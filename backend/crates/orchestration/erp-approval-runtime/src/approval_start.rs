@@ -177,6 +177,7 @@ pub async fn persist_start_tasks(
         }
         db.work_items().create(&item, executor).await?;
     }
+    crate::resource_grants::append_assignments(db, writes, executor).await?;
     Ok(first_task)
 }
 

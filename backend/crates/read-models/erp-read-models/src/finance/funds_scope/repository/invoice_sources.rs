@@ -59,6 +59,7 @@ pub(super) fn sales_stages(
         authorization.sales.document(),
         "sales_owner_user_id",
         "order_no",
+        &authorization.sales.grant_lookup,
     ));
     stages.push(doc! { "$set": { "order": "$_account.sales_order_id",
         "source_exists": { "$eq": [{ "$type": "$_source" }, "object"] },
@@ -121,6 +122,7 @@ fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
         purchase,
         "owner_user_id",
         "purchase_no",
+        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.grant_lookup.as_slice()),
     );
     stages.extend(source_stages(
         <Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -129,6 +131,7 @@ fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
         settlement,
         "prepared_by",
         "statement_no",
+        &[],
     ));
     stages
 }

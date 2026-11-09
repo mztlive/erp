@@ -46,8 +46,8 @@ export const customerReceivableKeys = {
         [
             ...customerReceivableKeys.all,
             "allocation-source",
-            target.salesOrderId,
-            target.salesOrderRevisionId ?? "current",
+            target.targetKind,
+            target.targetId,
         ] as const,
     list: (query: CustomerAccountsQuery) =>
         [...customerReceivableKeys.all, "list", query] as const,
@@ -352,7 +352,7 @@ export function useAllocationSources(pool: readonly AllocationTarget[]) {
     const profile = useAccountProfileQuery()
     const canRead =
         !profile.isError &&
-        hasPermission(profile.data?.permissions, "sales_order:detail")
+        hasPermission(profile.data?.permissions, "receivable_account:detail")
     const targets = [
         ...new Map(
             pool.map((target) => [allocationSourceKey(target), target]),
@@ -362,10 +362,7 @@ export function useAllocationSources(pool: readonly AllocationTarget[]) {
         queries: targets.map((target) => ({
             queryKey: customerReceivableKeys.allocationSource(target),
             queryFn: () =>
-                fetchAllocationSource(
-                    target.salesOrderId,
-                    target.salesOrderRevisionId,
-                ),
+                fetchAllocationSource(target.targetKind, target.targetId),
             enabled: canRead,
             retry: false,
         })),

@@ -318,12 +318,12 @@ impl FundsAccess {
         let account =
             accounts.into_iter().next().ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
         let key = source_key(account.source_type, &account.source_document_id);
-        let fact = self
-            .purchase_fact_map(std::slice::from_ref(&key), executor)
-            .await?
-            .remove(&key)
-            .filter(|fact| authorization.payable_fact_allowed(&key, fact))
-            .ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
+        let mut facts = self.purchase_fact_map(std::slice::from_ref(&key), executor).await?;
+        let allowed = self.payable_targets(&authorization, &facts, executor).await?;
+        if !allowed.as_ref().is_some_and(|ids| ids.contains(&key)) {
+            return Err(Error::NotFound("应付往来子账不存在".into()));
+        }
+        let fact = facts.remove(&key).ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
         let fact = Some(fact);
         let row_facts = FundsLinkedFacts {
             owner_user_id: fact.as_ref().and_then(|order| order.owner_user_id.clone()),

@@ -284,6 +284,7 @@ async fn dispatch_finance(
                 &registry.db,
                 &finance_posting_ports(registry.db.clone(), registry.rbac.clone()),
                 context.business_object_id(),
+                context.approval_process_instance_id(),
                 actor,
                 executor,
             )

@@ -182,7 +182,7 @@ impl<A: WorkflowAuthorizationPort> PortalOfferingImpactReadService<A> {
         query: &PortalQuery,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOfferingUsageFact>> {
-        let (access, scope) = self
+        let (_access, scope) = self
             .purchase
             .resolve_permissions(actor, "detail", &["purchase_order:list".into()], executor)
             .await?;
@@ -196,11 +196,10 @@ impl<A: WorkflowAuthorizationPort> PortalOfferingImpactReadService<A> {
             if fact.order.supplier_id != *supplier_id {
                 return Err(Error::Internal("采购正式选源的供应商与供给归属不符".into()));
             }
-            if self.purchase.allows(&access, &scope, &fact.order)?
-                && query
-                    .q
-                    .as_ref()
-                    .is_none_or(|q| fact.order.purchase_no.to_lowercase().contains(&q.to_lowercase()))
+            if query
+                .q
+                .as_ref()
+                .is_none_or(|q| fact.order.purchase_no.to_lowercase().contains(&q.to_lowercase()))
             {
                 visible.push(fact);
             }

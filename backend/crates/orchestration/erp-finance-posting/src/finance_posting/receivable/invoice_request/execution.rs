@@ -4,10 +4,13 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, WorkItemId};
+use erp_finance::entity::receivable::SalesInvoiceRequest;
 use erp_finance::repository::prelude::*;
+use erp_identity::entity::resource_access::event::{GrantEventEvidence, GrantEventPayload};
+use erp_identity::service::resource_access::append_event;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
-    FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItemStatus,
+    FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItem, WorkItemStatus,
     new_approved_sales_invoice_task,
 };
 use erp_workflow::repository::prelude::*;
@@ -20,7 +23,9 @@ use crate::FinancePostingPorts;
 ///
 /// # 参数
 /// * `db` - 数据库。
+/// * `rbac` - 财务办理与任务权限端口。
 /// * `id` - 开票申请 ID。
+/// * `approval_instance_id` - 本次最终通过的正式审批实例 ID。
 /// * `actor` - 已认证审批人。
 /// * `executor` - 审批事务执行器。
 ///
@@ -33,6 +38,7 @@ pub async fn approve(
     db: &Database,
     rbac: &FinancePostingPorts,
     id: &str,
+    approval_instance_id: &str,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -65,6 +71,7 @@ pub async fn approve(
     request.work_item_id = Some(task.base.id.clone());
     db.work_items().create(&task, executor).await?;
     db.sales_invoice_requests().update(&mut request, executor).await?;
+    append_invoice_grant(db, &request, &task, approval_instance_id, executor).await?;
     let audit = actor.clone().resource_log(
         "sales_invoice_request.approve",
         "sales_invoice_request",
@@ -147,5 +154,34 @@ pub(crate) async fn sync_authorized_tasks(
         task.subject_version = account.base.version.to_string();
         db.work_items().update(&mut task, executor).await?;
     }
+    Ok(())
+}
+
+/// 使用已保存的申请版本和实际任务责任人记录授权来源。
+async fn append_invoice_grant(
+    db: &Database,
+    request: &SalesInvoiceRequest,
+    task: &WorkItem,
+    approval_instance_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    append_event(
+        db,
+        GrantEventEvidence {
+            payload: GrantEventPayload::InvoiceApproved {
+                invoice_request_id: request.base.id.clone(),
+                approval_instance_id: approval_instance_id.into(),
+                work_item_id: task.base.id.clone(),
+            },
+            recipient: task
+                .owner_user_id
+                .clone()
+                .ok_or_else(|| Error::ConflictError("开票任务缺少实际分配人".into()))?,
+            fact_version: request.base.version,
+            occurred_at: request.base.updated_at,
+        },
+        executor,
+    )
+    .await?;
     Ok(())
 }

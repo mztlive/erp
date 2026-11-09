@@ -1,4 +1,5 @@
 "use client"
+import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
 import {
     useQuery,
     useQueries,
@@ -48,6 +49,8 @@ export const useInvoiceRequests = (query: RequestQuery, enabled = true) =>
     useQuery({
         queryKey: [...requestKeys.all, "list", query],
         queryFn: () => listRequests(query),
+        refetchInterval: (state) =>
+            isResourceAuthorizationPending(state.state.error) ? 2000 : false,
         enabled,
     })
 /** 详情查询支持从销售单、集中列表和工作台进入。 */

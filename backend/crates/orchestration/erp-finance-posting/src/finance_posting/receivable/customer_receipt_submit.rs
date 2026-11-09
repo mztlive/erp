@@ -362,6 +362,32 @@ impl ReceiptSubmitReplayPort for MongoReceiptSubmitReplay<'_> {
     }
 }
 
+/// 以提交后的完整分配逐级解析分录、子账、销售单，不接受客户端裁剪的来源证明。
+pub(super) async fn require_allocation_sources(
+    db: &Database,
+    rbac: &FinancePostingPorts,
+    actor: &AuditActor,
+    receipt: &CustomerReceipt,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut sources = Vec::new();
+    for line in &receipt.pending_allocations {
+        let entry = db
+            .receivable_entries()
+            .find_by_id(line.receivable_entry_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("核销来源分录不存在".into()))?;
+        let account = db
+            .receivable_accounts()
+            .find_by_id(entry.receivable_account_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("核销来源子账不存在".into()))?;
+        sources.push(account.sales_order_id.to_string());
+    }
+    rbac.funds.require_sales_sources(actor, "customer_receipt:submit", &sources, executor).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;

@@ -494,8 +494,9 @@ mod tests {
 
     #[test]
     fn approval_stable_codes_are_exhaustive() {
-        assert_eq!(ErrorCode::ALL.len(), 21);
-        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")));
+        assert_eq!(ErrorCode::ALL.len(), 22);
+        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")
+            || *code == ErrorCode::ResourceAuthorizationNotReady));
     }
     #[test]
     fn only_commit_related_variants_allow_command_receipt_recovery() {

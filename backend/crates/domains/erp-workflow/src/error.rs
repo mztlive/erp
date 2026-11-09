@@ -189,6 +189,7 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
 /// 合同冻结的结构化审批错误码。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
+    ResourceAuthorizationNotReady,
     ApprovalPolicyNotRegistered,
     ApprovalProcessNotConfigured,
     ApprovalDraftSourceNotAvailable,
@@ -214,7 +215,8 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// 审批合同冻结的全部结构化错误码。
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
+        Self::ResourceAuthorizationNotReady,
         Self::ApprovalPolicyNotRegistered,
         Self::ApprovalProcessNotConfigured,
         Self::ApprovalDraftSourceNotAvailable,
@@ -250,6 +252,7 @@ impl ErrorCode {
     /// 不返回错误。
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::ResourceAuthorizationNotReady => "RESOURCE_AUTHORIZATION_NOT_READY",
             Self::ApprovalPolicyNotRegistered => "APPROVAL_POLICY_NOT_REGISTERED",
             Self::ApprovalProcessNotConfigured => "APPROVAL_PROCESS_NOT_CONFIGURED",
             Self::ApprovalDraftSourceNotAvailable => "APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE",
@@ -306,7 +309,8 @@ impl ErrorCode {
     pub const fn retryable(self) -> bool {
         matches!(
             self,
-            Self::ApprovalDefinitionVersionConflict
+            Self::ResourceAuthorizationNotReady
+                | Self::ApprovalDefinitionVersionConflict
                 | Self::ApprovalTaskVersionConflict
                 | Self::ApprovalInstanceVersionConflict
                 | Self::ApprovalExecutionVersionConflict
@@ -336,7 +340,7 @@ mod tests {
 
     #[test]
     fn frozen_error_codes_cover_contract_set() {
-        assert_eq!(ErrorCode::ALL.len(), 21);
+        assert_eq!(ErrorCode::ALL.len(), 22);
         assert!(ErrorCode::ALL.contains(&ErrorCode::ApprovalGenericWorkItemMutationForbidden));
     }
 

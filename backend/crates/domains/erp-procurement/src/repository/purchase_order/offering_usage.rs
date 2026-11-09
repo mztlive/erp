@@ -187,13 +187,12 @@ fn usage_pipeline(
 
 /// 授权条件留在采购对象字段内，不能被供给业务筛选覆盖。
 fn order_lookup(scope: &PurchaseReadScope) -> Document {
-    doc! { "$lookup": { "from": PURCHASE_ORDERS, "let": { "order_id": "$header.purchase_order_id" }, "pipeline": [
-        { "$match": { "$and": [
-            { "$expr": { "$eq": ["$id", "$$order_id"] } },
-            { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": { "$nin": ["COMPLETED", "VOIDED"] } },
-            scope.document(),
-        ] } },
-    ], "as": "order" } }
+    let mut pipeline = vec![
+        doc! { "$match": { "$expr": { "$eq": ["$id", "$$order_id"] }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": { "$nin": ["COMPLETED", "VOIDED"] } } },
+    ];
+    pipeline.extend(scope.grant_lookup.clone());
+    pipeline.push(doc! { "$match": scope.document() });
+    doc! { "$lookup": { "from": PURCHASE_ORDERS, "let": { "order_id": "$header.purchase_order_id" }, "pipeline": pipeline, "as": "order" } }
 }
 
 #[cfg(test)]

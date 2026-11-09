@@ -474,10 +474,14 @@ impl FundsAccess {
         let sales_tuples = invoice_sales_tuples(&row, sales, &sales_facts);
         let purchase_tuples = invoice_purchase_tuples(&row, purchase, &purchase_facts);
         let sales_allowed = self
-            .authorized_sales_ids(&authorization, executor)
+            .authorized_sales_targets(
+                &authorization,
+                &sales_facts.keys().cloned().collect::<Vec<_>>(),
+                executor,
+            )
             .await?
             .map(|list| list.into_iter().collect::<BTreeSet<_>>());
-        let purchase_allowed = authorization.payable_ids(&purchase_facts);
+        let purchase_allowed = self.payable_targets(&authorization, &purchase_facts, executor).await?;
         let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
         let purchase_matched = matched_orders(&purchase_tuples, &purchase_allowed);
         let whole = whole_invoice_readable(

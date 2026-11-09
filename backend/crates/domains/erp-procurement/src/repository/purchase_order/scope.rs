@@ -1,7 +1,8 @@
 //! 采购单当前责任范围查询；输入必须由应用层完成资源动作授权。
 
 use mongodb::bson::{Document, doc};
-use persistence_core::QueryFilter;
+use mongodb::options::FindOptions;
+use persistence_core::{QueryFilter, aggregate};
 
 /// 一个已经通过同角色权限证明的采购责任范围。
 #[derive(Debug, Clone, Default)]
@@ -17,6 +18,8 @@ pub struct PurchaseScopeClause {
 /// 角色并集与个人上限保留为独立条件，筛选不得覆盖授权。
 #[derive(Debug, Clone, Default)]
 pub struct PurchaseReadScope {
+    /// 由统一授权接口生成的关联阶段，必须在范围条件和分页之前执行。
+    pub grant_lookup: Vec<Document>,
     /// 其他资源动作的独立范围，全部必须同时满足。
     pub required_scopes: Vec<PurchaseReadScope>,
     /// 同角色正向范围。
@@ -95,6 +98,19 @@ impl PurchaseScopeClause {
 }
 
 impl PurchaseReadScope {
+    /// 先用本次业务筛选收窄集合，再关联有效读取来源。
+    /// # 参数
+    /// filter 为不含授权临时字段的业务条件。
+    /// # 返回
+    /// 授权判定前的查询阶段；不得在这些阶段中分页。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn lookup_after(&self, filter: Document) -> Vec<Document> {
+        let mut stages = vec![doc! { "$match": filter }];
+        stages.extend(self.grant_lookup.clone());
+        stages
+    }
+
     /// 校验尚未持久化的单据责任；只使用正向角色范围与个人上限。
     ///
     /// # 参数
@@ -149,6 +165,9 @@ impl PurchaseReadScope {
     /// # 关键业务约束
     /// 缺范围保持空集，不得退化为全量查询。
     pub fn is_empty(&self) -> bool {
+        if !self.grant_lookup.is_empty() {
+            return self.required_scopes.iter().any(Self::is_empty);
+        }
         self.required_scopes.iter().any(Self::is_empty)
             || (self.roles.iter().all(PurchaseScopeClause::is_empty) && self.historical_order_ids.is_empty())
             || self.user_limit.as_ref().is_some_and(PurchaseScopeClause::is_empty)
@@ -173,13 +192,16 @@ impl PurchaseReadScope {
             grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
         }
         let mut roles = union(grants);
+        if let Some(limit) = &self.user_limit {
+            roles = doc! { "$and": [roles, limit.document()] };
+        }
+        if !self.grant_lookup.is_empty() {
+            roles = doc! { "$or": [roles, { "__resource_grant.0": { "$exists": true } }] };
+        }
         if !self.required_scopes.is_empty() {
             let mut required = self.required_scopes.iter().map(Self::document).collect::<Vec<_>>();
             required.push(roles);
             roles = doc! { "$and": required };
-        }
-        if let Some(limit) = &self.user_limit {
-            return doc! { "$and": [roles, limit.document()] };
         }
         roles
     }
@@ -262,7 +284,15 @@ impl PurchaseOrderRepositoryScopeExt
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+        aggregate::find(
+            &self.collection(),
+            doc! { "deleted_at": 0, "$and": [{ "id": id }, scope.document()] },
+            FindOptions::builder().limit(1).build(),
+            scope.lookup_after(doc! { "deleted_at": 0, "id": id }),
+            executor,
+        )
+        .await
+        .map(|rows| rows.into_iter().next())
     }
 
     async fn list_authorized_ids(
@@ -270,7 +300,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<String>> {
-        let versions = persistence_core::mongo_ops::find_many(
+        let versions = aggregate::find(
             &self.collection().clone_with_type::<PurchaseVersion>(),
             doc! {
                 "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
@@ -281,6 +311,7 @@ impl PurchaseOrderRepositoryScopeExt
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
+            scope.lookup_after(doc! { "deleted_at": 0 }),
             executor,
         )
         .await?;
@@ -293,7 +324,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<PurchaseVersion>> {
-        persistence_core::mongo_ops::find_many(
+        aggregate::find(
             &self.collection().clone_with_type::<PurchaseVersion>(),
             doc! { "$and": [filter.to_doc(), scope.document()] },
             mongodb::options::FindOptions::builder()
@@ -301,6 +332,7 @@ impl PurchaseOrderRepositoryScopeExt
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
+            scope.lookup_after(filter.to_doc()),
             executor,
         )
         .await
@@ -376,6 +408,7 @@ mod tests {
             required_scopes: vec![],
             roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
             user_limit: Some(PurchaseScopeClause::default()),
+            grant_lookup: Vec::new(),
             historical_order_ids: vec![],
         };
         assert_eq!(scope.document(), doc! { "$and": [{}, { "$expr": false }] });
@@ -408,6 +441,7 @@ mod tests {
                 ..Default::default()
             }],
             user_limit: None,
+            grant_lookup: Vec::new(),
             historical_order_ids: vec![],
         };
         assert!(!scope.is_empty());

@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
+use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::ResourceAccessService;
@@ -129,16 +130,9 @@ impl ResourceAccessService {
         evidence: GrantEventEvidence,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        require_transaction(executor)?;
-        let event = GrantEvent::new(evidence)?;
-        let repo = resource_grants::events(&self.db);
-        if let Some(old) = repo.find_by_id(&event.base.id, executor).await? {
-            old.ensure_replay(&event)?;
-            return Ok(false);
-        }
-        repo.create(&event, executor).await?;
-        Ok(true)
+        append_event(&self.db, evidence, executor).await
     }
+
     async fn authorize_manager(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         let permissions = [Permission::parse("data_scope:create")?];
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
@@ -235,6 +229,29 @@ fn require_transaction(executor: &mut dyn Executor) -> Result<()> {
         return Err(Error::Internal("授权发布必须加入调用方事务".into()));
     }
     Ok(())
+}
+
+/// 在业务原事务追加已提交事实对应的幂等授权事件。
+/// # 参数
+/// db 为身份集合所在数据库；evidence 为正式分配证据；executor 为业务事务。
+/// # 返回
+/// 新事件返回 true，同证据重放返回 false。
+/// # 错误
+/// 无事务、证据非法、幂等冲突或持久化失败拒绝。
+pub async fn append_event(
+    db: &Database,
+    evidence: GrantEventEvidence,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    require_transaction(executor)?;
+    let event = GrantEvent::new(evidence)?;
+    let repo = resource_grants::events(db);
+    if let Some(old) = repo.find_by_id(&event.base.id, executor).await? {
+        old.ensure_replay(&event)?;
+        return Ok(false);
+    }
+    repo.create(&event, executor).await?;
+    Ok(true)
 }
 
 #[cfg(test)]

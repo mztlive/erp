@@ -5,13 +5,13 @@ use std::future::Future;
 use std::pin::Pin;
 
 use application_core::AuditActor;
+use erp_approval_runtime::resource_grants::append_assignments;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{
     AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService, subject,
 };
-use erp_read_models::sales_center::access::SalesAccess;
 use erp_supplier_catalog::supplier_portal::authorization::request_readable as portal_request_readable;
 use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_reviewable;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -19,14 +19,15 @@ use erp_workflow::ports::{
     OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact, WorkflowAuthorizationPort,
     WorkflowDataScope, WorkflowQueueAccessFact, WorkflowScopeObject, WorkflowScopeObjects,
 };
+use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::order_access::{approval_readable, readable_sources};
 use super::{account_fact, map_service};
+use crate::wiring::contract_access;
 use crate::wiring::errors::{Error, Result};
-use crate::wiring::{contract_access, purchase_access};
 
 /// 工作流命令与定义服务使用的共享 RBAC adapter。
 #[derive(Clone)]
@@ -74,6 +75,26 @@ impl WorkflowAuth {
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
+    async fn require_approval_source(
+        &self,
+        actor: &AuditActor,
+        source: &OrderTaskSource,
+        instance: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()> {
+        super::resource_access::require_approval(&self.db, &self.rbac, actor, source, instance, executor)
+            .await
+            .map_err(map_service)
+    }
+
+    async fn append_assignment_grants(
+        &self,
+        writes: &PlannedWrites,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()> {
+        append_assignments(&self.db, writes, executor).await.map_err(|error| map_service(error.into()))
+    }
+
     async fn supplier_portal_request_reviewable(
         &self,
         actor: &AuditActor,
@@ -250,19 +271,18 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         source: &OrderTaskSource,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        match source {
-            OrderTaskSource::Sales(id) => {
-                SalesAccess::new(self.db.clone(), self.rbac.clone())
-                    .require_object(actor, "detail", id, &[], executor)
-                    .await
-                    .map_err(|error| map_service(Error::from(error)))?;
-            },
-            OrderTaskSource::Purchase(id) => {
-                purchase_access(self.db.clone(), self.rbac.clone())
-                    .require_object(actor, "detail", id, &[], executor)
-                    .await
-                    .map_err(|error| map_service(Error::from(error)))?;
-            },
+        if !super::resource_access::readable(
+            &self.db,
+            &self.rbac,
+            actor,
+            source,
+            "work_item:detail",
+            executor,
+        )
+        .await
+        .map_err(map_service)?
+        {
+            return Err(WorkflowError::Forbidden("没有任务来源的读取资格".into()));
         }
         Ok(())
     }
@@ -647,6 +667,8 @@ fn contract_readable_result(result: Result<()>) -> WorkflowResult<bool> {
 
 #[cfg(test)]
 mod tests {
+    use erp_workflow::ErrorCode;
+
     use super::*;
 
     #[test]
@@ -699,7 +721,7 @@ mod tests {
         assert!(
             matches!(map_service(Error::Logic(erp_core::Error::from("original"))), WorkflowError::Logic(error) if error.to_string() == "original")
         );
-        for code in erp_workflow::ErrorCode::ALL {
+        for code in ErrorCode::ALL {
             let mapped = map_service(Error::Coded(code));
             assert_eq!(mapped.to_string(), code.to_string());
             assert_eq!(mapped.class(), code.class());

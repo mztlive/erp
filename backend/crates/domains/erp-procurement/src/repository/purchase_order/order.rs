@@ -5,7 +5,7 @@ use erp_core::ids::{SalesOrderId, SupplierAccountId};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -382,16 +382,18 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
             .projection(purchase_order_projection())
             .build();
         let collection = self.collection().clone_with_type::<PurchaseOrderRow>();
-        let items = mongo_ops::find_many(
+        let items = aggregate::find(
             &collection,
             doc! { "$and": [filter.to_doc(), scope.document()] },
             options,
+            scope.lookup_after(filter.to_doc()),
             executor,
         )
         .await?;
-        let total = mongo_ops::count_documents(
+        let total = aggregate::count(
             &self.collection(),
             doc! { "$and": [filter.to_doc(), scope.document()] },
+            scope.lookup_after(filter.to_doc()),
             executor,
         )
         .await?;

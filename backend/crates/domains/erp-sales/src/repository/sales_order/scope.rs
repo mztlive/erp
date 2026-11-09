@@ -3,7 +3,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, aggregate};
 
 /// 一个已经通过同角色权限证明的销售责任范围。
 #[derive(Debug, Clone, Default)]
@@ -17,6 +17,8 @@ pub struct SalesScopeClause {
 /// 角色并集与个人上限保留为独立条件，筛选不得覆盖授权。
 #[derive(Debug, Clone, Default)]
 pub struct SalesReadScope {
+    /// 由统一授权接口生成的关联阶段，必须在范围条件和分页之前执行。
+    pub grant_lookup: Vec<Document>,
     /// 其他敏感资源的独立范围，全部必须同时满足。
     pub required_scopes: Vec<SalesReadScope>,
     pub roles: Vec<SalesScopeClause>,
@@ -61,6 +63,19 @@ impl SalesScopeClause {
 }
 
 impl SalesReadScope {
+    /// 先用本次业务筛选收窄集合，再关联有效读取来源。
+    /// # 参数
+    /// filter 为不含授权临时字段的业务条件。
+    /// # 返回
+    /// 授权判定前的查询阶段；不得在这些阶段中分页。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn lookup_after(&self, filter: Document) -> Vec<Document> {
+        let mut stages = vec![doc! { "$match": filter }];
+        stages.extend(self.grant_lookup.clone());
+        stages
+    }
+
     /// 校验尚未持久化的单据责任；只使用正向角色范围与个人上限。
     ///
     /// # 返回
@@ -97,6 +112,9 @@ impl SalesReadScope {
     /// # 错误
     /// 不返回错误。
     pub fn is_empty(&self) -> bool {
+        if !self.grant_lookup.is_empty() {
+            return self.required_scopes.iter().any(Self::is_empty);
+        }
         self.required_scopes.iter().any(Self::is_empty)
             || (self.roles.iter().all(SalesScopeClause::is_empty) && self.historical_order_ids.is_empty())
             || self.user_limit.as_ref().is_some_and(SalesScopeClause::is_empty)
@@ -117,13 +135,16 @@ impl SalesReadScope {
             grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
         }
         let mut roles = union(grants);
+        if let Some(limit) = &self.user_limit {
+            roles = doc! { "$and": [roles, limit.document()] };
+        }
+        if !self.grant_lookup.is_empty() {
+            roles = doc! { "$or": [roles, { "__resource_grant.0": { "$exists": true } }] };
+        }
         if !self.required_scopes.is_empty() {
             let mut required = self.required_scopes.iter().map(Self::document).collect::<Vec<_>>();
             required.push(roles);
             roles = doc! { "$and": required };
-        }
-        if let Some(limit) = &self.user_limit {
-            return doc! { "$and": [roles, limit.document()] };
         }
         roles
     }
@@ -226,10 +247,13 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        self.find_many(
-            doc! { "$and": [
+        aggregate::find(
+            &self.collection(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
                 { "id": { "$in": ids } }, sales.document(), resource.document()
             ] },
+            FindOptions::default(),
+            sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } }),
             executor,
         )
         .await
@@ -245,12 +269,13 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        mongo_ops::find_many(
+        aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
                 { "id": { "$in": ids } }, sales.document(), resource.document()
             ] },
             FindOptions::builder().projection(doc! { "id": 1, "version": 1 }).sort(doc! { "id": 1 }).build(),
+            sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } }),
             executor,
         )
         .await
@@ -262,7 +287,15 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<crate::entity::sales_order::SalesOrder>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+        aggregate::find(
+            &self.collection(),
+            doc! { "deleted_at": 0, "$and": [{ "id": id }, scope.document()] },
+            FindOptions::builder().limit(1).build(),
+            scope.lookup_after(doc! { "deleted_at": 0, "id": id }),
+            executor,
+        )
+        .await
+        .map(|rows| rows.into_iter().next())
     }
 
     async fn list_authorized_ids(
@@ -270,7 +303,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<String>> {
-        let versions = persistence_core::mongo_ops::find_many(
+        let versions = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! {
                 "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
@@ -281,6 +314,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
+            scope.lookup_after(doc! { "deleted_at": 0 }),
             executor,
         )
         .await?;
@@ -354,6 +388,7 @@ mod tests {
             required_scopes: vec![],
             roles: vec![SalesScopeClause { company: true, ..Default::default() }],
             user_limit: Some(SalesScopeClause::default()),
+            grant_lookup: Vec::new(),
             historical_order_ids: vec![],
         };
         assert_eq!(scope.document(), doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] });
@@ -386,6 +421,7 @@ mod tests {
                 ..Default::default()
             }],
             user_limit: None,
+            grant_lookup: Vec::new(),
             historical_order_ids: vec![],
         };
         assert!(!scope.is_empty());

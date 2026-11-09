@@ -101,3 +101,20 @@ impl ResourceAccessService {
         GrantQueue { db: self.db.clone() }.event(expected, executor).await
     }
 }
+
+impl ResourceAccessService {
+    /// 精确读取一个来源的正式事件，供业务入口核对授权处理状态。
+    /// # 参数
+    /// source 为服务端确定的来源身份；executor 为请求原执行器。
+    /// # 返回
+    /// 来源内一条已持久化事件；不存在返回 None。
+    /// # 错误
+    /// 来源身份非法或持久化读取失败拒绝。
+    pub async fn source_event(
+        &self,
+        source: &SourceKey,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<crate::entity::resource_access::event::GrantEvent>> {
+        GrantQueue { db: self.db.clone() }.source_event(source, executor).await
+    }
+}

@@ -263,6 +263,8 @@ impl AuditFailure for Error {
     }
 }
 
+from_domain!(erp_fulfillment_execution, Rbac, Coded);
+
 #[cfg(test)]
 mod tests {
     use application_core::ValidationIssues;
@@ -297,8 +299,6 @@ mod tests {
         assert_eq!(duplicate_index_conflict_message(Some("unknown")), "数据已存在，请勿重复提交");
     }
 }
-
-from_domain!(erp_fulfillment_execution, Rbac, Coded);
 
 #[cfg(test)]
 mod conversion_contract_tests {
@@ -412,8 +412,9 @@ mod conversion_contract_tests {
 
     #[test]
     fn approval_stable_codes_are_exhaustive() {
-        assert_eq!(ErrorCode::ALL.len(), 21);
-        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")));
+        assert_eq!(ErrorCode::ALL.len(), 22);
+        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")
+            || *code == ErrorCode::ResourceAuthorizationNotReady));
     }
     #[test]
     fn historical_indexes_keep_typed_duplicate_for_http() {

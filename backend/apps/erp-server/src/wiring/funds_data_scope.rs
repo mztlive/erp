@@ -11,6 +11,10 @@ use erp_finance::ports::funds_scope::{
 };
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
+use erp_identity::entity::resource_access::SourceKey;
+use erp_read_models::Result as ReadResult;
+use erp_read_models::ports::invoice_grants::InvoiceGrantReadiness;
+use erp_resource_grants::{GrantReadiness, ResourceGrantProcess};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -185,13 +189,39 @@ pub fn funds_access_with_rbac(
     rbac: SharedRbacService,
 ) -> erp_read_models::finance::funds_scope::FundsAccess {
     let scope = MongoFundsDataScope::shared(db.clone(), rbac.clone());
-    erp_read_models::finance::funds_scope::FundsAccess::new(db, rbac, scope)
+    erp_read_models::finance::funds_scope::FundsAccess::new(db.clone(), rbac.clone(), scope)
+        .with_grant_readiness(Arc::new(InvoiceReadiness { db, rbac }))
+}
+
+struct InvoiceReadiness {
+    db: Database,
+    rbac: SharedRbacService,
+}
+#[async_trait]
+impl InvoiceGrantReadiness for InvoiceReadiness {
+    async fn pending(
+        &self,
+        request_id: &str,
+        recipient: &str,
+        executor: &mut dyn Executor,
+    ) -> ReadResult<bool> {
+        let source = SourceKey {
+            rule: "invoice_approved".into(),
+            business_type: "sales_invoice_request".into(),
+            business_id: request_id.into(),
+            recipient: recipient.into(),
+        };
+        let status = ResourceGrantProcess::new(self.db.clone(), self.rbac.clone())
+            .source_readiness(&source, executor)
+            .await?;
+        Ok(status == GrantReadiness::NotReady)
+    }
 }
 
 #[cfg(test)]
 mod equivalence_tests {
     use erp_finance::ports::funds_scope::FundsResolvedScope;
-    use erp_read_models::finance::funds_scope::{FundsAccess, FundsLinkedFacts};
+    use erp_read_models::finance::funds_scope::FundsLinkedFacts;
     use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
     use serde_json::json;
     use test_support::matches_filter as matches;
@@ -251,6 +281,7 @@ mod equivalence_tests {
                         let compiled = SalesReadScope {
                             roles: vec![scope_clause(role, "actor"), scope_clause(second, "actor")],
                             user_limit: (limit >= 0).then(|| scope_clause(limit as u8, "actor")),
+                            grant_lookup: Vec::new(),
                             historical_order_ids: vec![],
                             required_scopes: vec![],
                         };
@@ -274,14 +305,9 @@ mod equivalence_tests {
                             "sales_owner_user_id": owner,
                             "business_org_unit_id": org });
                             assert_eq!(
-                                FundsAccess::allows(&access, &facts).unwrap(),
+                                evaluate_object(&access, &object).unwrap(),
                                 matches(&compiled.document(), &document),
                                 "action={action}, role={role}, second={second}, limit={limit}, object={index}"
-                            );
-                            assert_eq!(
-                                evaluate_object(&access, &object).unwrap(),
-                                FundsAccess::allows(&access, &facts).unwrap(),
-                                "adapter 与唯一对象映射一致 action={action}, object={index}"
                             );
                         }
                     }

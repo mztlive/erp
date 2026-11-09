@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
+import { Button } from "@/components/ui/button"
 import { sourceSalesOrderHref } from "../lib/source-sales-order"
 import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
 import { subtractFixed } from "@/lib/fixed-decimal"
@@ -80,9 +82,12 @@ export function WorkspaceInvoiceTask({
             : undefined
     const descriptor = workspaceInvoiceDescriptor(item)
     const receivableQuery = useCustomerAccountsDetailQuery(
-        descriptor ? "receivable" : null,
+        descriptor && requestQuery.isSuccess && approvedRequest
+            ? "receivable"
+            : null,
         descriptor?.receivableAccountId ?? null,
     )
+    const grantPending = isResourceAuthorizationPending(requestQuery.error)
     const receivable = receivableQuery.data?.receivable
     const identityOk = Boolean(
         descriptor &&
@@ -127,7 +132,30 @@ export function WorkspaceInvoiceTask({
                         请联系管理员核对开票负责人和关联销售单，再刷新重试。
                     </AlertDescription>
                 </Alert>
-            ) : receivableQuery.isPending ? (
+            ) : grantPending ? (
+                <Alert>
+                    <AlertTitle>资料授权正在处理</AlertTitle>
+                    <AlertDescription>
+                        审批已完成，资料准备好后将自动刷新。
+                        <Button
+                            id="workspace-invoice-grant-refresh"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void requestQuery.refetch()}
+                        >
+                            刷新资料
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            ) : requestQuery.isError ? (
+                <BusinessFailureState
+                    idPrefix="workspace-invoice-request"
+                    title="开票申请暂不可查看"
+                    error={requestQuery.error}
+                    onRetry={() => void requestQuery.refetch()}
+                />
+            ) : receivableQuery.isPending &&
+              (!requestQuery.isSuccess || approvedRequest) ? (
                 <InvoiceSessionSkeleton />
             ) : receivableQuery.isError ? (
                 <BusinessFailureState
@@ -136,6 +164,13 @@ export function WorkspaceInvoiceTask({
                     error={receivableQuery.error}
                     onRetry={() => void receivableQuery.refetch()}
                 />
+            ) : requestQuery.isSuccess && !approvedRequest ? (
+                <Alert variant="warning">
+                    <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
+                    <AlertDescription>
+                        请刷新任务状态，核对申请与任务的关联。
+                    </AlertDescription>
+                </Alert>
             ) : !identityOk || !receivable || !descriptor ? (
                 <Alert variant="destructive">
                     <AlertTitle>待办关联的销售应收不匹配</AlertTitle>
@@ -151,15 +186,6 @@ export function WorkspaceInvoiceTask({
                             "当前账号没有处理此开票任务的资格。"}
                     </AlertDescription>
                 </Alert>
-            ) : requestQuery.isPending ? (
-                <InvoiceSessionSkeleton />
-            ) : requestQuery.isError ? (
-                <BusinessFailureState
-                    idPrefix={`workspace-invoice-request-${toAutomationIdSegment(item.workItemId)}`}
-                    title="开票申请暂不可查看"
-                    error={requestQuery.error}
-                    onRetry={() => void requestQuery.refetch()}
-                />
             ) : approvedRequest?.status === "completed" ? (
                 <Alert>
                     <AlertTitle>本次申请已全部开票</AlertTitle>

@@ -1,6 +1,8 @@
 //! 统一读取判定及按来源授权管理；业务写入必须在原 Executor 内重新解析。
 mod command;
+pub use command::append_event;
 mod queue;
+mod reader;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -100,7 +102,7 @@ impl ResourceAccessService {
     ) -> Result<()> {
         let revision = resource_grants::revision(&self.db, &query.user_id, query.resource, executor).await?;
         if revision != query.grant_revision {
-            return Err(Error::ConflictError("授权范围已变化，请重新读取".into()));
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权范围已变化，请重新读取".into()));
         }
         Ok(())
     }

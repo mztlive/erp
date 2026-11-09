@@ -314,7 +314,22 @@ mod tests {
             status_of(ErrorCode::ApprovalPolicyNotRegistered),
             axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
-        assert_eq!(ErrorCode::ALL.len(), 21);
+        assert_eq!(ErrorCode::ALL.len(), 22);
+    }
+
+    #[tokio::test]
+    async fn pending_resource_grant_is_a_refreshable_conflict() {
+        let response = ApprovalHttpError::from_service(
+            crate::wiring::errors::Error::Coded(ErrorCode::ResourceAuthorizationNotReady),
+            &axum::http::HeaderMap::new(),
+        )
+        .into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["code"], "RESOURCE_AUTHORIZATION_NOT_READY");
+        assert_eq!(body["retryable"], true);
+        assert_eq!(body["success"], false);
     }
 
     #[tokio::test]

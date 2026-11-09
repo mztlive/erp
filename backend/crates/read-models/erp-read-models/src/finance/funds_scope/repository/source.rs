@@ -80,11 +80,14 @@ pub(crate) fn source_stages(
     scope: Document,
     owner_field: &str,
     number_field: &str,
+    grant_lookup: &[Document],
 ) -> Vec<Document> {
     let owner = owner_expression(owner_field);
     let number = format!("${number_field}");
     let reference = format!("${as_field}");
     let allowed = format!("{as_field}_allowed");
+    let mut allowed_stages = grant_lookup.to_vec();
+    allowed_stages.extend([doc! { "$match": scope }, doc! { "$project": { "_id": 0, "id": 1 } }]);
     vec![
         doc! { "$lookup": { "from": collection, "let": { "source_id": local_expression },
         "pipeline": [
@@ -93,7 +96,7 @@ pub(crate) fn source_stages(
             { "$facet": {
                 "facts": [{ "$project": { "_id": 0, "id": 1, "owner_user_id": owner,
                     "business_org_unit_id": 1, "version": 1, "document_no": number } }],
-                "allowed": [{ "$match": scope }, { "$project": { "_id": 0, "id": 1 } }],
+                "allowed": allowed_stages,
             } },
         ], "as": as_field } },
         doc! { "$set": { as_field: { "$arrayElemAt": [&reference, 0] } } },

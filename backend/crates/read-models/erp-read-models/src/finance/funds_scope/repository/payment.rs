@@ -216,6 +216,7 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
         doc! { "$and": [purchase, linked_condition_document(condition, "owner_user_id")] },
         "owner_user_id",
         "purchase_no",
+        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.grant_lookup.as_slice()),
     );
     stages.extend(source_stages(
         Database::SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -224,6 +225,7 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
         doc! { "$and": [settlement, linked_condition_document(condition, "prepared_by")] },
         "prepared_by",
         "statement_no",
+        &[],
     ));
     stages.push(doc! { "$set": {
         "scope_source": { "$cond": [{ "$eq": ["$scope_source_type", "supplier_settlement"] }, "$scope_settlement", "$scope_purchase"] },

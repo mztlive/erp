@@ -203,6 +203,7 @@ async fn apply_resume(
         .await?;
     }
     persist_resume_writes(db, prepared, audit_port, executor).await?;
+    rbac.append_assignment_grants(&prepared.writes, executor).await?;
     Ok(map_command_view(
         &prepared.writes.instance,
         prepared.writes.created_executions.last(),

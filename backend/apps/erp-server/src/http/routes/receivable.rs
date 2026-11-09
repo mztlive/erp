@@ -24,6 +24,25 @@ use crate::permissions;
 pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
     receipt_file_routes(rbac)
         .merge(additional_document_routes(rbac))
+        .merge(invoice_request_edit_routes(rbac))
+        .merge(account_routes(rbac))
+        .merge(receipt_query_routes(rbac))
+        .merge(receipt_command_routes(rbac))
+        .merge(invoice_query_routes(rbac))
+        .merge(invoice_command_routes(rbac))
+}
+
+/// 应收子账与财务来源资料保留逐路由功能权限校验。
+fn account_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/receivable-accounts/sources/{kind}/{id}",
+            with_permission(
+                get(receivable::allocation_source::detail),
+                rbac,
+                permissions::receivable::ACCOUNT_DETAIL,
+            ),
+        )
         .route(
             "/receivable-accounts",
             with_permission(
@@ -48,6 +67,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::receivable::ACCOUNT_DETAIL,
             ),
         )
+}
+
+/// 回款列表、详情与草稿保留逐路由功能权限校验。
+fn receipt_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/customer-receipts",
             with_permission(
@@ -80,6 +104,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::receivable::DRAFT_UPDATE_CUSTOMER_RECEIPT_SAVE_DRAFT,
             ),
         )
+}
+
+/// 回款正式办理命令保留逐路由功能权限校验。
+fn receipt_command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/customer-receipts/commit",
             with_permission(
@@ -112,6 +141,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::receivable::CUSTOMER_RECEIPT_POST,
             ),
         )
+}
+
+/// 发票与开票申请查询保留逐路由功能权限校验。
+fn invoice_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/invoices",
             with_permission(get(receivable::invoice_list), rbac, permissions::receivable::INVOICE_LIST),
@@ -140,7 +174,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
             ),
         )
-        .merge(invoice_request_edit_routes(rbac))
         .route(
             "/sales-invoice-requests/amounts/{id}",
             with_permission(
@@ -149,6 +182,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::receivable::INVOICE_REQUEST_INVOICE_REQUEST_AMOUNTS,
             ),
         )
+}
+
+/// 发票登记与红票命令保留逐路由功能权限校验。
+fn invoice_command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/invoices/commit",
             with_permission(post(receivable::invoice_commit), rbac, permissions::receivable::INVOICE_COMMIT),

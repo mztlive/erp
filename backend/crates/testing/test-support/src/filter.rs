@@ -33,12 +33,29 @@ fn matches(filter: &Document, object: &Document) -> bool {
         ("$expr", Bson::Boolean(value)) => *value,
         (_, Bson::Document(operator)) => {
             assert_eq!(operator.len(), 1, "未知查询操作必须使测试失败");
+            if let Ok(expected) = operator.get_bool("$exists") {
+                return path_value(object, key).is_some() == expected;
+            }
             let values = operator.get_array("$in").expect("未知查询操作必须使测试失败");
-            object.get(key).is_some_and(|value| values.contains(value))
+            path_value(object, key).is_some_and(|value| values.contains(value))
         },
         (key, _) if key.starts_with('$') => unsupported_operator(key),
-        (_, value) => object.get(key) == Some(value),
+        (_, value) => path_value(object, key) == Some(value),
     })
+}
+
+/// 按 Mongo 字段路径读取文档或明确数组位置；缺路径不制造值。
+fn path_value<'a>(object: &'a Document, path: &str) -> Option<&'a Bson> {
+    let mut parts = path.split('.');
+    let mut value = object.get(parts.next()?)?;
+    for part in parts {
+        value = match value {
+            Bson::Document(doc) => doc.get(part)?,
+            Bson::Array(items) => items.get(part.parse::<usize>().ok()?)?,
+            _ => return None,
+        };
+    }
+    Some(value)
 }
 
 /// 将查询数组元素转为文档；非文档一律走统一的未知操作失败路径。

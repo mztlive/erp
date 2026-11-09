@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use erp_identity::entity::resource_access::SourceKey;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventStatus};
 use erp_identity::service::resource_access::{GrantQueueHealth, GrantRecompute, ResourceAccessService};
 use erp_identity::{Error, Result, SharedRbacService};
@@ -163,5 +164,25 @@ impl ResourceGrantProcess {
             },
             _ => GrantReadiness::NotReady,
         })
+    }
+}
+
+impl ResourceGrantProcess {
+    /// 对业务确定的来源读取正式事件，并以当前可信事实核验授权就绪。
+    /// # 参数
+    /// source 为服务端来源身份；executor 为当前请求事务。
+    /// # 返回
+    /// 没有正式事件返回 Absent；其他状态按当前来源、事实和授权结果判定。
+    /// # 错误
+    /// 关联损坏、账号失效或读取失败不作为待处理返回。
+    pub async fn source_readiness(
+        &self,
+        source: &SourceKey,
+        executor: &mut dyn Executor,
+    ) -> Result<GrantReadiness> {
+        let Some(event) = self.access(None).source_event(source, executor).await? else {
+            return Ok(GrantReadiness::Absent);
+        };
+        self.readiness(&event, executor).await
     }
 }

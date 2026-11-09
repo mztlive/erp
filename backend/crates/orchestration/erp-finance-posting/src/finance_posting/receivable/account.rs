@@ -13,14 +13,15 @@ use erp_finance::entity::receivable::{
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::zero_amount;
 use erp_read_models::finance::dto::ReceivableAccountView;
-use erp_sales::entity::sales_order::BusinessType;
+use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
-use crate::{Error, Result};
+use crate::{Error, FinancePostingPorts, Result};
 
 impl ReceivableProcess {
     // -----------------------------------------------------------------------
@@ -52,42 +53,30 @@ impl ReceivableProcess {
         actor: &AuditActor,
     ) -> Result<ReceivableAccountView> {
         req.validate()?;
-        let sales_order = self
-            .db
-            .sales_orders()
-            .find_by_id(&req.sales_order_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-        let review_status = AccountReviewStatus::resolve_initial(
-            req.review_status,
-            sales_business_type_fact(sales_order.business_type),
-        )
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
-        if sales_order.business_type == BusinessType::Voucher
-            && sales_order.stable.current_revision_id.as_deref()
-                != Some(req.source_sales_order_revision_id.as_str())
-        {
-            return Err(Error::ConflictError("卡券应收必须绑定来源销售单的当前正式版本".to_string()));
-        }
-        let account_id = ReceivableAccountId::new(next_id());
-        let entry_id = ReceivableEntryId::new(next_id());
-        let posted_at = Instant::now();
-        let account = new_account(&req, account_id.clone(), review_status, actor.id())?;
-        let entry = new_entry(&req, entry_id, account_id.clone(), &account, posted_at)?;
-        let audit = actor.clone().resource_log(
-            "receivable_account.create",
-            "receivable_account",
-            account_id.to_string(),
-        )?;
-
         let db = self.db.clone();
-        let client = db.client().clone();
-        client
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let account_id = db
+            .client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let sales_order = authorized_source(&db, &rbac, &req, &actor, executor).await?;
+                    let review_status = initial_review_status(&req, &sales_order)?;
+                    let account_id = ReceivableAccountId::new(next_id());
+                    let entry_id = ReceivableEntryId::new(next_id());
+                    let posted_at = Instant::now();
+                    let account = new_account(&req, account_id.clone(), review_status, actor.id())?;
+                    let entry = new_entry(&req, entry_id, account_id.clone(), &account, posted_at)?;
+                    let audit = actor.clone().resource_log(
+                        "receivable_account.create",
+                        "receivable_account",
+                        account_id.to_string(),
+                    )?;
+
                     db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), Error>(())
+                    Ok::<_, Error>(account_id)
                 })
             })
             .await?;
@@ -155,4 +144,55 @@ fn new_entry(
             posted_at,
         },
     )?)
+}
+
+/// 校验来源版本并确定新建子账复核状态。
+fn initial_review_status(
+    req: &CreateReceivableAccountRequest,
+    sales_order: &SalesOrder,
+) -> Result<AccountReviewStatus> {
+    let review_status = AccountReviewStatus::resolve_initial(
+        req.review_status,
+        sales_business_type_fact(sales_order.business_type),
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    if sales_order.business_type == BusinessType::Voucher
+        && sales_order.stable.current_revision_id.as_deref()
+            != Some(req.source_sales_order_revision_id.as_str())
+    {
+        return Err(Error::ConflictError("卡券应收必须绑定来源销售单的当前正式版本".to_string()));
+    }
+    Ok(review_status)
+}
+
+/// 同一事务校验真实销售单、绑定版本与客户，避免客户端拼接跨单来源。
+async fn authorized_source(
+    db: &Database,
+    rbac: &FinancePostingPorts,
+    req: &CreateReceivableAccountRequest,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<SalesOrder> {
+    let sales_order = db
+        .sales_orders()
+        .find_by_id(&req.sales_order_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+    rbac.funds
+        .require_sales_sources(
+            actor,
+            "receivable_account:create",
+            std::slice::from_ref(&sales_order.base.id),
+            executor,
+        )
+        .await?;
+    if sales_order.customer_id != req.customer_id {
+        return Err(Error::ConflictError("应收客户与来源销售单不一致".into()));
+    }
+    db.sales_order_revisions()
+        .find_by_id(&req.source_sales_order_revision_id, executor)
+        .await?
+        .filter(|revision| revision.sales_order_id.as_ref() == req.sales_order_id)
+        .ok_or_else(|| Error::ConflictError("应收绑定版本与来源销售单不一致".into()))?;
+    Ok(sales_order)
 }

@@ -2269,6 +2269,30 @@
   },
   {
     "method": "POST",
+    "path": "/product-brands/import/jobs",
+    "handler": "catalog::brand_import::submit",
+    "code": "product_brand:create",
+    "group": "商品与仓库",
+    "group_desc": "公司商品池、商品、类目、供应商与仓库基础资料",
+    "description": "提交品牌导入任务",
+    "guards": [
+      "product_brand:create"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/product-brands/import/jobs/{id}/failures",
+    "handler": "catalog::brand_import::failures",
+    "code": "product_brand:create",
+    "group": "商品与仓库",
+    "group_desc": "公司商品池、商品、类目、供应商与仓库基础资料",
+    "description": "下载品牌导入待处理行",
+    "guards": [
+      "product_brand:create"
+    ]
+  },
+  {
+    "method": "POST",
     "path": "/product-brands/with-assets",
     "handler": "catalog::product_brand_create_with_assets",
     "code": "product_brand:create",
@@ -3262,6 +3286,30 @@
     "description": "预览本人导入原文",
     "guards": [
       "contract:create"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/sales-orders/{id}/delivery-arrangements",
+    "handler": "address_arrangement::sales_get",
+    "code": "sales_order:detail",
+    "group": "销售单",
+    "group_desc": "销售单（W05）管理",
+    "description": "查询销售单详情",
+    "guards": [
+      "sales_order:detail"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/sales-orders/{id}/delivery-arrangements",
+    "handler": "address_arrangement::sales_save",
+    "code": "sales_order:update",
+    "group": "销售单",
+    "group_desc": "销售单（W05）管理",
+    "description": "补充或调整收货安排",
+    "guards": [
+      "sales_order:update"
     ]
   },
   {
@@ -5114,6 +5162,30 @@
   },
   {
     "method": "GET",
+    "path": "/deliveries/{id}/delivery-arrangements",
+    "handler": "fulfillment::address_arrangement::delivery_get",
+    "code": "delivery:update",
+    "group": "履约",
+    "group_desc": "采购入库、发货、交付、服务与客户验收管理",
+    "description": "更新发货单",
+    "guards": [
+      "delivery:update"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/deliveries/{id}/delivery-arrangements",
+    "handler": "fulfillment::address_arrangement::delivery_save",
+    "code": "delivery:update",
+    "group": "履约",
+    "group_desc": "采购入库、发货、交付、服务与客户验收管理",
+    "description": "更新发货单",
+    "guards": [
+      "delivery:update"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/purchase-receipts",
     "handler": "fulfillment::purchase_receipt::purchase_receipt_list",
     "code": "purchase_receipt:list",
@@ -5566,6 +5638,18 @@
     "description": "过账库存调整",
     "guards": [
       "stock_adjustment:post"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/receivable-accounts/sources/{kind}/{id}",
+    "handler": "receivable::allocation_source::detail",
+    "code": "receivable_account:detail",
+    "group": "客户往来",
+    "group_desc": "应收台账、回款与销项发票管理",
+    "description": "查询应收往来子账详情",
+    "guards": [
+      "receivable_account:detail"
     ]
   },
   {

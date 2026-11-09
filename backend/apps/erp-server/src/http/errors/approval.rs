@@ -10,6 +10,7 @@ use erp_workflow::ErrorCode;
 /// 无。
 pub(crate) fn approval_message(code: ErrorCode) -> &'static str {
     match code {
+        ErrorCode::ResourceAuthorizationNotReady => "资料授权正在处理，请稍后刷新",
         ErrorCode::ApprovalPolicyNotRegistered => {
             "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
         },

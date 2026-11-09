@@ -6,7 +6,8 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, aggregate,
+    insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -535,16 +536,18 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
             .projection(sales_order_projection())
             .build();
         let collection = self.collection().clone_with_type::<SalesOrderRow>();
-        let items = mongo_ops::find_many(
+        let items = aggregate::find(
             &collection,
             doc! { "$and": [filter.to_doc(), scope.document()] },
             options,
+            scope.lookup_after(filter.to_doc()),
             executor,
         )
         .await?;
-        let total = mongo_ops::count_documents(
+        let total = aggregate::count(
             &self.collection(),
             doc! { "$and": [filter.to_doc(), scope.document()] },
+            scope.lookup_after(filter.to_doc()),
             executor,
         )
         .await?;
@@ -558,7 +561,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<super::scope::SalesVersion>> {
-        mongo_ops::find_many(
+        aggregate::find(
             &self.collection().clone_with_type::<super::scope::SalesVersion>(),
             doc! { "$and": [filter.to_doc(), scope.document()] },
             FindOptions::builder()
@@ -566,6 +569,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
+            scope.lookup_after(filter.to_doc()),
             executor,
         )
         .await

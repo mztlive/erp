@@ -267,3 +267,23 @@ impl GrantQueue {
         Ok(event)
     }
 }
+
+impl GrantQueue {
+    /// 按精确来源身份读取正式事件，使用来源索引而不扫描账号事件。
+    pub(crate) async fn source_event(
+        &self,
+        source: &SourceKey,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<GrantEvent>> {
+        source.id()?;
+        Ok(resource_grants::events(&self.db)
+            .find_one(
+                doc! {
+                    "source.rule": &source.rule, "source.business_type": &source.business_type,
+                    "source.business_id": &source.business_id, "source.recipient": &source.recipient,
+                },
+                executor,
+            )
+            .await?)
+    }
+}

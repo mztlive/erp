@@ -1,7 +1,7 @@
 //! 客户经营质量双口径的有界销售单事实查询；授权范围在数据库过滤中交集执行。
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, aggregate};
 
 use crate::entity::sales_order::{CommercialStatus, SalesOrder};
 
@@ -19,16 +19,26 @@ pub struct QualityOrderFilter {
 impl QualityOrderFilter {
     /// 不接受客户端范围标识替代授权集合；空集合必定无结果。
     fn document(&self) -> Document {
+        let mut filter = self.business_filter();
+        let mut conditions = filter.get_array("$and").cloned().unwrap_or_default();
+        conditions.insert(0, self.authorized_scope.document().into());
+        filter.insert("$and", conditions);
+        filter
+    }
+    /// 期间与业务筛选先于授权关联，不能把用户条件作为授权依据。
+    fn business_filter(&self) -> Document {
         let mut filter = doc! { "deleted_at": 0_i64,
         "commercial_status": CommercialStatus::Effective.as_str(),
         "effective_at": { "$gte": self.from, "$lt": self.until } };
-        let mut conditions = vec![self.authorized_scope.document()];
+        let mut conditions = Vec::new();
         match &self.customer_ids {
             None => {},
             Some(ids) if ids.is_empty() => conditions.push(doc! { "$expr": false }),
             Some(ids) => conditions.push(doc! { "customer_id": { "$in": ids } }),
         }
-        filter.insert("$and", conditions);
+        if !conditions.is_empty() {
+            filter.insert("$and", conditions);
+        }
         filter
     }
 }
@@ -64,7 +74,14 @@ impl SalesOrderRepositoryQualityExt for Repository<'_, SalesOrder> {
             .limit((QUALITY_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
             .build();
-        mongo_ops::find_many(&self.collection().clone_with_type(), filter.document(), options, executor).await
+        aggregate::find(
+            &self.collection().clone_with_type(),
+            filter.document(),
+            options,
+            filter.authorized_scope.lookup_after(filter.business_filter()),
+            executor,
+        )
+        .await
     }
 }
 

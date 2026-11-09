@@ -1,7 +1,7 @@
 //! 开票申请查询与额度占用读取。并发申请必须由调用方先写锁应收子账。
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, aggregate};
 
 use crate::dto::receivable::invoice_request::InvoiceRequestQuery;
 use crate::entity::receivable::SalesInvoiceRequest;
@@ -58,6 +58,7 @@ pub trait SalesInvoiceRequestRepositoryExt {
     async fn scope_candidates(
         &self,
         query: &InvoiceRequestQuery,
+        stages: Vec<Document>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesInvoiceRequest>>;
 
@@ -128,10 +129,12 @@ impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, Sales
     async fn scope_candidates(
         &self,
         query: &InvoiceRequestQuery,
+        stages: Vec<Document>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesInvoiceRequest>> {
-        mongo_ops::find_many(&self.collection(), RequestFilter(query).to_doc(), candidate_options(), executor)
-            .await
+        let mut pipeline = vec![doc! { "$match": RequestFilter(query).to_doc() }];
+        pipeline.extend(stages);
+        aggregate::find(&self.collection(), doc! {}, candidate_options(), pipeline, executor).await
     }
 
     async fn find_for_task(

@@ -149,6 +149,7 @@ fn allocation_lookup(
         scope,
         "sales_owner_user_id",
         "order_no",
+        &authorization.sales.grant_lookup,
     ));
     let mut project = doc! { "_id": 0, "id": 1, "order": "$scope_order_id", "owner": "$scope_source.owner_user_id", "source_version": "$scope_source.version",
     "exists": { "$ne": [{ "$ifNull": ["$scope_source.id", Bson::Null] }, Bson::Null] },

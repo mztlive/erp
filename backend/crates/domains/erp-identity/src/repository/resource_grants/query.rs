@@ -31,6 +31,17 @@ pub fn read_stages(query: &AuthorizedResourceQuery, base_filter: Document) -> Ve
     ]
 }
 
+/// 编译有效指定记录的关联阶段，由业务仓储与原范围取并集。
+/// # 参数
+/// query 为统一服务证明的当前入口。
+/// # 返回
+/// 有效来源关联阶段，须先执行再判断 __resource_grant.0；下游类型化投影不得暴露临时字段。
+/// # 错误
+/// 不执行 I/O；不得用于原单据写入。
+pub fn lookup_stages(query: &AuthorizedResourceQuery) -> Vec<Document> {
+    read_stages(query, doc! { "$expr": false }).into_iter().take(1).collect()
+}
+
 /// 只读取本次目标的有效授权；数据库关联来源并按目标去重。
 /// # 参数
 /// user、resource 为可信入口身份；targets 为已校验目标；executor 为调用事务。

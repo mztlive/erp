@@ -132,7 +132,7 @@ impl PurchaseAccess {
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))?;
-        if !self.allows(&access, &scope, &order)? {
+        if !matches!(action, "list" | "detail") && !self.allows(&access, &scope, &order)? {
             return Err(Error::NotFound("采购单不存在或无权操作".into()));
         }
         Ok(order)
@@ -280,6 +280,7 @@ pub fn attach_history(
 pub fn purchase_scope(access: &PurchaseResolvedScope, user: &str, history: Vec<String>) -> PurchaseReadScope {
     PurchaseReadScope {
         required_scopes: vec![],
+        grant_lookup: access.grant_lookup.clone(),
         historical_order_ids: history,
         roles: access.role_clauses.iter().map(|clause| map_clause(clause, user)).collect(),
         user_limit: access.user_limit.as_ref().map(|clause| map_clause(clause, user)),
@@ -330,6 +331,7 @@ mod tests {
     #[test]
     fn attach_history_only_enriches_reads_and_updates_scope_version() {
         let mut access = PurchaseResolvedScope {
+            grant_lookup: Vec::new(),
             user_id: "buyer-a".into(),
             resource: "purchase_order".into(),
             action: "list".into(),

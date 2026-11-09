@@ -8,3 +8,5 @@ pub mod material_writes;
 pub use errors::{Error, Result};
 pub mod runtime_port;
 pub use runtime_port::{ApprovalRuntime, ApprovalRuntimePort};
+
+pub mod resource_grants;

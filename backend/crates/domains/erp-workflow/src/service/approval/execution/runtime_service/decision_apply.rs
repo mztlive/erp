@@ -1,5 +1,6 @@
 //! 审批决定提交、回放与事务写入。
 
+use crate::ports::WorkflowAuthorizationPort;
 use crate::service::approval::copies::persist_copies;
 mod decision_persist;
 mod decision_prepare;
@@ -68,7 +69,7 @@ struct RuntimeDecisionOutcome {
     blocked: bool,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
+impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 提交当前开放任务的通过或驳回。
     ///
     /// 加载任务、执行、实例与定义图，重验三方责任与写时资格，调用
@@ -229,7 +230,7 @@ pub(super) fn decision_terminal_fresh_error() -> Error {
 /// 决定回放先执行与 Fresh 相同的任务前置和当前授权，再允许查询和比较收据。
 async fn replay_decision(
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    rbac: &impl WorkflowAuthorizationPort,
     object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
@@ -322,7 +323,7 @@ async fn replay_terminal_receipt_view(
 #[allow(clippy::too_many_arguments)]
 async fn submit_decision_apply(
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    rbac: &impl WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
     object_read: &dyn crate::ports::ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
@@ -348,6 +349,7 @@ async fn submit_decision_apply(
     }
     persist_decision_writes(db, persist_decision_input(&loaded, &prepared, command, audit_port), executor)
         .await?;
+    rbac.append_assignment_grants(&prepared.writes, executor).await?;
     persist_copies(db, rbac, &prepared.writes.instance, &prepared.writes.events, executor).await?;
     let blocked = prepared.writes.commit == CommitRequired::Blocked;
     let view = map_command_view(
@@ -563,7 +565,7 @@ pub(super) fn terminal_task_subject_matches(
 /// 回放只使用冻结运行事实证明原决定人当前仍具备动作权限，不信任收据或 WorkItem owner 投影。
 async fn authorize_decision_terminal_replay(
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    rbac: &impl WorkflowAuthorizationPort,
     object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     item: &WorkItem,

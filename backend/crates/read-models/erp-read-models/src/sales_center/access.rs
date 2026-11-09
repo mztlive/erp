@@ -7,9 +7,12 @@ use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
+use erp_identity::entity::resource_access::ResourceKind;
 use erp_identity::repository::OrganizationRepository;
+use erp_identity::repository::resource_grants::lookup_stages;
 use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
+use erp_identity::service::resource_access::ResourceAccessService;
 use erp_identity::{Permission, SharedRbacService};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
@@ -72,9 +75,6 @@ impl SalesAccess {
                         .find_authorized(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
-                    if !Self::allows(&context, &scope, &order)? {
-                        return Err(Error::NotFound("销售单不存在或无权查看".into()));
-                    }
                     let version =
                         format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                     Ok((order, version))
@@ -142,7 +142,15 @@ impl SalesAccess {
         customers.hash(&mut fingerprint);
         history.hash(&mut fingerprint);
         access.scope_version = format!("{}:{:x}", access.scope_version, fingerprint.finish());
-        let scope = sales_scope(&access, actor.id(), &customers, history);
+        let mut scope = sales_scope(&access, actor.id(), &customers, history);
+        if allows_history(resource, action) {
+            let entry = Permission::parse(format!("{resource}:{action}"))?;
+            let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
+                .resolve(actor, &entry, ResourceKind::SalesOrder, executor)
+                .await?;
+            access.scope_version = format!("{}:{}", access.scope_version, query.constraints().3);
+            scope.grant_lookup = lookup_stages(&query);
+        }
         Ok((access, scope))
     }
     /// 在调用方事务内重验对象资格。
@@ -178,7 +186,7 @@ impl SalesAccess {
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))?;
-        if !Self::allows(&access, &scope, &order)? {
+        if !allows_history("sales_order", action) && !Self::allows(&access, &scope, &order)? {
             return Err(Error::NotFound("销售单不存在或无权操作".into()));
         }
         Ok(order)
@@ -423,6 +431,7 @@ pub fn sales_scope(
 ) -> SalesReadScope {
     SalesReadScope {
         required_scopes: vec![],
+        grant_lookup: Vec::new(),
         historical_order_ids: history,
         roles: access.scope.role_clauses.iter().map(|c| clause(c, user, customers)).collect(),
         user_limit: access.scope.user_limit.as_ref().map(|c| clause(c, user, customers)),

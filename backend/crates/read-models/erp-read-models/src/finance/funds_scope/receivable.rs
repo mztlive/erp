@@ -5,9 +5,11 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::CustomerAccountId;
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::ReceivableAccountListParams;
+use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{CustomerCenterReceivableRow, ReceivableExt};
-use erp_sales::repository::SalesOrderExt;
+use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::repository::{SalesOrderExt, SalesOrderRepositoryScopeExt};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -106,76 +108,100 @@ impl FundsAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let (access, authorization) =
-                        this.resolve(&actor, "receivable_account", "detail", executor).await?;
-                    let account = this
-                        .db
-                        .receivable_accounts()
-                        .find_by_id(&id, executor)
-                        .await
-                        .map_err(Error::from)?
-                        .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
-                    let order = this
-                        .db
-                        .sales_orders()
-                        .find_by_id(account.sales_order_id.as_ref(), executor)
-                        .await
-                        .map_err(Error::from)?
-                        .ok_or_else(|| Error::NotFound("应收账户来源销售单不存在".into()))?;
-                    let facts = FundsLinkedFacts {
-                        owner_user_id: Some(order.sales_owner_user_id.clone()),
-                        business_org_unit_id: Some(order.business_org_unit_id.clone()),
-                        operator_user_ids: vec![account.stable.created_by.clone()],
-                        secondary_operator_user_ids: Vec::new(),
-                        linked_document_id: order.base.id.clone(),
-                        linked_document_version: order.base.version,
-                    };
-                    if !Self::allows(&access, &facts)? {
-                        return Err(Error::NotFound("应收往来子账不存在".into()));
-                    }
-                    let whole = true;
-                    let visible = this.receivable_visible_share(&account.base.id, executor).await?;
-                    let mut row = ScopedReceivableAccountRow {
-                        id: account.base.id.clone(),
-                        sales_order_id: account.sales_order_id.to_string(),
-                        sales_order_no: order.order_no.clone(),
-                        account_seq: account.account_seq,
-                        status: account.stable.status(),
-                        created_at: account.base.created_at,
-                        version: account.base.version,
-                        customer_id: account.customer_id.to_string(),
-                        customer_name: None,
-                        counterparty_party_id: account.counterparty_party_id.to_string(),
-                        counterparty_party_name: None,
-                        visible_settled_share: visible,
-                        gross_total: whole_amount(whole, account.gross_total),
-                        settled_total: whole_amount(whole, account.settled_total),
-                        open_total: whole_amount(whole, account.open_total),
-                        invoiceable_total: whole_amount(whole, account.invoiceable_total),
-                        invoiced_total: whole_amount(whole, account.invoiced_total),
-                        open_invoiceable_total: whole_amount(whole, account.open_invoiceable_total),
-                        permission_limited: !whole,
-                        sales_owner_user_id: Some(order.sales_owner_user_id.clone()),
-                        business_org_unit_id: Some(order.business_org_unit_id.clone()),
-                        entries: Vec::new(),
-                    };
-                    this.finish_receivable_display(std::slice::from_mut(&mut row), executor).await?;
-                    let parts = vec![facts.version_part()];
-                    let version = scope_version(&authorization.context, &parts);
-                    Ok(FundsScopedResult {
-                        data: row,
-                        scope_version: version,
-                        policy_version: authorization.context.policy_version,
-                        organization_version: authorization.context.organizations.version,
-                        as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-                        empty_reason: None,
-                        scope_summary: "应收子账继承所属销售来源边界",
-                        ownership_basis: "current_sales_owner_and_register_operator",
-                    })
-                })
+                Box::pin(async move { this.load_receivable_detail(&id, &actor, executor).await })
             })
             .await
+    }
+
+    /// 在调用方事务内读取授权后的应收详情。
+    async fn load_receivable_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<FundsScopedResult<ScopedReceivableAccountRow>> {
+        let (_access, authorization) = self.resolve(actor, "receivable_account", "detail", executor).await?;
+        let account = self
+            .db
+            .receivable_accounts()
+            .find_by_id(id, executor)
+            .await
+            .map_err(Error::from)?
+            .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
+        let order = self
+            .db
+            .sales_orders()
+            .find_by_id(account.sales_order_id.as_ref(), executor)
+            .await
+            .map_err(Error::from)?
+            .ok_or_else(|| Error::NotFound("应收账户来源销售单不存在".into()))?;
+        let facts = FundsLinkedFacts {
+            owner_user_id: Some(order.sales_owner_user_id.clone()),
+            business_org_unit_id: Some(order.business_org_unit_id.clone()),
+            operator_user_ids: vec![account.stable.created_by.clone()],
+            secondary_operator_user_ids: Vec::new(),
+            linked_document_id: order.base.id.clone(),
+            linked_document_version: order.base.version,
+        };
+        if self
+            .db
+            .sales_orders()
+            .find_authorized(&order.base.id, &authorization.sales, executor)
+            .await?
+            .is_none()
+        {
+            return Err(Error::NotFound("应收往来子账不存在".into()));
+        }
+        let mut row = self.receivable_detail_row(&account, &order, executor).await?;
+        self.finish_receivable_display(std::slice::from_mut(&mut row), executor).await?;
+        let parts = vec![facts.version_part()];
+        let version = scope_version(&authorization.context, &parts);
+        Ok(FundsScopedResult {
+            data: row,
+            scope_version: version,
+            policy_version: authorization.context.policy_version,
+            organization_version: authorization.context.organizations.version,
+            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
+            empty_reason: None,
+            scope_summary: "应收子账继承所属销售来源边界",
+            ownership_basis: "current_sales_owner_and_register_operator",
+        })
+    }
+
+    /// 由已经过来源授权的子账组装完整财务视图。
+    async fn receivable_detail_row(
+        &self,
+        account: &ReceivableAccount,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<ScopedReceivableAccountRow> {
+        let whole = true;
+        let visible = self.receivable_visible_share(&account.base.id, executor).await?;
+        let row = ScopedReceivableAccountRow {
+            id: account.base.id.clone(),
+            sales_order_id: account.sales_order_id.to_string(),
+            sales_order_no: order.order_no.clone(),
+            account_seq: account.account_seq,
+            status: account.stable.status(),
+            created_at: account.base.created_at,
+            version: account.base.version,
+            customer_id: account.customer_id.to_string(),
+            customer_name: None,
+            counterparty_party_id: account.counterparty_party_id.to_string(),
+            counterparty_party_name: None,
+            visible_settled_share: visible,
+            gross_total: whole_amount(whole, account.gross_total),
+            settled_total: whole_amount(whole, account.settled_total),
+            open_total: whole_amount(whole, account.open_total),
+            invoiceable_total: whole_amount(whole, account.invoiceable_total),
+            invoiced_total: whole_amount(whole, account.invoiced_total),
+            open_invoiceable_total: whole_amount(whole, account.open_invoiceable_total),
+            permission_limited: !whole,
+            sales_owner_user_id: Some(order.sales_owner_user_id.clone()),
+            business_org_unit_id: Some(order.business_org_unit_id.clone()),
+            entries: Vec::new(),
+        };
+        Ok(row)
     }
 
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。

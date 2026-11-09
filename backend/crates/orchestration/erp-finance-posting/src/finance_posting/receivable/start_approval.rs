@@ -315,7 +315,7 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     let CustomerReceiptStartPersistInput {
         resubmission_reason,
         receipt,
-        actor: _,
+        actor,
         id: _,
         snapshot_payload,
         prepared,
@@ -326,6 +326,7 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(receipt);
     };
+    super::customer_receipt_submit::require_allocation_sources(db, rbac, &actor, &receipt, executor).await?;
     claim_receipt_start(db, &writes, now, executor).await?;
     reserve_receipt(db, &receipt, executor).await?;
     // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。

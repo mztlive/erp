@@ -1,22 +1,16 @@
 import { apiGet } from "@/lib/api"
 import { compactFixed } from "@/lib/fixed-decimal"
 
-/** 仅消费销售详情的冻结商业快照；不引入销售工作面的查询及依赖。 */
-type SalesSourceDto = {
-    current_revision_id?: string | null
-    owner_user_name?: string | null
-    revisions: Array<{
-        id: string
-        customer_name?: string | null
-        project_name?: string | null
-        contract_no?: string | null
-        commercial_lines?: Array<{
-            item_name_snapshot: string
-            spec_snapshot?: string | null
-            quantity?: string | null
-            card_count?: number | null
-            unit_snapshot?: string | null
-        }>
+type AllocationSourceDto = {
+    customer_name: string
+    project_name?: string | null
+    contract_no?: string | null
+    owner_name?: string | null
+    products: Array<{
+        name: string
+        spec?: string | null
+        quantity?: string | null
+        unit?: string | null
     }>
 }
 
@@ -28,32 +22,27 @@ export type AllocationSource = {
     products: readonly string[]
 }
 
-/** 有应收的销售单只读指定生效修订，不以未通过的工作副本替代。 */
+/** 从财务接口读取应收绑定的生效资料；来源版本由服务端确定。 */
 export async function fetchAllocationSource(
-    salesOrderId: string,
-    revisionId?: string,
+    targetKind: "receivable_entry" | "receivable_account",
+    targetId: string,
 ): Promise<AllocationSource> {
-    const detail = await apiGet<SalesSourceDto>(
-        `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
-    )
-    const revision = detail.revisions.find(
-        (item) => item.id === (revisionId || detail.current_revision_id),
+    const source = await apiGet<AllocationSourceDto>(
+        `/admin/receivable-accounts/sources/${targetKind}/${encodeURIComponent(targetId)}`,
     )
     return {
-        customerName: revision?.customer_name?.trim() || undefined,
-        projectName: revision?.project_name?.trim() || undefined,
-        contractNo: revision?.contract_no?.trim() || undefined,
-        ownerName: detail.owner_user_name?.trim() || undefined,
-        products: (revision?.commercial_lines ?? []).map((line) => {
-            const quantity = line.quantity ?? line.card_count?.toString()
-            const spec = line.spec_snapshot?.trim()
-            return [
-                line.item_name_snapshot,
-                spec && spec !== "无规格" ? `（${spec}）` : "",
-                quantity
-                    ? ` × ${compactFixed(quantity)}${line.unit_snapshot?.trim() || ""}`
+        customerName: source.customer_name.trim() || undefined,
+        projectName: source.project_name?.trim() || undefined,
+        contractNo: source.contract_no?.trim() || undefined,
+        ownerName: source.owner_name?.trim() || undefined,
+        products: source.products.map((line) =>
+            [
+                line.name,
+                line.spec && line.spec !== "无规格" ? `（${line.spec}）` : "",
+                line.quantity
+                    ? ` × ${compactFixed(line.quantity)}${line.unit?.trim() || ""}`
                     : "",
-            ].join("")
-        }),
+            ].join(""),
+        ),
     }
 }

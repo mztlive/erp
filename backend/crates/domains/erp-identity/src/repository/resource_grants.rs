@@ -6,8 +6,8 @@ use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Error as PersistenceError, Executor, Repository, persisted_document};
-pub use query::read_stages;
 pub(crate) use query::target_ids;
+pub use query::{lookup_stages, read_stages};
 pub(crate) use revision::{advance, revision};
 use serde::de::DeserializeOwned;
 

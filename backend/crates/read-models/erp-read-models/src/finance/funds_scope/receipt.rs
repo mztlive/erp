@@ -624,7 +624,7 @@ impl FundsAccess {
         let links = self.receipt_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.sales_fact_map(&order_ids, executor).await?;
-        let authorized = self.authorized_sales_ids(&authorization, executor).await?;
+        let authorized = self.authorized_sales_targets(&authorization, &order_ids, executor).await?;
         let allowed = authorized.map(|list| list.into_iter().collect::<BTreeSet<_>>());
         let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {

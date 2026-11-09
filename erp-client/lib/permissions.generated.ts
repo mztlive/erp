@@ -1272,6 +1272,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/receivable-accounts/sources/{kind}/{id}",
+                description: "查询应收往来子账详情",
+                permission: {
+                    resource: "receivable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/receivable-accounts",
                 description: "查询应收往来子账列表",
                 permission: {

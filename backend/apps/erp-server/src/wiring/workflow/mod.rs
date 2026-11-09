@@ -188,6 +188,8 @@ pub fn attach_published_binding(
     erp_workflow::service::approval::binding::attach_published_binding(document, binding).map_err(Error::from)
 }
 
+mod resource_access;
+
 #[cfg(test)]
 mod committed_response_tests {
     use super::*;

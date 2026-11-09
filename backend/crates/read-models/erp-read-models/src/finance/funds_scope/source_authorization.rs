@@ -8,7 +8,10 @@ use application_core::AuditActor;
 use erp_finance::ports::funds_scope::{FundsResolvedClause, FundsResolvedScope};
 use erp_identity::access_control::ScopeClause;
 use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
+use erp_identity::entity::resource_access::ResourceKind;
+use erp_identity::repository::resource_grants::lookup_stages;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
+use erp_identity::service::resource_access::ResourceAccessService;
 use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt, SharedRbacService};
 use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
 use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
@@ -50,10 +53,10 @@ impl FundsAccess {
         let permissions = [entry_permission.clone(), ledger_permission.clone()];
         let mut batch = resolver.batch(actor, &permissions, executor);
         let source_permission =
-            Permission::parse(if purchase { "purchase_order:list" } else { "sales_order:list" })?;
+            Permission::parse(if purchase { "purchase_order:detail" } else { "sales_order:detail" })?;
         let context = batch.resolve_source_scope(&entry_permission, &source_permission).await?;
         let sales = if dual {
-            let sales_permission = Permission::parse("sales_order:list")?;
+            let sales_permission = Permission::parse("sales_order:detail")?;
             Some(batch.resolve_source_scope(&entry_permission, &sales_permission).await?)
         } else {
             None
@@ -65,7 +68,24 @@ impl FundsAccess {
             None
         };
         let ledger_read = batch.has_permission(&ledger_permission).await?;
-        Ok(source_authorization(context, sales, settlement, actor.id(), purchase, ledger_read))
+        let (mut access, mut authorization) =
+            source_authorization(context, sales, settlement, actor.id(), purchase, ledger_read);
+        let resolver = ResourceAccessService::reader(self.db.clone(), self.rbac.clone());
+        if !purchase || dual {
+            let query =
+                resolver.resolve(actor, &entry_permission, ResourceKind::SalesOrder, executor).await?;
+            authorization.sales.grant_lookup = lookup_stages(&query);
+            authorization.context.scope_version.push_str(query.constraints().3);
+        }
+        if let Some(scope) = &mut authorization.purchase_scope {
+            let query =
+                resolver.resolve(actor, &entry_permission, ResourceKind::PurchaseOrder, executor).await?;
+            scope.grant_lookup = lookup_stages(&query);
+            authorization.context.scope_version.push_str(query.constraints().3);
+        }
+        access.scope_version = authorization.context.scope_version.clone();
+        authorization.no_scope = authorization.empty();
+        Ok((access, authorization))
     }
 }
 
@@ -161,6 +181,7 @@ fn purchase_condition(source: &SalesReadScope) -> PurchaseReadScope {
         required_scopes: Vec::new(),
         roles: source.roles.iter().map(clause).collect(),
         user_limit: source.user_limit.as_ref().map(clause),
+        grant_lookup: Vec::new(),
         historical_order_ids: Vec::new(),
     }
 }

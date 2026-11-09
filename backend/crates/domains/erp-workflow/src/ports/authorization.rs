@@ -177,6 +177,45 @@ pub type WorkflowPolicyWrite<T, E> = Box<
 
 /// Authorization facts and policy-bound transactions for workflow commands.
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
+    /// 当前审批办理在原事务检查完整单据读取资格。
+    /// # 参数
+    /// actor 为已验证当前办理人；source 为实际订单；instance 为审批实例；executor 为原事务。
+    /// # 返回
+    /// 当前入口和来源授权成立时成功。
+    /// # 错误
+    /// 未装配、授权未就绪或来源不可读时拒绝。
+    fn require_approval_source(
+        &self,
+        _actor: &AuditActor,
+        _source: &OrderTaskSource,
+        _instance: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { Err(Error::Internal("审批单据读取授权未装配".into())) }
+    }
+
+    /// 在正式审批分配事务追加读取授权事件。
+    /// # 参数
+    /// writes 为已持久化的计划；executor 为原事务。
+    /// # 返回
+    /// 对应事件全部保存成功。
+    /// # 错误
+    /// 销售采购人工任务未装配事件提供者时拒绝。
+    fn append_assignment_grants(
+        &self,
+        writes: &crate::service::approval::execution::PlannedWrites,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async move {
+            if !writes.create_tasks.is_empty()
+                && matches!(writes.instance.subject.subject_kind(), "sales_order" | "purchase_order")
+            {
+                return Err(Error::Internal("审批读取授权事件未装配".into()));
+            }
+            Ok(())
+        }
+    }
+
     /// 证明内部账号可读取指定供应商申请的当前对象范围。
     ///
     /// # 参数

@@ -3,25 +3,28 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_core::money::Amount;
-use erp_finance::ports::funds_scope::{FundsDataScopePort, FundsResolvedClause, FundsResolvedScope};
-use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
+use erp_finance::ports::funds_scope::{FundsDataScopePort, FundsResolvedScope};
+use erp_identity::SharedRbacService;
+#[cfg(test)]
+use erp_identity::access_control::ResolvedScope;
 #[cfg(test)]
 use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+use erp_procurement::PurchaseAccess;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
-use erp_procurement::{PurchaseAccess, PurchaseResolvedScope};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_sales::repository::sales_order::scope::SalesReadScope;
+use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::Serialize;
 
 use super::rows::*;
+use crate::ports::invoice_grants::InvoiceGrantReadiness;
 use crate::{Error, Result};
 
 /// 资金自身动作资格与真实来源边界；整账职责不替代任何来源判定。
@@ -113,12 +116,25 @@ pub struct FundsLinkedCondition {
 /// 资金读取访问器；本域对象规则必须复用，不得与领域 Service 各维护一份。
 #[derive(Clone)]
 pub struct FundsAccess {
+    pub(super) grant_readiness: Option<Arc<dyn InvoiceGrantReadiness>>,
     pub(super) db: Database,
-    pub(super) rbac: erp_identity::SharedRbacService,
-    pub(super) scope: std::sync::Arc<dyn FundsDataScopePort>,
+    pub(super) rbac: SharedRbacService,
+    pub(super) scope: Arc<dyn FundsDataScopePort>,
 }
 
 impl FundsAccess {
+    /// 装配独立授权处理状态读取端口。
+    /// # 参数
+    /// readiness 为组合根提供的可信事实校验器。
+    /// # 返回
+    /// 具备未就绪状态判定的访问服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn with_grant_readiness(mut self, readiness: Arc<dyn InvoiceGrantReadiness>) -> Self {
+        self.grant_readiness = Some(readiness);
+        self
+    }
+
     /// 绑定资金集合数据库、身份服务与组合层注入的资金范围 Port。
     ///
     /// # 参数
@@ -134,12 +150,8 @@ impl FundsAccess {
     ///
     /// # 关键业务约束
     /// 不得在构造时补公司范围或读取登录人默认组织；不得直接构造身份域 Service。
-    pub fn new(
-        db: Database,
-        rbac: erp_identity::SharedRbacService,
-        scope: std::sync::Arc<dyn FundsDataScopePort>,
-    ) -> Self {
-        Self { db, rbac, scope }
+    pub fn new(db: Database, rbac: SharedRbacService, scope: Arc<dyn FundsDataScopePort>) -> Self {
+        Self { db, rbac, scope, grant_readiness: None }
     }
 
     /// 在调用方事务内证明资金资源动作并映射关联销售范围。
@@ -193,117 +205,37 @@ impl FundsAccess {
         self.resolve_sources(actor, resource, action, true, false, executor).await
     }
 
-    /// 以关联销售责任事实复用公共单对象判定。
-    ///
+    /// 按本次真实来源分批读取允许的销售单 ID，不枚举账号全部授权。
     /// # 参数
-    /// * `access` - 本动作公共解析上下文
-    /// * `facts` - 本域提供的关联责任与经办事实
-    ///
+    /// authorization 为当前入口授权；ids 为本次来源；executor 为原事务。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
-    ///
+    /// Some 中仅包含本次可读来源，空集合表示全部不可读。
     /// # 错误
-    /// 未注册资源动作拒绝。
-    pub fn allows(access: &FundsResolvedScope, facts: &FundsLinkedFacts) -> Result<bool> {
-        let consumer = registration(&access.resource, &access.action)?;
-        let resolved = ResolvedScope {
-            role_clauses: access.role_clauses.iter().map(public_clause).collect(),
-            user_limit: access.user_limit.as_ref().map(public_clause),
-        };
-        Ok(resolved.allows(
-            &ScopedObject {
-                owned: facts.owner_is(access.user_id.as_str()),
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: facts.business_org_unit_id.as_deref(),
-                settlement_party_id: None,
-                warehouse_id: None,
-            },
-            consumer.allows_history,
-        ))
-    }
-
-    /// 以关联采购责任事实复用公共单对象判定。
-    ///
-    /// # 参数
-    /// * `access` - 采购资源动作的已解析事实
-    /// * `facts` - 关联采购责任与业务组织事实
-    ///
-    /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
-    ///
-    /// # 错误
-    /// 资源或动作尚未接入 DataScope 时返回校验错误。
-    pub fn allows_purchase(access: &PurchaseResolvedScope, facts: &FundsLinkedFacts) -> Result<bool> {
-        let consumer = registration(&access.resource, &access.action)?;
-        let resolved = ResolvedScope {
-            role_clauses: access.role_clauses.iter().map(purchase_clause).collect(),
-            user_limit: access.user_limit.as_ref().map(purchase_clause),
-        };
-        Ok(resolved.allows(
-            &ScopedObject {
-                owned: facts.owner_is(access.user_id.as_str()),
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: facts.business_org_unit_id.as_deref(),
-                settlement_party_id: None,
-                warehouse_id: None,
-            },
-            consumer.allows_history,
-        ))
-    }
-
-    /// 将已证明范围编译为关联销售单 ID 限制。
-    ///
-    /// # 参数
-    /// * `authorization` - 已证明的资金授权
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// `None` 表示公司范围不限制关联单；`Some` 为必须命中的关联单集合。
-    ///
-    /// # 错误
-    /// 销售单 ID 查询失败时返回对应错误；结果超过 10000 条时返回校验错误并整体拒绝。
-    ///
-    /// # 关键业务约束
-    /// 空集表示无可见对象；超限必须整体拒绝，不得截断汇总。
-    pub async fn authorized_sales_ids(
+    /// 授权查询或数据库失败时拒绝，不截断必要来源。
+    pub async fn authorized_sales_targets(
         &self,
         authorization: &FundsAuthorization,
+        ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Option<Vec<String>>> {
-        if authorization.empty() {
-            return Ok(Some(Vec::new()));
+        let mut allowed = Vec::new();
+        for batch in ids.chunks(500) {
+            let rows = self
+                .db
+                .sales_orders()
+                .scope_order_versions(
+                    batch,
+                    &authorization.sales,
+                    &SalesReadScope {
+                        roles: vec![SalesScopeClause { company: true, ..Default::default() }],
+                        ..Default::default()
+                    },
+                    executor,
+                )
+                .await?;
+            allowed.extend(rows.into_iter().map(|row| row.id));
         }
-        if authorization.sales.is_company() {
-            return Ok(None);
-        }
-        let ids = self.db.sales_orders().list_authorized_ids(&authorization.sales, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("资金查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        Ok(Some(ids))
-    }
-
-    /// 将已证明范围编译为关联采购单 ID 限制。
-    ///
-    /// # 参数
-    /// * `purchase_access` - 组合层注入的采购访问器
-    /// * `scope` - 已证明的采购对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// `None` 表示公司范围不限制关联单；`Some` 为必须命中的关联单集合。
-    ///
-    /// # 错误
-    /// 采购来源 ID 解析失败时返回对应错误，其中包括超过查询上限。
-    pub async fn authorized_purchase_ids(
-        &self,
-        purchase_access: &PurchaseAccess,
-        scope: &erp_procurement::repository::purchase_order::scope::PurchaseReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<Vec<String>>> {
-        purchase_access.authorized_source_ids(scope, executor).await.map_err(Error::from)
+        Ok(Some(allowed))
     }
 
     /// 展开请求中的内部组织及其可选有效下级。
@@ -331,46 +263,6 @@ impl FundsAccess {
     }
 }
 
-/// 把资金 Port 事实无损转回公共判定输入，不读取或重解释原始规则。
-///
-/// # 参数
-/// * `clause` - 已解析的资金范围条款。
-///
-/// # 返回
-/// 复制公司、本人、协作与组织字段后的公共 `ScopeClause`；其余字段保持默认。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn public_clause(clause: &FundsResolvedClause) -> ScopeClause {
-    ScopeClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: clause.collaborative,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-        ..ScopeClause::default()
-    }
-}
-
-/// 把采购 Port 事实无损转回公共判定输入；协作不映射为采购对象。
-///
-/// # 参数
-/// * `clause` - 已解析的采购范围条款。
-///
-/// # 返回
-/// 复制公司、本人与组织字段的公共 `ScopeClause`；`collaborative` 固定为 false。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn purchase_clause(clause: &erp_procurement::ports::PurchaseResolvedClause) -> ScopeClause {
-    ScopeClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: false,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-        ..ScopeClause::default()
-    }
-}
-
 /// 由版本号构造组织版本快照；不读取组织集合。
 #[cfg(test)]
 pub(super) fn organization_version(version: u64) -> OrganizationState {
@@ -378,20 +270,6 @@ pub(super) fn organization_version(version: u64) -> OrganizationState {
 }
 
 impl FundsLinkedFacts {
-    /// 判断当前操作人是否为关联单据的当前负责人。
-    ///
-    /// # 参数
-    /// * `user` - 待比较的用户 ID。
-    ///
-    /// # 返回
-    /// `owner_user_id` 等于 `user` 时返回 true；负责人为空时返回 false。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn owner_is(&self, user: &str) -> bool {
-        self.owner_user_id.as_deref() == Some(user)
-    }
-
     /// 返回关联单据业务版本，用于跨页版本绑定。
     ///
     /// # 参数
@@ -674,6 +552,7 @@ where
 pub(super) fn changed() -> Error {
     crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

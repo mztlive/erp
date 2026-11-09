@@ -2,7 +2,7 @@
 use erp_core::common::time::Instant;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, mongo_ops};
+use persistence_core::{Executor, Repository, Result, aggregate};
 use serde::Deserialize;
 
 use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution, SalesOrder};
@@ -35,14 +35,24 @@ pub struct ProfitLossOrderFilter {
 impl ProfitLossOrderFilter {
     /// 不接受客户端范围标识替代授权集合；空集合必定无结果。
     fn document(&self) -> Document {
+        let mut filter = self.business_filter();
+        let mut conditions = filter.get_array("$and").cloned().unwrap_or_default();
+        conditions.insert(0, self.authorized_scope.document().into());
+        filter.insert("$and", conditions);
+        filter
+    }
+    /// 期间与业务筛选先于授权关联，不能把用户条件作为授权依据。
+    fn business_filter(&self) -> Document {
         let mut filter = doc! { "deleted_at": 0_i64, "business_type": "GOODS_SERVICE",
         "commercial_status": CommercialStatus::Effective.as_str(),
         "effective_at": { "$gte": self.from, "$lt": self.until } };
-        let mut conditions = vec![self.authorized_scope.document()];
+        let mut conditions = Vec::new();
         if let Some(id) = &self.customer_id {
             conditions.push(doc! { "customer_id": id });
         }
-        filter.insert("$and", conditions);
+        if !conditions.is_empty() {
+            filter.insert("$and", conditions);
+        }
         if let Some(id) = &self.sales_order_id {
             filter.insert("id", id);
         }
@@ -82,9 +92,17 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
             .projection(doc! { "id": 1, "order_no": 1, "customer_id": 1, "current_revision_id": 1,
             "effective_at": 1, "fulfillment_progress": 1, "attribution": 1, "version": 1 })
             .build();
-        mongo_ops::find_many(&self.collection().clone_with_type(), filter.document(), options, executor).await
+        aggregate::find(
+            &self.collection().clone_with_type(),
+            filter.document(),
+            options,
+            filter.authorized_scope.lookup_after(filter.business_filter()),
+            executor,
+        )
+        .await
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

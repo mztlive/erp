@@ -35,3 +35,6 @@ pub use rows::{
     ScopedReceivableAccountRow, ScopedSupplierPaymentRow,
 };
 pub(crate) use source_authorization::ledger_readable;
+
+mod allocation_source;
+pub use allocation_source::{AllocationSource, AllocationSourceKind};

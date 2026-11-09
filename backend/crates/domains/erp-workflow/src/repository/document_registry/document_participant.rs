@@ -18,6 +18,20 @@ struct ParticipantDocumentIdRow {
 /// 单据参与人集合仓储扩展。
 #[allow(async_fn_in_trait)]
 pub trait DocumentParticipantRepositoryExt {
+    /// 查询本次目标中的历史参与记录，不枚举用户其他单据。
+    /// # 参数
+    /// user_id 为当前账号；ids 为本次目标；executor 为调用方事务。
+    /// # 返回
+    /// 去重后的参与单据 ID；空目标返回空集合。
+    /// # 错误
+    /// 数据库读取失败返回错误。
+    async fn document_ids_in(
+        &self,
+        user_id: &str,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
     /// 按参与人返回去重后的业务单据 ID，仅投影 `document_id`。
     ///
     /// # 参数
@@ -50,6 +64,25 @@ pub trait DocumentParticipantRepositoryExt {
 }
 
 impl DocumentParticipantRepositoryExt for Repository<'_, DocumentParticipant> {
+    async fn document_ids_in(
+        &self,
+        user_id: &str,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<ParticipantDocumentIdRow>(),
+            doc! { "participant_user_id": user_id, "document_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::builder().projection(doc! { "document_id": 1 }).build(), executor,
+        ).await?;
+        let mut result = rows.into_iter().map(|row| row.document_id).collect::<Vec<_>>();
+        result.sort_unstable();
+        result.dedup();
+        Ok(result)
+    }
     async fn document_ids_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
         let collection = self.collection().clone_with_type::<ParticipantDocumentIdRow>();
         let options = FindOptions::builder().projection(doc! { "document_id": 1 }).build();

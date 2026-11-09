@@ -1,5 +1,6 @@
 //! MongoDB 连接、执行器、事务与通用仓储机械能力。
 
+pub mod aggregate;
 pub mod change_feed;
 mod connection;
 pub mod dirty_marks;

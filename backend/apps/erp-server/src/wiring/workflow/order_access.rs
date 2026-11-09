@@ -5,12 +5,12 @@ use std::slice;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
+use erp_identity::entity::resource_access::ResourceKind;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Error as IdentityError, SharedRbacService};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_read_models::workbench::authority::WorkItemFactsReader;
-use erp_sales::repository::SalesOrderExt;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::{OrderTaskSource, WorkflowScopeObject};
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
@@ -59,8 +59,9 @@ pub(super) async fn approval_readable(
         .as_ref()
         .filter(|source| source.matches_kind(kind))
         .ok_or_else(|| WorkflowError::Internal("订单审批缺少权威来源".into()))?;
-    let sources = BTreeSet::from([source.clone()]);
-    Ok(readable_sources(db, rbac, actor, &sources, executor).await?.contains(source))
+    super::resource_access::readable(db, rbac, actor, source, "approval_instance:read", executor)
+        .await
+        .map_err(map_service)
 }
 
 /// 每种订单解析一次权限并批量加载对象；任务重复引用不引起逐任务查询。
@@ -87,23 +88,29 @@ pub(super) async fn readable_sources(
     if sources.len() > 500 {
         return Err(WorkflowError::ValidationError("单批任务订单来源超过 500 条".into()));
     }
-    let sales = sources
-        .iter()
-        .filter_map(|source| match source {
-            OrderTaskSource::Sales(id) => Some(id.clone()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let purchases = sources
-        .iter()
-        .filter_map(|source| match source {
-            OrderTaskSource::Purchase(id) => Some(id.clone()),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
     let mut allowed = BTreeSet::new();
-    allowed.extend(read_result(sales_sources(db, rbac, actor, &sales, executor).await)?);
-    allowed.extend(read_result(purchase_sources(db, rbac, actor, &purchases, executor).await)?);
+    for kind in [ResourceKind::SalesOrder, ResourceKind::PurchaseOrder] {
+        let ids = sources
+            .iter()
+            .filter_map(|source| match (kind, source) {
+                (ResourceKind::SalesOrder, OrderTaskSource::Sales(id))
+                | (ResourceKind::PurchaseOrder, OrderTaskSource::Purchase(id)) => Some(id.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let result =
+            super::resource_access::readable_batch(db, rbac, actor, kind, &ids, "work_item:list", executor)
+                .await
+                .map(|ids| {
+                    ids.into_iter()
+                        .map(|id| match kind {
+                            ResourceKind::SalesOrder => OrderTaskSource::Sales(id),
+                            ResourceKind::PurchaseOrder => OrderTaskSource::Purchase(id),
+                        })
+                        .collect()
+                });
+        allowed.extend(read_result(result)?);
+    }
     Ok(allowed)
 }
 
@@ -114,27 +121,6 @@ fn read_result(result: Result<Vec<OrderTaskSource>>) -> WorkflowResult<Vec<Order
         Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(Vec::new()),
         Err(error) => Err(map_service(error)),
     }
-}
-
-async fn sales_sources(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    ids: &[String],
-    executor: &mut dyn Executor,
-) -> Result<Vec<OrderTaskSource>> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let (context, scope) =
-        SalesAccess::new(db.clone(), rbac.clone()).resolve(actor, "detail", &[], executor).await?;
-    let mut allowed = Vec::new();
-    for order in db.sales_orders().list_active_by_ids(ids, executor).await? {
-        if SalesAccess::allows(&context, &scope, &order)? {
-            allowed.push(OrderTaskSource::Sales(order.base.id));
-        }
-    }
-    Ok(allowed)
 }
 
 async fn purchase_sources(

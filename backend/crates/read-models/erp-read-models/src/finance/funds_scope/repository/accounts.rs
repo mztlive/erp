@@ -154,7 +154,6 @@ impl FundsAccess {
             keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable).await?,
         );
         let scope = doc! { "$and": [authorization.sales.document(),
-        source_scope_document(&authorization.context, "sales_owner_user_id"),
         linked_condition_document(condition, "sales_owner_user_id")] };
         let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
         if let Some(ids) = &condition.operator_user_ids {
@@ -167,6 +166,7 @@ impl FundsAccess {
             scope,
             "sales_owner_user_id",
             "order_no",
+            &authorization.sales.grant_lookup,
         ));
         pipeline.push(doc! { "$match": { "_source_allowed": true } });
         let sort = sort_document(
@@ -338,6 +338,7 @@ fn payable_source_stages(
         doc! { "$and": [scope, linked_condition_document(condition, "owner_user_id")] },
         "owner_user_id",
         "purchase_no",
+        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.grant_lookup.as_slice()),
     );
     let settlement_scope = authorization
         .settlement
@@ -350,6 +351,7 @@ fn payable_source_stages(
         doc! { "$and": [settlement_scope, linked_condition_document(condition, "prepared_by")] },
         "prepared_by",
         "statement_no",
+        &[],
     ));
     stages.push(doc! { "$set": {
         "_source": { "$switch": { "branches": [

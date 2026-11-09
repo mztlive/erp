@@ -7,7 +7,10 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
+use erp_identity::entity::resource_access::ResourceKind;
+use erp_identity::repository::resource_grants::lookup_stages;
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::service::resource_access::ResourceAccessService;
 use erp_identity::{Permission, SharedRbacService};
 use erp_procurement::ports::PurchaseScopeObject;
 use erp_procurement::{PurchaseAccess, PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope};
@@ -84,7 +87,17 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
             .resolve(actor, "purchase_order", action, executor)
             .await
             .map_err(map_identity_error)?;
-        map_access(access)
+        let mut mapped = map_access(access)?;
+        if matches!(action, "list" | "detail") {
+            let entry = Permission::parse(format!("purchase_order:{action}"))?;
+            let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
+                .resolve(actor, &entry, ResourceKind::PurchaseOrder, executor)
+                .await
+                .map_err(map_identity_error)?;
+            mapped.scope_version = format!("{}:{}", mapped.scope_version, query.constraints().3);
+            mapped.grant_lookup = lookup_stages(&query);
+        }
+        Ok(mapped)
     }
 
     async fn resolve_permissions(
@@ -102,7 +115,17 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
             .resolve_permissions(actor, "purchase_order", action, &extra, executor)
             .await
             .map_err(map_identity_error)?;
-        map_access(access)
+        let mut mapped = map_access(access)?;
+        if matches!(action, "list" | "detail") {
+            let entry = Permission::parse(format!("purchase_order:{action}"))?;
+            let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
+                .resolve(actor, &entry, ResourceKind::PurchaseOrder, executor)
+                .await
+                .map_err(map_identity_error)?;
+            mapped.scope_version = format!("{}:{}", mapped.scope_version, query.constraints().3);
+            mapped.grant_lookup = lookup_stages(&query);
+        }
+        Ok(mapped)
     }
 
     async fn expand_org_units(
@@ -158,6 +181,7 @@ fn map_access(
     access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
 ) -> erp_procurement::Result<PurchaseResolvedScope> {
     Ok(PurchaseResolvedScope {
+        grant_lookup: Vec::new(),
         user_id: access.user_id,
         resource: access.resource,
         action: access.action,
@@ -229,6 +253,36 @@ pub fn purchase_access(db: Database, rbac: SharedRbacService) -> PurchaseAccess 
     PurchaseAccess::new(db.clone(), MongoPurchaseDataScope::shared(db, rbac))
 }
 
+/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
+fn evaluate_object(
+    scope: &PurchaseResolvedScope,
+    object: &PurchaseScopeObject,
+) -> erp_procurement::Result<bool> {
+    if scope.resource != "purchase_order" {
+        return Err(erp_procurement::Error::ValidationError("范围资源与消费方不一致".into()));
+    }
+    evaluate_registered(
+        &scope.resource,
+        &scope.action,
+        scope.role_clauses.iter().map(public_clause),
+        scope.user_limit.as_ref().map(public_clause),
+        ScopedObject {
+            owned: object.owned,
+            collaborating: object.collaborating,
+            historical_read_participant: object.historical_read_participant,
+            org_unit_id: object.org_unit_id.as_deref(),
+            settlement_party_id: None,
+            warehouse_id: None,
+        },
+        map_identity_error,
+    )
+}
+
+/// 转换已解析条款，保留本人、协作、组织及空集。
+fn public_clause(clause: &PurchaseResolvedClause) -> ScopeClause {
+    scope_clause(clause.company, clause.self_owned, clause.collaborative, &clause.org_unit_ids)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -268,36 +322,6 @@ mod tests {
     }
 }
 
-/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
-fn evaluate_object(
-    scope: &PurchaseResolvedScope,
-    object: &PurchaseScopeObject,
-) -> erp_procurement::Result<bool> {
-    if scope.resource != "purchase_order" {
-        return Err(erp_procurement::Error::ValidationError("范围资源与消费方不一致".into()));
-    }
-    evaluate_registered(
-        &scope.resource,
-        &scope.action,
-        scope.role_clauses.iter().map(public_clause),
-        scope.user_limit.as_ref().map(public_clause),
-        ScopedObject {
-            owned: object.owned,
-            collaborating: object.collaborating,
-            historical_read_participant: object.historical_read_participant,
-            org_unit_id: object.org_unit_id.as_deref(),
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        map_identity_error,
-    )
-}
-
-/// 转换已解析条款，保留本人、协作、组织及空集。
-fn public_clause(clause: &PurchaseResolvedClause) -> ScopeClause {
-    scope_clause(clause.company, clause.self_owned, clause.collaborative, &clause.org_unit_ids)
-}
-
 #[cfg(test)]
 mod equivalence_tests {
     use erp_procurement::service::purchase_order::access::purchase_scope;
@@ -319,6 +343,7 @@ mod equivalence_tests {
     fn unwired_port_and_mismatched_resource_fail_closed() {
         use erp_procurement::ports::FailClosedPurchaseDataScopePort;
         let mut scope = PurchaseResolvedScope {
+            grant_lookup: Vec::new(),
             user_id: "actor".into(),
             resource: "purchase_order".into(),
             action: "detail".into(),
@@ -423,6 +448,7 @@ mod equivalence_tests {
                 for second in [0, 2, 8] {
                     for limit in -1..16 {
                         let access = PurchaseResolvedScope {
+                            grant_lookup: Vec::new(),
                             user_id: "actor".into(),
                             resource: "purchase_order".into(),
                             action: action.into(),

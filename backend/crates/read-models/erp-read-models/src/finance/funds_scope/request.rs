@@ -11,6 +11,7 @@ use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
+use erp_workflow::ErrorCode;
 use persistence_core::{Executor, Transactional};
 
 use super::authorization::*;
@@ -141,7 +142,12 @@ impl FundsAccess {
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "开票申请无可见范围"));
         }
-        let candidates = self.page_all_requests(query, executor).await?;
+        if let Some(task_id) = &query.work_item_id
+            && let Some(request) = self.db.sales_invoice_requests().find_for_task(task_id, executor).await?
+        {
+            self.ensure_request_ready(&request, actor, &authorization, executor).await?;
+        }
+        let candidates = self.request_candidates(query, &authorization, executor).await?;
         let RequestSnapshot { decided, facts, order_nos } =
             self.assemble_requests(query, candidates, &access, &authorization, executor).await?;
         let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
@@ -154,25 +160,6 @@ impl FundsAccess {
             }
         }
         self.finish_requests(query, decided, facts, order_nos, authorization, fingerprint, executor).await
-    }
-
-    /// 有界完整装载候选；超过既有上限整体拒绝，不改变最终授权裁剪与分页。
-    ///
-    /// # 参数
-    /// * `query` - 开票申请列表查询。
-    /// * `executor` - 调用方事务。
-    ///
-    /// # 返回
-    /// 不超过 10000 条的申请候选。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回对应错误；候选超过 10000 条时返回校验错误。
-    pub(super) async fn page_all_requests(
-        &self,
-        query: &erp_finance::dto::receivable::InvoiceRequestQuery,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesInvoiceRequest>> {
-        bounded_request_candidates(self.db.sales_invoice_requests().scope_candidates(query, executor).await?)
     }
 
     /// 开票申请候选逐行判定可见性与筛选；缺失销售单的行跳过，不计未分配。
@@ -199,7 +186,7 @@ impl FundsAccess {
     ) -> Result<RequestSnapshot> {
         let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
         let (facts, order_nos) = self.request_sales_context(&order_ids, executor).await?;
-        let authorized = self.authorized_sales_ids(authorization, executor).await?;
+        let authorized = self.authorized_sales_targets(authorization, &order_ids, executor).await?;
         let allowed = authorized.map(|list| list.into_iter().collect::<BTreeSet<_>>());
         let work_ids = rows.iter().filter_map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
         let handlers = self.work_item_handlers(&work_ids, executor).await?;
@@ -350,7 +337,7 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedInvoiceRequestRow>> {
-        let (access, authorization) =
+        let (_access, authorization) =
             self.resolve(actor, "sales_invoice_request", "detail", executor).await?;
         let row = self
             .db
@@ -359,12 +346,13 @@ impl FundsAccess {
             .await
             .map_err(Error::from)?
             .ok_or_else(|| Error::NotFound("开票申请不存在".into()))?;
+        self.ensure_request_ready(&row, actor, &authorization, executor).await?;
         let order_ids = vec![row.sales_order_id.to_string()];
         let (facts, order_nos) = self.request_sales_context(&order_ids, executor).await?;
         let fact = facts
             .get(&row.sales_order_id.to_string())
             .ok_or_else(|| Error::NotFound("开票申请不存在".into()))?;
-        let authorized = self.authorized_sales_ids(&authorization, executor).await?;
+        let authorized = self.authorized_sales_targets(&authorization, &order_ids, executor).await?;
         if let Some(allowed) = &authorized
             && !allowed.contains(&row.sales_order_id.to_string())
         {
@@ -375,9 +363,6 @@ impl FundsAccess {
             .await?;
         let handler = row.work_item_id.as_ref().and_then(|item| handlers.get(item).cloned());
         let row_facts = request_linked_facts(&row, fact, handler.as_deref());
-        if !Self::allows(&access, &row_facts)? {
-            return Err(Error::NotFound("开票申请不存在".into()));
-        }
         let data = request_row(&row, handler, &facts, &order_nos);
         let parts = vec![format!("{}:{}", row.base.id, row.base.version), row_facts.version_part()];
         Ok(FundsScopedResult {
@@ -401,7 +386,7 @@ pub(super) struct RequestSnapshot {
 }
 
 /// 完整候选达到 10001 条时整体拒绝，恰好 10000 条仍完整返回。
-fn bounded_request_candidates(rows: Vec<SalesInvoiceRequest>) -> Result<Vec<SalesInvoiceRequest>> {
+pub(super) fn bounded_request_candidates(rows: Vec<SalesInvoiceRequest>) -> Result<Vec<SalesInvoiceRequest>> {
     if rows.len() > 10_000 {
         return Err(Error::ValidationError("开票申请查询超过上限，请收窄组织或负责人条件".into()));
     }
@@ -414,7 +399,7 @@ fn decide_requests(
     facts: &HashMap<String, LinkedSalesFact>,
     allowed: &Option<BTreeSet<String>>,
     handlers: &HashMap<String, String>,
-    access: &FundsResolvedScope,
+    _access: &FundsResolvedScope,
     condition: &FundsLinkedCondition,
 ) -> Result<Vec<(SalesInvoiceRequest, Option<String>)>> {
     let mut decided = Vec::new();
@@ -427,7 +412,7 @@ fn decide_requests(
         }
         let handler = row.work_item_id.as_ref().and_then(|id| handlers.get(id).cloned());
         let row_facts = request_linked_facts(&row, fact, handler.as_deref());
-        if FundsAccess::allows(access, &row_facts)? && matches_linked_condition(&row_facts, condition) {
+        if matches_linked_condition(&row_facts, condition) {
             decided.push((row, handler));
         }
     }
@@ -476,6 +461,27 @@ fn request_row(
         permission_limited: false,
         sales_owner_user_id: fact.map(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
+    }
+}
+
+impl FundsAccess {
+    /// 先按正常来源范围取证，仅为可信待处理来源返回可重试状态。
+    async fn ensure_request_ready(
+        &self,
+        row: &SalesInvoiceRequest,
+        actor: &AuditActor,
+        authorization: &FundsAuthorization,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let allowed =
+            self.authorized_sales_targets(authorization, &[row.sales_order_id.to_string()], executor).await?;
+        if allowed.as_ref().is_some_and(|ids| ids.is_empty())
+            && let Some(readiness) = &self.grant_readiness
+            && readiness.pending(&row.base.id, actor.id(), executor).await?
+        {
+            return Err(Error::Coded(ErrorCode::ResourceAuthorizationNotReady));
+        }
+        Ok(())
     }
 }
 
@@ -668,8 +674,10 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        let mut access = access();
-        access.user_limit = Some(FundsResolvedClause::default());
-        assert!(decide_requests(rows, &facts, &None, &handlers, &access, &condition()).unwrap().is_empty());
+        assert!(
+            decide_requests(rows, &facts, &Some(BTreeSet::new()), &handlers, &access(), &condition())
+                .unwrap()
+                .is_empty()
+        );
     }
 }

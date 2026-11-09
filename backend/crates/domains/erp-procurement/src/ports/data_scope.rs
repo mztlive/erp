@@ -6,6 +6,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
+use mongodb::bson::Document;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
@@ -45,6 +46,8 @@ impl PurchaseResolvedClause {
 /// 已通过资格检查的采购范围事实。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PurchaseResolvedScope {
+    /// 统一权限服务生成的指定记录关联阶段。
+    pub grant_lookup: Vec<Document>,
     /// 已认证操作人。
     pub user_id: String,
     /// 固定为采购单资源。
@@ -403,6 +406,7 @@ mod tests {
         );
         assert!(
             !PurchaseResolvedScope {
+                grant_lookup: Vec::new(),
                 user_id: "u1".into(),
                 resource: "purchase_order".into(),
                 action: "list".into(),

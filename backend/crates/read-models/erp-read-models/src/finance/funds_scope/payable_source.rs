@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use erp_finance::entity::payable::PayableSourceType;
 use erp_identity::access_control::ScopedObject;
+use erp_procurement::repository::{PurchaseOrderExt, PurchaseOrderRepositoryScopeExt};
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use persistence_core::Executor;
@@ -76,29 +77,6 @@ impl FundsAccess {
 }
 
 impl FundsAuthorization {
-    /// 每条应付关联仅采用其实际来源范围，未知或缺失来源不获得资格。
-    ///
-    /// # 参数
-    /// * `facts` - 已装载的采购或结算来源事实。
-    ///
-    /// # 返回
-    /// 始终返回 `Some`，内容是被对应来源范围覆盖的关联键；没有命中时为空集合。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn payable_ids(
-        &self,
-        facts: &HashMap<String, LinkedPurchaseFact>,
-    ) -> Option<BTreeSet<String>> {
-        Some(
-            facts
-                .iter()
-                .filter(|(id, fact)| self.payable_fact_allowed(id, fact))
-                .map(|(id, _)| id.clone())
-                .collect(),
-        )
-    }
-
     /// 使用真实来源责任校验单一应付关联，不采用另一来源的组织授权。
     ///
     /// # 参数
@@ -133,6 +111,30 @@ impl FundsAuthorization {
             },
             false,
         )
+    }
+}
+
+impl FundsAccess {
+    /// 按当前请求的真实采购来源检查指定记录授权，结算来源仍由所属范围判定。
+    pub(super) async fn payable_targets(
+        &self,
+        authorization: &FundsAuthorization,
+        facts: &HashMap<String, LinkedPurchaseFact>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BTreeSet<String>>> {
+        let mut allowed = BTreeSet::new();
+        for (id, fact) in facts {
+            if id.starts_with(SETTLEMENT_PREFIX) {
+                if authorization.payable_fact_allowed(id, fact) {
+                    allowed.insert(id.clone());
+                }
+            } else if let Some(scope) = &authorization.purchase_scope
+                && self.db.purchase_orders().find_authorized(id, scope, executor).await?.is_some()
+            {
+                allowed.insert(id.clone());
+            }
+        }
+        Ok(Some(allowed))
     }
 }
 
@@ -199,16 +201,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_source_is_not_added_to_authorized_shares() {
-        let access = authorization();
-        let settlement = source_key(PayableSourceType::SupplierSettlement, "settlement");
-        let facts =
-            [(settlement.clone(), fact("settlement-org")), ("foreign".into(), fact("outside"))].into();
-        assert_eq!(access.payable_ids(&facts), Some([settlement].into()));
-        assert_eq!(access.payable_ids(&HashMap::new()), Some(BTreeSet::new()));
-    }
-
-    #[test]
     fn ledger_duty_keeps_unallocated_candidates_without_any_source_scope() {
         let mut access = authorization();
         access.context.scope.role_clauses.clear();
@@ -216,6 +208,6 @@ mod tests {
         assert!(access.empty());
         access.ledger_read = true;
         assert!(!access.empty());
-        assert_eq!(access.payable_ids(&HashMap::new()), Some(BTreeSet::new()));
+        assert!(!access.payable_fact_allowed("missing", &fact("purchase-org")));
     }
 }

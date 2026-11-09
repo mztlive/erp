@@ -317,6 +317,24 @@ impl erp_approval_runtime::approval_recovery::ApprovalCommandFailure for Error {
     }
 }
 
+from_domain!(erp_master_data, Rbac);
+
+from_domain!(erp_supplier_orders, Rbac, Coded);
+
+from_domain!(erp_order_to_cash, Rbac, Coded, CommittedResultUnavailable);
+
+from_domain!(erp_procure_to_pay, Rbac, Coded);
+
+from_domain!(erp_fulfillment_execution, Rbac, Coded);
+
+from_domain!(erp_finance_posting, Rbac, Coded, CommittedResultUnavailable);
+
+from_domain!(erp_reverse_flow, Rbac, Coded);
+
+from_domain!(erp_supply_settlement, Rbac, Coded);
+
+from_domain!(erp_demo_data, Rbac, Coded);
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;
@@ -436,8 +454,9 @@ mod tests {
 
     #[test]
     fn approval_stable_codes_are_exhaustive() {
-        assert_eq!(ErrorCode::ALL.len(), 21);
-        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")));
+        assert_eq!(ErrorCode::ALL.len(), 22);
+        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")
+            || *code == ErrorCode::ResourceAuthorizationNotReady));
     }
     #[test]
     fn historical_indexes_keep_typed_duplicate_for_http() {
@@ -590,24 +609,6 @@ mod tests {
         );
     }
 }
-
-from_domain!(erp_master_data, Rbac);
-
-from_domain!(erp_supplier_orders, Rbac, Coded);
-
-from_domain!(erp_order_to_cash, Rbac, Coded, CommittedResultUnavailable);
-
-from_domain!(erp_procure_to_pay, Rbac, Coded);
-
-from_domain!(erp_fulfillment_execution, Rbac, Coded);
-
-from_domain!(erp_finance_posting, Rbac, Coded, CommittedResultUnavailable);
-
-from_domain!(erp_reverse_flow, Rbac, Coded);
-
-from_domain!(erp_supply_settlement, Rbac, Coded);
-
-from_domain!(erp_demo_data, Rbac, Coded);
 
 #[cfg(test)]
 mod orchestration_error_tests {

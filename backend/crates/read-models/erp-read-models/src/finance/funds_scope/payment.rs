@@ -380,7 +380,7 @@ impl FundsAccess {
         let links = self.payment_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.purchase_fact_map(&order_ids, executor).await?;
-        let allowed = authorization.payable_ids(&facts);
+        let allowed = self.payable_targets(&authorization, &facts, executor).await?;
         let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
             return Err(Error::NotFound("供应商付款单不存在".into()));

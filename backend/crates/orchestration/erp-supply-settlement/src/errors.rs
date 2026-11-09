@@ -227,6 +227,26 @@ impl AuditFailure for Error {
 
 // 读取合同的错误载荷保持类型化。
 
+from_domain!(erp_identity, Rbac);
+
+from_domain!(erp_workflow, Rbac, Coded);
+
+from_domain!(erp_party);
+
+from_domain!(erp_supplier);
+
+from_domain!(erp_audit);
+
+from_domain!(erp_supply);
+
+from_domain!(erp_finance);
+
+from_domain!(erp_read_models, Rbac, Coded);
+
+from_domain!(erp_supplier_orders, Rbac, Coded);
+
+from_domain!(erp_fulfillment_execution, Rbac, Coded);
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;
@@ -339,8 +359,9 @@ mod tests {
 
     #[test]
     fn approval_stable_codes_are_exhaustive() {
-        assert_eq!(ErrorCode::ALL.len(), 21);
-        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")));
+        assert_eq!(ErrorCode::ALL.len(), 22);
+        assert!(ErrorCode::ALL.iter().all(|code| code.as_str().starts_with("APPROVAL_")
+            || *code == ErrorCode::ResourceAuthorizationNotReady));
     }
     #[test]
     fn historical_indexes_keep_typed_duplicate_for_http() {
@@ -480,23 +501,3 @@ mod tests {
         );
     }
 }
-
-from_domain!(erp_identity, Rbac);
-
-from_domain!(erp_workflow, Rbac, Coded);
-
-from_domain!(erp_party);
-
-from_domain!(erp_supplier);
-
-from_domain!(erp_audit);
-
-from_domain!(erp_supply);
-
-from_domain!(erp_finance);
-
-from_domain!(erp_read_models, Rbac, Coded);
-
-from_domain!(erp_supplier_orders, Rbac, Coded);
-
-from_domain!(erp_fulfillment_execution, Rbac, Coded);
