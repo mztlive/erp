@@ -7,7 +7,7 @@ digraph resourceAuthorization {
     label="一、业务事实：维护归属，触发额外数据授权";
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
     scope [label="单据与客户的个人数据配置\n指定公司 / 部门 / 单资源；内建 root 例外"];
-    business [label="业务事件\n指定责任人归属 / 所有权移交\n任务与原所有者附件原子移交"];
+    business [label="业务事件\n指定责任人归属 / 所有权移交\n单据所有权与未完成任务原子移交"];
     bpm [label="BPM 与工作流\n创建任务 / 变更负责人 / 维护状态"];
     governance [label="治理与受限身份\n按自身范围及动作授予或终止，禁止自授\n来源独立有效 / 外部会话 / 服务作业"];
     {rank=same; scope; business; bpm; governance;}
@@ -30,13 +30,13 @@ digraph resourceAuthorization {
     request [label="管理列表 / 工作台 / 详情\nAPI / 文件 / 导出 / 后台命令"];
     identity [label="身份与强制边界\n账号状态 / 会话有效 / 当前功能资格"];
     capability [label="功能权限\n普通角色仅提供功能；有效角色取并集"];
-    dataCheck [label="按资源分类检查\n单据 / 客户：归属或有效授权\n公共资料：无需人员数据范围\n任务 / 附件 / 会话：登记上下文约束\n普通附件含内建 root 访问依据"];
+    dataCheck [label="按资源分类检查\n单据 / 客户：归属或有效授权\n公共资料：无需人员数据范围\n任务 / 材料 / 会话：登记上下文约束\n普通附件继承所属资源读取资格"];
     decision [label="统一授权结果\n身份 AND 功能 AND 对应资源访问规则", fillcolor="#e9f2ff", color="#557fb1", penwidth=2];
     {rank=same; identity; capability; dataCheck;}
     request -> identity; request -> capability; request -> dataCheck;
     identity -> decision; capability -> decision; dataCheck -> decision;
   }
-  own [label="自身归属（无需授权记录）\n单据 / 客户：当前所有者\n本人任务：当前实际负责人\n普通附件：唯一所有者，跨单共用", fillcolor="#fff8e9", color="#c8aa68"];
+  own [label="自身归属（无需授权记录）\n单据 / 客户：当前所有者\n本人任务：当前实际负责人", fillcolor="#fff8e9", color="#c8aa68"];
   outbox -> own [label="业务提交即生效", color="#b28d40"];
   own -> dataCheck [label="当前归属事实"];
   grants -> dataCheck [label="有效授权与授权版本"];
@@ -47,7 +47,7 @@ digraph resourceAuthorization {
     fontsize=16; fontcolor="#355984"; color="#c9dbef"; style="rounded";
     query [label="查询\n单据 / 客户：统一范围约束后分页、汇总\n供应商 / 商品等公共资料：不按人员过滤\n我的待办：仅本人当前任务"];
     command [label="执行\n业务状态 / 金额 / 版本 / 职责分离\n当前分配代次 / 流程迁移"];
-    material [label="输出\n完整对象或登记材料视图\n附件动作独立；成本毛利用功能控制\n导出按读取范围；下载重验"];
+    material [label="输出\n完整对象或登记材料视图\n附件读取随所属资源；成本毛利用功能控制\n导出按读取范围；下载重验"];
     {rank=same; query; command; material;}
   }
   decision -> query; decision -> command; decision -> material;
