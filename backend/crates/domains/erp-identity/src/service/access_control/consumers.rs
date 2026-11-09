@@ -274,6 +274,7 @@ pub(super) fn scope_registration(resource: &str, action: &str) -> Result<Consume
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Permission;
 
     #[test]
     fn deposit_resolution_and_release_require_the_account_scope() {
@@ -345,11 +346,18 @@ mod tests {
                 }
             }
         }
-        for (resource, action) in [("contract", "update"), ("sales_selection_proposal", "get")] {
+        for (resource, action, expected) in [
+            ("contract", "update", "customer:list"),
+            ("sales_selection_proposal", "get", "sales_selection_booklet:get"),
+        ] {
             assert!(configurable_registration(resource, action).is_err());
-            let source = AuthorizationPolicy::scope_source(resource, action);
-            assert!(configurable_registration(source.0, source.1).is_ok());
+            let permission = Permission::parse(format!("{resource}:{action}")).unwrap();
+            let source = AuthorizationPolicy::scope_source(&permission).unwrap();
+            assert_eq!(source, Permission::parse(expected).unwrap());
+            assert!(configurable_registration(source.resource(), source.action()).is_ok());
         }
+        let permission = Permission::parse("SALES_ORDER:DETAIL").unwrap();
+        assert_eq!(AuthorizationPolicy::scope_source(&permission).unwrap(), permission);
     }
 
     #[test]

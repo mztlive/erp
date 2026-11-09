@@ -9,3 +9,6 @@ pub use organization::OrganizationBusinessPort;
 
 mod scope_targets;
 pub use scope_targets::ScopeTargetPort;
+
+mod resource_grants;
+pub use resource_grants::ResourceGrantFacts;

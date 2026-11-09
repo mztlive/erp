@@ -21,3 +21,5 @@ pub use rbac::*;
 pub use role::*;
 
 pub mod person_profile_change;
+
+pub mod resource_access;

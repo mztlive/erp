@@ -1,0 +1,210 @@
+//! 只访问身份领域自有集合，所有读写复用调用方执行器。
+mod query;
+mod revision;
+use futures_util::TryStreamExt;
+use mongodb::Database;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Error as PersistenceError, Executor, Repository, persisted_document};
+pub use query::read_stages;
+pub(crate) use query::target_ids;
+pub(crate) use revision::{advance, revision};
+use serde::de::DeserializeOwned;
+
+use crate::entity::resource_access::event::GrantEvent;
+use crate::entity::resource_access::query::GrantSourcePage;
+use crate::entity::resource_access::{GrantSource, ResourceGrant, ResourceKind};
+use crate::{Error, Result};
+pub(crate) const GRANTS: &str = "resource_grants";
+pub(crate) const SOURCES: &str = "resource_grant_sources";
+pub(crate) const EVENTS: &str = "resource_grant_events";
+/// 取得来源集合仓储。
+/// # 参数
+/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
+/// # 返回
+/// 对应集合仓储、查询结果或成功的持久化结果。
+/// # 错误
+/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+pub(crate) fn sources(db: &Database) -> Repository<'_, GrantSource> {
+    Repository::new(db, SOURCES)
+}
+/// 取得指定记录授权集合仓储。
+/// # 参数
+/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
+/// # 返回
+/// 对应集合仓储、查询结果或成功的持久化结果。
+/// # 错误
+/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+pub(crate) fn grants(db: &Database) -> Repository<'_, ResourceGrant> {
+    Repository::new(db, GRANTS)
+}
+/// 取得正式分配事件集合仓储。
+/// # 参数
+/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
+/// # 返回
+/// 对应集合仓储、查询结果或成功的持久化结果。
+/// # 错误
+/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+pub(crate) fn events(db: &Database) -> Repository<'_, GrantEvent> {
+    Repository::new(db, EVENTS)
+}
+/// 管理列表按稳定主键分页，保留终止来源供审计。
+/// # 参数
+/// user 为接收人；after 为上一页游标；executor 为调用执行器。
+/// # 返回
+/// 最多 100 个来源及下一页游标。
+/// # 错误
+/// 数据库读取失败时拒绝。
+pub(crate) async fn for_recipient(
+    db: &Database,
+    user: &str,
+    after: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<GrantSourcePage> {
+    let mut filter = doc! { "key.recipient": user, "deleted_at": 0 };
+    if let Some(after) = after {
+        filter.insert("id", doc! { "$gt": after });
+    }
+    let mut items: Vec<GrantSource> = page(db, SOURCES, filter, 101, executor).await?;
+    let next_cursor = if items.len() > 100 {
+        items.pop();
+        items.last().map(|item| item.base.id.clone())
+    } else {
+        None
+    };
+    Ok(GrantSourcePage { items, next_cursor })
+}
+
+/// 读取单个来源的一页授权行；更新方通过主键游标继续，不装载历史全集。
+/// # 参数
+/// source_id 为唯一来源；after 为已处理的最后一个主键；executor 为发布事务。
+/// # 返回
+/// 最多 200 行，空页表示结束。
+/// # 错误
+/// 数据库读取失败时拒绝。
+pub(crate) async fn source_rows(
+    db: &Database,
+    source_id: &str,
+    after: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<ResourceGrant>> {
+    let mut filter = doc! { "source_id": source_id, "deleted_at": 0 };
+    if let Some(after) = after {
+        filter.insert("id", doc! { "$gt": after });
+    }
+    page(db, GRANTS, filter, 200, executor).await
+}
+
+/// 调用方必须提供索引限定条件；本方法仅读取一页，不表达完整授权集合。
+async fn page<T: DeserializeOwned + Unpin + Send + Sync>(
+    db: &Database,
+    collection: &str,
+    filter: Document,
+    limit: i64,
+    executor: &mut dyn Executor,
+) -> Result<Vec<T>> {
+    let collection = db.collection::<T>(collection);
+    let find = collection.find(filter).sort(doc! { "id": 1 }).limit(limit);
+    Ok(match executor.session() {
+        Some(session) => find
+            .session(&mut *session)
+            .await
+            .map_err(PersistenceError::from)?
+            .stream(session)
+            .try_collect()
+            .await
+            .map_err(PersistenceError::from)?,
+        None => {
+            find.await.map_err(PersistenceError::from)?.try_collect().await.map_err(PersistenceError::from)?
+        },
+    })
+}
+/// 授权行身份使用结构化编码，避免任意分隔符碰撞。
+/// # 参数
+/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
+/// # 返回
+/// 对应集合仓储、查询结果或成功的持久化结果。
+/// # 错误
+/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+pub(crate) fn row_id(source: &str, resource: ResourceKind, id: &str) -> Result<String> {
+    serde_json::to_string(&(source, resource, id)).map_err(|e| Error::Internal(e.to_string()))
+}
+/// 在授权事务中追加不可变来源审计快照。
+/// # 参数
+/// 数据库及函数声明中的身份或查询事实；异步访问复用调用方执行器。
+/// # 返回
+/// 对应集合仓储、查询结果或成功的持久化结果。
+/// # 错误
+/// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
+pub(crate) async fn audit_source(
+    db: &Database,
+    source: &GrantSource,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let event = doc! { "id": format!("{}:{}", source.base.id, source.base.version), "source_id": &source.base.id,
+    "snapshot": persisted_document(source)? };
+    let session = executor.session().ok_or_else(|| Error::Internal("来源审计必须使用事务".into()))?;
+    db.collection("resource_grant_audits")
+        .insert_one(event)
+        .session(session)
+        .await
+        .map_err(PersistenceError::from)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::deserialize_from_document;
+
+    use super::*;
+    use crate::entity::resource_access::event::{GrantEventEvidence, GrantEventPayload};
+
+    #[test]
+    fn typed_event_bson_roundtrip_keeps_source_index_fields_and_payload() {
+        let payloads = [
+            GrantEventPayload::InvoiceApproved {
+                invoice_request_id: "request".into(),
+                approval_instance_id: "approval".into(),
+                work_item_id: "task".into(),
+            },
+            GrantEventPayload::SalesOrderApprovalAssigned {
+                sales_order_id: "sales".into(),
+                approval_instance_id: "approval".into(),
+                node_id: "node".into(),
+                assignment_id: "assignment".into(),
+            },
+            GrantEventPayload::PurchaseOrderApprovalAssigned {
+                purchase_order_id: "purchase".into(),
+                approval_instance_id: "approval".into(),
+                node_id: "node".into(),
+                assignment_id: "assignment".into(),
+            },
+        ];
+        for payload in payloads {
+            let event = GrantEvent::new(GrantEventEvidence {
+                payload,
+                recipient: "operator".into(),
+                fact_version: 1,
+                occurred_at: 100,
+            })
+            .unwrap();
+            let document = persisted_document(&event).unwrap();
+            assert_eq!(document.get_str("status").unwrap(), "pending");
+            assert_eq!(
+                document.get_document("source").unwrap().get_str("business_type").unwrap(),
+                event.source.business_type
+            );
+            assert_eq!(
+                document
+                    .get_document("evidence")
+                    .unwrap()
+                    .get_document("payload")
+                    .unwrap()
+                    .get_str("type")
+                    .unwrap(),
+                event.source.rule
+            );
+            let restored: GrantEvent = deserialize_from_document(document).unwrap();
+            event.ensure_replay(&restored).unwrap();
+        }
+    }
+}

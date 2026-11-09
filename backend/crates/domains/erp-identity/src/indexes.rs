@@ -124,6 +124,7 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
         ],
     )
     .await?;
+    ensure_resource_grants(db).await?;
     ensure_person_scopes(db).await?;
     ensure_organizations(db).await?;
     create_indexes(
@@ -335,6 +336,83 @@ pub async fn ensure_person_scopes(db: &Database) -> Result<()> {
     )
     .await?;
     Ok(())
+}
+
+/// 创建指定记录授权、来源、分配事件及不可变审计的索引。
+async fn ensure_resource_grants(db: &Database) -> Result<()> {
+    create_indexes(
+        db,
+        "resource_grants",
+        vec![
+            unique_index("uk_resource_grants_id", doc! { "id": 1 }),
+            unique_index(
+                "uk_resource_grants_source_target",
+                doc! { "source_id": 1, "resource": 1, "resource_id": 1, "action": 1 },
+            ),
+            named_index(
+                "idx_resource_grants_recipient",
+                doc! { "recipient": 1, "resource": 1, "active": 1, "resource_id": 1 },
+            ),
+            named_index("idx_resource_grants_source_page", doc! { "source_id": 1, "deleted_at": 1, "id": 1 }),
+            named_index("idx_resource_grants_target_read", doc! { "recipient": 1, "resource": 1, "resource_id": 1, "action": 1, "active": 1, "deleted_at": 1 }),
+            named_index(
+                "idx_resource_grants_source_version",
+                doc! { "source_id": 1, "source_version": 1, "resource": 1, "active": 1 },
+            ),
+        ],
+    )
+    .await?;
+    ensure_resource_grant_sources(db).await?;
+    ensure_resource_grant_events(db).await
+}
+
+/// 来源及审计按稳定主键和来源身份建立索引。
+async fn ensure_resource_grant_sources(db: &Database) -> Result<()> {
+    create_indexes(
+        db,
+        "resource_grant_sources",
+        vec![
+            unique_index("uk_resource_grant_sources_id", doc! { "id": 1 }),
+            unique_index(
+                "uk_resource_grant_sources_key",
+                doc! { "key.rule": 1, "key.business_type": 1, "key.business_id": 1, "key.recipient": 1 },
+            ),
+            named_index(
+                "idx_resource_grant_sources_recipient",
+                doc! { "key.recipient": 1, "deleted_at": 1, "id": 1 },
+            ),
+        ],
+    )
+    .await?;
+    create_indexes(
+        db,
+        "resource_grant_audits",
+        vec![
+            unique_index("uk_resource_grant_audits_id", doc! { "id": 1 }),
+            named_index("idx_resource_grant_audits_source", doc! { "source_id": 1, "snapshot.version": 1 }),
+        ],
+    )
+    .await
+}
+
+/// 事件幂等身份、领取顺序及业务来源索引。
+async fn ensure_resource_grant_events(db: &Database) -> Result<()> {
+    create_indexes(
+        db,
+        "resource_grant_events",
+        vec![
+            unique_index("uk_resource_grant_events_id", doc! { "id": 1 }),
+            named_index(
+                "idx_resource_grant_events_claim",
+                doc! { "status": 1, "available_at": 1, "lease_until": 1, "id": 1 },
+            ),
+            named_index(
+                "idx_resource_grant_events_typed_source",
+                doc! { "source.business_type": 1, "source.business_id": 1, "evidence.fact_version": 1 },
+            ),
+        ],
+    )
+    .await
 }
 
 #[cfg(test)]

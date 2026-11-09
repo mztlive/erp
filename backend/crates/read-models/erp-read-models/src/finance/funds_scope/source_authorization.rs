@@ -46,17 +46,21 @@ impl FundsAccess {
     ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
         let resolver = DataScopeService::new(self.db.clone(), self.rbac.clone());
         let ledger_permission = Permission::parse(FINANCE_LEDGER_READ)?;
-        let permissions = [Permission::parse(format!("{resource}:{action}"))?, ledger_permission.clone()];
+        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
+        let permissions = [entry_permission.clone(), ledger_permission.clone()];
         let mut batch = resolver.batch(actor, &permissions, executor);
-        let source = if purchase { "purchase_order" } else { "sales_order" };
-        let context = batch.resolve_source_scope(resource, action, source, "list").await?;
+        let source_permission =
+            Permission::parse(if purchase { "purchase_order:list" } else { "sales_order:list" })?;
+        let context = batch.resolve_source_scope(&entry_permission, &source_permission).await?;
         let sales = if dual {
-            Some(batch.resolve_source_scope(resource, action, "sales_order", "list").await?)
+            let sales_permission = Permission::parse("sales_order:list")?;
+            Some(batch.resolve_source_scope(&entry_permission, &sales_permission).await?)
         } else {
             None
         };
         let settlement = if purchase {
-            Some(batch.resolve_source_scope(resource, action, "supplier_settlement_statement", "list").await?)
+            let settlement_permission = Permission::parse("supplier_settlement_statement:list")?;
+            Some(batch.resolve_source_scope(&entry_permission, &settlement_permission).await?)
         } else {
             None
         };

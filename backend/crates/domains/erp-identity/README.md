@@ -80,3 +80,22 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-identity --lib --locked
 ```
 
 代码变更还须执行[统一质量门禁](../../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
+
+## 指定记录读取授权
+
+1. 统一入口为 `service::resource_access::ResourceAccessService`。首批资源限定销售单和采购单；`read` 不授予修改、审批或任务办理权限。
+2. 调用 `resolve` 时必须通过 `entry_permission: &Permission` 传入已解析的服务端实际入口权限，例如 `Permission::parse("invoice:create")`；`resource` 独立指定来源业务类型。销售列表采用销售列表范围，其他来源读取采用详情范围。财务入口只检查其自身功能权限，再解析销售来源范围。
+3. 列表调用 `resolve` 取得 `AuthorizedResourceQuery`；只读取原范围和账号资源修订号，不预加载授权 ID。业务仓储将原范围编译为条件，调用 `repository::resource_grants::read_stages`，按“业务筛选 → 授权阶段 → 分页、计数、汇总”执行聚合。授权阶段按业务主键 `id` 关联有效授权和来源，使用存在性判断避免多来源重复计数。查询使用本次解析的同一执行器，返回结果前调用 `ensure_current`，版本变化必须拒绝并重读。
+4. 单条、批量和任务检查调用 `resolve_targets`，通过 `ResourceTargets::new` 传入服务端确定的完整目标集合，单条传一个 ID。数据库只查询这些目标并校验关联来源，去重后返回至多目标数个 ID。`AuthorizedResourceAccess::allows`、`batch` 只对本次目标有效，目标之外一律拒绝；该类型不能提供完整列表约束。`ensure_task` 还要求当前正式分配、可办理状态及全部必要来源通过，禁止客户端裁剪来源。业务写入须在同一事务执行器内重新解析目标授权及当前业务事实，禁止复用先前响应。
+5. 人工授予通过 `grant` 执行，来源 `rule`、`business_type` 均固定为 `manual`，`business_id` 使用稳定命令号。管理操作要求有效后台账号、`data_scope:create`、`org_unit:manage` 及无个人上限的全公司组织管理范围。接收账号必须有效；目标存在性通过 `ResourceGrantFacts` 校验。
+6. 自动发布使用 `apply_source`，必须加入外层事务并通过事实端口重验规则、开票最终审批通过或审批节点分配事实、正式接收人、事实版本和完整目标。事实读取失败须返回错误；不得提交空集。规则计算必须包含需保留的历史正式分配来源。
+7. 来源版本和事实版本只允许前进；同版本同目标重放零写入，同版本异目标拒绝。撤销使用 `revoke` 和期望版本，永久保留终止状态，后续重算不能复活。多个来源独立生效。来源、授权行、操作人及原因审计同事务提交。
+8. `append_event` 接收 `GrantEventEvidence`，业务载荷 `GrantEventPayload` 固定为 `InvoiceApproved`、`SalesOrderApprovalAssigned`、`PurchaseOrderApprovalAssigned`。开票事件必须在最终审批通过并创建执行任务的同一事务追加，携带开票申请、审批实例、执行任务标识，接收人取执行任务实际分配账号；销售、采购事件在审批节点正式分配事务追加，携带单据、审批实例、节点及分配记录标识。来源规则和业务类型由变体派生，调用方不得自选。
+9. 事件幂等键包含类型、正式业务事件身份、接收人及事实版本。开票事实版本采用申请版本，销售和采购审批采用审批实例版本，不得混用节点局部版本。同键更换执行任务、单据或发生时间必须返回冲突；同证据重放不重置处理状态。未知类型、缺失证据及不规范身份必须拒绝。`Pending / Processing / Applied / Failed` 仅表示处理状态；领取、重试和授权未就绪响应由后续 worker 接入。
+10. `scope_version` 包含原身份范围版本、入口、资源及账号资源修订号。来源变更必须对修改前后资源类型的并集递增修订号，并与来源、授权行及审计同事务提交；幂等重放不递增。来源撤销后旧授权行不产生资格，查询每次校验来源终止状态、版本和目标成员。禁止通过枚举全量记录计算版本。单次操作目标和单来源目标各最多 1000；账号授权总量没有 10000 条读取门槛。来源管理接口每页最多 100 项并返回游标，来源同步每次只装载 200 行，按稳定主键继续处理。
+11. 新增集合为 `resource_grants`、`resource_grant_sources`、`resource_grant_events`、`resource_grant_audits`、`resource_grant_revisions`。发布前执行 [索引迁移](../../../scripts/migrations/20261109-resource-grants.mongosh.js)，启动时复用本域 `indexes::ensure_authorization`。不得修改旧人员范围数据；回滚时停止新入口及授权写入、恢复旧应用，保留新集合、事件与终止记录。
+12. 当前交付为身份领域接口、存储和单元规则。业务适配器、HTTP 管理入口、worker、历史回填和生产切换必须分别完成后才可启用。库测试不能替代 MongoDB 事务、并发及业务链路验收。
+
+事件结构升级必须先执行索引迁移的旧记录检查。发现没有 `evidence.payload.type` 的旧事件时停止发布，按正式业务证据重建；禁止默认转换为 `InvoiceApproved`。升级增加 `idx_resource_grant_events_typed_source` 索引并保留旧索引。回滚必须停止类型化事件生产和消费，保留已写事件及授权来源，禁止将新事件交给旧结构消费者。
+
+修订号使用结构化账号资源身份作为 MongoDB `_id`；内建唯一索引承担精确读写。不存在的修订号按初始版本 0 处理，不重置已有记录。启用前必须切换全部授权写入方，禁止旧程序绕过修订号发布授权。回滚须同时停止新授权入口与写入，保留修订号；重新启用后必须重新解析授权上下文。

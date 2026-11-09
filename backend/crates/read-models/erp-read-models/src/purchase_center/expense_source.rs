@@ -1,8 +1,8 @@
 //! 费用采购来源：以采购创建资格读取销售协同范围，不要求销售菜单权限。
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderRevisionId, SalesOrderRevisionLineId};
-use erp_identity::SharedRbacService;
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
@@ -79,8 +79,10 @@ impl ExpenseSourceReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(String, SalesReadScope)> {
+        let entry_permission = Permission::parse("purchase_order:create")?;
+        let source_permission = Permission::parse("sales_order:detail")?;
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_source_scope(actor, "purchase_order", "create", "sales_order", "detail", executor)
+            .resolve_source_scope(actor, &entry_permission, &source_permission, executor)
             .await?;
         let scope = sales_scope(&access, actor.id(), &[], Vec::new());
         Ok((access.scope_version, scope))

@@ -1,7 +1,7 @@
 //! 配置准入与运行消费分离；任务、来源和角色授权不生成独立人员范围。
 use serde::Serialize;
 
-use crate::{Error, Result};
+use crate::{Error, Permission, Result};
 
 /// 资源动作的权限边界；不替代拥有领域对具体对象的授权判断。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -87,17 +87,20 @@ impl AuthorizationPolicy {
     /// 资源的范围条款配置来源；动作权限及实际对象归属仍由目标资源证明。
     /// 合同复用客户条款设置，但不得以客户身份代替合同独立责任授权。
     /// # 参数
-    /// `resource` 与 `action` 为请求资源动作。
+    /// `permission` 为已解析的请求权限。
     /// # 返回
-    /// 来源资源动作，或无需映射时保持原值。
+    /// 来源权限，或无需映射时保持原值；只用于选择范围条款。
     /// # 错误
-    /// 不返回错误。消费者登记由解析入口验证。
-    pub fn scope_source<'a>(resource: &'a str, action: &'a str) -> (&'a str, &'a str) {
-        match resource {
-            "contract" => ("customer", "list"),
-            "sales_selection_proposal" => ("sales_selection_booklet", action),
-            _ => (resource, action),
-        }
+    /// 映射后的权限格式无效时返回错误；消费者登记由解析入口验证。
+    pub fn scope_source(permission: &Permission) -> Result<Permission> {
+        let source = match permission.resource() {
+            "contract" => Permission::parse("customer:list")?,
+            "sales_selection_proposal" => {
+                Permission::parse(format!("sales_selection_booklet:{}", permission.action()))?
+            },
+            _ => permission.clone(),
+        };
+        Ok(source)
     }
 
     /// 当前策略是否接受独立人员范围配置。

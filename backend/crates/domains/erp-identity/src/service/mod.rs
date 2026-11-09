@@ -11,3 +11,5 @@ pub mod person_directory;
 pub mod portal;
 
 pub mod organization_access;
+
+pub mod resource_access;

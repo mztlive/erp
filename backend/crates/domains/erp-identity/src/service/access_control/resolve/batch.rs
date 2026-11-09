@@ -82,25 +82,24 @@ impl<'a> DataScopeBatch<'a> {
         action: &str,
         permissions: &[Permission],
     ) -> Result<AuthorizedDataScope> {
-        let source = AuthorizationPolicy::scope_source(resource, action);
-        self.resolve_boundary((resource, action), source, permissions).await
+        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
+        let source_permission = AuthorizationPolicy::scope_source(&entry_permission)?;
+        self.resolve_boundary(&entry_permission, &source_permission, permissions).await
     }
 
     /// 目标资格独立证明，采用指定真实业务来源的人员范围。
     /// # 参数
-    /// 目标及来源的资源动作；来源动作不要求调用人另有操作权限。
+    /// entry_permission 为入口功能权限；source_permission 只选择来源范围，不要求另有来源操作权限。
     /// # 返回
     /// 保留目标身份与来源范围的授权上下文。
     /// # 错误
     /// 任一登记无效、目标权限失效、版本漂移或持久化失败时拒绝。
     pub async fn resolve_source_scope(
         &mut self,
-        resource: &str,
-        action: &str,
-        source_resource: &str,
-        source_action: &str,
+        entry_permission: &Permission,
+        source_permission: &Permission,
     ) -> Result<AuthorizedDataScope> {
-        self.resolve_boundary((resource, action), (source_resource, source_action), &[]).await
+        self.resolve_boundary(entry_permission, source_permission, &[]).await
     }
 
     /// 由本阶段当前启用角色独立证明静态动作，不产生任何业务数据范围。
@@ -192,19 +191,21 @@ impl<'a> DataScopeBatch<'a> {
     /// 保留调用顺序和各动作失败顺序，只去重同阶段公共事实。
     async fn resolve_boundary(
         &mut self,
-        target: (&str, &str),
-        source: (&str, &str),
+        entry_permission: &Permission,
+        source_permission: &Permission,
         permissions: &[Permission],
     ) -> Result<AuthorizedDataScope> {
+        let target = (entry_permission.resource(), entry_permission.action());
+        let source = (source_permission.resource(), source_permission.action());
         ensure_resource(target.0, target.1)?;
         scope_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
-        required.push(Permission::parse(format!("{}:{}", target.0, target.1))?);
+        required.push(entry_permission.clone());
         self.ensure_declared(&required)?;
         if !self.reuse {
             return self
                 .service
-                .resolve_boundary(self.actor, target, source, permissions, self.executor)
+                .resolve_boundary(self.actor, entry_permission, source_permission, permissions, self.executor)
                 .await;
         }
         self.load_identity().await?;

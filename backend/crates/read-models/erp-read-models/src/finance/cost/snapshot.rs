@@ -14,6 +14,7 @@ use erp_finance::repository::cost::read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT};
 use erp_finance::repository::cost::{CostEntryFilter, CostEntryRow};
 use erp_finance::repository::prelude::*;
 use erp_finance::service::cost::{cost_entry_filter, cost_entry_row_view};
+use erp_identity::Permission;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use persistence_core::{Executor, Transactional};
@@ -208,8 +209,10 @@ impl CostReadModel {
         executor: &mut dyn Executor,
     ) -> Result<CostAuthorization> {
         let resolver = DataScopeService::new(self.db.clone(), self.rbac.clone());
+        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
+        let source_permission = Permission::parse("sales_order:list")?;
         let context =
-            resolver.resolve_source_scope(actor, resource, action, "sales_order", "list", executor).await?;
+            resolver.resolve_source_scope(actor, &entry_permission, &source_permission, executor).await?;
         let sales = sales_scope(&context, actor.id(), &[], Vec::new());
         let ledger_read = ledger_readable(&self.db, &self.rbac, actor, executor).await?;
         let mut fingerprint = DefaultHasher::new();
