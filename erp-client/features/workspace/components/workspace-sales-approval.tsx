@@ -180,27 +180,24 @@ export function WorkspaceSalesApproval({
                             本次提交没有销售明细。
                         </p>
                     )}
-                    <dl className="grid grid-cols-2 gap-4 border-t border-grid pt-4 @min-[640px]/sales-lines:grid-cols-3">
-                        <Fact label="开票要求">
-                            {submission.invoice_type || "—"}
-                        </Fact>
-                        <Fact label="收款到期日">
-                            {submission.receivable_due_date || "—"}
-                        </Fact>
-                        {submission.business_type === "VOUCHER" && (
-                            <Fact label="卡券履约期限">
-                                {dateLabel(submission.voucher_expiry_at)}
-                            </Fact>
-                        )}
-                        {submission.business_remark && (
-                            <DescriptionItem className="col-span-full">
-                                <DescriptionTerm>业务备注</DescriptionTerm>
-                                <DescriptionDetails className="whitespace-pre-wrap wrap-anywhere">
-                                    {submission.business_remark}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                        )}
-                    </dl>
+                    {submission.business_type === "VOUCHER" ||
+                    submission.business_remark ? (
+                        <dl className="grid grid-cols-2 gap-4 border-t border-grid pt-4 @min-[640px]/sales-lines:grid-cols-3">
+                            {submission.business_type === "VOUCHER" && (
+                                <Fact label="卡券履约期限">
+                                    {dateLabel(submission.voucher_expiry_at)}
+                                </Fact>
+                            )}
+                            {submission.business_remark && (
+                                <DescriptionItem className="col-span-full">
+                                    <DescriptionTerm>业务备注</DescriptionTerm>
+                                    <DescriptionDetails className="whitespace-pre-wrap wrap-anywhere">
+                                        {submission.business_remark}
+                                    </DescriptionDetails>
+                                </DescriptionItem>
+                            )}
+                        </dl>
+                    ) : null}
                 </>
             )}
         </section>

@@ -19,6 +19,7 @@ import { WorkspaceSalesApproval } from "./workspace-sales-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { WorkspaceApprovalRouteSummary } from "./workspace-approval-route-summary"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
+import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
@@ -163,9 +164,26 @@ export function WorkspaceDocumentTaskDetail({
             : item.impactSummary
     const detailFacts = splitDetailSections(summarySections, counterpartyName)
     const [primaryAmount, ...otherAmounts] = detailFacts.amounts
+    const salesMaterials = useApprovalMaterials(
+        instanceId ?? "",
+        Boolean(salesApproval && instanceId && canReadSensitive),
+    )
+    const salesSubmission = salesMaterials.data?.sales_order
     const documentFields = [
         ...(detailFacts.submitter
             ? [{ label: "申请人", value: detailFacts.submitter }]
+            : []),
+        ...(salesSubmission
+            ? [
+                  {
+                      label: "开票要求",
+                      value: salesSubmission.invoice_type || "—",
+                  },
+                  {
+                      label: "收款到期日",
+                      value: salesSubmission.receivable_due_date || "—",
+                  },
+              ]
             : []),
         ...detailFacts.keyFields,
         ...detailFacts.moreFields,

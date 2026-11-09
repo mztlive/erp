@@ -74,6 +74,19 @@ export function ApprovalSalesOrderPaper({
                                     : submission.effective_at) * 1000,
                             ).toLocaleString("zh-CN", { hour12: false }),
                         },
+                        {
+                            id: "invoice",
+                            label: "开票要求",
+                            value: submission.invoice_type || "—",
+                        },
+                        {
+                            id: "receivable-due",
+                            label: "收款到期日",
+                            value:
+                                (isSubmission
+                                    ? submission.receivable_due_date
+                                    : null) || "—",
+                        },
                     ],
                 },
                 {
@@ -105,19 +118,6 @@ export function ApprovalSalesOrderPaper({
                     value:
                         displayReadableName(submission.payment_term_name) ||
                         "未记录付款条件名称",
-                },
-                {
-                    id: "invoice",
-                    label: "开票要求",
-                    value: submission.invoice_type || "—",
-                },
-                {
-                    id: "receivable-due",
-                    label: "收款到期日",
-                    value:
-                        (isSubmission
-                            ? submission.receivable_due_date
-                            : null) || "—",
                 },
                 ...(isCard
                     ? [
