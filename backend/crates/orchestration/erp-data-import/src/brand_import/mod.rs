@@ -11,8 +11,8 @@ use application_core::AuditActor;
 use erp_catalog::CatalogService;
 use erp_catalog::dto::BrandImportJobRequest;
 use erp_core::AccountKind;
-use erp_identity::SharedRbacService;
-use erp_identity::service::account_permissions::ensure_actor_action_permissions;
+use erp_identity::service::account_permissions::ensure_actor_permissions;
+use erp_identity::{Permission, SharedRbacService};
 use erp_party::SensitiveDataCodec;
 use erp_support::BackgroundJob;
 use mongodb::Database;
@@ -67,8 +67,14 @@ impl BrandImportProcess {
 
     /// 每次提交、执行和下载都重验当前账号及品牌创建权限，不缓存授权结论。
     async fn authorize(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        ensure_actor_action_permissions(&self.db, &self.rbac, actor, "product_brand", &["create"], executor)
-            .await?;
+        ensure_actor_permissions(
+            &self.db,
+            &self.rbac,
+            actor,
+            &[Permission::parse("product_brand:create")?],
+            executor,
+        )
+        .await?;
         Ok(())
     }
 }

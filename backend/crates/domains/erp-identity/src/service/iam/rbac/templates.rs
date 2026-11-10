@@ -12,7 +12,7 @@ use crate::entity::role_template::{BuiltinRoleState, BuiltinRoleTemplate};
 use crate::entity::role_workbench::RoleWorkbench;
 use crate::entity::{Permission, Role, RoleData};
 use crate::service::iam::builtin_role_templates;
-use crate::{AccessControlExt, Error, Result};
+use crate::{AccessControlExt, Error, Result, RoleId};
 
 impl RbacService {
     /// 查询可审阅的岗位权限及当前生成状态。
@@ -96,7 +96,7 @@ impl RbacService {
         }
         let mut data = RoleData::new(template.name).with_description(template.description);
         data.workbenches = RoleWorkbench::recommended(&template.id);
-        let role = Role::new(template.id, data)?;
+        let role = Role::new(RoleId::parse(template.id)?, data)?;
         let audit = self.audit.resource_log(actor.clone(), "role.create", "role", role.base.id.clone())?;
         self.db.roles().create(&role, executor).await?;
         self.policy_store

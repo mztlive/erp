@@ -1,9 +1,9 @@
 //! 询价责任采购的账号、同角色权限与有效主属组织资格。
 
 use application_core::AuditActor;
-use erp_identity::service::account_permissions::ensure_actor_action_permissions;
+use erp_identity::service::account_permissions::ensure_actor_permissions;
 use erp_identity::service::business_ownership::required_business_org;
-use erp_identity::{AccessControlExt, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -75,15 +75,11 @@ impl ProcurementInquiryEligibility {
         actions: &[&str],
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        Ok(ensure_actor_action_permissions(
-            &self.db,
-            &self.rbac,
-            actor,
-            "procurement_inquiry",
-            actions,
-            executor,
-        )
-        .await?)
+        let permissions = actions
+            .iter()
+            .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(ensure_actor_permissions(&self.db, &self.rbac, actor, &permissions, executor).await?)
     }
 }
 

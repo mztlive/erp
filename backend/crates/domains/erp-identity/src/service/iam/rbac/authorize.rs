@@ -68,9 +68,8 @@ impl RbacService {
     pub async fn authorize_role_assignment(
         &self,
         actor: &AuditActor,
-        role_ids: Vec<String>,
+        role_ids: RoleIdSet,
     ) -> Result<AuthorizedRoleGrant> {
-        let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
         let roles = self.db.roles().enabled_roles(&role_ids, &mut NoTransaction).await?;
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
         ensure_roles_delegable(&roles)?;
@@ -104,10 +103,8 @@ impl RbacService {
         actor: &AuditActor,
         target_kind: AccountKind,
         target_id: &str,
-        requested_role_ids: Option<Vec<String>>,
+        requested_role_ids: Option<RoleIdSet>,
     ) -> Result<AuthorizedAccountManagement> {
-        let requested_role_ids =
-            requested_role_ids.map(RoleIdSet::parse).transpose()?.map(|role_ids| role_ids.to_strings());
         let snapshot = self.actor_permission_snapshot(actor).await?;
         let target_role_ids = role_ids_for_account(&snapshot.enforcer, target_kind, target_id);
         authorize_account_permissions(
@@ -115,12 +112,12 @@ impl RbacService {
             &snapshot.actor_permissions,
             target_kind,
             target_id,
-            requested_role_ids.as_deref(),
+            requested_role_ids.as_ref(),
         )?;
         let policy_revision = snapshot.policy_revision;
         drop(snapshot.enforcer);
 
-        let roles = self.load_management_roles(&target_role_ids, requested_role_ids.as_deref()).await?;
+        let roles = self.load_management_roles(&target_role_ids, requested_role_ids.as_ref()).await?;
         ensure_target_roles_manageable(&target_role_ids, &roles)?;
         let role_grant = requested_role_ids
             .map(|role_ids| authorized_role_grant(role_ids, policy_revision, &roles))
@@ -154,11 +151,11 @@ impl RbacService {
     async fn load_management_roles(
         &self,
         target_role_ids: &[String],
-        requested_role_ids: Option<&[String]>,
+        requested_role_ids: Option<&RoleIdSet>,
     ) -> Result<HashMap<String, Role>> {
         let mut role_ids = target_role_ids.to_vec();
         if let Some(requested_role_ids) = requested_role_ids {
-            role_ids.extend_from_slice(requested_role_ids);
+            role_ids.extend(requested_role_ids.iter().map(ToString::to_string));
         }
         role_ids.sort();
         role_ids.dedup();
@@ -247,10 +244,9 @@ impl RbacService {
         &self,
         account_kind: AccountKind,
         account_id: &str,
-        role_ids: Vec<String>,
+        role_ids: RoleIdSet,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
         self.write_subject_roles(account_kind, account_id, role_ids, executor).await
     }
 
@@ -274,11 +270,11 @@ impl RbacService {
         &self,
         account_kind: AccountKind,
         account_id: &str,
-        role_ids: Vec<String>,
+        role_ids: RoleIdSet,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.ensure_roles_assignable(&role_ids, executor).await?;
-        let role_keys = role_ids.iter().map(|role_id| role_key(role_id)).collect::<Vec<_>>();
+        let role_keys = role_ids.iter().map(|role_id| role_key(role_id.as_str())).collect::<Vec<_>>();
         self.policy_store
             .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
             .await?;
@@ -326,7 +322,7 @@ impl RbacService {
     ///
     /// # 错误
     /// 当角色缺失、被停用或 MongoDB 写入冲突时返回错误。
-    async fn ensure_roles_assignable(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<()> {
+    async fn ensure_roles_assignable(&self, role_ids: &RoleIdSet, executor: &mut dyn Executor) -> Result<()> {
         let mut roles = self.db.roles().enabled_roles(role_ids, executor).await?;
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
         for role in &mut roles {
@@ -377,7 +373,7 @@ fn authorize_account_permissions(
     actor_permissions: &PermissionSet,
     target_kind: AccountKind,
     target_id: &str,
-    requested_role_ids: Option<&[String]>,
+    requested_role_ids: Option<&RoleIdSet>,
 ) -> Result<()> {
     let target_permissions = permissions_for_account(enforcer, target_kind, target_id)?;
     ensure_management_subset(actor_permissions, &target_permissions)?;
@@ -414,11 +410,12 @@ pub(super) fn ensure_target_roles_manageable(
 
 /// 在借用已加载角色的情况下冻结有效授予身份与策略版本。
 fn authorized_role_grant(
-    role_ids: Vec<String>,
+    role_ids: RoleIdSet,
     policy_revision: u64,
     roles: &HashMap<String, Role>,
 ) -> Result<AuthorizedRoleGrant> {
-    let requested_roles = role_ids.iter().filter_map(|role_id| roles.get(role_id)).collect::<Vec<_>>();
+    let requested_roles =
+        role_ids.iter().filter_map(|role_id| roles.get(role_id.as_str())).collect::<Vec<_>>();
     ensure_all_roles_assignable(role_ids.len(), requested_roles.len())?;
     requested_roles.into_iter().try_for_each(|role| {
         role.ensure_assignable()

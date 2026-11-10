@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::Deref;
 
 use erp_core::{Error, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -111,7 +112,8 @@ impl<'de> Deserialize<'de> for RoleId {
 }
 
 /// 已去空白、去重且保序的角色 ID 集合。
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(from = "Vec<RoleId>", into = "Vec<RoleId>")]
 pub struct RoleIdSet(Vec<RoleId>);
 
 impl RoleIdSet {
@@ -130,15 +132,8 @@ impl RoleIdSet {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut values = Vec::new();
-        let mut seen = HashSet::new();
-        for role_id in role_ids {
-            let role_id = RoleId::parse(role_id)?;
-            if seen.insert(role_id.clone()) {
-                values.push(role_id);
-            }
-        }
-        Ok(Self(values))
+        let values = role_ids.into_iter().map(RoleId::parse).collect::<Result<Vec<_>>>()?;
+        Ok(Self::from(values))
     }
 
     /// 解析非空角色 ID 集合。去重且保留首次出现的顺序。
@@ -157,10 +152,22 @@ impl RoleIdSet {
         S: AsRef<str>,
     {
         let role_ids = Self::parse(role_ids)?;
-        if role_ids.0.is_empty() {
+        role_ids.ensure_non_empty()?;
+        Ok(role_ids)
+    }
+
+    /// 检查当前用例要求至少一个角色。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 非空集合返回成功，保留已解析身份。
+    /// # 错误
+    /// 集合为空时返回至少选择一个角色的业务错误。
+    pub fn ensure_non_empty(&self) -> Result<()> {
+        if self.is_empty() {
             return Err(Error::from("至少选择一个角色"));
         }
-        Ok(role_ids)
+        Ok(())
     }
 
     /// 从 Casbin 角色主体键提取确定性的角色 ID 集合。
@@ -215,6 +222,26 @@ impl RoleIdSet {
     /// 不返回错误。
     pub fn to_strings(&self) -> Vec<String> {
         self.0.iter().map(ToString::to_string).collect()
+    }
+}
+
+impl From<Vec<RoleId>> for RoleIdSet {
+    fn from(values: Vec<RoleId>) -> Self {
+        let mut seen = HashSet::new();
+        Self(values.into_iter().filter(|id| seen.insert(id.clone())).collect())
+    }
+}
+
+impl From<RoleIdSet> for Vec<RoleId> {
+    fn from(ids: RoleIdSet) -> Self {
+        ids.0
+    }
+}
+
+impl Deref for RoleIdSet {
+    type Target = [RoleId];
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -520,6 +547,14 @@ impl PermissionSet {
 #[cfg(test)]
 mod tests {
     use super::{Permission, PermissionSet, RoleIdSet};
+
+    #[test]
+    fn role_set_wire_format_is_a_normalized_array() {
+        let ids: RoleIdSet = serde_json::from_str(r#"[" role-a ","role-a","role-b"]"#).unwrap();
+        assert_eq!(ids.to_strings(), ["role-a", "role-b"]);
+        assert_eq!(serde_json::to_string(&ids).unwrap(), r#"["role-a","role-b"]"#);
+        assert!(serde_json::from_str::<RoleIdSet>(r#"["bad/id"]"#).is_err());
+    }
 
     #[test]
     fn role_ids_should_trim_deduplicate_and_preserve_order() {

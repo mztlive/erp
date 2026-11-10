@@ -99,34 +99,6 @@ impl AuthorizedResourceAccess {
     pub fn allows(&self, id: &str, object: &ScopedObject<'_>) -> bool {
         self.targets.ids().contains(id) && (self.query.scope.allows(object, true) || self.ids.contains(id))
     }
-    /// 批量检查使用与单条相同的规则，不接收客户端预裁剪的完整操作集合。
-    /// # 参数
-    /// objects 为业务拥有领域读取的目标集合。
-    /// # 返回
-    /// 按输入顺序返回判定。
-    /// # 错误
-    /// 不返回错误。
-    pub fn batch(&self, objects: &[(&str, ScopedObject<'_>)]) -> Vec<bool> {
-        objects.iter().map(|(id, object)| self.allows(id, object)).collect()
-    }
-    /// 检查任务办理必须同时满足当前分配、可办理状态及全部必要来源。
-    /// # 参数
-    /// assigned、actionable 为当前可信任务事实；objects 为服务端完整来源集合。
-    /// # 返回
-    /// 所有条件满足时成功。
-    /// # 错误
-    /// 未分配、结束、空来源或任一来源无权时拒绝。
-    pub fn ensure_task(
-        &self,
-        assigned: bool,
-        actionable: bool,
-        objects: &[(&str, ScopedObject<'_>)],
-    ) -> Result<()> {
-        if !assigned || !actionable || objects.is_empty() || self.batch(objects).contains(&false) {
-            return Err(Error::Forbidden("任务分配、状态或来源读取资格不满足".into()));
-        }
-        Ok(())
-    }
 }
 
 /// 原范围版本与账号资源修订号共同标识授权；不依赖枚举授权记录。
@@ -170,11 +142,6 @@ mod tests {
         assert!(!access.allows("s2", &object(false)));
         assert!(access.allows("s2", &object(true)));
         assert!(!access.allows("unrequested", &object(true)));
-        assert!(access.ensure_task(true, true, &[("s1", object(false)), ("s2", object(true))]).is_ok());
-        assert!(access.ensure_task(true, true, &[("s1", object(false)), ("s2", object(false))]).is_err());
-        assert!(access.ensure_task(false, true, &[("s1", object(false))]).is_err());
-        assert!(access.ensure_task(true, false, &[("s1", object(false))]).is_err());
-        assert!(access.ensure_task(true, true, &[]).is_err());
     }
     #[test]
     fn target_inputs_are_validated_and_deduplicated() {

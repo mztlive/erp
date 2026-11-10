@@ -7,7 +7,7 @@
 //! `user:admin:`），改动任一侧须同步另一侧。
 
 use chrono::Utc;
-use erp_identity::{Role, RoleData};
+use erp_identity::{Role, RoleData, RoleId};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 
@@ -89,7 +89,7 @@ async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<
 async fn insert_role_and_policies(db: &Database, account_id: &str) -> Result<()> {
     let role_id = format!("p0-test-{}", uuid_hex_n(UUID_ROLE_SUFFIX_LEN));
     let role_key = format!("{ROLE_PREFIX}{role_id}");
-    let role = Role::new(role_id, RoleData::new("P0 测试管理员").with_system(false))?;
+    let role = Role::new(RoleId::parse(role_id)?, RoleData::new("P0 测试管理员").with_system(false))?;
     db.collection::<Role>(ROLES).insert_one(role).await?;
 
     let mut rules: Vec<Document> = SEED_PERMISSIONS

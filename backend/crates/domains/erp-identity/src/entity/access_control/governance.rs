@@ -24,13 +24,16 @@ pub(crate) fn root_scope(qualified_roles: &[Role]) -> Option<ResolvedScope> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RoleId;
     use crate::access_control::ScopedObject;
     use crate::entity::role::RoleData;
 
     /// 全公司范围覆盖非本人、其他部门、仓库和结算主体，不依赖参与关系。
     #[test]
     fn root_covers_all_business_dimensions_without_person_limit() {
-        let root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员").with_system(true)).unwrap();
+        let root =
+            Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超级管理员").with_system(true))
+                .unwrap();
         let scope = root_scope(&[root]).unwrap();
         assert!(scope.user_limit.is_none());
         assert!(scope.allows(
@@ -51,9 +54,10 @@ mod tests {
     fn root_identity_and_enabled_system_role_are_required() {
         assert!(root_scope(&[]).is_none());
         let ordinary =
-            Role::new("role-custom".into(), RoleData::new("超级管理员").with_system(true)).unwrap();
+            Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("超级管理员").with_system(true))
+                .unwrap();
         assert!(root_scope(&[ordinary]).is_none());
-        let mut root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员")).unwrap();
+        let mut root = Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超级管理员")).unwrap();
         assert!(root_scope(std::slice::from_ref(&root)).is_none());
         root.system = true;
         root.disabled = true;

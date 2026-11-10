@@ -5,12 +5,12 @@ use persistence_core::NoTransaction;
 
 use super::policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found};
 use super::{AuthorizedRoleUpdate, RbacService};
-use crate::AccessControlExt;
 use crate::dto::{CreateRoleParams, UpdateRoleParams};
 use crate::entity::rbac::{Permission, PermissionSet};
 use crate::entity::role::{Role, RoleData, RoleUpdate};
 use crate::error::{Error, Result};
 use crate::ports::PreparedResourceAudit;
+use crate::{AccessControlExt, RoleId};
 
 impl RbacService {
     /// 创建角色并写入 Casbin 权限策略。
@@ -201,7 +201,7 @@ impl RbacService {
         audit: Option<PreparedResourceAudit>,
         expected_revision: Option<u64>,
     ) -> Result<Role> {
-        let role = Role::new(id, data)?;
+        let role = Role::new(RoleId::parse(id)?, data)?;
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
         let audit_port = self.audit.clone();

@@ -173,7 +173,7 @@ impl<'a> OrgTree<'a> {
             return Err(Error::ValidationError("组织身份重复".into()));
         }
         for node in nodes {
-            tree.path(&node.base.id)?;
+            tree.validate_path(&node.base.id)?;
             if let Some(parent) = node.parent_id.as_deref() {
                 tree.children.entry(parent).or_default().push(node);
             }
@@ -190,9 +190,23 @@ impl<'a> OrgTree<'a> {
     /// 成功时返回自根到该节点的路径。
     ///
     /// # 错误
-    /// 路径存在环或节点缺失时返回 `Error::ValidationError`，不生成残缺归属快照。
+    /// 目标节点缺失时返回 `Error::ValidationError`；父链完整和无环已由构造函数保证。
     pub fn path(&self, id: &str) -> Result<Vec<&'a OrgUnit>> {
         let mut path = Vec::new();
+        let mut node = self.nodes.get(id).ok_or_else(|| Error::ValidationError("组织节点不存在".into()))?;
+        loop {
+            path.push(*node);
+            let Some(parent) = node.parent_id.as_deref() else {
+                break;
+            };
+            node = self.nodes.get(parent).expect("构造时已验证完整祖先链，树不可变");
+        }
+        path.reverse();
+        Ok(path)
+    }
+
+    /// 构造阶段验证父链完整且无环。
+    fn validate_path(&self, id: &str) -> Result<()> {
         let mut seen = BTreeSet::new();
         let mut current = Some(id);
         while let Some(id) = current {
@@ -200,11 +214,9 @@ impl<'a> OrgTree<'a> {
                 return Err(Error::ValidationError("组织父子关系不得形成环".into()));
             }
             let node = self.nodes.get(id).ok_or_else(|| Error::ValidationError("组织节点不存在".into()))?;
-            path.push(*node);
             current = node.parent_id.as_deref();
         }
-        path.reverse();
-        Ok(path)
+        Ok(())
     }
 
     /// 展开明确目标及可选的有效下级。

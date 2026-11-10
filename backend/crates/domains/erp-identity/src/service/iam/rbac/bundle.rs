@@ -6,7 +6,9 @@ use persistence_core::Executor;
 use super::RbacService;
 use super::policy::{implicit_permissions_for_role, permission_pairs, role_key};
 use crate::entity::authorization_bundle::plan::{PlannedBinding, PlannedRole};
-use crate::{AccessControlExt, PermissionSet, Result, Role, RoleData, RoleRepositoryExt, RoleUpdate};
+use crate::{
+    AccessControlExt, PermissionSet, Result, Role, RoleData, RoleIdSet, RoleRepositoryExt, RoleUpdate,
+};
 
 impl RbacService {
     /// 从当前启用角色构造授予上限，停用角色不能提供上限。
@@ -52,8 +54,7 @@ impl RbacService {
                 role
             },
             None => {
-                let role =
-                    Role::new(planned.declaration.id.to_string(), RoleData::new(planned.declaration.name))?;
+                let role = Role::new(planned.declaration.id, RoleData::new(planned.declaration.name))?;
                 self.db.roles().create(&role, executor).await?;
                 role
             },
@@ -83,7 +84,13 @@ impl RbacService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.write_subject_roles(AccountKind::Admin, &planned.user_id, planned.role_ids, executor).await?;
+        self.write_subject_roles(
+            AccountKind::Admin,
+            &planned.user_id,
+            RoleIdSet::parse(planned.role_ids)?,
+            executor,
+        )
+        .await?;
         let audit = self.audit.resource_log(actor.clone(), "admin.role.update", "admin", planned.user_id)?;
         self.audit.persist(&audit, executor).await
     }

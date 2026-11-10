@@ -356,6 +356,7 @@ mod tests {
     use entity_core::BaseModel;
 
     use super::*;
+    use crate::RoleId;
     use crate::access_control::ScopedObject;
     use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgValidity};
     use crate::entity::role::{ROOT_ROLE_ID, RoleData};
@@ -398,7 +399,7 @@ mod tests {
     /// 岗位共享不读取旧的撤权、本人或部门配置，且不会变成销售授权。
     #[tokio::test]
     async fn shared_scope_ignores_person_limits_but_sales_keeps_them() {
-        let roles = [Role::new("role-buyer".into(), RoleData::new("采购")).unwrap()];
+        let roles = [Role::new(RoleId::parse("role-buyer").unwrap(), RoleData::new("采购")).unwrap()];
         for resource in [
             "product",
             "supplier",
@@ -438,7 +439,7 @@ mod tests {
     /// 共享政策不补授动作资格，失效角色和空资格均拒绝。
     #[tokio::test]
     async fn shared_scope_requires_current_qualified_role() {
-        let mut disabled = Role::new("role-buyer".into(), RoleData::new("采购")).unwrap();
+        let mut disabled = Role::new(RoleId::parse("role-buyer").unwrap(), RoleData::new("采购")).unwrap();
         disabled.disabled = true;
         let mut deleted = disabled.clone();
         deleted.disabled = false;
@@ -455,7 +456,9 @@ mod tests {
     /// 已有超管不读人员配置；缺配置、旧撤权或读取错误均不改变固定范围。
     #[tokio::test]
     async fn root_scope_does_not_poll_person_configuration() {
-        let root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员").with_system(true)).unwrap();
+        let root =
+            Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超级管理员").with_system(true))
+                .unwrap();
         let scope = resolve_scope(&[root], async {
             panic!("超级管理员不应读取人员范围配置");
         })
@@ -468,7 +471,7 @@ mod tests {
     /// 普通账号即使名为 admin 也保留本人范围、撤权结果和读取错误。
     #[tokio::test]
     async fn ordinary_role_keeps_person_scope_and_errors() {
-        let roles = [Role::new("role-custom".into(), RoleData::new("超级管理员")).unwrap()];
+        let roles = [Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("超级管理员")).unwrap()];
         let state = OrganizationState::default();
         let at = Instant::from_unix_secs(0);
         let registration = registration("product", "create").unwrap();
@@ -488,7 +491,9 @@ mod tests {
     /// 内建角色失效后立即回到人员范围，不保留超管公司授权。
     #[tokio::test]
     async fn disabled_or_deleted_root_does_not_override_person_scope() {
-        let mut root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员").with_system(true)).unwrap();
+        let mut root =
+            Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超级管理员").with_system(true))
+                .unwrap();
         root.disabled = true;
         let scope = resolve_scope(std::slice::from_ref(&root), async { Ok(PersonDataScope::denied()) })
             .await

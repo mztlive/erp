@@ -143,7 +143,10 @@ impl ResourceGrantService {
         let repo = resource_grants::sources(&self.db);
         let existing = repo.find_by_id(&update.key.id()?, executor).await?;
         let is_new = existing.is_none();
-        let mut source = existing.unwrap_or(GrantSource::new(update.key)?);
+        let mut source = match existing {
+            Some(source) => source,
+            None => GrantSource::new(update.key)?,
+        };
         let mut affected = source.resources();
         if !source.apply(
             update.rule_version,

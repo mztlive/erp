@@ -1,17 +1,13 @@
-//! 个人业务扩展授权，与个人 DataScope 上限独立持久化。
+//! 旧个人业务扩展授权的迁移读取模型。
 use entity_core::BaseModel;
-use entity_macros::{Entity, id_type};
-use erp_core::validation::normalize_required_text_ref;
+use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use super::{
     DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension,
     ScopeTargetMode,
 };
-use crate::entity::rbac::RoleId;
 use crate::{Error, Result};
-
-id_type!(PersonalBusinessGrantId);
 
 /// 同一有效角色支持的个人部门授权；不授予动作权限。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
@@ -26,62 +22,7 @@ pub struct PersonalBusinessGrant {
     pub include_descendants: bool,
 }
 
-/// 新增个人部门授权的数据，不接收系统字段。
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PersonalBusinessGrantData {
-    pub role_id: String,
-    pub resource: String,
-    pub actions: Vec<String>,
-    pub org_unit_ids: Vec<String>,
-    pub include_descendants: bool,
-}
-
 impl PersonalBusinessGrant {
-    /// 规范化身份、明确动作和部门目标。
-    /// # 参数
-    /// * `id` - 新授权身份。
-    /// * `user_id` - 固定人员身份。
-    /// * `data` - 角色、业务动作和部门。
-    /// # 返回
-    /// 校验后的独立正向授权。
-    /// # 错误
-    /// 空身份、未知业务、非法动作和部门目标拒绝。
-    pub fn new(id: PersonalBusinessGrantId, user_id: &str, data: PersonalBusinessGrantData) -> Result<Self> {
-        let mut grant = Self {
-            base: BaseModel::new(id.to_string()),
-            user_id: normalize_required_text_ref(user_id, "请选择人员", 128, "人员身份过长")?,
-            role_id: RoleId::parse(data.role_id)?.to_string(),
-            resource: data.resource,
-            actions: data.actions,
-            org_unit_ids: data.org_unit_ids,
-            include_descendants: data.include_descendants,
-        };
-        grant.actions.sort();
-        grant.actions.dedup();
-        let rule = grant.as_role_scope()?;
-        grant.org_unit_ids = rule.scope_targets;
-        Ok(grant)
-    }
-
-    /// 核对撤销命令的人员边界和实体版本。
-    /// # 参数
-    /// * `user` - 路径中的固定人员。
-    /// * `version` - 用户读取的授权版本。
-    /// # 返回
-    /// 当前授权可撤销时成功。
-    /// # 错误
-    /// 跨人员操作或版本冲突拒绝。
-    pub fn ensure_revoke(&self, user: &str, version: u64) -> Result<()> {
-        if self.user_id != user {
-            return Err(Error::NotFound("该人员的业务授权不存在".into()));
-        }
-        if self.base.version != version || self.base.is_deleted() {
-            return Err(Error::ConflictError("授权已变化，请刷新后重试".into()));
-        }
-        Ok(())
-    }
-
     /// 转为同角色的范围证据；调用方仍须检查人员、有效角色与动作。
     /// # 参数
     /// 无。
@@ -165,49 +106,46 @@ pub fn department_grant_resource(resource: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn data() -> PersonalBusinessGrantData {
-        PersonalBusinessGrantData {
+
+    /// 构造迁移读取的旧集合记录，不恢复旧创建接口。
+    fn grant() -> PersonalBusinessGrant {
+        PersonalBusinessGrant {
+            base: BaseModel::fake(),
+            user_id: "alice".into(),
             role_id: "sales".into(),
             resource: "sales_order".into(),
-            actions: vec!["detail".into(), "detail".into()],
+            actions: vec!["detail".into()],
             org_unit_ids: vec!["one".into()],
             include_descendants: false,
         }
     }
+
     #[test]
-    fn input_is_explicit_and_does_not_allow_other_dimensions() {
-        let grant = PersonalBusinessGrant::new(PersonalBusinessGrantId::new("g"), "alice", data()).unwrap();
-        assert_eq!(grant.actions, vec!["detail"]);
-        assert!(grant.ensure_revoke("alice", 1).is_ok());
-        assert!(grant.ensure_revoke("bob", 1).is_err());
-        assert!(grant.ensure_revoke("alice", 2).is_err());
+    fn migration_rejects_invalid_legacy_targets_and_preserves_identity() {
+        let value = grant();
+        let rule = value.as_role_scope().unwrap();
+        assert_eq!(rule.subject_id, "sales");
+        assert_eq!(rule.base, value.base);
+        assert_eq!(rule.scope_targets, ["one"]);
         for resource in ["warehouse", "approval_instance", "org_unit", "unknown"] {
-            assert!(
-                PersonalBusinessGrant::new(
-                    PersonalBusinessGrantId::new("g"),
-                    "alice",
-                    PersonalBusinessGrantData { resource: resource.into(), ..data() }
-                )
-                .is_err()
-            );
+            assert!(PersonalBusinessGrant { resource: resource.into(), ..grant() }.as_role_scope().is_err());
         }
         for actions in [vec![], vec!["*".into()]] {
-            assert!(
-                PersonalBusinessGrant::new(
-                    PersonalBusinessGrantId::new("g"),
-                    "alice",
-                    PersonalBusinessGrantData { actions, ..data() }
-                )
-                .is_err()
-            );
+            assert!(PersonalBusinessGrant { actions, ..grant() }.as_role_scope().is_err());
         }
-        assert!(
-            PersonalBusinessGrant::new(
-                PersonalBusinessGrantId::new("g"),
-                "alice",
-                PersonalBusinessGrantData { org_unit_ids: vec![], ..data() }
-            )
-            .is_err()
-        );
+        assert!(PersonalBusinessGrant { org_unit_ids: vec![], ..grant() }.as_role_scope().is_err());
+    }
+
+    #[test]
+    fn migration_only_applies_current_user_role_and_action_grants() {
+        let mut value = grant();
+        let roles = ["sales".into()];
+        assert!(value.applies("alice", &roles, "sales_order", "detail"));
+        assert!(!value.applies("bob", &roles, "sales_order", "detail"));
+        assert!(!value.applies("alice", &[], "sales_order", "detail"));
+        assert!(!value.applies("alice", &roles, "purchase_order", "detail"));
+        assert!(!value.applies("alice", &roles, "sales_order", "update"));
+        value.base.deleted_at = 10;
+        assert!(!value.applies("alice", &roles, "sales_order", "detail"));
     }
 }

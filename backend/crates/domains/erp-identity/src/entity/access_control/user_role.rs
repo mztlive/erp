@@ -184,29 +184,6 @@ impl UserRole {
         self.revoke_reason_text = revoke_reason_text;
         Ok(())
     }
-
-    /// 判断绑定在给定时刻是否有效。
-    ///
-    /// # 参数
-    /// * `at` - 判断时刻
-    ///
-    /// # 返回
-    /// 未撤权、不早于 `effective_from`，且没有终点或不超过 `effective_to` 时返回 `true`。终点时刻仍算有效。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn is_effective_at(&self, at: Instant) -> bool {
-        if self.revoked_at.is_some() {
-            return false;
-        }
-        if at < self.effective_from {
-            return false;
-        }
-        match self.effective_to {
-            Some(effective_to) => at <= effective_to,
-            None => true,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -234,9 +211,6 @@ mod tests {
         assert_eq!(binding.user_id, "user-1");
         assert_eq!(binding.assigned_by, "admin-1");
         assert_eq!(binding.role_id, RoleId::parse("role-sales").unwrap());
-        assert!(binding.is_effective_at(Instant::from_unix_secs(1_700_100_000)));
-        assert!(!binding.is_effective_at(Instant::from_unix_secs(1_700_000_000 - 1)));
-        assert!(!binding.is_effective_at(Instant::from_unix_secs(1_700_604_801)));
     }
 
     /// 失败路径：必填为空被拒。
@@ -279,7 +253,6 @@ mod tests {
             .unwrap();
         assert_eq!(binding.revoke_reason_code.as_deref(), Some("EMERGENCY_REVOKE"));
         assert_eq!(binding.revoked_by.as_deref(), Some("admin-2"));
-        assert!(!binding.is_effective_at(Instant::from_unix_secs(1_700_200_000)));
 
         assert!(
             binding

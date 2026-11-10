@@ -307,12 +307,12 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::RoleData;
     use crate::entity::authorization_bundle::PolicyVersion;
+    use crate::{RoleData, RoleId};
 
     /// 测试使用固定元数据，避免时间影响审核摘要。
     fn role(id: &str, permissions: &[&str]) -> PolicyRoleState {
-        let mut role = Role::new(id.into(), RoleData::new("只读岗位")).unwrap();
+        let mut role = Role::new(RoleId::parse(id).unwrap(), RoleData::new("只读岗位")).unwrap();
         role.base = BaseModel::fake();
         role.base.id = id.into();
         PolicyRoleState {

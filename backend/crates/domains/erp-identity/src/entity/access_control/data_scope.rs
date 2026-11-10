@@ -226,7 +226,10 @@ impl DataScope {
 ///
 /// # 错误
 /// 当目标数量越界、目标为空/超长或范围类型不允许携带目标时返回错误。
-fn normalize_scope_targets(scope_type: DataScopeType, targets: Vec<String>) -> Result<Vec<String>> {
+pub(crate) fn normalize_scope_targets(
+    scope_type: DataScopeType,
+    targets: Vec<String>,
+) -> Result<Vec<String>> {
     if !scope_type.requires_targets() {
         if !targets.is_empty() {
             return Err(Error::from(format!("{}范围不允许携带范围目标", scope_type.label())));

@@ -4,9 +4,9 @@ use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::AuditAction;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
-use erp_identity::SharedRbacService;
 use erp_identity::service::account_permissions::{account_has_permission, permission_candidates};
 use erp_identity::service::organization_access::ensure_org_enabled;
+use erp_identity::{Permission, SharedRbacService};
 use erp_supply::entity::handover_receipt::{
     HANDOVER_ACTION, HANDOVER_LABEL, HANDOVER_RESOURCE, OfferingHandoverReceipt,
 };
@@ -133,7 +133,7 @@ pub async fn handover_candidates(
         &db,
         &rbac,
         &offering.maintainer_user_id,
-        "supplier_offering:update",
+        &Permission::parse("supplier_offering:update")?,
         &mut NoTransaction,
     )
     .await?
@@ -253,7 +253,9 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if account_has_permission(db, rbac, target, "supplier_offering:update", executor).await? {
+    if account_has_permission(db, rbac, target, &Permission::parse("supplier_offering:update")?, executor)
+        .await?
+    {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备供给维护资格".into()))

@@ -5,14 +5,10 @@ use std::sync::Arc;
 use persistence_core::NoTransaction;
 
 use super::RbacService;
-use crate::entity::access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType};
+use crate::AccessControlExt;
 use crate::entity::{Permission, PermissionSet, RoleData};
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::{
-    configurable_registration, validate_binding, validate_scope_type,
-};
-use crate::{AccessControlExt, MongoCasbinAdapter};
 
 impl RbacService {
     /// 若角色 ID 尚不存在则创建预定义角色及其权限；已存在（含软删除）则不改动。
@@ -116,71 +112,6 @@ impl RbacService {
             .await
     }
 
-    /// 按资源原子登记首次授权清单，已有任意配置（含软删除）时不再初始化。
-    ///
-    /// # 参数
-    /// * `role_id` - 预定义角色 ID。
-    /// * `resource` - 业务资源。
-    /// * `definitions` - 首次写入的范围定义。
-    ///
-    /// # 返回
-    /// 角色不存在、已有历史配置或本次登记完成后无返回值。
-    ///
-    /// # 错误
-    /// 查询、唯一冲突或事务失败返回原错误，禁止失败后扩大为 Company。
-    pub async fn seed_data_scope_manifest(
-        self: &Arc<Self>,
-        role_id: &str,
-        resource: &str,
-        definitions: Vec<DataScopeData>,
-    ) -> Result<()> {
-        validate_scope_manifest(role_id, resource, &definitions)?;
-        if !self.active_role_exists(role_id).await? {
-            return Ok(());
-        }
-        let existing =
-            self.db.data_scopes().has_subject_resource_history(role_id, resource, &mut NoTransaction).await?;
-        if existing {
-            return Ok(());
-        }
-        let scopes = definitions
-            .into_iter()
-            .map(|data| {
-                DataScope::new(
-                    DataScopeId::new(format!("s2:{}:{}:{}", role_id, resource, data.scope_type.as_str())),
-                    data,
-                )
-            })
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        let db = self.db.clone();
-        use persistence_core::Transactional;
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let Some(first) = scopes.first() else {
-                        return Ok::<(), Error>(());
-                    };
-                    if !db.roles().exists_active_by_id(&first.subject_id, executor).await? {
-                        return Ok(());
-                    }
-                    if db
-                        .data_scopes()
-                        .has_subject_resource_history(&first.subject_id, &first.binding.resource, executor)
-                        .await?
-                    {
-                        return Ok(());
-                    }
-                    for scope in &scopes {
-                        db.data_scopes().create(scope, executor).await?;
-                    }
-                    MongoCasbinAdapter::new(db.clone()).bump_policy_revision(executor).await?;
-                    Ok::<(), Error>(())
-                })
-            })
-            .await
-    }
-
     /// 判断未删除的预定义角色是否存在。
     ///
     /// # 参数
@@ -230,84 +161,5 @@ impl RbacService {
             },
             Err(error) => Err(error),
         }
-    }
-}
-
-/// 初始化载荷须在任何数据库读写之前证明消费者准入与主体一致性。
-fn validate_scope_manifest(role: &str, resource: &str, definitions: &[DataScopeData]) -> Result<()> {
-    if definitions.is_empty() {
-        return Err(Error::ValidationError("初始化范围清单不能为空".into()));
-    }
-    for data in definitions {
-        if data.subject_type != DataScopeSubjectType::Role
-            || data.subject_id != role
-            || data.binding.resource != resource
-        {
-            return Err(Error::ValidationError("初始化范围主体或资源与清单不一致".into()));
-        }
-        data.binding.validate(data.scope_type, &data.scope_targets)?;
-        validate_binding(&data.binding)?;
-        for action in &data.binding.actions {
-            configurable_registration(&data.binding.resource, action)?;
-        }
-        validate_scope_type(&data.binding.resource, data.scope_type)?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod scope_manifest_tests {
-    use super::*;
-    use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
-
-    fn data() -> DataScopeData {
-        DataScopeData {
-            subject_type: DataScopeSubjectType::Role,
-            subject_id: "role-sales".into(),
-            scope_type: DataScopeType::Company,
-            scope_targets: vec![],
-            binding: ScopeBinding {
-                schema_version: 2,
-                resource: "customer".into(),
-                actions: vec!["list".into()],
-                target_dimension: ScopeDimension::InternalOrg,
-                target_mode: None,
-                include_descendants: None,
-                enabled: true,
-            },
-        }
-    }
-
-    #[test]
-    fn scope_seed_rejects_retired_authorization_policies() {
-        for (resource, action) in [
-            ("approval_instance", "read"),
-            ("contract", "list"),
-            ("supplier_settlement_statement", "confirm"),
-            ("integration_error_task", "create"),
-        ] {
-            let mut retired = data();
-            retired.binding.resource = resource.into();
-            retired.binding.actions = vec![action.into()];
-            assert!(validate_scope_manifest("role-sales", resource, &[retired]).is_err());
-        }
-    }
-
-    #[test]
-    fn seed_rejects_unwired_mismatched_and_empty_manifests_before_io() {
-        let good = data();
-        assert!(validate_scope_manifest("role-sales", "customer", std::slice::from_ref(&good)).is_ok());
-        assert!(validate_scope_manifest("role-other", "customer", std::slice::from_ref(&good)).is_err());
-        assert!(validate_scope_manifest("role-sales", "contract", std::slice::from_ref(&good)).is_err());
-        assert!(validate_scope_manifest("role-sales", "customer", &[]).is_err());
-        let mut bad = good.clone();
-        bad.binding.actions.push("manage".into());
-        assert!(validate_scope_manifest("role-sales", "customer", &[bad]).is_err());
-        let mut bad = good.clone();
-        bad.binding.resource = "work_item".into();
-        assert!(validate_scope_manifest("role-sales", "work_item", &[bad]).is_ok());
-        let mut bad = good;
-        bad.binding.target_dimension = ScopeDimension::Warehouse;
-        assert!(validate_scope_manifest("role-sales", "customer", &[bad]).is_err());
     }
 }

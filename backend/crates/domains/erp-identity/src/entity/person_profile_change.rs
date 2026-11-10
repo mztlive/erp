@@ -24,8 +24,8 @@ pub struct PersonProfileChange {
     pub user_id: String,
     pub expected_name: String,
     pub name: Option<String>,
-    pub expected_role_ids: Option<Vec<String>>,
-    pub role_ids: Option<Vec<String>>,
+    pub expected_role_ids: Option<RoleIdSet>,
+    pub role_ids: Option<RoleIdSet>,
     pub org_unit_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) remove_management_ids: Vec<String>,
@@ -46,13 +46,13 @@ impl PersonProfileChange {
         let Some(roles) = &self.role_ids else {
             return Ok(());
         };
-        RoleIdSet::parse_non_empty(roles)?;
+        roles.ensure_non_empty()?;
         let expected = self
             .expected_role_ids
             .as_ref()
             .ok_or_else(|| Error::ValidationError("修改角色必须提供原角色集合".into()))?;
-        if RoleIdSet::parse(expected)?.to_strings().into_iter().collect::<BTreeSet<_>>()
-            != RoleIdSet::parse(current)?.to_strings().into_iter().collect::<BTreeSet<_>>()
+        if expected.iter().collect::<BTreeSet<_>>()
+            != RoleIdSet::parse(current)?.iter().collect::<BTreeSet<_>>()
         {
             return Err(Error::ConflictError("人员角色已变化，请刷新后重新编辑".into()));
         }
@@ -107,18 +107,18 @@ mod tests {
     #[test]
     fn role_change_checks_original_set_and_accepts_role_only_change() {
         let mut value = change();
-        value.role_ids = Some(vec!["new".into()]);
+        value.role_ids = Some(RoleIdSet::parse(["new"]).unwrap());
         let current = vec!["old".into()];
         assert!(value.validate_roles(&current).is_err());
-        value.expected_role_ids = Some(vec!["other".into()]);
+        value.expected_role_ids = Some(RoleIdSet::parse(["other"]).unwrap());
         assert!(matches!(value.validate_roles(&current), Err(Error::ConflictError(_))));
-        value.expected_role_ids = Some(current.clone());
+        value.expected_role_ids = Some(RoleIdSet::parse(&current).unwrap());
         assert!(value.validate_roles(&current).is_ok());
         assert!(value.operations().unwrap().is_empty());
-        value.expected_role_ids = Some(vec!["second".into(), "old".into()]);
+        value.expected_role_ids = Some(RoleIdSet::parse(["second", "old"]).unwrap());
         assert!(value.validate_roles(&["old".into(), "second".into()]).is_ok());
-        value.expected_role_ids = Some(current.clone());
-        value.role_ids = Some(vec![]);
+        value.expected_role_ids = Some(RoleIdSet::parse(&current).unwrap());
+        value.role_ids = Some(RoleIdSet::default());
         assert!(value.validate_roles(&current).is_err());
     }
 

@@ -190,3 +190,35 @@ pub async fn audit_event_list(
 }
 
 pub mod person_scope;
+
+#[cfg(test)]
+mod tests {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use erp_identity::access_control::{UserRole, UserRoleId};
+    use erp_identity::{AssignUserRoleRequest, UserRoleView};
+    use serde_json::json;
+
+    use crate::http::errors::Error;
+
+    /// 请求中的无效时间返回 400；正常请求与响应保持秒级数字协议。
+    #[test]
+    fn role_assignment_time_contract() {
+        for seconds in [0, u64::MAX, u64::try_from(i64::MAX).unwrap()] {
+            let request: AssignUserRoleRequest = serde_json::from_value(json!({
+                "user_id": "user", "role_id": "role", "effective_from": seconds
+            }))
+            .unwrap();
+            let error = request.into_data("admin").unwrap_err();
+            assert_eq!(Error::from(error).into_response().status(), StatusCode::BAD_REQUEST);
+        }
+        let request: AssignUserRoleRequest = serde_json::from_value(json!({
+            "user_id": "user", "role_id": "role", "effective_from": 10, "effective_to": 20
+        }))
+        .unwrap();
+        let entity = UserRole::new(UserRoleId::new("binding"), request.into_data("admin").unwrap()).unwrap();
+        let response = serde_json::to_value(UserRoleView::from(entity)).unwrap();
+        assert_eq!(response["effective_from"], 10);
+        assert_eq!(response["effective_to"], 20);
+    }
+}

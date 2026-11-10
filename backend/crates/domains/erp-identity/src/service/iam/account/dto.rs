@@ -155,36 +155,6 @@ impl UpdateAdminParams {
         Self { id: id.into(), name: None, password: None, role_ids: None, status: None }
     }
 
-    /// 设置管理员名称。
-    ///
-    /// # 参数
-    /// * `name` - 管理员名称
-    ///
-    /// # 返回
-    /// 返回更新后的参数。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
-    }
-
-    /// 设置登录密码。
-    ///
-    /// # 参数
-    /// * `password` - 明文密码
-    ///
-    /// # 返回
-    /// 返回更新后的参数。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_password(mut self, password: impl Into<String>) -> Self {
-        self.password = Some(password.into());
-        self
-    }
-
     /// 设置角色 ID 集合。
     ///
     /// # 参数
@@ -385,7 +355,8 @@ mod tests {
             name: "Admin".to_string(),
             role_ids: vec!["role-1".to_string()],
         };
-        let update = UpdateAdminParams::new("admin-1").with_password("short");
+        let update =
+            UpdateAdminParams { password: Some("short".into()), ..UpdateAdminParams::new("admin-1") };
         let roles = UpdateAdminRoleParams::new("admin-1");
 
         assert!(create.validate().is_err());
@@ -399,8 +370,10 @@ mod tests {
         assert_eq!(init.account, "root");
         let reset = ResetAdminPasswordParams::new("admin01", "password");
         assert_eq!(reset.account, "admin01");
-        let update =
-            UpdateAdminParams::new("admin-1").with_name("Admin").with_role_ids(vec!["r-1".to_string()]);
+        let update = UpdateAdminParams {
+            name: Some("Admin".into()),
+            ..UpdateAdminParams::new("admin-1").with_role_ids(vec!["r-1".to_string()])
+        };
         assert_eq!(update.id, "admin-1");
         assert_eq!(update.name.as_deref(), Some("Admin"));
         assert_eq!(update.role_ids, Some(vec!["r-1".to_string()]));

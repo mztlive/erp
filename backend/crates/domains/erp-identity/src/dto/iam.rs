@@ -92,21 +92,6 @@ impl RoleItem {
         self
     }
 
-    /// 设置创建时间。
-    ///
-    /// # 参数
-    /// * `created_at` - 创建时间（秒级时间戳）
-    ///
-    /// # 返回
-    /// 返回更新后的响应项。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_created_at(mut self, created_at: u64) -> Self {
-        self.created_at = created_at;
-        self
-    }
-
     /// 从角色实体与直接权限策略构建响应项。
     ///
     /// 系统标记取角色的 `system`，或角色 ID 等于 `ROOT_ROLE_ID`。
@@ -137,6 +122,7 @@ mod tests {
     use validator::Validate;
 
     use super::{RoleItem, UpdateRoleParams};
+    use crate::RoleId;
     use crate::entity::rbac::Permission;
 
     #[test]
@@ -168,7 +154,7 @@ mod tests {
         assert!(!item.system);
         assert!(item.permissions.is_empty());
         assert_eq!(item.created_at, 0);
-        let system = RoleItem::new("role-a", "管理员").with_system(true).with_created_at(42);
+        let system = RoleItem { created_at: 42, ..RoleItem::new("role-a", "管理员").with_system(true) };
         assert!(system.system);
         assert_eq!(system.created_at, 42);
     }
@@ -180,7 +166,8 @@ mod tests {
         for (id, system, protected) in
             [("role-custom", false, false), ("role-built-in", true, true), (crate::ROOT_ROLE_ID, false, true)]
         {
-            let role = Role::new(id.to_string(), RoleData::new("测试角色").with_system(system)).unwrap();
+            let role =
+                Role::new(RoleId::parse(id).unwrap(), RoleData::new("测试角色").with_system(system)).unwrap();
             assert_eq!(RoleItem::from_role(role, vec![]).system, protected);
         }
     }

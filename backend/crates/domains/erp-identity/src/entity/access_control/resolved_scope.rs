@@ -1,13 +1,8 @@
-//! 按同一角色证明动作后的范围解析；角色授权与个人上限始终分别保留。
+//! 范围分支与限制条件共用的对象判定，不承载角色资格解析。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-use erp_core::common::time::Instant;
-
-use super::personal_grant::PersonalBusinessGrant;
-use super::{DataScope, DataScopeSubjectType, DataScopeType, ScopeDimension, ScopeTargetMode};
-use crate::entity::organization::{OrgMembership, OrgTree};
-use crate::{Error, Result};
+use super::ScopeDimension;
 
 #[cfg(test)]
 #[path = "resolved_scope_tests.rs"]
@@ -22,19 +17,6 @@ pub struct ScopeClause {
     pub org_unit_ids: BTreeSet<String>,
     pub settlement_party_ids: BTreeSet<String>,
     pub warehouse_ids: BTreeSet<String>,
-}
-
-/// 已经通过账号、角色状态和完整动作权限校验的解析输入。
-pub struct ScopeResolution<'a> {
-    pub user_id: &'a str,
-    pub eligible_role_ids: &'a [String],
-    pub resource: &'a str,
-    pub action: &'a str,
-    pub required_dimensions: &'a [ScopeDimension],
-    pub rules: &'a [DataScope],
-    pub memberships: &'a [OrgMembership],
-    pub tree: &'a OrgTree<'a>,
-    pub as_of: Instant,
 }
 
 /// 范围解析结果不直接序列化给客户端。
@@ -83,7 +65,7 @@ impl ScopeClause {
     }
 
     /// 校验资源要求的维度均有该角色自己的范围证据。
-    fn complete(&self, dimensions: &[ScopeDimension]) -> bool {
+    pub(crate) fn complete(&self, dimensions: &[ScopeDimension]) -> bool {
         self.company
             || dimensions.iter().all(|dimension| match dimension {
                 ScopeDimension::InternalOrg => {
@@ -128,136 +110,5 @@ impl ResolvedScope {
     /// 个人上限只收窄已有角色结果，不构成授权，也不得补 Company。
     pub fn has_role_scope(&self) -> bool {
         !self.role_clauses.is_empty()
-    }
-}
-
-impl ScopeResolution<'_> {
-    /// 解析角色并集及用户上限；输入角色必须由现有 RBAC 同角色完整权限检查产生。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回角色条款并集和可选的用户上限，不保留逐角色映射。
-    ///
-    /// # 错误
-    /// 没有合格角色时返回 `Error::Forbidden`。绑定、目标或组织关系非法时返回对应错误。缺范围、缺组织或缺必需维度的角色不进入结果，而不是报错。
-    pub fn resolve(&self) -> Result<ResolvedScope> {
-        self.resolve_with_roles().map(|(scope, _)| scope)
-    }
-
-    /// 保留每个完整授权角色的条款，供需要角色责任证明的消费者使用。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回合并后的范围，以及角色 ID 到其完整条款的映射。不完整的角色两者都不收录。
-    ///
-    /// # 错误
-    /// `eligible_role_ids` 为空时返回 `Error::Forbidden`。规则绑定、组织展开或成员关系非法时返回对应错误。
-    pub fn resolve_with_roles(&self) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
-        if self.eligible_role_ids.is_empty() {
-            return Err(crate::Error::Forbidden("没有提供完整动作权限的有效角色".into()));
-        }
-        let mut role_clauses = Vec::new();
-        let mut role_scopes = BTreeMap::new();
-        for role_id in self.eligible_role_ids {
-            let rules = self.rules_for(DataScopeSubjectType::Role, role_id);
-            let clause = self.clause(&rules)?;
-            if clause != ScopeClause::default() && clause.complete(self.required_dimensions) {
-                role_scopes.insert(role_id.clone(), clause.clone());
-                role_clauses.push(clause);
-            }
-        }
-        let rules = self.rules_for(DataScopeSubjectType::User, self.user_id);
-        let user_limit = (!rules.is_empty()).then(|| self.clause(&rules)).transpose()?;
-        Ok((ResolvedScope { role_clauses, user_limit }, role_scopes))
-    }
-
-    /// 将人员扩展规则加入其依据角色，保留个人上限与同角色证据。
-    /// # 参数
-    /// * `grants` - 独立个人扩展授权。
-    /// # 返回
-    /// 合并后的范围及逐角色证据。
-    /// # 错误
-    /// 非法部门或规则拒绝；非当前人员及不合格角色的授权不参与。
-    pub fn resolve_with_grants(
-        &self,
-        grants: &[PersonalBusinessGrant],
-    ) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
-        let mut rules = self.rules.to_vec();
-        for grant in grants
-            .iter()
-            .filter(|grant| grant.applies(self.user_id, self.eligible_role_ids, self.resource, self.action))
-        {
-            rules.push(grant.as_role_scope()?);
-        }
-        ScopeResolution { rules: &rules, ..*self }.resolve_with_roles()
-    }
-
-    /// 只提取当前资源动作、主体、状态均匹配的规则。
-    fn rules_for(&self, subject_type: DataScopeSubjectType, id: &str) -> Vec<&DataScope> {
-        self.rules
-            .iter()
-            .filter(|rule| {
-                !rule.base.is_deleted()
-                    && rule.subject_type == subject_type
-                    && rule.subject_id == id
-                    && rule.binding.applies(self.resource, self.action)
-            })
-            .collect()
-    }
-
-    /// 汇总同一主体的同维度正向范围。
-    fn clause(&self, rules: &[&DataScope]) -> Result<ScopeClause> {
-        let mut clause = ScopeClause::default();
-        for rule in rules {
-            rule.binding.validate(rule.scope_type, &rule.scope_targets)?;
-            match rule.scope_type {
-                DataScopeType::Company => clause.company = true,
-                DataScopeType::SelfOwned => clause.self_owned = true,
-                DataScopeType::Collaborative => clause.collaborative = true,
-                DataScopeType::Organization | DataScopeType::Team => self.add_targets(&mut clause, rule)?,
-            }
-        }
-        Ok(clause)
-    }
-
-    /// 按类型添加目标，不将内部组织身份写入仓库或结算主体集合。
-    fn add_targets(&self, clause: &mut ScopeClause, rule: &DataScope) -> Result<()> {
-        match rule.binding.target_dimension {
-            ScopeDimension::InternalOrg => clause.org_unit_ids.extend(self.org_targets(rule)?),
-            ScopeDimension::SettlementParty => {
-                clause.settlement_party_ids.extend(rule.scope_targets.iter().cloned())
-            },
-            ScopeDimension::Warehouse => clause.warehouse_ids.extend(rule.scope_targets.iter().cloned()),
-        }
-        Ok(())
-    }
-
-    /// 解析本人及指定组织，旧管理部门模式必须显式迁移。
-    fn org_targets(&self, rule: &DataScope) -> Result<BTreeSet<String>> {
-        let mut result = BTreeSet::new();
-        let descendants = rule.binding.include_descendants.unwrap_or(false);
-        match rule.binding.target_mode {
-            Some(ScopeTargetMode::Explicit) => {
-                for id in &rule.scope_targets {
-                    result.extend(self.tree.expand(id, descendants)?);
-                }
-            },
-            Some(ScopeTargetMode::OwnOrg) => {
-                for membership in self.memberships.iter().filter(|m| {
-                    !m.base.is_deleted() && m.user_id == self.user_id && m.validity.contains(self.as_of)
-                }) {
-                    result.extend(self.tree.expand(&membership.org_unit_id, descendants)?);
-                }
-            },
-            Some(ScopeTargetMode::ManagedOrgs) => {
-                return Err(Error::ValidationError("旧管理部门范围必须重新配置为人员数据范围".into()));
-            },
-            None => {},
-        }
-        Ok(result)
     }
 }

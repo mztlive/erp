@@ -338,6 +338,7 @@ pub(super) fn scope_version(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RoleId;
     use crate::access_control::ScopeClause;
     use crate::entity::access_control::governance::root_scope;
     use crate::entity::role::{ROOT_ROLE_ID, RoleData};
@@ -357,8 +358,10 @@ mod tests {
     /// 不因本批其他动作有超管角色而把当前动作未通过的角色加入其范围。
     #[test]
     fn requested_roles_do_not_acquire_unrelated_root_scope() {
-        let root = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超级管理员").with_system(true)).unwrap();
-        let ordinary = Role::new("role-sales".into(), RoleData::new("销售")).unwrap();
+        let root =
+            Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超级管理员").with_system(true))
+                .unwrap();
+        let ordinary = Role::new(RoleId::parse("role-sales").unwrap(), RoleData::new("销售")).unwrap();
         let roles = vec![root, ordinary];
         let ordinary_scope = qualified_roles(&roles, &["role-sales".into()]);
         assert_eq!(ordinary_scope.len(), 1);
@@ -371,7 +374,7 @@ mod tests {
     /// 共用公共事实仍须分别绑定每个来源和目标，所有授权版本变化均使游标失效。
     #[test]
     fn scope_versions_keep_each_source_and_all_authorization_versions() {
-        let role = Role::new("role-finance".into(), RoleData::new("财务")).unwrap();
+        let role = Role::new(RoleId::parse("role-finance").unwrap(), RoleData::new("财务")).unwrap();
         let mut roles = vec![role];
         let mut state = OrganizationState { version: 4, ..Default::default() };
         let scope = ResolvedScope {

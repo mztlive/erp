@@ -39,7 +39,7 @@ pub use root::ensure_root_role;
 use tokio::sync::{Mutex, OnceCell, RwLock};
 
 use crate::MongoCasbinAdapter;
-use crate::entity::rbac::{Permission, PermissionSet};
+use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
 pub use crate::entity::role::ROOT_ROLE_ID;
 use crate::ports::IdentityAuditPort;
 const ROOT_ROLE_NAME: &str = "超级管理员";
@@ -180,7 +180,7 @@ impl RolePermissionSnapshot {
 
 /// 已基于操作人当前权限校验的角色授予上下文。
 pub struct AuthorizedRoleGrant {
-    role_ids: Vec<String>,
+    role_ids: RoleIdSet,
     policy_revision: u64,
 }
 

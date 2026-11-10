@@ -25,7 +25,7 @@ impl PolicyDocument {
             if role.id.as_str() == ROOT_ROLE_ID || !roles.insert(role.id.clone()) {
                 return Err(Error::ValidationError("系统角色或重复角色不能写入策略文件".into()));
             }
-            role.name = Role::new(role.id.to_string(), RoleData::new(&role.name))?.name;
+            role.name = Role::new(role.id.clone(), RoleData::new(&role.name))?.name;
             if role.permissions.len() > 1000 {
                 return Err(Error::ValidationError("单个角色最多1000项权限".into()));
             }
@@ -196,6 +196,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::RoleId;
 
     /// 构造真实文件 DTO，测试执行生产规范化入口。
     fn document() -> PolicyDocument {
@@ -263,7 +264,7 @@ mod tests {
     #[test]
     fn root_role_and_oversized_input_are_rejected() {
         let mut value = document();
-        value.roles[0].id = crate::RoleId::parse("role-root").unwrap();
+        value.roles[0].id = RoleId::parse("role-root").unwrap();
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));
         let mut value = document();
         value.bindings[0].user_id = "x".repeat(129);

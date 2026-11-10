@@ -28,7 +28,7 @@ use validator::Validate;
 
 use crate::AccessControlExt;
 use crate::entity::access_control::{
-    AuditEvent, AuditEventData, AuditEventId, AuditEventResult, Permission, PermissionId, UserRole,
+    AuditEvent, AuditEventData, AuditEventId, AuditEventResult, PermissionDefinition, PermissionId, UserRole,
     UserRoleId,
 };
 use crate::ports::ScopeTargetPort;
@@ -159,7 +159,7 @@ impl AccessControlService {
         actor: &AuditActor,
     ) -> Result<PermissionView> {
         req.validate()?;
-        let permission = Permission::new(PermissionId::new(next_id()), req.into_data())?;
+        let permission = PermissionDefinition::new(PermissionId::new(next_id()), req.into_data())?;
         let event = self
             .build_audit_event(
                 actor,
@@ -305,13 +305,13 @@ impl AccessControlService {
         req: AssignUserRoleRequest,
         actor: &AuditActor,
     ) -> Result<UserRoleView> {
-        req.validate()?;
+        let data = req.into_data(actor.id())?;
         self.db
             .roles()
-            .find_by_id(req.role_id.as_str(), &mut NoTransaction)
+            .find_by_id(data.role_id.as_str(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("角色不存在".to_string()))?;
-        let binding = UserRole::new(UserRoleId::new(next_id()), req.into_data(actor.id()))?;
+        let binding = UserRole::new(UserRoleId::new(next_id()), data)?;
         let event = self
             .build_audit_event(
                 actor,
@@ -436,7 +436,11 @@ impl AccessControlService {
     ///
     /// # 错误
     /// 权限不存在返回 `NotFound`；版本不一致返回 `ConflictError`。
-    async fn load_permission_with_version(&self, id: &str, expected_version: u64) -> Result<Permission> {
+    async fn load_permission_with_version(
+        &self,
+        id: &str,
+        expected_version: u64,
+    ) -> Result<PermissionDefinition> {
         let permission = self
             .db
             .permissions()

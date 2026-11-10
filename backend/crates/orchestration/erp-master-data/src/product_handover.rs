@@ -11,9 +11,9 @@ use erp_catalog::repository::handover_receipt::ProductHandoverReceiptExt;
 use erp_catalog::{
     CatalogAccess, CatalogService, HandoverCandidateView, HandoverProductRequest, HandoverProductView,
 };
-use erp_identity::SharedRbacService;
 use erp_identity::service::account_permissions::{account_has_permission, permission_candidates};
 use erp_identity::service::organization_access::ensure_org_enabled;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
@@ -129,15 +129,21 @@ pub async fn handover_candidates(
     actor: &AuditActor,
 ) -> Result<Vec<HandoverCandidateView>> {
     let product = ports.access.require_product(actor, "update", id, &mut NoTransaction).await?;
-    Ok(permission_candidates(&db, &rbac, &product.maintainer_user_id, "product:update", &mut NoTransaction)
-        .await?
-        .into_iter()
-        .map(|candidate| HandoverCandidateView {
-            user_id: candidate.user_id,
-            display_name: candidate.display_name,
-            account: candidate.account,
-        })
-        .collect())
+    Ok(permission_candidates(
+        &db,
+        &rbac,
+        &product.maintainer_user_id,
+        &Permission::parse("product:update")?,
+        &mut NoTransaction,
+    )
+    .await?
+    .into_iter()
+    .map(|candidate| HandoverCandidateView {
+        user_id: candidate.user_id,
+        display_name: candidate.display_name,
+        account: candidate.account,
+    })
+    .collect())
 }
 
 /// 在原执行器中匹配独立回执，并重验当前访问读取当前责任视图。
@@ -247,7 +253,7 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if account_has_permission(db, rbac, target, "product:update", executor).await? {
+    if account_has_permission(db, rbac, target, &Permission::parse("product:update")?, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()))

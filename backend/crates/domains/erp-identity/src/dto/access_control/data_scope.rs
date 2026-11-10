@@ -118,51 +118,6 @@ impl DataScopeListMeta {
             no_scope: false,
         }
     }
-
-    /// 设置当前权限策略版本。
-    ///
-    /// # 参数
-    /// * `policy_version` - 当前权限策略版本
-    ///
-    /// # 返回
-    /// 返回更新后的列表元数据。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_policy_version(mut self, policy_version: u64) -> Self {
-        self.policy_version = policy_version;
-        self
-    }
-
-    /// 设置当前组织版本。
-    ///
-    /// # 参数
-    /// * `organization_version` - 当前组织版本
-    ///
-    /// # 返回
-    /// 返回更新后的列表元数据。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_organization_version(mut self, organization_version: u64) -> Self {
-        self.organization_version = organization_version;
-        self
-    }
-
-    /// 设置角色缺范围标记。
-    ///
-    /// # 参数
-    /// * `no_scope` - 角色是否缺少该动作范围
-    ///
-    /// # 返回
-    /// 返回更新后的列表元数据。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_no_scope(mut self, no_scope: bool) -> Self {
-        self.no_scope = no_scope;
-        self
-    }
 }
 
 impl DataScopeListView {

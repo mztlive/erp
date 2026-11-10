@@ -289,10 +289,7 @@ impl<'de> Deserialize<'de> for Instant {
     /// 整数时间戳落在 `DateTime<Utc>` 可表示范围时返回对应时刻。
     ///
     /// # 错误
-    /// 类型不是上述整数，或 `u64` 超出 i64 范围时返回 serde 错误。浮点数会被拒绝。
-    ///
-    /// # Panics
-    /// 整数能放进 i64、但超出 `DateTime<Utc>` 范围时，经 [`Instant::from_unix_secs`] panic。
+    /// 非整数或超出可表示时刻范围时返回 serde 错误。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         struct InstantVisitor;
 
@@ -303,7 +300,7 @@ impl<'de> Deserialize<'de> for Instant {
                 formatter.write_str("秒级 Unix 时间戳（整数）")
             }
 
-            /// 能表示则返回时刻；超出 `DateTime<Utc>` 时经 `from_unix_secs` panic，不转成 serde 错误。
+            /// 将有符号时间戳解析为可表示的时刻。
             ///
             /// # 参数
             /// * `value` - 秒级 Unix 时间戳。
@@ -312,15 +309,12 @@ impl<'de> Deserialize<'de> for Instant {
             /// 时间戳可表示时返回对应 `Instant`。
             ///
             /// # 错误
-            /// 不返回错误。越界不转成 serde 错误。
-            ///
-            /// # Panics
-            /// `value` 超出 `DateTime<Utc>` 可表示范围时，`Instant::from_unix_secs` 会 panic。
+            /// 超出可表示时刻范围时返回 serde 错误。
             fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Self::Value, E> {
-                Ok(Instant::from_unix_secs(value))
+                Instant::try_from_unix_secs(value).map_err(de::Error::custom)
             }
 
-            /// `u64` 超出 i64 时返回 serde 错误；转入 i64 后仍越界则同样 panic。
+            /// 将无符号时间戳解析为可表示的时刻。
             ///
             /// # 参数
             /// * `value` - 秒级 Unix 时间戳。
@@ -329,22 +323,19 @@ impl<'de> Deserialize<'de> for Instant {
             /// `value` 能转入 `i64` 且时刻可表示时返回对应 `Instant`。
             ///
             /// # 错误
-            /// `value` 超出 `i64` 可表示范围时返回 serde 错误，文案为「时间戳超出 i64 可表示范围」。
-            ///
-            /// # Panics
-            /// 转入 `i64` 后仍超出 `DateTime<Utc>` 可表示范围时，`Instant::from_unix_secs` 会 panic。
+            /// 超出 i64 或可表示时刻范围时返回 serde 错误。
             fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Self::Value, E> {
                 let secs =
                     i64::try_from(value).map_err(|_| de::Error::custom("时间戳超出 i64 可表示范围"))?;
-                Ok(Instant::from_unix_secs(secs))
+                self.visit_i64(secs)
             }
 
             fn visit_i32<E: de::Error>(self, value: i32) -> std::result::Result<Self::Value, E> {
-                self.visit_i64(value as i64)
+                self.visit_i64(i64::from(value))
             }
 
             fn visit_u32<E: de::Error>(self, value: u32) -> std::result::Result<Self::Value, E> {
-                self.visit_u64(value as u64)
+                self.visit_u64(u64::from(value))
             }
         }
 
@@ -437,5 +428,19 @@ mod tests {
         assert!(!date("2026-10-16").is_within(start, end));
         assert!(!date("2026-09-30").is_within(start, end));
         assert!(date("2099-01-01").is_within(start, None));
+    }
+}
+
+#[cfg(test)]
+mod instant_boundary_tests {
+    use super::Instant;
+    #[test]
+    fn decoding_out_of_range_timestamps_returns_errors() {
+        for raw in [i64::MIN.to_string(), i64::MAX.to_string(), u64::MAX.to_string()] {
+            assert!(serde_json::from_str::<Instant>(&raw).is_err());
+        }
+        for seconds in [-1, 0, 1, 1_700_000_000] {
+            assert_eq!(serde_json::from_str::<Instant>(&seconds.to_string()).unwrap().unix_secs(), seconds);
+        }
     }
 }

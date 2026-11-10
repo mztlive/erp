@@ -36,6 +36,7 @@ pub(crate) fn ensure_reset_admin(actor: &AuditActor, account: &AccountCore, role
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RoleId;
     use crate::entity::{AccountCoreData, AccountStatus, LoginAccount, RoleData, Secret};
 
     fn account() -> AccountCore {
@@ -58,7 +59,8 @@ mod tests {
     fn active_admin_and_enabled_builtin_root_are_required() {
         let account = account();
         let actor = AuditActor::new(account.base.id.clone(), "admin".into(), AccountKind::Admin);
-        let mut role = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超管").with_system(true)).unwrap();
+        let mut role =
+            Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超管").with_system(true)).unwrap();
         assert!(ensure_reset_admin(&actor, &account, &role).is_ok());
         role.disabled = true;
         assert!(ensure_reset_admin(&actor, &account, &role).is_err());
@@ -74,7 +76,8 @@ mod tests {
     fn another_identity_or_inactive_admin_cannot_reset() {
         let mut account = account();
         let actor = AuditActor::new(account.base.id.clone(), "admin".into(), AccountKind::Admin);
-        let role = Role::new(ROOT_ROLE_ID.into(), RoleData::new("超管").with_system(true)).unwrap();
+        let role =
+            Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超管").with_system(true)).unwrap();
         let other = AuditActor::new("other".into(), "admin".into(), AccountKind::Admin);
         assert!(ensure_reset_admin(&other, &account, &role).is_err());
         account.status = AccountStatus::Suspended;

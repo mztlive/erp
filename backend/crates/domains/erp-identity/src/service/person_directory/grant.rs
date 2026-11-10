@@ -8,7 +8,7 @@ use crate::entity::person_directory::{
     ExistingGrant, PersonDirectoryCategory, PersonQueryQualification, PersonQueryStatus, should_insert_grant,
 };
 use crate::repository::prelude::*;
-use crate::{AccessControlExt, Error, Result};
+use crate::{AccessControlExt, Error, Result, RoleId};
 
 /// 为本次角色分配中新出现的目录来源角色补记查询资格。
 ///
@@ -30,11 +30,11 @@ use crate::{AccessControlExt, Error, Result};
 pub async fn grant_assigned_roles(
     db: &Database,
     account_id: &str,
-    role_ids: &[String],
+    role_ids: &[RoleId],
     executor: &mut dyn Executor,
 ) -> Result<()> {
     for role_id in role_ids {
-        let Some(category) = PersonDirectoryCategory::from_grant_role(role_id) else {
+        let Some(category) = PersonDirectoryCategory::from_grant_role(role_id.as_str()) else {
             continue;
         };
         ensure_grant(db, account_id, category, executor).await?;

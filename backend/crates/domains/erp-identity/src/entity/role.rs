@@ -108,10 +108,9 @@ impl Role {
     ///
     /// # 错误
     /// 当角色 ID、名称或描述非法时返回错误。
-    pub fn new(id: String, data: RoleData) -> Result<Self> {
-        RoleId::parse(&id)?;
+    pub fn new(id: RoleId, data: RoleData) -> Result<Self> {
         Ok(Self {
-            base: BaseModel::new(id),
+            base: BaseModel::new(id.to_string()),
             name: normalize_required_text(data.name, "角色名称不能为空", NAME_MAX_LEN, "角色名称过长")?,
             description: normalize_optional_text(data.description, "角色描述", DESCRIPTION_MAX_LEN)?,
             system: data.system,
@@ -224,10 +223,18 @@ impl Role {
 #[cfg(test)]
 mod tests {
     use super::{ROOT_ROLE_ID, Role, RoleData, RoleUpdate};
+    use crate::RoleId;
+
+    #[test]
+    fn role_identity_uses_the_normalized_value() {
+        let role = Role::new(RoleId::parse(" role-a ").unwrap(), RoleData::new("角色")).unwrap();
+        assert_eq!(role.base.id, "role-a");
+        assert!(RoleId::parse("bad/id").is_err());
+    }
 
     #[test]
     fn reserved_root_identity_remains_protected_without_system_flag() {
-        let role = Role::new(ROOT_ROLE_ID.into(), RoleData::new("root")).unwrap();
+        let role = Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("root")).unwrap();
         assert!(!role.system);
         assert!(role.ensure_assignable().is_err());
         assert!(role.ensure_mutable().is_err());
@@ -247,26 +254,28 @@ mod tests {
 
     #[test]
     fn role_should_normalize_name() {
-        let role = Role::new("role-a".to_string(), RoleData::new(" 运营管理员 ")).unwrap();
+        let role = Role::new(RoleId::parse(" role-a ").unwrap(), RoleData::new(" 运营管理员 ")).unwrap();
         assert_eq!(role.name, "运营管理员");
     }
 
     #[test]
     fn role_should_reject_empty_name() {
-        let result = Role::new("role-a".to_string(), RoleData::new(" "));
+        let result = Role::new(RoleId::parse("role-a").unwrap(), RoleData::new(" "));
         assert!(result.is_err());
     }
 
     #[test]
     fn role_update_should_change_disabled_state() {
-        let mut role = Role::new("role-a".to_string(), RoleData::new("角色")).unwrap();
+        let mut role = Role::new(RoleId::parse("role-a").unwrap(), RoleData::new("角色")).unwrap();
         role.update(RoleUpdate { disabled: Some(true), ..Default::default() }).unwrap();
         assert!(role.disabled);
     }
 
     #[test]
     fn system_role_should_not_be_deletable() {
-        let role = Role::new("role-system".to_string(), RoleData::new("系统角色").with_system(true)).unwrap();
+        let role =
+            Role::new(RoleId::parse("role-system").unwrap(), RoleData::new("系统角色").with_system(true))
+                .unwrap();
 
         assert!(role.ensure_deletable().is_err());
         assert!(role.ensure_mutable().is_err());
@@ -274,16 +283,17 @@ mod tests {
 
     #[test]
     fn custom_role_should_be_deletable() {
-        let role = Role::new("role-custom".to_string(), RoleData::new("自定义角色")).unwrap();
+        let role = Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("自定义角色")).unwrap();
 
         assert!(role.ensure_deletable().is_ok());
     }
 
     #[test]
     fn only_enabled_custom_role_should_be_assignable() {
-        let custom = Role::new("role-custom".to_string(), RoleData::new("自定义角色")).unwrap();
+        let custom = Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("自定义角色")).unwrap();
         let system =
-            Role::new("role-system".to_string(), RoleData::new("系统角色").with_system(true)).unwrap();
+            Role::new(RoleId::parse("role-system").unwrap(), RoleData::new("系统角色").with_system(true))
+                .unwrap();
         let mut disabled = custom.clone();
         disabled.update(RoleUpdate { disabled: Some(true), ..Default::default() }).unwrap();
 

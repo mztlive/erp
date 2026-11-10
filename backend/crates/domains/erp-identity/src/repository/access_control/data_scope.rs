@@ -155,25 +155,6 @@ pub trait DataScopeRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<bool>;
 
-    /// 查询主体资源的全部配置留痕，包含撤销记录，防止初始化恢复授权。
-    ///
-    /// # 参数
-    /// * `role_id` - 角色主体 ID
-    /// * `resource` - 资源标识
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 存在匹配文档时返回 `true`，不按删除或启用状态过滤。
-    ///
-    /// # 错误
-    /// 底层读取失败时返回仓储错误。
-    async fn has_subject_resource_history(
-        &self,
-        role_id: &str,
-        resource: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<bool>;
-
     /// 判断指定主体是否存在至少一个未软删除的数据范围。
     ///
     /// 查询只投影 `_id` 并在首条命中后停止，不反序列化完整范围集合。
@@ -278,24 +259,6 @@ impl DataScopeRepositoryExt for Repository<'_, DataScope> {
         Ok(mongo_ops::find_one(
             &self.collection().clone_with_type::<Document>(),
             doc! { "subject_type": "role", "subject_id": role_id, "resource": resource, "actions": action },
-            executor,
-        )
-        .await?
-        .is_some())
-    }
-
-    async fn has_subject_resource_history(
-        &self,
-        role_id: &str,
-        resource: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        let collection = self
-            .database()
-            .collection::<Document>(<mongodb::Database as crate::AccessControlExt>::DATA_SCOPES);
-        Ok(persistence_core::mongo_ops::find_one(
-            &collection,
-            doc! { "subject_type": "role", "subject_id": role_id, "resource": resource },
             executor,
         )
         .await?

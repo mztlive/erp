@@ -256,7 +256,7 @@ fn invalid_session() -> Error {
     Error::Unauthenticated("认证已失效".to_string())
 }
 
-pub use crate::dto::{AuthRequest, AuthResponse, PasswordLoginPayload};
+pub use crate::dto::{AuthRequest, AuthResponse};
 
 #[cfg(test)]
 mod tests {

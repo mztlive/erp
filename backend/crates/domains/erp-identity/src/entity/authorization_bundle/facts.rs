@@ -66,7 +66,7 @@ impl PolicyUserState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RoleData;
+    use crate::{RoleData, RoleId};
 
     #[test]
     fn missing_role_with_parent_is_not_treated_as_a_fresh_identity() {
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn existing_role_preserves_complete_impact_and_rejects_unsupported_links() {
-        let role = Role::new("reader".into(), RoleData::new("销售只读")).unwrap();
+        let role = Role::new(RoleId::parse("reader").unwrap(), RoleData::new("销售只读")).unwrap();
         let state =
             PolicyRoleState::from_parts(Some(role.clone()), vec![], vec![], vec!["user:admin:alice".into()])
                 .unwrap()

@@ -7,7 +7,7 @@ use erp_core::ids::PermissionId;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::rbac;
+use crate::Permission;
 
 /// 权限名称最大长度。
 const NAME_MAX_LEN: usize = 64;
@@ -98,17 +98,16 @@ pub struct PermissionUpdate {
 ///
 /// 角色、用户、团队、权限和数据范围配置化，不把角色枚举硬编码到业务逻辑
 /// （erp-phase-1 §11.1）。`resource:action` 组合复用既有
-/// `entities::rbac::Permission` 的解析与规范化（小写、白名单字符）；
+/// `Permission` 的解析与规范化（小写、白名单字符）；
 /// 角色 ↔ 权限的授权绑定仍由既有 Casbin 规则承载，本实体只维护定义目录，
 /// 不重建绑定能力。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
-pub struct Permission {
+pub struct PermissionDefinition {
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 权限资源。
-    pub resource: String,
-    /// 权限动作。
-    pub action: String,
+    /// 已规范化权限；持久化仍使用 resource/action 两个字段。
+    #[serde(flatten, with = "permission_parts")]
+    permission: Permission,
     /// 展示名称。
     pub name: String,
     /// 描述。
@@ -119,10 +118,21 @@ pub struct Permission {
     pub disabled: bool,
 }
 
-impl Permission {
+impl PermissionDefinition {
+    /// 返回已验证的资源动作身份。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 不可变的权限值对象。
+    /// # 错误
+    /// 不返回错误。
+    pub fn permission(&self) -> &Permission {
+        &self.permission
+    }
+
     /// 创建权限定义。
     ///
-    /// 通过 `entities::rbac::Permission::parse` 校验并规范化 `resource:action`
+    /// 通过 `Permission::parse` 校验并规范化 `resource:action`
     /// （trim、小写、白名单字符、长度上限），完成 name/description 的规范化。
     ///
     /// # 参数
@@ -135,13 +145,12 @@ impl Permission {
     /// # 错误
     /// 当 `resource:action` 非法或 name/description 为空/超长时返回错误。
     pub fn new(id: PermissionId, data: PermissionData) -> Result<Self> {
-        let parsed = rbac::Permission::parse(format!("{}:{}", data.resource, data.action))?;
+        let parsed = Permission::parse(format!("{}:{}", data.resource, data.action))?;
         let name = normalize_required_text(data.name, "权限名称不能为空", NAME_MAX_LEN, "权限名称过长")?;
         let description = normalize_optional_text(data.description, "权限描述", DESCRIPTION_MAX_LEN)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
-            resource: parsed.resource().to_string(),
-            action: parsed.action().to_string(),
+            permission: parsed,
             name,
             description,
             system: data.system,
@@ -196,8 +205,9 @@ impl Permission {
 #[cfg(test)]
 mod tests {
     use erp_core::ids::PermissionId;
+    use mongodb::bson;
 
-    use super::{Permission, PermissionData, PermissionUpdate};
+    use super::{PermissionData, PermissionDefinition, PermissionUpdate};
 
     fn data() -> PermissionData {
         PermissionData::new(" SalesOrder", "APPROVE", " 销售单审批 ").with_description(" 审批销售单 ")
@@ -205,10 +215,22 @@ mod tests {
 
     /// happy path：resource:action 小写规范化，name/description trim。
     #[test]
+    fn definition_preserves_document_shape_and_validates_decoded_permission() {
+        let value = PermissionDefinition::new(PermissionId::new("p"), data()).unwrap();
+        let mut json = serde_json::to_value(&value).unwrap();
+        assert_eq!(json["resource"], "salesorder");
+        assert_eq!(json["action"], "approve");
+        assert!(json.get("permission").is_none());
+        assert_eq!(serde_json::from_value::<PermissionDefinition>(json.clone()).unwrap(), value);
+        json["action"] = "invalid:action".into();
+        assert!(serde_json::from_value::<PermissionDefinition>(json).is_err());
+    }
+
+    #[test]
     fn new_normalizes_resource_action_and_text() {
-        let permission = Permission::new(PermissionId::new("perm-1"), data()).unwrap();
-        assert_eq!(permission.resource, "salesorder");
-        assert_eq!(permission.action, "approve");
+        let permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
+        assert_eq!(permission.permission().resource(), "salesorder");
+        assert_eq!(permission.permission().action(), "approve");
         assert_eq!(permission.name, "销售单审批");
         assert_eq!(permission.description.as_deref(), Some("审批销售单"));
         assert!(!permission.disabled);
@@ -218,23 +240,23 @@ mod tests {
     #[test]
     fn new_rejects_malformed_resource_action() {
         let payload = PermissionData { action: "approve:extra".to_string(), ..data() };
-        assert!(Permission::new(PermissionId::new("perm-1"), payload).is_err());
+        assert!(PermissionDefinition::new(PermissionId::new("perm-1"), payload).is_err());
     }
 
     /// 失败路径：名称为空与超长被拒。
     #[test]
     fn new_rejects_blank_and_overlong_name() {
         let blank = PermissionData { name: "  ".to_string(), ..data() };
-        assert!(Permission::new(PermissionId::new("perm-1"), blank).is_err());
+        assert!(PermissionDefinition::new(PermissionId::new("perm-1"), blank).is_err());
 
         let overlong = PermissionData { name: "名".repeat(65), ..data() };
-        assert!(Permission::new(PermissionId::new("perm-2"), overlong).is_err());
+        assert!(PermissionDefinition::new(PermissionId::new("perm-2"), overlong).is_err());
     }
 
     /// 更新：复用校验且不改关键字段。
     #[test]
     fn update_applies_name_and_disabled_only() {
-        let mut permission = Permission::new(PermissionId::new("perm-1"), data()).unwrap();
+        let mut permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
         permission
             .update(PermissionUpdate {
                 name: Some(" 新名称 ".to_string()),
@@ -244,8 +266,8 @@ mod tests {
             .unwrap();
         assert_eq!(permission.name, "新名称");
         assert!(permission.disabled);
-        assert_eq!(permission.resource, "salesorder");
-        assert_eq!(permission.action, "approve");
+        assert_eq!(permission.permission().resource(), "salesorder");
+        assert_eq!(permission.permission().action(), "approve");
 
         assert!(
             permission
@@ -257,9 +279,10 @@ mod tests {
     /// 系统权限删除保护。
     #[test]
     fn system_permission_is_not_deletable() {
-        let system = Permission::new(PermissionId::new("perm-2"), data().with_system(true)).unwrap();
+        let system =
+            PermissionDefinition::new(PermissionId::new("perm-2"), data().with_system(true)).unwrap();
         assert!(system.ensure_deletable().is_err());
-        let custom = Permission::new(PermissionId::new("perm-3"), data()).unwrap();
+        let custom = PermissionDefinition::new(PermissionId::new("perm-3"), data()).unwrap();
         assert!(custom.ensure_deletable().is_ok());
     }
 
@@ -272,12 +295,42 @@ mod tests {
         assert!(!data.system);
     }
 
-    /// JSON 往返。
+    /// BSON 往返保留既有字段，不新增嵌套权限字段。
     #[test]
     fn entity_roundtrips_through_bson() {
-        let permission = Permission::new(PermissionId::new("perm-1"), data()).unwrap();
-        let json = serde_json::to_string(&permission).unwrap();
-        let roundtrip: Permission = serde_json::from_str(&json).unwrap();
+        let permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
+        let document = bson::serialize_to_document(&permission).unwrap();
+        assert_eq!(document.get_str("resource").unwrap(), "salesorder");
+        assert_eq!(document.get_str("action").unwrap(), "approve");
+        assert!(!document.contains_key("permission"));
+        let roundtrip: PermissionDefinition = bson::deserialize_from_document(document).unwrap();
         assert_eq!(roundtrip, permission);
+    }
+}
+
+/// 保持既有 Mongo resource/action 字段，同时在解码边界建立权限不变式。
+mod permission_parts {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use crate::Permission;
+
+    #[derive(Serialize, Deserialize)]
+    struct Parts {
+        resource: String,
+        action: String,
+    }
+
+    /// 按既有文档字段编码已验证权限。
+    pub(super) fn serialize<S: Serializer>(
+        permission: &Permission,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        Parts { resource: permission.resource().into(), action: permission.action().into() }
+            .serialize(serializer)
+    }
+    /// 将文档字段一次性解析为权限值对象。
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Permission, D::Error> {
+        let parts = Parts::deserialize(deserializer)?;
+        Permission::parse(format!("{}:{}", parts.resource, parts.action)).map_err(serde::de::Error::custom)
     }
 }

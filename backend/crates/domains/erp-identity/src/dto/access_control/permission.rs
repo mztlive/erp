@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::PageParams;
-use crate::entity::access_control::{Permission, PermissionData, PermissionUpdate};
+use crate::entity::access_control::{PermissionData, PermissionDefinition, PermissionUpdate};
 use crate::error::Result;
 
 /// 权限定义响应视图（W19 权限目录）。
@@ -31,13 +31,15 @@ pub struct PermissionView {
     pub created_at: u64,
 }
 
-impl From<Permission> for PermissionView {
+impl From<PermissionDefinition> for PermissionView {
     /// 从实体构造响应视图。
-    fn from(permission: Permission) -> Self {
+    fn from(permission: PermissionDefinition) -> Self {
+        let resource = permission.permission().resource().to_owned();
+        let action = permission.permission().action().to_owned();
         Self {
             id: permission.base.id,
-            resource: permission.resource,
-            action: permission.action,
+            resource,
+            action,
             name: permission.name,
             description: permission.description,
             system: permission.system,

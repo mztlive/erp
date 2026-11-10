@@ -13,6 +13,7 @@ use super::{
     ensure_target_roles_manageable, parse_policy_permissions, permission_pairs, permissions_for_roles,
     policy_revisions_match, role_key, role_or_not_found, root_role_is_current, stable_policy_revision,
 };
+use crate::RoleId;
 use crate::entity::{Permission, PermissionSet, Role, RoleData};
 use crate::error::Error;
 use crate::ports::{IdentityAuditPort, PreparedResourceAudit};
@@ -132,7 +133,8 @@ fn remote_policy_revision_invalidates_the_local_snapshot() {
 fn root_initialization_is_noop_only_for_canonical_metadata_and_policy() {
     let root = Permission::parse("*:*").unwrap();
     let mut role =
-        Role::new(ROOT_ROLE_ID.to_string(), RoleData::new("超级管理员").with_system(true)).unwrap();
+        Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("超级管理员").with_system(true))
+            .unwrap();
     assert!(root_role_is_current(&role, std::slice::from_ref(&root), &root));
     assert!(!root_role_is_current(&role, &[], &root));
     role.disabled = true;
@@ -144,14 +146,16 @@ fn root_initialization_is_noop_only_for_canonical_metadata_and_policy() {
 
 #[test]
 fn system_role_is_rejected_by_normal_delegation_boundary() {
-    let system = Role::new("role-system".to_string(), RoleData::new("系统角色").with_system(true)).unwrap();
+    let system =
+        Role::new(RoleId::parse("role-system").unwrap(), RoleData::new("系统角色").with_system(true))
+            .unwrap();
 
     assert!(matches!(ensure_roles_delegable(&[system]), Err(Error::Forbidden(_))));
 }
 
 #[test]
 fn root_id_is_protected_even_when_legacy_metadata_is_not_system() {
-    let root = Role::new(ROOT_ROLE_ID.to_string(), RoleData::new("错误元数据")).unwrap();
+    let root = Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("错误元数据")).unwrap();
 
     assert!(matches!(ensure_roles_delegable(std::slice::from_ref(&root)), Err(Error::Forbidden(_))));
     assert!(root.ensure_mutable().is_err());
@@ -182,7 +186,9 @@ fn actor_can_manage_only_an_equal_or_lower_permission_target() {
 
 #[test]
 fn root_and_other_system_role_targets_are_not_manageable() {
-    let system = Role::new("role-system".to_string(), RoleData::new("系统角色").with_system(true)).unwrap();
+    let system =
+        Role::new(RoleId::parse("role-system").unwrap(), RoleData::new("系统角色").with_system(true))
+            .unwrap();
     let roles = [(system.base.id.clone(), system)].into_iter().collect();
 
     assert!(matches!(

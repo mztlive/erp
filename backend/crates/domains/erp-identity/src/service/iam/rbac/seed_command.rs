@@ -63,14 +63,14 @@ impl RbacService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Permission;
     use crate::entity::rbac::PermissionSet;
     use crate::entity::role::Role;
+    use crate::{Permission, RoleId};
 
     /// 使用正式合并规则覆盖旧销售角色缺少新目录权限的场景及重复执行。
     #[test]
     fn seeded_permissions_fill_missing_directory_without_removing_existing_grants() {
-        let role = Role::new("role-demo-sales".into(), RoleData::new("演示销售")).unwrap();
+        let role = Role::new(RoleId::parse("role-demo-sales").unwrap(), RoleData::new("演示销售")).unwrap();
         let current = PermissionSet::new([Permission::parse("sales_order:*").unwrap()]);
         let desired = PermissionSet::new([
             Permission::parse("sales_order:create").unwrap(),
@@ -87,7 +87,8 @@ mod tests {
     #[test]
     fn seeded_permissions_reject_conflicting_and_inactive_roles() {
         let current = PermissionSet::default();
-        let mut role = Role::new("role-demo-sales".into(), RoleData::new("演示销售")).unwrap();
+        let mut role =
+            Role::new(RoleId::parse("role-demo-sales").unwrap(), RoleData::new("演示销售")).unwrap();
         assert!(role.seeded_permissions("其他角色", &current, &current).is_err());
         role.disabled = true;
         assert!(role.seeded_permissions("演示销售", &current, &current).is_err());

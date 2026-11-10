@@ -71,10 +71,11 @@ impl RoleWorkbench {
 mod tests {
     use super::super::role::RoleData;
     use super::*;
+    use crate::RoleId;
     #[test]
     fn mapping_and_permissions_are_both_required() {
         let all = vec![Permission::parse("*:*").unwrap()];
-        let mut role = Role::new("sales".into(), RoleData::new("销售")).unwrap();
+        let mut role = Role::new(RoleId::parse("sales").unwrap(), RoleData::new("销售")).unwrap();
         assert!(RoleWorkbench::available(&[role.clone()], &all).is_empty());
         role.workbenches.insert(RoleWorkbench::Sales);
         assert_eq!(RoleWorkbench::available(&[role.clone()], &all), BTreeSet::from([RoleWorkbench::Sales]));
@@ -84,7 +85,7 @@ mod tests {
     }
     #[test]
     fn legacy_roles_and_explicit_updates_preserve_permission_boundary() {
-        let role = Role::new("role-sales".into(), RoleData::new("销售")).unwrap();
+        let role = Role::new(RoleId::parse("role-sales").unwrap(), RoleData::new("销售")).unwrap();
         let mut json = serde_json::to_value(role).unwrap();
         json.as_object_mut().unwrap().remove("workbenches");
         let mut legacy: Role = serde_json::from_value(json).unwrap();

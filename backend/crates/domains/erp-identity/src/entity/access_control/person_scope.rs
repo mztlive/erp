@@ -1,4 +1,6 @@
 //! 人员按资源动作保存一份完整范围表达式，不引用角色身份。
+mod compile;
+use compile::ScopeCompiler;
 use entity_core::BaseModel;
 use entity_macros::{Entity, id_type};
 use erp_core::common::time::Instant;
@@ -6,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType, ResolvedScope, ScopeBinding,
-    ScopeClause, ScopeDimension, ScopeResolution, ScopeTargetMode,
+    ScopeClause, ScopeDimension, ScopeTargetMode,
 };
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
@@ -215,37 +217,25 @@ impl PersonDataScope {
     ) -> Result<ResolvedScope> {
         let branches = self.expression.branches(&self.resource, &self.action);
         let condition = self.expression.read_limit(&branches, dimensions, allows_history)?;
-        let mut rules = Vec::new();
-        let roles = (0..branches.len()).map(|n| format!("branch-{n}")).collect::<Vec<_>>();
-        for (branch, id) in branches.iter().zip(&roles) {
-            for term in branch {
-                rules.push(term.rule(&self.resource, &self.action, id, false)?);
-            }
-        }
-        if let Some(condition) = &condition {
-            for term in condition {
-                rules.push(term.rule(&self.resource, &self.action, &self.user_id, true)?);
-            }
-        }
         let tree = OrgTree::new(&state.units)?;
-        // 空分支依然可表达合法历史读取；显式空 condition 表示完全拒绝。
-        let ids = if roles.is_empty() { vec!["empty".into()] } else { roles };
-        let mut result = ScopeResolution {
-            user_id: &self.user_id,
-            eligible_role_ids: &ids,
+        let compiler = ScopeCompiler {
+            user: &self.user_id,
             resource: &self.resource,
             action: &self.action,
-            required_dimensions: dimensions,
-            rules: &rules,
-            memberships: &state.memberships,
             tree: &tree,
-            as_of: at,
+            memberships: &state.memberships,
+            at,
+        };
+        let mut role_clauses = Vec::new();
+        for branch in &branches {
+            let clause = compiler.clause(branch)?;
+            if clause != ScopeClause::default() && clause.complete(dimensions) {
+                role_clauses.push(clause);
+            }
         }
-        .resolve()?;
-        if condition.as_ref().is_some_and(Vec::is_empty) {
-            result.user_limit = Some(ScopeClause::default());
-        }
-        Ok(result)
+        // 显式空条件编译为空条款，始终拒绝普通和历史读取。
+        let user_limit = condition.as_ref().map(|terms| compiler.clause(terms)).transpose()?;
+        Ok(ResolvedScope { role_clauses, user_limit })
     }
 
     /// 构造尚未持久化的基础范围；必须先完成账号与动作资格检查。
@@ -318,6 +308,37 @@ mod tests {
             warehouse_id: None,
         }
     }
+    #[test]
+    fn invalid_terms_and_empty_branches_remain_closed() {
+        let state = OrganizationState::default();
+        let mut policy = config(vec![PersonScopeTerm {
+            target_mode: Some(ScopeTargetMode::ManagedOrgs),
+            ..term(DataScopeType::Organization)
+        }]);
+        assert!(policy.resolve(&state, &[], false, Instant::now()).is_err());
+        policy.expression.alternatives = vec![vec![PersonScopeTerm {
+            target_dimension: ScopeDimension::Warehouse,
+            target_mode: Some(ScopeTargetMode::Explicit),
+            scope_targets: vec!["*".into()],
+            ..term(DataScopeType::Organization)
+        }]];
+        assert!(policy.resolve(&state, &[], false, Instant::now()).is_err());
+        policy.expression.alternatives.clear();
+        policy.expression.history_read = true;
+        let scope = policy.resolve(&state, &[], true, Instant::now()).unwrap();
+        assert!(!scope.has_role_scope());
+        assert!(!scope.allows(&object(true, false), false));
+        assert!(scope.allows(&object(false, true), true));
+        policy.expression.condition = Some(vec![PersonScopeTerm {
+            target_mode: Some(ScopeTargetMode::OwnOrg),
+            include_descendants: Some(false),
+            ..term(DataScopeType::Organization)
+        }]);
+        assert!(
+            !policy.resolve(&state, &[], true, Instant::now()).unwrap().allows(&object(false, true), true)
+        );
+    }
+
     #[test]
     fn explicit_self_does_not_add_history_and_company_is_explicit() {
         let state = OrganizationState::default();

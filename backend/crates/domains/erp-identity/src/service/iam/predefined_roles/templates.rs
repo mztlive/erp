@@ -28,6 +28,7 @@ pub fn builtin_role_templates() -> Result<Vec<BuiltinRoleTemplate>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RoleId;
     use crate::entity::role_template::BuiltinRoleState;
     use crate::entity::{Permission, PermissionSet, Role, RoleData};
 
@@ -137,7 +138,7 @@ mod tests {
     #[test]
     fn existing_identity_is_preserved_in_every_state() {
         assert_eq!(BuiltinRoleState::from_role(None), BuiltinRoleState::Missing);
-        let mut role = Role::new("role-sales".into(), RoleData::new("自定义销售")).unwrap();
+        let mut role = Role::new(RoleId::parse("role-sales").unwrap(), RoleData::new("自定义销售")).unwrap();
         assert_eq!(BuiltinRoleState::from_role(Some(&role)), BuiltinRoleState::Existing);
         role.disabled = true;
         assert_eq!(BuiltinRoleState::from_role(Some(&role)), BuiltinRoleState::Disabled);

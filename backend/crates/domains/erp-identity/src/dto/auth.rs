@@ -22,40 +22,9 @@ pub struct AuthResponse {
     pub token: String,
 }
 
-/// 账号密码登录参数。
-///
-/// 该 DTO 由 HTTP 与认证 Service 共同复用，Service 仍负责执行校验，避免
-/// 非 HTTP 调用绕过输入合同。
-#[derive(Debug, Deserialize, Validate)]
-pub struct PasswordLoginPayload {
-    #[validate(length(min = 4, max = 64))]
-    pub account: String,
-    #[validate(length(min = 6, max = 64))]
-    pub password: String,
-}
-
 #[cfg(test)]
 mod tests {
-    use erp_core::AccountKind;
-    use validator::Validate;
-
-    use super::{AuthRequest, PasswordLoginPayload};
-
-    #[test]
-    fn password_login_payload_should_accept_valid_credentials() {
-        let payload =
-            PasswordLoginPayload { account: "admin01".to_string(), password: "password123".to_string() };
-
-        assert!(payload.validate().is_ok());
-    }
-
-    #[test]
-    fn password_login_payload_should_reject_short_password() {
-        let payload = PasswordLoginPayload { account: "admin01".to_string(), password: "short".to_string() };
-
-        assert!(payload.validate().is_err());
-    }
-
+    use super::*;
     #[test]
     fn backoffice_auth_request_rejects_unbounded_credentials() {
         let request = AuthRequest {
@@ -63,7 +32,6 @@ mod tests {
             password: "x".repeat(33),
             account_kind: AccountKind::Admin,
         };
-
         assert!(request.validate().is_err());
     }
 }

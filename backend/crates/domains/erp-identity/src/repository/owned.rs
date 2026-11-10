@@ -11,7 +11,7 @@ pub type AuditEventRepository<'a> =
     persistence_core::Repository<'a, crate::entity::access_control::AuditEvent>;
 pub type DataScopeRepository<'a> = persistence_core::Repository<'a, crate::entity::access_control::DataScope>;
 pub type PermissionRepository<'a> =
-    persistence_core::Repository<'a, crate::entity::access_control::Permission>;
+    persistence_core::Repository<'a, crate::entity::access_control::PermissionDefinition>;
 pub type RoleRepository<'a> = persistence_core::Repository<'a, crate::entity::Role>;
 pub type UserRoleRepository<'a> = persistence_core::Repository<'a, crate::entity::access_control::UserRole>;
 

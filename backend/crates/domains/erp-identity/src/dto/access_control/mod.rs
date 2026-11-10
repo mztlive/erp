@@ -75,7 +75,6 @@ pub(crate) fn page_params(
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;
-pub mod personal_grant;
 pub mod user_role;
 
 pub use audit_event::{AuditEventListParams, AuditEventView};
@@ -148,10 +147,12 @@ mod tests {
     fn data_scope_list_envelope_keeps_versions_off_items() {
         let view = DataScopeListView::compose(
             PageView { items: Vec::new(), total: 0, page: 1, page_size: 20 },
-            DataScopeListMeta::new("scope-v", "2026-09-15T00:00:00Z")
-                .with_policy_version(3)
-                .with_organization_version(4)
-                .with_no_scope(true),
+            DataScopeListMeta {
+                policy_version: 3,
+                organization_version: 4,
+                no_scope: true,
+                ..DataScopeListMeta::new("scope-v", "2026-09-15T00:00:00Z")
+            },
         );
         let json = serde_json::to_value(&view).unwrap();
         assert_eq!(json["empty_reason"], "no_scope");
@@ -215,7 +216,7 @@ mod tests {
             "effective_to": 1700604800,
         }))
         .unwrap();
-        let data = request.into_data("admin-1");
+        let data = request.into_data("admin-1").unwrap();
         assert_eq!(data.user_id, "user-1");
         assert_eq!(data.assigned_by, "admin-1");
         assert_eq!(data.effective_from.unix_secs(), erp_core::common::time::Instant::now().unix_secs());

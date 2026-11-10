@@ -46,7 +46,11 @@ pub trait RoleRepositoryExt {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    async fn enabled_roles(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Role>>;
+    async fn enabled_roles(
+        &self,
+        role_ids: &[impl AsRef<str> + Sync],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Role>>;
 
     /// 查询一组未删除角色，不要求角色处于启用状态。
     ///
@@ -62,7 +66,11 @@ pub trait RoleRepositoryExt {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    async fn roles_by_ids(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Role>>;
+    async fn roles_by_ids(
+        &self,
+        role_ids: &[impl AsRef<str> + Sync],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Role>>;
 
     /// 根据 ID 查询角色，包含已软删除记录。
     ///
@@ -100,11 +108,19 @@ impl RoleRepositoryExt for Repository<'_, Role> {
         .await
     }
 
-    async fn enabled_roles(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Role>> {
+    async fn enabled_roles(
+        &self,
+        role_ids: &[impl AsRef<str> + Sync],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Role>> {
         find_roles_by_ids(self, role_ids, true, executor).await
     }
 
-    async fn roles_by_ids(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Role>> {
+    async fn roles_by_ids(
+        &self,
+        role_ids: &[impl AsRef<str> + Sync],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Role>> {
         find_roles_by_ids(self, role_ids, false, executor).await
     }
 
@@ -131,7 +147,7 @@ impl RoleRepositoryExt for Repository<'_, Role> {
 /// 当 MongoDB 查询失败时返回错误。
 async fn find_roles_by_ids(
     repo: &Repository<'_, Role>,
-    role_ids: &[String],
+    role_ids: &[impl AsRef<str> + Sync],
     only_enabled: bool,
     executor: &mut dyn Executor,
 ) -> Result<Vec<Role>> {
@@ -139,7 +155,8 @@ async fn find_roles_by_ids(
         return Ok(Vec::new());
     }
 
-    let mut filter = doc! { "id": { "$in": role_ids } };
+    let ids = role_ids.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+    let mut filter = doc! { "id": { "$in": ids } };
     if only_enabled {
         filter.insert("disabled", false);
     }

@@ -9,7 +9,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::{permission_projection, sort_doc};
-use crate::entity::access_control::{Permission, UserRole};
+use crate::entity::access_control::{PermissionDefinition, UserRole};
 
 /// 权限定义列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -142,7 +142,7 @@ pub trait PermissionRepositoryExt {
     ) -> Result<PageResult<PermissionRow>>;
 }
 
-impl PermissionRepositoryExt for Repository<'_, Permission> {
+impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
     async fn search_permissions(
         &self,
         filter: &PermissionFilter,

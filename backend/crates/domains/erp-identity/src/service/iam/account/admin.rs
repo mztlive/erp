@@ -106,7 +106,7 @@ impl AdminService {
         let account = LoginAccount::new(params.account)?;
         ensure_account_available(&self.db, &account, None, &mut NoTransaction).await?;
 
-        let role_ids = RoleIdSet::parse_non_empty(params.role_ids)?.to_strings();
+        let role_ids = RoleIdSet::parse_non_empty(params.role_ids)?;
         let secret = password::hash_secret(account, params.password).await?;
         let id = id_generator::next_id();
         let data = AccountCoreData {
@@ -229,8 +229,7 @@ impl AdminService {
             "管理员不存在",
         )?;
 
-        let role_ids =
-            role_ids.map(RoleIdSet::parse_non_empty).transpose()?.map(|role_ids| role_ids.to_strings());
+        let role_ids = role_ids.map(RoleIdSet::parse_non_empty).transpose()?;
         let authorization = self
             .rbac
             .authorize_target_management(actor, AccountKind::Admin, account.base.id.as_str(), role_ids)
@@ -278,7 +277,7 @@ impl AdminService {
             "管理员不存在",
         )?;
 
-        let role_ids = RoleIdSet::parse_non_empty(params.role_ids)?.to_strings();
+        let role_ids = RoleIdSet::parse_non_empty(params.role_ids)?;
         let authorization = self
             .rbac
             .authorize_target_management(&actor, AccountKind::Admin, account.base.id.as_str(), Some(role_ids))
@@ -394,7 +393,7 @@ impl AdminService {
     async fn create_system_account_with_roles(
         &self,
         account: AccountCore,
-        role_ids: Vec<String>,
+        role_ids: RoleIdSet,
     ) -> Result<AccountCore> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -430,7 +429,7 @@ impl AdminService {
                     rbac.assign_system_roles(
                         AccountKind::Admin,
                         &account_id,
-                        vec![crate::ROOT_ROLE_ID.to_string()],
+                        RoleIdSet::parse([crate::ROOT_ROLE_ID])?,
                         executor,
                     )
                     .await?;
@@ -582,7 +581,7 @@ impl AdminService {
                 avatar: None,
             },
         )?;
-        self.create_system_account_with_roles(admin, vec![crate::ROOT_ROLE_ID.to_string()]).await
+        self.create_system_account_with_roles(admin, RoleIdSet::parse([crate::ROOT_ROLE_ID])?).await
     }
 }
 

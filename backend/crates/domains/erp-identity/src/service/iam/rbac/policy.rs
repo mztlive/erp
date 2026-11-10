@@ -119,10 +119,13 @@ pub(super) fn permissions_for_account(
 ///
 /// # 错误
 /// 任一角色的策略无法解析时返回错误。
-pub(super) fn permissions_for_roles(enforcer: &Enforcer, role_ids: &[String]) -> Result<PermissionSet> {
+pub(super) fn permissions_for_roles(
+    enforcer: &Enforcer,
+    role_ids: &[impl AsRef<str>],
+) -> Result<PermissionSet> {
     let mut permissions = Vec::new();
     for role_id in role_ids {
-        permissions.extend(implicit_permissions_for_role(enforcer, role_id)?.into_vec());
+        permissions.extend(implicit_permissions_for_role(enforcer, role_id.as_ref())?.into_vec());
     }
     Ok(PermissionSet::new(permissions))
 }
