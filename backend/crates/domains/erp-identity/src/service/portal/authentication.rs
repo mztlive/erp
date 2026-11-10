@@ -30,10 +30,10 @@ impl PortalIdentityService {
             .and_then(|account| account.authentication_secret_for(AccountKind::Supplier))
             .cloned();
         let password_check = password::verify_password(secret, request.password.clone()).await?;
-        if !password_check.is_match() {
-            return Err(invalid_credentials());
-        }
-        let mut stored = stored.ok_or_else(invalid_credentials)?;
+        let mut stored = match (stored, password_check.is_match()) {
+            (Some(account), true) => account,
+            _ => return Err(invalid_credentials()),
+        };
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored.secret = secret;
             self.db.accounts().update(&mut stored, &mut NoTransaction).await?;

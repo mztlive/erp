@@ -153,18 +153,19 @@ impl BackofficeAuthService {
             .cloned();
         let is_authenticatable = secret.is_some();
         let password_check = password::verify_password(secret, request.password.clone()).await?;
-        if !is_authenticatable || !password_check.is_match() {
-            tracing::info!(
-                account = request.account.as_str(),
-                account_kind = ?request.account_kind,
-                found = stored_account.is_some(),
-                authenticatable = is_authenticatable,
-                "backoffice authenticate rejected"
-            );
-            return Err(invalid_credentials());
-        }
-
-        let mut stored_account = stored_account.ok_or_else(invalid_credentials)?;
+        let mut stored_account = match (stored_account, password_check.is_match()) {
+            (Some(account), true) => account,
+            (account, _) => {
+                tracing::info!(
+                    account = request.account.as_str(),
+                    account_kind = ?request.account_kind,
+                    found = account.is_some(),
+                    authenticatable = is_authenticatable,
+                    "backoffice authenticate rejected"
+                );
+                return Err(invalid_credentials());
+            },
+        };
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored_account.secret = secret;
             self.db.accounts().update(&mut stored_account, &mut NoTransaction).await?;

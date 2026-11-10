@@ -61,7 +61,7 @@ impl PasswordCheck {
 /// 返回密码匹配状态及可选升级凭证。
 ///
 /// # 错误
-/// 当信号量、阻塞任务或密码处理失败时返回错误。
+/// 当阻塞任务或密码处理失败时返回错误。
 pub async fn verify_password(secret: Option<Secret>, password: String) -> Result<PasswordCheck> {
     run_password_work(
         move || verify_password_sync(secret, password),
@@ -80,7 +80,7 @@ pub async fn verify_password(secret: Option<Secret>, password: String) -> Result
 /// 返回已生成 Argon2 哈希的凭证。
 ///
 /// # 错误
-/// 当密码、信号量或阻塞任务处理失败时返回错误。
+/// 当密码或阻塞任务处理失败时返回错误。
 pub async fn hash_secret(account: LoginAccount, password: String) -> Result<Secret> {
     run_hashing(move || Secret::new(account, password)).await
 }
@@ -97,7 +97,7 @@ pub async fn hash_secret(account: LoginAccount, password: String) -> Result<Secr
 /// 返回同步领域工作生成的值。
 ///
 /// # 错误
-/// 当领域校验、信号量或阻塞任务处理失败时返回错误。
+/// 当领域校验或阻塞任务处理失败时返回错误。
 pub async fn run_hashing<T, Work>(work: Work) -> Result<T>
 where
     T: Send + 'static,
@@ -115,8 +115,7 @@ where
     Work: FnOnce() -> erp_core::Result<T> + Send + 'static,
     MapError: FnOnce(erp_core::Error) -> Error,
 {
-    let permit =
-        PASSWORD_WORK_SLOTS.acquire().await.map_err(|_| Error::Internal("密码处理资源不可用".to_string()))?;
+    let permit = PASSWORD_WORK_SLOTS.acquire().await.expect("密码工作信号量为私有静态资源，永不关闭");
     let result = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         work()
@@ -128,14 +127,15 @@ where
 
 /// 完成单次同步密码工作；仅在 legacy 匹配时生成新 Argon2 哈希。
 fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::Result<PasswordCheck> {
-    let verification = Secret::verify_password_or_dummy(secret.as_ref(), password.as_str());
+    let Some(mut secret) = secret else {
+        Secret::verify_password_or_dummy(None, password.as_str());
+        return Ok(PasswordCheck::Mismatch);
+    };
+    let verification = Secret::verify_password_or_dummy(Some(&secret), password.as_str());
     match verification {
         PasswordVerification::Mismatch => Ok(PasswordCheck::Mismatch),
         PasswordVerification::Current => Ok(PasswordCheck::Current),
         PasswordVerification::Legacy => {
-            let Some(mut secret) = secret else {
-                return Err(erp_core::Error::LogicError("密码处理失败".to_string()));
-            };
             secret.change_password(password)?;
             Ok(PasswordCheck::Upgraded(secret))
         },
@@ -191,6 +191,8 @@ mod tests {
         }))
         .unwrap();
 
+        let mismatch = verify_password(Some(secret.clone()), "wrong-password".into()).await.unwrap();
+        assert!(matches!(mismatch, PasswordCheck::Mismatch));
         let result = verify_password(Some(secret), "password123".to_string()).await.unwrap();
         let PasswordCheck::Upgraded(secret) = result else {
             panic!("matching legacy credential should be upgraded");

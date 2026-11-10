@@ -169,7 +169,7 @@ impl BuiltinRoleTemplate {
     /// # 错误
     /// 不合法选择整批拒绝。
     pub fn select(catalog: &[Self], ids: &[String]) -> Result<Vec<Self>> {
-        if ids.is_empty() || ids.len() > catalog.len() {
+        if ids.is_empty() {
             return Err(Error::ValidationError("请选择有效的内建岗位".into()));
         }
         let mut selected = Vec::new();
@@ -285,5 +285,28 @@ impl BuiltinRoleState {
             Some(role) if role.disabled => Self::Disabled,
             Some(_) => Self::Existing,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 超过目录数量的选择按具体重复或未知身份拒绝。
+    #[test]
+    fn oversized_selection_reports_duplicate_or_unknown_template() {
+        let catalog = [BuiltinRoleTemplate::new("role-sales", "销售", "销售岗位", &[]).unwrap()];
+        for (ids, expected) in [
+            (vec!["role-sales".into(), "role-sales".into()], "内建岗位不能重复选择"),
+            (vec!["role-sales".into(), "unknown".into()], "未登记的内建岗位：unknown"),
+        ] {
+            assert!(matches!(BuiltinRoleTemplate::select(&catalog, &ids),
+                Err(Error::ValidationError(message)) if message == expected));
+        }
+        assert!(BuiltinRoleTemplate::select(&[], &["unknown".into()]).is_err());
+        assert!(BuiltinRoleTemplate::select(&catalog, &[]).is_err());
+        let selected = BuiltinRoleTemplate::select(&catalog, &["role-sales".into()]).unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].id, "role-sales");
     }
 }

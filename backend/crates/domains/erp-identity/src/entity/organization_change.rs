@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
+use erp_core::validation::normalize_required_text;
 use serde::{Deserialize, Serialize};
 
 use super::organization::*;
@@ -232,9 +233,15 @@ impl OrganizationState {
                     self.apply(operation, &format!("{id}-{index}"), actor, reason, at)?;
                 }
             },
-            OrganizationOperation::CreateUnit { .. }
-            | OrganizationOperation::MoveUnit { .. }
-            | OrganizationOperation::RenameUnit { .. } => self.change_unit(change, id, actor, reason)?,
+            OrganizationOperation::CreateUnit { name, parent_id, kind } => {
+                self.create_unit(name, parent_id.as_deref(), *kind, id, actor, reason)?;
+            },
+            OrganizationOperation::MoveUnit { org_unit_id, parent_id } => {
+                self.move_unit(org_unit_id, parent_id.as_deref(), actor, reason)?;
+            },
+            OrganizationOperation::RenameUnit { org_unit_id, name } => {
+                self.rename_unit(org_unit_id, name, actor, reason)?;
+            },
             OrganizationOperation::SetLeader { org_unit_id, user_id } => {
                 if user_id.as_ref().is_some_and(|id| id.trim().is_empty()) {
                     return Err(Error::ValidationError("请选择负责人，或明确清除负责人".into()));
@@ -268,45 +275,43 @@ impl OrganizationState {
         Ok(())
     }
 
-    /// 修改组织节点身份资料；涉及完整树的不变式由变更入口统一校验。
-    fn change_unit(
+    /// 创建组织节点，父组织必须存在且整条祖先路径有效。
+    fn create_unit(
         &mut self,
-        change: &OrganizationOperation,
+        name: &str,
+        parent_id: Option<&str>,
+        kind: OrgUnitKind,
         id: &str,
         actor: &str,
         reason: &str,
     ) -> Result<()> {
-        match change {
-            OrganizationOperation::CreateUnit { name, parent_id, kind } => {
-                if let Some(parent) = parent_id {
-                    self.ensure_enabled(parent)?;
-                }
-                self.units.push(OrgUnit::new(
-                    id.into(),
-                    name.clone(),
-                    parent_id.clone(),
-                    *kind,
-                    actor.into(),
-                    reason.into(),
-                )?);
-            },
-            OrganizationOperation::MoveUnit { org_unit_id, parent_id } => {
-                if let Some(parent) = parent_id {
-                    self.ensure_enabled(parent)?;
-                }
-                self.unit_mut(org_unit_id, actor, reason)?.parent_id = parent_id.clone();
-            },
-            OrganizationOperation::RenameUnit { org_unit_id, name } => {
-                let name = erp_core::validation::normalize_required_text(
-                    name.clone(),
-                    "组织名称不能为空",
-                    100,
-                    "组织名称过长",
-                )?;
-                self.unit_mut(org_unit_id, actor, reason)?.name = name;
-            },
-            _ => return Err(Error::Internal("错误的组织节点命令".into())),
+        if let Some(parent) = parent_id {
+            self.ensure_enabled(parent)?;
         }
+        self.units.push(OrgUnit::new(
+            id.into(),
+            name.into(),
+            parent_id.map(str::to_owned),
+            kind,
+            actor.into(),
+            reason.into(),
+        )?);
+        Ok(())
+    }
+
+    /// 移动组织节点；完整树的成环约束由变更入口统一校验。
+    fn move_unit(&mut self, id: &str, parent_id: Option<&str>, actor: &str, reason: &str) -> Result<()> {
+        if let Some(parent) = parent_id {
+            self.ensure_enabled(parent)?;
+        }
+        self.unit_mut(id, actor, reason)?.parent_id = parent_id.map(str::to_owned);
+        Ok(())
+    }
+
+    /// 规范化组织名称后更新可用节点及审计信息。
+    fn rename_unit(&mut self, id: &str, name: &str, actor: &str, reason: &str) -> Result<()> {
+        let name = normalize_required_text(name.into(), "组织名称不能为空", 100, "组织名称过长")?;
+        self.unit_mut(id, actor, reason)?.name = name;
         Ok(())
     }
 
@@ -317,7 +322,7 @@ impl OrganizationState {
             .units
             .iter_mut()
             .find(|u| u.base.id == id)
-            .ok_or_else(|| Error::NotFound("组织不存在".into()))?;
+            .expect("ensure_enabled 已确认节点存在，且组织集合尚未修改");
         unit.changed_by = actor.into();
         unit.reason = reason.into();
         Ok(unit)
@@ -460,6 +465,86 @@ mod tests {
             idempotency_key: "change-1".into(),
             reason: "组织调整".into(),
             change,
+        }
+    }
+
+    /// 节点命令保留规范化、拓扑变更和审计信息，原状态不受影响。
+    #[test]
+    fn unit_commands_update_identity_topology_and_audit() {
+        let before = state();
+        let at = Instant::from_unix_secs(10);
+        let created = before
+            .changed(
+                &request(OrganizationOperation::CreateUnit {
+                    name: " 新团队 ".into(),
+                    parent_id: Some("one".into()),
+                    kind: OrgUnitKind::Team,
+                }),
+                "new",
+                "operator",
+                at,
+            )
+            .unwrap();
+        let unit = created.units.iter().find(|unit| unit.base.id == "new").unwrap();
+        assert_eq!(unit.name, "新团队");
+        assert_eq!(unit.parent_id.as_deref(), Some("one"));
+        assert_eq!(unit.kind, OrgUnitKind::Team);
+        assert_eq!(unit.changed_by, "operator");
+        assert_eq!(unit.reason, "组织调整");
+
+        let moved = before
+            .changed(
+                &request(OrganizationOperation::MoveUnit {
+                    org_unit_id: "two".into(),
+                    parent_id: Some("one".into()),
+                }),
+                "id",
+                "operator",
+                at,
+            )
+            .unwrap();
+        assert_eq!(moved.units[1].parent_id.as_deref(), Some("one"));
+        assert_eq!(moved.units[1].changed_by, "operator");
+        let renamed = before
+            .changed(
+                &request(OrganizationOperation::RenameUnit {
+                    org_unit_id: "two".into(),
+                    name: " 新名称 ".into(),
+                }),
+                "id",
+                "operator",
+                at,
+            )
+            .unwrap();
+        assert_eq!(renamed.units[1].name, "新名称");
+        assert_eq!(renamed.units[1].changed_by, "operator");
+        assert_eq!(before.units.len(), 2);
+        assert_eq!(before.units[1].name, "二部");
+        assert_eq!(before.units[1].parent_id, None);
+    }
+
+    /// 不存在节点、停用祖先和无效名称仍返回错误，不触发节点存在性断言。
+    #[test]
+    fn unit_commands_reject_missing_nodes_disabled_ancestors_and_invalid_names() {
+        let mut before = state();
+        before.units[0].enabled = false;
+        before.units[1].parent_id = Some("one".into());
+        let original = before.clone();
+        for operation in [
+            OrganizationOperation::RenameUnit { org_unit_id: "missing".into(), name: "名称".into() },
+            OrganizationOperation::RenameUnit { org_unit_id: "two".into(), name: "名称".into() },
+            OrganizationOperation::RenameUnit { org_unit_id: "two".into(), name: " ".into() },
+            OrganizationOperation::MoveUnit { org_unit_id: "two".into(), parent_id: None },
+            OrganizationOperation::CreateUnit {
+                name: "新团队".into(),
+                parent_id: Some("two".into()),
+                kind: OrgUnitKind::Team,
+            },
+        ] {
+            assert!(
+                before.changed(&request(operation), "id", "operator", Instant::from_unix_secs(10)).is_err()
+            );
+            assert_eq!(before, original);
         }
     }
 

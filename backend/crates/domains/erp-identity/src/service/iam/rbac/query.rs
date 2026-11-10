@@ -21,16 +21,20 @@ use crate::{AccessControlExt, MongoCasbinAdapter};
 /// 由批量直接权限装配角色响应项（两个列表入口共用该映射）。
 ///
 /// # 参数
-/// * `roles` - 待装配的角色
-/// * `permissions` - 按角色 ID 索引的直接权限；命中项会被取出
+/// * `roles` - ID 不重复的待装配角色
+/// * `permissions` - 包含全部待装配角色 ID 的直接权限；命中项会被取出
 ///
 /// # 返回
-/// 与输入角色一一对应的响应项；缺权限的角色携带空权限。
+/// 与输入角色一一对应的响应项；没有权限的角色使用映射中已有的空权限集合。
+///
+/// # Panics
+/// 角色 ID 重复或权限映射缺少待装配角色时触发，表示调用方破坏了批量装配不变式。
 fn role_items_from_map(roles: Vec<Role>, permissions: &mut HashMap<String, PermissionSet>) -> Vec<RoleItem> {
     roles
         .into_iter()
         .map(|role| {
-            let role_permissions = permissions.remove(&role.base.id).unwrap_or_default();
+            let role_permissions =
+                permissions.remove(&role.base.id).expect("权限映射由全部角色 ID 构造，且每个角色仅装配一次");
             RoleItem::from_role(role, role_permissions.into_vec())
         })
         .collect()
@@ -242,5 +246,41 @@ impl RbacService {
             .await
             .get_implicit_permissions_for_user(&subject(account_kind, account_id), None);
         parse_policy_permissions(policies)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use casbin::{CoreApi, DefaultModel, Enforcer, MemoryAdapter};
+
+    use super::*;
+    use crate::service::iam::rbac::RBAC_MODEL;
+    use crate::{Permission, RoleData};
+
+    /// 实际批量读取结果可装配完整列表或筛选子集，空权限角色不会缺失。
+    #[tokio::test]
+    async fn role_items_preserve_order_and_empty_permissions() {
+        let model = DefaultModel::from_str(RBAC_MODEL).await.unwrap();
+        let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await.unwrap();
+        enforcer
+            .add_permission_for_user(&role_key("role-a"), vec!["customer".into(), "list".into()])
+            .await
+            .unwrap();
+        let roles = ["role-b", "role-a"]
+            .into_iter()
+            .map(|id| Role::new(RoleId::parse(id).unwrap(), RoleData::new(id)).unwrap())
+            .collect::<Vec<_>>();
+        let ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
+        let mut permissions = collect_role_permissions(&enforcer, &ids).unwrap();
+        let items = role_items_from_map(roles.clone(), &mut permissions);
+        assert_eq!(items[0].id, "role-b");
+        assert!(items[0].permissions.is_empty());
+        assert_eq!(items[1].id, "role-a");
+        assert_eq!(items[1].permissions, vec![Permission::parse("customer:list").unwrap()]);
+
+        let mut permissions = collect_role_permissions(&enforcer, &ids).unwrap();
+        let items = role_items_from_map(vec![roles[0].clone()], &mut permissions);
+        assert_eq!(items.len(), 1);
+        assert!(items[0].permissions.is_empty());
     }
 }
