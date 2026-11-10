@@ -227,7 +227,7 @@ impl GrantEvent {
     /// # 错误
     /// 无。
     pub fn retry_delay(&self) -> u64 {
-        2_u64.saturating_pow(self.attempts.min(10)).min(900)
+        2_u64.pow(self.attempts.min(10)).min(900)
     }
 }
 

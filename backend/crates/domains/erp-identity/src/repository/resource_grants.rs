@@ -12,8 +12,8 @@ pub(crate) use revision::{advance, revision};
 pub(crate) use rows::sync_rows;
 use serde::de::DeserializeOwned;
 
+use crate::dto::GrantSourcePage;
 use crate::entity::resource_access::event::GrantEvent;
-use crate::entity::resource_access::query::GrantSourcePage;
 use crate::entity::resource_access::{GrantSource, ResourceGrant, ResourceKind};
 use crate::{Error, Result};
 pub(crate) const GRANTS: &str = "resource_grants";

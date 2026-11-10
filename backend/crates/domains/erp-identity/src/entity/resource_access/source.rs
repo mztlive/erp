@@ -86,7 +86,7 @@ impl GrantTarget {
     /// 排序后的唯一目标，空集表示明确清空。
     /// # 错误
     /// 超过 1000 项、空或未规范化身份拒绝。
-    pub fn normalize(targets: Vec<Self>) -> Result<Vec<Self>> {
+    fn normalize(mut targets: Vec<Self>) -> Result<Vec<Self>> {
         if targets.len() > 1000 {
             return Err(Error::ValidationError("单来源最多 1000 个目标".into()));
         }
@@ -96,7 +96,9 @@ impl GrantTarget {
                 return Err(Error::ValidationError("目标身份不能带首尾空白".into()));
             }
         }
-        Ok(targets.into_iter().collect::<BTreeSet<_>>().into_iter().collect())
+        targets.sort_unstable();
+        targets.dedup();
+        Ok(targets)
     }
 }
 /// 来源终止记录永久保留；审计人与原因随状态原子保存。
@@ -241,6 +243,31 @@ mod tests {
     }
     fn target(id: &str) -> GrantTarget {
         GrantTarget { resource: ResourceKind::SalesOrder, id: id.into() }
+    }
+    #[test]
+    fn targets_are_sorted_unique_and_keep_resource_identity() {
+        let purchase = GrantTarget { resource: ResourceKind::PurchaseOrder, id: "a".into() };
+        let mut source = source();
+        source
+            .apply(1, 1, vec![purchase.clone(), target("b"), target("a"), target("a")], "admin", "分配")
+            .unwrap();
+        assert_eq!(source.targets, vec![target("a"), target("b"), purchase]);
+        assert!(
+            !source
+                .apply(1, 1, vec![source.targets[2].clone(), target("b"), target("a")], "admin", "重放")
+                .unwrap()
+        );
+    }
+    #[test]
+    fn target_limit_applies_before_deduplication_and_failure_is_atomic() {
+        let mut source = source();
+        source.apply(1, 1, vec![target("a"); 1000], "admin", "分配").unwrap();
+        assert!(matches!(
+            source.apply(1, 2, vec![target("b"); 1001], "admin", "超量"),
+            Err(Error::ValidationError(message)) if message == "单来源最多 1000 个目标"
+        ));
+        assert_eq!(source.fact_version, 1);
+        assert_eq!(source.targets, vec![target("a")]);
     }
     #[test]
     fn source_read_does_not_authorize_original_document_writes() {

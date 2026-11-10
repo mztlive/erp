@@ -10,13 +10,44 @@ use erp_identity::ports::ResourceGrantFacts;
 use erp_identity::service::resource_access::append_event;
 use erp_identity::{Error, Result};
 use erp_workflow::entity::work_item_command::WorkItemCommandResult;
+pub use erp_workflow::repository::grant_history::GrantHistoryKind;
 use erp_workflow::repository::grant_history::{self, GrantHistoryEntry};
 use erp_workflow::repository::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, Transactional};
+use serde::{Deserialize, Serialize};
 
 use crate::ResourceGrantProcess;
 use crate::facts::Facts;
-use crate::management::{BackfillProblem, BackfillReport, BackfillRequest, validate_cursor};
+use crate::management::validate_cursor;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackfillRequest {
+    pub kind: GrantHistoryKind,
+    pub after: Option<String>,
+    #[serde(default = "default_dry_run")]
+    pub dry_run: bool,
+}
+fn default_dry_run() -> bool {
+    true
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct BackfillReport {
+    pub scanned: usize,
+    pub eligible: usize,
+    pub appended: usize,
+    pub existing: usize,
+    pub terminated: usize,
+    pub invalid: Vec<BackfillProblem>,
+    pub next_cursor: Option<String>,
+    pub dry_run: bool,
+}
+#[derive(Debug, Serialize)]
+pub struct BackfillProblem {
+    pub record_id: String,
+    pub reason: String,
+}
 
 impl ResourceGrantProcess {
     /// 按正式证据预览或执行一页存量回填。
@@ -209,8 +240,25 @@ mod tests {
         ApprovalParticipant, NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef,
         Timestamp,
     };
+    use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn backfill_defaults_to_preview_and_rejects_unknown_fields() {
+        let request: BackfillRequest =
+            serde_json::from_value(json!({"kind":"invoice_reassignments"})).unwrap();
+        assert!(request.dry_run);
+        let request: BackfillRequest =
+            serde_json::from_value(json!({"kind":"invoice_reassignments", "dry_run":false})).unwrap();
+        assert!(!request.dry_run);
+        assert!(
+            serde_json::from_value::<BackfillRequest>(json!({
+                "kind":"invoice_reassignments", "recipient":"forged"
+            }))
+            .is_err()
+        );
+    }
 
     #[test]
     fn historical_orders_use_frozen_recipients_and_distinct_sources() {

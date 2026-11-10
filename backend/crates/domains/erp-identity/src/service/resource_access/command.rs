@@ -3,8 +3,8 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::ResourceGrantService;
+use crate::dto::GrantSourcePage;
 use crate::entity::resource_access::event::{GrantEvent, GrantEventEvidence};
-use crate::entity::resource_access::query::GrantSourcePage;
 use crate::entity::resource_access::{GrantSource, SourceKey, SourceUpdate};
 use crate::repository::resource_grants;
 use crate::service::access_control::resolve::DataScopeService;

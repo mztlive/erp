@@ -3,8 +3,7 @@ use erp_core::validation::normalize_required_text_ref;
 use erp_identity::entity::resource_access::{GrantTarget, SourceKey, SourceUpdate};
 use erp_identity::service::resource_access::{GrantRecompute, ResourceGrantService};
 use erp_identity::{Error, Result};
-pub use erp_workflow::repository::grant_history::GrantHistoryKind;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::ResourceGrantProcess;
 
@@ -79,33 +78,17 @@ pub struct RecomputeRequest {
     pub after: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct BackfillRequest {
-    pub kind: GrantHistoryKind,
-    pub after: Option<String>,
-    #[serde(default = "default_dry_run")]
-    pub dry_run: bool,
-}
-fn default_dry_run() -> bool {
-    true
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct BackfillReport {
-    pub scanned: usize,
-    pub eligible: usize,
-    pub appended: usize,
-    pub existing: usize,
-    pub terminated: usize,
-    pub invalid: Vec<BackfillProblem>,
-    pub next_cursor: Option<String>,
-    pub dry_run: bool,
-}
-#[derive(Debug, Serialize)]
-pub struct BackfillProblem {
-    pub record_id: String,
-    pub reason: String,
+impl RecomputeRequest {
+    /// 校验重算请求的排他游标。
+    /// # 参数
+    /// 无；使用当前请求参数。
+    /// # 返回
+    /// 未指定游标或游标合法时成功。
+    /// # 错误
+    /// 游标为空、带首尾空白或超过 4096 字符时拒绝。
+    pub fn validate(&self) -> Result<()> {
+        validate_cursor(self.after.as_deref())
+    }
 }
 
 /// 校验维护查询的排他游标，禁止无效页默默变成全量重扫。
@@ -115,7 +98,7 @@ pub struct BackfillProblem {
 /// None 或合法游标时成功。
 /// # 错误
 /// 空白或超过 4096 字符时拒绝。
-pub fn validate_cursor(after: Option<&str>) -> Result<()> {
+pub(crate) fn validate_cursor(after: Option<&str>) -> Result<()> {
     if let Some(value) = after
         && normalize_required_text_ref(value, "游标不能为空", 4096, "游标过长")? != value
     {
@@ -144,6 +127,18 @@ mod tests {
 
     use super::*;
     #[test]
+    fn recompute_validates_cursor_without_changing_selection() {
+        for after in [None, Some("cursor".into()), Some("x".repeat(4096))] {
+            let request = RecomputeRequest { selection: GrantRecompute::All, after };
+            request.validate().unwrap();
+            assert!(matches!(request.selection, GrantRecompute::All));
+        }
+        for after in ["".into(), " ".into(), " a".into(), "a ".into(), "x".repeat(4097)] {
+            let request = RecomputeRequest { selection: GrantRecompute::All, after: Some(after) };
+            assert!(request.validate().is_err());
+        }
+    }
+    #[test]
     fn management_does_not_accept_automatic_evidence_or_arbitrary_versions() {
         let request = json!({"command_id":"c", "recipient":"u", "targets":[{"resource":"sales_order","id":"S001"}], "reason":"核查"});
         let update = serde_json::from_value::<ManualGrantRequest>(request.clone()).unwrap().into_update();
@@ -166,9 +161,6 @@ mod tests {
         let mut forged = request;
         forged["fact_version"] = json!(9);
         assert!(serde_json::from_value::<ManualGrantRequest>(forged).is_err());
-        let backfill: BackfillRequest =
-            serde_json::from_value(json!({"kind":"invoice_reassignments"})).unwrap();
-        assert!(backfill.dry_run);
         for value in ["", " ", " a"] {
             assert!(validate_cursor(Some(value)).is_err());
         }

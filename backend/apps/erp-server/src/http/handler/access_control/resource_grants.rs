@@ -4,9 +4,8 @@ use axum::Extension;
 use axum::extract::State;
 use erp_core::common::time::Instant;
 use erp_identity::Error as IdentityError;
+use erp_identity::dto::GrantSourcePage;
 use erp_identity::entity::resource_access::GrantSource;
-use erp_identity::entity::resource_access::query::GrantSourcePage;
-use erp_resource_grants::management::validate_cursor;
 use erp_resource_grants::{
     BackfillReport, BackfillRequest, ManualGrantRequest, RecomputeRequest, ResourceGrantProcess,
     RevokeRequest, SourcesQuery,
@@ -90,7 +89,7 @@ pub async fn recompute(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<RecomputeRequest>,
 ) -> Result<Option<String>> {
-    validate_cursor(request.after.as_deref())?;
+    request.validate()?;
     let now =
         u64::try_from(Instant::now().unix_secs()).map_err(|_| IdentityError::Internal("时间越界".into()))?;
     Ok(ApiResponse::ok_with_data(

@@ -1,69 +1,107 @@
-# 独立自动读取授权
+# erp-resource-grants
 
-本 crate 由独立 `erp-worker` 装配。处理 `InvoiceApproved`、`InvoiceTaskReassigned`、`SalesOrderApprovalAssigned`、`PurchaseOrderApprovalAssigned`，规则版本为 1；不得执行或重放业务审批、派工或财务命令。
+负责自动记录读取授权的业务编排：根据业务事件读取事实、计算授权结果，再交给 `erp-identity` 保存。公开入口为 `ResourceGrantProcess`，同时提供授权就绪查询、重算和存量回填。
 
-## 事件合同
+## 职责边界
 
-- 生产方须在业务事务内调用身份域 `append_event`。开票事件只能在最终审批通过并创建执行任务后追加。
-- 审批事件的 `assignment_id` 必须为正式 `ApprovalNodeExecution.id`，`node_id` 为冻结节点键，事实版本为审批实例版本。禁止使用候选审批人或定义绑定 ID。
-- 开票事件的事实版本为申请版本。申请、审批实例、执行任务、应收子账及销售单必须全部匹配；任务历任正式责任人必须包含事件接收人。
-- 完成、取消、转派后仍根据历史正式分配事实计算读取权。开票转派通过独立 `InvoiceTaskReassigned` 生成新接收人的来源；事件绑定任务与不可变命令回执，使用回执中的任务版本和接收人，不得伪造 `InvoiceApproved`。
+| 模块 | 职责 |
+| --- | --- |
+| 业务领域或业务编排 | 决定何时产生授权事件，在业务事务中追加事件 |
+| 本 crate | 读取业务事实、执行自动授权规则、生成授权结果 |
+| [erp-identity](../../domains/erp-identity/README.md) | 提供事件与授权模型、存储、来源管理和统一权限判断 |
+| [erp-server worker](../../../apps/erp-server/src/worker/resource_grants.rs) | 装配处理器，运行消费与对账循环，管理进程生命周期 |
 
-## 执行合同
+业务事实通过拥有领域的仓储读取；授权事件、来源和授权记录通过 identity 的公开服务维护。业务访问检查继续使用 `AuthorizationService`。
 
-1. 每次领取使用独立令牌，租约为 300 秒；过期 Processing 事件允许重新领取。
-2. 发布事务内重读事件、来源及当前业务事实；来源永久终止时仅完成事件，不恢复授权。
-3. 授权行、来源、修订号、审计及事件 Applied 状态同事务提交。当前事实版本不得小于事件版本；旧结果不得覆盖更高版本。
-4. 事实缺失、关联冲突、接收账号失效及持久化失败保留原授权并记录失败。退避从 2 秒开始，上限 900 秒。
-5. 提交结果未知时不立即重放；保留领取状态，待租约恢复后按事件键读取已提交状态。事务 Future 不设置可中断超时；停止时完成当前事务后退出。
-6. 每 30 轮扫描最多 100 条正式事件，按唯一主键续页；只重新排队 Applied 事件，不抢占处理中或失败退避事件。扫描结束后开始下一轮。
-7. `recompute` 支持指定来源、固定规则、资源类型及全量分页。禁止从当前负责人或用户全量授权 ID 重建历史。
-8. `readiness` 只接受服务端正式事件并重验事实；`NotReady` 表示合法来源尚未生成当前版本授权。该状态不能代替身份、功能权限及当前办理资格检查。
+## 如何使用
 
-## 运维与接入
+### 产生授权事件
 
-执行 `scripts/migrations/20261109-resource-grant-worker.mongosh.js` 建立新增索引；服务启动的身份域索引入口使用相同定义。回滚先停止 worker，再按迁移脚本列出的名称删除新增索引，保留事件、来源、授权和审计数据。
+在业务用例中构造 `GrantEventEvidence`，使用当前业务事务的执行器调用 identity 的 `append_event`：
 
-worker 记录积压量、最老未完成秒数、失败量及最近来源事实版本；单事件保存失败原因与领取信息。进程监督器检测循环退出，统一停止与排空覆盖本 worker。
+```rust
+use erp_identity::service::resource_access::append_event;
 
-业务生产方在审批启动、节点推进、恢复正式分配及开票最终批准事务内追加事件。业务入口通过 `source_readiness` 按精确来源读取正式事件并核对当前事实；HTTP 使用 `RESOURCE_AUTHORIZATION_NOT_READY` 表示资料授权处理中。前端只轮询资料查询，不重放业务命令。不得产生历史分配猜测事件；存量业务回填必须使用下述分页维护接口。
+// evidence 由业务用例构造，executor 为当前业务事务执行器。
+append_event(db, evidence, executor).await?;
+```
 
-## 验证范围
+事件与业务变更必须同事务提交，追加失败须向上传播。事件类型与字段见 [GrantEventPayload](../../domains/erp-identity/src/entity/resource_access/event.rs)。现有生产方示例见 [审批事件接入](../erp-approval-runtime/src/resource_grants.rs)。
 
-规则单元测试执行实际校验逻辑，覆盖四类合法来源与审批、节点、接收人、任务、子账、销售单关联错误。身份域测试覆盖来源幂等、版本倒退、同版本异载荷和永久终止。
+### 处理授权事件
 
-真实 MongoDB 事务原子性、并发领取、未知提交恢复及迁移执行须在获准的运行环境另行验收；单元测试和静态门禁不得作为该验收证据。
+组合层创建 `ResourceGrantProcess`，由 worker 调用：
 
-## 管理接口
+```rust
+use erp_resource_grants::ResourceGrantProcess;
 
-所有接口均位于 `/admin/resource-grants`，入口要求 `data_scope:create`；服务另验同角色的全公司 `org_unit:manage`，存在个人范围上限时拒绝。来源查询同样要求维护资格；授予、撤销、重算和回填的资格检查与写入共享事务。
+let process = ResourceGrantProcess::new(db, rbac);
+// token 为本次领取的唯一令牌，now 为当前秒级时间。
+let claimed = process.tick(&token, now).await?;
+```
 
-| 方法及路径 | 输入 | 结果 |
+`new` 不启动后台任务；`tick` 处理一次领取及发布，返回是否领取到事件。运行循环复用 [现有 worker](../../../apps/erp-server/src/worker/resource_grants.rs)。
+
+处理链路为：业务事务追加事件 → worker 领取 → 本 crate 读取事实并计算结果 → identity 保存授权。事件追加成功与授权生效是两个阶段。
+
+### 查询和维护
+
+以下方法均属于 `ResourceGrantProcess`：
+
+| 场景 | 入口 | 使用说明 |
 | --- | --- | --- |
-| `POST /admin/resource-grants` | `command_id`、`recipient`、`targets: [{resource, id}]`、`reason` | 人工来源及其版本；`resource` 仅为 `sales_order`、`purchase_order` |
-| `GET /admin/resource-grants/sources` | 查询参数 `recipient`、可选 `after` | 最多 100 个来源及 `next_cursor`，包含永久终止记录 |
-| `POST /admin/resource-grants/revoke` | `source: {rule, business_type, business_id, recipient}`、`expected_version`、`reason` | 永久终止后的来源 |
-| `POST /admin/resource-grants/recompute` | `selection`、可选 `after` | 最多重排 100 条已完成事件，返回下一页游标；空值表示结束 |
-| `POST /admin/resource-grants/backfill` | `kind`、可选 `after`、`dry_run`（默认 true） | 最多扫描 25 条正式证据，返回统计、无效证据和下一页游标 |
+| 按来源查询授权就绪状态 | `source_readiness` | 传入服务端确定的 `SourceKey` 和当前执行器 |
+| 查询开票授权是否待生成 | `invoice_pending` | 传入申请 ID、读取账号和当前执行器 |
+| 后台对账 | `reconcile` | 按返回游标继续处理后续页 |
+| 查询队列运行情况 | `health` | 获取队列指标 |
+| 管理授权来源 | `management` | 返回绑定业务事实校验的 `ResourceGrantService` |
+| 存量回填 | `backfill` | 接收 `BackfillRequest`，按页预览或追加事件 |
 
-人工来源固定 `rule=manual`、`business_type=manual`，版本固定从 1 开始。相同操作号、接收人及目标重复提交不增加授权；同来源异目标拒绝。改变授权须终止原来源后使用新的操作号。人工来源与自动来源互不覆盖，所有来源均仅授予读取权。
+`source_readiness` 返回 `GrantReadiness`，用于区分来源不存在、待生成、已就绪和已终止；`invoice_pending` 返回是否存在待生成的开票授权。业务访问仍须执行完整权限检查。
 
-`selection` 仅接受 `{"kind":"all"}`、`{"kind":"source","value":来源身份}`、`{"kind":"resource","value":"sales_order"或"purchase_order"}`、`{"kind":"rule","value":规则代码}`。规则代码固定为四类事件的 snake_case 名称。重算不抢占处理中或失败退避事件，不恢复永久终止来源。
+管理端通过 `management()` 返回服务的 `grant`、`revoke`、`sources`、`recompute_managed` 操作授权来源；回填使用 `backfill`。后台 `reconcile` 不执行管理员资格检查，不能直接作为管理端入口。管理请求见 [management.rs](src/management.rs)，回填请求与结果见 [backfill.rs](src/backfill.rs)；请求与结果类型统一从 crate 根导入。HTTP 接线见 [管理 handler](../../../apps/erp-server/src/http/handler/access_control/resource_grants.rs)。
 
-## 存量回填与切换
+## 如何扩展
 
-1. 执行新增索引脚本 `scripts/migrations/20261110-resource-grant-maintenance.mongosh.js`，确认索引建立成功后启用维护入口。先部署支持四类事件的 worker，再部署转派生产方；所有参与记录写入实例均须同步维护账号修订号。
-2. 分别以 `kind=invoice_approvals`、`order_assignments`、`invoice_reassignments`、`dry_run=true` 从无游标开始预览，使用每页 `next_cursor` 继续，直至返回空游标。保留每页报告并核查 `invalid`。
-3. 开票批准证据必须存在最终批准实例、对应版本申请、申请绑定的执行任务及一致的子账和销售单；初始接收人取任务持久化责任历史的首项。转派接收人必须存在有效命令回执和相应责任历史。审批分配须有冻结节点和实际生成的审批任务。缺失证据不得从当前负责人推断。
-4. 以相同类型重新从无游标开始，显式传 `dry_run=false` 执行。每页重新读取和验证事实；`eligible` 为本次可新增来源数，`appended` 为新增事件数，`existing` 为已有事件来源数，`terminated` 为永久终止来源数，`invalid` 为未通过的记录。无适用订单或无实际任务的证据不生成事件。
-5. 一页内的授权事件与维护资格检查共享事务；数据库故障回滚整页。无效业务证据记入报告，不产生该证据的授权。提交结果未知时不得自动重试；按同一页参数人工重查。已有来源事件不重复追加，终止来源持续排除。worker 只处理授权，不重放审批、派工或财务命令。
-6. 回填结束后检查 worker 队列及失败记录，按设计文档验收 S001/S002 隔离、转派后新接收人授权、旧来源保留和永久撤销。预览、编译及单元测试不得代替实际回填和真实数据库验收。
-7. 回滚先关闭维护与转派事件生产，再停止 worker；保留事件、来源、授权、审计及参与修订号。旧 worker 不支持新事件，不得直接降级消费。删除新增索引按迁移脚本的显式 `rollback` 模式执行；不删除业务数据或撤销记录。
+自动授权规则通过代码接入。新增规则需要同时接通事件生产、事实读取、授权计算和维护入口。
 
-## 事件 ID 与幂等键切换
+| 步骤 | 修改位置 | 接入内容 |
+| --- | --- | --- |
+| 1. 定义事件 | identity 的 [event.rs](../../domains/erp-identity/src/entity/resource_access/event.rs) | 增加 `GrantEventPayload` 变体及来源、事件身份映射 |
+| 2. 接入触发点 | 对应业务领域或业务编排 | 构造事件证据，在业务事务中调用 `append_event` |
+| 3. 读取事实 | 本 crate 的 [facts.rs](src/facts.rs) | 扩展 `Facts::target` 分派，调用拥有领域仓储；由 `compute` 生成 `SourceUpdate` |
+| 4. 实现规则 | 本 crate 的 [rules.rs](src/rules.rs) | 增加或调整不依赖 I/O 的规则校验，并由事实计算路径调用 |
+| 5. 接入重算 | identity 的 [queue.rs](../../domains/erp-identity/src/repository/resource_grants/queue.rs) | 扩展 `GrantRule` 及按规则、资源筛选的映射 |
+| 6. 验证 | 规则、事件和生产方的对应测试模块 | 覆盖新规则行为、事件接入和维护路径 |
 
-- 新事件 `id` 使用项目标准 UUID；`dedup_key` 固定编码业务身份、接收人及事实版本，并由 `uk_resource_grant_events_dedup_key` 唯一索引约束。Worker 的领取、更新和游标继续使用记录 ID。
-- 重放按 `dedup_key` 查询并核验完整来源及证据，保留已有处理状态。同键异证据返回冲突。并发插入冲突须退出并回滚原业务事务；后续重试在新的事务中读取既有事件。禁止在已失败事务内继续查询或将冲突直接视为业务提交成功。
-- 发布前停止全部事件生产方、维护入口及 worker，排空事务。设置 `resourceGrantEventWritesStopped = true`，执行 `scripts/migrations/20261110-resource-grant-event-dedup.mongosh.js`。脚本校验旧 ID 与业务身份一致，将旧 ID 原值回填为 `dedup_key`，建立唯一索引；重复执行不得改变已有 ID、证据、状态或租约。
-- 回填和索引成功后统一部署新版本，再恢复写入与消费。缺失字段的历史记录必须完成迁移；禁止新旧生产方混跑。
-- 回滚仅允许在新版本尚未写入事件时，先执行 `db.resource_grant_events.dropIndex("uk_resource_grant_events_dedup_key")`，再恢复旧应用；保留新增字段，避免旧生产方缺少该字段而触发唯一冲突。新版本已写入后必须保持相关入口关闭并前向修复，禁止直接降级旧生产方、删除事件或重写历史 ID。
+修改已有规则时，从 `facts.rs`、`rules.rs` 进入，检查事件证据是否仍满足计算需要，并确定已有授权是否需要重算。新增规则无需另建 worker；继续复用 `ResourceGrantProcess` 的消费和发布流程。
+
+按需求扩展以下配套能力：
+
+- **新增授权资源类型**：扩展 identity 的 [ResourceKind](../../domains/erp-identity/src/entity/resource_access/source.rs)、本 crate 的目标校验与重算映射，并将业务读取入口接入相应授权政策和 Mapping。
+- **支持历史数据**：由拥有领域仓储提供证据读取，在 [backfill.rs](src/backfill.rs) 接入转换与分页处理。现有仓储示例见 [grant_history.rs](../../domains/erp-workflow/src/repository/grant_history.rs)。
+- **增加管理参数或返回数据**：普通管理请求修改 [management.rs](src/management.rs)，回填请求与结果修改 [backfill.rs](src/backfill.rs)，同步管理 handler。
+
+扩展时保留公共处理约束：事实读取沿用传入的 `Executor`；读取失败返回错误，不能转换为空授权结果；授权发布继续经过 `ResourceGrantService::apply_source`，复用身份域的幂等、版本和撤销控制。
+
+## 代码导航
+
+| 文件 | 维护内容 |
+| --- | --- |
+| [lib.rs](src/lib.rs) | 公开 API 导出 |
+| [process.rs](src/process.rs) | 事件处理、事务编排、后台对账和队列观测 |
+| [readiness.rs](src/readiness.rs) | 来源就绪与开票授权待生成查询 |
+| [facts.rs](src/facts.rs) | 业务数据读取、事件分派、授权结果计算及发布前重验 |
+| [rules.rs](src/rules.rs) | 纯规则校验与测试 |
+| [backfill.rs](src/backfill.rs) | 回填请求与结果、历史证据转换、回填预览与执行 |
+| [management.rs](src/management.rs) | 管理请求、参数校验与管理服务装配 |
+
+## 验证
+
+在 `backend/` 下执行本 crate 与身份域的库测试：
+
+```bash
+env -u ERP_TEST_MONGO_URI cargo test -p erp-resource-grants -p erp-identity --lib --locked
+```
+
+修改事件生产方时，执行对应业务 crate 的受影响测试；修改跨域依赖时，执行 `./scripts/check-domain-boundaries.sh`。涉及数据库事务、并发消费或恢复行为的变更，另行执行对应集成验证。

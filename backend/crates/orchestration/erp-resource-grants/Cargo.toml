@@ -17,7 +17,6 @@ erp-sales = { workspace = true }
 erp-workflow = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

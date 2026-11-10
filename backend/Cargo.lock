@@ -2508,7 +2508,6 @@ dependencies = [
  "persistence-core",
  "serde",
  "serde_json",
- "tokio",
 ]
 
 [[package]]

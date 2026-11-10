@@ -8,6 +8,7 @@ mod iam;
 mod organization;
 mod person_directory;
 mod portal;
+mod resource_access;
 mod role_template;
 
 pub use access_control::*;
@@ -17,6 +18,7 @@ pub use iam::*;
 pub use organization::*;
 pub use person_directory::*;
 pub use portal::*;
+pub use resource_access::GrantSourcePage;
 pub use role_template::*;
 
 pub use crate::entity::person_directory::PersonDirectoryCategory;

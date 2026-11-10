@@ -1,11 +1,12 @@
 //! 独立自动读取授权编排；业务事实经拥有领域仓储读取。
-mod facts;
-mod process;
-mod rules;
-pub use process::{GrantReadiness, ResourceGrantProcess};
-
 mod backfill;
-pub mod management;
-pub use management::{
-    BackfillReport, BackfillRequest, ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery,
-};
+mod facts;
+mod management;
+mod process;
+mod readiness;
+mod rules;
+
+pub use backfill::{BackfillProblem, BackfillReport, BackfillRequest, GrantHistoryKind};
+pub use management::{ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery};
+pub use process::ResourceGrantProcess;
+pub use readiness::GrantReadiness;
