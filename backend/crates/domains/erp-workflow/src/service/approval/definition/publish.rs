@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -27,7 +28,7 @@ use crate::repository::BpmExt;
 use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::service::approval::copies::validate_recipients;
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 发布草稿为当前唯一已发布版本。
     ///
     /// # 参数
@@ -82,7 +83,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
-        let rbac = self.auth.clone();
+
+        let identity_service = self.identity.clone();
         let audit = std::sync::Arc::clone(&self.audit);
         let transaction_actor = actor.clone();
         let transaction_policy = policy.clone();
@@ -92,8 +94,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 publish_tx(
+                    &identity_service,
                     &db,
-                    &rbac,
                     graph,
                     PublishTxInput {
                         policy: transaction_policy,
@@ -146,8 +148,8 @@ struct PublishTxInput<'a> {
 /// 回放收据或刷新快照并发布当前草稿。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前草稿图
 /// * `input` - 政策、请求、摘要与操作人
 /// * `executor` - 执行器
@@ -161,14 +163,14 @@ struct PublishTxInput<'a> {
 /// # 关键业务约束
 /// 任一校验失败必须整体回滚。
 async fn publish_tx(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     input: PublishTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let PublishTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, &policy, executor).await?;
+    ensure_definition_admin_permission(identity_service, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -179,9 +181,15 @@ async fn publish_tx(
     {
         return Ok(view);
     }
-    let current =
-        publish_candidate(db, rbac, &graph, &policy, request.expected_definition_lock_version, executor)
-            .await?;
+    let current = publish_candidate(
+        identity_service,
+        db,
+        &graph,
+        &policy,
+        request.expected_definition_lock_version,
+        executor,
+    )
+    .await?;
     let Publication { mut result, previous, previous_lock } =
         plan_publication(db, &current, actor, executor).await?;
     write_receipt(db, &identity.current, &DefinitionCommandResultRef::from_graph(&result).encode(), executor)
@@ -244,8 +252,8 @@ async fn plan_publication(
 }
 
 async fn publish_candidate(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: &DefinitionGraph,
     policy: &ProcessRequiredApprovalPolicy,
     expected_lock: u64,
@@ -255,19 +263,20 @@ async fn publish_candidate(
     let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
         current.validate_linear().map_err(map_model_error),
         validate_required_purposes(policy, &current.purpose_refs()),
-        validate_assignees(db, rbac, policy, &current.assignee_ids(), executor).await,
+        validate_assignees(identity_service, db, policy, &current.assignee_ids(), executor).await,
         ensure_actions_registered(policy),
     )?;
     if let Some(config) = db.approval_copies().config(&current.definition.base.id, executor).await? {
         let rules = ApprovalCopyRule::prepare(config.rules, current.nodes.len())?;
-        validate_recipients(rbac, &rules, executor).await?;
+        validate_recipients(identity_service, &rules, executor).await?;
     }
-    prepare_publish_graph(db, rbac, current, executor).await
+    prepare_publish_graph(identity_service, db, current, executor).await
 }
 
 /// 刷新快照并构造待写草稿图，供发布事务在 receipt-first 后持久化。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - MongoDB 数据库
 /// * `graph` - 已完成发布前校验的草稿图
 /// * `session` - 调用方事务执行器
@@ -281,13 +290,13 @@ async fn publish_candidate(
 /// # 关键业务约束
 /// 发布前必须以当前账号显示名刷新全部节点快照；本函数不得产生物理写入。
 async fn prepare_publish_graph(
+    identity_service: &SharedRbacService,
     _db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let assignee_ids = graph.assignee_ids();
-    let snapshots = load_assignee_snapshots(rbac, &assignee_ids, session).await?;
+    let snapshots = load_assignee_snapshots(identity_service, &assignee_ids, session).await?;
     let nodes = apply_snapshots(graph.nodes, &snapshots)?;
     rebuild_draft_graph(&graph.definition, nodes)
 }

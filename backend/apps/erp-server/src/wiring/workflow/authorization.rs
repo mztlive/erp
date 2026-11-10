@@ -21,7 +21,7 @@ use super::order_access::{approval_readable, readable_sources};
 use crate::wiring::contract_access;
 use crate::wiring::errors::{Error, Result};
 
-/// 工作流命令与定义服务使用的共享 RBAC adapter。
+/// 工作流跨域业务来源授权 adapter。
 #[derive(Clone)]
 pub struct WorkflowAuth {
     db: Database,
@@ -29,7 +29,7 @@ pub struct WorkflowAuth {
 }
 
 impl WorkflowAuth {
-    /// 把共享 RBAC 包装为工作流授权端口，构造时不查询。
+    /// 以业务数据库和共享身份服务装配来源授权，构造时不查询。
     ///
     /// # 参数
     /// * `db` - 身份与业务集合所在数据库。
@@ -51,10 +51,6 @@ impl WorkflowAuth {
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
-    fn rbac(&self) -> WorkflowResult<&SharedRbacService> {
-        Ok(&self.rbac)
-    }
-
     async fn require_approval_source(
         &self,
         actor: &AuditActor,

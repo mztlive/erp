@@ -12,10 +12,7 @@ pub use account::{
     CreateAdminParams, InitializeSuperAdminParams, InitializeSuperAdminResult, ResetAdminPasswordParams,
     ResetAdminPasswordResult, UpdateAdminParams, UpdateAdminRoleParams,
 };
-pub use predefined_roles::{
-    builtin_role_templates, create_missing_predefined_role, ensure_identity_foundation,
-    ensure_predefined_roles, predefined_role_permissions,
-};
+pub use predefined_roles::{builtin_role_templates, ensure_identity_foundation};
 pub use rbac::{
     AuthorizedAccountManagement, AuthorizedRoleGrant, QualifiedPermissions, ROOT_ROLE_ID, RbacService,
     RolePermissionSnapshot, SharedRbacService, ensure_root_role, shared_rbac_service, subject,

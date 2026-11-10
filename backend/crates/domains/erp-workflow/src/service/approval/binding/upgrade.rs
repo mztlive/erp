@@ -3,6 +3,7 @@ use bpm::ids::ApprovalProcessDefinitionId;
 use bpm::model::types::ModelError;
 use bpm::model::{ApprovalCommandReceipt, Timestamp};
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -11,9 +12,7 @@ use super::super::execution::{
     PreparedCommandIdentity, map_receipt_first_write_error, upgrade_binding_identity,
 };
 use super::super::policy::{ProcessRequiredApprovalPolicy, require_process_required};
-use super::super::scope::{
-    approval_actor_is_active_with_executor, approval_binding_upgrade_authorization_with_executor,
-};
+use super::super::scope::approval_binding_upgrade_authorization_with_executor;
 use super::super::upgrade_subject::{
     ApprovalUpgradeSubjectFacts, ensure_initial_unsubmitted_approval_upgrade_subject,
     load_approval_upgrade_subject_facts,
@@ -43,6 +42,7 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// 本端口不开事务；运行层必须传入同一外层事务执行器。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 共享 RBAC 服务
 /// * `object_read` - 注入的对象读取端口
@@ -62,6 +62,7 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 // 升级入口 8 参数：db/各 Port/命令/操作人/执行器由组合根固定装配，顺序由调用点锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
 pub async fn upgrade_unsubmitted_document_definition(
+    identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn ApprovalObjectReadPort,
@@ -74,7 +75,9 @@ pub async fn upgrade_unsubmitted_document_definition(
     let reason = normalized_upgrade_reason(command)?;
     ensure_prepared_upgrade_identity(command, actor, reason)?;
 
-    let authorized = load_authorized_upgrade_context(db, rbac, upgrade, command, actor, executor).await?;
+    let authorized =
+        load_authorized_upgrade_context(identity_service, db, rbac, upgrade, command, actor, executor)
+            .await?;
 
     let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
     match command.identity.classify(receipt.as_ref()) {
@@ -88,6 +91,7 @@ pub async fn upgrade_unsubmitted_document_definition(
     authorized.facts.ensure_expected_business_object_version(command.expected_business_object_version)?;
     ensure_initial_unsubmitted_approval_upgrade_subject(upgrade, &authorized.facts, executor).await?;
     apply_fresh_upgrade(
+        identity_service,
         db,
         rbac,
         object_read,
@@ -108,6 +112,7 @@ pub async fn upgrade_unsubmitted_document_definition(
 /// 在 unknown/duplicate 恢复的新事务中只执行授权回读。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC
 /// * `upgrade` - 升级主体端口
@@ -127,6 +132,7 @@ pub async fn upgrade_unsubmitted_document_definition(
 /// 本端口绝不调用 Fresh 门禁与任何写入；运行层必须为每次恢复尝试传入可用的
 /// 新事务执行器。
 pub async fn replay_unsubmitted_document_definition_upgrade(
+    identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     upgrade: &dyn crate::ports::UpgradeSubjectPort,
@@ -136,7 +142,9 @@ pub async fn replay_unsubmitted_document_definition_upgrade(
 ) -> Result<Option<UpgradeBindingResultView>> {
     let reason = normalized_upgrade_reason(command)?;
     ensure_prepared_upgrade_identity(command, actor, reason)?;
-    let _authorized = load_authorized_upgrade_context(db, rbac, upgrade, command, actor, executor).await?;
+    let _authorized =
+        load_authorized_upgrade_context(identity_service, db, rbac, upgrade, command, actor, executor)
+            .await?;
     let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
     match command.identity.classify(receipt.as_ref()) {
         ReceiptBranch::SamePayload(receipt) => {
@@ -161,6 +169,7 @@ fn normalized_upgrade_reason(command: &UpgradeUnsubmittedDefinitionCommand) -> R
 
 /// 先加载精确强事实，再重验账号与当前三重授权。
 async fn load_authorized_upgrade_context(
+    identity_service: &SharedRbacService,
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     upgrade: &dyn crate::ports::UpgradeSubjectPort,
@@ -171,9 +180,9 @@ async fn load_authorized_upgrade_context(
     let facts =
         load_approval_upgrade_subject_facts(upgrade, command.document_type, &command.document_id, executor)
             .await?;
-    ensure_active_upgrade_actor(rbac, actor, executor).await?;
     let policy = require_process_required(facts.document_type)?;
     let authorization = approval_binding_upgrade_authorization_with_executor(
+        identity_service,
         rbac,
         actor,
         facts.document_type,
@@ -208,18 +217,6 @@ fn ensure_prepared_upgrade_identity(
         return Err(payload_conflict_error());
     }
     Ok(())
-}
-
-/// 在强业务对象存在性已证明后，事务内重验操作人。
-async fn ensure_active_upgrade_actor(
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    if approval_actor_is_active_with_executor(rbac, actor, executor).await? {
-        return Ok(());
-    }
-    Err(Error::Forbidden("审批绑定升级账号不存在、已停用或身份已变化".to_string()))
 }
 
 /// 只按预构造 V3 身份查找绑定升级收据。
@@ -293,6 +290,7 @@ struct ApplyFreshUpgradeInput<'a> {
 /// 在唯一事务内校验并写入绑定升级收据、单据、动作与审计。
 ///
 /// # 参数
+/// * `identity` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC 服务
 /// * `input` - 命令、主体事实与操作人
@@ -307,6 +305,7 @@ struct ApplyFreshUpgradeInput<'a> {
 /// # 关键业务约束
 /// 收据必须作为第一物理写；后续失败随事务整体回滚。
 async fn apply_fresh_upgrade(
+    identity: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn ApprovalObjectReadPort,
@@ -327,12 +326,12 @@ async fn apply_fresh_upgrade(
 
     let published = load_published_graph(db, facts.document_type, executor).await?;
     let object = rbac.approval_scope_object(facts.document_type, &facts.document_id, executor).await?;
-    let mut binding_context = facts.binding_context();
-    binding_context.order_source = object.order_source;
-    binding_context.customer_id = object.customer_id;
-    binding_context.business_org_unit_id = object.business_org_unit_id;
-    binding_context.scope_owner_user_id = Some(object.owner_user_id);
-    revalidate_binding_graph(db, rbac, object_read, policy, &binding_context, &published, executor).await?;
+    let mut context = facts.binding_context();
+    context.order_source = object.order_source;
+    context.customer_id = object.customer_id;
+    context.business_org_unit_id = object.business_org_unit_id;
+    context.scope_owner_user_id = Some(object.owner_user_id);
+    revalidate_binding_graph(identity, db, object_read, policy, &context, &published, executor).await?;
     ensure_upgrade_changes_definition(&previous, &published)?;
 
     let current_definition_id = ApprovalProcessDefinitionId::new(published.definition.base.id.clone());
@@ -389,7 +388,6 @@ async fn apply_fresh_upgrade(
         &action,
         UpgradeBindingOutcome::Applied,
     )?;
-
     db.bpm_workflow()
         .insert_command_receipt(&receipt, executor)
         .await

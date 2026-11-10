@@ -19,8 +19,7 @@ use super::{
     WorkItemService,
 };
 use crate::entity::work_item::{
-    AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
-    WorkItemType,
+    FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemType,
 };
 use crate::error::{Error, Result};
 
@@ -99,9 +98,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?;
         let mut candidates = Vec::new();
         for account in accounts {
-            if item.owner_user_id.as_deref() == Some(account.id.as_str())
-                || AvailableWorkItemAccount::from_account(&account).is_err()
-            {
+            if item.owner_user_id.as_deref() == Some(account.id.as_str()) || !account.can_login {
                 continue;
             }
             match self.assignment_authorization_snapshot(&actor, &account.id, &item).await {
@@ -286,8 +283,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .account(user_id, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
-        AvailableWorkItemAccount::from_account_kind(&account, expected_kind)
-            .map_err(|_| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
+        if !account.can_login || account.kind != expected_kind {
+            return Err(Error::Forbidden("目标账号不存在或已失效".to_string()));
+        }
         if item.work_item_type == WorkItemType::SupplierPortalReview && !account.is_active_backoffice() {
             return Err(Error::Forbidden("供应商申请确认人必须为启用的内部账号".into()));
         }
@@ -299,7 +297,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
         self.identity.ensure_policy_snapshot_with_executor(authorization.policy_revision, executor).await?;
-        let access = self.business_eligibility(user_id, qualified.permissions(), executor).await?;
+        let access = self.business_eligibility(&actor, qualified.permissions(), executor).await?;
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
             .map_err(task_read_error)?;
@@ -386,19 +384,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
         require_supplier_portal_task_read(
             &self.auth,
-            &access.task.actor_id,
+            &access.actor,
             policy.object_kind,
             &item.business_object_id,
             executor,
         )
         .await?;
         if !item.is_open_procurement_task() {
-            require_order_task_read(&self.auth, &access.task.actor_id, policy.object_kind, fact, executor)
-                .await?;
+            require_order_task_read(&self.auth, &access.actor, policy.object_kind, fact, executor).await?;
         }
         require_supplier_portal_task_review(
             &self.auth,
-            &access.task.actor_id,
+            &access.actor,
             policy.object_kind,
             &item.business_object_id,
             executor,
@@ -477,8 +474,7 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: crate::ports::Workflow
         .qualified_permissions(&actor, &required, executor)
         .await?
         .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-    let target_access =
-        TaskEligibility::new(target_user_id.to_owned()).with_permissions(qualified.permissions());
+    let target_access = TaskEligibility::new(actor).with_permissions(qualified.permissions());
     for task in tasks {
         service.ensure_assignment_candidate_access_with_executor(task, &target_access, executor).await?;
     }

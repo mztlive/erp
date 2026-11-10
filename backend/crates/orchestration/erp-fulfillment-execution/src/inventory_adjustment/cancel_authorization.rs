@@ -2,15 +2,13 @@
 
 use application_core::AuditActor;
 use bpm::model::ApprovalProcessInstance;
+use erp_identity::{Permission, SharedRbacService};
 use erp_workflow::ApprovalIntegrationExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::service::approval::{
-    approval_action_roles_with_executor, approval_actor_is_active_with_executor,
-    definition_management_visibility_with_executor,
-};
+use erp_workflow::service::approval::definition_management_visibility_with_executor;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -104,21 +102,23 @@ pub(crate) async fn ensure_cancel_authorized_with_executor(
 
 /// 原撤回授权顺序使用应用已装配的工作流 Port，禁止重建授权源。
 pub(crate) async fn authorize_with<A: WorkflowAuthorizationPort>(
+    identity_service: &SharedRbacService,
     db: &Database,
     auth: &A,
     instance: &ApprovalProcessInstance,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<CancelAuthorization> {
-    if !approval_actor_is_active_with_executor(auth, actor, executor).await? {
+    if !identity_service.directory().actor_is_active(actor, executor).await? {
         return Err(Error::Forbidden("当前账号不可执行库存调整审批撤回".to_string()));
     }
     let snapshot = cancel_authorization_snapshot(db, instance, executor).await?;
-    let roles =
-        approval_action_roles_with_executor(auth, actor, "approval_instance:cancel", executor).await?;
-    let read_roles =
-        approval_action_roles_with_executor(auth, actor, "approval_instance:read", executor).await?;
-    if roles.is_empty() || read_roles.is_empty() {
+    let required =
+        [Permission::parse("approval_instance:cancel")?, Permission::parse("approval_instance:read")?];
+    let qualified = identity_service.qualified_permissions(actor, &required, executor).await?;
+    if qualified
+        .is_none_or(|value| !required.iter().all(|permission| value.permissions().covers_one(permission)))
+    {
         return Err(Error::Forbidden("当前账号缺少撤回审批或读取权限".to_string()));
     }
     if snapshot.payload.submitted_by == actor.id() {
@@ -128,7 +128,8 @@ pub(crate) async fn authorize_with<A: WorkflowAuthorizationPort>(
             responsible_org_id: snapshot.payload.responsible_org_id,
         });
     }
-    let visibility = definition_management_visibility_with_executor(auth, actor, executor).await?;
+    let visibility =
+        definition_management_visibility_with_executor(identity_service, actor, executor).await?;
     if !visibility.runtime_admin_types().contains(&DocumentType::StockAdjustment)
         || !auth
             .approval_source_readable(

@@ -596,22 +596,15 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
 
 #[cfg(test)]
 mod tests {
-    use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
 
     use super::super::{
-        AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemStatus,
-        WorkItemSubjectVersions, WorkItemType, account, direct_data,
+        AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+        direct_data,
     };
     #[test]
-    fn account_and_subject_version_value_objects_fail_closed() {
-        let active = account(true);
-        let available = AvailableWorkItemAccount::from_account_kind(&active, AccountKind::Admin).unwrap();
-        assert_eq!(available.account_id(), "account-1");
-        assert_eq!(available.kind(), AccountKind::Admin);
-        assert!(AvailableWorkItemAccount::from_account(&account(false)).is_err());
-
+    fn subject_version_value_objects_fail_closed() {
         let versions = WorkItemSubjectVersions::constrained(vec![
             "v2".to_string(),
             " v1 ".to_string(),

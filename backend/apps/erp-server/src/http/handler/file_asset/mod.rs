@@ -33,7 +33,6 @@ use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::http::upload;
-use crate::wiring::workflow::workflow_auth;
 
 /// 查询文件资产列表（列表不暴露敏感对象存储键）。
 ///
@@ -245,8 +244,8 @@ pub async fn document_attachment_create(
     .require_attachment(&actor, "update", req.document_id.as_ref())
     .await?;
     erp_approval_runtime::approval_materials::authorize_attachment(
+        &state.application().rbac(),
         &state.application().db(),
-        &workflow_auth(state.application().db(), state.application().rbac()),
         &actor,
         req.file_asset_id.as_ref(),
     )

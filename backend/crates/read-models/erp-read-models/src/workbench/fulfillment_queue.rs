@@ -369,7 +369,7 @@ impl WorkbenchReadService {
         }
 
         let mut filter = fulfillment_repository_filter(&mut query, actor.id(), &visible_types)?;
-        filter.authorization = Some(access.read_access()?.clone());
+        filter.authorization = Some(access.read_access().clone());
         let repository_page =
             FulfillmentQueueRepository::new(&self.db).search_fulfillment_queue(&filter, executor).await?;
 

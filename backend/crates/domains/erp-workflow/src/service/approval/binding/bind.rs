@@ -1,6 +1,7 @@
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -25,8 +26,8 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// `PROCESS_REQUIRED` 查询唯一 `PUBLISHED` 定义并重验图与人员。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
-/// * `rbac` - 共享 RBAC
 /// * `object_read` - 注入的对象读取端口
 /// * `audit_port` - 审计写入端口
 /// * `command` - 绑定命令
@@ -39,8 +40,8 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// # 错误
 /// 缺失发布定义、图损坏、人员或范围失败时返回错误，调用方必须回滚。
 pub async fn bind_published_definition_on_document_create(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     command: &BindPublishedDefinitionCommand,
@@ -55,8 +56,16 @@ pub async fn bind_published_definition_on_document_create(
             Ok(None)
         },
         BindingDecision::RequirePublished => {
-            let binding =
-                bind_required_definition(db, rbac, object_read, audit_port, command, actor, executor).await?;
+            let binding = bind_required_definition(
+                identity_service,
+                db,
+                object_read,
+                audit_port,
+                command,
+                actor,
+                executor,
+            )
+            .await?;
             Ok(Some(binding))
         },
     }
@@ -103,8 +112,8 @@ pub fn binding_from_published(
 
 /// 必须审批路径：查询发布定义、重验并写绑定审计。
 async fn bind_required_definition(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     command: &BindPublishedDefinitionCommand,
@@ -113,7 +122,8 @@ async fn bind_required_definition(
 ) -> Result<ApprovalDefinitionBinding> {
     let policy = require_process_required(command.document_type)?;
     let graph = load_published_graph(db, command.document_type, executor).await?;
-    revalidate_binding_graph(db, rbac, object_read, &policy, &command.context, &graph, executor).await?;
+    revalidate_binding_graph(identity_service, db, object_read, &policy, &command.context, &graph, executor)
+        .await?;
     let binding = binding_from_published(
         ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         graph.definition.definition_version,

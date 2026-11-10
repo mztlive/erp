@@ -1,13 +1,12 @@
 use application_core::{EmptyScopeVersion, ScopeVersion};
 
-use super::access::QueueAccess;
 use super::dto;
 use crate::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemDueFilter};
 use crate::{Error, Result};
 pub(crate) fn queue_context_id(
     actor_id: &str,
     query: &dto::WorkItemListQuery,
-    access: &QueueAccess,
+    authorization_version: &str,
 ) -> String {
     QueueContextIdentity::new(
         "work-items",
@@ -31,7 +30,7 @@ pub(crate) fn queue_context_id(
             QueueContextField::set("purchase_orders", query.purchase_order_ids.iter().cloned()),
             QueueContextField::scalar("sort", query.sort_by),
             QueueContextField::scalar("ascending", query.sort_ascending.to_string()),
-            QueueContextField::scalar("authorization", access.version().unwrap_or_default()),
+            QueueContextField::scalar("authorization", authorization_version),
         ],
     )
     .into_string()

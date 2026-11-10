@@ -25,6 +25,7 @@ use application_core::AuditActor;
 use bpm::engine::CommitRequired;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ApprovalProcessInstance};
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 pub use query::{
@@ -39,9 +40,7 @@ use super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
 use crate::entity::approval_integration::{ApprovalSubjectSnapshot, resolve_runtime_document_type};
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
-use crate::ports::{
-    ApprovalObjectReadPort, FailClosedObjectReadPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuditPort,
-};
+use crate::ports::{ApprovalObjectReadPort, FailClosedObjectReadPort, UpgradeSubjectPort, WorkflowAuditPort};
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
@@ -49,14 +48,13 @@ use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActio
 /// HTTP 面审批运行服务。
 #[derive(Clone)]
 pub struct ApprovalRuntimeService<A> {
+    pub(crate) identity: SharedRbacService,
     pub(crate) db: Database,
     pub(crate) auth: A,
     action_port: Arc<dyn ApprovalDomainActionPort>,
     pub(crate) object_read: Arc<dyn ApprovalObjectReadPort>,
     pub(crate) upgrade: Arc<dyn UpgradeSubjectPort>,
     pub(crate) audit: Arc<dyn WorkflowAuditPort>,
-    #[allow(dead_code)]
-    pub(crate) facts: Arc<dyn ObjectFactPort>,
 }
 
 /// 候选人。
@@ -72,6 +70,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 创建运行服务。
     ///
     /// # 参数
+    /// * `identity` - 共享身份与权限服务。
     /// * `db` - MongoDB
     /// * `auth` - 授权 Port
     ///
@@ -80,28 +79,28 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: Database, auth: A) -> Self {
+    pub fn new(db: Database, identity: SharedRbacService, auth: A) -> Self {
         Self::with_ports(
             db,
+            identity,
             auth,
             Arc::new(FailClosedApprovalActionPort),
             Arc::new(FailClosedObjectReadPort),
             Arc::new(crate::ports::FailClosedUpgradeSubjectPort),
             Arc::new(crate::ports::FailClosedAuditPort),
-            Arc::new(crate::ports::FailClosedObjectFactPort),
         )
     }
 
     /// 用组合根注入的全部端口创建运行服务。
     ///
     /// # 参数
+    /// * `identity` - 共享身份与权限服务。
     /// * `db` - MongoDB。
     /// * `auth` - 授权端口。
     /// * `action_port` - 领域动作端口。
     /// * `object_read` - 被审对象读取端口。
     /// * `upgrade` - 未提交绑定升级端口。
     /// * `audit` - 审计端口。
-    /// * `facts` - 对象事实端口。
     ///
     /// # 返回
     /// 返回已装配端口的运行服务。
@@ -110,14 +109,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 不返回错误。
     pub fn with_ports(
         db: Database,
+        identity: SharedRbacService,
         auth: A,
         action_port: Arc<dyn ApprovalDomainActionPort>,
         object_read: Arc<dyn ApprovalObjectReadPort>,
         upgrade: Arc<dyn UpgradeSubjectPort>,
         audit: Arc<dyn WorkflowAuditPort>,
-        facts: Arc<dyn ObjectFactPort>,
     ) -> Self {
-        Self { db, auth, action_port, object_read, upgrade, audit, facts }
+        Self { db, identity, auth, action_port, object_read, upgrade, audit }
     }
 }
 

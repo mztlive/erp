@@ -10,7 +10,7 @@ use bpm::model::{
 use erp_core::common::time::Instant;
 use erp_core::ids::StockAdjustmentId;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AccountCore};
+use erp_identity::{AccessControlExt, AccountCore, Permission, SharedRbacService};
 use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentApprovalSnapshot,
@@ -34,10 +34,7 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use erp_workflow::service::approval::{
-    approval_action_roles_with_executor, approval_actor_is_active_with_executor,
-    approval_participant_permissions_with_executor, read,
-};
+use erp_workflow::service::approval::{approval_participant_permissions_with_executor, read};
 use erp_workflow::{ApprovalIntegrationExt, BpmExt};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -466,19 +463,21 @@ pub(crate) async fn ensure_submit_authorized(
 }
 
 pub(crate) async fn authorize_submit_with<A: WorkflowAuthorizationPort>(
+    identity_service: &SharedRbacService,
     _db: &Database,
     auth: &A,
     adjustment: &StockAdjustment,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !approval_actor_is_active_with_executor(auth, actor, executor).await?
+    if !identity_service.directory().actor_is_active(actor, executor).await?
         || adjustment.prepared_by != actor.id()
     {
         return Err(Error::Forbidden(STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN.to_string()));
     }
-    let roles = approval_action_roles_with_executor(auth, actor, "stock_adjustment:submit", executor).await?;
-    if roles.is_empty()
+    let permission = Permission::parse("stock_adjustment:submit")?;
+    let qualified = identity_service.qualified_permissions(actor, &[permission], executor).await?;
+    if qualified.is_none_or(|value| value.permissions().is_empty())
         || !auth
             .approval_source_readable(actor, DocumentType::StockAdjustment, &adjustment.base.id, executor)
             .await?
@@ -645,9 +644,9 @@ pub(crate) async fn revalidate_stock_adjustment_start_candidates(
     rbac.revalidate_stock_adjustment_candidates(graph, initiator_id, organization_id, executor).await
 }
 
-pub(crate) async fn revalidate_candidates_with<A: WorkflowAuthorizationPort>(
+pub(crate) async fn revalidate_candidates_with(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &A,
     graph: &DefinitionGraph,
     initiator_id: &str,
     organization_id: &str,
@@ -673,7 +672,9 @@ pub(crate) async fn revalidate_candidates_with<A: WorkflowAuthorizationPort>(
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
-        if !approval_participant_permissions_with_executor(auth, &assignee_actor, executor).await? {
+        if !approval_participant_permissions_with_executor(identity_service, &assignee_actor, executor)
+            .await?
+        {
             return Err(Error::ValidationError("指定审批人缺少审批读取和决定权限".to_string()));
         }
     }

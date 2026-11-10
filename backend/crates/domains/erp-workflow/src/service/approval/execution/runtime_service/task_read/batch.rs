@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use application_core::AuditActor;
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -28,6 +29,7 @@ struct RuntimeBatchFacts {
 /// 对同一读者逐任务证明资格，再批量读取必要运行事实并按输入顺序判定。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` / `auth` - 工作流仓储与当前权限端口
 /// * `actor` - 同一已认证读者
 /// * `items` - 服务端读取的当前批任务，调用方负责保持输入顺序
@@ -46,6 +48,7 @@ struct RuntimeBatchFacts {
 /// # Panics
 /// 准入任务与主体结果必须等长且同序；`subjects.next()` 为 `None` 时 `expect`，表示本函数内部拼接被破坏。
 pub async fn approval_tasks_readable_with_executor(
+    identity_service: &SharedRbacService,
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -55,7 +58,7 @@ pub async fn approval_tasks_readable_with_executor(
     if items.is_empty() {
         return Ok(Vec::new());
     }
-    let checks = candidate_checks(auth, actor, items, executor).await;
+    let checks = candidate_checks(identity_service, actor, items, executor).await;
     let candidates = eligible_items(items, &checks);
     let facts = load_runtime_facts(db, &candidates, executor).await?;
     let subjects = candidates.iter().map(|item| subject_for_task(item, &facts)).collect::<Vec<_>>();
@@ -77,7 +80,9 @@ pub async fn approval_tasks_readable_with_executor(
             .as_ref()
             .and_then(|id| open_tasks.get(id.as_ref()))
             .map_or(&[][..], Vec::as_slice);
-        result.push(task_subject_readable(auth, actor, item, &subject, tasks, executor).await?);
+        result.push(
+            task_subject_readable(identity_service, auth, actor, item, &subject, tasks, executor).await?,
+        );
     }
     Ok(result)
 }
@@ -85,7 +90,8 @@ pub async fn approval_tasks_readable_with_executor(
 /// 按原任务顺序保留独立权限证明，首个权限错误之后不再读取其他账号事实。
 ///
 /// # 参数
-/// * `auth` / `actor` - 当前权限事实和读者
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// * `identity_service` / `actor` - 当前权限事实和读者
 /// * `items` - 原输入任务
 /// * `executor` - 调用方执行器
 ///
@@ -95,14 +101,14 @@ pub async fn approval_tasks_readable_with_executor(
 /// # 错误
 /// 错误保存在对应结果中，不提前覆盖较早任务的冻结主体错误。
 async fn candidate_checks(
-    auth: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
     items: &[&WorkItem],
     executor: &mut dyn Executor,
 ) -> Vec<Result<bool>> {
     let mut checks = Vec::with_capacity(items.len());
     for item in items {
-        let check = task_read_candidate(auth, actor, item, executor).await;
+        let check = task_read_candidate(identity_service, actor, item, executor).await;
         let failed = check.is_err();
         checks.push(check);
         if failed {
@@ -331,16 +337,11 @@ fn open_execution_ids(
 
 #[cfg(test)]
 mod tests {
-    use application_core::AuditActor;
-    use erp_core::AccountKind;
-    use persistence_core::NoTransaction;
 
     use super::super::tests::fixture;
     use super::*;
     use crate::entity::document_registry::DocumentType;
-    use crate::entity::work_item::AssignmentSource;
     use crate::error::Error;
-    use crate::ports::FailClosedWorkflowAuthorizationPort;
 
     /// 将同一条真实运行夹具拆成批量 loader 消费的身份映射。
     fn facts(mut subject: RuntimeReadSubject) -> RuntimeBatchFacts {
@@ -370,25 +371,6 @@ mod tests {
         assert_eq!(selected[0].base.id, "task-2");
         assert!(execution_ids(&[]).is_empty());
         assert_eq!(execution_ids(&[&task, &other]).len(), 1);
-    }
-
-    /// 原短路拒绝不读取权限端口，遇权限错误后不再校验后续任务。
-    #[tokio::test]
-    async fn approval_task_batch_checks_keep_denial_short_circuit_and_error_position() {
-        let (_, task) = fixture();
-        let mut ordinary = task.clone();
-        ordinary.assignment_source = AssignmentSource::SystemRule;
-        let actor = AuditActor::new("owner-1".into(), "owner".into(), AccountKind::Admin);
-        let checks = candidate_checks(
-            &FailClosedWorkflowAuthorizationPort,
-            &actor,
-            &[&ordinary, &task, &ordinary],
-            &mut NoTransaction,
-        )
-        .await;
-        assert_eq!(checks.len(), 2);
-        assert!(matches!(&checks[0], Ok(false)));
-        assert!(matches!(&checks[1], Err(Error::Internal(message)) if message == "身份服务未装配"));
     }
 
     /// 缺失执行或实例保持不可读，不把缺关联改成冻结主体冲突。

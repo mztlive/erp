@@ -7,9 +7,11 @@ use mongodb::bson::{Bson, Document};
 use persistence_core::Executor;
 
 use crate::entity::authorization::{AccessContext, AccessRule, AccessSubject, MappingFacts, QueryModel};
+use crate::entity::fingerprint::Fingerprint;
 use crate::ports::AccessMapping;
 use crate::repository::authorization::compile;
-use crate::{Error, Result};
+use crate::repository::fingerprint::BsonFingerprint;
+use crate::{Error, Permission, Result};
 
 /// 只有授权服务能生成的完整查询约束。
 pub struct AuthorizedQuery {
@@ -120,6 +122,17 @@ impl CompiledAccess {
         &self.proof.context.actor
     }
 
+    /// 返回读取凭证绑定的入口权限。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 服务端登记并已核验的具体权限。
+    /// # 错误
+    /// 无；使用凭证前后仍须复验。
+    pub fn permission(&self) -> &Permission {
+        &self.proof.context.permission
+    }
+
     /// 在所有异步复验完成后检查整体有效期。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         self.proof.ensure_current(executor)?;
@@ -137,11 +150,15 @@ impl CompiledAccess {
     /// # 错误
     /// 不返回错误；不能替代执行前后的 validate。
     pub fn version(&self) -> String {
-        let mut parts = vec![self.proof.version.clone()];
-        for dependency in &self.dependencies {
-            parts.push(format!("{:?}:{:?}:{:?}", dependency.model, dependency.facts, dependency.key));
-        }
-        format!("{:x}", md5::compute(format!("{parts:?}")))
+        // v2 字段顺序：证明版本、无序映射依赖（模型、事实、查询键）。
+        let mut version = Fingerprint::new("authorization-query-v2");
+        version.text(&self.proof.version);
+        version.unordered(&self.dependencies, |hash, dependency| {
+            hash.model(&dependency.model);
+            hash.facts(&dependency.facts);
+            hash.bson(&dependency.key);
+        });
+        version.finish()
     }
 
     /// 读取完整授权阶段，必须在分页、计数和汇总前执行。

@@ -132,11 +132,10 @@ pub async fn bind_published_definition_on_document_create(
     actor: &application_core::AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>> {
-    let auth = WorkflowAuth::new(db.clone(), rbac.clone());
     let audit = WorkflowAudit::new(db.clone());
     erp_workflow::service::approval::binding::bind_published_definition_on_document_create(
+        rbac,
         db,
-        &auth,
         object_read,
         &audit,
         command,

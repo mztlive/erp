@@ -25,8 +25,8 @@ use std::sync::Arc;
 
 #[cfg(test)]
 use access::{
-    TaskEligibility, authorized_item_fields, detail_scope, ensure_generic_work_item_mutation,
-    has_assignment_candidate_access,
+    TaskEligibility, detail_scope, ensure_generic_work_item_mutation, has_assignment_candidate_access,
+    has_item_access,
 };
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -112,6 +112,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
 mod tests {
     use std::collections::{HashMap, HashSet};
 
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
     use erp_identity::{Permission, PermissionSet};
@@ -119,8 +121,8 @@ mod tests {
     use super::{
         AssignmentSeparationPolicy, ObjectFact, ObjectFactMap, ObjectKind, TaskEligibility,
         WorkItemAllowedAction, WorkItemScope, approval_assignment_separated, audited_fact_operator_actors,
-        authorized_item_fields, detail_scope, ensure_generic_work_item_mutation, expected_task_version,
-        has_assignment_candidate_access, non_empty_assignment_actors,
+        detail_scope, ensure_generic_work_item_mutation, expected_task_version,
+        has_assignment_candidate_access, has_item_access, non_empty_assignment_actors,
         purchase_order_fulfillment_responsibility_id,
     };
     use crate::entity::work_item::{
@@ -169,11 +171,12 @@ mod tests {
     }
 
     fn procurement_access(actor_id: &str) -> TaskEligibility {
-        TaskEligibility::new(actor_id.to_string()).with_permissions(PermissionSet::new(
-            vec!["purchase_order:create".to_string()]
-                .into_iter()
-                .map(|code: String| Permission::parse(code).unwrap()),
-        ))
+        TaskEligibility::new(AuditActor::new(actor_id.to_string(), actor_id.to_string(), AccountKind::Admin))
+            .with_permissions(PermissionSet::new(
+                vec!["purchase_order:create".to_string()]
+                    .into_iter()
+                    .map(|code: String| Permission::parse(code).unwrap()),
+            ))
     }
 
     fn procurement_facts() -> ObjectFactMap {
@@ -277,13 +280,17 @@ mod tests {
         } else {
             &["receivable_account:detail"]
         };
-        TaskEligibility::new(actor_id.to_string())
+        TaskEligibility::new(AuditActor::new(actor_id.to_string(), actor_id.to_string(), AccountKind::Admin))
             .with_permissions(PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())))
     }
 
     fn managed_action_access() -> TaskEligibility {
-        let mut access = TaskEligibility::new("manager-1".to_string())
-            .with_permissions(PermissionSet::new([Permission::parse("work_item:manage").unwrap()]));
+        let mut access = TaskEligibility::new(AuditActor::new(
+            "manager-1".to_string(),
+            "manager-1".to_string(),
+            AccountKind::Admin,
+        ))
+        .with_permissions(PermissionSet::new([Permission::parse("work_item:manage").unwrap()]));
         access.task.managed_task_ids.insert("wi-managed-w29".into());
         access
     }
@@ -362,14 +369,19 @@ mod tests {
     fn current_owner_does_not_bypass_revoked_object_participation() {
         let mut item = w13_delta_item();
         item.reassign("finance-user", Instant::from_unix_secs(101)).unwrap();
-        let access = TaskEligibility::new("finance-user".to_string()).with_permissions(PermissionSet::new(
+        let access = TaskEligibility::new(AuditActor::new(
+            "finance-user".to_string(),
+            "finance-user".to_string(),
+            AccountKind::Admin,
+        ))
+        .with_permissions(PermissionSet::new(
             vec!["receivable_account:detail".to_string()]
                 .into_iter()
                 .map(|code: String| Permission::parse(code).unwrap()),
         ));
 
         assert_eq!(item.owner_user_id.as_deref(), Some("finance-user"));
-        assert!(authorized_item_fields(item, &access, &w13_facts()).is_none());
+        assert!(!has_item_access(&item, &access, &w13_facts()));
     }
 
     /// 冻结的当前审批人有对象读取权限即可承接节点，陌生人与撤权者仍被拒绝。
@@ -387,12 +399,12 @@ mod tests {
         let mut access = procurement_access("alice");
         access.task.permissions =
             PermissionSet::new([Permission::parse("purchase_change_order:detail").unwrap()]);
-        assert!(authorized_item_fields(item.clone(), &access, &facts).is_some());
+        assert!(has_item_access(&item, &access, &facts));
         access.task.actor_id = "stranger".into();
-        assert!(authorized_item_fields(item.clone(), &access, &facts).is_none());
+        assert!(!has_item_access(&item, &access, &facts));
         access.task.actor_id = "alice".into();
         access.task.permissions = PermissionSet::default();
-        assert!(authorized_item_fields(item, &access, &facts).is_none());
+        assert!(!has_item_access(&item, &access, &facts));
     }
 
     /// 导入确认的冻结负责人可读取系统批次，陌生人、撤权和缺失事实仍失败关闭。
@@ -421,20 +433,24 @@ mod tests {
             (ObjectKind::LegacyImportBatch, "batch-1".to_string()),
             ObjectFact::new("batch-1", "旧数据导入批次", "__system__"),
         )]);
-        let mut access =
-            TaskEligibility::new("confirmation-owner".to_string()).with_permissions(PermissionSet::new(
-                vec!["legacy_import_batch:detail".to_string()]
-                    .into_iter()
-                    .map(|code: String| Permission::parse(code).unwrap()),
-            ));
+        let mut access = TaskEligibility::new(AuditActor::new(
+            "confirmation-owner".to_string(),
+            "confirmation-owner".to_string(),
+            AccountKind::Admin,
+        ))
+        .with_permissions(PermissionSet::new(
+            vec!["legacy_import_batch:detail".to_string()]
+                .into_iter()
+                .map(|code: String| Permission::parse(code).unwrap()),
+        ));
         assert!(!access.task.can_manage(&item.base.id));
-        assert!(authorized_item_fields(item.clone(), &access, &facts).is_some());
-        assert!(authorized_item_fields(item.clone(), &access, &HashMap::new()).is_none());
+        assert!(has_item_access(&item, &access, &facts));
+        assert!(!has_item_access(&item, &access, &HashMap::new()));
         access.task.actor_id = "stranger".to_string();
-        assert!(authorized_item_fields(item.clone(), &access, &facts).is_none());
+        assert!(!has_item_access(&item, &access, &facts));
         access.task.actor_id = "confirmation-owner".to_string();
         access.task.permissions = PermissionSet::default();
-        assert!(authorized_item_fields(item, &access, &facts).is_none());
+        assert!(!has_item_access(&item, &access, &facts));
     }
 
     #[test]
@@ -450,7 +466,8 @@ mod tests {
             WorkItemType::ProcurementOrderCreation.assignment_separation_policy(),
             AssignmentSeparationPolicy::RoleAndParticipation
         );
-        let fields = authorized_item_fields(item.clone(), &owner_access, &facts).unwrap();
+        assert!(has_item_access(&item, &owner_access, &facts));
+        let fields = super::dto::WorkItemFields::from(item.clone());
         assert!(
             fields
                 .allowed_actions(WorkItemScope::Mine, "buyer-1", &owner_access.task)
@@ -465,6 +482,7 @@ mod tests {
     fn procurement_direct_assignment_still_requires_create_permission() {
         let item = procurement_item("buyer-1");
         let access = TaskEligibility {
+            actor: AuditActor::new("buyer-1".to_string(), "buyer-1".to_string(), AccountKind::Admin),
             task: TaskAccess {
                 actor_id: "buyer-1".to_string(),
                 permissions: PermissionSet::default(),
@@ -473,7 +491,7 @@ mod tests {
             participant_document_ids: HashSet::new(),
         };
 
-        assert!(authorized_item_fields(item.clone(), &access, &procurement_facts()).is_none());
+        assert!(!has_item_access(&item, &access, &procurement_facts()));
         assert!(!has_assignment_candidate_access(&item, &access, &procurement_facts()));
     }
 
@@ -490,6 +508,7 @@ mod tests {
             ObjectFact::new("po-1", "采购入库单 GRN-1", "__system__"),
         )]);
         let access = |codes: &[&str]| TaskEligibility {
+            actor: AuditActor::new("candidate-1".to_string(), "candidate-1".to_string(), AccountKind::Admin),
             task: TaskAccess {
                 actor_id: "candidate-1".to_string(),
                 permissions: PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())),
@@ -536,6 +555,7 @@ mod tests {
             ObjectFact::new("sales-order-1", "销售单 SO-1", "sales-1"),
         )]);
         let access = |codes: &[&str]| TaskEligibility {
+            actor: AuditActor::new("candidate-1".to_string(), "candidate-1".to_string(), AccountKind::Admin),
             task: TaskAccess {
                 actor_id: "candidate-1".to_string(),
                 permissions: PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())),
@@ -563,7 +583,8 @@ mod tests {
         let item = invoice_execution_item("finance-1");
         let facts = invoice_execution_facts();
         let revoked = invoice_execution_access("finance-1", false);
-        let fields = authorized_item_fields(item.clone(), &revoked, &facts).unwrap();
+        assert!(has_item_access(&item, &revoked, &facts));
+        let fields = super::dto::WorkItemFields::from(item.clone());
 
         assert!(
             !fields
@@ -573,7 +594,8 @@ mod tests {
         assert!(!has_assignment_candidate_access(&item, &revoked, &facts));
 
         let full = invoice_execution_access("finance-1", true);
-        let fields = authorized_item_fields(item.clone(), &full, &facts).unwrap();
+        assert!(has_item_access(&item, &full, &facts));
+        let fields = super::dto::WorkItemFields::from(item.clone());
         assert!(
             fields
                 .allowed_actions(WorkItemScope::Mine, "finance-1", &full.task)
@@ -720,6 +742,7 @@ mod tests {
         item.reassign("bob", Instant::from_unix_secs(110)).unwrap();
         item.complete_by_domain_command("bob", Instant::from_unix_secs(120)).unwrap();
         let access = |actor_id: &str| TaskEligibility {
+            actor: AuditActor::new(actor_id.to_string(), actor_id.to_string(), AccountKind::Admin),
             task: TaskAccess {
                 actor_id: actor_id.to_string(),
                 permissions: PermissionSet::default(),

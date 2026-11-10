@@ -183,12 +183,12 @@ impl Application {
         let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_ports(
             db.clone(),
+            rbac.clone(),
             workflow_auth(db.clone(), Arc::clone(&rbac)),
             approval_action_port,
             Arc::new(ApprovalObjectRead),
             Arc::new(ApprovalUpgradeReadModel::new(db.clone())),
             workflow_audit(db.clone()),
-            workflow_object_facts(db.clone()),
         ));
         let notifications = NotificationService::new(db.clone(), Default::default());
         let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::with_sender(

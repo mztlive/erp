@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -18,7 +19,7 @@ use super::mapping::detail_with_copies;
 use crate::error::{Error, Result};
 use crate::repository::BpmExt;
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 退役当前已发布定义。
     ///
     /// # 参数
@@ -73,7 +74,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
-        let rbac = self.auth.clone();
+
+        let identity_service = self.identity.clone();
         let audit = std::sync::Arc::clone(&self.audit);
         let transaction_actor = actor.clone();
         let transaction_policy = policy.clone();
@@ -83,8 +85,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 retire_tx(
+                    &identity_service,
                     &db,
-                    &rbac,
                     graph,
                     RetireTxInput {
                         policy: transaction_policy,
@@ -137,8 +139,8 @@ struct RetireTxInput<'a> {
 /// 回放收据或退役当前已发布定义并写入审计。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前定义图
 /// * `input` - 政策、请求、摘要与操作人
 /// * `executor` - 执行器
@@ -152,14 +154,14 @@ struct RetireTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn retire_tx(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     input: RetireTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let RetireTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, &policy, executor).await?;
+    ensure_definition_admin_permission(identity_service, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,

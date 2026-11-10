@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::{Permission, PermissionSet};
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -22,7 +21,6 @@ use crate::error::{Error, Result};
 /// 统计时限与选中类型共用固定基准，累计状态不保存任何任务或对象事实。
 struct StatsContext<'a> {
     actor: &'a AuditActor,
-    access: &'a QueueAccess,
     selected_types: &'a [WorkItemType],
     as_of: Instant,
     today_start: Instant,
@@ -151,15 +149,12 @@ impl WorkItemReadService {
         all_families: bool,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
-        let mut access = QueueAccess::new(actor.id().to_owned());
-        access.read = Some(self.authorization.query(&actor, "list", executor).await?);
-        access.task.permissions = PermissionSet::new([Permission::parse("work_item:list")?]);
+        let access = QueueAccess::new(self.authorization.query(&actor, "list", executor).await?);
         access.scope_filter(&query)?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs())?;
         let context = StatsContext {
             actor: &actor,
-            access: &access,
             selected_types: &query.work_item_types,
             as_of,
             today_start,
@@ -171,12 +166,12 @@ impl WorkItemReadService {
         if !all_families {
             personal_query.work_item_types = registered_work_item_types();
         }
-        let personal = self.stream_stats(&personal_query, &context, executor).await?;
+        let personal = self.stream_stats(&personal_query, &access, &context, executor).await?;
         let assigned = personal.selected.assigned;
         let selected = if query.scope == WorkItemScope::Mine {
             personal.selected
         } else {
-            self.stream_stats(&query, &context, executor).await?.selected
+            self.stream_stats(&query, &access, &context, executor).await?.selected
         };
         self.validate_access(&access, executor).await?;
         Ok(WorkItemStatsView {
@@ -195,10 +190,11 @@ impl WorkItemReadService {
     async fn stream_stats(
         &self,
         query: &dto::WorkItemListQuery,
+        access: &QueueAccess,
         context: &StatsContext<'_>,
         executor: &mut dyn Executor,
     ) -> Result<StatsCounts> {
-        let mut filter = context.access.scope_filter(query)?;
+        let mut filter = access.scope_filter(query)?;
         apply_due_filter_at(&mut filter, query.due, context.as_of)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
         filter.query = None;
@@ -318,15 +314,12 @@ mod tests {
     fn pending_counts_match_assignment_pages_without_business_or_execution_permissions() {
         use bpm::ids::ApprovalNodeExecutionId;
         use erp_core::ids::WorkItemId;
-        use erp_identity::{Permission, PermissionSet};
 
         use crate::dto::work_item::WorkItemListParams;
         use crate::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
         use crate::service::work_item::read::context::AuthorizedPageCollector;
 
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = QueueAccess::new("actor".into())
-            .with_permissions(PermissionSet::new([Permission::parse("work_item:list").unwrap()]));
         let at = Instant::from_unix_secs(1_790_784_000);
         let approval: dto::WorkItemFields = WorkItem::new_document_approval(
             WorkItemId::new("approval"),
@@ -363,7 +356,7 @@ mod tests {
         }
         let params: WorkItemListParams = serde_json::from_value(serde_json::json!({"scope":"mine"})).unwrap();
         let query = params.normalized().unwrap();
-        let context = context(&actor, &access, &query.work_item_types, at);
+        let context = context(&actor, &query.work_item_types, at);
         let mut counts = StatsCounts::default();
         // 来源事实缺失或授权未就绪不改变持久化任务数量。
         counts.extend_pending(rows.clone(), &query, &context);
@@ -386,14 +379,9 @@ mod tests {
     }
 
     /// 使用固定业务时点构造实际计数上下文。
-    fn context<'a>(
-        actor: &'a AuditActor,
-        access: &'a QueueAccess,
-        types: &'a [WorkItemType],
-        as_of: Instant,
-    ) -> StatsContext<'a> {
+    fn context<'a>(actor: &'a AuditActor, types: &'a [WorkItemType], as_of: Instant) -> StatsContext<'a> {
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs()).unwrap();
-        StatsContext { actor, access, selected_types: types, as_of, today_start, tomorrow_start }
+        StatsContext { actor, selected_types: types, as_of, today_start, tomorrow_start }
     }
 
     /// 构造已由当前任务分配确定的最小统计身份。
@@ -422,9 +410,8 @@ mod tests {
     #[test]
     fn batches_release_items_and_keep_selected_and_personal_family_counts() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = QueueAccess::new("actor".into());
         let selected_types = [WorkItemType::DocumentApproval];
-        let context = context(&actor, &access, &selected_types, Instant::from_unix_secs(1_790_784_000));
+        let context = context(&actor, &selected_types, Instant::from_unix_secs(1_790_784_000));
         let drops = Arc::new(AtomicUsize::new(0));
         let mut counts = StatsCounts::default();
         for rows in [
@@ -461,9 +448,8 @@ mod tests {
     #[test]
     fn type_timing_keeps_missing_dates_and_day_boundaries_distinct() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = QueueAccess::new("actor".into());
         let types = [WorkItemType::DocumentApproval];
-        let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_787_600));
+        let context = context(&actor, &types, Instant::from_unix_secs(1_790_787_600));
         let mut counts = StatsCounts::default();
         for due in [
             None,
@@ -486,9 +472,8 @@ mod tests {
     #[test]
     fn type_counts_cover_multiple_pages_and_empty_queues() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = QueueAccess::new("actor".into());
         let types = [WorkItemType::ProcurementOrderCreation];
-        let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_784_000));
+        let context = context(&actor, &types, Instant::from_unix_secs(1_790_784_000));
         let mut counts = StatsCounts::default();
         counts.extend_batch([], &context);
         assert!(counts.work_item_type_counts.is_empty());
@@ -510,10 +495,9 @@ mod tests {
     #[test]
     fn midnight_due_and_overdue_boundaries_use_response_timestamp() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = QueueAccess::new("actor".into());
         let types = [WorkItemType::BusinessException];
         let midnight = Instant::from_unix_secs(1_790_697_600);
-        let context = context(&actor, &access, &types, midnight);
+        let context = context(&actor, &types, midnight);
         assert_eq!(context.today_start, midnight);
         let mut counts = StatsCounts::default();
         let before = Instant::from_unix_secs(midnight.unix_secs() - 1);

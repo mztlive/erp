@@ -253,13 +253,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         let access = self.task_eligibility(actor, &item, executor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
-        let fields = self
-            .authorized_fields_for_items(vec![item.clone()], &access, executor)
-            .await?
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".to_string()))?;
-        let view_access = ViewAccess::from_fields(&fields, scope, &access.task);
+        self.require_business_read(&item, actor, &access, executor).await?;
+        let view_access = ViewAccess::from_fields(&item.clone().into(), scope, &access.task);
         self.authorization.require(actor, "detail", id, executor).await?;
         Ok(AuthorizedWorkItem {
             item,

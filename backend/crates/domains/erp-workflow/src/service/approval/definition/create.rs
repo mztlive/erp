@@ -5,6 +5,7 @@ use bpm::graph::{
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use bpm::model::ApprovalProcessDefinition;
 use entity_core::BaseModel;
+use erp_identity::SharedRbacService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -24,7 +25,7 @@ use crate::repository::BpmExt;
 use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::service::approval::copies::validate_recipients;
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 创建定义草稿。
     ///
     /// # 参数
@@ -75,7 +76,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
-        let rbac = self.auth.clone();
+
+        let identity_service = self.identity.clone();
         let audit = std::sync::Arc::clone(&self.audit);
         let transaction_actor = actor.clone();
         let transaction_policy = policy.clone();
@@ -85,8 +87,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 create_draft_tx(
+                    &identity_service,
                     &db,
-                    &rbac,
                     CreateDraftTxInput {
                         policy: &transaction_policy,
                         name: &name,
@@ -148,8 +150,8 @@ struct CreateDraftTxInput<'a> {
 /// 回放收据或构造并持久化新草稿。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
 /// * `input` - 政策、请求、摘要与操作人
 /// * `executor` - 执行器
 ///
@@ -162,13 +164,13 @@ struct CreateDraftTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn create_draft_tx(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     input: CreateDraftTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let CreateDraftTxInput { policy, name, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, policy, executor).await?;
+    ensure_definition_admin_permission(identity_service, actor, policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -181,7 +183,8 @@ async fn create_draft_tx(
     }
     let CreateDraftWriteStep::PersistNewDraftAndReceipt =
         decide_create_draft_write(db.bpm_workflow().find_active_draft(policy.process_kind, executor).await?)?;
-    let graph = build_new_draft(db, rbac, policy, name, request.draft_source, actor, executor).await?;
+    let graph =
+        build_new_draft(identity_service, db, policy, name, request.draft_source, actor, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     persist_new_draft(db, &graph, executor).await?;
@@ -192,7 +195,7 @@ async fn create_draft_tx(
             .await?
             .ok_or_else(second_draft_error)?;
         if let Some(mut config) = db.approval_copies().config(&source.base.id, executor).await? {
-            validate_recipients(rbac, &config.rules, executor).await?;
+            validate_recipients(identity_service, &config.rules, executor).await?;
             config.base = BaseModel::new(graph.definition.base.id.clone());
             db.approval_copies().save_config(&config, executor).await?;
         }
@@ -205,8 +208,8 @@ async fn create_draft_tx(
 
 /// 构造空草稿或从当前发布复制。
 async fn build_new_draft(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     policy: &ProcessRequiredApprovalPolicy,
     name: &str,
     draft_source: DraftSource,
@@ -217,7 +220,7 @@ async fn build_new_draft(
     match draft_source {
         DraftSource::Empty => empty_draft(policy, name, version, actor),
         DraftSource::CurrentPublished => {
-            copy_published_draft(db, rbac, policy, name, version, actor, session).await
+            copy_published_draft(identity_service, db, policy, name, version, actor, session).await
         },
     }
 }
@@ -245,8 +248,8 @@ fn empty_draft(
 /// 从当前发布定义复制节点到新草稿。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - MongoDB 数据库
-/// * `rbac` - 共享 RBAC 服务
 /// * `policy` - 当前单据类型必须审批政策
 /// * `name` - 已由 BPM 规范化的草稿名称
 /// * `version` - 新草稿业务版本
@@ -262,8 +265,8 @@ fn empty_draft(
 /// # 关键业务约束
 /// Service 只生成新 ID 与查询账号，节点复制、用途清理、入口和连线规则全部由 BPM 提供。
 async fn copy_published_draft(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     policy: &ProcessRequiredApprovalPolicy,
     name: &str,
     version: u32,
@@ -279,7 +282,7 @@ async fn copy_published_draft(
     let identities = next_copied_node_identities(source.nodes.len());
     let nodes = copy_nodes_for_definition(&source.nodes, definition_id.clone(), &identities, at)
         .map_err(map_model_error)?;
-    validate_assignees(db, rbac, policy, &assignee_ids(&nodes), session).await?;
+    validate_assignees(identity_service, db, policy, &assignee_ids(&nodes), session).await?;
     let transition_ids = next_transition_ids(nodes.len());
     DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
         definition_id,

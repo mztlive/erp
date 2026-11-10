@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessInstanceId;
+use erp_identity::Permission;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::{ApprovalRuntimeService, hidden_not_found};
@@ -9,7 +10,6 @@ use crate::entity::approval_progress::ViewedApprovalProgress;
 use crate::error::Result;
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::BpmExt;
-use crate::service::approval::approval_action_roles_with_executor;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 查询当前有效账号发起的未读审批数量。
@@ -56,9 +56,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         version: u64,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if approval_action_roles_with_executor(&self.auth, actor, "approval_instance:read", executor)
+        if self
+            .identity
+            .qualified_permissions(actor, &[Permission::parse("approval_instance:read")?], executor)
             .await?
-            .is_empty()
+            .is_none_or(|qualified| qualified.permissions().is_empty())
         {
             return Err(hidden_not_found());
         }

@@ -128,9 +128,8 @@ async fn authorize_posting<A: WorkflowAuthorizationPort>(
     ex: &mut dyn Executor,
 ) -> Result<()> {
     input.work_items.ensure_domain_decision_access(input.actor, input.work_item, ex).await?;
-    let auth = &input.work_items.auth;
     super::reviewers::ensure_reviewer(
-        auth,
+        &input.work_items.identity,
         input.actor_id,
         &input.statement.prepared_by,
         &input.statement.business_org_unit_id,

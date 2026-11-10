@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{QueueAccess, detail_scope};
+use super::access::QueueAccess;
 use super::context::*;
 use super::stats::apply_due_filter;
 use super::{
@@ -147,7 +147,7 @@ impl WorkItemReadService {
         executor: &mut dyn Executor,
     ) -> Result<WorkItemPageView> {
         let (access, identity_version) = self.queue_access_with_version(&actor, executor).await?;
-        let queue_context_id = queue_context_id(actor.id(), &query, &access);
+        let queue_context_id = queue_context_id(actor.id(), &query, &access.version());
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
         let mut filter = access.scope_filter(&query)?;
         apply_due_filter(&mut filter, query.due)?;
@@ -433,7 +433,7 @@ impl WorkItemReadService {
                 .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
             let item_id = item.base.id.clone();
             let access = self.task_access(actor, action, executor).await?;
-            let scope = detail_scope(&item, actor.id(), &access)?;
+            let scope = WorkItemScope::for_task(&item, actor.id());
             let fields = dto::WorkItemFields::from(item);
             let queue_context_id = single_item_context_id(actor.id(), &item_id);
             let projected = self.projected_access(&access, std::slice::from_ref(&fields), executor).await?;
@@ -665,8 +665,6 @@ mod tests {
 
     #[test]
     fn queue_context_binds_handler_and_order_filters_for_cross_page_version() {
-        use crate::service::work_item::read::access::QueueAccess;
-
         fn query_with(
             handler: &[&str],
             sales: &[&str],
@@ -693,20 +691,16 @@ mod tests {
             }
         }
 
-        fn access() -> QueueAccess {
-            QueueAccess::new("actor".to_string())
-        }
-
-        let access = access();
+        let access = "authorization-version";
         let base = query_with(&[], &[], &[]);
-        let base_context = super::queue_context_id("actor", &base, &access);
-        assert_eq!(base_context, super::queue_context_id("actor", &query_with(&[], &[], &[]), &access));
+        let base_context = super::queue_context_id("actor", &base, access);
+        assert_eq!(base_context, super::queue_context_id("actor", &query_with(&[], &[], &[]), access));
         for varied in [
             query_with(&["handler-1"], &[], &[]),
             query_with(&[], &["so-1"], &[]),
             query_with(&[], &[], &["po-1"]),
         ] {
-            let varied_context = super::queue_context_id("actor", &varied, &access);
+            let varied_context = super::queue_context_id("actor", &varied, access);
             assert_ne!(base_context, varied_context);
             assert!(super::ensure_queue_context(&Some(base_context.clone()), &varied_context).is_err());
             let base_version = super::queue_scope_version("identity", &base_context, "result");

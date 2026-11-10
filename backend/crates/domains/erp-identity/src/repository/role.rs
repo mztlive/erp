@@ -7,22 +7,6 @@ use crate::entity::Role;
 /// 角色集合仓储的域特有查询。
 #[allow(async_fn_in_trait)]
 pub trait RoleRepositoryExt {
-    /// 判断指定角色 ID 是否对应未软删除记录。
-    ///
-    /// 本方法不把 `disabled` 解释为不存在；只用于种子过程区分已软删除身份，
-    /// 并通过 `_id` 窄投影在首条命中后停止。
-    ///
-    /// # 参数
-    /// * `id` - 角色 ID
-    /// * `executor` - 调用方事务或非事务执行器
-    ///
-    /// # 返回
-    /// 角色存在且未软删除时返回 `true`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    async fn exists_active_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<bool>;
-
     /// 查询全部未删除且启用的角色。
     ///
     /// # 参数
@@ -93,10 +77,6 @@ pub trait RoleRepositoryExt {
 }
 
 impl RoleRepositoryExt for Repository<'_, Role> {
-    async fn exists_active_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<bool> {
-        self.exists(doc! { "id": id }, executor).await
-    }
-
     async fn list_enabled(&self, executor: &mut dyn Executor) -> Result<Vec<Role>> {
         self.find_many(
             doc! {

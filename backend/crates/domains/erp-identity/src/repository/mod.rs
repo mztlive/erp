@@ -30,3 +30,5 @@ pub use person_directory::PersonQueryQualificationRepositoryExt;
 pub use role::RoleRepositoryExt;
 
 pub mod resource_grants;
+
+pub(crate) mod fingerprint;

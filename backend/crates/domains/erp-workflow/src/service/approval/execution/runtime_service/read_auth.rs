@@ -7,7 +7,7 @@ use bpm::engine::Eligibility;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use mongodb::Database;
+use erp_identity::SharedRbacService;
 use persistence_core::Executor;
 
 use super::super::authorization::{AuthorizationFailure, converge_eligibility};
@@ -16,7 +16,7 @@ use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{ApprovalObjectReadPort, OrderTaskSource, WorkflowAuthorizationPort};
+use crate::ports::{OrderTaskSource, WorkflowAuthorizationPort};
 use crate::repository::bpm::ApprovalInstanceSummary;
 use crate::service::approval::approval_participant_permissions_with_executor;
 use crate::service::approval::business_adapter::{adapter_spec_of, ensure_separation_of_duties};
@@ -73,6 +73,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 /// 将审批人资格收敛为 BPM 可消费的 Eligible/Blocked。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC 服务
 /// * `object_read` - 注入的对象读取端口
@@ -88,9 +89,9 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 /// # 关键业务约束
 /// 任一资格失败必须收敛为 blocker，不得回滚为空。
 pub(super) async fn revalidate_decision_approver(
-    _db: &Database,
+    identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
-    _object_read: &dyn ApprovalObjectReadPort,
+
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Eligibility> {
@@ -105,7 +106,7 @@ pub(super) async fn revalidate_decision_approver(
     if spec.document_type != snapshot.document_type {
         return Err(hidden_not_found());
     }
-    let account = rbac.rbac()?.directory().account(assignee_id, executor).await?;
+    let account = identity_service.directory().account(assignee_id, executor).await?;
     let failure = match account {
         None => Some(AuthorizationFailure::AccountInactive),
         Some(account)
@@ -119,7 +120,9 @@ pub(super) async fn revalidate_decision_approver(
             let scope_actor = authenticated_actor
                 .cloned()
                 .unwrap_or_else(|| AuditActor::new(account.id.clone(), account.id.clone(), account.kind));
-            if !approval_participant_permissions_with_executor(rbac, &scope_actor, executor).await? {
+            if !approval_participant_permissions_with_executor(identity_service, &scope_actor, executor)
+                .await?
+            {
                 Some(AuthorizationFailure::NotEligible)
             } else if ensure_separation_of_duties(
                 separation_policy,

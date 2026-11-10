@@ -1,70 +1,48 @@
-//! 命令路径上的投影辅助，与变更结果共用。
+//! 单任务业务读取资格；不构造展示投影。
 
 use std::collections::HashSet;
 
 use application_core::AuditActor;
 use persistence_core::Executor;
 
-use super::access::{TaskEligibility, authorized_item_fields};
+use super::WorkItemService;
+use super::access::{TaskEligibility, has_item_access};
 use super::order_access::filter_order_facts;
-use super::{WorkItemService, dto};
 use crate::entity::work_item::WorkItem;
-use crate::error::Result;
-use crate::ports::ObjectFactMap;
+use crate::error::{Error, Result};
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
 
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
-    /// 重读对象事实，只保留当前快照仍有权看到的投影。
-    ///
+    /// 在当前执行器验证单任务业务读取资格，保留原来源入口权限。
     /// # 参数
-    /// * `items` - 待投影的工作项
-    /// * `access` - 当前账号访问快照
-    /// * `executor` - 授权和业务读取共用的执行器
-    ///
+    /// item 为当前任务，actor 和 access 为当前身份及资格，executor 沿用原事务。
     /// # 返回
-    /// 返回审批任务责任链匹配的投影，以及普通任务经对象事实过滤后的投影。
-    ///
+    /// 审批责任链或普通任务的来源、参与关系和版本均满足时成功。
     /// # 错误
-    /// 账号、审批责任链或对象事实读取失败时返回对应错误。
-    pub async fn authorized_fields_for_items(
+    /// 无业务读取资格时拒绝，取证故障保留原错误。
+    pub(super) async fn require_business_read(
         &self,
-        items: Vec<WorkItem>,
+        item: &WorkItem,
+        actor: &AuditActor,
         access: &TaskEligibility,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<dto::WorkItemFields>> {
-        let mut ordinary = Vec::new();
-        let mut approval_fields = Vec::new();
-        let actor = self
-            .identity
-            .directory()
-            .account(&access.task.actor_id, executor)
-            .await?
-            .map(|account| AuditActor::new(account.id, account.login_account, account.kind));
-        for item in items {
-            if item.work_item_type.is_document_approval() {
-                if let Some(actor) = &actor
-                    && approval_task_readable_with_executor(&self.db, &self.auth, actor, &item, executor)
-                        .await?
-                {
-                    approval_fields.push(dto::WorkItemFields::from(item));
-                }
-            } else {
-                ordinary.push(item);
-            }
+    ) -> Result<()> {
+        let readable = if item.work_item_type.is_document_approval() {
+            approval_task_readable_with_executor(&self.identity, &self.db, &self.auth, actor, item, executor)
+                .await?
+        } else {
+            let policy = item
+                .work_item_type
+                .brief_relation(&item.business_object_type)
+                .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".into()))?;
+            let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
+            let mut facts = self.facts.load_object_facts(&keys, executor).await?;
+            filter_order_facts(&self.auth, actor, &mut facts, executor).await?;
+            has_item_access(item, access, &facts)
+        };
+        if !readable {
+            return Err(Error::Forbidden("当前账号无权查看该业务对象".into()));
         }
-        let items = ordinary;
-        let keys = items
-            .iter()
-            .filter_map(|item| {
-                item.work_item_type
-                    .brief_relation(&item.business_object_type)
-                    .map(|policy| (policy.object_kind, item.business_object_id.clone()))
-            })
-            .collect::<HashSet<_>>();
-        let mut facts: ObjectFactMap = self.facts.load_object_facts(&keys, executor).await?;
-        filter_order_facts(&self.auth, &access.task.actor_id, &mut facts, executor).await?;
-        approval_fields
-            .extend(items.into_iter().filter_map(|item| authorized_item_fields(item, access, &facts)));
-        Ok(approval_fields)
+        Ok(())
     }
 }

@@ -86,25 +86,26 @@ Redis、消息广播或变更流。revision 查询失败时授权请求直接失
 `data_scope` 时，启动流程会为 `role-root` 写入公司级范围，供工作台 `managed` 队列与
 指定责任任务证明组织覆盖；管理员已配置或软删除的范围不覆盖、不重建。
 
-### 业务预定义角色
+### 业务岗位模板
 
-在 `ensure_root_role` 之后，启动流程还会调用 `ensure_predefined_roles`，按固定角色 ID
-幂等写入业务岗位角色（销售、销售领导、采购、运营、仓储、财务、管理层、系统管理员）。
+HTTP 应用启动时在 `ensure_root_role` 之后执行 `ensure_identity_foundation`，仅准备组织基础与目录资格。
+业务岗位必须由管理员通过“角色与权限 → 从内建岗位生成”显式创建，启动过程不创建、升级或补权业务岗位。
 
-行为约定：
+执行约定：
 
-- **不存在则创建**：写入角色实体与推荐 Casbin 权限（`system=false`，可分配、可后续调整）。
-- **已存在且仍等于已知旧种子**：整集升级到当前推荐权限（用于权限替换，例如删旧加新）。
-- **已存在但不等于旧种子**：只追加当前种子中尚未覆盖的权限；**不删除**管理员额外授予的
-  权限，也**不覆盖**名称、启停状态与 system 标记。软删除记录不重建、不补权限。
-- **空范围补齐公司级数据范围**：角色尚无任何生效 `data_scope` 时写入 `company` 范围，供
-  指定责任任务的对象参与权校验与主管 `managed` 查询使用；管理员已配置或软删除的范围不覆盖、不重建。
-  `role-root` 使用同一规则，由 `ensure_root_role` 单独补齐，不进入本清单。
-- **不替代 root**：`role-sysadmin` 仅含同步/集成/导入等运维权限，不含账号与角色超级管理，
-  也不含 `*:*`。
-- 业务状态机仍禁止按角色枚举硬编码；预定义角色只是可配置权限的启动种子。
+- 通过 `GET /admin/role-templates` 读取模板；通过 `POST /admin/role-templates/generate`
+  提交模板 ID 和 `expected_policy_version`。操作者必须具有角色创建资格，并能授予所选模板的全部权限。
+- 缺失角色在同一授权策略事务中写入角色、Casbin 权限和审计；策略版本变化时拒绝整批生成。
+- 已有角色保持原配置，包括已改名、停用或软删除的角色；生成操作不补权、不恢复、不覆盖已有权限。
+- 最终权限由 `builtin_role_templates()` 构造。管理层仅保留读取动作及 `work_item:manage`；
+  系统管理员不自动取得 `approval_process` 或 `approval_instance` 权限，也不具有 `*:*`。
+- 角色生成不配置人员数据范围、审批人、付款人或仓库经办人；人员开通时必须分别配置对应资格与责任。
+- 业务状态机不得按岗位角色枚举硬编码；岗位模板仅提供可配置的权限集合。
+- 演示基础初始化通过 `ensure_seeded_role` 显式维护 `role-demo-*` 角色，沿用操作人授权、策略版本和审计约束。
+  该入口不接入应用启动。
 
-推荐权限定义见 `services/src/iam/predefined_roles.rs`，对齐第一期部门职责与 W01 角色入口。
+共享权限定义位于 `crates/domains/erp-identity/src/service/iam/predefined_roles/permission_tables/`；
+最终模板构造位于同目录的 `templates.rs`，岗位权限边界由 `entity/role_template.rs` 约束。
 
 系统超级管理员只能通过 `AdminService::initialize_super_admin` 创建或修复。该方法按包含软删除记录的全局
 账号查找已有身份，并在同一事务中写入传入的名称和新 Argon2 密码、恢复账号、设置启用状态

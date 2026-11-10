@@ -1,83 +1,10 @@
 //! 工作项执行权限与可用账号身份。
 
-use erp_core::{AccountKind, Error, Result};
-use erp_identity::{AccountSummary, Permission};
+use erp_core::{Error, Result};
+use erp_identity::Permission;
 
 use super::{WorkItem, WorkItemType};
 use crate::entity::work_item::required_execution_permissions;
-
-/// 已验证可参与工作项授权计算的账号身份。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AvailableWorkItemAccount {
-    account_id: String,
-    kind: AccountKind,
-}
-
-impl AvailableWorkItemAccount {
-    /// 从统一账号主数据形成可用工作项账号。
-    ///
-    /// # 参数
-    /// * `account` - 当前统一账号事实
-    ///
-    /// # 返回
-    /// 账号处于可登录状态时返回稳定身份与账号类型。
-    ///
-    /// # 错误
-    /// 账号已停用或归档时返回错误。
-    pub fn from_account(account: &AccountSummary) -> Result<Self> {
-        if !account.can_login {
-            return Err(Error::from("工作项账号不可登录"));
-        }
-        Ok(Self { account_id: account.id.clone(), kind: account.kind })
-    }
-
-    /// 从统一账号主数据形成指定类型的可用工作项账号。
-    ///
-    /// # 参数
-    /// * `account` - 当前统一账号事实
-    /// * `expected_kind` - 授权快照冻结的账号类型
-    ///
-    /// # 返回
-    /// 账号可登录且类型未变化时返回稳定身份。
-    ///
-    /// # 错误
-    /// 账号不可登录或类型已变化时返回错误。
-    pub fn from_account_kind(account: &AccountSummary, expected_kind: AccountKind) -> Result<Self> {
-        let available = Self::from_account(account)?;
-        if available.kind != expected_kind {
-            return Err(Error::from("工作项账号类型已变化"));
-        }
-        Ok(available)
-    }
-
-    /// 返回稳定账号 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回统一账号主键。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn account_id(&self) -> &str {
-        &self.account_id
-    }
-
-    /// 返回账号类型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回当前已验证账号类型。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn kind(&self) -> AccountKind {
-        self.kind
-    }
-}
 
 impl WorkItemType {
     /// 判断转派候选人校验是否必须携带完整工作面执行权限快照。

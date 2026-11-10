@@ -1,7 +1,6 @@
 //! Casbin RBAC 服务。
 
 mod database_reset;
-mod seed;
 mod seed_command;
 mod templates;
 

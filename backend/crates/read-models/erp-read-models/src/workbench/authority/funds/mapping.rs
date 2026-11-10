@@ -292,7 +292,9 @@ pub(in crate::workbench) fn invoice_request_fact(
 mod tests {
     use std::collections::HashMap;
 
+    use application_core::AuditActor;
     use entity_core::BaseModel;
+    use erp_core::AccountKind;
     use erp_workflow::ports::ObjectFact;
     use erp_workflow::service::work_item::access::{TaskEligibility, has_object_participation};
     use serde::de::DeserializeOwned;
@@ -343,8 +345,16 @@ mod tests {
 
     #[test]
     fn six_funds_projections_use_domain_creator_and_keep_handlers_separate() {
-        let creator = TaskEligibility::new("domain-creator".into());
-        let handler = TaskEligibility::new("current-handler".into());
+        let creator = TaskEligibility::new(AuditActor::new(
+            "domain-creator".to_string(),
+            "domain-creator".to_string(),
+            AccountKind::Admin,
+        ));
+        let handler = TaskEligibility::new(AuditActor::new(
+            "current-handler".to_string(),
+            "current-handler".to_string(),
+            AccountKind::Admin,
+        ));
         for authority in facts(Some("domain-creator")) {
             assert_eq!(authority.created_by, "domain-creator");
             assert!(has_object_participation(&creator, "", "", &authority));
@@ -357,8 +367,16 @@ mod tests {
 
     #[test]
     fn missing_domain_identity_never_grants_creator_participation() {
-        let creator = TaskEligibility::new("domain-creator".into());
-        let handler = TaskEligibility::new("current-handler".into());
+        let creator = TaskEligibility::new(AuditActor::new(
+            "domain-creator".to_string(),
+            "domain-creator".to_string(),
+            AccountKind::Admin,
+        ));
+        let handler = TaskEligibility::new(AuditActor::new(
+            "current-handler".to_string(),
+            "current-handler".to_string(),
+            AccountKind::Admin,
+        ));
         for authority in facts(None) {
             assert!(authority.created_by.is_empty());
             assert!(!has_object_participation(&creator, "", "", &authority));

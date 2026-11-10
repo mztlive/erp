@@ -10,6 +10,7 @@ use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService};
 use crate::access_control::ResolvedScope;
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::consumer_spec::{ConsumerSpec, OrganizationFacts};
+use crate::entity::fingerprint::Fingerprint;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
@@ -219,7 +220,7 @@ fn qualified_roles(roles: &[Role], granting: &[RoleId]) -> Vec<Role> {
 /// # 参数
 /// 身份、目标和来源、账号与策略版本，以及经本动作证明的角色、组织和范围。
 /// # 返回
-/// 保持既有跨页合同格式的摘要。
+/// v2 稳定编码摘要；保留跨页版本比较合同，旧摘要触发重新分页。
 /// # 错误
 /// 无。
 pub(super) fn scope_version(
@@ -231,15 +232,21 @@ pub(super) fn scope_version(
     state: &OrganizationState,
     scope: &ResolvedScope,
 ) -> String {
-    let (account_version, policy_revision) = versions;
-    let fingerprint = format!(
-        "shared-policy-v1:{account_version}:{policy_revision}:{}:{}:{}:{source:?}:{:?}:{scope:?}",
-        state.version,
-        target.0,
-        target.1,
-        roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>(),
-    );
-    format!("{:x}", md5::compute(format!("{user}:{fingerprint}").as_bytes()))
+    // v2 字段顺序：账号、账号/策略/组织版本、目标、来源、无序角色、范围。
+    let mut hash = Fingerprint::new("shared-policy-v2");
+    hash.text(user);
+    hash.number(versions.0);
+    hash.number(versions.1);
+    hash.number(state.version);
+    for value in [target.0, target.1, source.0, source.1] {
+        hash.text(value);
+    }
+    hash.unordered(roles, |hash, role| {
+        hash.text(&role.base.id);
+        hash.number(role.base.version);
+    });
+    hash.scope(scope);
+    hash.finish()
 }
 
 #[cfg(test)]
@@ -283,6 +290,7 @@ mod tests {
     fn scope_versions_keep_each_source_and_all_authorization_versions() {
         let role = Role::new(RoleId::parse("role-finance").unwrap(), RoleData::new("财务")).unwrap();
         let mut roles = vec![role];
+        roles[0].base.version = 0;
         let mut state = OrganizationState { version: 4, ..Default::default() };
         let scope = ResolvedScope {
             role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
@@ -291,6 +299,7 @@ mod tests {
         let target = ("invoice", "list");
         let source = ("sales_order", "list");
         let version = scope_version("finance", target, source, (2, 3), &roles, &state, &scope);
+        assert_eq!(version, "fd4cfc9427c3662ca4f5922dbf4bf64c");
         assert_eq!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
         for (user, changed_target, changed_source, versions) in [
             ("other", target, source, (2, 3)),
@@ -312,5 +321,46 @@ mod tests {
         state.version -= 1;
         let denied = ResolvedScope { role_clauses: vec![], user_limit: None };
         assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &denied));
+    }
+
+    /// 角色和条款顺序不改变范围版本；个人上限与条款字段变化仍使其失效。
+    #[test]
+    fn scope_versions_ignore_role_order_but_bind_limits_and_dimensions() {
+        let roles = vec![
+            Role::new(RoleId::parse("first").unwrap(), RoleData::new("甲")).unwrap(),
+            Role::new(RoleId::parse("second").unwrap(), RoleData::new("乙")).unwrap(),
+        ];
+        let state = OrganizationState::default();
+        let scope = ResolvedScope {
+            role_clauses: vec![
+                ScopeClause { self_owned: true, ..Default::default() },
+                ScopeClause { collaborative: true, ..Default::default() },
+            ],
+            user_limit: None,
+        };
+        let hash = |roles: &[Role], scope: &ResolvedScope| {
+            scope_version("u", ("invoice", "list"), ("sales_order", "list"), (1, 2), roles, &state, scope)
+        };
+        let original = hash(&roles, &scope);
+        let mut reversed = scope.clone();
+        reversed.role_clauses.reverse();
+        assert_eq!(original, hash(&roles.into_iter().rev().collect::<Vec<_>>(), &reversed));
+        let roles = Vec::new();
+        let original = hash(&roles, &scope);
+        let clauses = [
+            ScopeClause::default(),
+            ScopeClause { company: true, ..Default::default() },
+            ScopeClause { self_owned: true, ..Default::default() },
+            ScopeClause { collaborative: true, ..Default::default() },
+            ScopeClause { org_unit_ids: ["org".into()].into(), ..Default::default() },
+            ScopeClause { settlement_party_ids: ["party".into()].into(), ..Default::default() },
+            ScopeClause { warehouse_ids: ["warehouse".into()].into(), ..Default::default() },
+        ];
+        let versions: BTreeSet<_> = clauses
+            .into_iter()
+            .map(|limit| hash(&roles, &ResolvedScope { user_limit: Some(limit), ..scope.clone() }))
+            .collect();
+        assert_eq!(versions.len(), 7);
+        assert!(!versions.contains(&original));
     }
 }

@@ -4,7 +4,7 @@ use std::result::Result as StdResult;
 use std::slice;
 
 use application_core::AuditActor;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{Permission, PermissionSet, SharedRbacService};
 use persistence_core::{Executor, NoTransaction};
 
 use super::dto::ApprovalRecoveryAuthorization;
@@ -119,49 +119,6 @@ impl DefinitionManagementVisibility {
     }
 }
 
-/// 重验当前审批读取主体仍是同类型的有效账号。
-///
-/// # 参数
-/// * `auth` - 注入的授权 Port
-/// * `actor` - Handler 已认证但可能已经失效的身份快照
-///
-/// # 返回
-/// 账号仍存在、类型未漂移且允许登录时返回 `true`；不存在、停用或类型漂移时
-/// 返回 `false`。
-///
-/// # 错误
-/// 账号仓储读取失败时返回服务错误。
-///
-/// # 关键业务约束
-/// 调用方必须在读取具体审批资源前执行本重验，并把 `false` 映射为不泄露资源
-/// 存在性的拒绝结果。
-pub async fn approval_actor_is_active<A: WorkflowAuthorizationPort>(
-    auth: &A,
-    actor: &AuditActor,
-) -> Result<bool> {
-    approval_actor_is_active_with_executor(auth, actor, &mut NoTransaction).await
-}
-
-/// 在调用方执行器的同一数据库快照内重验审批主体仍有效。
-///
-/// # 参数
-/// * `auth` - 注入的授权 Port
-/// * `actor` - Handler 已认证的身份快照
-/// * `executor` - 调用方持有的事务或非事务执行器
-///
-/// # 返回
-/// 账号仍存在、类型未漂移且允许登录时返回 `true`。
-///
-/// # 错误
-/// 账号仓储读取失败时返回服务错误。
-pub async fn approval_actor_is_active_with_executor<A: WorkflowAuthorizationPort>(
-    auth: &A,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    Ok(auth.rbac()?.directory().actor_is_active(actor, executor).await?)
-}
-
 /// 计算定义管理的类型级可见范围。
 ///
 /// 只按各 `DocumentType` 已注册的 `definition_admin_permission` 与
@@ -170,7 +127,7 @@ pub async fn approval_actor_is_active_with_executor<A: WorkflowAuthorizationPort
 /// 同一个仍启用的角色实际授予目标类型权限。
 ///
 /// # 参数
-/// * `rbac` - 注入的授权 Port
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `actor` - 已认证操作人
 ///
 /// # 返回
@@ -179,16 +136,16 @@ pub async fn approval_actor_is_active_with_executor<A: WorkflowAuthorizationPort
 /// # 错误
 /// 角色、政策读取或 RBAC 判定失败时返回服务错误。
 pub async fn definition_management_visibility(
-    rbac: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
 ) -> Result<DefinitionManagementVisibility> {
-    definition_management_visibility_with_executor(rbac, actor, &mut NoTransaction).await
+    definition_management_visibility_with_executor(identity_service, actor, &mut NoTransaction).await
 }
 
 /// 在调用方执行器的同一数据库快照内计算定义与运行管理的类型级可见范围。
 ///
 /// # 参数
-/// * `rbac` - 注入的授权 Port
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `actor` - 已认证操作人
 /// * `executor` - 调用方持有的事务或非事务执行器
 ///
@@ -198,7 +155,7 @@ pub async fn definition_management_visibility(
 /// # 错误
 /// 角色、政策读取或 RBAC 判定失败时返回服务错误。
 pub async fn definition_management_visibility_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionManagementVisibility> {
@@ -218,7 +175,7 @@ pub async fn definition_management_visibility_with_executor(
         .flat_map(|(_, define, runtime)| [define.as_str(), runtime.as_str()])
         .map(Permission::parse)
         .collect::<StdResult<Vec<_>, _>>()?;
-    let qualification = rbac.rbac()?.qualified_permissions(actor, &required, executor).await?;
+    let qualification = identity_service.qualified_permissions(actor, &required, executor).await?;
     let Some(qualification) = qualification else {
         return Ok(DefinitionManagementVisibility::default());
     };
@@ -255,47 +212,23 @@ fn visibility_from_enforced_permissions(
     DefinitionManagementVisibility::from_type_permissions(definition_admin_types, runtime_admin_types)
 }
 
-/// 在当前执行器中证明静态动作由仍启用的角色授予。
-///
-/// # 参数
-/// * `rbac` - 权限事实端口。
-/// * `actor` - 已认证主体。
-/// * `permission` - 静态动作权限。
-/// * `executor` - 当前事务执行器。
-/// # 返回
-/// 返回有效授权角色；空集表示无动作权限，不产生对象访问权。
-/// # 错误
-/// 账号失效或策略版本变化时失败关闭。
-pub async fn approval_action_roles_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    permission: &str,
-    executor: &mut dyn Executor,
-) -> Result<Vec<String>> {
-    let permission = Permission::parse(permission)?;
-    let qualified = rbac.rbac()?.qualified_permissions(actor, slice::from_ref(&permission), executor).await?;
-    Ok(qualified
-        .map(|value| value.roles(&permission).into_iter().map(|role| role.to_string()).collect())
-        .unwrap_or_default())
-}
-
 /// 校验候选审批人同一启用角色同时授予审批读取与决定能力。
 ///
 /// # 参数
-/// * `rbac` / `actor` / `executor` - 当前授权事实及事务快照。
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// * `identity_service` / `actor` / `executor` - 当前授权事实及事务快照。
 /// # 返回
 /// 资格成立时返回 true；该结果不授予任何具体单据读取权。
 /// # 错误
 /// 账号或策略读取失败时拒绝。
 pub async fn approval_participant_permissions_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     let required =
         [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
-    Ok(rbac
-        .rbac()?
+    Ok(identity_service
         .qualified_permissions(actor, &required, executor)
         .await?
         .is_some_and(|qualified| qualified.same_role(&required)))
@@ -304,6 +237,7 @@ pub async fn approval_participant_permissions_with_executor(
 /// 证明运行管理动作、类型管理资格和真实业务来源同时成立。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `rbac` / `actor` / `executor` - 当前身份和授权事务。
 /// * `permission` - 当前管理动作。
 /// * `document_type` / `document_id` - 精确主体。
@@ -312,6 +246,7 @@ pub async fn approval_participant_permissions_with_executor(
 /// # 错误
 /// 任何动作、类型或来源权限不足时拒绝。
 pub async fn require_approval_management_with_executor(
+    identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     permission: &str,
@@ -326,8 +261,7 @@ pub async fn require_approval_management_with_executor(
         .into_iter()
         .map(Permission::parse)
         .collect::<StdResult<Vec<_>, _>>()?;
-    let qualified = rbac
-        .rbac()?
+    let qualified = identity_service
         .qualified_permissions(actor, &required, executor)
         .await?
         .ok_or_else(|| Error::Forbidden("审批管理账号已失效".into()))?;
@@ -336,7 +270,7 @@ pub async fn require_approval_management_with_executor(
     {
         return Err(Error::Forbidden("缺少审批动作、类型管理资格或业务来源访问权".into()));
     }
-    rbac.rbac()?.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?;
+    identity_service.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?;
     Ok(())
 }
 
@@ -346,7 +280,7 @@ pub async fn require_approval_management_with_executor(
 /// 角色绑定、启用角色和 policy 版本；具体恢复命令另验类型管理与真实业务来源。
 ///
 /// # 参数
-/// * `rbac` - 授权端口
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `actor` - 已认证操作人
 ///
 /// # 返回
@@ -355,13 +289,13 @@ pub async fn require_approval_management_with_executor(
 /// # 错误
 /// 账号失效、缺少恢复权限、授权读取失败，或有限次重试后策略版本仍在变化时返回错误。
 pub async fn approval_recovery_authorization(
-    rbac: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
 ) -> Result<ApprovalRecoveryAuthorization> {
     let permission = Permission::parse("approval_instance:resume")?;
-    let identity = rbac.rbac()?;
+
     for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-        let qualified = identity
+        let qualified = identity_service
             .qualified_permissions(actor, slice::from_ref(&permission), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Forbidden("恢复账号不存在、已停用或身份已变化".into()))?;
@@ -369,7 +303,7 @@ pub async fn approval_recovery_authorization(
         if roles.is_empty() {
             return Err(Error::Forbidden("缺少审批恢复权限".into()));
         }
-        if qualified.policy_revision() == identity.current_policy_revision().await? {
+        if qualified.policy_revision() == identity_service.current_policy_revision().await? {
             return Ok(ApprovalRecoveryAuthorization {
                 actor_kind: actor.kind(),
                 policy_revision: qualified.policy_revision(),
@@ -390,6 +324,7 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
 /// 在调用方事务快照中形成绑定升级的三重授权证明。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `rbac` - 共享 RBAC 服务
 /// * `actor` - 已在同一事务中重验为有效的操作人
 /// * `document_type` - 强业务对象证明的精确单据类型
@@ -410,6 +345,7 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
 /// fence。每项权限各自只能使用真正授予该权限的启用角色
 /// 对象范围；三项权限可以来自不同角色。
 pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
+    identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     document_type: DocumentType,
@@ -421,11 +357,10 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     let upgrade = Permission::parse("approval_instance:upgrade_binding")?;
     let read = Permission::parse("approval_instance:read")?;
     let required = [definition.clone(), upgrade.clone(), read.clone()];
-    let qualified = rbac
-        .rbac()?
+    let qualified = identity_service
         .qualified_permissions(actor, &required, executor)
         .await?
-        .ok_or_else(|| Error::Forbidden("审批绑定升级账号已失效".into()))?;
+        .ok_or_else(|| Error::Forbidden("审批绑定升级账号不存在、已停用或身份已变化".into()))?;
     let mut roles = qualified.roles(&definition);
     roles.sort();
     let actor_role =
@@ -436,7 +371,7 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     {
         return Err(Error::Forbidden("审批绑定升级动作或业务来源读取权限不足".into()));
     }
-    rbac.rbac()?.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?;
+    identity_service.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?;
     Ok(ApprovalBindingUpgradeAuthorization { actor_role })
 }
 

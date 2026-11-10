@@ -14,7 +14,7 @@ use erp_warehouse::{
     AttachmentFingerprintPort, HandlerIdentityFact, IdentityFactPort, PreparedWarehouseAudit,
     WarehouseAuditPort, WarehouseService,
 };
-use erp_workflow::{AvailableWorkItemAccount, WorkItemType};
+use erp_workflow::WorkItemType;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -143,7 +143,7 @@ impl MongoWarehouseIdentity {
         account: &erp_identity::AccountCore,
     ) -> erp_warehouse::Result<HandlerIdentityFact> {
         let fact = AccountSummary::from(account);
-        let can_login = AvailableWorkItemAccount::from_account(&fact).is_ok();
+        let can_login = fact.can_login;
         let inbound = handler_permissions(required_fulfillment_permissions("purchase_receipt"));
         let outbound = handler_permissions(required_fulfillment_permissions("delivery"));
         let permissions = self

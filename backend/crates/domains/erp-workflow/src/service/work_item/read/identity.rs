@@ -25,7 +25,7 @@ impl WorkItemReadService {
         access: &super::access::QueueAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.authorization.service.validate(access.read_access()?, executor).await?;
+        self.authorization.service.validate(access.read_access(), executor).await?;
         if let Some(manage) = &access.manage {
             self.authorization.service.validate(manage, executor).await?;
         }
@@ -73,7 +73,7 @@ impl WorkItemReadService {
     ) -> Result<super::access::QueueAccess> {
         let mut projected = access.clone();
         projected.task.permissions =
-            self.task_permissions(access.read_access()?.actor(), fields, executor).await?;
+            self.task_permissions(access.read_access().actor(), fields, executor).await?;
         let ids = fields.iter().map(|field| field.id.clone()).collect::<Vec<_>>();
         if let Some(manage) = &access.manage {
             self.authorization.service.validate(manage, executor).await?;

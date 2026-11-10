@@ -16,8 +16,8 @@ use validator::Validate;
 
 use super::WorkItemService;
 use crate::entity::work_item::{
-    AvailableWorkItemAccount, EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule,
-    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope, WorkItemType,
+    EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,
+    FinanceResponsibilityRuleSet, FinanceResponsibilityScope, WorkItemType,
 };
 use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
@@ -415,7 +415,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             self.identity.directory().accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
         let mut options = Vec::new();
         for account in accounts {
-            if AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).is_err() {
+            if !account.is_active_backoffice() {
                 continue;
             }
             let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
@@ -605,18 +605,24 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         operation: FinanceResponsibilityOperation,
         owner_user_id: String,
     ) -> impl Future<Output = Result<()>> + Send + 'static {
-        let identity = self.identity.clone();
+        let identity_service = self.identity.clone();
         async move {
-            let account =
-                identity.directory().account(&owner_user_id, &mut NoTransaction).await?.ok_or_else(|| {
+            let account = identity_service
+                .directory()
+                .account(&owner_user_id, &mut NoTransaction)
+                .await?
+                .ok_or_else(|| {
                     Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
                 })?;
-            AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).map_err(|_| {
-                Error::BusinessLogicError(format!("{}负责人账号不可用，请重新选择", operation.label()))
-            })?;
+            if !account.is_active_backoffice() {
+                return Err(Error::BusinessLogicError(format!(
+                    "{}负责人账号不可用，请重新选择",
+                    operation.label()
+                )));
+            }
             let required = required_finance_permissions(operation)?;
             let actor = AuditActor::new(account.id, account.login_account, account.kind);
-            let granted = identity
+            let granted = identity_service
                 .qualified_permissions(&actor, &required.clone().into_vec(), &mut NoTransaction)
                 .await?
                 .map(|qualified| qualified.permissions())

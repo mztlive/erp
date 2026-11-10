@@ -23,8 +23,8 @@ pub use entity::document_registry::{
     BusinessDocument, DocumentParticipant, DocumentRelation, DocumentType, WorkflowAction,
 };
 pub use entity::work_item::{
-    AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem,
-    WorkItemData, WorkItemStatus, WorkItemType,
+    FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem, WorkItemData, WorkItemStatus,
+    WorkItemType,
 };
 pub use error::{Error, ErrorCode, Result, known_duplicate_index_message};
 pub use ports::{

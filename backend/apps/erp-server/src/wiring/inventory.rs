@@ -30,7 +30,7 @@ use persistence_core::Executor;
 use super::approval_runtime;
 use super::audit_conversion::PreparedAudit;
 use super::errors::Error;
-use crate::wiring::workflow::{work_item_service, workflow_auth};
+use crate::wiring::workflow::work_item_service;
 
 mod people;
 
@@ -130,13 +130,11 @@ pub async fn authorize_inventory(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> erp_inventory::Result<InventoryAuthorization> {
-    if !erp_workflow::service::approval::approval_actor_is_active_with_executor(
-        &workflow_auth(db.clone(), Arc::clone(rbac)),
-        actor,
-        executor,
-    )
-    .await
-    .map_err(|error| map_svc(Error::from(error)))?
+    if !rbac
+        .directory()
+        .actor_is_active(actor, executor)
+        .await
+        .map_err(|error| map_svc(Error::from(error)))?
     {
         return Ok(InventoryAuthorization::inactive());
     }

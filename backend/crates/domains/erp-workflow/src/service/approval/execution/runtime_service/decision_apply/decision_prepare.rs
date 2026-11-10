@@ -9,6 +9,7 @@ use bpm::model::{
     ParticipantId, Timestamp,
 };
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -285,6 +286,7 @@ fn ensure_or_sign_tasks(
 /// 重验当前与下一节点资格，并形成尚未写库的决定计划。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库。
 /// * `rbac` - 授权端口。
 /// * `object_read` - 被审对象读取端口。
@@ -299,9 +301,9 @@ fn ensure_or_sign_tasks(
 /// # 错误
 /// 定义或目标节点缺失、资格重验失败、执行序号溢出、规划失败，或新命令落入回放分支时返回错误。
 pub(super) async fn prepare_open_decision(
+    identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
     loaded: &OpenDecisionRuntime,
@@ -309,19 +311,20 @@ pub(super) async fn prepare_open_decision(
 ) -> Result<PreparedOpenDecision> {
     let now = Instant::now();
     let (graph, current_eligibility, next_eligibility) =
-        revalidate_decision_eligibilities(db, rbac, object_read, actor, command, loaded, executor).await?;
+        revalidate_decision_eligibilities(identity_service, db, rbac, actor, command, loaded, executor)
+            .await?;
     let writes =
         plan_open_decision(actor, command, loaded, graph, current_eligibility, next_eligibility, now)?;
     let runtime_admin_ids =
-        blocked_runtime_admin_ids(db, rbac, object_read, loaded, &writes, executor).await?;
+        blocked_runtime_admin_ids(identity_service, rbac, loaded, &writes, executor).await?;
     finish_prepared_open_decision(actor, command, loaded, writes, now, runtime_admin_ids)
 }
 
 /// 重验当前与下一节点资格；定义或目标节点缺失时失败。
 async fn revalidate_decision_eligibilities(
+    identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn crate::ports::ApprovalObjectReadPort,
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
     loaded: &OpenDecisionRuntime,
@@ -337,9 +340,8 @@ async fn revalidate_decision_eligibilities(
         .map(|person| person.name)
         .unwrap_or_default();
     let current_eligibility = revalidate_decision_approver(
-        db,
+        identity_service,
         rbac,
-        object_read,
         RevalidateDecisionApproverInput {
             assignee_id: actor.id(),
             assignee_name: &actor_name,
@@ -359,7 +361,7 @@ async fn revalidate_decision_eligibilities(
         .map_err(map_runtime_graph_error)?;
     let next_eligibility = match decision_target {
         Some(node_key) => match graph.node(&node_key) {
-            Some(node) => revalidate_node_eligibility(db, rbac, object_read, loaded, node, executor).await?,
+            Some(node) => revalidate_node_eligibility(identity_service, rbac, loaded, node, executor).await?,
             None => return Err(Error::ConflictError("审批定义缺少目标节点".to_string())),
         },
         None => current_eligibility.clone(),
@@ -368,9 +370,9 @@ async fn revalidate_decision_eligibilities(
 }
 
 async fn revalidate_node_eligibility(
-    db: &Database,
+    identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn crate::ports::ApprovalObjectReadPort,
+
     loaded: &OpenDecisionRuntime,
     node: &ApprovalNodeDefinition,
     executor: &mut dyn Executor,
@@ -379,9 +381,8 @@ async fn revalidate_node_eligibility(
     for person in node.participants() {
         members.push(
             revalidate_decision_approver(
-                db,
+                identity_service,
                 rbac,
-                object_read,
                 RevalidateDecisionApproverInput {
                     assignee_id: person.participant_id.as_str(),
                     assignee_name: &person.name,
@@ -499,9 +500,9 @@ fn finish_prepared_open_decision(
 
 /// 仅当计划含受阻通知时解析运行管理员收件人。
 async fn blocked_runtime_admin_ids(
-    db: &Database,
+    identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn crate::ports::ApprovalObjectReadPort,
+
     loaded: &OpenDecisionRuntime,
     writes: &PlannedWrites,
     executor: &mut dyn Executor,
@@ -510,9 +511,8 @@ async fn blocked_runtime_admin_ids(
         intent.event_kind == crate::entity::approval_integration::ApprovalNotificationEventKind::Blocked
     }) {
         runtime_admin_notification_recipients(
-            db,
+            identity_service,
             rbac,
-            object_read,
             loaded.document_type,
             &loaded.snapshot,
             executor,

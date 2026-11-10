@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
@@ -13,7 +14,7 @@ use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
 use crate::repository::BpmExt;
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 返回固定 21 行非敏感目录。
     ///
     /// # 参数
@@ -30,7 +31,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         actor: &AuditActor,
         visibility: &DefinitionManagementVisibility,
     ) -> Result<Vec<DefinitionCatalogItem>> {
-        let visibility = enforce_visibility(&self.db, &self.auth, actor, visibility).await?;
+        let visibility = enforce_visibility(&self.identity, &self.db, actor, visibility).await?;
         let mut required_kinds = Vec::new();
         let mut policies = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
@@ -67,7 +68,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         actor: &AuditActor,
         visibility: &DefinitionManagementVisibility,
     ) -> Result<Vec<DefinitionVersionItem>> {
-        let visibility = enforce_visibility(&self.db, &self.auth, actor, visibility).await?;
+        let visibility = enforce_visibility(&self.identity, &self.db, actor, visibility).await?;
         require_process_required(document_type)?;
         ensure_can_read_detail(&visibility, document_type)?;
         let versions = self
@@ -96,7 +97,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         actor: &AuditActor,
         visibility: &DefinitionManagementVisibility,
     ) -> Result<DefinitionDetailView> {
-        let visibility = enforce_visibility(&self.db, &self.auth, actor, visibility).await?;
+        let visibility = enforce_visibility(&self.identity, &self.db, actor, visibility).await?;
         let graph = self
             .db
             .bpm_workflow()
@@ -114,12 +115,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
 
 /// 以当前 RBAC 重验类型级范围，禁止调用方扩大权限。
 async fn enforce_visibility(
+    identity_service: &SharedRbacService,
     _db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     actor: &AuditActor,
     visibility: &DefinitionManagementVisibility,
 ) -> Result<DefinitionManagementVisibility> {
-    Ok(definition_management_visibility(rbac, actor).await?.intersect(visibility))
+    Ok(definition_management_visibility(identity_service, actor).await?.intersect(visibility))
 }
 
 /// 详情读取权。

@@ -59,7 +59,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 保留人工发布版本，报告与演示链条的差异。
     async fn note_published(
         &self,
-        definitions: &ApprovalDefinitionService<A>,
+        definitions: &ApprovalDefinitionService,
         visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
@@ -79,7 +79,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 读取当前已发布版本，不受并存草稿影响。
     async fn published_detail(
         &self,
-        definitions: &ApprovalDefinitionService<A>,
+        definitions: &ApprovalDefinitionService,
         visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
@@ -95,7 +95,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 命令键绑定定义 ID 与锁版本，重试和退役后重建不回放旧定义。
     async fn publish_approval(
         &self,
-        definitions: &ApprovalDefinitionService<A>,
+        definitions: &ApprovalDefinitionService,
         visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
@@ -134,7 +134,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 复用活动草稿；新草稿键包含下一个业务版本，避免命中退役定义的旧回执。
     async fn draft_id(
         &self,
-        definitions: &ApprovalDefinitionService<A>,
+        definitions: &ApprovalDefinitionService,
         visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
@@ -161,7 +161,6 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
 
     /// 所有指定审批人须具有同一启用角色授予的读取与决定资格。
     async fn validate_approval_accounts(&self, accounts: &PreparedAccounts) -> Result<()> {
-        let auth = self.ports.workflow_auth.clone();
         for spec in &spec::foundation_spec().approvals {
             approval_nodes(spec, accounts)?;
             for node in &spec.nodes {
@@ -174,7 +173,9 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     .role_actor(&account.account)
                     .await?
                     .ok_or_else(|| Error::Forbidden(format!("审批账号 {} 不可用", account.account)))?;
-                if !approval_participant_permissions_with_executor(&auth, &actor, &mut NoTransaction).await? {
+                if !approval_participant_permissions_with_executor(&self.rbac, &actor, &mut NoTransaction)
+                    .await?
+                {
                     return Err(Error::Forbidden(format!(
                         "审批账号 {} 缺少同一启用角色的审批读取与决定权限",
                         account.account
@@ -189,18 +190,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     async fn definition_session(
         &self,
         actor: &AuditActor,
-    ) -> Result<(ApprovalDefinitionService<A>, DefinitionManagementVisibility)> {
+    ) -> Result<(ApprovalDefinitionService, DefinitionManagementVisibility)> {
         let definitions = ApprovalDefinitionService::with_audit(
             self.db.clone(),
-            self.ports.workflow_auth.clone(),
+            self.rbac.clone(),
             self.ports.workflow_audit.clone(),
         );
-        let visibility = definition_management_visibility_with_executor(
-            &self.ports.workflow_auth.clone(),
-            actor,
-            &mut NoTransaction,
-        )
-        .await?;
+        let visibility =
+            definition_management_visibility_with_executor(&self.rbac, actor, &mut NoTransaction).await?;
         Ok((definitions, visibility))
     }
 }

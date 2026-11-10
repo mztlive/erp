@@ -1,28 +1,19 @@
-//! 业务预定义角色种子。
+//! 内建岗位模板的共享权限定义与启动身份基础。
 //!
 //! 管理页面显式生成岗位角色；启动仅初始化组织基础与目录资格。
-//! 以下旧种子升级入口保留供历史显式调用，不接入应用启动：
-//! - 数据库中尚不存在（含软删除记录）时创建角色与推荐权限；
-//! - 已存在且权限仍等于已知旧种子时，整集升级到当前推荐权限；
-//! - 其余已存在角色只追加旧业务种子权限；查询目录权限仅在首次创建角色时初始化，
-//!   也不覆盖名称、启停状态与 system 标记。
-//!
-//! 角色集合与默认权限对齐第一期部门职责（`docs/erp-phase-1.md` §11）、
-//! 工作台角色入口（W01 今日工作台）以及二期销售领导审批轨。
-//! `role-root` 由 [`super::ensure_root_role`] 单独维护，不在本清单中。
-
-use application_core::AuditActor;
-use erp_core::Result as CoreResult;
-use persistence_core::NoTransaction;
+//! `role-root` 由 [`super::ensure_root_role`] 单独维护，不在模板清单中。
 
 use super::SharedRbacService;
+use crate::error::Result;
 use crate::service::organization::ensure_home_department;
 use crate::service::person_directory::sync_role_grants;
-use crate::{AccessControlExt, CreateRoleParams};
 
 pub(crate) mod permission_tables;
 mod templates;
-mod upgrades;
+use permission_tables::{
+    FINANCE_PERMISSIONS, MANAGEMENT_PERMISSIONS, OPERATIONS_PERMISSIONS, PROCUREMENT_PERMISSIONS,
+    SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS, SYSADMIN_PERMISSIONS, WAREHOUSE_PERMISSIONS,
+};
 pub use templates::builtin_role_templates;
 
 /// 启动时仅准备组织基础与目录资格，不创建或补权业务角色。
@@ -35,76 +26,6 @@ pub use templates::builtin_role_templates;
 pub async fn ensure_identity_foundation(rbac: &SharedRbacService) -> Result<()> {
     ensure_home_department(rbac.database().clone()).await?;
     sync_role_grants(rbac).await
-}
-
-pub(crate) use permission_tables::{
-    FINANCE_PERMISSIONS, MANAGEMENT_PERMISSIONS, OPERATIONS_PERMISSIONS, PROCUREMENT_PERMISSIONS,
-    SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS, SYSADMIN_PERMISSIONS, WAREHOUSE_PERMISSIONS,
-};
-#[cfg(test)]
-pub(crate) use upgrades::{
-    APPROVAL_HTTP_ACTION_PERMISSIONS, PROCUREMENT_DUTY_GAP_PERMISSIONS, approval_http_legacy_snapshot,
-    finance_legacy_permission_snapshots, integration_task_legacy_snapshot,
-    legacy_workflow_permission_snapshot, low_margin_confirmation_legacy_snapshot,
-    procurement_legacy_permission_snapshots, sales_legacy_permission_snapshots,
-};
-pub(crate) use upgrades::{
-    remove_permissions, upgrade_approval_http_permissions, upgrade_customer_role_boundaries, upgrade_exact,
-    upgrade_finance_role_party_read_permissions, upgrade_import_confirmation_permissions,
-    upgrade_integration_task_permissions, upgrade_procurement_role_permissions,
-    upgrade_sales_role_permissions, upgrade_sellable_sku_reader_permissions, upgrade_workflow_permissions,
-};
-
-use crate::entity::policy_permission::FINANCE_LEDGER_READ;
-use crate::entity::role_workbench::RoleWorkbench;
-use crate::entity::{Permission, RoleData};
-use crate::error::{Error, Result};
-
-/// 读取岗位当前推荐权限，供显式初始化命令构造独立角色。
-/// # 参数
-/// `role_id` 为内建业务岗位键，不接受超级管理员角色。
-/// # 返回
-/// 已解析的推荐权限；不读取或改写数据库角色。
-/// # 错误
-/// 岗位未登记或静态权限无效时拒绝。
-pub fn predefined_role_permissions(role_id: &str) -> Result<Vec<Permission>> {
-    let role = PREDEFINED_ROLES
-        .iter()
-        .find(|role| role.id == role_id)
-        .ok_or_else(|| Error::ValidationError(format!("未登记的业务岗位角色：{role_id}")))?;
-    parse_permissions(role.permissions)
-}
-
-/// 由显式初始化命令以当前操作人的权限创建缺失岗位角色，保留一切已有配置。
-/// # 参数
-/// `rbac` 为授权服务，`role_id` 为内建岗位键，`actor` 为发起人。
-/// # 返回
-/// 缺失时创建；包括软删除在内的已有角色保持原样。
-/// # 错误
-/// 岗位键无效、操作人不能授予推荐权限或角色写入失败时拒绝。
-pub async fn create_missing_predefined_role(
-    rbac: &SharedRbacService,
-    role_id: &str,
-    actor: &AuditActor,
-) -> Result<()> {
-    let role = PREDEFINED_ROLES
-        .iter()
-        .find(|role| role.id == role_id)
-        .ok_or_else(|| Error::ValidationError(format!("未登记的业务岗位角色：{role_id}")))?;
-    if rbac.database().roles().find_by_id_including_deleted(role_id, &mut NoTransaction).await?.is_some() {
-        return Ok(());
-    }
-    rbac.ensure_seeded_role(
-        role_id,
-        CreateRoleParams {
-            name: role.name.into(),
-            permissions: parse_permissions(role.permissions)?,
-            workbenches: RoleWorkbench::recommended(role_id),
-        },
-        actor.clone(),
-    )
-    .await?;
-    Ok(())
 }
 
 /// 单条预定义角色的静态定义。
@@ -172,185 +93,25 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     },
 ];
 
-/// 确保全部业务预定义角色已写入数据库，并补齐当前种子中缺失的权限。
-///
-/// 对每个固定角色 ID：若不存在则创建角色实体与 Casbin 权限；已有角色先按已知旧
-/// 种子做精确升级，再把当前推荐权限中尚未覆盖的项追加进 policy。
-///
-/// # 参数
-/// * `rbac` - 共享 RBAC 服务
-///
-/// # 返回
-/// 全部角色检查、创建或补齐完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 角色校验、MongoDB 写入或 Casbin policy 事务失败时返回错误。
-///
-/// # 业务约束
-/// 管理员额外授予的权限、角色名称与启停状态不会被启动过程删除或覆盖。
-/// 门户专项只进入首次创建或显式应用的模板，既有角色必须由管理员显式授予。
-pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
-    for role in PREDEFINED_ROLES {
-        seed_one(rbac, role).await?;
-    }
-    upgrade_workflow_permissions(rbac).await?;
-    upgrade_retired_purchase_review_permission(rbac).await?;
-    upgrade_sales_role_permissions(rbac).await?;
-    upgrade_finance_role_party_read_permissions(rbac).await?;
-    upgrade_customer_role_boundaries(rbac).await?;
-    upgrade_procurement_role_permissions(rbac).await?;
-    upgrade_sellable_sku_reader_permissions(rbac).await?;
-    upgrade_import_confirmation_permissions(rbac).await?;
-    upgrade_integration_task_permissions(rbac).await?;
-    upgrade_supplier_connection_governance_permissions(rbac).await?;
-    upgrade_approval_http_permissions(rbac).await?;
-    ensure_missing_permissions(rbac).await?;
-    crate::service::organization::ensure_home_department(rbac.database().clone()).await?;
-    crate::service::person_directory::sync_role_grants(rbac).await?;
-    Ok(())
-}
-
-/// 为已存在的预定义角色追加当前种子中尚未覆盖的权限。
-///
-/// # 参数
-/// * `rbac` - 共享 RBAC 服务
-///
-/// # 返回值
-/// 全部角色检查或补齐完成后返回 `Ok(())`。
-///
-/// # 错误
-/// 权限解析或 Casbin policy 写入失败时返回错误。
-///
-/// # 业务约束
-/// 只追加缺失权限；已有更宽通配覆盖目标时视为已具备，不再写入重复细项。
-async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
-    for role in PREDEFINED_ROLES {
-        // 已存在角色的目录授权由管理员显式维护；缺失无法区分从未授予与人工撤销。
-        let desired = appendable_permissions(startup_permissions(parse_permissions(role.permissions)?));
-        if rbac.ensure_missing_seeded_role_permissions(role.id, desired).await? {
-            tracing::info!(
-                role_id = role.id,
-                role_name = role.name,
-                "predefined role missing permissions appended"
-            );
-        }
-    }
-    Ok(())
-}
-
-/// 显式维护的目录资格不进入既有角色的缺项自动追加。
-fn appendable_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
-    permissions
-        .into_iter()
-        .filter(|permission| {
-            !matches!(
-                (permission.resource(), permission.action()),
-                ("sales_person" | "procurement_person" | "business_person" | "warehouse", "list")
-                    | ("person_query_qualification", "manage")
-            )
-        })
-        .collect()
-}
-
-/// 启动过程不授予外部账号、定向目录与申请处理专项权限。
-///
-/// # 参数
-/// `permissions` 为岗位模板或历史升级目标。
-/// # 返回
-/// 保留普通岗位基线，门户专项交由管理员显式授权。
-/// # 错误
-/// 无。
-fn startup_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
-    permissions
-        .into_iter()
-        .filter(|permission| !permission.resource().starts_with("supplier_portal_"))
-        .collect()
-}
-
-/// 从仍保持上一版默认权限快照的财务角色移除已退役采购审核旁路权限。
-async fn upgrade_retired_purchase_review_permission(rbac: &SharedRbacService) -> Result<()> {
-    let desired = parse_permissions(FINANCE_PERMISSIONS)?;
-    let mut previous = desired.clone();
-    previous.push(Permission::parse("purchase_order:review")?);
-    upgrade_exact(rbac, "role-finance", previous, desired).await
-}
-
-/// 将仍保持上一版默认种子的采购/系统管理员权限收口到 W20 固定职责。
-async fn upgrade_supplier_connection_governance_permissions(rbac: &SharedRbacService) -> Result<()> {
-    let procurement_desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
-    let mut procurement_previous = remove_permissions(
-        &procurement_desired,
-        &["supplier_api_connection:update_business_profile", "supplier_api_capability:confirm_requirement"],
-    );
-    procurement_previous.push(Permission::parse("supplier_api_connection:health_check")?);
-    upgrade_exact(rbac, "role-procurement", procurement_previous, procurement_desired).await?;
-
-    let sysadmin_desired = parse_permissions(SYSADMIN_PERMISSIONS)?;
-    let sysadmin_previous = remove_permissions(
-        &sysadmin_desired,
-        &[
-            "supplier_api_connection:bind_endpoint_reference",
-            "supplier_api_connection:manage_credential_reference",
-            "supplier_api_connection:enable",
-            "supplier_api_connection:disable",
-            "supplier_api_connection:catalog_sync",
-            "supplier_api_connection:view_reference_metadata",
-            "supplier_api_capability:update",
-        ],
-    );
-    upgrade_exact(rbac, "role-sysadmin", sysadmin_previous, sysadmin_desired).await
-}
-
-/// 仅在首次创建财务角色时授予整账资格，既有角色不得由启动补权。
-async fn seed_one(rbac: &SharedRbacService, role: &PredefinedRoleDef) -> Result<()> {
-    let permissions = initial_permissions(role)?;
-    // 可分配、可后续由管理员调整；仅 `role-root` 使用 system=true 的强保护边界。
-    let data = RoleData::new(role.name.to_string()).with_description(role.description.to_string());
-    let created = rbac.seed_role_if_absent(role.id, data, permissions).await?;
-    if created {
-        tracing::info!(role_id = role.id, role_name = role.name, "predefined role seeded");
-    }
-    Ok(())
-}
-
-/// 构建首次创建权限；整账资格不进入既有角色的自动升级快照。
-fn initial_permissions(role: &PredefinedRoleDef) -> Result<Vec<Permission>> {
-    let mut permissions = parse_permissions(role.permissions)?;
-    if role.id == "role-finance" {
-        permissions.push(Permission::parse(FINANCE_LEDGER_READ)?);
-    }
-    Ok(permissions)
-}
-
-/// 将静态权限字符串解析为领域权限集合。
-///
-/// # 参数
-/// * `raw` - `resource:action` 字符串切片
-///
-/// # 返回值
-/// 返回解析后的权限列表。
-///
-/// # 错误
-/// 任一字符串不符合权限格式时返回错误。
-fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
-    Ok(raw.iter().map(Permission::parse).collect::<CoreResult<_>>()?)
-}
-
-/// 返回预定义角色 ID 列表（测试与文档校验用）。
-///
-/// # 返回值
-/// 按定义顺序返回角色 ID。
-#[cfg(test)]
-pub(super) fn predefined_role_ids() -> Vec<&'static str> {
-    PREDEFINED_ROLES.iter().map(|role| role.id).collect()
-}
-
 #[cfg(test)]
 mod tests {
+    use erp_core::Result as CoreResult;
+
+    use super::{PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS, SALES_PERMISSIONS, builtin_role_templates};
+    use crate::Result;
+    use crate::entity::rbac::{Permission, PermissionSet};
+
+    /// 解析静态权限表，供岗位职责断言使用。
+    fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
+        Ok(raw.iter().map(Permission::parse).collect::<CoreResult<_>>()?)
+    }
+
+    /// 显式采购模板授予门户职责和供应商维护权限，不授予内部账号管理。
     #[test]
-    fn portal_permissions_are_explicit_template_grants_and_never_startup_grants() {
-        let role = super::PREDEFINED_ROLES.iter().find(|role| role.id == "role-procurement").unwrap();
-        let initial = super::initial_permissions(role).unwrap();
+    fn portal_permissions_are_explicit_procurement_template_grants() {
+        let catalog = builtin_role_templates().unwrap();
+        let procurement = catalog.iter().find(|role| role.id == "role-procurement").unwrap();
+        let permissions = PermissionSet::new(procurement.permissions.clone());
         for code in [
             "supplier_portal_account:list",
             "supplier_portal_account:create",
@@ -360,57 +121,42 @@ mod tests {
             "supplier_portal_request:list",
             "supplier_portal_request:detail",
             "supplier_portal_request:review",
+            "supplier:update",
         ] {
-            assert!(initial.iter().any(|permission| permission.to_string() == code), "{code}");
+            assert!(permissions.covers_one(&Permission::parse(code).unwrap()), "{code}");
         }
-        let startup = super::startup_permissions(initial);
-        assert!(startup.iter().all(|permission| !permission.resource().starts_with("supplier_portal_")));
-        assert!(startup.iter().any(|permission| permission.to_string() == "supplier:*"));
-        assert!(startup.iter().all(|permission| permission.resource() != "account"));
-        let old = super::remove_permissions(
-            &super::parse_permissions(role.permissions).unwrap(),
-            &["supplier_sensitive:reveal"],
-        );
-        assert!(
-            super::startup_permissions(old)
-                .iter()
-                .all(|permission| !permission.resource().starts_with("supplier_portal_"))
-        );
+        assert!(procurement.permissions.iter().all(|permission| permission.resource() != "account"));
     }
 
+    /// 抄送接收资格不通过岗位模板授予。
     #[test]
     fn copy_receiving_is_not_a_role_permission() {
-        for role in super::PREDEFINED_ROLES {
-            let initial = super::initial_permissions(role).unwrap();
-            assert!(initial.iter().all(|p| p.resource() != "approval_copy"));
-            let appended = super::appendable_permissions(super::startup_permissions(initial));
-            assert!(appended.iter().all(|p| p.resource() != "approval_copy"));
+        for template in builtin_role_templates().unwrap() {
+            assert!(template.permissions.iter().all(|permission| permission.resource() != "approval_copy"));
         }
     }
 
+    /// 整账读取仅授予综合财务及三个细分财务模板。
     #[test]
-    fn ledger_read_is_only_seeded_for_a_new_finance_role() {
-        for role in super::PREDEFINED_ROLES {
-            let initial = super::initial_permissions(role).unwrap();
-            let has_ledger =
-                initial.iter().any(|permission| permission.to_string() == super::FINANCE_LEDGER_READ);
-            assert_eq!(has_ledger, role.id == "role-finance");
-            assert!(!role.permissions.contains(&super::FINANCE_LEDGER_READ));
+    fn ledger_read_is_only_granted_to_finance_templates() {
+        let ledger = Permission::parse("finance_ledger:read").unwrap();
+        for template in builtin_role_templates().unwrap() {
+            let has_ledger = PermissionSet::new(template.permissions).covers_one(&ledger);
+            assert_eq!(
+                has_ledger,
+                matches!(
+                    template.id.as_str(),
+                    "role-finance" | "role-finance-director" | "role-cashier" | "role-invoice-clerk"
+                ),
+                "{} 的整账读取资格不符合岗位职责",
+                template.id
+            );
         }
     }
 
-    use super::{
-        APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS,
-        SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS, approval_http_legacy_snapshot,
-        integration_task_legacy_snapshot, legacy_workflow_permission_snapshot,
-        low_margin_confirmation_legacy_snapshot, parse_permissions, predefined_role_ids,
-        procurement_legacy_permission_snapshots, sales_legacy_permission_snapshots,
-    };
-    use crate::entity::rbac::{Permission, PermissionSet};
-
-    /// 采购和销售选择已有公司，系统管理员维护公司；启动补权限保留额外人工授权。
+    /// 采购和销售选择已有公司，系统管理员维护公司。
     #[test]
-    fn company_permissions_follow_role_duties_and_append_without_replacing() {
+    fn company_permissions_follow_role_duties() {
         let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
         let sysadmin = PermissionSet::new(parse_permissions(super::SYSADMIN_PERMISSIONS).unwrap());
         let sales = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
@@ -420,22 +166,12 @@ mod tests {
             assert_eq!(procurement.covers_one(&permission), matches!(action, "list" | "detail"));
             assert_eq!(sales.covers_one(&permission), matches!(action, "list" | "detail"));
         }
-        let mut previous = super::remove_permissions(
-            &parse_permissions(PROCUREMENT_PERMISSIONS).unwrap(),
-            &["company:list", "company:detail"],
-        );
-        let custom = Permission::parse("custom_resource:read").unwrap();
-        previous.push(custom.clone());
-        let old = PermissionSet::new(previous);
-        let merged = old.with_missing(&procurement).unwrap();
-        assert!(merged.covers(&procurement));
-        assert!(merged.covers_one(&custom));
-        assert!(merged.with_missing(&procurement).is_none());
     }
 
+    /// 岗位身份保持唯一，且不包含独立维护的超级管理员。
     #[test]
     fn predefined_role_ids_are_unique_and_stable() {
-        let ids = predefined_role_ids();
+        let ids: Vec<_> = PREDEFINED_ROLES.iter().map(|role| role.id).collect();
         let mut sorted = ids.clone();
         sorted.sort_unstable();
         sorted.dedup();
@@ -453,31 +189,33 @@ mod tests {
         }
     }
 
+    /// 财务模板不授予已退役的采购审核旁路权限。
     #[test]
-    fn finance_seed_excludes_retired_purchase_review_permission() {
-        let desired = parse_permissions(FINANCE_PERMISSIONS).unwrap();
-        let mut previous = desired.clone();
-        previous.push(Permission::parse("purchase_order:review").unwrap());
-
-        assert!(!desired.iter().any(|permission| permission.to_string() == "purchase_order:review"));
-        assert!(previous.iter().any(|permission| permission.to_string() == "purchase_order:review"));
+    fn finance_template_excludes_retired_purchase_review_permission() {
+        let catalog = builtin_role_templates().unwrap();
+        let finance = catalog.iter().find(|template| template.id == "role-finance").unwrap();
+        let permissions = PermissionSet::new(finance.permissions.clone());
+        assert!(!permissions.covers_one(&Permission::parse("purchase_order:review").unwrap()));
     }
 
-    /// 财务选择结算主体需要读取名称，历史默认快照升级不包含主体修改权限。
+    /// 财务模板只读结算主体修订和销售变更。
     #[test]
-    fn finance_party_read_upgrade_covers_previous_defaults() {
-        let desired = parse_permissions(FINANCE_PERMISSIONS).unwrap();
-        assert!(FINANCE_PERMISSIONS.contains(&"party_revision:list"));
-        assert!(FINANCE_PERMISSIONS.contains(&"sales_change_order:detail"));
-        assert!(FINANCE_PERMISSIONS.contains(&"sales_change_order:list"));
-        assert!(!FINANCE_PERMISSIONS.contains(&"sales_change_order:create"));
-        assert!(!FINANCE_PERMISSIONS.contains(&"party_revision:*"));
-        let snapshots = super::finance_legacy_permission_snapshots(&desired).unwrap();
-        assert!(snapshots.contains(&super::remove_permissions(&desired, &["party_revision:list"])));
-        assert!(snapshots.contains(&super::remove_permissions(
-            &desired,
-            &["party:list", "party:detail", "party_revision:list"]
-        )));
+    fn finance_template_reads_parties_and_sales_changes_without_writes() {
+        let catalog = builtin_role_templates().unwrap();
+        let finance = catalog.iter().find(|template| template.id == "role-finance").unwrap();
+        let permissions = PermissionSet::new(finance.permissions.clone());
+        for code in [
+            "party:list",
+            "party:detail",
+            "party_revision:list",
+            "sales_change_order:list",
+            "sales_change_order:detail",
+        ] {
+            assert!(permissions.covers_one(&Permission::parse(code).unwrap()), "{code}");
+        }
+        for code in ["party_revision:create", "party_revision:update", "sales_change_order:create"] {
+            assert!(!permissions.covers_one(&Permission::parse(code).unwrap()), "{code}");
+        }
     }
 
     /// 仓储审批采购变更需要读取对象，但不得获得创建或提交变更的职责。
@@ -577,21 +315,6 @@ mod tests {
     }
 
     #[test]
-    fn integration_task_upgrade_snapshot_only_removes_two_permissions() {
-        for role in PREDEFINED_ROLES.iter().filter(|role| {
-            matches!(
-                role.id,
-                "role-sales" | "role-procurement" | "role-operations" | "role-finance" | "role-sysadmin"
-            )
-        }) {
-            let desired = parse_permissions(role.permissions).unwrap();
-            let previous = integration_task_legacy_snapshot(&desired);
-            assert_eq!(previous.len() + 2, desired.len());
-            assert!(previous.iter().all(|permission| permission.resource() != "integration_task"));
-        }
-    }
-
-    #[test]
     fn purchase_change_read_follows_review_responsibility_roles() {
         // 采购变更由仓储确认履约影响、财务复核；管理层可打开任务详情。各岗位必须能读取变更单，
         // 决定本身走 approval_instance:decide，无需 approve/reject 资源动作。
@@ -639,8 +362,9 @@ mod tests {
         }
     }
 
+    /// 销售变更审批权限仅授予销售领导、采购和运营岗位。
     #[test]
-    fn low_margin_permissions_are_owned_only_by_sales_leader_and_upgrade_is_exact() {
+    fn sales_change_approval_permissions_follow_assigned_roles() {
         let required = ["sales_change_order:approve"];
         let holders = ["role-sales-leader", "role-procurement", "role-operations"];
         for role in PREDEFINED_ROLES {
@@ -654,16 +378,6 @@ mod tests {
         let leader = PREDEFINED_ROLES.iter().find(|role| role.id == "role-sales-leader").unwrap();
         for permission in required {
             assert!(leader.permissions.contains(&permission), "销售领导缺少 {permission}");
-        }
-
-        let desired = parse_permissions(SALES_LEADER_PERMISSIONS).unwrap();
-        let previous = low_margin_confirmation_legacy_snapshot(&desired);
-        assert_eq!(previous.len() + 1, desired.len());
-        for permission in required {
-            assert!(
-                previous.iter().all(|candidate| candidate.to_string() != permission),
-                "旧快照仍包含 {permission}"
-            );
         }
     }
 
@@ -725,25 +439,6 @@ mod tests {
     }
 
     #[test]
-    fn procurement_legacy_snapshots_cover_current_database_seed() {
-        let desired = parse_permissions(PROCUREMENT_PERMISSIONS).unwrap();
-        let snapshots = procurement_legacy_permission_snapshots(&desired).unwrap();
-        let duty_gap_count = super::PROCUREMENT_DUTY_GAP_PERMISSIONS.len();
-        assert_eq!(snapshots.len(), 4);
-        assert_eq!(snapshots[0].len(), desired.len() - duty_gap_count - 1);
-        assert_eq!(snapshots[1].len(), desired.len() - duty_gap_count - 3);
-        assert_eq!(snapshots[2].len(), desired.len() - duty_gap_count);
-        assert_eq!(snapshots[3].len(), desired.len() - duty_gap_count);
-        assert!(
-            snapshots[2].iter().any(|permission| permission.to_string() == "supplier_catalog_cost:detail")
-        );
-        assert!(!snapshots[2].iter().any(|permission| permission.to_string() == "supplier_sensitive:reveal"));
-        assert!(snapshots.iter().flatten().all(|permission| {
-            super::PROCUREMENT_DUTY_GAP_PERMISSIONS.iter().all(|gap| permission.to_string() != *gap)
-        }));
-    }
-
-    #[test]
     fn inquiry_position_permissions_separate_sales_results_and_internal_procurement() {
         let sales = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
         let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
@@ -791,114 +486,51 @@ mod tests {
         assert!(!permissions.iter().any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
     }
 
-    #[test]
-    fn startup_appends_missing_seed_permissions_without_dropping_custom_grants() {
-        let desired = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
-        let extra = Permission::parse("custom:extra").unwrap();
-        let current = PermissionSet::new(
-            desired
-                .as_slice()
-                .iter()
-                .filter(|permission| permission.to_string() != "sellable_sku:list")
-                .cloned()
-                .chain(std::iter::once(extra.clone())),
-        );
-        let merged = current.with_missing(&desired).expect("应补齐可售 SKU 查询权限");
-
-        assert!(merged.covers(&desired));
-        assert!(merged.covers_one(&extra));
-        assert!(desired.with_missing(&desired).is_none());
-    }
-
-    #[test]
-    fn sales_legacy_snapshots_cover_catalog_and_customer_boundary_seeds() {
-        let desired = parse_permissions(SALES_PERMISSIONS).unwrap();
-        let snapshots = sales_legacy_permission_snapshots(&desired).unwrap();
-        // 快照[0]为选品上线前：desired 去掉 13 个选品权限。
-        assert_eq!(snapshots[0].len(), desired.len() - 13);
-        // 快照[1]为可售池上线前：[0] 去掉 sellable_sku:list 并补 7 个商品只读权限。
-        assert_eq!(snapshots[1].len(), desired.len() - 7);
-        // 快照[2]为客户边界收紧前：[1] 去掉 5 个客户细分权限并补 customer:* 与 party_bank_account:*。
-        assert_eq!(snapshots[2].len(), desired.len() - 10);
-        assert!(snapshots[1].iter().any(|permission| permission.to_string() == "sku:list"));
-        assert!(snapshots[2].iter().any(|permission| permission.to_string() == "party_bank_account:*"));
-        // 可售池上线前的快照（[1] 起）不含 sellable_sku:list；[0] 为选品上线前仍保留它。
-        assert!(
-            snapshots[1..].iter().flatten().all(|permission| permission.to_string() != "sellable_sku:list")
-        );
-        assert!(
-            snapshots
-                .iter()
-                .flatten()
-                .all(|permission| { !permission.to_string().starts_with("sales_selection_") })
-        );
-    }
-
+    /// 最终管理层模板只读，仅保留待办查看管理资格。
     #[test]
     fn management_permissions_are_read_only() {
-        let management = PREDEFINED_ROLES.iter().find(|role| role.id == "role-management").unwrap();
-        for raw in management.permissions {
-            let permission = Permission::parse(*raw).unwrap();
-            if matches!(
-                raw,
-                &"work_item:manage"
-                    | &"work_item:reassign"
-                    | &"approval_process:read"
-                    | &"approval_instance:read"
-                    | &"approval_instance:cancel"
-                    | &"approval_instance:resume"
-                    | &"approval_instance:cancel_blocked"
-                    | &"background_job:cancel"
-            ) {
-                continue;
-            }
+        let catalog = builtin_role_templates().unwrap();
+        let management = catalog.iter().find(|template| template.id == "role-management").unwrap();
+        for permission in &management.permissions {
             assert!(
-                matches!(permission.action(), "list" | "detail"),
-                "管理层除任务责任管理外应保持只读，发现: {raw}"
+                matches!(permission.action(), "list" | "detail" | "read")
+                    || (permission.resource() == "work_item" && permission.action() == "manage"),
+                "管理层除待办查看管理资格外应保持只读，发现: {permission}"
             );
         }
     }
 
+    /// 最终岗位模板必须使用显式工作流动作。
     #[test]
-    fn workflow_permissions_are_explicit_and_legacy_snapshots_are_recognizable() {
-        for role in PREDEFINED_ROLES {
-            assert!(!role.permissions.contains(&"work_item:*"), "{} 不得继续授予任务通配权限", role.id);
-            let desired = parse_permissions(role.permissions).unwrap();
-            let previous = legacy_workflow_permission_snapshot(role.id, &desired).unwrap();
-            if role.id == "role-management" {
-                assert!(previous.iter().all(|permission| permission.to_string() != "work_item:manage"));
-            } else {
-                assert!(previous.iter().any(|permission| permission.to_string() == "work_item:*"));
-            }
-            if matches!(role.id, "role-sales-leader" | "role-operations") {
+    fn workflow_permissions_are_explicit() {
+        for template in builtin_role_templates().unwrap() {
+            assert!(
+                template.permissions.iter().all(|permission| {
+                    !matches!(permission.resource(), "work_item" | "approval_process" | "approval_instance")
+                        || permission.action() != "*"
+                }),
+                "{} 不得授予工作流通配权限",
+                template.id
+            );
+        }
+    }
+
+    /// 最终模板排除退役审批动作，系统管理员不自动获得流程或审批权限。
+    #[test]
+    fn approval_templates_exclude_retired_actions_and_sysadmin_approval_access() {
+        for template in builtin_role_templates().unwrap() {
+            let permissions = PermissionSet::new(template.permissions.clone());
+            for forbidden in ["approval_instance:recover", "approval_instance:diagnose"] {
                 assert!(
-                    previous.iter().any(|permission| permission.to_string() == "sales_change_order:approve")
+                    !permissions.covers_one(&Permission::parse(forbidden).unwrap()),
+                    "{} 不得授予 {forbidden}",
+                    template.id
                 );
             }
-        }
-    }
-
-    #[test]
-    fn approval_http_permissions_replace_recover_diagnose_and_team_actions() {
-        assert_eq!(APPROVAL_HTTP_ACTION_PERMISSIONS.len(), 11);
-        for role in PREDEFINED_ROLES {
-            for forbidden in ["approval_instance:recover", "approval_instance:diagnose"] {
-                assert!(!role.permissions.contains(&forbidden), "{} 不得继续授予 {forbidden}", role.id);
-            }
-            let desired = parse_permissions(role.permissions).unwrap();
-            let previous = approval_http_legacy_snapshot(role.id, &desired).unwrap();
-            assert!(
-                previous
-                    .iter()
-                    .all(|permission| !APPROVAL_HTTP_ACTION_PERMISSIONS
-                        .contains(&permission.to_string().as_str())),
-                "{} 旧快照不得包含新动作权限",
-                role.id
-            );
-            if role.id == "role-sysadmin" {
-                for required in APPROVAL_HTTP_ACTION_PERMISSIONS {
-                    assert!(role.permissions.contains(required), "系统管理员缺少 {required}");
-                }
+            if template.id == "role-sysadmin" {
+                assert!(template.permissions.iter().all(|permission| {
+                    !matches!(permission.resource(), "approval_process" | "approval_instance")
+                }));
             }
         }
     }

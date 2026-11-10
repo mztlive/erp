@@ -145,9 +145,9 @@ pub trait FulfillmentWorkflow: Send + Sync {
     ) -> Result<()>;
 }
 
-/// 已装配的工作项服务与保留独立材料授权来源的审批运行能力。
+/// 已装配的工作项服务与审批运行能力。
 ///
-/// 普通授权沿用调用方服务；启动快照和取消材料由审批运行能力在原步骤创建各自授权源。
+/// 身份服务由应用统一注入，业务步骤沿用调用方执行器。
 pub struct FulfillmentWorkflowServices<A> {
     service: WorkItemService<A>,
     runtime: Arc<dyn ApprovalRuntimePort>,
@@ -158,7 +158,7 @@ impl<A> FulfillmentWorkflowServices<A> {
     ///
     /// # 参数
     /// * `service` - 已注入原授权、业务事实和审计提供者的工作项服务。
-    /// * `runtime` - 在各原材料步骤分别构造授权源的审批运行能力。
+    /// * `runtime` - 已注入共享身份和业务来源授权的审批运行能力。
     ///
     /// # 返回
     /// 返回不执行读取或写入的履约工作流能力。
@@ -183,8 +183,8 @@ where
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalDefinitionBinding>> {
         Ok(bind_published_definition_on_document_create(
+            &self.service.identity,
             &self.service.db,
-            &self.service.auth,
             object_read,
             self.service.audit.as_ref(),
             command,
@@ -200,7 +200,7 @@ where
         assets: &[FileAsset],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(authorize_material_transfer(&self.service.auth, actor, assets, executor).await?)
+        Ok(authorize_material_transfer(&self.service.identity, actor, assets, executor).await?)
     }
 
     async fn authorize_stock_adjustment_cancel(
@@ -209,7 +209,15 @@ where
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustmentCancelAuthorization> {
-        authorize_with(&self.service.db, &self.service.auth, instance, actor, executor).await
+        authorize_with(
+            &self.service.identity,
+            &self.service.db,
+            &self.service.auth,
+            instance,
+            actor,
+            executor,
+        )
+        .await
     }
 
     async fn persist_start_snapshot(
@@ -226,7 +234,15 @@ where
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        authorize_submit_with(&self.service.db, &self.service.auth, adjustment, actor, executor).await
+        authorize_submit_with(
+            &self.service.identity,
+            &self.service.db,
+            &self.service.auth,
+            adjustment,
+            actor,
+            executor,
+        )
+        .await
     }
 
     async fn revalidate_stock_adjustment_candidates(
@@ -237,8 +253,8 @@ where
         executor: &mut dyn Executor,
     ) -> Result<()> {
         revalidate_candidates_with(
+            &self.service.identity,
             &self.service.db,
-            &self.service.auth,
             graph,
             initiator_id,
             organization_id,

@@ -8,6 +8,7 @@ use persistence_core::Executor;
 use super::{AccessPolicy, AccessRegistration, AuthorizationService};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::authorization::{AccessContext, AccessFact, AccessRule, AccessSubject, ReadAccess};
+use crate::entity::fingerprint::Fingerprint;
 use crate::repository::authorization::AccessProof;
 use crate::repository::resource_grants;
 use crate::service::access_control::resolve::DataScopeService;
@@ -43,15 +44,17 @@ impl AuthorizationService {
             .policy(&entry.policy, &entry, &context, &mut resolution, executor)
             .await?
             .requiring(&entry.required_facts);
-        let version = format!(
-            "{:x}",
-            md5::compute(format!("{:?}:{:?}:{rule:?}:{model:?}", resolution.versions, entry.subject))
-        );
+        // v2 字段顺序：无序版本依赖、主体、规则、可选模型标识。
+        let mut version = Fingerprint::new("authorization-proof-v2");
+        version.unordered(&resolution.versions, |hash, value| hash.text(value));
+        version.subject(&entry.subject);
+        version.rule(&rule);
+        version.optional(model.as_ref(), |hash, key| hash.text(key.as_str()));
         Ok(AccessProof {
             context,
             subject: entry.subject.clone(),
             rule,
-            version,
+            version: version.finish(),
             valid_until: resolution.valid_until,
             session: executor.session().map(|s| s.id().clone()),
             registry: self.token.clone(),
@@ -173,7 +176,11 @@ impl AuthorizationService {
                 resource.scope_action(&entry.permission)?;
                 let revision =
                     resource_grants::revision(&self.db, context.actor.id(), resource, executor).await?;
-                resolution.versions.push(format!("{resource:?}:{revision}"));
+                // v2 字段顺序：固定资源代码、授权修订号。
+                let mut version = Fingerprint::new("resource-grant-v2");
+                version.text(resource.code());
+                version.number(revision);
+                resolution.versions.push(version.finish());
                 Ok(AccessRule::any(vec![base, AccessRule::RecordReadGrant(resource)]))
             },
             _ => Ok(base),

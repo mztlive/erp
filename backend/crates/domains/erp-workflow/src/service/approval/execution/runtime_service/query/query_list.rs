@@ -125,7 +125,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        if !approval_participant_permissions_with_executor(&self.auth, actor, &mut NoTransaction).await? {
+        if !approval_participant_permissions_with_executor(&self.identity, actor, &mut NoTransaction).await? {
             return Ok(RuntimeInstanceListPage {
                 items: Vec::new(),
                 total: 0,
@@ -398,7 +398,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             process_required_document_types()?
         } else {
             crate::service::approval::scope::definition_management_visibility_with_executor(
-                &self.auth, actor, executor,
+                &self.identity,
+                actor,
+                executor,
             )
             .await?
             .runtime_admin_types()

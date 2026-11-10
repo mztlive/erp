@@ -6,6 +6,7 @@ use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessInstance;
 use chrono::Utc;
 use entity_core::BaseModel;
+use erp_identity::SharedRbacService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -13,20 +14,21 @@ use persistence_core::Executor;
 use crate::entity::approval_copy::{ApprovalCopyConfig, ApprovalCopyReceipt, CopyTrigger};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::error::{Error, Result};
-use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::{ApprovalIntegrationExt, ApprovalSubjectSnapshotRepositoryExt, BpmExt};
 
 /// 启动事务生成一次流程开始抄送；旧定义无配置时零写入。
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+///
 /// 数据库、当前授权端口、已冻结快照和提交事务。
 /// # 返回
 /// 无。
 /// # 错误
 /// 实例不匹配、配置损坏或数据库失败时中止提交。
 pub async fn persist_started_copy(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
     snapshot: &ApprovalSubjectSnapshot,
     ex: &mut dyn Executor,
 ) -> Result<()> {
@@ -40,19 +42,21 @@ pub async fn persist_started_copy(
         snapshot.approval_process_instance_id.clone(),
         instance.current_round_no,
     );
-    persist_events(db, auth, &instance, &[event], snapshot, ex).await
+    persist_events(identity_service, db, &instance, &[event], snapshot, ex).await
 }
 
 /// 决定或取消原事务中按绑定版本追加抄送。
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+///
 /// 数据库、授权端口、实例、已接受事件和原事务。
 /// # 返回
 /// 无；恢复与受阻事件不产生记录。
 /// # 错误
 /// 快照不匹配、数据库或账号读取失败时回滚。
 pub async fn persist_copies(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
     instance: &ApprovalProcessInstance,
     events: &[BpmEvent],
     ex: &mut dyn Executor,
@@ -73,12 +77,13 @@ pub async fn persist_copies(
         .find_by_process_instance_id(&instance.base.id, ex)
         .await?
         .ok_or_else(|| Error::Internal("抄送缺少提交快照".into()))?;
-    persist_events(db, auth, instance, events, &snapshot, ex).await
+    persist_events(identity_service, db, instance, events, &snapshot, ex).await
 }
 
 async fn persist_events(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
+
     instance: &ApprovalProcessInstance,
     events: &[BpmEvent],
     snapshot: &ApprovalSubjectSnapshot,
@@ -107,8 +112,13 @@ async fn persist_events(
         return Err(Error::Internal("抄送版本不匹配".into()));
     }
     for event in events {
-        persist_event(db, auth, Dispatch { instance, snapshot, graph: &graph, config: &config, event }, ex)
-            .await?;
+        persist_event(
+            identity_service,
+            db,
+            Dispatch { instance, snapshot, graph: &graph, config: &config, event },
+            ex,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -120,8 +130,9 @@ struct Dispatch<'a> {
     event: &'a BpmEvent,
 }
 async fn persist_event(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
+
     context: Dispatch<'_>,
     ex: &mut dyn Executor,
 ) -> Result<()> {
@@ -140,7 +151,8 @@ async fn persist_event(
     if ids.is_empty() {
         return Ok(());
     }
-    let accounts = auth.rbac()?.directory().accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
+    let accounts =
+        identity_service.directory().accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
     let mut rows = Vec::new();
     for id in ids {
         let account = accounts.iter().find(|a| a.id == id);

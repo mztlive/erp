@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use bpm::model::types::ModelError;
-use erp_identity::AccountSummary;
+use erp_identity::{AccountSummary, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -12,7 +12,7 @@ use super::super::scope::approval_participant_permissions_with_executor;
 use super::process_not_configured;
 use super::upgrade::map_model_error;
 use crate::error::{Error, Result};
-use crate::ports::{ApprovalObjectReadPort, OrderTaskSource, WorkflowAuthorizationPort};
+use crate::ports::{ApprovalObjectReadPort, OrderTaskSource};
 use crate::repository::bpm::DefinitionGraph;
 
 /// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
@@ -38,8 +38,8 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 /// Adapter 重验指定用户、权限、对象范围、读取权与岗位分离。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `_db` - 数据库参数；本函数不读取
-/// * `rbac` - 共享 RBAC 服务
 /// * `_object_read` - 对象读取端口；本函数不读取
 /// * `policy` - 当前单据类型必须审批政策
 /// * `context` - 当前单据组织与创建人事实
@@ -55,8 +55,8 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 /// # 关键业务约束
 /// 审批人集合由 BPM 图确定性提取，Service 只编排外部资格判断。
 pub async fn revalidate_binding_graph(
+    identity_service: &SharedRbacService,
     _db: &Database,
-    rbac: &impl WorkflowAuthorizationPort,
     _object_read: &dyn ApprovalObjectReadPort,
     policy: &ProcessRequiredApprovalPolicy,
     context: &BindingRevalidationContext,
@@ -65,7 +65,7 @@ pub async fn revalidate_binding_graph(
 ) -> Result<()> {
     let assignee_ids = graph.assignee_ids();
     ensure_separation_of_duties(policy.separation_of_duties_policy, &context.creator_id, &assignee_ids)?;
-    let accounts = load_assignee_accounts(rbac, &assignee_ids, executor).await?;
+    let accounts = load_assignee_accounts(identity_service, &assignee_ids, executor).await?;
     for user_id in &assignee_ids {
         let account = require_ready_assignee(accounts.get(user_id))?;
         let assignee = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
@@ -77,7 +77,7 @@ pub async fn revalidate_binding_graph(
         {
             return Err(Error::ValidationError("订单审批绑定缺少内部业务部门".into()));
         }
-        if !approval_participant_permissions_with_executor(rbac, &assignee, executor).await? {
+        if !approval_participant_permissions_with_executor(identity_service, &assignee, executor).await? {
             return Err(Error::ValidationError("指定审批人缺少审批读取或决定权限".into()));
         }
     }
@@ -87,7 +87,7 @@ pub async fn revalidate_binding_graph(
 /// 一次批量读取定义内全部审批人账号事实。
 ///
 /// # 参数
-/// * `rbac` - 共享 RBAC 服务
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `assignee_ids` - BPM 按确定顺序提取的审批人 ID
 /// * `executor` - 调用方事务执行器
 ///
@@ -101,12 +101,11 @@ pub async fn revalidate_binding_graph(
 /// Repository 不保证 `$in` 结果顺序；Service 必须继续按 `assignee_ids`
 /// 逐用户查表与重验 RBAC，保留首错与精确错误语义。
 async fn load_assignee_accounts(
-    rbac: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     assignee_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, AccountSummary>> {
-    Ok(rbac
-        .rbac()?
+    Ok(identity_service
         .directory()
         .accounts(assignee_ids, executor)
         .await?

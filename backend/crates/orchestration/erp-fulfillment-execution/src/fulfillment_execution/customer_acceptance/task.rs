@@ -6,12 +6,12 @@
 
 use erp_core::ids::SalesOrderId;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AccountSummary, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
-    AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
 use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
@@ -263,8 +263,9 @@ async fn ensure_customer_acceptance_owner_eligible(
         db.accounts().find_work_item_account(owner_user_id, executor).await?.ok_or_else(|| {
             Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string())
         })?;
-    AvailableWorkItemAccount::from_account(&AccountSummary::from(&account))
-        .map_err(|_| Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()))?;
+    if !account.can_login() {
+        return Err(Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()));
+    }
     let granted = rbac.permissions(account.kind, owner_user_id).await?;
     let required = PermissionSet::new(
         required_permissions

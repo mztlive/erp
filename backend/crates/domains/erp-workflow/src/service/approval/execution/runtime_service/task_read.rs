@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -12,8 +13,7 @@ use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::{
-    approval_action_roles_with_executor, approval_participant_permissions_with_executor,
-    require_approval_management_with_executor,
+    approval_participant_permissions_with_executor, require_approval_management_with_executor,
 };
 
 mod batch;
@@ -24,6 +24,7 @@ mod tests;
 /// 验证任务、执行、实例及冻结主体，形成仅该审批任务的读取资格。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` / `auth` - 工作流仓储及当前权限事实。
 /// * `actor` - 当前已认证读者。
 /// * `item` - 服务端读取的审批任务。
@@ -33,20 +34,23 @@ mod tests;
 /// # 错误
 /// 仓储、策略或冻结主体损坏时失败关闭。
 pub async fn approval_task_readable_with_executor(
+    identity_service: &SharedRbacService,
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     item: &WorkItem,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let readable = approval_tasks_readable_with_executor(db, auth, actor, &[item], executor).await?;
+    let readable =
+        approval_tasks_readable_with_executor(identity_service, db, auth, actor, &[item], executor).await?;
     Ok(readable.first().copied().unwrap_or(false))
 }
 
 /// 在加载具体运行事实之前逐任务证明静态读取资格。
 ///
 /// # 参数
-/// * `auth` / `actor` - 当前权限端口与认证身份
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// * `identity_service` / `actor` - 当前权限端口与认证身份
 /// * `item` - 服务端任务事实
 /// * `executor` - 调用方执行器
 ///
@@ -56,16 +60,17 @@ pub async fn approval_task_readable_with_executor(
 /// # 错误
 /// 保持每任务原有账号、角色和策略版本失败语义。
 async fn task_read_candidate(
-    auth: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
     item: &WorkItem,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     if item.work_item_type != WorkItemType::DocumentApproval
         || item.assignment_source != AssignmentSource::ApprovalRuntime
-        || approval_action_roles_with_executor(auth, actor, "approval_instance:read", executor)
+        || identity_service
+            .qualified_permissions(actor, &[Permission::parse("approval_instance:read")?], executor)
             .await?
-            .is_empty()
+            .is_none_or(|qualified| qualified.permissions().is_empty())
     {
         return Ok(false);
     }
@@ -75,6 +80,7 @@ async fn task_read_candidate(
 /// 在已装载的精确运行主体上执行原责任链与逐任务动态权限分支。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `auth` / `actor` - 当前权限事实与认证身份
 /// * `item` / `subject` - 本次快照下的任务和冻结主体
 /// * `open_tasks` - 同一执行关联的全部开放任务
@@ -86,6 +92,7 @@ async fn task_read_candidate(
 /// # 错误
 /// 决定能力、管理来源或策略重验失败时保持原错误。
 async fn task_subject_readable(
+    identity_service: &SharedRbacService,
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     item: &WorkItem,
@@ -99,11 +106,11 @@ async fn task_subject_readable(
     let owner = item.owner_user_id.as_deref().unwrap_or_default();
     if owner == actor.id()
         && (item.status != WorkItemStatus::Open
-            || approval_participant_permissions_with_executor(auth, actor, executor).await?)
+            || approval_participant_permissions_with_executor(identity_service, actor, executor).await?)
     {
         return Ok(true);
     }
-    manager_can_read(auth, actor, subject, executor).await
+    manager_can_read(identity_service, auth, actor, subject, executor).await
 }
 
 /// 对单任务和批量任务共用同一开放唯一链及实际完成链规则。
@@ -139,6 +146,7 @@ fn task_chain_matches_subject(
 /// 管理员在真实业务来源边界内读取已验证的审批任务。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `auth` / `actor` - 当前权限端口与身份
 /// * `subject` - 已验证冻结主体
 /// * `executor` - 原事务执行器
@@ -149,12 +157,14 @@ fn task_chain_matches_subject(
 /// # 错误
 /// 除 Forbidden 之外的策略及来源错误原样传播。
 async fn manager_can_read(
+    identity_service: &SharedRbacService,
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     subject: &RuntimeReadSubject,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     match require_approval_management_with_executor(
+        identity_service,
         auth,
         actor,
         "approval_instance:read",

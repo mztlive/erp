@@ -4,6 +4,7 @@ use erp_audit::execution::{persist_log, recover_command};
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
+use erp_identity::SharedRbacService;
 use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
@@ -35,11 +36,9 @@ use super::{
 };
 use crate::{Error, Result};
 
-struct PreparedSubmission<A: WorkflowAuthorizationPort> {
+struct PreparedSubmission {
     statement: SupplierSettlementStatement,
     work_item: WorkItem,
-    auth: A,
-    policy_revision: u64,
 }
 
 struct PreparedDecision {
@@ -85,19 +84,17 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let statement =
             self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         validate_submission_command(&statement, &req, actor)?;
-        let auth = (self.fresh_work_items)().auth;
         let policy_revision = self
-            .authorize_reviewer(&auth, &req.reviewer_user_id, actor.id(), &statement.business_org_unit_id)
+            .authorize_reviewer(&req.reviewer_user_id, actor.id(), &statement.business_org_unit_id)
             .await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let operation_id = req.operation_id.clone();
-        let prepared = PreparedSubmission { statement, work_item, auth, policy_revision };
-        let auth = prepared.auth.clone();
-        let policy_revision = prepared.policy_revision;
+        let prepared = PreparedSubmission { statement, work_item };
         let input = SubmissionCommit::new(self, req, actor, prepared, (&audit_id, &fingerprint));
-        let transaction_result = auth
-            .rbac()?
+        let transaction_result = self
+            .work_items
+            .identity
             .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(input.persist(executor))
             })
@@ -321,9 +318,8 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         if work_item.owner_user_id.as_deref() != Some(actor.id()) {
             return Err(Error::Forbidden("仅原复核人可重放决定".into()));
         }
-        let auth = (self.fresh_work_items)().auth;
         reviewers::ensure_reviewer(
-            &auth,
+            &self.work_items.identity,
             actor.id(),
             &statement.prepared_by,
             &statement.business_org_unit_id,
@@ -335,23 +331,25 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     }
 }
 
-struct SubmissionCommit<A: WorkflowAuthorizationPort> {
+struct SubmissionCommit {
+    identity: SharedRbacService,
     context: SettlementWriteContext,
     request: SubmitSettlementReviewRequest,
-    prepared: PreparedSubmission<A>,
+    prepared: PreparedSubmission,
     command_id: String,
     fingerprint: String,
 }
 
-impl<A: WorkflowAuthorizationPort> SubmissionCommit<A> {
-    fn new(
+impl SubmissionCommit {
+    fn new<A: WorkflowAuthorizationPort>(
         process: &SupplierSettlementProcess<A>,
         request: SubmitSettlementReviewRequest,
         actor: &AuditActor,
-        prepared: PreparedSubmission<A>,
+        prepared: PreparedSubmission,
         identity: (&str, &str),
     ) -> Self {
         Self {
+            identity: process.work_items.identity.clone(),
             context: process.write_context(actor),
             request,
             prepared,
@@ -373,7 +371,7 @@ impl<A: WorkflowAuthorizationPort> SubmissionCommit<A> {
         }
         ensure_review_submission_ready(&context.db, &current, context.actor.id(), executor).await?;
         reviewers::ensure_reviewer(
-            &self.prepared.auth,
+            &self.identity,
             &self.request.reviewer_user_id,
             &current.prepared_by,
             &current.business_org_unit_id,

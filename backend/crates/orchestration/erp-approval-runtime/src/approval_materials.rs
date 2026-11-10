@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_core::ids::FileAssetId;
+use erp_identity::SharedRbacService;
 use erp_read_models::workbench::{authorize_material_transfer, invoice_sales_reference};
 use erp_support::repository::FileAssetExt;
 use erp_support::{FileAssetService, FileAssetView, SecurityScanStatus};
@@ -68,14 +69,16 @@ impl ReadPhase {
 
 /// 建立关联前验证文件来源资格，冻结提交时仍须在事务内重新验证。
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+///
 /// 身份数据库、权限服务、当前账号及目标文件 ID。
 /// # 返回
 /// 文件由本人创建或当前具有文件读取资格时成功。
 /// # 错误
 /// 文件不存在、账号失效或无文件来源资格时拒绝。
-pub async fn authorize_attachment<A: WorkflowAuthorizationPort>(
+pub async fn authorize_attachment(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &A,
     actor: &AuditActor,
     file_id: &str,
 ) -> Result<()> {
@@ -84,7 +87,7 @@ pub async fn authorize_attachment<A: WorkflowAuthorizationPort>(
         .find_by_id(file_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
-    authorize_material_transfer(auth, actor, &[file], &mut NoTransaction).await?;
+    authorize_material_transfer(identity_service, actor, &[file], &mut NoTransaction).await?;
     Ok(())
 }
 

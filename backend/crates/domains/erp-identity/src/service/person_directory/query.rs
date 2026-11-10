@@ -5,15 +5,16 @@ use std::collections::BTreeSet;
 use application_core::{AuditActor, PageView};
 use mongodb::Database;
 use persistence_core::Executor;
-use serde_json::to_vec;
 
 use crate::dto::PersonDirectoryPage;
+use crate::entity::fingerprint::Fingerprint;
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::person_directory::{
     DirectoryListRequest, PersonDirectoryCategory, candidate_in_directory, directory_org_ids,
 };
 use crate::repository::OrganizationRepository;
+use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::person_directory_query::{
     DIRECTORY_LIMIT, DirectoryRead, DirectoryResult, directory_page,
 };
@@ -66,7 +67,12 @@ pub async fn list_page(
     )
     .await?;
     let display = display_version(db, &mut authorized, &result, executor).await?;
-    let version = format!("{:x}", md5::compute(format!("{display}:{:?}:{org_filter:?}", request.search,)));
+    // v2 字段顺序：展示版本、可选搜索词、可选无序组织集合。
+    let mut version = Fingerprint::new("person-directory-query-v2");
+    version.text(&display);
+    version.optional(request.search.as_deref(), Fingerprint::text);
+    version.optional(org_filter.as_ref(), |hash, ids| hash.unordered(ids, |hash, id| hash.text(id)));
+    let version = version.finish();
     ensure_current_version(&request.scope_version, &version)?;
     page_from_result(result, request.page, request.page_size, &authorized, version)
 }
@@ -186,15 +192,16 @@ async fn display_version(
     authorized.facts.organizations.memberships = OrganizationRepository::new(db)
         .directory_memberships(Some(&ids), None, authorized.facts.as_of, executor)
         .await?;
-    let content = content_version(&authorized.facts.scope_version, result)?;
-    let relations = authorized
-        .facts
-        .organizations
-        .memberships
-        .iter()
-        .map(|row| (&row.user_id, &row.org_unit_id, &row.base.id, row.base.version))
-        .collect::<Vec<_>>();
-    Ok(format!("{:x}", md5::compute(format!("{content}:{relations:?}"))))
+    // v2 字段顺序：内容版本、无序关系（账号、组织、关系 ID、关系版本）。
+    let mut version = Fingerprint::new("person-directory-display-v2");
+    version.text(&content_version(&authorized.facts.scope_version, result));
+    version.unordered(&authorized.facts.organizations.memberships, |hash, row| {
+        hash.text(&row.user_id);
+        hash.text(&row.org_unit_id);
+        hash.text(&row.base.id);
+        hash.number(row.base.version);
+    });
+    Ok(version.finish())
 }
 
 /// 将组织状态转为有界的人员范围索引；公司无个人上限时不展开全部账号。
@@ -237,13 +244,12 @@ fn scope_ids(
 }
 
 /// 内容索引包含账号显示信息和资格版本，不用人数代替目录版本。
-fn content_version(scope: &str, result: &DirectoryResult) -> Result<String> {
-    let mut hash = md5::Context::new();
-    hash.consume(scope.as_bytes());
-    for row in &result.versions {
-        hash.consume(to_vec(row)?);
-    }
-    Ok(format!("{:x}", hash.finalize()))
+fn content_version(scope: &str, result: &DirectoryResult) -> String {
+    // v2 字段顺序：范围版本、无序人员版本文档；文档内部保留 BSON 字段顺序。
+    let mut hash = Fingerprint::new("person-directory-content-v2");
+    hash.text(scope);
+    hash.unordered(&result.versions, Fingerprint::document);
+    hash.finish()
 }
 
 /// 展开用户指定的目录组织条件。
@@ -385,11 +391,29 @@ mod tests {
     #[test]
     fn changed_display_or_empty_authorization_invalidates_previous_version() {
         let result = version_fixture("甲", "active");
-        let old = content_version("scope", &result).unwrap();
-        assert_ne!(old, content_version("scope", &version_fixture("乙", "active")).unwrap());
-        assert_ne!(old, content_version("scope", &version_fixture("甲", "suspended")).unwrap());
-        let empty = content_version("no-scope", &DirectoryResult::default()).unwrap();
-        assert!(ensure_current_version(&Some(old), &empty).is_err());
+        let old = content_version("scope", &result);
+        assert_ne!(old, content_version("scope", &version_fixture("乙", "active")));
+        assert_ne!(old, content_version("scope", &version_fixture("甲", "suspended")));
+        let empty = content_version("no-scope", &DirectoryResult::default());
+        assert!(matches!(
+            ensure_current_version(&Some(old.clone()), &empty),
+            Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED")
+        ));
+        assert!(ensure_current_version(&Some(old.clone()), &old).is_ok());
+        assert!(ensure_current_version(&None, &old).is_ok());
+    }
+
+    /// 目录内容按人员事实集合编码，返回顺序变化不造成版本漂移。
+    #[test]
+    fn directory_versions_ignore_row_order_but_bind_scope() {
+        let mut result = version_fixture("甲", "active");
+        result.versions.extend(version_fixture("乙", "active").versions);
+        let version = content_version("scope", &result);
+        result.versions.reverse();
+        assert_eq!(version, content_version("scope", &result));
+        assert_ne!(version, content_version("other-scope", &result));
+        result.versions.pop();
+        assert_ne!(version, content_version("scope", &result));
     }
 
     #[test]

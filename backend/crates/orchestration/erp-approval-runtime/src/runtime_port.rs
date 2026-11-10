@@ -5,6 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use bpm::engine::DefinitionGraph;
+use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_support::FileAsset;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
@@ -17,9 +18,6 @@ use erp_workflow::service::approval::binding::{
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::service::approval::policy::ProcessRequiredApprovalPolicy;
-use erp_workflow::service::approval::{
-    approval_action_roles_with_executor, approval_actor_is_active_with_executor,
-};
 use erp_workflow::{ApprovalObjectReadPort, WorkflowAuthorizationPort};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -156,25 +154,21 @@ pub trait ApprovalRuntimePort: Send + Sync {
 
 /// 由应用装配原授权与审计提供者的审批共有运行能力。
 pub struct ApprovalRuntime<A> {
+    pub(crate) identity: SharedRbacService,
     auth: A,
     audit: Arc<dyn WorkflowAuditPort>,
-    material_auth_factory: Arc<dyn Fn() -> A + Send + Sync>,
 }
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntime<A> {
     /// 绑定现有提供者；构造时不查询、授权或写入。
     /// # 参数
-    /// `auth`、`audit` 为调用方原授权和审计提供者；`material_auth_factory` 为材料各原步骤创建独立授权实例的工厂。
+    /// `identity` 为共享身份服务；`auth`、`audit` 为业务授权和审计提供者。
     /// # 返回
     /// 返回可注入业务编排的运行能力。
     /// # 错误
     /// 不返回错误。
-    pub fn new(
-        auth: A,
-        audit: Arc<dyn WorkflowAuditPort>,
-        material_auth_factory: Arc<dyn Fn() -> A + Send + Sync>,
-    ) -> Self {
-        Self { auth, audit, material_auth_factory }
+    pub fn new(identity: SharedRbacService, auth: A, audit: Arc<dyn WorkflowAuditPort>) -> Self {
+        Self { identity, auth, audit }
     }
 }
 
@@ -186,7 +180,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         snapshot: ApprovalSubjectSnapshot,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_start_snapshot(db, snapshot, self.material_auth_factory.as_ref(), executor).await
+        persist_start_snapshot(&self.identity, db, snapshot, &self.auth, executor).await
     }
 
     async fn persist_cancel_copies(
@@ -195,7 +189,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         writes: &PlannedWrites,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_cancel_copies(db, writes, self.material_auth_factory.as_ref(), executor).await
+        persist_cancel_copies(&self.identity, db, writes, executor).await
     }
 
     async fn bind_document(
@@ -207,8 +201,8 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalDefinitionBinding>> {
         Ok(bind_published_definition_on_document_create(
+            &self.identity,
             db,
-            &self.auth,
             object_read,
             self.audit.as_ref(),
             command,
@@ -219,7 +213,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
     }
 
     async fn authorize_attachment(&self, db: &Database, actor: &AuditActor, file_id: &str) -> Result<()> {
-        authorize_attachment(db, &self.auth, actor, file_id).await
+        authorize_attachment(&self.identity, db, actor, file_id).await
     }
 
     async fn authorize_material_transfer(
@@ -228,10 +222,10 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         files: &[FileAsset],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(authorize_material_transfer(&self.auth, actor, files, executor).await?)
+        Ok(authorize_material_transfer(&self.identity, actor, files, executor).await?)
     }
     async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(approval_actor_is_active_with_executor(&self.auth, actor, executor).await?)
+        Ok(self.identity.directory().actor_is_active(actor, executor).await?)
     }
 
     async fn action_roles(
@@ -240,7 +234,12 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         permission: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        Ok(approval_action_roles_with_executor(&self.auth, actor, permission, executor).await?)
+        let permission = Permission::parse(permission)?;
+        let qualified =
+            self.identity.qualified_permissions(actor, std::slice::from_ref(&permission), executor).await?;
+        Ok(qualified
+            .map(|value| value.roles(&permission).into_iter().map(|role| role.to_string()).collect())
+            .unwrap_or_default())
     }
 
     async fn source_readable(
@@ -262,6 +261,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         graph: &DefinitionGraph,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(revalidate_binding_graph(db, &self.auth, object_read, policy, context, graph, executor).await?)
+        Ok(revalidate_binding_graph(&self.identity, db, object_read, policy, context, graph, executor)
+            .await?)
     }
 }

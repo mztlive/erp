@@ -6,6 +6,7 @@ pub mod auth;
 pub mod authorization;
 pub mod authorization_bundle;
 pub(crate) mod database_reset;
+pub(crate) mod fingerprint;
 pub mod organization;
 pub mod organization_change;
 pub mod person_directory;

@@ -4,9 +4,10 @@
 
 use std::sync::Arc;
 
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 
-use crate::ports::{FailClosedAuditPort, WorkflowAuditPort, WorkflowAuthorizationPort};
+use crate::ports::{FailClosedAuditPort, WorkflowAuditPort};
 
 mod command;
 mod create;
@@ -19,33 +20,33 @@ mod retire;
 pub use super::scope::{DefinitionManagementVisibility, definition_management_visibility};
 
 /// 审批流程定义管理服务。
-pub struct ApprovalDefinitionService<A> {
+pub struct ApprovalDefinitionService {
+    pub(crate) identity: SharedRbacService,
     db: Database,
-    pub(crate) auth: A,
     pub(crate) audit: Arc<dyn WorkflowAuditPort>,
 }
 
-impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 创建定义管理服务。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
-    /// * `auth` - 授权 Port
+    /// * `identity` - 共享身份与权限服务
     ///
     /// # 返回
     /// 返回尚未接线 HTTP 的应用端口。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, auth: A) -> Self {
-        Self { db, auth, audit: Arc::new(FailClosedAuditPort) }
+    pub fn new(db: Database, identity: SharedRbacService) -> Self {
+        Self { db, identity, audit: Arc::new(FailClosedAuditPort) }
     }
 
     /// 创建注入审计端口的定义管理服务。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
-    /// * `auth` - 授权 Port
+    /// * `identity` - 共享身份与权限服务
     /// * `audit` - 审计写入端口
     ///
     /// # 返回
@@ -53,8 +54,8 @@ impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn with_audit(db: Database, auth: A, audit: Arc<dyn WorkflowAuditPort>) -> Self {
-        Self { db, auth, audit }
+    pub fn with_audit(db: Database, identity: SharedRbacService, audit: Arc<dyn WorkflowAuditPort>) -> Self {
+        Self { db, identity, audit }
     }
 }
 

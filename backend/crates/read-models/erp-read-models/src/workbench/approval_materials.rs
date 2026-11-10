@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_core::ids::{BusinessDocumentId, FileAssetId, SalesChangeOrderId, SalesOrderId};
+use erp_identity::SharedRbacService;
 use erp_returns::repository::ReturnsExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
@@ -30,6 +31,7 @@ pub(super) mod related_sales;
 /// 在原提交事务内冻结显示与附件版本，历史快照不补取当前材料。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` / `executor` - 原业务提交事务。
 /// * `auth` - 在同一事务中重验提交账号和文件预览资格的权限端口。
 /// * `snapshot` - 已匹配本次提交的强类型快照。
@@ -38,6 +40,7 @@ pub(super) mod related_sales;
 /// # 错误
 /// 单据类型不匹配、附件资产缺失或材料超限时中止提交。
 pub async fn freeze_approval_materials(
+    identity_service: &SharedRbacService,
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
     mut snapshot: ApprovalSubjectSnapshot,
@@ -46,7 +49,7 @@ pub async fn freeze_approval_materials(
     snapshot.links =
         work_item_links::capture(db, snapshot.document_type.as_str(), &snapshot.business_object_id, executor)
             .await?;
-    let (mut materials, actor) = direct_materials(db, auth, &snapshot, executor).await?;
+    let (mut materials, actor) = direct_materials(identity_service, db, &snapshot, executor).await?;
     if let Some(contract) = sales_contract_material(db, auth, &actor, &snapshot, executor).await? {
         materials.push(contract);
     }
@@ -103,8 +106,8 @@ fn unique_materials(mut materials: Vec<ApprovalMaterialFile>) -> Vec<ApprovalMat
 
 /// 本单直接附件保持原上传者或通用文件预览资格，不以关联记录替代转授授权。
 async fn direct_materials(
+    identity_service: &SharedRbacService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<(Vec<ApprovalMaterialFile>, AuditActor)> {
@@ -133,8 +136,7 @@ async fn direct_materials(
     if files.len() != ids.len() {
         return Err(Error::ConflictError("审批材料引用的文件不存在或已删除".into()));
     }
-    let account = auth
-        .rbac()?
+    let account = identity_service
         .directory()
         .account(&snapshot.payload.submitted_by, executor)
         .await?
@@ -142,7 +144,7 @@ async fn direct_materials(
         .ok_or_else(|| Error::Forbidden("审批材料原提交账号不存在或已失效".into()))?;
     let actor = AuditActor::new(account.id, account.login_account, account.kind)
         .with_actor_name_snapshot(Some(account.display_name))?;
-    authorize_material_transfer(auth, &actor, &files, executor).await?;
+    authorize_material_transfer(identity_service, &actor, &files, executor).await?;
     Ok((files.iter().map(material_from_asset).collect(), actor))
 }
 

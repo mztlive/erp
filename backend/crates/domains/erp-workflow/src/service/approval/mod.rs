@@ -30,7 +30,6 @@ pub use dto::{
     ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
 };
 pub use scope::{
-    approval_action_roles_with_executor, approval_actor_is_active, approval_actor_is_active_with_executor,
     approval_participant_permissions_with_executor, approval_recovery_authorization,
     definition_management_visibility_with_executor, require_approval_management_with_executor,
 };

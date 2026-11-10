@@ -76,9 +76,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             return Err(Error::ValidationError("抄送查询条件无效".into()));
         }
         query.query = query.query.map(|q| q.trim().to_owned()).filter(|q| !q.is_empty());
-        require_reader(&self.auth, actor, &mut NoTransaction).await?;
+        require_reader(&self.identity, actor, &mut NoTransaction).await?;
         let page = self.db.approval_copies().page(actor.id(), &query, &mut NoTransaction).await?;
-        require_reader(&self.auth, actor, &mut NoTransaction).await?;
+        require_reader(&self.identity, actor, &mut NoTransaction).await?;
         Ok(page)
     }
 
@@ -94,12 +94,8 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let mut display =
             snapshot.display.ok_or_else(|| Error::ConflictError("该审批未保存可预览资料".into()))?;
         if display.source.needs_submitter_name(&snapshot.payload.submitted_by) {
-            let account = self
-                .auth
-                .rbac()?
-                .directory()
-                .account(&snapshot.payload.submitted_by, &mut NoTransaction)
-                .await?;
+            let account =
+                self.identity.directory().account(&snapshot.payload.submitted_by, &mut NoTransaction).await?;
             display.source.resolve_submitter_name(
                 &snapshot.payload.submitted_by,
                 account.as_ref().map(|a| a.display_name.as_str()),
@@ -185,7 +181,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .clone()
             .with_transaction(move |ex| {
                 Box::pin(async move {
-                    require_reader(&service.auth, &actor, ex).await?;
+                    require_reader(&service.identity, &actor, ex).await?;
                     for id in &ids {
                         service.copy_subject(&actor, id, ex).await?;
                     }
@@ -205,7 +201,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         id: &str,
         ex: &mut dyn Executor,
     ) -> Result<(ApprovalCopyReceipt, ApprovalSubjectSnapshot, ApprovalProcessInstance)> {
-        require_reader(&self.auth, actor, ex).await?;
+        require_reader(&self.identity, actor, ex).await?;
         let receipt =
             self.db.approval_copies().receipt(id, actor.id(), ex).await?.ok_or_else(copy_not_found)?;
         let snapshot = self

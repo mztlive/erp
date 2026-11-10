@@ -3,8 +3,7 @@ use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{AccountSummary, Permission, PermissionSet};
-use erp_workflow::entity::work_item::AvailableWorkItemAccount;
+use erp_identity::{AccountSummary, Permission, PermissionSet, SharedRbacService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
@@ -31,7 +30,7 @@ fn eligible(
     scopes: &[(String, Option<String>)],
 ) -> bool {
     account.id != preparer_id
-        && AvailableWorkItemAccount::from_account_kind(account, AccountKind::Admin).is_ok()
+        && account.is_active_backoffice()
         && [
             "supplier_settlement_statement:detail",
             "supplier_settlement_statement:confirm",
@@ -44,7 +43,7 @@ fn eligible(
 
 /// 候选资格由同一启用财务角色提供完整动作；对象访问由指定复核任务证明。
 async fn reviewer_scopes(
-    auth: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     account: &AccountSummary,
     preparer: &str,
     org: &str,
@@ -54,10 +53,10 @@ async fn reviewer_scopes(
     let required =
         ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"];
     let required = required.into_iter().map(Permission::parse).collect::<StdResult<Vec<_>, _>>()?;
-    let snapshot = auth.rbac()?.role_permission_snapshot(account.kind, &account.id, &required).await?;
-    auth.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    let snapshot = identity_service.role_permission_snapshot(account.kind, &account.id, &required).await?;
+    identity_service.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
     let roles =
-        auth.rbac()?.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
+        identity_service.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
     Ok(roles.into_iter().map(|role| (role.to_string(), None)).collect())
 }
 
@@ -81,19 +80,20 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         if !statement.is_prepared_by(actor.id()) || !statement.is_editable() {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
-        let auth = self.work_items.auth.clone();
-        let accounts =
-            auth.rbac()?.directory().accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
+        let accounts = self
+            .work_items
+            .identity
+            .directory()
+            .accounts_by_kind(AccountKind::Admin, &mut NoTransaction)
+            .await?;
         let mut options = Vec::new();
         for account in accounts {
-            if account.id == actor.id()
-                || AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).is_err()
-            {
+            if account.id == actor.id() || !account.is_active_backoffice() {
                 continue;
             }
-            let permissions = auth.rbac()?.permissions(account.kind, &account.id).await?;
+            let permissions = self.work_items.identity.permissions(account.kind, &account.id).await?;
             let scopes = reviewer_scopes(
-                &auth,
+                &self.work_items.identity,
                 &account,
                 &statement.prepared_by,
                 &statement.business_org_unit_id,
@@ -115,7 +115,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// 在提交时重新验证人员资格并返回一致的授权版本；过期策略由提交事务拒绝。
     ///
     /// # 参数
-    /// * `auth` - 工作流授权端口。
     /// * `reviewer_id` - 拟指定的复核人。
     /// * `preparer_id` - 当前经办人，须与复核人岗位分离。
     /// * `org` - 结算单业务组织。
@@ -127,15 +126,15 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// 资格校验失败时返回对应错误。连续三次读到的政策版本不一致时返回 `ConflictError`。
     pub(super) async fn authorize_reviewer(
         &self,
-        auth: &impl WorkflowAuthorizationPort,
         reviewer_id: &str,
         preparer_id: &str,
         org: &str,
     ) -> Result<u64> {
         for _ in 0..3 {
-            let revision = auth.rbac()?.current_policy_revision().await?;
-            ensure_reviewer(auth, reviewer_id, preparer_id, org, &mut NoTransaction).await?;
-            if revision == auth.rbac()?.current_policy_revision().await? {
+            let revision = self.work_items.identity.current_policy_revision().await?;
+            ensure_reviewer(&self.work_items.identity, reviewer_id, preparer_id, org, &mut NoTransaction)
+                .await?;
+            if revision == self.work_items.identity.current_policy_revision().await? {
                 return Ok(revision);
             }
         }
@@ -146,7 +145,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// 在调用方事务内重验岗位分离、账号及同一启用财务角色的完整动作。
 ///
 /// # 参数
-/// * `auth` - 工作流授权端口。
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `reviewer_id` - 复核人账号。
 /// * `preparer_id` - 经办人账号。
 /// * `org` - 结算单业务组织。
@@ -159,20 +158,19 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// 复核人不存在时返回 `ValidationError`。资格、权限或财务角色不满足时返回 `Forbidden`。
 /// 账号或范围读取失败时返回对应错误。
 pub(super) async fn ensure_reviewer(
-    auth: &impl WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     reviewer_id: &str,
     preparer_id: &str,
     org: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let account = auth
-        .rbac()?
+    let account = identity_service
         .directory()
         .account(reviewer_id, executor)
         .await?
         .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
-    let permissions = auth.rbac()?.permissions(account.kind, reviewer_id).await?;
-    let scopes = reviewer_scopes(auth, &account, preparer_id, org, executor).await?;
+    let permissions = identity_service.permissions(account.kind, reviewer_id).await?;
+    let scopes = reviewer_scopes(identity_service, &account, preparer_id, org, executor).await?;
     if !eligible(&account, preparer_id, &permissions, &scopes) {
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
     }

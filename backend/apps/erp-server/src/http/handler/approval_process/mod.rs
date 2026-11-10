@@ -22,7 +22,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::handler::approval_instance::error::{ApprovalHttpError, parse_version};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::workflow::{WorkflowAuth, workflow_audit, workflow_auth};
+use crate::wiring::workflow::workflow_audit;
 
 /// 定义 Handler 结果。
 type ApprovalResult<T> = std::result::Result<ApiResponse<T>, ApprovalHttpError>;
@@ -44,12 +44,9 @@ pub async fn definition_catalog(
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
 ) -> ApprovalResult<Vec<DefinitionCatalogItem>> {
-    let visibility = definition_management_visibility(
-        &workflow_auth(state.application().db(), state.application().rbac()),
-        &actor,
-    )
-    .await
-    .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    let visibility = definition_management_visibility(&state.application().rbac(), &actor)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let items = definition_service(&state)
         .definition_catalog(&actor, &visibility)
         .await
@@ -67,12 +64,9 @@ pub async fn definition_versions(
     headers: HeaderMap,
     Path(document_type): Path<DocumentType>,
 ) -> ApprovalResult<Vec<DefinitionVersionItem>> {
-    let visibility = definition_management_visibility(
-        &workflow_auth(state.application().db(), state.application().rbac()),
-        &actor,
-    )
-    .await
-    .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    let visibility = definition_management_visibility(&state.application().rbac(), &actor)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let versions = definition_service(&state)
         .definition_versions(document_type, &actor, &visibility)
         .await
@@ -90,12 +84,9 @@ pub async fn definition_detail(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApprovalResult<DefinitionDetailView> {
-    let visibility = definition_management_visibility(
-        &workflow_auth(state.application().db(), state.application().rbac()),
-        &actor,
-    )
-    .await
-    .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
+    let visibility = definition_management_visibility(&state.application().rbac(), &actor)
+        .await
+        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let view = definition_service(&state)
         .definition_detail(&id, &actor, &visibility)
         .await
@@ -212,10 +203,10 @@ pub async fn eligible_assignees(
 }
 
 /// 构造定义管理服务。
-fn definition_service(state: &HttpState) -> ApprovalDefinitionService<WorkflowAuth> {
+fn definition_service(state: &HttpState) -> ApprovalDefinitionService {
     ApprovalDefinitionService::with_audit(
         state.application().db(),
-        workflow_auth(state.application().db(), state.application().rbac()),
+        state.application().rbac(),
         workflow_audit(state.application().db()),
     )
 }

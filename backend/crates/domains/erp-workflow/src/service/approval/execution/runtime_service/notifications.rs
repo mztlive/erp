@@ -6,6 +6,7 @@ use application_core::AuditActor;
 use bpm::engine::TaskIntent;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -14,11 +15,8 @@ use super::super::notification_outbox::NotificationIntent;
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
-use crate::ports::ApprovalObjectReadPort;
 use crate::repository::ApprovalIntegrationExt;
-use crate::service::approval::{
-    approval_action_roles_with_executor, definition_management_visibility_with_executor,
-};
+use crate::service::approval::definition_management_visibility_with_executor;
 
 /// 决定通知只消费冻结快照、实际执行与当前权限事实。
 pub(super) struct DecisionNotificationFacts<'a> {
@@ -134,6 +132,7 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 /// 读取当前有效且真正具备该单据类型运行管理权限的通知收件人。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `_db` - 保留给调用形参，本函数不直接查库。
 /// * `rbac` - 账号与权限端口。
 /// * `_object_read` - 保留给调用形参，本函数不读取对象正文。
@@ -147,24 +146,27 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 /// # 错误
 /// 账号、权限或来源可读性读取失败时返回对应错误。
 pub(super) async fn runtime_admin_notification_recipients(
-    _db: &Database,
+    identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    _object_read: &dyn ApprovalObjectReadPort,
+
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let accounts = rbac.rbac()?.directory().accounts_by_kind(erp_core::AccountKind::Admin, executor).await?;
+    let accounts =
+        identity_service.directory().accounts_by_kind(erp_core::AccountKind::Admin, executor).await?;
     let mut recipients = Vec::new();
     for account in accounts {
         if !account.is_active_backoffice() {
             continue;
         }
         let actor = AuditActor::new(account.id.clone(), account.id.clone(), account.kind);
-        let visibility = definition_management_visibility_with_executor(rbac, &actor, executor).await?;
-        let can_read = !approval_action_roles_with_executor(rbac, &actor, "approval_instance:read", executor)
+        let visibility =
+            definition_management_visibility_with_executor(identity_service, &actor, executor).await?;
+        let can_read = identity_service
+            .qualified_permissions(&actor, &[Permission::parse("approval_instance:read")?], executor)
             .await?
-            .is_empty();
+            .is_some_and(|qualified| !qualified.permissions().is_empty());
         if visibility.runtime_admin_types().contains(&document_type)
             && can_read
             && rbac

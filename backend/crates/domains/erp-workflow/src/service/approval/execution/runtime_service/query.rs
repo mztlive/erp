@@ -11,6 +11,7 @@ use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use erp_core::common::time::Instant;
+use erp_identity::Permission;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
@@ -41,8 +42,7 @@ use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{
-    approval_action_roles_with_executor, approval_participant_permissions_with_executor,
-    require_approval_management_with_executor,
+    approval_participant_permissions_with_executor, require_approval_management_with_executor,
 };
 use crate::service::work_item::approval_rework::open_rework_id;
 
@@ -266,9 +266,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 RuntimeRecoveryAction::ResumeCurrentApprover => "approval_instance:resume",
                 RuntimeRecoveryAction::CancelBlocked => "approval_instance:cancel_blocked",
             };
-            if !approval_action_roles_with_executor(&self.auth, actor, permission, &mut NoTransaction)
+            if self
+                .identity
+                .qualified_permissions(actor, &[Permission::parse(permission)?], &mut NoTransaction)
                 .await?
-                .is_empty()
+                .is_some_and(|qualified| !qualified.permissions().is_empty())
             {
                 actions.push(action);
             }
@@ -358,14 +360,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
     pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
-        if !approval_action_roles_with_executor(
-            &self.auth,
-            actor,
-            "approval_instance:read",
-            &mut NoTransaction,
-        )
-        .await?
-        .is_empty()
+        if self
+            .identity
+            .qualified_permissions(actor, &[Permission::parse("approval_instance:read")?], &mut NoTransaction)
+            .await?
+            .is_some_and(|qualified| !qualified.permissions().is_empty())
         {
             return Ok(());
         }
@@ -492,6 +491,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
         require_approval_management_with_executor(
+            &self.identity,
             &self.auth,
             actor,
             "approval_instance:read",
@@ -513,7 +513,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         subject: &RuntimeReadSubject,
     ) -> Result<bool> {
         if subject.instance.status != ApprovalProcessInstanceStatus::Running
-            || !approval_participant_permissions_with_executor(&self.auth, actor, &mut NoTransaction).await?
+            || !approval_participant_permissions_with_executor(&self.identity, actor, &mut NoTransaction)
+                .await?
         {
             return Ok(false);
         }

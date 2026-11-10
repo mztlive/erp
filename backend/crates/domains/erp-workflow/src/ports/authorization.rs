@@ -6,7 +6,6 @@ use std::future::Future;
 use application_core::AuditActor;
 #[cfg(test)]
 use erp_core::AccountKind;
-use erp_identity::SharedRbacService;
 use persistence_core::Executor;
 
 use super::object_facts::OrderTaskSource;
@@ -14,19 +13,8 @@ use super::{WorkflowScopeObject, WorkflowScopeObjects};
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 
-/// 工作流消费的业务来源取证与共享身份设施。
+/// 工作流消费的跨域业务来源取证；身份服务由用例直接注入。
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
-    /// 取得共享 identity 服务；通用权限与策略事务直接使用 identity API。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回组合根装配的共享 RBAC 服务。
-    /// # 错误
-    /// 未装配时拒绝，不构造空权限或降级身份。
-    fn rbac(&self) -> Result<&SharedRbacService> {
-        Err(Error::Internal("身份服务未装配".into()))
-    }
-
     /// 当前审批办理在原事务检查完整单据读取资格。
     /// # 参数
     /// actor 为已验证当前办理人；source 为实际订单；instance 为审批实例；executor 为原事务。

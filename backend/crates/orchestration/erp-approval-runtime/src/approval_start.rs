@@ -8,6 +8,7 @@ use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
+use erp_identity::SharedRbacService;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
@@ -113,10 +114,11 @@ async fn apply_runtime_steps(steps: &impl StartRuntimeSteps, executor: &mut dyn 
 /// 冻结附件并保存提交快照，沿用入口的写入顺序。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 业务与审批数据库。
 /// * `snapshot` - 入口已补充专有展示资料的快照。
 /// * `executor` - 同一业务提交执行器。
-/// * `auth_factory` - 在材料冻结前和快照持久化后分别创建独立授权实例的工厂。
+/// * `auth` - 材料来源的业务授权端口。
 ///
 /// # 返回
 /// 冻结资料和快照保存完成时返回空值。
@@ -124,14 +126,14 @@ async fn apply_runtime_steps(steps: &impl StartRuntimeSteps, executor: &mut dyn 
 /// # 错误
 /// 附件冻结或快照写入失败时立即返回，调用方不得继续创建任务。
 pub async fn persist_start_snapshot<A: WorkflowAuthorizationPort>(
+    identity_service: &SharedRbacService,
     db: &Database,
     snapshot: ApprovalSubjectSnapshot,
-    auth_factory: impl Fn() -> A,
+    auth: &A,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let auth = auth_factory();
-    let snapshot = freeze_approval_materials(db, snapshot, &auth, executor).await?;
-    persist_approval_snapshot(db, &snapshot, auth_factory, executor).await
+    let snapshot = freeze_approval_materials(identity_service, db, snapshot, auth, executor).await?;
+    persist_approval_snapshot(identity_service, db, &snapshot, executor).await
 }
 
 /// 依计划顺序创建入口人工任务，并返回首个任务回执。

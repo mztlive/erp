@@ -5,7 +5,7 @@ use bpm::ParticipantId;
 use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition};
-use erp_identity::AccountSummary;
+use erp_identity::{AccountSummary, SharedRbacService};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -33,7 +33,7 @@ use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::bpm::CasWriteOutcome;
 use crate::service::approval::copies::{save_config, validate_recipients};
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 整组替换草稿节点。
     ///
     /// # 参数
@@ -94,7 +94,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
-        let rbac = self.auth.clone();
+
+        let identity_service = self.identity.clone();
         let audit = std::sync::Arc::clone(&self.audit);
         let transaction_actor = actor.clone();
         let transaction_policy = policy.clone();
@@ -106,8 +107,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     replace_nodes_tx(
+                        &identity_service,
                         &db,
-                        &rbac,
                         graph,
                         ReplaceNodesTxInput {
                             policy: transaction_policy,
@@ -161,8 +162,8 @@ struct ReplaceNodesTxInput<'a> {
 /// 回放收据或校验并持久化新草稿图。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前草稿图
 /// * `input` - 政策、请求、摘要与操作人
 /// * `executor` - 执行器
@@ -176,14 +177,14 @@ struct ReplaceNodesTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn replace_nodes_tx(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: DefinitionGraph,
     input: ReplaceNodesTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let ReplaceNodesTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(rbac, actor, &policy, executor).await?;
+    ensure_definition_admin_permission(identity_service, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -197,7 +198,9 @@ async fn replace_nodes_tx(
     let reloaded =
         reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
-    let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, executor).await?;
+    let prepared =
+        prepare_replacement(identity_service, db, &reloaded, &policy, &request.nodes, actor, executor)
+            .await?;
     let repository = db.approval_copies();
     let rules = match request.copy_rules {
         Some(rules) => rules,
@@ -207,10 +210,10 @@ async fn replace_nodes_tx(
             &prepared.nodes,
         )?,
     };
-    validate_recipients(rbac, &rules, executor).await?;
+    validate_recipients(identity_service, &rules, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&prepared).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
-    save_config(db, &prepared, rbac, rules, executor).await?;
+    save_config(identity_service, db, &prepared, rules, executor).await?;
     apply_draft_graph(
         db,
         audit,
@@ -275,8 +278,8 @@ pub(super) async fn reload_draft_for_cas(
 /// 按请求构造替换后的草稿图。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - MongoDB 数据库
-/// * `rbac` - 共享 RBAC 服务
 /// * `graph` - 当前草稿图
 /// * `policy` - 当前单据类型必须审批政策
 /// * `requests` - 客户端整组节点请求
@@ -292,8 +295,8 @@ pub(super) async fn reload_draft_for_cas(
 /// # 关键业务约束
 /// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
 async fn prepare_replacement(
+    identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     graph: &DefinitionGraph,
     policy: &ProcessRequiredApprovalPolicy,
     requests: &[DefinitionNodeRequest],
@@ -304,9 +307,10 @@ async fn prepare_replacement(
     let drafts = node_replacement_drafts(requests)?;
     let planned = graph.plan_replacement_nodes(&drafts, now()?).map_err(map_model_error)?;
     let assignee_ids = assignee_ids(&planned);
-    let snapshots = load_assignee_snapshots(rbac, &assignee_ids, session).await?;
-    let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph =
-        allow_replace_after_assignees(validate_assignees(db, rbac, policy, &assignee_ids, session).await)?;
+    let snapshots = load_assignee_snapshots(identity_service, &assignee_ids, session).await?;
+    let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph = allow_replace_after_assignees(
+        validate_assignees(identity_service, db, policy, &assignee_ids, session).await,
+    )?;
     let nodes = apply_snapshots(planned, &snapshots)?;
     rebuild_draft_graph(&graph.definition, nodes)
 }
@@ -418,8 +422,8 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
 /// 批量读取审批人并校验账号、静态权限与可静态判断的岗位分离。
 ///
 /// # 参数
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `_db` - 数据库参数；本函数不读取
-/// * `rbac` - 共享 RBAC 服务
 /// * `policy` - 当前单据类型必须审批政策
 /// * `user_ids` - BPM 确定性提取的审批人 ID
 /// * `session` - 调用方事务执行器
@@ -433,16 +437,16 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
 /// # 关键业务约束
 /// 定义期不读取具体实例 DataScopeFact，运行时对象访问资格由绑定与执行阶段重验。
 pub(super) async fn validate_assignees(
+    identity_service: &SharedRbacService,
     _db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     policy: &ProcessRequiredApprovalPolicy,
     user_ids: &[String],
     session: &mut dyn Executor,
 ) -> Result<()> {
-    let accounts = load_assignee_snapshots(rbac, user_ids, session).await?;
+    let accounts = load_assignee_snapshots(identity_service, user_ids, session).await?;
     for user_id in user_ids {
         let account = require_active_backoffice_assignee(accounts.get(user_id))?;
-        ensure_static_eligibility(rbac, policy, account, session).await?;
+        ensure_static_eligibility(identity_service, policy, account, session).await?;
     }
     validate_static_separation(policy.separation_of_duties_policy, user_ids)
 }
@@ -450,7 +454,7 @@ pub(super) async fn validate_assignees(
 /// 批量读取账号快照。
 ///
 /// # 参数
-/// * `rbac` - 共享 RBAC 服务
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `user_ids` - 去重后的审批人账号 ID
 /// * `session` - 调用方事务执行器
 ///
@@ -463,21 +467,21 @@ pub(super) async fn validate_assignees(
 /// # 关键业务约束
 /// 查询条件由账号 Repository 的 `list_by_ids` 封装，禁止 Service 拼装 MongoDB 条件。
 pub(super) async fn load_assignee_snapshots(
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     user_ids: &[String],
     session: &mut dyn Executor,
 ) -> Result<HashMap<String, AccountSummary>> {
     if user_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let accounts = rbac.rbac()?.directory().accounts(user_ids, session).await?;
+    let accounts = identity_service.directory().accounts(user_ids, session).await?;
     Ok(accounts.into_iter().map(|account| (account.id.clone(), account)).collect())
 }
 
 /// 校验后台有效账号与静态审批权限，不伪造实例 DataScopeFact。
 ///
 /// # 参数
-/// * `rbac` - 共享 RBAC 服务
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `policy` - 当前单据类型审批人资格政策
 /// * `account` - Repository 返回的账号快照
 ///
@@ -490,7 +494,7 @@ pub(super) async fn load_assignee_snapshots(
 /// # 关键业务约束
 /// 账号类型与状态组合由实体判断；本方法只编排 RBAC 权限重验。
 async fn ensure_static_eligibility(
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     policy: &ProcessRequiredApprovalPolicy,
     account: &AccountSummary,
     executor: &mut dyn Executor,
@@ -500,7 +504,7 @@ async fn ensure_static_eligibility(
     }
     require_active_backoffice_assignee(Some(account))?;
     let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-    let allowed = approval_participant_permissions_with_executor(rbac, &actor, executor).await?;
+    let allowed = approval_participant_permissions_with_executor(identity_service, &actor, executor).await?;
     ensure_static_decide_permission(allowed)
 }
 

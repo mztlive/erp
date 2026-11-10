@@ -90,6 +90,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<UpgradeBindingResultView> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
+        let identity_service = self.identity.clone();
         let object_read = Arc::clone(&self.object_read);
         let upgrade = Arc::clone(&self.upgrade);
         let audit = Arc::clone(&self.audit);
@@ -99,6 +100,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     upgrade_unsubmitted_document_definition(
+                        &identity_service,
                         &db,
                         &rbac,
                         object_read.as_ref(),
@@ -124,6 +126,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         recover_by_replay(original_error, || async {
             let db = self.db.clone();
             let rbac = self.auth.clone();
+            let identity_service = self.identity.clone();
             let upgrade = Arc::clone(&self.upgrade);
             let actor = actor.clone();
             let command = command.clone();
@@ -132,6 +135,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .with_transaction(move |executor| {
                     Box::pin(async move {
                         replay_unsubmitted_document_definition_upgrade(
+                            &identity_service,
                             &db,
                             &rbac,
                             upgrade.as_ref(),

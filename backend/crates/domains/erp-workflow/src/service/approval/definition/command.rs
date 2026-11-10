@@ -11,6 +11,7 @@ use bpm::model::{
 };
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
+use erp_identity::SharedRbacService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -79,7 +80,7 @@ pub(super) enum DefinitionResultExpectation {
     DefinitionId(String),
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl ApprovalDefinitionService {
     /// 校验操作人具备该类型定义管理权。
     ///
     /// # 参数
@@ -96,7 +97,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         actor: &AuditActor,
         policy: &ProcessRequiredApprovalPolicy,
     ) -> Result<()> {
-        ensure_definition_admin_permission(&self.auth, actor, policy, &mut NoTransaction).await
+        ensure_definition_admin_permission(&self.identity, actor, policy, &mut NoTransaction).await
     }
 
     /// 读取定义图，缺失时失败关闭。
@@ -172,7 +173,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         }
         for attempt in 0..DEFINITION_COMMAND_RECOVERY_ATTEMPTS {
             let db = self.db.clone();
-            let rbac = self.auth.clone();
+
+            let identity_service = self.identity.clone();
             let actor = actor.clone();
             let policy = policy.clone();
             let identity = identity.clone();
@@ -182,7 +184,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        ensure_definition_admin_permission(&rbac, &actor, &policy, executor).await?;
+                        ensure_definition_admin_permission(&identity_service, &actor, &policy, executor)
+                            .await?;
                         replay_prepared_definition_receipt(&db, &identity, &expectation, executor).await
                     })
                 })
@@ -780,7 +783,7 @@ pub(super) fn ensure_legacy_result(
 /// 使用当前启用角色重新验证目标类型定义管理权。
 ///
 /// # 参数
-/// * `rbac` - 共享 RBAC 服务
+/// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `actor` - 已认证操作人
 /// * `policy` - 目标单据类型必须审批政策
 /// * `executor` - 调用方事务或非事务执行器
@@ -794,12 +797,13 @@ pub(super) fn ensure_legacy_result(
 /// # 关键业务约束
 /// 回放与 Fresh 必须共用本检查，禁止用账号级 Casbin 判定绕过停用角色。
 pub(super) async fn ensure_definition_admin_permission(
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    identity_service: &SharedRbacService,
     actor: &AuditActor,
     policy: &ProcessRequiredApprovalPolicy,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let visibility = definition_management_visibility_with_executor(rbac, actor, executor).await?;
+    let visibility =
+        definition_management_visibility_with_executor(identity_service, actor, executor).await?;
     ensure_definition_admin_allowed(visibility.can_define(policy.document_type))
 }
 
