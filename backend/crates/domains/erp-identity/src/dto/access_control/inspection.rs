@@ -114,7 +114,7 @@ impl AccessInspectionView {
     /// 包含操作权限、范围和个人限制的检查报告。
     /// # 错误
     /// 无。
-    pub fn from_access(access: &AuthorizedDataScope) -> Self {
+    pub(crate) fn from_access(access: &AuthorizedDataScope) -> Self {
         let mut view = Self {
             scope_version: Some(access.scope_version.clone()),
             checked_at: Some(access.as_of.as_utc().to_rfc3339()),
@@ -188,11 +188,9 @@ mod tests {
         use crate::access_control::ResolvedScope;
         use crate::entity::organization_change::OrganizationState;
         AuthorizedDataScope::test_fixture(DataScopeFacts {
-            user_id: "u".into(),
             resource: "sales_order".into(),
             action: "detail".into(),
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-            qualified_roles: Default::default(),
             organizations: OrganizationState::default(),
             policy_version: 1,
             scope_version: "v1".into(),

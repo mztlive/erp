@@ -38,7 +38,7 @@ mod person_scope;
 pub mod person_scope_migration;
 mod person_scope_query;
 pub mod policy_bundle;
-pub mod resolve;
+pub(crate) mod resolve;
 
 use application_core::AuditActor;
 

@@ -2,6 +2,7 @@
 
 pub mod access_control;
 mod account_core;
+pub mod authorization;
 pub mod casbin_adapter;
 pub(crate) mod database_reset;
 pub mod extensions;

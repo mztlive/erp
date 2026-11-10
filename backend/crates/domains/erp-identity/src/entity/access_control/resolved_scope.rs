@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use super::ScopeDimension;
+use crate::entity::authorization::AccessRule;
 
 #[cfg(test)]
 #[path = "resolved_scope_tests.rs"]
@@ -48,20 +49,7 @@ impl ScopeClause {
     /// # 错误
     /// 不返回错误。
     pub fn covers(&self, object: &ScopedObject<'_>) -> bool {
-        if self.company {
-            return true;
-        }
-        let ownership = (self.self_owned && object.owned)
-            || (self.collaborative && object.collaborating)
-            || object.org_unit_id.is_some_and(|id| self.org_unit_ids.contains(id));
-        let has_ownership_dimension = self.self_owned || self.collaborative || !self.org_unit_ids.is_empty();
-        let has_other_dimension = !self.settlement_party_ids.is_empty() || !self.warehouse_ids.is_empty();
-        (!has_ownership_dimension || ownership)
-            && (has_ownership_dimension || has_other_dimension)
-            && (self.settlement_party_ids.is_empty()
-                || object.settlement_party_id.is_some_and(|id| self.settlement_party_ids.contains(id)))
-            && (self.warehouse_ids.is_empty()
-                || object.warehouse_id.is_some_and(|id| self.warehouse_ids.contains(id)))
+        AccessRule::clause(self).allows_scope(object)
     }
 
     /// 校验资源要求的维度均有该角色自己的范围证据。
@@ -90,9 +78,7 @@ impl ResolvedScope {
     /// # 错误
     /// 不返回错误。
     pub fn allows(&self, object: &ScopedObject<'_>, allow_history: bool) -> bool {
-        let granted = self.role_clauses.iter().any(|scope| scope.covers(object))
-            || (allow_history && object.historical_read_participant);
-        granted && self.user_limit.as_ref().is_none_or(|limit| limit.covers(object))
+        AccessRule::scope(self, allow_history).allows_scope(object)
     }
 
     /// 判断角色是否贡献该资源动作的正向范围。

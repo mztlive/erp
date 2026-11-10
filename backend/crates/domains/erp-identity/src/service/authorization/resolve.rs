@@ -1,0 +1,202 @@
+use std::sync::Arc;
+
+use application_core::AuditActor;
+use erp_core::common::time::Instant;
+use futures_util::future::BoxFuture;
+use persistence_core::Executor;
+
+use super::{AccessPolicy, AccessRegistration, AuthorizationService};
+use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+use crate::entity::authorization::{AccessContext, AccessFact, AccessRule, AccessSubject, ReadAccess};
+use crate::repository::authorization::AccessProof;
+use crate::repository::prelude::*;
+use crate::repository::resource_grants;
+use crate::service::access_control::resolve::DataScopeService;
+use crate::{AccessControlExt, Error, Permission, Result};
+
+struct Resolution {
+    versions: Vec<String>,
+    valid_until: Option<Instant>,
+}
+
+impl AuthorizationService {
+    /// 冻结身份与登记模型，范围节点共享解释时点。
+    pub(super) async fn resolve(
+        &self,
+        actor: &AuditActor,
+        entry: Arc<AccessRegistration>,
+        executor: &mut dyn Executor,
+    ) -> Result<AccessProof> {
+        let version = self.identity(actor, &entry, executor).await?;
+        let model = match &entry.subject {
+            AccessSubject::View(key) => Some(key.clone()),
+            _ => entry.mapping.as_ref().map(|mapping| mapping.model().key.clone()),
+        };
+        let context = AccessContext {
+            actor: actor.clone(),
+            permission: entry.permission.clone(),
+            resource: entry.permission.resource().into(),
+            model: model.clone(),
+            as_of: Instant::now(),
+        };
+        let mut resolution = Resolution { versions: vec![version], valid_until: None };
+        let rule = self
+            .policy(&entry.policy, &entry, &context, &mut resolution, executor)
+            .await?
+            .requiring(&entry.required_facts);
+        let version = format!(
+            "{:x}",
+            md5::compute(format!("{:?}:{:?}:{rule:?}:{model:?}", resolution.versions, entry.subject))
+        );
+        Ok(AccessProof {
+            context,
+            subject: entry.subject.clone(),
+            rule,
+            version,
+            valid_until: resolution.valid_until,
+            session: executor.session().map(|s| s.id().clone()),
+            registry: self.token.clone(),
+        })
+    }
+
+    /// 无对象资格不装载组织树，多个权限必须由同一启用角色证明。
+    pub(super) async fn identity(
+        &self,
+        actor: &AuditActor,
+        entry: &AccessRegistration,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let mut permissions = entry.required_permissions.clone();
+        permissions.push(entry.permission.clone());
+        self.qualification(actor, &permissions, executor)
+            .await?
+            .ok_or_else(|| Error::Forbidden("账号或有效角色不具备本操作的完整权限".into()))
+    }
+
+    /// 功能资格与对象入口共享账号、启用角色和同角色完整权限证明。
+    pub(super) async fn qualification(
+        &self,
+        actor: &AuditActor,
+        permissions: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
+        let account = self
+            .db
+            .accounts()
+            .find_by_id(actor.id(), executor)
+            .await?
+            .filter(|account| account.is_authorization_actor(actor.kind()));
+        let Some(account) = account else {
+            return Ok(None);
+        };
+        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), permissions).await?;
+        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+        let ids = snapshot.granting_role_ids_for_all(permissions);
+        let roles = self.db.roles().enabled_roles(&ids, executor).await?;
+        if roles.is_empty() {
+            return Ok(None);
+        }
+        let mut versions = roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>();
+        versions.sort();
+        Ok(Some(format!(
+            "{}:{:?}:{}:{}:{versions:?}",
+            actor.id(),
+            actor.kind(),
+            account.base.version,
+            snapshot.policy_revision()
+        )))
+    }
+
+    /// 按登记树解析，不接受调用方传入的授权表达式。
+    fn policy<'a>(
+        &'a self,
+        policy: &'a AccessPolicy,
+        entry: &'a AccessRegistration,
+        context: &'a AccessContext,
+        resolution: &'a mut Resolution,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<AccessRule>> {
+        Box::pin(async move {
+            match policy {
+                AccessPolicy::Operation => Err(Error::ValidationError("无对象政策不能生成查询范围".into())),
+                AccessPolicy::Assigned => Ok(AccessRule::Fact(AccessFact::AssignedTo)),
+                AccessPolicy::Participant => Ok(AccessRule::Fact(AccessFact::Participant)),
+                AccessPolicy::Scope { permission, read } => {
+                    self.scope(permission, *read, entry, context, resolution, executor).await
+                },
+                AccessPolicy::All(policies) | AccessPolicy::Any(policies) => {
+                    let mut rules = Vec::new();
+                    for policy in policies {
+                        rules.push(self.policy(policy, entry, context, resolution, executor).await?);
+                    }
+                    Ok(if matches!(policy, AccessPolicy::All(_)) {
+                        AccessRule::all(rules)
+                    } else {
+                        AccessRule::any(rules)
+                    })
+                },
+                AccessPolicy::Related { relation, resource, mode, required_facts, policy } => {
+                    let context = AccessContext { resource: resource.clone(), ..context.clone() };
+                    let rule = self
+                        .policy(policy, entry, &context, resolution, executor)
+                        .await?
+                        .requiring(required_facts);
+                    Ok(AccessRule::Related {
+                        relation: relation.clone(),
+                        resource: resource.clone(),
+                        mode: *mode,
+                        rule: Box::new(rule),
+                    })
+                },
+            }
+        })
+    }
+
+    /// 范围配置与对象资源分别取证；读取授权只加入获准读取的资源。
+    async fn scope(
+        &self,
+        permission: &Permission,
+        read: ReadAccess,
+        entry: &AccessRegistration,
+        context: &AccessContext,
+        resolution: &mut Resolution,
+        executor: &mut dyn Executor,
+    ) -> Result<AccessRule> {
+        if permission.resource() != context.resource {
+            return Err(Error::ValidationError("范围政策与对象资源不匹配".into()));
+        }
+        let source = AuthorizationPolicy::scope_source(permission)?;
+        let scope = DataScopeService::new(self.db.clone(), self.rbac.clone())
+            .registered(
+                &context.actor,
+                &entry.permission,
+                &source,
+                &entry.required_permissions,
+                context.as_of,
+                executor,
+            )
+            .await?;
+        resolution.versions.push(scope.scope_version.clone());
+        for member in &scope.organizations.memberships {
+            for boundary in [Some(member.validity.valid_from), member.validity.valid_to].into_iter().flatten()
+            {
+                if boundary > context.as_of {
+                    resolution.valid_until =
+                        Some(resolution.valid_until.map_or(boundary, |old| old.min(boundary)));
+                }
+            }
+        }
+        let base = read.base(&scope.scope);
+        let resource = read.resource(permission)?;
+        match resource {
+            Some(resource) if base != AccessRule::Allow => {
+                resource.scope_action(&entry.permission)?;
+                let revision =
+                    resource_grants::revision(&self.db, context.actor.id(), resource, executor).await?;
+                resolution.versions.push(format!("{resource:?}:{revision}"));
+                Ok(AccessRule::any(vec![base, AccessRule::RecordReadGrant(resource)]))
+            },
+            _ => Ok(base),
+        }
+    }
+}

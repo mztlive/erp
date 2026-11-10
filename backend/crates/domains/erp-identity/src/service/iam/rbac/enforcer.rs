@@ -109,7 +109,7 @@ impl RbacService {
     ///
     /// # 错误
     /// 当 Casbin policy 加载或匹配失败时返回错误。
-    pub async fn enforce(&self, subject: &str, permission: &Permission) -> Result<bool> {
+    pub(crate) async fn enforce(&self, subject: &str, permission: &Permission) -> Result<bool> {
         Ok(self.fresh_enforcer().await?.read().await.enforce((
             subject,
             permission.resource(),

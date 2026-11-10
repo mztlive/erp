@@ -9,13 +9,15 @@ pub mod repository;
 pub mod service;
 
 pub use dto::*;
+pub use entity::authorization::{AccessSubject, AccessTarget, ResourceTargets};
 pub use entity::portal::{PortalActor, PortalBinding, PortalRole};
 pub use entity::{
     AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount, PasswordVerification,
     Permission, PermissionSet, Role, RoleData, RoleId, RoleIdSet, RoleUpdate, Secret, access_control,
 };
 pub use error::{Error, Result};
-pub use ports::{AuthorizationPort, IdentityAuditPort, OrganizationScopeFact, PreparedResourceAudit};
+pub use ports::{AccessFactsPort, AccessMapping, IdentityAuditPort, PreparedResourceAudit};
+pub use repository::authorization::{AuthorizedQuery, CompiledAccess};
 pub use repository::portal::{PortalBindingRepository, PortalBindingRepositoryExt, PortalIdentityExt};
 pub use repository::{
     AccessControlExt, AccountCoreRepository, AccountCoreRepositoryExt, AuditEventFilter,
@@ -25,6 +27,9 @@ pub use repository::{
 };
 pub use service::access_control::AccessControlService;
 pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
+pub use service::authorization::{
+    AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService,
+};
 pub use service::iam::{
     AccountProfile, AccountProfileService, AdminItem, AdminService, AuthorizedAccountManagement,
     AuthorizedRoleGrant, BootstrapSuperAdminResult, CreateAdminParams, CreateRoleParams,

@@ -1,133 +1,115 @@
 # erp-identity
 
-负责账号登录、角色权限、组织成员和数据范围，也支持给指定账号授予销售单、采购单的读取权限。
+负责账号登录、角色权限、组织成员、数据范围及指定记录读取授权。业务授权统一使用 `AuthorizationService`。
 
-本 crate 不依赖其他业务领域。客户归谁负责、订单分配给谁等信息，由业务代码提供。
+本 crate 不依赖其他业务领域。业务模块提供 Mapping 和对象事实，组合根登记资源动作及查询模型。完整合同见 [identity 统一权限 API 设计](../../../../docs/identity-authorization-api-design.md)。
 
-统一权限 API 的待实施合同见 [identity 统一权限 API 设计](../../../../docs/identity-authorization-api-design.md)。下文说明当前接口。
+## 业务授权 API
 
-## 检查权限
+| 用途 | 方法 | 返回 |
+| --- | --- | --- |
+| 操作、单条、批量、拟创建对象检查 | `AuthorizationService::require` | `Result<()>` |
+| 列表、计数、汇总、查询式导出 | `AuthorizationService::query` | `AuthorizedQuery` |
+| 查询条件编译 | `AuthorizedQuery::compile` | `CompiledAccess` |
+| 仓储执行前后复验 | `AuthorizationService::validate` | `Result<()>` |
+| HTTP 入口、按钮功能资格 | `AuthorizationService::has_permission` | `Result<bool>` |
 
-管理端按以下顺序检查：
+`has_permission` 检查账号有效及启用角色授予的单个功能权限，不包含对象资格。业务用例仍执行 `require` 或 `query`。数据库或策略读取错误不转换为 `false`。
 
-1. 账号是否有效。
-2. 是否有本次操作的功能权限。
-3. 是否允许访问这条业务数据。
+业务不再调用 `RbacService::enforce`、`DataScopeService`、`ResourceAccessService`，也不再手工合并基础范围和记录授权。旧查询结果类型及 `read_stages`、`lookup_stages` 已移除。identity 管理用例使用的范围解析器仅在 crate 内可见。
 
-第三步按业务类型处理，不能由调用方随意省略：
+供应商门户继续使用 `PortalIdentityService`，按供应商绑定和门户岗位检查。
 
-- 客户、销售单等，按负责人、组织和人员配置的数据范围检查。
-- 采购单、商品、供应商等，有对应操作权限的有效角色可以访问公司范围内的数据，不受旧人员范围限制。修改、审批等操作还要检查单据状态和任务分配。
-- 合同复用客户的范围设置，但按合同自己的负责人和组织判断。选品方案使用所属选品册的范围。
-- 任务操作检查任务分配、参与关系和管理权限。能查看任务不代表能办理任务。
-- 人员、仓库等候选列表的可见范围，只用于选择候选项，不授予关联业务权限。
-
-各资源的规则见 [authorization_policy.rs](src/entity/access_control/authorization_policy.rs)，已接入的动作见 [consumers.rs](src/service/access_control/consumers.rs)。范围解析会拒绝未登记的资源或动作。工作项管理等操作需要显式配置范围；有效超级管理员使用公司范围。
-
-供应商门户使用 `PortalIdentityService`，检查账号绑定的供应商和门户岗位，不使用管理端的角色及组织范围。
-
-### 只检查功能权限
-
-在不需要检查数据范围的入口调用 `RbacService::enforce`。调用前先检查账号是否有效；该方法只做 Casbin 权限匹配。
+## 对象与命令
 
 ```rust
-use erp_identity::service::iam::subject;
-use erp_identity::Error;
+use erp_identity::{AccessSubject, AccessTarget, Permission, ResourceTargets};
 
-let sub = subject(actor.kind(), actor.id());
-if !rbac.enforce(&sub, &entry_permission).await? {
-    return Err(Error::Forbidden("无权执行此操作".into()));
-}
+let permission = Permission::parse("sales_order:update")?;
+authorization.require(
+    actor,
+    &permission,
+    AccessTarget::Records {
+        subject: AccessSubject::Direct,
+        ids: ResourceTargets::new(&[order_id])?,
+    },
+    executor,
+).await?;
 ```
 
-示例中的 `entry_permission` 由服务端根据当前操作确定，不能接受客户端传入的权限码。`db`、`rbac`、`actor` 和 `executor` 均由调用方提供。
+- 单条和批量使用同一入口。目标集合最多 1000 项，空集合拒绝。
+- 事实端口必须返回完整根目标及实际来源。缺失、重复、额外或资源错配的根对象导致整次失败。
+- 来源保留全部引用 ID 和实际读取对象。`AllNonEmpty` 要求集合非空、全部来源存在且有权。
+- 无对象操作使用 `AccessTarget::Operation`，仅接受已登记的无对象政策。
+- 创建使用 `AccessTarget::Proposed`。事实端口核实拟写入的责任字段及来源；历史参与和记录读取授权不能单独放行创建。
+- 对象及来源事实展开最多 1000 项、最多 8 层，超限失败，不截断。
+- 写入前在业务事务内执行检查，授权读取、业务读取和写入使用同一执行器。状态、金额、业务版本、幂等及所需并发冲突保护由业务用例负责。
 
-### 检查数据范围
-
-调用 `DataScopeService::resolve` 检查账号、角色和操作权限，并取得数据范围。需要同时检查多个权限时，使用 `resolve_permissions`；同一个有效角色必须拥有这些权限。
-
-业务代码再提供 `ScopedObject`，说明这条数据是否由当前账号负责、属于哪个组织、是否存在历史参与等。以客户详情为例：
+## 列表查询
 
 ```rust
-use erp_identity::{Error, Permission};
-use erp_identity::service::access_control::consumers::registration;
-use erp_identity::service::access_control::resolve::DataScopeService;
-
-let perm = Permission::parse("customer:detail")?;
-let access = DataScopeService::new(db.clone(), rbac.clone())
-    .resolve(actor, &perm, executor)
+let permission = Permission::parse("sales_order:list")?;
+let access = authorization
+    .query(actor, &permission, AccessSubject::Direct, executor)
     .await?;
 
-// object 由客户业务代码按当前账号和 access.as_of 查询、组装。
-let allow_history = registration(perm.resource(), perm.action())?.allows_history;
-if !access.scope.allows(&object, allow_history) {
-    return Err(Error::Forbidden("无权访问该客户".into()));
-}
+// mapping 为组合根登记的同一个 Arc<dyn AccessMapping>。
+let compiled = access.compile(mapping.as_ref(), executor).await?;
+authorization.validate(&compiled, executor).await?;
+// 仓储将 compiled.stages() 放在分页、计数、汇总之前执行。
+let page = repository.list(&filter, &compiled, executor).await?;
+authorization.validate(&compiled, executor).await?;
 ```
 
-客户负责人来自有效期内的 `CustomerAssignment`，不能从 `CustomerAccount` 直接读取负责人和组织字段。现有客户服务通过 `CustomerDataScopePort` 调用权限检查，具体实现见 [CustomerAccess](../erp-customer/src/service/customer/access.rs)。
+仓储统一封装编译、执行及前后复验。业务筛选只收窄候选集合，不能先用部分权限条件排除记录。列表、总数、汇总和导出使用同一完整授权条件。
 
-普通人员范围读取 `person_data_scopes`。生成列表查询条件时，必须保留完整规则：
+`AuthorizedQuery` 不可由业务构造或修改，绑定账号、入口、资源、模型、授权时点及身份版本。`CompiledAccess` 继续绑定 Mapping 实例、准备事实、版本和有效期。两者只用于当前读取阶段，禁止跨请求或事务缓存。
 
-- 任一 `role_clauses` 条件满足，或该动作允许的历史参与条件满足，才算命中范围。
-- 存在 `user_limit` 时，还必须满足它。
-- 每条条件中的组织、结算主体、仓库等要求，按 `ScopeClause::covers` 处理。
-- 空范围不能改成“本人”或“全公司”。列表与 `ResolvedScope::allows` 的判断结果必须一致。
+跨页游标使用 `CompiledAccess::version()`，包含身份和业务映射依赖；`AuthorizedQuery::version()` 只包含编译前身份授权依赖。复验发现账号停用、权限撤销、版本变化或有效期到达时返回 `DATA_SCOPE_CHANGED`，丢弃结果并重新查询；数据库和接入错误保留原类别。
 
-需要读取关联单据的业务，使用 `resolve_source_scope`，分别传入当前操作权限和来源范围。合同、选品方案已在 `scope_source` 中配置映射；其他来源由业务代码确定。任务操作不能直接套用普通数据范围检查。
+记录授权在数据库内按有效来源关联，不预加载账号全部授权 ID。关联采用存在性查询，不增加根记录数量。事务读取以原事务快照为准；非事务映射必须提供完整修订号，不能用前后读取代替缺失的版本证据。
 
-## 授予指定单据的读取权限
+## 服务端登记与 Mapping
 
-目前支持销售单和采购单。账号有效且有当前操作的功能权限时，满足以下任一条件即可读取：
+组合根创建 `AuthorizationRegistry`，传给 `AuthorizationService::new(db, rbac, registry)`。登记不可由 HTTP 参数生成；未登记操作拒绝。
 
-- 原数据范围允许读取。
-- 账号获得了这条单据的读取授权。
+每个 `AccessRegistration` 固定以下内容：
 
-这类授权不允许修改原单据，也不授予任务办理权限。采购单的原数据范围仍按公司共享规则处理。
+- 入口 `Permission`、额外必需权限及 `AccessSubject`。全部必需权限须由同一个有效角色提供。
+- `AccessPolicy`：无对象操作、范围、任务分配、参与、与或组合、来源关系。
+- 根对象和各来源的必需事实，以及每个范围节点的 `ReadAccess` 读取补充开关。
+- 可选 Mapping 实例、是否接受拟创建对象，以及可选的 `AccessFactsPort`。
 
-### 列表查询
+查询接入需要 Mapping；对象或拟创建对象检查需要事实端口。只做对象检查可以不登记 Mapping，不执行查询准备和编译。`View` 的标识须与模型一致，`Source` 必须对应政策中的实际关系。
 
-按以下顺序执行，不能先分页再过滤权限：
+| Mapping 能力 | 职责 |
+| --- | --- |
+| `model` | 固定模型、资源、集合、行主键、输出粒度和支持的事实维度 |
+| `key` | 返回授权资源 ID 表达式，供记录授权和来源连接使用；支持字段引用及计算表达式 |
+| `prepare` | 在原执行器读取本次事实、修订号和有效期 |
+| `records` | 限定实际存在且未删除的模型记录；根查询、来源关联均应用 |
+| `predicate` | 将一个 `AccessFact` 转成字段条件或关联存在性查询 |
+| `relation` | 提供完整来源 ID 表达式及来源 Mapping |
 
-1. 调用 `ResourceAccessService::resolve`，得到 `query`。
-2. 通过 `query.constraints()` 取得账号、资源、数据范围和版本。业务仓储将完整范围转换成 `base_filter`，保留限制条件和允许的历史参与，不能固定写成“本人负责”。
-3. 调用 `read_stages(&query, base_filter)`，将返回的阶段放在业务筛选之后、分页、计数和汇总之前。记录须保留业务主键 `id`。
-4. 用同一执行器执行聚合查询，再调用 `ensure_current` 检查读取期间授权修订号是否变化。
+`Owned` 在销售单中映射到负责销售字段，在客户中映射到有效负责人分配。字段不同，语义相同。Mapping 不决定权限条件的与或关系、个人上限或是否接受记录授权。
 
-`read_stages` 只把 `base_filter` 与指定单据授权合并，不会自动生成数据范围条件。前面的业务筛选也不能先排除“超出原范围但有单独授权”的记录。
+`QueryOutput::Object` 表示完整对象。`Share` 和 `Existence` 必须登记为独立只读视图并列出输出字段，编译器执行字段投影。份额模型每行只对应一个来源，金额只能来自该份额；存在性视图不能登记其他来源内容或完整单据金额。受限视图不能用于 `require` 完整对象检查。
 
-需要自行组合查询时可用 `lookup_stages`，调用方负责合并条件并清除临时字段。不要将账号的全部授权 ID 加载到内存，也不要用批量检查代替列表查询。
+`AccessRegistration.required_facts` 声明根对象必需事实，`AccessPolicy::Related.required_facts` 声明来源必需事实，Mapping 在 `QueryModel.facts` 中声明支持的维度。对象字段使用 `FactValue`：`Missing` 表示未读取；`Known(None)` 或已知空集合表示确认没有值。必需事实缺失时返回接入错误，其他授权分支命中不能掩盖缺失。
 
-`ensure_current` 只检查指定单据授权的修订号，不能代替账号、功能权限或完整数据范围的重新检查。
+查询缺少映射、对象检查缺少事实端口、未知事实、错误模型或不支持维度均返回错误，不能降级成全量查询。Mapping 与事实端口执行相同责任定义，并验证对象判定与列表成员判断一致。
 
-### 单条或批量检查
+## 授权规则
 
-调用 `resolve_targets`，传入本次要检查的全部 ID，每次最多 1000 项。只会查询这些 ID 的授权。
+1. 账号和同角色完整操作权限先于数据判断。
+2. 每个 `AccessPolicy::Scope` 通过 `ReadAccess { history, records }` 显式选择读取补充，默认关闭。基础数据范围为有效条款或已开启的历史参与，再与个人上限求交。
+3. 销售单、采购单的列表和详情开启 `records` 后增加有效记录读取授权分支；该分支不放行原单据修改、提交。
+4. 独立范围继续与读取结果求交。
+5. 来源业务检查入口权限及实际来源数据资格，不额外要求来源详情功能权限。
+6. 任务可见、资料可读、任务可办理分别登记；业务状态不由授权服务判断。
+7. 公司共享资源仍检查账号和操作权限，不读取无关的人员范围或记录授权。
 
-```rust
-use erp_identity::{Error, Permission};
-use erp_identity::entity::resource_access::ResourceKind;
-use erp_identity::entity::resource_access::query::ResourceTargets;
-use erp_identity::service::resource_access::ResourceAccessService;
-
-let service = ResourceAccessService::new(db.clone(), rbac.clone());
-let entry_perm = Permission::parse("sales_order:detail")?;
-let targets = ResourceTargets::new(&[order_id])?;
-let access = service
-    .resolve_targets(actor, &entry_perm, ResourceKind::SalesOrder, targets, executor)
-    .await?;
-
-// object 是业务代码为这张销售单组装的 ScopedObject。
-if !access.allows(order_id, &object) {
-    return Err(Error::Forbidden("无权访问该单据".into()));
-}
-```
-
-财务等业务写入前，需要检查来源单据是否可读时，必须在写事务内重新调用 `resolve_targets`，传入本次写操作的权限及来源资源类型。不能拿之前的详情检查结果直接放行，也不能用 `sales_order:detail` 替代写操作的权限。来源动作的功能权限不额外要求，但业务仍需检查状态、版本和任务分配。
-
-检查销售单本身时只接受 `list`、`detail`，不能用这类授权放行 `sales_order:update`。决定写入的权限检查和数据读取，必须使用写事务的同一执行器。
-
-### 创建与撤销授权
+## 管理记录读取授权
 
 人工授权使用 `ResourceGrantService`：`grant` 创建或更新，`revoke` 永久撤销一个来源，`sources` 查询账号的授权来源。这些方法会检查管理员权限。
 
@@ -150,7 +132,9 @@ if !access.allows(order_id, &object) {
 | [service/organization.rs](src/service/organization.rs) | 组织和成员管理 |
 | [service/portal/](src/service/portal/) | 供应商门户账号和登录 |
 | [service/access_control/](src/service/access_control/) | 数据范围配置、解析和检查 |
-| [service/resource_access/](src/service/resource_access/) | `ResourceAccessService` 检查读取权限；`ResourceGrantService` 管理授权；`GrantEventService` 处理事件队列 |
+| [service/resource_access/](src/service/resource_access/) | `ResourceGrantService` 管理授权；`GrantEventService` 处理事件队列 |
+| [service/authorization/](src/service/authorization/) | 统一操作、对象、查询与复验 |
+| [repository/authorization/](src/repository/authorization/) | 查询编译及不可伪造的查询结果类型 |
 | [entity/](src/entity/) | 数据结构和不访问数据库的判断规则 |
 | [repository/](src/repository/) | MongoDB 读写和查询条件 |
 | [ports/](src/ports/) | 由外部实现的业务查询和审计接口 |

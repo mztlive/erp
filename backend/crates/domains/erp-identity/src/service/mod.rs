@@ -4,6 +4,7 @@ pub mod access_control;
 pub mod account_permissions;
 pub mod account_support;
 pub mod auth;
+pub mod authorization;
 pub mod business_ownership;
 pub mod iam;
 pub mod organization;

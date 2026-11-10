@@ -3,43 +3,24 @@ use std::collections::BTreeSet;
 
 use futures_util::TryStreamExt;
 use mongodb::Database;
-use mongodb::bson::{Document, doc};
+use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
 use serde::Deserialize;
 
 use super::{GRANTS, SOURCES};
 use crate::Result;
+use crate::entity::authorization::ResourceTargets;
 use crate::entity::resource_access::ResourceKind;
-use crate::entity::resource_access::query::{AuthorizedResourceQuery, ResourceTargets};
 
-/// 编译列表读取的授权阶段，原范围与有效指定记录取并集。
-/// # 参数
-/// query 为当前事务解析的授权上下文；base_filter 为业务仓储编译的原范围条件。
-/// # 返回
-/// 必须放在业务筛选之后、分页、计数、汇总之前的聚合阶段；输入记录的 id 为稳定业务主键。
-/// # 错误
-/// 不执行 I/O；不得对输入预分页，不得把目标检查结果代入完整列表查询。
-pub fn read_stages(query: &AuthorizedResourceQuery, base_filter: Document) -> Vec<Document> {
-    let mut pipeline = vec![doc! { "$match": grant_filter(&query.user_id, query.resource) }];
-    pipeline.extend(valid_source(&query.user_id, query.resource));
+/// 对指定业务主键构造存在性读取授权关联，不丢弃未命中的根记录。
+pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson, alias: &str) -> Document {
+    let mut filter = grant_filter(user, resource);
+    filter.insert("$expr", doc! { "$eq": ["$resource_id", "$$__identity_key"] });
+    let mut pipeline = vec![doc! { "$match": filter }];
+    pipeline.extend(valid_source(user, resource));
     pipeline.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": 1 } }]);
-    vec![
-        doc! { "$lookup": { "from": GRANTS, "localField": "id", "foreignField": "resource_id",
-        "pipeline": pipeline, "as": "__resource_grant" } },
-        doc! { "$match": { "$or": [base_filter, { "__resource_grant.0": { "$exists": true } }] } },
-        doc! { "$unset": "__resource_grant" },
-    ]
-}
-
-/// 编译有效指定记录的关联阶段，由业务仓储与原范围取并集。
-/// # 参数
-/// query 为统一服务证明的当前入口。
-/// # 返回
-/// 有效来源关联阶段，须先执行再判断 __resource_grant.0；下游类型化投影不得暴露临时字段。
-/// # 错误
-/// 不执行 I/O；不得用于原单据写入。
-pub fn lookup_stages(query: &AuthorizedResourceQuery) -> Vec<Document> {
-    read_stages(query, doc! { "$expr": false }).into_iter().take(1).collect()
+    doc! { "$lookup": { "from": GRANTS, "let": { "__identity_key": key },
+    "pipeline": pipeline, "as": alias } }
 }
 
 /// 只读取本次目标的有效授权；数据库关联来源并按目标去重。
@@ -121,7 +102,6 @@ fn valid_source(user: &str, resource: ResourceKind) -> Vec<Document> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::access_control::ResolvedScope;
 
     #[test]
     fn targets_are_restricted_before_join_and_grouped_after_source_validation() {
@@ -142,28 +122,14 @@ mod tests {
     }
 
     #[test]
-    fn list_uses_target_lookup_and_unions_scope_before_pagination() {
-        let query = AuthorizedResourceQuery {
-            user_id: "u".into(),
-            resource: ResourceKind::SalesOrder,
-            scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-            scope_version: "v".into(),
-            grant_revision: 0,
-        };
-        let base = doc! { "owner_id": "u" };
-        let stages = read_stages(&query, base.clone());
-        let lookup = stages[0].get_document("$lookup").unwrap();
-        assert_eq!(lookup.get_str("localField").unwrap(), "id");
-        assert_eq!(lookup.get_str("foreignField").unwrap(), "resource_id");
+    fn lookup_binds_business_key_and_checks_live_source() {
+        let stage = grant_lookup("u", ResourceKind::SalesOrder, "$order_id".into(), "__identity_fact_0");
+        let lookup = stage.get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! { "__identity_key": "$order_id" });
         let pipeline = lookup.get_array("pipeline").unwrap();
         assert_eq!(pipeline[1], valid_source("u", ResourceKind::SalesOrder)[0].clone().into());
         assert_eq!(pipeline[2], doc! { "$match": { "__grant_source.0": { "$exists": true } } }.into());
         assert_eq!(pipeline[3], doc! { "$limit": 1 }.into());
-        assert_eq!(
-            stages[1],
-            doc! { "$match": { "$or": [base, { "__resource_grant.0": { "$exists": true } }] } }
-        );
-        assert_eq!(stages[2], doc! { "$unset": "__resource_grant" });
     }
 
     #[test]

@@ -1,26 +1,22 @@
 //! 只在原事务的一次读取阶段复用公共授权事实，范围和同角色证明仍逐请求执行。
 
 use std::collections::BTreeSet;
-use std::future::Future;
-use std::pin::Pin;
-use std::result::Result as CallbackResult;
-use std::slice;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::Executor;
 
-use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService, active_relations};
+use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService};
 use crate::access_control::ResolvedScope;
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::{registration, scope_registration};
+use crate::service::access_control::consumers::scope_registration;
 use crate::{AccessControlExt, Error, Permission, Result, RoleId, RolePermissionSnapshot};
 
 /// 一次事务读取阶段的范围解析批次；持有原执行器以阻止夹入业务写入。
-pub struct DataScopeBatch<'a> {
+pub(crate) struct DataScopeBatch<'a> {
     service: &'a DataScopeService,
     actor: &'a AuditActor,
     executor: &'a mut dyn Executor,
@@ -30,6 +26,7 @@ pub struct DataScopeBatch<'a> {
     directory: Option<OrganizationState>,
     reuse: bool,
     revalidate: bool,
+    as_of: Instant,
 }
 
 /// 账号、权限与启用角色在原事务中的共同事实，不携带任何业务范围。
@@ -66,103 +63,14 @@ impl<'a> DataScopeBatch<'a> {
             directory: None,
             reuse,
             revalidate: false,
+            as_of: Instant::now(),
         }
     }
 
-    /// 证明同一角色的完整动作资格，再解释该业务操作的独立范围。
-    /// # 参数
-    /// 目标资源动作及额外必须由同一角色提供的权限。
-    /// # 返回
-    /// 当前目标动作的范围、版本及授权时点。
-    /// # 错误
-    /// 未声明权限、无完整角色资格、版本漂移或持久化失败时拒绝。
-    pub async fn resolve_permissions(
-        &mut self,
-        entry_permission: &Permission,
-        permissions: &[Permission],
-    ) -> Result<AuthorizedDataScope> {
-        let source_permission = AuthorizationPolicy::scope_source(entry_permission)?;
-        self.resolve_boundary(entry_permission, &source_permission, permissions).await
-    }
-
-    /// 目标资格独立证明，采用指定真实业务来源的人员范围。
-    /// # 参数
-    /// entry_permission 为入口功能权限；source_permission 只选择来源范围，不要求另有来源操作权限。
-    /// # 返回
-    /// 保留目标身份与来源范围的授权上下文。
-    /// # 错误
-    /// 任一登记无效、目标权限失效、版本漂移或持久化失败时拒绝。
-    pub async fn resolve_source_scope(
-        &mut self,
-        entry_permission: &Permission,
-        source_permission: &Permission,
-    ) -> Result<AuthorizedDataScope> {
-        self.resolve_boundary(entry_permission, source_permission, &[]).await
-    }
-
-    /// 由本阶段当前启用角色独立证明静态动作，不产生任何业务数据范围。
-    /// # 参数
-    /// 已在批次中声明的操作权限。
-    /// # 返回
-    /// 存在实际授予该动作的启用角色时为 true。
-    /// # 错误
-    /// 未声明权限、账号失效、策略漂移或持久化失败时拒绝。
-    pub async fn has_permission(&mut self, permission: &Permission) -> Result<bool> {
-        self.ensure_declared(slice::from_ref(permission))?;
-        self.load_identity().await?;
-        let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
-        let ids = facts.snapshot.granting_role_ids(permission);
-        self.load_roles(&ids).await?;
-        let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
-        Ok(facts.roles.iter().any(|role| ids.iter().any(|id| id.as_str() == role.base.id)))
-    }
-
-    /// 读取本阶段的完整身份版本，不授予任何资源访问权。
-    /// # 参数
-    /// 使用构造时绑定的当前身份及原执行器。
-    /// # 返回
-    /// 账号、启用角色、策略及组织有效关系组成的版本。
-    /// # 错误
-    /// 账号失效、策略漂移或持久化失败时拒绝。
-    pub async fn authorization_version(&mut self) -> Result<String> {
-        self.load_identity().await?;
-        let ids = self.facts.as_ref().expect("公共身份事实已成功加载").snapshot.role_ids().to_vec();
-        self.load_roles(&ids).await?;
-        let at = self.facts.as_ref().expect("公共身份事实已成功加载").as_of;
-        let state = self.scope_organizations("work_item", at).await?;
-        let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
-        let active = active_relations(&state, at);
-        Ok(format!(
-            "{:x}",
-            md5::compute(format!(
-                "{}:{}:{}:{}:{:?}:{active:?}",
-                self.actor.id(),
-                facts.account_version,
-                facts.snapshot.policy_revision(),
-                state.version,
-                facts.roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>()
-            ))
-        ))
-    }
-
-    /// 在同一读取阶段借用原执行器完成其他只读事实，保持调用方已有错误顺序。
-    /// # 参数
-    /// `read` 只能查询事实，不得写入或开启事务。
-    /// # 返回
-    /// 回调的只读结果；回调结束后继续使用本批公共授权事实。
-    /// # 错误
-    /// 回调错误原样返回。
-    ///
-    /// 业务写入前必须释放本批；写入后的授权检查须创建新批次。
-    pub async fn read<'b, T, E, F>(&'b mut self, read: F) -> CallbackResult<T, E>
-    where
-        T: Send + 'b,
-        E: Send + 'b,
-        F: FnOnce(&'b mut dyn Executor) -> Pin<Box<dyn Future<Output = CallbackResult<T, E>> + Send + 'b>>
-            + Send,
-    {
-        self.revalidate = self.facts.is_some();
-        read(self.executor).await
+    /// 统一授权阶段固定事实解释时点，必须在首次取证前调用。
+    pub(super) fn at(mut self, at: Instant) -> Self {
+        self.as_of = at;
+        self
     }
 
     /// 保留调用顺序和各动作失败顺序，只去重同阶段公共事实。
@@ -174,7 +82,6 @@ impl<'a> DataScopeBatch<'a> {
     ) -> Result<AuthorizedDataScope> {
         let target = (entry_permission.resource(), entry_permission.action());
         let source = (source_permission.resource(), source_permission.action());
-        registration(target.0, target.1)?;
         scope_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
         required.push(entry_permission.clone());
@@ -189,7 +96,11 @@ impl<'a> DataScopeBatch<'a> {
             return Err(Error::Forbidden(facts.snapshot.denial_message(&required)));
         }
         let at = facts.as_of;
-        let state = self.scope_organizations(source.0, at).await?;
+        let state = if AuthorizationPolicy::for_action(source.0, source.1)? == AuthorizationPolicy::Shared {
+            OrganizationState::default()
+        } else {
+            self.scope_organizations(source.0, at).await?
+        };
         let scope = self.service.resolved(self.actor.id(), &roles, source, &state, at, self.executor).await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let scope_version = scope_version(
@@ -203,14 +114,9 @@ impl<'a> DataScopeBatch<'a> {
         );
         Ok(AuthorizedDataScope {
             facts: DataScopeFacts {
-                user_id: self.actor.id().into(),
                 resource: target.0.into(),
                 action: target.1.into(),
                 scope,
-                qualified_roles: ids
-                    .into_iter()
-                    .filter(|id| roles.iter().any(|role| role.base.id == id.as_str()))
-                    .collect(),
                 organizations: state,
                 policy_version: facts.snapshot.policy_revision(),
                 scope_version,
@@ -256,7 +162,7 @@ impl<'a> DataScopeBatch<'a> {
             snapshot,
             roles: Vec::new(),
             checked_roles: BTreeSet::new(),
-            as_of: Instant::now(),
+            as_of: self.as_of,
         });
         if !self.reuse {
             self.organizations = None;
