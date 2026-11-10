@@ -8,3 +8,4 @@ pub mod work_item_command;
 
 pub mod approval_copy;
 pub mod approval_progress;
+pub(crate) mod approval_qualification;

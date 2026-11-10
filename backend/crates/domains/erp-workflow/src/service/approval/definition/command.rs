@@ -1,4 +1,5 @@
 mod replace_identity;
+use std::slice;
 use std::time::Duration;
 
 use application_core::AuditActor;
@@ -11,7 +12,7 @@ use bpm::model::{
 };
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
-use erp_identity::SharedRbacService;
+use erp_identity::{Permission, SharedRbacService};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -23,7 +24,6 @@ use super::super::definition_dto::DefinitionNodeRequest;
 use super::super::definition_dto::{DefinitionDetailView, DraftSource};
 use super::super::policy::{ProcessRequiredApprovalPolicy, require_process_required};
 use super::super::process_kind::{document_type_of, process_kind_of};
-use super::super::scope::definition_management_visibility_with_executor;
 use super::ApprovalDefinitionService;
 use super::mapping::detail_with_copies;
 use crate::entity::document_registry::DocumentType;
@@ -802,9 +802,12 @@ pub(super) async fn ensure_definition_admin_permission(
     policy: &ProcessRequiredApprovalPolicy,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let visibility =
-        definition_management_visibility_with_executor(identity_service, actor, executor).await?;
-    ensure_definition_admin_allowed(visibility.can_define(policy.document_type))
+    let permission = Permission::parse(&policy.definition_admin_permission)?;
+    let qualified =
+        identity_service.qualified_permissions(actor, slice::from_ref(&permission), executor).await?;
+    ensure_definition_admin_allowed(
+        qualified.is_some_and(|value| value.permissions().covers_one(&permission)),
+    )
 }
 
 /// 仅把 receipt-first 的唯一键竞争标记为可恢复错误。

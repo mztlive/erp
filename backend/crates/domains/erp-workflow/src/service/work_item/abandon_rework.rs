@@ -9,7 +9,7 @@ use super::write::expected_task_version;
 use super::{WorkItemMutationOutcome, WorkItemService};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use crate::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
-use crate::ports::{PreparedWorkflowAudit, WorkflowAuditOperation};
+use crate::ports::{PreparedWorkflowAudit, WorkflowAuditOperation, WorkflowAuthorizationPort};
 use crate::repository::prelude::*;
 use crate::repository::{WorkItemCommandExt, WorkItemCommandRepositoryExt, WorkItemExt};
 use crate::{Error, Result};
@@ -22,7 +22,7 @@ pub struct AbandonApprovalReworkRequest {
     pub reason: String,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 原提交人关闭自己的驳回待处理任务。
     /// # 参数
     /// 任务ID、原版本与幂等键和放弃说明、已认证操作人。

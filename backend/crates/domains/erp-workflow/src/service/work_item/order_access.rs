@@ -1,13 +1,11 @@
 //! 订单与供应商申请任务的独立对象授权；读模型与任务命令复用同一合同。
 
-use std::collections::BTreeSet;
-
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
-use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind, OrderTaskSource, WorkflowAuthorizationPort};
+use crate::ports::{ObjectFact, ObjectKind, OrderTaskSource, TaskReadAction, WorkflowAuthorizationPort};
 
 /// 重验供应商申请任务的内部账号及独立对象读取范围。
 ///
@@ -98,9 +96,10 @@ pub(super) fn task_read_error(error: Error) -> Error {
 /// * `actor` - 同一执行器内已经验证的操作人或候选接收人身份。
 /// * `kind` - 任务注册表固定的对象种类。
 /// * `fact` - 同一执行器读取的业务对象事实。
+/// * `action` - 原用例要求的任务读取入口。
 /// * `executor` - 调用方查询或任务事务执行器。
 /// # 返回
-/// S2 订单来源通过独立详情授权时成功；其他对象仍执行其所属阶段的授权。
+/// 订单来源通过原入口的独立授权时成功；其他对象仍执行其所属阶段的授权。
 /// # 错误
 /// 必需来源缺失、账号失效、未装配或详情范围越界时拒绝。
 pub async fn require_order_task_read(
@@ -108,6 +107,7 @@ pub async fn require_order_task_read(
     actor: &AuditActor,
     kind: ObjectKind,
     fact: &ObjectFact,
+    action: TaskReadAction,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if !OrderTaskSource::required_for(kind) {
@@ -119,122 +119,142 @@ pub async fn require_order_task_read(
         .filter(|source| source.matches_kind(kind))
         .ok_or_else(|| Error::Internal("订单关联任务缺少权威范围来源".into()))?;
 
-    auth.require_order_task_read(actor, source, executor).await
-}
-
-/// 批量过滤订单与供应商申请对象；调用方须在排序、分页、计数之前应用结果。
-///
-/// # 参数
-/// * `auth` - 注入的授权 Port。
-/// * `actor` - 同一执行器内已经验证的账号身份。
-/// * `facts` - 当前执行器读取的对象事实。
-/// * `executor` - 原读取执行器。
-/// # 返回
-/// 保留订单及供应商申请仍可读的对象；其他阶段沿原有规则继续检查。
-/// # 错误
-/// 缺失或错配来源、账号失效及授权配置错误失败关闭。
-pub async fn filter_order_facts(
-    auth: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    facts: &mut ObjectFactMap,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    filter_supplier_portal_facts(auth, actor, facts, executor).await?;
-    let sources = order_sources(facts)?;
-    if sources.is_empty() {
-        return Ok(());
-    }
-
-    let allowed = auth.readable_order_sources(actor, &sources, executor).await?;
-    facts.retain(|(kind, _), fact| {
-        !OrderTaskSource::required_for(*kind)
-            || fact.order_scope_source.as_ref().is_some_and(|source| allowed.contains(source))
-    });
-    Ok(())
-}
-
-/// 在分页、统计与简报形成前移除当前账号无权读取的供应商申请。
-async fn filter_supplier_portal_facts(
-    auth: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    facts: &mut ObjectFactMap,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let mut keys = facts
-        .keys()
-        .filter(|(kind, _)| *kind == ObjectKind::SupplierPortalRequest)
-        .cloned()
-        .collect::<Vec<_>>();
-    keys.sort_by(|left, right| left.1.cmp(&right.1));
-    for (kind, id) in keys {
-        match require_supplier_portal_task_read(auth, actor, kind, &id, executor).await {
-            Ok(()) => {},
-            Err(Error::Forbidden(_) | Error::NotFound(_)) => {
-                facts.remove(&(kind, id));
-            },
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
-}
-
-/// 注册类型必须有精确来源；空集不能掩盖缺失的业务事实。
-fn order_sources(facts: &ObjectFactMap) -> Result<BTreeSet<OrderTaskSource>> {
-    facts
-        .iter()
-        .filter(|((kind, _), _)| OrderTaskSource::required_for(*kind))
-        .map(|((kind, _), fact)| {
-            fact.order_scope_source
-                .as_ref()
-                .filter(|source| source.matches_kind(*kind))
-                .cloned()
-                .ok_or_else(|| Error::Internal("订单关联任务缺少权威范围来源或来源类型不符".into()))
-        })
-        .collect()
+    auth.require_order_task_read(actor, source, action, executor).await
 }
 
 #[cfg(test)]
 mod tests {
-    use erp_core::AccountKind;
+    use std::sync::{Arc, Mutex};
+
     use persistence_core::NoTransaction;
 
     use super::*;
     use crate::ports::FailClosedWorkflowAuthorizationPort;
 
-    #[test]
-    fn typed_order_sources_are_deduplicated_and_never_inferred_from_display_root() {
-        let source = OrderTaskSource::Purchase("purchase".into());
-        let fact = ObjectFact::new("display", "title", "creator").with_order_source(source.clone());
-        let mut facts = ObjectFactMap::from([
-            ((ObjectKind::PurchaseReceipt, "receipt".into()), fact.clone()),
-            ((ObjectKind::ElectronicDelivery, "electronic".into()), fact),
-        ]);
-        assert_eq!(order_sources(&facts).unwrap(), BTreeSet::from([source]));
-        facts.insert(
-            (ObjectKind::Delivery, "sales-delivery".into()),
-            ObjectFact::new("display", "title", "creator"),
-        );
-        assert!(order_sources(&facts).is_err());
-        facts.get_mut(&(ObjectKind::Delivery, "sales-delivery".into())).unwrap().order_scope_source =
-            Some(OrderTaskSource::Purchase("wrong-dimension".into()));
-        assert!(order_sources(&facts).is_err());
+    #[derive(Clone, Default)]
+    struct SourceAuthorization {
+        calls: Arc<Mutex<Vec<(String, OrderTaskSource, TaskReadAction)>>>,
+    }
+
+    impl WorkflowAuthorizationPort for SourceAuthorization {
+        async fn require_order_task_read(
+            &self,
+            actor: &AuditActor,
+            source: &OrderTaskSource,
+            action: TaskReadAction,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            self.calls.lock().unwrap().push((actor.id().into(), source.clone(), action));
+            match source {
+                OrderTaskSource::Sales(id) if id == "denied" => Err(Error::Forbidden("revoked".into())),
+                OrderTaskSource::Sales(id) if id == "changed" => {
+                    Err(Error::ConflictError("DATA_SCOPE_CHANGED".into()))
+                },
+                _ => Ok(()),
+            }
+        }
     }
 
     #[tokio::test]
-    async fn missing_composition_cannot_authorize_an_order_task() {
+    async fn exact_source_check_preserves_entry_and_never_uses_display_root() {
+        let auth = SourceAuthorization::default();
+        let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin);
+        let source = OrderTaskSource::Purchase("purchase".into());
+        let fact = ObjectFact::new("display-root", "title", "creator").with_order_source(source.clone());
+        for (action, permission) in
+            [(TaskReadAction::List, "work_item:list"), (TaskReadAction::Detail, "work_item:detail")]
+        {
+            assert_eq!(action.permission(), permission);
+            require_order_task_read(
+                &auth,
+                &actor,
+                ObjectKind::PurchaseReceipt,
+                &fact,
+                action,
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap();
+        }
+        assert_eq!(
+            auth.calls.lock().unwrap().as_slice(),
+            &[
+                ("actor".into(), source.clone(), TaskReadAction::List),
+                ("actor".into(), source, TaskReadAction::Detail),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_or_mismatched_source_fails_before_authorization() {
+        let auth = SourceAuthorization::default();
+        let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin);
+        for fact in [
+            ObjectFact::new("display-root", "title", "creator"),
+            ObjectFact::new("display-root", "title", "creator")
+                .with_order_source(OrderTaskSource::Purchase("wrong".into())),
+        ] {
+            let result = require_order_task_read(
+                &auth,
+                &actor,
+                ObjectKind::Delivery,
+                &fact,
+                TaskReadAction::List,
+                &mut NoTransaction,
+            )
+            .await;
+            assert!(matches!(result, Err(Error::Internal(_))));
+        }
+        assert!(auth.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn exact_source_check_preserves_denial_and_operational_failures() {
+        let auth = SourceAuthorization::default();
+        let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin);
+        for action in [TaskReadAction::List, TaskReadAction::Detail] {
+            let denied = ObjectFact::new("display", "title", "creator")
+                .with_order_source(OrderTaskSource::Sales("denied".into()));
+            assert!(
+                matches!(require_order_task_read(&auth, &actor, ObjectKind::Delivery, &denied, action, &mut NoTransaction).await, Err(Error::Forbidden(message)) if message == "revoked")
+            );
+            let changed = ObjectFact::new("display", "title", "creator")
+                .with_order_source(OrderTaskSource::Sales("changed".into()));
+            assert!(
+                matches!(require_order_task_read(&auth, &actor, ObjectKind::Delivery, &changed, action, &mut NoTransaction).await, Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn non_order_tasks_skip_order_authorization_but_unwired_order_and_portal_fail_closed() {
         let auth = FailClosedWorkflowAuthorizationPort;
         let actor = AuditActor::new("actor".into(), "account".into(), AccountKind::Admin);
+        let fact = ObjectFact::new("display", "title", "creator");
+        require_order_task_read(
+            &auth,
+            &actor,
+            ObjectKind::SupplierPortalRequest,
+            &fact,
+            TaskReadAction::List,
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap();
         let source = OrderTaskSource::Sales("sales".into());
-        assert!(auth.require_order_task_read(&actor, &source, &mut NoTransaction).await.is_err());
+        for action in [TaskReadAction::List, TaskReadAction::Detail] {
+            assert!(auth.require_order_task_read(&actor, &source, action, &mut NoTransaction).await.is_err());
+        }
         assert!(
-            auth.readable_order_sources(&actor, &BTreeSet::from([source]), &mut NoTransaction).await.is_err()
+            require_supplier_portal_task_read(
+                &auth,
+                &actor,
+                ObjectKind::SupplierPortalRequest,
+                "request",
+                &mut NoTransaction
+            )
+            .await
+            .is_err()
         );
-    }
-
-    #[tokio::test]
-    async fn missing_composition_cannot_authorize_supplier_portal_request_scope() {
-        let auth = FailClosedWorkflowAuthorizationPort;
-        let actor = AuditActor::new("reviewer".into(), "account".into(), AccountKind::Admin);
-        assert!(auth.supplier_portal_request_readable(&actor, "request", &mut NoTransaction).await.is_err());
     }
 }

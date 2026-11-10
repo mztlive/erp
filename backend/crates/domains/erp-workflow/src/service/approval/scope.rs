@@ -7,6 +7,7 @@ use erp_identity::{Permission, PermissionSet, SharedRbacService};
 use persistence_core::{Executor, NoTransaction};
 
 use super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
+use crate::entity::approval_qualification::ApprovalQualification;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
@@ -91,27 +92,6 @@ impl DefinitionManagementVisibility {
     /// 不返回错误。
     pub fn runtime_admin_types(&self) -> &[DocumentType] {
         &self.runtime_admin_types
-    }
-
-    /// 与另一范围求交，防止调用方扩大已证明的类型级权限。
-    ///
-    /// # 参数
-    /// * `other` - 另一份类型级范围
-    ///
-    /// # 返回
-    /// 返回两端都具备的类型集合。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn intersect(&self, other: &Self) -> Self {
-        Self::from_type_permissions(
-            self.definition_admin_types.iter().copied().filter(|item| other.can_define(*item)).collect(),
-            self.runtime_admin_types
-                .iter()
-                .copied()
-                .filter(|item| other.runtime_admin_types.contains(item))
-                .collect(),
-        )
     }
 }
 
@@ -220,12 +200,31 @@ pub async fn approval_participant_permissions_with_executor(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
+    Ok(matches!(
+        approver_qualification(identity_service, actor, executor).await?,
+        ApprovalQualification::Eligible(_)
+    ))
+}
+
+/// 统一读取审批资格，保留账号失效与权限不足的区别供各用例处理。
+/// # 参数
+/// identity_service 为共享身份服务，actor 为待核验审批人，executor 沿用原执行器。
+/// # 返回
+/// 返回账号失效、同角色权限不足或携带账号摘要的合格结果。
+/// # 错误
+/// 身份、策略和数据库错误保持原类别。
+pub(super) async fn approver_qualification(
+    identity_service: &SharedRbacService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalQualification> {
     let required =
         [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
-    Ok(identity_service
-        .qualified_permissions(actor, &required, executor)
-        .await?
-        .is_some_and(|qualified| qualified.same_role(&required)))
+    let qualified = identity_service.qualified_permissions(actor, &required, executor).await?;
+    Ok(ApprovalQualification::from_account(
+        qualified.as_ref().map(|value| value.account().clone()),
+        qualified.as_ref().is_some_and(|value| value.same_role(&required)),
+    ))
 }
 
 /// 证明运行管理动作、类型管理资格和真实业务来源同时成立。
@@ -335,7 +334,6 @@ mod tests {
     use erp_core::AccountKind;
     use erp_identity::AccountSummary;
 
-    use super::DefinitionManagementVisibility;
     use crate::entity::document_registry::DocumentType;
 
     fn account(id: &str, can_login: bool) -> AccountSummary {
@@ -363,23 +361,5 @@ mod tests {
         assert!(visibility.can_read_detail(DocumentType::SalesOrder));
         assert!(!visibility.can_read_detail(DocumentType::Invoice));
         assert_eq!(visibility.definition_admin_types(), &[DocumentType::StockAdjustment]);
-    }
-
-    /// 求交不能放大调用方范围。
-    #[test]
-    fn visibility_intersect_cannot_enlarge_caller_scope() {
-        let proven = DefinitionManagementVisibility::from_type_permissions(
-            vec![DocumentType::StockAdjustment],
-            vec![DocumentType::SalesOrder],
-        );
-        let claimed = DefinitionManagementVisibility::from_type_permissions(
-            vec![DocumentType::StockAdjustment, DocumentType::SalesOrder],
-            vec![DocumentType::SalesOrder, DocumentType::CustomerReceipt],
-        );
-        let intersected = proven.intersect(&claimed);
-        assert_eq!(intersected.definition_admin_types(), &[DocumentType::StockAdjustment]);
-        assert_eq!(intersected.runtime_admin_types(), &[DocumentType::SalesOrder]);
-        assert!(!intersected.can_define(DocumentType::SalesOrder));
-        assert!(!intersected.can_read_detail(DocumentType::CustomerReceipt));
     }
 }

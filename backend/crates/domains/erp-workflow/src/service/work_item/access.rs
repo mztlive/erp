@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use erp_core::Result as CoreResult;
 use erp_identity::{Permission, PermissionSet};
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 #[cfg(test)]
 use super::WorkItemAllowedAction;
@@ -20,7 +20,7 @@ use crate::entity::work_item::{
     TaskAccess, WorkItem, WorkItemStatus, WorkItemType, required_execution_permissions,
 };
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{ObjectFact, ObjectFactMap};
+use crate::ports::{ObjectFact, ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
 use crate::repository::DocumentRegistryExt;
 use crate::repository::prelude::*;
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
@@ -78,22 +78,7 @@ impl TaskEligibility {
     }
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
-    /// 任务控制命令执行前按 manage DataScope 重验任务负责人范围。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `item` - 待访问的工作项
-    ///
-    /// # 返回
-    /// 对象可访问时无返回值。
-    ///
-    /// # 错误
-    /// 授权快照读取失败时返回对应错误；对象不可访问时经 `task_read_error` 隐藏存在性。
-    pub async fn ensure_task_control_access(&self, actor: &AuditActor, item: &WorkItem) -> Result<()> {
-        self.ensure_task_manage(actor, item, &mut NoTransaction).await
-    }
-
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 按操作人账号类型与 ID 构造访问快照。
     ///
     /// # 参数
@@ -210,7 +195,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         )
         .await?;
         if !item.owns_procurement_task(&access.task.actor_id) {
-            require_order_task_read(&self.auth, &access.actor, policy.object_kind, fact, executor).await?;
+            require_order_task_read(
+                &self.auth,
+                &access.actor,
+                policy.object_kind,
+                fact,
+                TaskReadAction::Detail,
+                executor,
+            )
+            .await?;
         }
         let access = self.participation(access, &facts, executor).await?;
         if !has_item_access(item, &access, &facts) {

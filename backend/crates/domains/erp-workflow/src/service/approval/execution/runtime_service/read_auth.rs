@@ -8,12 +8,13 @@ use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_core::AccountKind;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::SharedRbacService;
 use persistence_core::Executor;
 
 use super::super::authorization::{AuthorizationFailure, converge_eligibility};
 use super::hidden_not_found;
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::approval_qualification::ApprovalQualification;
 use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
@@ -22,6 +23,7 @@ use crate::repository::bpm::ApprovalInstanceSummary;
 use crate::service::approval::business_adapter::{adapter_spec_of, ensure_separation_of_duties};
 use crate::service::approval::policy::{DocumentApprovalPolicy, SeparationOfDutiesPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
+use crate::service::approval::scope::approver_qualification;
 
 /// 单实例读取授权所需的持久化事实。
 pub(super) struct RuntimeReadSubject {
@@ -96,17 +98,15 @@ pub(super) async fn revalidate_decision_approver(
     let actor = authenticated_actor
         .cloned()
         .unwrap_or_else(|| AuditActor::new(assignee_id.into(), assignee_id.into(), AccountKind::Admin));
-    let required =
-        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
     let qualified = if actor.id() == assignee_id {
-        identity_service.qualified_permissions(&actor, &required, executor).await?
+        approver_qualification(identity_service, &actor, executor).await?
     } else {
-        None
+        ApprovalQualification::Inactive
     };
     let failure = match qualified {
-        None => Some(AuthorizationFailure::AccountInactive),
-        Some(qualified) if !qualified.same_role(&required) => Some(AuthorizationFailure::NotEligible),
-        Some(_)
+        ApprovalQualification::Inactive => Some(AuthorizationFailure::AccountInactive),
+        ApprovalQualification::MissingPermissions => Some(AuthorizationFailure::NotEligible),
+        ApprovalQualification::Eligible(_)
             if ensure_separation_of_duties(
                 separation_policy,
                 &snapshot.payload.submitted_by,
@@ -116,7 +116,7 @@ pub(super) async fn revalidate_decision_approver(
         {
             Some(AuthorizationFailure::SeparationOfDuties)
         },
-        Some(_) => None,
+        ApprovalQualification::Eligible(_) => None,
     };
     if failure.is_none()
         && let Some(actor) = authenticated_actor

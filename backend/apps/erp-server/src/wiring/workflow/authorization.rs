@@ -1,21 +1,18 @@
 //! 将身份域权限与 policy 事务装配到工作流授权端口。
 
-use std::collections::BTreeSet;
-
 use application_core::AuditActor;
 use erp_approval_runtime::resource_grants::append_assignments;
 use erp_identity::SharedRbacService;
 use erp_supplier_catalog::supplier_portal::authorization::request_readable as portal_request_readable;
 use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_reviewable;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::{ApprovalBindingFacts, OrderTaskSource, WorkflowAuthorizationPort};
+use erp_workflow::ports::{ApprovalBindingFacts, OrderTaskSource, TaskReadAction, WorkflowAuthorizationPort};
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::map_service;
-use super::order_access::readable_sources;
 use crate::wiring::contract_access;
 use crate::wiring::errors::{Error, Result};
 
@@ -150,32 +147,27 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
     }
 
-    async fn readable_order_sources(
-        &self,
-        actor: &AuditActor,
-        sources: &BTreeSet<OrderTaskSource>,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<BTreeSet<OrderTaskSource>> {
-        readable_sources(&self.db, &self.rbac, actor, sources, executor).await
-    }
-
     async fn require_order_task_read(
         &self,
         actor: &AuditActor,
         source: &OrderTaskSource,
+        action: TaskReadAction,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        if !super::resource_access::readable(
+        let result = super::resource_access::readable(
             &self.db,
             &self.rbac,
             actor,
             source,
-            "work_item:detail",
+            action.permission(),
             executor,
         )
-        .await
-        .map_err(map_service)?
-        {
+        .await;
+        let readable = match (action, result) {
+            (TaskReadAction::List, Err(Error::Forbidden(_) | Error::NotFound(_))) => false,
+            (_, result) => result.map_err(map_service)?,
+        };
+        if !readable {
             return Err(WorkflowError::Forbidden("没有任务来源的读取资格".into()));
         }
         Ok(())

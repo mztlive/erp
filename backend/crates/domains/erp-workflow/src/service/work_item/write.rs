@@ -10,7 +10,9 @@ use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, Wor
 use crate::dto::work_item::ViewAccess;
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
-use crate::ports::{PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditPort};
+use crate::ports::{
+    PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditPort, WorkflowAuthorizationPort,
+};
 use crate::repository::{
     WorkItemCommandExt, WorkItemCommandRepositoryExt, WorkItemExt, WorkItemRepositoryExt,
 };
@@ -110,7 +112,7 @@ pub(super) fn recover_command_error<T>(original: Error, recovery: Result<Option<
     }
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 按 ID 读取工作项。
     ///
     /// # 参数
@@ -163,7 +165,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             return Err(Error::Internal("幂等回执任务版本与事实不一致".to_string()));
         }
         ensure_generic_work_item_mutation(&item)?;
-        self.ensure_task_control_access(actor, &item).await?;
+        self.ensure_task_manage(actor, &item, &mut NoTransaction).await?;
         Ok(Some(item))
     }
 

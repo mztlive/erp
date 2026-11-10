@@ -7,12 +7,13 @@ use persistence_core::Executor;
 
 use super::WorkItemService;
 use super::access::{TaskEligibility, has_item_access};
-use super::order_access::filter_order_facts;
+use super::order_access::{require_order_task_read, require_supplier_portal_task_read, task_read_error};
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
+use crate::ports::{TaskReadAction, WorkflowAuthorizationPort};
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 在当前执行器验证单任务业务读取资格，保留原来源入口权限。
     /// # 参数
     /// item 为当前任务，actor 和 access 为当前身份及资格，executor 沿用原事务。
@@ -36,8 +37,29 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 .brief_relation(&item.business_object_type)
                 .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".into()))?;
             let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
-            let mut facts = self.facts.load_object_facts(&keys, executor).await?;
-            filter_order_facts(&self.auth, actor, &mut facts, executor).await?;
+            let facts = self.facts.load_object_facts(&keys, executor).await?;
+            let fact = facts
+                .get(&(policy.object_kind, item.business_object_id.clone()))
+                .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".into()))?;
+            require_supplier_portal_task_read(
+                &self.auth,
+                actor,
+                policy.object_kind,
+                &item.business_object_id,
+                executor,
+            )
+            .await
+            .map_err(task_read_error)?;
+            require_order_task_read(
+                &self.auth,
+                actor,
+                policy.object_kind,
+                fact,
+                TaskReadAction::List,
+                executor,
+            )
+            .await
+            .map_err(task_read_error)?;
             let access = self.participation(access, &facts, executor).await?;
             has_item_access(item, &access, &facts)
         };

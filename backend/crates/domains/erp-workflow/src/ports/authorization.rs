@@ -1,6 +1,5 @@
 //! 工作流消费的跨域业务授权事实；账号查询直接使用 identity。
 
-use std::collections::BTreeSet;
 use std::future::Future;
 
 use application_core::AuditActor;
@@ -12,6 +11,29 @@ use super::ApprovalBindingFacts;
 use super::object_facts::OrderTaskSource;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
+
+/// 单任务来源检查沿用原用例的入口权限，不扩大为其他业务动作。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskReadAction {
+    List,
+    Detail,
+}
+
+impl TaskReadAction {
+    /// 返回服务端固定的任务读取权限。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 列表来源资格或任务详情资格对应的权限码。
+    /// # 错误
+    /// 无。
+    pub fn permission(self) -> &'static str {
+        match self {
+            Self::List => "work_item:list",
+            Self::Detail => "work_item:detail",
+        }
+    }
+}
 
 /// 工作流消费的跨域业务来源取证；身份服务由用例直接注入。
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
@@ -154,30 +176,12 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("审批范围事实未装配".into())) }
     }
 
-    /// 批量返回当前详情范围允许的关联订单，用于任务列表、统计及详情。
-    ///
-    /// # 参数
-    /// * `actor` - 服务端账号身份。
-    /// * `sources` - 从业务实体外键得到的去重订单来源。
-    /// * `executor` - 调用方执行器。
-    /// # 返回
-    /// 返回已授权来源的子集；空授权必须保持空集。
-    /// # 错误
-    /// 未装配、未知范围版本及基础设施错误失败关闭。
-    fn readable_order_sources(
-        &self,
-        _actor: &AuditActor,
-        _sources: &BTreeSet<OrderTaskSource>,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<BTreeSet<OrderTaskSource>>> + Send {
-        async { Err(Error::Internal("任务对象范围授权未装配".into())) }
-    }
-
-    /// 在任务命令原事务内独立重验关联业务对象的详情范围。
+    /// 在原执行器内按任务读取入口独立重验关联业务对象范围。
     ///
     /// # 参数
     /// * `actor` - 当前操作人或待接收任务的有效账号。
     /// * `source` - 事务内业务实体证明的订单来源。
+    /// * `action` - 服务端用例固定的任务读取入口。
     /// * `executor` - 原任务事务执行器。
     /// # 返回
     /// 对象当前可读时成功；任务责任不替代对象授权。
@@ -187,16 +191,19 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         &self,
         _actor: &AuditActor,
         _source: &OrderTaskSource,
+        _action: TaskReadAction,
         _executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Err(Error::Internal("任务对象范围授权未装配".into())) }
     }
 }
 
-/// Fail-closed authorization port used when composition has not injected an adapter.
+/// 测试未装配业务授权时的失败关闭行为。
+#[cfg(test)]
 #[derive(Debug, Default, Clone, Copy)]
-pub struct FailClosedWorkflowAuthorizationPort;
+pub(crate) struct FailClosedWorkflowAuthorizationPort;
 
+#[cfg(test)]
 impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {}
 
 #[cfg(test)]

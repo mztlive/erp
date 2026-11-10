@@ -4,18 +4,14 @@ use std::slice;
 
 use application_core::AuditActor;
 use erp_workflow::ports::WorkflowAuthorizationPort;
+use erp_workflow::service::approval::approval_participant_permissions_with_executor;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
-use erp_workflow::service::approval::definition::{
-    ApprovalDefinitionService, DefinitionManagementVisibility,
-};
+use erp_workflow::service::approval::definition::ApprovalDefinitionService;
 use erp_workflow::service::approval::definition_dto::{
     CreateDefinitionDraftRequest, DefinitionConfigurationStatus, DefinitionDetailView, DefinitionNodeRequest,
     DraftSource, PublishDefinitionRequest, ReplaceDefinitionNodesRequest,
 };
 use erp_workflow::service::approval::policy::require_process_required;
-use erp_workflow::service::approval::{
-    approval_participant_permissions_with_executor, definition_management_visibility_with_executor,
-};
 use persistence_core::NoTransaction;
 
 use super::accounts::PreparedAccounts;
@@ -38,8 +34,12 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         report: &mut DemoFoundationReport,
     ) -> Result<()> {
         self.validate_approval_accounts(accounts).await?;
-        let (definitions, visibility) = self.definition_session(actor).await?;
-        let catalog = definitions.definition_catalog(actor, &visibility).await?;
+        let definitions = ApprovalDefinitionService::with_audit(
+            self.db.clone(),
+            self.rbac.clone(),
+            self.ports.workflow_audit.clone(),
+        );
+        let catalog = definitions.definition_catalog(actor).await?;
         for spec in &spec::foundation_spec().approvals {
             let document_type = spec::document_type(&spec.document_type)?;
             let published = catalog.iter().any(|item| {
@@ -47,10 +47,10 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     && item.configuration_status == DefinitionConfigurationStatus::Published
             });
             if published {
-                self.note_published(&definitions, &visibility, actor, spec, accounts, report).await?;
+                self.note_published(&definitions, actor, spec, accounts, report).await?;
                 continue;
             }
-            self.publish_approval(&definitions, &visibility, actor, spec, accounts).await?;
+            self.publish_approval(&definitions, actor, spec, accounts).await?;
             report.approvals_published += 1;
         }
         Ok(())
@@ -60,13 +60,12 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     async fn note_published(
         &self,
         definitions: &ApprovalDefinitionService,
-        visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
         accounts: &PreparedAccounts,
         report: &mut DemoFoundationReport,
     ) -> Result<()> {
-        let detail = self.published_detail(definitions, visibility, actor, spec).await?;
+        let detail = self.published_detail(definitions, actor, spec).await?;
         if detail.is_some_and(|detail| nodes_match(&detail, spec, accounts)) {
             report.approvals_existing += 1;
             return Ok(());
@@ -80,29 +79,27 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     async fn published_detail(
         &self,
         definitions: &ApprovalDefinitionService,
-        visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
     ) -> Result<Option<DefinitionDetailView>> {
         let document_type = spec::document_type(&spec.document_type)?;
-        let versions = definitions.definition_versions(document_type, actor, visibility).await?;
+        let versions = definitions.definition_versions(document_type, actor).await?;
         let Some(published) = versions.into_iter().find(|version| version.status == "PUBLISHED") else {
             return Ok(None);
         };
-        Ok(Some(definitions.definition_detail(&published.definition_id, actor, visibility).await?))
+        Ok(Some(definitions.definition_detail(&published.definition_id, actor).await?))
     }
 
     /// 命令键绑定定义 ID 与锁版本，重试和退役后重建不回放旧定义。
     async fn publish_approval(
         &self,
         definitions: &ApprovalDefinitionService,
-        visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
         accounts: &PreparedAccounts,
     ) -> Result<()> {
-        let definition_id = self.draft_id(definitions, visibility, actor, spec).await?;
-        let detail = definitions.definition_detail(&definition_id, actor, visibility).await?;
+        let definition_id = self.draft_id(definitions, actor, spec).await?;
+        let detail = definitions.definition_detail(&definition_id, actor).await?;
         let replaced = definitions
             .replace_definition_nodes(
                 ReplaceDefinitionNodesRequest {
@@ -135,12 +132,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     async fn draft_id(
         &self,
         definitions: &ApprovalDefinitionService,
-        visibility: &DefinitionManagementVisibility,
         actor: &AuditActor,
         spec: &ApprovalSpec,
     ) -> Result<String> {
         let document_type = spec::document_type(&spec.document_type)?;
-        let versions = definitions.definition_versions(document_type, actor, visibility).await?;
+        let versions = definitions.definition_versions(document_type, actor).await?;
         if let Some(draft) = versions.iter().find(|version| version.status == "DRAFT") {
             return Ok(draft.definition_id.clone());
         }
@@ -184,21 +180,6 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             }
         }
         Ok(())
-    }
-
-    /// 装配正式定义服务与当前类型管理可见边界。
-    async fn definition_session(
-        &self,
-        actor: &AuditActor,
-    ) -> Result<(ApprovalDefinitionService, DefinitionManagementVisibility)> {
-        let definitions = ApprovalDefinitionService::with_audit(
-            self.db.clone(),
-            self.rbac.clone(),
-            self.ports.workflow_audit.clone(),
-        );
-        let visibility =
-            definition_management_visibility_with_executor(&self.rbac, actor, &mut NoTransaction).await?;
-        Ok((definitions, visibility))
     }
 }
 

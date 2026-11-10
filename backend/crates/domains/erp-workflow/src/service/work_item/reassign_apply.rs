@@ -37,7 +37,7 @@ struct ReassignmentContext {
     purchase_order_audit: Option<PreparedWorkflowAudit>,
 }
 
-impl<A: WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
     ///
     /// # 用途

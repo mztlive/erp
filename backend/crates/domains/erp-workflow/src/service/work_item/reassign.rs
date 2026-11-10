@@ -22,6 +22,7 @@ use crate::entity::work_item::{
     FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemType,
 };
 use crate::error::{Error, Result};
+use crate::ports::{TaskReadAction, WorkflowAuthorizationPort};
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
@@ -64,7 +65,7 @@ pub(super) struct AssignmentPolicyAuditInput<'a> {
     pub(super) authorization: AssignmentAuthorizationSnapshot,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 查询当前开放非审批任务可转交的具体账号。
     ///
     /// # 参数
@@ -184,13 +185,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             )?;
             if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
                 ensure_generic_work_item_mutation(&replayed)?;
-                self.ensure_task_control_access(&actor, &replayed).await?;
+                self.ensure_task_manage(&actor, &replayed, &mut NoTransaction).await?;
                 return self.applied_outcome(replayed, &actor).await;
             }
             if item.base.version != expected_task_version {
                 return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
             }
-            self.ensure_task_control_access(&actor, &item).await?;
+            self.ensure_task_manage(&actor, &item, &mut NoTransaction).await?;
             let authorization =
                 self.assignment_authorization_snapshot(&actor, &target_user_id, &item).await?;
             let updated = self
@@ -277,25 +278,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         allow_current_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let account = self
-            .identity
-            .directory()
-            .account(user_id, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
-        if !account.can_login || account.kind != expected_kind {
-            return Err(Error::Forbidden("目标账号不存在或已失效".to_string()));
-        }
-        if item.work_item_type == WorkItemType::SupplierPortalReview && !account.is_active_backoffice() {
-            return Err(Error::Forbidden("供应商申请确认人必须为启用的内部账号".into()));
-        }
-        let actor = AuditActor::new(account.id, account.login_account, account.kind);
+        let actor = AuditActor::new(user_id.into(), user_id.into(), expected_kind);
         let required = item.qualification_permissions()?;
         let qualified = self
             .identity
             .qualified_permissions(&actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
+        let account = qualified.account();
+        if item.work_item_type == WorkItemType::SupplierPortalReview && !account.is_active_backoffice() {
+            return Err(Error::Forbidden("供应商申请确认人必须为启用的内部账号".into()));
+        }
+        let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
         self.identity.ensure_policy_snapshot_with_executor(authorization.policy_revision, executor).await?;
         let access = TaskEligibility::new(actor).with_permissions(qualified.permissions());
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
@@ -391,7 +385,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         )
         .await?;
         if !item.is_open_procurement_task() {
-            require_order_task_read(&self.auth, &access.actor, policy.object_kind, fact, executor).await?;
+            require_order_task_read(
+                &self.auth,
+                &access.actor,
+                policy.object_kind,
+                fact,
+                TaskReadAction::Detail,
+                executor,
+            )
+            .await?;
         }
         require_supplier_portal_task_review(
             &self.auth,
@@ -450,7 +452,7 @@ const SYSTEM_OBJECT_OWNER: &str = "__system__";
 ///
 /// # 错误
 /// 任一任务的对象访问校验失败时返回对应错误。
-pub(super) async fn ensure_fulfillment_tasks_candidate<A: crate::ports::WorkflowAuthorizationPort>(
+pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     tasks: &[WorkItem],
     target_user_id: &str,

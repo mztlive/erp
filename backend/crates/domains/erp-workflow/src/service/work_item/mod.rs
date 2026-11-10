@@ -7,6 +7,7 @@ mod abandon_rework;
 mod authorization;
 pub use authorization::WorkItemAuthorization;
 use erp_identity::SharedRbacService;
+
 pub mod access;
 pub mod approval_rework;
 pub use abandon_rework::AbandonApprovalReworkRequest;
@@ -47,7 +48,10 @@ use reassign::{
 pub use write::{AuthorizedWorkItem, expected_task_version};
 
 use crate::dto::work_item as dto;
-use crate::ports::{FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, WorkflowAuditPort};
+use crate::ports::{
+    FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, WorkflowAuditPort,
+    WorkflowAuthorizationPort,
+};
 #[cfg(test)]
 use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
 use crate::repository::WorkItemExt;
@@ -65,7 +69,7 @@ pub struct WorkItemService<A> {
     pub audit: Arc<dyn WorkflowAuditPort>,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 创建服务。
     ///
     /// # 参数

@@ -9,9 +9,7 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::service::approval::definition::{
-    ApprovalDefinitionService, definition_management_visibility,
-};
+use erp_workflow::service::approval::definition::ApprovalDefinitionService;
 use erp_workflow::service::approval::definition_dto::{
     CreateDefinitionDraftRequest, DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem,
     PublishDefinitionRequest, ReplaceDefinitionNodesRequest, RetireDefinitionRequest,
@@ -44,11 +42,8 @@ pub async fn definition_catalog(
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
 ) -> ApprovalResult<Vec<DefinitionCatalogItem>> {
-    let visibility = definition_management_visibility(&state.application().rbac(), &actor)
-        .await
-        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let items = definition_service(&state)
-        .definition_catalog(&actor, &visibility)
+        .definition_catalog(&actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     Ok(ApiResponse::ok_with_data(items))
@@ -64,11 +59,8 @@ pub async fn definition_versions(
     headers: HeaderMap,
     Path(document_type): Path<DocumentType>,
 ) -> ApprovalResult<Vec<DefinitionVersionItem>> {
-    let visibility = definition_management_visibility(&state.application().rbac(), &actor)
-        .await
-        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let versions = definition_service(&state)
-        .definition_versions(document_type, &actor, &visibility)
+        .definition_versions(document_type, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     Ok(ApiResponse::ok_with_data(versions))
@@ -84,11 +76,8 @@ pub async fn definition_detail(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApprovalResult<DefinitionDetailView> {
-    let visibility = definition_management_visibility(&state.application().rbac(), &actor)
-        .await
-        .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let view = definition_service(&state)
-        .definition_detail(&id, &actor, &visibility)
+        .definition_detail(&id, &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     Ok(ApiResponse::ok_with_data(view))

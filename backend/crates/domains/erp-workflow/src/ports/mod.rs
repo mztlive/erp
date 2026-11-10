@@ -15,7 +15,9 @@ pub use audit::{
     FailClosedAuditPort, PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditOperation,
     WorkflowAuditPort,
 };
-pub use authorization::{FailClosedWorkflowAuthorizationPort, WorkflowAuthorizationPort};
+#[cfg(test)]
+pub(crate) use authorization::FailClosedWorkflowAuthorizationPort;
+pub use authorization::{TaskReadAction, WorkflowAuthorizationPort};
 pub use binding_facts::ApprovalBindingFacts;
 pub use object_facts::{
     FailClosedObjectFactPort, ObjectFact, ObjectFactKey, ObjectFactMap, ObjectFactPort, ObjectKind,

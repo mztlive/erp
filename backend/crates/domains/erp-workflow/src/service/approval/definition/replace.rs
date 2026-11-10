@@ -6,7 +6,7 @@ use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition};
 use erp_core::AccountKind;
-use erp_identity::{AccountSummary, Permission, SharedRbacService};
+use erp_identity::{AccountSummary, SharedRbacService};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -25,12 +25,14 @@ use super::command::{
 };
 use super::mapping::detail_with_copies;
 use crate::entity::approval_copy::ApprovalCopyRule;
+use crate::entity::approval_qualification::ApprovalQualification;
 use crate::error::{Error, ErrorCode, Result};
 use crate::repository::BpmExt;
 use crate::repository::approval_copy::ApprovalCopyExt;
 #[cfg(test)]
 use crate::repository::bpm::CasWriteOutcome;
 use crate::service::approval::copies::{save_config, validate_recipients};
+use crate::service::approval::scope::approver_qualification;
 
 impl ApprovalDefinitionService {
     /// 整组替换草稿节点。
@@ -415,19 +417,19 @@ pub(super) async fn validate_assignees(
     user_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, AccountSummary>> {
-    let required =
-        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
     let mut accounts = HashMap::new();
     for user_id in user_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
-        let qualified = identity_service
-            .qualified_permissions(&actor, &required, executor)
-            .await?
-            .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()))?;
-        if !qualified.same_role(&required) {
-            return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
-        }
-        accounts.insert(user_id.clone(), qualified.account().clone());
+        let account = match approver_qualification(identity_service, &actor, executor).await? {
+            ApprovalQualification::Inactive => {
+                return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
+            },
+            ApprovalQualification::MissingPermissions => {
+                return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
+            },
+            ApprovalQualification::Eligible(account) => account,
+        };
+        accounts.insert(user_id.clone(), account);
     }
     Ok(accounts)
 }

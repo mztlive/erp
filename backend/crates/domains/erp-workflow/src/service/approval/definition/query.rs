@@ -1,7 +1,5 @@
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
-use erp_identity::SharedRbacService;
-use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use super::super::definition_dto::{DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem};
@@ -19,19 +17,14 @@ impl ApprovalDefinitionService {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `visibility` - 类型级可见范围
     ///
     /// # 返回
     /// 返回 `ALL_DOCUMENT_TYPES` 每一类型一行目录。
     ///
     /// # 错误
     /// 政策或仓储读取失败时返回错误。
-    pub async fn definition_catalog(
-        &self,
-        actor: &AuditActor,
-        visibility: &DefinitionManagementVisibility,
-    ) -> Result<Vec<DefinitionCatalogItem>> {
-        let visibility = enforce_visibility(&self.identity, &self.db, actor, visibility).await?;
+    pub async fn definition_catalog(&self, actor: &AuditActor) -> Result<Vec<DefinitionCatalogItem>> {
+        let visibility = definition_management_visibility(&self.identity, actor).await?;
         let mut required_kinds = Vec::new();
         let mut policies = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
@@ -55,7 +48,6 @@ impl ApprovalDefinitionService {
     /// # 参数
     /// * `document_type` - 固定单据类型
     /// * `actor` - 已认证操作人
-    /// * `visibility` - 类型级可见范围
     ///
     /// # 返回
     /// 返回该类型的版本摘要。
@@ -66,9 +58,8 @@ impl ApprovalDefinitionService {
         &self,
         document_type: DocumentType,
         actor: &AuditActor,
-        visibility: &DefinitionManagementVisibility,
     ) -> Result<Vec<DefinitionVersionItem>> {
-        let visibility = enforce_visibility(&self.identity, &self.db, actor, visibility).await?;
+        let visibility = definition_management_visibility(&self.identity, actor).await?;
         require_process_required(document_type)?;
         ensure_can_read_detail(&visibility, document_type)?;
         let versions = self
@@ -84,7 +75,6 @@ impl ApprovalDefinitionService {
     /// # 参数
     /// * `definition_id` - 定义主键
     /// * `actor` - 已认证操作人
-    /// * `visibility` - 类型级可见范围
     ///
     /// # 返回
     /// 返回定义详情。
@@ -95,9 +85,8 @@ impl ApprovalDefinitionService {
         &self,
         definition_id: &str,
         actor: &AuditActor,
-        visibility: &DefinitionManagementVisibility,
     ) -> Result<DefinitionDetailView> {
-        let visibility = enforce_visibility(&self.identity, &self.db, actor, visibility).await?;
+        let visibility = definition_management_visibility(&self.identity, actor).await?;
         let graph = self
             .db
             .bpm_workflow()
@@ -111,16 +100,6 @@ impl ApprovalDefinitionService {
         ensure_can_read_detail(&visibility, document_type)?;
         detail_with_copies(&self.db, &graph, &mut NoTransaction).await
     }
-}
-
-/// 以当前 RBAC 重验类型级范围，禁止调用方扩大权限。
-async fn enforce_visibility(
-    identity_service: &SharedRbacService,
-    _db: &Database,
-    actor: &AuditActor,
-    visibility: &DefinitionManagementVisibility,
-) -> Result<DefinitionManagementVisibility> {
-    Ok(definition_management_visibility(identity_service, actor).await?.intersect(visibility))
 }
 
 /// 详情读取权。
@@ -155,13 +134,6 @@ mod tests {
         );
         assert!(ensure_can_read_detail(&visibility, DocumentType::StockAdjustment).is_ok());
         assert!(ensure_can_read_detail(&visibility, DocumentType::SalesOrder).is_err());
-        let claimed = DefinitionManagementVisibility::from_type_permissions(
-            vec![DocumentType::StockAdjustment, DocumentType::SalesOrder],
-            vec![DocumentType::SalesOrder],
-        );
-        let intersected = visibility.intersect(&claimed);
-        assert!(intersected.can_define(DocumentType::StockAdjustment));
-        assert!(!intersected.can_define(DocumentType::SalesOrder));
         assert_eq!(
             definition_allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None),
             Vec::new()

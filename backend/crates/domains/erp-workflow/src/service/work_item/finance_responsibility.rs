@@ -19,7 +19,7 @@ use crate::entity::work_item::{
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope, WorkItemType,
 };
 use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
+use crate::ports::{PreparedWorkflowAudit, WorkflowAuthorizationPort};
 use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
 use crate::repository::work_item::finance_rotation;
@@ -171,7 +171,7 @@ pub struct ResolvedFinanceResponsibility {
     pub responsibility_key: String,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkItemService<A> {
+impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 查询全部财务责任规则。
     ///
     /// # 参数
