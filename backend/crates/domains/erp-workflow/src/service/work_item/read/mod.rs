@@ -12,5 +12,4 @@ use crate::dto::work_item::{read as dto, *};
 use crate::entity::work_item::WorkItemDueFilter;
 use crate::repository::WorkItemFilter;
 
-mod facts;
 mod identity;

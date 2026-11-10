@@ -2,34 +2,32 @@
 
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::ports::AccessMapping;
-use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_identity::SharedRbacService;
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{ActorAccess, detail_scope};
+use super::access::{QueueAccess, detail_scope};
 use super::context::*;
 use super::stats::apply_due_filter;
 use super::{
     ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
     WorkItemPageView, WorkItemScope, WorkItemSearchParams, WorkItemView, WorkspaceFilters, dto,
 };
+use crate::dto::work_item::ViewAccess;
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
 use crate::repository::work_item::WorkItemScan;
-use crate::repository::work_item::authorization::WorkItemMapping;
+use crate::service::work_item::WorkItemAuthorization;
 use crate::{BpmExt, WorkItemExt};
 
 pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
 
 struct FocusedQueueContext<'a> {
     page_size: u32,
-    actor: &'a AuditActor,
-    access: &'a ActorAccess,
+    access: &'a QueueAccess,
 }
 
 /// 工作项领域查询服务。
@@ -40,8 +38,7 @@ pub struct WorkItemReadService {
     /// MongoDB handle used for work-item reads.
     pub db: mongodb::Database,
     /// Identity 共享权限服务。
-    pub(super) authorization: AuthorizationService,
-    pub(super) mapping: Arc<dyn AccessMapping>,
+    pub authorization: WorkItemAuthorization,
 }
 
 impl WorkItemReadService {
@@ -57,9 +54,8 @@ impl WorkItemReadService {
     /// # 错误
     /// 无。
     pub fn new(db: mongodb::Database, rbac: SharedRbacService) -> Self {
-        let mapping = WorkItemMapping::shared();
-        let authorization = super::identity::authorization(db.clone(), rbac, mapping.clone());
-        Self { db, authorization, mapping }
+        let authorization = WorkItemAuthorization::new(db.clone(), rbac);
+        Self { db, authorization }
     }
 }
 
@@ -82,7 +78,7 @@ impl WorkItemReadService {
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {
-            let result = self.require_task(actor, "detail", id, executor).await.map(|()| true);
+            let result = self.authorization.require(actor, "detail", id, executor).await.map(|()| true);
             match result {
                 Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(false),
                 other => other,
@@ -157,7 +153,7 @@ impl WorkItemReadService {
         apply_due_filter(&mut filter, query.due)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
         let (authorized_page, result_version, filter_options) =
-            self.authorized_page_fields(&filter, &query, &actor, &access, executor).await?;
+            self.authorized_page_fields(&filter, &query, &access, executor).await?;
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
         let fields = self
@@ -166,12 +162,11 @@ impl WorkItemReadService {
                 query.current_work_item_id.as_deref(),
                 &filter,
                 &query,
-                FocusedQueueContext { page_size: query.page_size, actor: &actor, access: &access },
+                FocusedQueueContext { page_size: query.page_size, access: &access },
                 executor,
             )
             .await?;
-        let items =
-            self.project_fields(fields, query.scope, &actor, &access, &queue_context_id, executor).await?;
+        let items = self.project_fields(fields, query.scope, &access, &queue_context_id, executor).await?;
         self.validate_access(&access, executor).await?;
         Ok(WorkItemPageView {
             filter_options,
@@ -218,7 +213,7 @@ impl WorkItemReadService {
             field.search = super::search::task_document(field);
         }
         if query.filters.blocked {
-            self.search_blockers(&mut current, query.scope, context.actor, context.access, executor).await?;
+            self.search_blockers(&mut current, query.scope, context.access, executor).await?;
         }
         let Some(current) = current.into_iter().find(|fields| {
             fields.search.matches(filter.query.as_deref()).is_some()
@@ -271,8 +266,7 @@ impl WorkItemReadService {
         &self,
         fields: Vec<dto::WorkItemFields>,
         scope: WorkItemScope,
-        actor: &AuditActor,
-        actor_access: &ActorAccess,
+        actor_access: &QueueAccess,
         queue_context_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemView>> {
@@ -280,7 +274,7 @@ impl WorkItemReadService {
         let projected = self.projected_access(actor_access, &ids, executor).await?;
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
-            let access = self.view_access(&fields, scope, actor, &projected)?;
+            let access = ViewAccess::from_fields(&fields, scope, &projected.task);
             items.push(WorkItemView::from_fields(fields, queue_context_id.to_string())?.with_access(
                 access.processing_state,
                 access.processing_blocker,
@@ -431,7 +425,7 @@ impl WorkItemReadService {
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<WorkItemView>> {
         Box::pin(async move {
-            self.require_task(actor, action, id, executor).await?;
+            self.authorization.require(actor, action, id, executor).await?;
             let item = self
                 .db
                 .work_items()
@@ -444,7 +438,7 @@ impl WorkItemReadService {
             let fields = dto::WorkItemFields::from(item);
             let queue_context_id = single_item_context_id(actor.id(), &item_id);
             let projected = self.projected_access(&access, &[item_id], executor).await?;
-            let view_access = self.view_access(&fields, scope, actor, &projected)?;
+            let view_access = ViewAccess::from_fields(&fields, scope, &projected.task);
             let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
                 view_access.processing_state,
                 view_access.processing_blocker,
@@ -672,7 +666,7 @@ mod tests {
 
     #[test]
     fn queue_context_binds_handler_and_order_filters_for_cross_page_version() {
-        use crate::service::work_item::read::access::ActorAccess;
+        use crate::service::work_item::read::access::QueueAccess;
 
         fn query_with(
             handler: &[&str],
@@ -700,8 +694,8 @@ mod tests {
             }
         }
 
-        fn access() -> ActorAccess {
-            ActorAccess::new("actor".to_string())
+        fn access() -> QueueAccess {
+            QueueAccess::new("actor".to_string())
         }
 
         let access = access();

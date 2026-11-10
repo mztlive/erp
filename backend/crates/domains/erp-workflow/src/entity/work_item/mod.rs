@@ -3,7 +3,9 @@
 //! `status` 只表达 `OPEN / COMPLETED / CLOSED` 生命周期；开放任务必须有个人责任人。
 //! 审批推进与正式业务结果不由本域决定。
 
+mod access;
 mod action_policy;
+pub use access::{TaskAccess, required_execution_permissions};
 mod due;
 mod entity;
 mod finance_responsibility;

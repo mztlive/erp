@@ -4,7 +4,7 @@ use application_core::AuditActor;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission};
 use erp_workflow::WorkItemType;
-use erp_workflow::service::work_item::access::required_execution_permissions;
+use erp_workflow::entity::work_item::required_execution_permissions;
 use persistence_core::Executor;
 
 use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};

@@ -150,13 +150,14 @@ fn verify_abandon_replay(
 mod tests {
     use bpm::ApprovalProcessInstanceId;
     use erp_core::ids::WorkItemId;
+    use erp_identity::{Permission, PermissionSet};
 
     use super::*;
     use crate::entity::work_item::{
         AssignmentSource, WorkItemData, WorkItemPriority, WorkItemSubjectVersions,
     };
     use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
-    use crate::service::work_item::access::{ActorAccess, authorized_item_fields};
+    use crate::service::work_item::access::{TaskEligibility, authorized_item_fields};
 
     #[test]
     fn abandoned_v1_replays_after_v2_only_with_exact_history_and_current_object_permission() {
@@ -207,8 +208,11 @@ mod tests {
         let mut fact = ObjectFact::new("request", "付款申请", "submitter");
         fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["2".into()]).unwrap();
         let key = (ObjectKind::PurchasePaymentRequest, "request".into());
-        let access = ActorAccess::new("submitter".into())
-            .with_permissions(vec!["purchase_payment_request:detail".into(), "work_item:detail".into()]);
+        let access = TaskEligibility::new("submitter".into()).with_permissions(PermissionSet::new(
+            vec!["purchase_payment_request:detail".into(), "work_item:detail".into()]
+                .into_iter()
+                .map(|code: String| Permission::parse(code).unwrap()),
+        ));
         assert!(
             authorized_item_fields(
                 item.clone(),
@@ -224,12 +228,12 @@ mod tests {
         assert!(verify_abandon_replay(&item, &receipt, &command("另一说明"), "submitter").is_err());
         assert!(verify_abandon_replay(&item, &receipt, &command("不再办理"), "other").is_err());
         assert!(
-            authorized_item_fields(item.clone(), &ActorAccess::new("submitter".into()), &facts).is_none()
+            authorized_item_fields(item.clone(), &TaskEligibility::new("submitter".into()), &facts).is_none()
         );
         assert!(
             authorized_item_fields(
                 item.clone(),
-                &ActorAccess::new("other".into()).with_permissions(access.permissions.clone()),
+                &TaskEligibility::new("other".into()).with_permissions(access.task.permissions.clone()),
                 &facts
             )
             .is_none()

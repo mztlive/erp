@@ -1,5 +1,7 @@
 //! 工作项命令、查询与展示 DTO。
 
+mod access;
+pub use access::ViewAccess;
 mod command;
 mod status;
 mod view;

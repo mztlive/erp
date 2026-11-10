@@ -8,7 +8,7 @@ use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::ActorAccess;
+use super::access::QueueAccess;
 use super::dto::WorkItemTypeTiming;
 use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler};
 use super::{
@@ -21,7 +21,7 @@ use crate::error::{Error, Result};
 /// 统计时限与选中类型共用固定基准，累计状态不保存任何任务或对象事实。
 struct StatsContext<'a> {
     actor: &'a AuditActor,
-    access: &'a ActorAccess,
+    access: &'a QueueAccess,
     selected_types: &'a [WorkItemType],
     as_of: Instant,
     today_start: Instant,
@@ -292,6 +292,17 @@ fn increment_family_count(counts: &mut WorkItemFamilyCountsView, work_item_type:
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn business_day_bounds_use_fixed_asia_shanghai_timezone() {
+        let (previous_start, previous_end) = business_day_bounds_at(1_722_441_599).unwrap();
+        assert_eq!(previous_start.unix_secs(), 1_722_355_200);
+        assert_eq!(previous_end.unix_secs(), 1_722_441_600);
+
+        let (start, end) = business_day_bounds_at(1_722_441_600).unwrap();
+        assert_eq!(start.unix_secs(), 1_722_441_600);
+        assert_eq!(end.unix_secs(), 1_722_528_000);
+    }
+
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -304,15 +315,15 @@ mod tests {
     fn pending_counts_match_assignment_pages_without_business_or_execution_permissions() {
         use bpm::ids::ApprovalNodeExecutionId;
         use erp_core::ids::WorkItemId;
-        use erp_identity::Permission;
+        use erp_identity::{Permission, PermissionSet};
 
         use crate::dto::work_item::WorkItemListParams;
         use crate::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
         use crate::service::work_item::read::context::AuthorizedPageCollector;
 
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = ActorAccess::new("actor".into())
-            .with_permissions(vec![Permission::parse("work_item:list").unwrap()]);
+        let access = QueueAccess::new("actor".into())
+            .with_permissions(PermissionSet::new([Permission::parse("work_item:list").unwrap()]));
         let at = Instant::from_unix_secs(1_790_784_000);
         let approval: dto::WorkItemFields = WorkItem::new_document_approval(
             WorkItemId::new("approval"),
@@ -374,7 +385,7 @@ mod tests {
     /// 使用固定业务时点构造实际计数上下文。
     fn context<'a>(
         actor: &'a AuditActor,
-        access: &'a ActorAccess,
+        access: &'a QueueAccess,
         types: &'a [WorkItemType],
         as_of: Instant,
     ) -> StatsContext<'a> {
@@ -408,7 +419,7 @@ mod tests {
     #[test]
     fn batches_release_items_and_keep_selected_and_personal_family_counts() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = ActorAccess::new("actor".into());
+        let access = QueueAccess::new("actor".into());
         let selected_types = [WorkItemType::DocumentApproval];
         let context = context(&actor, &access, &selected_types, Instant::from_unix_secs(1_790_784_000));
         let drops = Arc::new(AtomicUsize::new(0));
@@ -447,7 +458,7 @@ mod tests {
     #[test]
     fn type_timing_keeps_missing_dates_and_day_boundaries_distinct() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = ActorAccess::new("actor".into());
+        let access = QueueAccess::new("actor".into());
         let types = [WorkItemType::DocumentApproval];
         let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_787_600));
         let mut counts = StatsCounts::default();
@@ -472,7 +483,7 @@ mod tests {
     #[test]
     fn type_counts_cover_multiple_pages_and_empty_queues() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = ActorAccess::new("actor".into());
+        let access = QueueAccess::new("actor".into());
         let types = [WorkItemType::ProcurementOrderCreation];
         let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_784_000));
         let mut counts = StatsCounts::default();
@@ -496,7 +507,7 @@ mod tests {
     #[test]
     fn midnight_due_and_overdue_boundaries_use_response_timestamp() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        let access = ActorAccess::new("actor".into());
+        let access = QueueAccess::new("actor".into());
         let types = [WorkItemType::BusinessException];
         let midnight = Instant::from_unix_secs(1_790_697_600);
         let context = context(&actor, &access, &types, midnight);

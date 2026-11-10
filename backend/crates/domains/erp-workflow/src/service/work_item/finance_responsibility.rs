@@ -2,11 +2,13 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_core::assignment::AssignmentStrategy;
+use erp_identity::{Permission, PermissionSet};
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
@@ -230,11 +232,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let rbac = self.auth.clone();
             let facts = Arc::clone(&self.facts);
             let audit_port = Arc::clone(&self.audit);
+            let identity = rbac.rbac()?.clone();
             let rule = rbac
                 .clone()
+                .rbac()?
                 .run_authorized_policy_transaction(policy_revision, move |executor| {
-                    let service =
-                        WorkItemService::with_ports(db.clone(), rbac, facts, Arc::clone(&audit_port));
+                    let service = WorkItemService::with_ports(
+                        db.clone(),
+                        identity,
+                        rbac,
+                        facts,
+                        Arc::clone(&audit_port),
+                    );
                     Box::pin(async move {
                         service.validate_finance_rule_data(&data, true, true, executor).await?;
                         db.finance_responsibility_rules().create(&rule, executor).await?;
@@ -283,10 +292,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             let rbac = self.auth.clone();
             let facts = Arc::clone(&self.facts);
             let audit_port = Arc::clone(&self.audit);
+            let identity = rbac.rbac()?.clone();
             let rule = rbac
                 .clone()
+                .rbac()?
                 .run_authorized_policy_transaction(policy_revision, move |executor| {
-                    let service = WorkItemService::with_ports(db, rbac, facts, Arc::clone(&audit_port));
+                    let service =
+                        WorkItemService::with_ports(db, identity, rbac, facts, Arc::clone(&audit_port));
                     Box::pin(async move {
                         let rule =
                             service.update_finance_rule(&id, version, data, updated_by, executor).await?;
@@ -336,7 +348,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         if owner_must_be_eligible {
             self.authorize_finance_pool(probe.operation, &probe.owner_user_ids).await
         } else {
-            self.auth.current_policy_revision().await
+            Ok(self.auth.rbac()?.current_policy_revision().await?)
         }
     }
 
@@ -405,12 +417,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             if AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).is_err() {
                 continue;
             }
-            let granted = self.auth.permission_codes(account.kind, account.id.as_str()).await?;
-            let covers = |required: &[String]| {
-                required
-                    .iter()
-                    .all(|code| granted.iter().any(|owned| crate::ports::permission_covers(owned, code)))
-            };
+            let granted = self.auth.rbac()?.permissions(account.kind, account.id.as_str()).await?;
+            let covers = |required: &PermissionSet| granted.covers(required);
             let supplier_payment_eligible = covers(&payment);
             let sales_invoice_eligible = covers(&invoice);
             if !supplier_payment_eligible && !sales_invoice_eligible {
@@ -436,11 +444,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         owner_user_ids: &[String],
     ) -> Result<u64> {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-            let before = self.auth.current_policy_revision().await?;
+            let before = self.auth.rbac()?.current_policy_revision().await?;
             for owner in owner_user_ids {
                 self.ensure_finance_owner_eligible(operation, owner.clone()).await?;
             }
-            let after = self.auth.current_policy_revision().await?;
+            let after = self.auth.rbac()?.current_policy_revision().await?;
             if before == after {
                 return Ok(before);
             }
@@ -513,10 +521,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let required = task_type
             .required_execution_permissions("purchase_order")
             .ok_or_else(|| Error::BusinessLogicError("退货财务权限未登记".into()))?;
-        let granted = self.auth.permission_codes(AccountKind::Admin, &resolved.owner_user_id).await?;
+        let granted = self.auth.rbac()?.permissions(AccountKind::Admin, &resolved.owner_user_id).await?;
         if !required
             .iter()
-            .all(|code| granted.iter().any(|owned| crate::ports::permission_covers(owned, code)))
+            .all(|code| granted.covers_one(&Permission::parse(code).expect("任务注册权限合法")))
         {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少退货处理权限，请调整财务责任配置",
@@ -586,12 +594,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             AvailableWorkItemAccount::from_account_kind(&account, AccountKind::Admin).map_err(|_| {
                 Error::BusinessLogicError(format!("{}负责人账号不可用，请重新选择", operation.label()))
             })?;
-            let granted = auth.permission_codes(account.kind, account.id.as_str()).await?;
+            let granted = auth.rbac()?.permissions(account.kind, account.id.as_str()).await?;
             let required = required_finance_permissions(operation)?;
-            if required
-                .iter()
-                .all(|code| granted.iter().any(|owned| crate::ports::permission_covers(owned, code)))
-            {
+            if granted.covers(&required) {
                 return Ok(());
             }
             Err(Error::BusinessLogicError(format!(
@@ -663,16 +668,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 }
 
-fn required_finance_permissions(operation: FinanceResponsibilityOperation) -> Result<Vec<String>> {
+fn required_finance_permissions(operation: FinanceResponsibilityOperation) -> Result<PermissionSet> {
     let codes = operation
         .required_permission_codes()
         .ok_or_else(|| Error::Internal("财务执行权限合同未注册".to_string()))?;
-    Ok(codes.iter().map(|code| (*code).to_string()).collect())
+    Ok(PermissionSet::new(codes.iter().map(Permission::parse).collect::<StdResult<Vec<_>, _>>()?))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::required_finance_permissions;
+    use super::{Permission, required_finance_permissions};
     use crate::entity::work_item::FinanceResponsibilityOperation;
 
     #[test]
@@ -680,14 +685,12 @@ mod tests {
         assert!(
             required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)
                 .unwrap()
-                .iter()
-                .any(|code| crate::ports::permission_covers(code, "purchase_payment_request:pay"))
+                .covers_one(&Permission::parse("purchase_payment_request:pay").unwrap())
         );
         assert!(
             required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)
                 .unwrap()
-                .iter()
-                .any(|code| crate::ports::permission_covers(code, "invoice:post"))
+                .covers_one(&Permission::parse("invoice:post").unwrap())
         );
         assert!(required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview).is_err());
     }

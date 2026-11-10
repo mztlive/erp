@@ -97,6 +97,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let policy_revision = prepared.policy_revision;
         let input = SubmissionCommit::new(self, req, actor, prepared, (&audit_id, &fingerprint));
         let transaction_result = auth
+            .rbac()?
             .run_authorized_policy_transaction(policy_revision, move |executor| {
                 Box::pin(input.persist(executor))
             })

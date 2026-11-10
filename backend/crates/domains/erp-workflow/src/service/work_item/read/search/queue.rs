@@ -1,8 +1,7 @@
 //! 授权批次的查询累加器；计数、命中说明和分页共用同一筛选结果。
-use application_core::AuditActor;
 use persistence_core::Executor;
 
-use super::super::access::ActorAccess;
+use super::super::access::QueueAccess;
 use super::super::context::{AuthorizedPage, AuthorizedPageCollector, queue_scope_version};
 use super::super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler};
 use super::super::{WorkItemFilter, WorkItemReadService, dto};
@@ -21,8 +20,7 @@ impl WorkItemReadService {
         &self,
         filter: &WorkItemFilter,
         query: &dto::WorkItemListQuery,
-        actor: &AuditActor,
-        access: &ActorAccess,
+        access: &QueueAccess,
         executor: &mut dyn Executor,
     ) -> Result<(AuthorizedPage<dto::WorkItemFields>, String, SearchOptions)> {
         let mut candidates = filter.clone();
@@ -42,7 +40,7 @@ impl WorkItemReadService {
                 field.search = super::task_document(field);
             }
             if query.filters.blocked {
-                self.search_blockers(&mut fields, query.scope, actor, access, executor).await?;
+                self.search_blockers(&mut fields, query.scope, access, executor).await?;
             }
             result.extend(fields, query, filter.query.as_deref());
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {

@@ -1,6 +1,10 @@
 //! 审批静态资格、类型管理权限与真实业务来源授权。
 
+use std::result::Result as StdResult;
+use std::slice;
+
 use application_core::AuditActor;
+use erp_identity::Permission;
 use persistence_core::{Executor, NoTransaction};
 
 use super::dto::ApprovalRecoveryAuthorization;
@@ -224,22 +228,23 @@ pub async fn definition_management_visibility_with_executor(
     let required = policies
         .iter()
         .flat_map(|(_, define, runtime)| [define.as_str(), runtime.as_str()])
-        .collect::<Vec<_>>();
-    let policy_snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-    let role_ids = rbac.enabled_role_ids(policy_snapshot.role_ids(), executor).await?;
+        .map(Permission::parse)
+        .collect::<StdResult<Vec<_>, _>>()?;
+    let policy_snapshot = rbac.rbac()?.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+    let role_ids = rbac.rbac()?.enabled_role_ids(policy_snapshot.role_ids(), executor).await?;
     let mut enforced = Vec::new();
     for (document_type, definition_permission, runtime_permission) in policies {
         let can_define = policy_snapshot
-            .granting_role_ids(&definition_permission)
+            .granting_role_ids(&Permission::parse(&definition_permission)?)
             .iter()
             .any(|role_id| role_ids.contains(role_id));
         let can_runtime = policy_snapshot
-            .granting_role_ids(&runtime_permission)
+            .granting_role_ids(&Permission::parse(&runtime_permission)?)
             .iter()
             .any(|role_id| role_ids.contains(role_id));
         enforced.push((document_type, can_define, can_runtime));
     }
-    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor).await?;
+    rbac.rbac()?.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor).await?;
     Ok(visibility_from_enforced_permissions(enforced))
 }
 
@@ -286,10 +291,12 @@ pub async fn approval_action_roles_with_executor(
     if !approval_actor_is_active_with_executor(rbac, actor, executor).await? {
         return Ok(Vec::new());
     }
-    let snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &[permission]).await?;
-    let roles = rbac.enabled_role_ids(&snapshot.granting_role_ids(permission), executor).await?;
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-    Ok(roles)
+    let permission = Permission::parse(permission)?;
+    let snapshot =
+        rbac.rbac()?.role_permission_snapshot(actor.kind(), actor.id(), slice::from_ref(&permission)).await?;
+    let roles = rbac.rbac()?.enabled_role_ids(&snapshot.granting_role_ids(&permission), executor).await?;
+    rbac.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    Ok(roles.into_iter().map(|role| role.to_string()).collect())
 }
 
 /// 校验候选审批人同一启用角色同时授予审批读取与决定能力。
@@ -308,10 +315,12 @@ pub async fn approval_participant_permissions_with_executor(
     if !approval_actor_is_active_with_executor(rbac, actor, executor).await? {
         return Ok(false);
     }
-    let required = ["approval_instance:read", "approval_instance:decide"];
-    let snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-    let roles = rbac.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    let required =
+        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+    let snapshot = rbac.rbac()?.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+    let roles =
+        rbac.rbac()?.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
+    rbac.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
     Ok(!roles.is_empty())
 }
 
@@ -365,7 +374,7 @@ pub async fn approval_recovery_authorization(
     actor: &AuditActor,
 ) -> Result<ApprovalRecoveryAuthorization> {
     for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-        let before = rbac.current_policy_revision().await?;
+        let before = rbac.rbac()?.current_policy_revision().await?;
         rbac.load_account(actor.id(), &mut NoTransaction)
             .await?
             .filter(|account| account.kind == actor.kind() && account.can_login)
@@ -376,7 +385,7 @@ pub async fn approval_recovery_authorization(
         if granting_role_ids.is_empty() {
             return Err(Error::Forbidden("缺少审批恢复权限".into()));
         }
-        let after = rbac.current_policy_revision().await?;
+        let after = rbac.rbac()?.current_policy_revision().await?;
         if before == after {
             return Ok(ApprovalRecoveryAuthorization {
                 actor_kind: actor.kind(),
@@ -425,13 +434,16 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     document_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalBindingUpgradeAuthorization> {
-    let snapshot =
-        rbac.role_permission_snapshot(actor.kind(), actor.id(), &[definition_admin_permission]).await?;
+    let definition_permission = Permission::parse(definition_admin_permission)?;
+    let snapshot = rbac
+        .rbac()?
+        .role_permission_snapshot(actor.kind(), actor.id(), slice::from_ref(&definition_permission))
+        .await?;
     let mut roles =
-        rbac.enabled_role_ids(&snapshot.granting_role_ids(definition_admin_permission), executor).await?;
+        rbac.rbac()?.enabled_role_ids(&snapshot.granting_role_ids(&definition_permission), executor).await?;
     roles.sort();
     let actor_role =
-        roles.into_iter().next().ok_or_else(|| Error::Forbidden("没有该类型定义管理权".into()))?;
+        roles.into_iter().next().ok_or_else(|| Error::Forbidden("没有该类型定义管理权".into()))?.to_string();
     let upgrade =
         approval_action_roles_with_executor(rbac, actor, "approval_instance:upgrade_binding", executor)
             .await?;
@@ -442,7 +454,7 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
     {
         return Err(Error::Forbidden("审批绑定升级动作或业务来源读取权限不足".into()));
     }
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    rbac.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
     Ok(ApprovalBindingUpgradeAuthorization { actor_role })
 }
 

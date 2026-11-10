@@ -67,7 +67,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         req: CloseWorkItemRequest,
         actor: AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        self.auth.require_task(&actor, "manage", &id, &mut NoTransaction).await?;
+        self.authorization.require(&actor, "manage", &id, &mut NoTransaction).await?;
         let item = self.load(id.clone()).await?;
         ensure_generic_work_item_mutation(&item)?;
         req.validate()?;
@@ -135,7 +135,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ) -> Result<()> {
         self.ensure_task_manage(actor, item, executor).await?;
         if let Some(id) = decision.replacement_work_item_id.as_deref() {
-            self.auth.require_task(actor, "manage", id, executor).await?;
+            self.authorization.require(actor, "manage", id, executor).await?;
         }
         Ok(())
     }

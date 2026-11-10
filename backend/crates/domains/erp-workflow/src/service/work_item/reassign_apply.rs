@@ -3,7 +3,6 @@
 use std::num::NonZeroU32;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_identity::service::resource_access::append_event;
 use id_generator::next_id;
@@ -67,6 +66,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
         let validation = self.clone();
         let result = self
             .auth
+            .rbac()?
             .run_authorized_policy_transaction(context.authorization.policy_revision, move |executor| {
                 Box::pin(async move { validation.apply_reassignment(context, executor).await })
             })
@@ -158,11 +158,9 @@ impl<A: WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
         ensure_assignment_policy(
             self,
             AssignmentPolicyCheck {
-                actor_kind: context.actor.kind(),
-                actor_id: context.actor.id(),
+                actor: &context.actor,
                 assignee_id: &context.target_user_id,
                 item,
-                require_manager: true,
                 authorization: &context.authorization,
                 allow_current_owner,
             },
@@ -293,16 +291,12 @@ fn reassignment_audits(
 /// # 关键业务约束
 /// 操作人身份必须与授权快照一致。
 struct AssignmentPolicyCheck<'a> {
-    /// 操作人账号类型。
-    actor_kind: AccountKind,
-    /// 操作人 ID。
-    actor_id: &'a str,
+    /// 真实操作人身份，沿用请求审计主体。
+    actor: &'a AuditActor,
     /// 目标责任人 ID。
     assignee_id: &'a str,
     /// 当前任务。
     item: &'a WorkItem,
-    /// 是否要求管理人权限。
-    require_manager: bool,
     /// 事务外冻结的授权快照。
     authorization: &'a AssignmentAuthorizationSnapshot,
     /// 是否允许候选人为当前责任人。
@@ -332,19 +326,10 @@ async fn ensure_assignment_policy<A: WorkflowAuthorizationPort>(
     check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if check.actor_kind != check.authorization.actor_kind {
+    if check.actor.kind() != check.authorization.actor_kind {
         return Err(Error::Forbidden("操作账号身份已变化".to_string()));
     }
-    service
-        .ensure_assignment_actor_access(
-            check.actor_kind,
-            check.actor_id,
-            check.item,
-            check.require_manager,
-            check.authorization,
-            executor,
-        )
-        .await?;
+    service.ensure_task_manage(check.actor, check.item, executor).await?;
     service
         .ensure_assignment_candidate(
             check.assignee_id,

@@ -1,11 +1,11 @@
 //! 工作流消费的授权事实；适配器位于组合根。
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::future::Future;
-use std::pin::Pin;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_identity::SharedRbacService;
 use persistence_core::Executor;
 
 use super::object_facts::OrderTaskSource;
@@ -14,169 +14,19 @@ use crate::entity::document_registry::DocumentType;
 pub use crate::entity::work_item::WorkflowAccountFact;
 use crate::error::{Error, Result};
 
-/// Frozen role-to-permission grants captured under one enforcer revision.
-#[derive(Debug, Clone)]
-pub struct RolePermissionSnapshotFact {
-    role_ids: Vec<String>,
-    grants: HashMap<String, Vec<String>>,
-    policy_revision: u64,
-}
-
-impl RolePermissionSnapshotFact {
-    /// 构造一份冻结的角色权限快照。
-    ///
-    /// # 参数
-    /// * `role_ids` - 按授权顺序排列的账号角色 ID。
-    /// * `grants` - 每个角色授予的权限代码。
-    /// * `policy_revision` - 计算授权时使用的执行器修订号。
-    ///
-    /// # 返回
-    /// 返回不暴露 Role 或 Permission 聚合的快照。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn new(role_ids: Vec<String>, grants: HashMap<String, Vec<String>>, policy_revision: u64) -> Self {
-        Self { role_ids, grants, policy_revision }
-    }
-
-    /// 返回本修订下绑定到账号的角色 ID。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回冻结顺序中的角色 ID。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn role_ids(&self) -> &[String] {
-        &self.role_ids
-    }
-
-    /// 返回授予 `permission_code` 的角色 ID，并保持冻结顺序。
-    ///
-    /// # 参数
-    /// * `permission_code` - 所需权限代码。
-    ///
-    /// # 返回
-    /// 返回其授权覆盖该权限的角色；没有命中时返回空列表。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn granting_role_ids(&self, permission_code: &str) -> Vec<String> {
-        self.role_ids
-            .iter()
-            .filter(|role_id| {
-                self.grants
-                    .get(*role_id)
-                    .is_some_and(|codes| codes.iter().any(|code| permission_covers(code, permission_code)))
-            })
-            .cloned()
-            .collect()
-    }
-
-    /// 返回在同一角色内授予全部所需权限的角色 ID。
-    ///
-    /// # 参数
-    /// * `permissions` - 必须由同一角色同时覆盖的权限。
-    ///
-    /// # 返回
-    /// 返回同时覆盖全部权限的角色。`permissions` 为空时返回空列表。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn granting_role_ids_for_all(&self, permissions: &[&str]) -> Vec<String> {
-        if permissions.is_empty() {
-            return Vec::new();
-        }
-        self.role_ids
-            .iter()
-            .filter(|role_id| {
-                self.grants.get(*role_id).is_some_and(|codes| {
-                    permissions
-                        .iter()
-                        .all(|required| codes.iter().any(|code| permission_covers(code, required)))
-                })
-            })
-            .cloned()
-            .collect()
-    }
-
-    /// 返回冻结本快照时使用的执行器修订号。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时写入的 `policy_revision`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn policy_revision(&self) -> u64 {
-        self.policy_revision
-    }
-}
-
-/// 判断已有权限是否按 Casbin 的 `resource:action` 规则覆盖所需权限，包括 `*`。
-///
-/// # 参数
-/// * `owned` - 已授予的权限代码。
-/// * `required` - 所需权限代码。
-///
-/// # 返回
-/// 资源与动作各自相等或为 `*` 时返回 `true`。任一侧不是恰好一段 `resource:action` 时返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn permission_covers(owned: &str, required: &str) -> bool {
-    let Some((owned_resource, owned_action)) = split_permission(owned) else {
-        return false;
-    };
-    let Some((required_resource, required_action)) = split_permission(required) else {
-        return false;
-    };
-    (owned_resource == "*" || owned_resource == required_resource)
-        && (owned_action == "*" || owned_action == required_action)
-}
-
-/// 只接受恰好一段 `resource:action`；空白、缺段或多段冒号都不是权限代码。
-fn split_permission(code: &str) -> Option<(&str, &str)> {
-    let normalized = code.trim();
-    let (resource, action) = normalized.split_once(':')?;
-    if action.contains(':') || resource.is_empty() || action.is_empty() {
-        return None;
-    }
-    Some((resource, action))
-}
-
-/// 一次工作台只读阶段的身份事实；对象读取权和具体任务资格仍须独立验证。
-///
-/// `identity_version` 仅在调用方原入口需要首拍队列版本时填入；终拍版本必须重新读取。
-/// 管理范围的 `None` 仅代表公共 DataScope 解析器证明的公司范围。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowQueueAccessFact {
-    /// 按原权限查询合同返回的权限代码，不以任务责任代替操作权。
-    pub permission_codes: Vec<String>,
-    /// 当前账号参与的正式单据身份。
-    pub participant_document_ids: Vec<String>,
-    /// 当前管理范围覆盖的具体负责人，空集合保持失败关闭。
-    pub managed_owner_ids: Option<Vec<String>>,
-    /// 已启用角色是否证明任务管理动作资格。
-    pub can_manage: bool,
-    /// 首拍身份授权版本，不是对象或任务版本。
-    pub identity_version: Option<String>,
-}
-
-/// Closure type for a policy-bound MongoDB write.
-pub type WorkflowPolicyWrite<T, E> = Box<
-    dyn for<'a> FnOnce(
-            &'a mut dyn Executor,
-        ) -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
-        + Send,
->;
-
 /// Authorization facts and policy-bound transactions for workflow commands.
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
+    /// 取得共享 identity 服务；通用权限与策略事务直接使用 identity API。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回组合根装配的共享 RBAC 服务。
+    /// # 错误
+    /// 未装配时拒绝，不构造空权限或降级身份。
+    fn rbac(&self) -> Result<&SharedRbacService> {
+        Err(Error::Internal("身份服务未装配".into()))
+    }
+
     /// 当前审批办理在原事务检查完整单据读取资格。
     /// # 参数
     /// actor 为已验证当前办理人；source 为实际订单；instance 为审批实例；executor 为原事务。
@@ -356,23 +206,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("审批范围事实未装配".into())) }
     }
 
-    /// 使用统一对象授权检查当前任务。
-    /// # 参数
-    /// actor 为真实账号，action 为 detail/manage，id 为实际任务，executor 为调用方执行器。
-    /// # 返回
-    /// 操作权限及任务责任范围同时成立时成功。
-    /// # 错误
-    /// 未装配、无权、对象缺失或事实读取失败时拒绝。
-    fn require_task(
-        &self,
-        _actor: &AuditActor,
-        _action: &str,
-        _id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<()>> + Send {
-        async { Err(Error::Internal("任务统一授权未装配".into())) }
-    }
-
     /// 在审批原事务内重验 S2 订单对象当前详情权限。
     ///
     /// # 参数
@@ -431,182 +264,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<()>> + Send {
         async { Err(Error::Internal("任务对象范围授权未装配".into())) }
     }
-
-    /// 返回授予 `account_id` 的角色 ID。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型。
-    /// * `account_id` - 账号 ID。
-    ///
-    /// # 返回
-    /// 成功时返回角色 ID。
-    ///
-    /// # 错误
-    /// 实现无法读取角色时返回错误。
-    fn role_ids(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send;
-
-    /// 返回 `executor` 可见的角色 ID。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型。
-    /// * `account_id` - 账号 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回该执行器快照中的角色 ID。
-    ///
-    /// # 错误
-    /// 实现无法读取角色时返回错误。
-    fn role_ids_with_executor(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send;
-
-    /// 返回授予 `account_id` 的权限代码。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型。
-    /// * `account_id` - 账号 ID。
-    ///
-    /// # 返回
-    /// 成功时返回权限代码。
-    ///
-    /// # 错误
-    /// 实现无法读取权限时返回错误。
-    fn permission_codes(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send;
-
-    /// 对 Casbin `subject` 执行 `permission_code` 判定。
-    ///
-    /// # 参数
-    /// * `subject` - Casbin 主体。
-    /// * `permission_code` - 所需权限代码。
-    ///
-    /// # 返回
-    /// 允许时返回 `true`，拒绝时返回 `false`。
-    ///
-    /// # 错误
-    /// 实现无法完成判定时返回错误。
-    fn enforce(&self, subject: &str, permission_code: &str) -> impl Future<Output = Result<bool>> + Send;
-
-    /// 判断 `owned` 中的权限代码是否覆盖全部 `required` 代码。
-    ///
-    /// # 参数
-    /// * `owned` - 已拥有的权限代码。
-    /// * `required` - 所需权限代码。
-    ///
-    /// # 返回
-    /// 全部覆盖时返回 `true`，否则返回 `false`。
-    ///
-    /// # 错误
-    /// 实现无法完成覆盖判断时返回错误。
-    fn permissions_cover(&self, owned: &[String], required: &[&str]) -> Result<bool>;
-
-    /// 返回 `role_ids` 中授予 `permission_code` 的角色 ID。
-    ///
-    /// # 参数
-    /// * `role_ids` - 候选角色 ID。
-    /// * `permission_code` - 所需权限代码。
-    ///
-    /// # 返回
-    /// 成功时返回命中的角色 ID。
-    ///
-    /// # 错误
-    /// 实现无法读取角色授权时返回错误。
-    fn roles_granting_permission(
-        &self,
-        role_ids: &[String],
-        permission_code: &str,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send;
-
-    /// 在同一执行器修订下冻结 `required` 权限的角色授权。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型。
-    /// * `account_id` - 账号 ID。
-    /// * `required` - 需要冻结的权限代码。
-    ///
-    /// # 返回
-    /// 成功时返回角色权限快照。
-    ///
-    /// # 错误
-    /// 实现无法冻结授权时返回错误。
-    fn role_permission_snapshot(
-        &self,
-        account_kind: AccountKind,
-        account_id: &str,
-        required: &[&str],
-    ) -> impl Future<Output = Result<RolePermissionSnapshotFact>> + Send;
-
-    /// 返回执行器快照中仍然启用的角色 ID。
-    ///
-    /// # 参数
-    /// * `role_ids` - 候选角色 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回仍启用的角色 ID。
-    ///
-    /// # 错误
-    /// 实现无法读取角色状态时返回错误。
-    fn enabled_role_ids(
-        &self,
-        role_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send;
-
-    /// 证明冻结的执行器修订与执行器快照一致。
-    ///
-    /// # 参数
-    /// * `expected_revision` - 调用方冻结的修订号。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 修订一致时成功。
-    ///
-    /// # 错误
-    /// 修订不一致或无法读取修订时返回错误。
-    fn ensure_policy_snapshot_with_executor(
-        &self,
-        expected_revision: u64,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<()>> + Send;
-
-    /// 返回本地执行器已加载的当前策略修订。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 成功时返回当前修订号。
-    ///
-    /// # 错误
-    /// 实现无法读取修订时返回错误。
-    fn current_policy_revision(&self) -> impl Future<Output = Result<u64>> + Send;
-
-    /// 返回 `executor` 可见的当前策略修订。
-    ///
-    /// # 参数
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回当前修订号。
-    ///
-    /// # 错误
-    /// 实现无法读取修订时返回错误。
-    fn policy_revision_with_executor(
-        &self,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<u64>> + Send;
 
     /// 按 ID 加载账号快照。
     ///
@@ -677,38 +334,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         limit: u32,
         executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send;
-
-    /// 运行绑定到调用方策略修订的写事务。
-    ///
-    /// # 参数
-    /// * `policy_revision` - 调用方持有的策略修订。
-    /// * `transaction` - 在该修订的执行器上执行的写入。
-    ///
-    /// # 返回
-    /// 成功时返回事务闭包的结果。
-    ///
-    /// # 错误
-    /// 修订不匹配、事务失败或闭包返回错误时，错误类型为 `E`。
-    fn run_authorized_policy_transaction<T, E, F>(
-        &self,
-        policy_revision: u64,
-        transaction: F,
-    ) -> impl Future<Output = std::result::Result<T, E>> + Send
-    where
-        T: Send + 'static,
-        E: From<Error>
-            + From<persistence_core::Error>
-            + From<application_core::Error>
-            + std::error::Error
-            + std::fmt::Display
-            + Send
-            + 'static,
-        F: for<'a> FnOnce(
-                &'a mut dyn Executor,
-            )
-                -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
-            + Send
-            + 'static;
 }
 
 /// Fail-closed authorization port used when composition has not injected an adapter.
@@ -721,83 +346,6 @@ fn unwired_auth<T>() -> Result<T> {
 
 #[allow(clippy::manual_async_fn)]
 impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
-    fn role_ids(
-        &self,
-        _account_kind: AccountKind,
-        _account_id: &str,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn role_ids_with_executor(
-        &self,
-        _account_kind: AccountKind,
-        _account_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn permission_codes(
-        &self,
-        _account_kind: AccountKind,
-        _account_id: &str,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn enforce(&self, _subject: &str, _permission_code: &str) -> impl Future<Output = Result<bool>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn permissions_cover(&self, _owned: &[String], _required: &[&str]) -> Result<bool> {
-        unwired_auth()
-    }
-
-    fn roles_granting_permission(
-        &self,
-        _role_ids: &[String],
-        _permission_code: &str,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn role_permission_snapshot(
-        &self,
-        _account_kind: AccountKind,
-        _account_id: &str,
-        _required: &[&str],
-    ) -> impl Future<Output = Result<RolePermissionSnapshotFact>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn enabled_role_ids(
-        &self,
-        _role_ids: &[String],
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<String>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn ensure_policy_snapshot_with_executor(
-        &self,
-        _expected_revision: u64,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<()>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn current_policy_revision(&self) -> impl Future<Output = Result<u64>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn policy_revision_with_executor(
-        &self,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<u64>> + Send {
-        async move { unwired_auth() }
-    }
-
     fn load_account(
         &self,
         _account_id: &str,
@@ -830,30 +378,6 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
     ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
         async move { unwired_auth() }
     }
-
-    fn run_authorized_policy_transaction<T, E, F>(
-        &self,
-        _policy_revision: u64,
-        _transaction: F,
-    ) -> impl Future<Output = std::result::Result<T, E>> + Send
-    where
-        T: Send + 'static,
-        E: From<Error>
-            + From<persistence_core::Error>
-            + From<application_core::Error>
-            + std::error::Error
-            + std::fmt::Display
-            + Send
-            + 'static,
-        F: for<'a> FnOnce(
-                &'a mut dyn Executor,
-            )
-                -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
-            + Send
-            + 'static,
-    {
-        async move { Err(E::from(Error::Internal("授权端口未接线".to_string()))) }
-    }
 }
 
 #[cfg(test)]
@@ -878,27 +402,5 @@ mod permission_tests {
             .supplier_portal_request_reviewable(&actor, "request", &mut NoTransaction)
             .await;
         assert!(matches!(result, Err(Error::Internal(message)) if message == "供应商申请业务确认资格未装配"));
-    }
-
-    #[test]
-    fn approval_read_and_decide_must_be_granted_by_one_role() {
-        let required = ["approval_instance:read", "approval_instance:decide"];
-        let split = RolePermissionSnapshotFact::new(
-            vec!["reader".into(), "decider".into()],
-            HashMap::from([
-                ("reader".into(), vec![required[0].into()]),
-                ("decider".into(), vec![required[1].into()]),
-            ]),
-            1,
-        );
-        assert!(split.granting_role_ids_for_all(&required).is_empty());
-        let combined = RolePermissionSnapshotFact::new(
-            vec!["approver".into()],
-            HashMap::from([("approver".into(), required.map(str::to_owned).to_vec())]),
-            1,
-        );
-        assert_eq!(combined.granting_role_ids_for_all(&required), vec!["approver"]);
-        assert!(combined.granting_role_ids("sales_order:detail").is_empty());
-        assert!(combined.granting_role_ids("approval_instance:resume").is_empty());
     }
 }

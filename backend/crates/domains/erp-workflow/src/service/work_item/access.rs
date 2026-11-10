@@ -1,8 +1,10 @@
-//! 责任队列授权快照、范围过滤与允许动作。
+//! 命令与候选人的业务资格；任务范围由共享 identity 授权服务证明。
 
 use std::collections::HashSet;
+use std::result::Result as StdResult;
 
 use application_core::AuditActor;
+use erp_identity::{Permission, PermissionSet, RoleId};
 use persistence_core::{Executor, NoTransaction};
 
 use super::dto;
@@ -11,11 +13,11 @@ use super::order_access::{
     task_read_error,
 };
 use crate::entity::work_item::{
-    AvailableWorkItemAccount, WorkItem, WorkItemActionAccess, WorkItemActionRequirement,
-    WorkItemBriefRelation, WorkItemStatus, WorkItemType,
+    AvailableWorkItemAccount, TaskAccess, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
+    required_execution_permissions,
 };
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{ObjectFact, ObjectFactMap, permission_covers};
+use crate::ports::{ObjectFact, ObjectFactMap};
 use crate::repository::DocumentRegistryExt;
 use crate::repository::prelude::*;
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
@@ -37,20 +39,16 @@ pub fn object_policy(
 ) -> Option<&'static WorkItemBriefRelation> {
     work_item_type.brief_relation(business_object_type)
 }
-use super::{ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemScope, WorkItemService};
+#[cfg(test)]
+use super::WorkItemAllowedAction;
+use super::{WorkItemScope, WorkItemService};
 
-pub const MANAGE_PERMISSION: &str = "work_item:manage";
-pub const REASSIGN_PERMISSION: &str = MANAGE_PERMISSION;
-pub const CLOSE_PERMISSION: &str = MANAGE_PERMISSION;
-
-pub struct ActorAccess {
-    pub actor_id: String,
-    pub permissions: Vec<String>,
+/// 办理人或转交候选人的操作权限与业务参与事实；查询范围另由 identity 证明。
+pub struct TaskEligibility {
+    pub task: TaskAccess,
     pub participant_document_ids: HashSet<String>,
-    pub managed_owner_ids: Option<Vec<String>>,
-    pub can_manage: bool,
 }
-impl ActorAccess {
+impl TaskEligibility {
     /// 以必填身份构造访问快照；权限与范围默认为空。
     ///
     /// # 参数
@@ -62,13 +60,7 @@ impl ActorAccess {
     /// # 错误
     /// 无。
     pub fn new(actor_id: String) -> Self {
-        Self {
-            actor_id,
-            permissions: Vec::new(),
-            participant_document_ids: HashSet::new(),
-            managed_owner_ids: None,
-            can_manage: false,
-        }
+        Self { task: TaskAccess::new(actor_id), participant_document_ids: HashSet::new() }
     }
 
     /// 设置权限代码。
@@ -81,38 +73,8 @@ impl ActorAccess {
     ///
     /// # 错误
     /// 无。
-    pub fn with_permissions(mut self, permissions: Vec<String>) -> Self {
-        self.permissions = permissions;
-        self
-    }
-
-    /// 设置管理数据范围。
-    ///
-    /// # 参数
-    /// * `ids` - 管理范围内负责人；`None` 表示不按负责人收窄
-    ///
-    /// # 返回
-    /// 返回更新后的快照。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_managed_owner_ids(mut self, ids: Option<Vec<String>>) -> Self {
-        self.managed_owner_ids = ids;
-        self
-    }
-
-    /// 设置管理权限标记。
-    ///
-    /// # 参数
-    /// * `can_manage` - 是否具备管理权限
-    ///
-    /// # 返回
-    /// 返回更新后的快照。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_can_manage(mut self, can_manage: bool) -> Self {
-        self.can_manage = can_manage;
+    pub fn with_permissions(mut self, permissions: PermissionSet) -> Self {
+        self.task.permissions = permissions;
         self
     }
 
@@ -159,7 +121,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ///
     /// # 错误
     /// 投影为空时返回禁止；对象事实读取失败时返回对应错误。
-    pub async fn ensure_item_access(&self, item: &WorkItem, access: &ActorAccess) -> Result<()> {
+    pub async fn ensure_item_access(&self, item: &WorkItem, access: &TaskEligibility) -> Result<()> {
         if self.authorized_fields_for_items(vec![item.clone()], access, &mut NoTransaction).await?.is_empty()
         {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
@@ -178,15 +140,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// 返回权限、参与单据及当前任务的管理资格，不用于其他任务。
     ///
     /// # 错误
-    /// 角色、权限、参与单据或管理范围读取失败时返回对应错误。
-    pub async fn actor_access(
+    /// 权限、参与单据或任务管理授权失败时返回对应错误。
+    pub async fn task_eligibility(
         &self,
         actor: &AuditActor,
         item: &WorkItem,
         executor: &mut dyn Executor,
-    ) -> Result<ActorAccess> {
-        let role_ids = self.auth.role_ids_with_executor(actor.kind(), actor.id(), executor).await?;
-        let permissions = self.auth.permission_codes(actor.kind(), actor.id()).await?;
+    ) -> Result<TaskEligibility> {
+        let permissions = self.auth.rbac()?.permissions(actor.kind(), actor.id()).await?;
         let participant_document_ids = self
             .db
             .document_participants()
@@ -194,88 +155,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .into_iter()
             .collect();
-        let has_manage = self.auth.permissions_cover(&permissions, &[MANAGE_PERMISSION])?;
-        let roles = self.roles_granting_permission(&role_ids, MANAGE_PERMISSION, has_manage).await?;
-        let can_manage = if roles.is_empty() {
-            false
-        } else {
-            match self.auth.require_task(actor, "manage", &item.base.id, executor).await {
-                Ok(()) => true,
-                Err(Error::Forbidden(_)) => false,
-                Err(error) => return Err(error),
-            }
+        let can_manage = match self.authorization.require(actor, "manage", &item.base.id, executor).await {
+            Ok(()) => true,
+            Err(Error::Forbidden(_)) => false,
+            Err(error) => return Err(error),
         };
-        let owners =
-            if can_manage { item.owner_user_id.clone().map(|owner| vec![owner]) } else { Some(vec![]) };
-        Ok(ActorAccess::new(actor.id().to_owned())
+        let mut access = TaskEligibility::new(actor.id().to_owned())
             .with_permissions(permissions)
-            .with_participant_document_ids(participant_document_ids)
-            .with_managed_owner_ids(owners)
-            .with_can_manage(can_manage))
-    }
-
-    /// 定位实际授予指定权限的角色，使管理数据范围与权限来源关联。
-    ///
-    /// # 参数
-    /// * `role_ids` - 账号当前角色
-    /// * `permission` - 待定位的权限
-    /// * `account_has_permission` - 账号是否已被判定具备该权限
-    ///
-    /// # 返回
-    /// 账号不具备该权限时返回空；否则返回 `enforce` 通过的角色 ID。
-    ///
-    /// # 错误
-    /// 角色鉴权失败时返回对应错误。
-    pub async fn roles_granting_permission(
-        &self,
-        role_ids: &[String],
-        permission: &str,
-        account_has_permission: bool,
-    ) -> Result<Vec<String>> {
-        if !account_has_permission {
-            return Ok(Vec::new());
+            .with_participant_document_ids(participant_document_ids);
+        if can_manage {
+            access.task.managed_task_ids.insert(item.base.id.clone());
         }
-        let mut granting_roles = Vec::new();
-        for role_id in role_ids {
-            if self.auth.enforce(&format!("role:{role_id}"), permission).await? {
-                granting_roles.push(role_id.clone());
-            }
-        }
-        Ok(granting_roles)
-    }
-
-    /// 计算该任务在指定队列范围内的查看状态与允许动作。
-    ///
-    /// # 参数
-    /// * `item` - 已授权的工作项投影
-    /// * `scope` - 当前队列范围
-    /// * `actor` - 已认证操作人
-    /// * `access` - 当前账号访问快照
-    ///
-    /// # 返回
-    /// 存在处理阻塞时返回阻塞视图；历史范围或非开放任务返回空动作；否则返回按权限算出的就绪视图。
-    ///
-    /// # 错误
-    /// 处理阻塞读取失败时返回对应错误。
-    pub async fn view_access(
-        &self,
-        item: &dto::WorkItemFields,
-        scope: WorkItemScope,
-        actor: &AuditActor,
-        access: &ActorAccess,
-    ) -> Result<ViewAccess> {
-        if let Some(blocker) = self.processing_blocker(None::<&str>).await? {
-            return Ok(ViewAccess::blocked(blocker));
-        }
-        if scope == WorkItemScope::History || item.status != WorkItemStatus::Open {
-            return Ok(ViewAccess::ready(Vec::new()));
-        }
-        let actions = allowed_actions(item, scope, actor.id(), access);
-        Ok(ViewAccess::ready(actions))
-    }
-
-    async fn processing_blocker(&self, _step_id: Option<&str>) -> Result<Option<ProcessingBlockerView>> {
-        Ok(None)
+        Ok(access)
     }
 
     /// 事务内按 MongoDB 权威角色、范围、对象和审批事实构造访问快照。
@@ -285,7 +176,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// * `actor_id` - 账号 ID
     /// * `read_permission` - 对象读取权限
     /// * `read_role_ids` - 已证明授予读取权的角色
-    /// * `manage_role_ids` - 已证明授予管理权的角色
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -293,24 +183,19 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ///
     /// # 错误
     /// 角色、参与单据或管理范围读取失败时返回对应错误。
-    pub async fn assignment_access_for_executor(
+    pub async fn assignment_eligibility(
         &self,
         account_kind: erp_core::AccountKind,
         actor_id: &str,
         read_permission: &str,
-        read_role_ids: &[String],
-        manage_role_ids: &[String],
+        read_role_ids: &[RoleId],
         executor: &mut dyn Executor,
-    ) -> Result<ActorAccess> {
-        let role_ids = self.auth.role_ids_with_executor(account_kind, actor_id, executor).await?;
+    ) -> Result<TaskEligibility> {
+        let role_ids = self.auth.rbac()?.role_ids_with_executor(account_kind, actor_id, executor).await?;
         let active_read_roles = intersect_role_ids(&role_ids, read_role_ids);
-        let active_manage_roles = intersect_role_ids(&role_ids, manage_role_ids);
-        let mut permissions = Vec::with_capacity(2);
+        let mut permissions = Vec::with_capacity(1);
         if !active_read_roles.is_empty() {
-            permissions.push(read_permission.to_string());
-        }
-        if !active_manage_roles.is_empty() {
-            permissions.push(MANAGE_PERMISSION.to_string());
+            permissions.push(Permission::parse(read_permission)?);
         }
         let participant_document_ids = self
             .db
@@ -319,14 +204,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .into_iter()
             .collect();
-        if !active_manage_roles.is_empty() {
-            return Err(Error::ValidationError("任务管理必须提供实际任务执行对象检查".into()));
-        }
-        Ok(ActorAccess::new(actor_id.to_string())
-            .with_permissions(permissions)
-            .with_participant_document_ids(participant_document_ids)
-            .with_managed_owner_ids(Some(vec![]))
-            .with_can_manage(!active_manage_roles.is_empty()))
+        Ok(TaskEligibility::new(actor_id.to_string())
+            .with_permissions(PermissionSet::new(permissions))
+            .with_participant_document_ids(participant_document_ids))
     }
 
     /// 使用调用方 executor 读取固定注册表对象事实并重验参与权。
@@ -344,13 +224,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     pub async fn ensure_item_access_with_executor(
         &self,
         item: &WorkItem,
-        access: &ActorAccess,
+        access: &TaskEligibility,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         if item.work_item_type.is_document_approval() {
             let account = self
                 .auth
-                .load_account(&access.actor_id, executor)
+                .load_account(&access.task.actor_id, executor)
                 .await?
                 .ok_or_else(|| Error::Forbidden("审批任务账号不存在".into()))?;
             let actor = AuditActor::new(account.id, account.login_account, account.kind);
@@ -371,14 +251,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
         require_supplier_portal_task_read(
             &self.auth,
-            &access.actor_id,
+            &access.task.actor_id,
             policy.object_kind,
             &item.business_object_id,
             executor,
         )
         .await?;
-        if !item.owns_procurement_task(&access.actor_id) {
-            require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
+        if !item.owns_procurement_task(&access.task.actor_id) {
+            require_order_task_read(&self.auth, &access.task.actor_id, policy.object_kind, fact, executor)
+                .await?;
         }
         if authorized_item_fields(item.clone(), access, &facts).is_none() {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
@@ -414,30 +295,32 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let policy = object_policy(item.work_item_type, &item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let read_permission = policy.read_permission;
-        let policy_revision = self.auth.policy_revision_with_executor(executor).await?;
-        let role_ids = self.auth.role_ids_with_executor(actor.kind(), actor.id(), executor).await?;
+        let policy_revision = self.auth.rbac()?.policy_revision_with_executor(executor).await?;
+        let role_ids = self.auth.rbac()?.role_ids_with_executor(actor.kind(), actor.id(), executor).await?;
         let execution_permissions =
             required_execution_permissions(item.work_item_type, &item.business_object_type)
                 .ok_or_else(|| Error::Forbidden("任务类型未注册完整执行权限".to_string()))?;
-        for permission in execution_permissions.as_slice() {
-            let granting_roles = self.roles_granting_permission(&role_ids, permission, true).await?;
-            if granting_roles.is_empty() {
-                return Err(Error::Forbidden("当前账号已不具备任务所需的完整执行权限".to_string()));
+        let required = execution_permissions
+            .iter()
+            .copied()
+            .chain([read_permission])
+            .map(Permission::parse)
+            .collect::<StdResult<Vec<_>, _>>()?;
+        let snapshot =
+            self.auth.rbac()?.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
+        self.auth.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+        for permission in &required[..execution_permissions.len()] {
+            if intersect_role_ids(&role_ids, &snapshot.granting_role_ids(permission)).is_empty() {
+                return Err(Error::Forbidden("当前账号已不具备任务所需的完整执行权限".into()));
             }
         }
-        let read_role_ids = self.roles_granting_permission(&role_ids, read_permission, true).await?;
+        let read_role_ids =
+            intersect_role_ids(&role_ids, &snapshot.granting_role_ids(&Permission::parse(read_permission)?));
         if read_role_ids.is_empty() {
-            return Err(Error::Forbidden("当前账号已不具备任务业务对象读取权限".to_string()));
+            return Err(Error::Forbidden("当前账号已不具备任务业务对象读取权限".into()));
         }
         let access = self
-            .assignment_access_for_executor(
-                actor.kind(),
-                actor.id(),
-                read_permission,
-                &read_role_ids,
-                &[],
-                executor,
-            )
+            .assignment_eligibility(actor.kind(), actor.id(), read_permission, &read_role_ids, executor)
             .await?;
         self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)?;
         require_supplier_portal_task_review(
@@ -448,7 +331,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             executor,
         )
         .await?;
-        self.auth.ensure_policy_snapshot_with_executor(policy_revision, executor).await
+        Ok(self.auth.rbac()?.ensure_policy_snapshot_with_executor(policy_revision, executor).await?)
     }
 
     /// 在操作执行器内验证 work_item:manage 及其 DataScope。
@@ -464,30 +347,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.auth.require_task(actor, "manage", &item.base.id, executor).await
+        self.authorization.require(actor, "manage", &item.base.id, executor).await
     }
-}
-
-/// 从事务内 Casbin `g` 授权事实与启用角色形成角色集合。
-///
-/// # 参数
-/// * `auth` - 授权端口
-/// * `account_kind` - 账号类型
-/// * `account_id` - 账号 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回事务内当前角色 ID。
-///
-/// # 错误
-/// 授权端口读取失败时返回对应错误。
-pub async fn active_role_ids<A: crate::ports::WorkflowAuthorizationPort>(
-    auth: &A,
-    account_kind: erp_core::AccountKind,
-    account_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Vec<String>> {
-    auth.role_ids_with_executor(account_kind, account_id, executor).await
 }
 
 /// 取当前启用角色与已授权角色的交集。
@@ -501,92 +362,8 @@ pub async fn active_role_ids<A: crate::ports::WorkflowAuthorizationPort>(
 ///
 /// # 错误
 /// 不返回错误。
-pub fn intersect_role_ids(active: &[String], authorized: &[String]) -> Vec<String> {
+pub fn intersect_role_ids(active: &[RoleId], authorized: &[RoleId]) -> Vec<RoleId> {
     active.iter().filter(|role_id| authorized.contains(role_id)).cloned().collect()
-}
-
-/// 根据实体注册关系和当前权限形成仓储候选对象形状。
-///
-/// # 参数
-/// * `access` - 当前账号的权限与参与范围事实
-///
-/// # 返回
-/// 返回当前账号具备读取权限的工作项类型和业务对象类型组合。
-///
-/// # 错误
-/// 无；注册关系中的固定权限必须可解析。
-pub fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, String)> {
-    WorkItemType::registered_brief_relations()
-        .iter()
-        .filter(|policy| has_permission(access, policy.read_permission))
-        .map(|policy| (policy.work_item_type, policy.business_object_type.to_string()))
-        .collect()
-}
-
-/// 判断当前访问快照是否覆盖实体关系要求的读取权限。
-///
-/// # 参数
-/// * `access` - 当前账号权限快照
-/// * `permission` - 实体关系注册的固定权限代码
-///
-/// # 返回
-/// 任一已授予权限覆盖要求时返回 `true`。
-///
-/// # 错误
-/// 无；固定权限代码无效属于程序错误并触发断言。
-pub fn has_permission(access: &ActorAccess, permission: &str) -> bool {
-    access.permissions.iter().any(|owned| permission_covers(owned, permission))
-}
-
-/// 按对象权限、参与关系与权威版本过滤工作项列表投影。
-///
-/// # 参数
-/// * `rows` - 仓储返回的候选工作项行
-/// * `access` - 当前账号访问事实
-/// * `facts` - 已批量加载的业务对象事实
-///
-/// # 返回
-/// 返回当前账号可见且已补齐对象展示字段的工作项。
-///
-/// # 错误
-/// 无；未注册或无法证明访问权的候选项会失败关闭并被过滤。
-pub fn authorized_fields(
-    rows: Vec<crate::repository::WorkItemRow>,
-    access: &ActorAccess,
-    facts: &ObjectFactMap,
-) -> Vec<dto::WorkItemFields> {
-    rows.into_iter()
-        .filter_map(|row| {
-            let policy = object_policy(row.work_item_type, &row.business_object_type)?;
-            let fact = facts.get(&(policy.object_kind, row.business_object_id.clone()))?;
-            if !has_permission(access, policy.read_permission)
-                || !(supplier_fulfillment_owner(
-                    row.work_item_type,
-                    &row.business_object_type,
-                    row.owner_user_id.as_deref(),
-                    access,
-                ) || has_item_participation(
-                    row.work_item_type,
-                    row.owner_user_id.as_deref(),
-                    &row.owner_role,
-                    &row.owner_organization_id,
-                    access,
-                    fact,
-                ))
-                || !fact.subject_versions.accepts_task(
-                    row.work_item_type,
-                    row.status,
-                    &row.id,
-                    &row.subject_version,
-                )
-            {
-                return None;
-            }
-            let mut fields = dto::WorkItemFields::from(row);
-            apply_object_display(&mut fields, fact);
-            Some(fields)
-        })
-        .collect()
 }
 
 /// 按对象权限、参与关系与权威版本形成单个工作项投影。
@@ -603,7 +380,7 @@ pub fn authorized_fields(
 /// 无；未注册或无法证明访问权时失败关闭。
 pub fn authorized_item_fields(
     item: WorkItem,
-    access: &ActorAccess,
+    access: &TaskEligibility,
     facts: &ObjectFactMap,
 ) -> Option<dto::WorkItemFields> {
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
@@ -611,17 +388,18 @@ pub fn authorized_item_fields(
     if item.work_item_type == WorkItemType::SalesInquiryProcessing {
         let ids = fact.responsibility_scope_ids.as_ref()?;
         let version = item.subject_version.strip_prefix("requirement-")?.parse().ok()?;
-        if !item.owns_inquiry_task(&access.actor_id, &item.business_object_id, version, ids) {
+        if !item.owns_inquiry_task(&access.task.actor_id, &item.business_object_id, version, ids) {
             return None;
         }
     }
-    if !has_permission(access, policy.read_permission)
+    if !access.task.permits(policy.read_permission)
         || !(supplier_fulfillment_owner(
             item.work_item_type,
             &item.business_object_type,
             item.owner_user_id.as_deref(),
             access,
         ) || has_item_participation(
+            &item.base.id,
             item.work_item_type,
             item.owner_user_id.as_deref(),
             &item.owner_role,
@@ -655,7 +433,11 @@ pub fn authorized_item_fields(
 ///
 /// # 错误
 /// 无；对象未注册或事实缺失时返回 `false`。
-pub fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts: &ObjectFactMap) -> bool {
+pub fn has_assignment_candidate_access(
+    item: &WorkItem,
+    access: &TaskEligibility,
+    facts: &ObjectFactMap,
+) -> bool {
     if item.work_item_type == WorkItemType::ProcurementOrderCreation && !item.is_open_procurement_task() {
         return false;
     }
@@ -673,7 +455,7 @@ pub fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, fa
     {
         return false;
     }
-    has_permission(access, policy.read_permission)
+    access.task.permits(policy.read_permission)
         && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
         && (item.work_item_type.uses_explicit_owner_authorization()
             || has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact))
@@ -691,37 +473,9 @@ fn supplier_fulfillment_owner(
     kind: WorkItemType,
     object_type: &str,
     owner: Option<&str>,
-    access: &ActorAccess,
+    access: &TaskEligibility,
 ) -> bool {
-    is_supplier_fulfillment_task(kind, object_type) && owner == Some(access.actor_id.as_str())
-}
-
-/// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
-///
-/// # 参数
-/// * `work_item_type` - 工作项类型
-/// * `business_object_type` - 业务对象类型稳定码
-///
-/// # 返回
-/// 供应商履约异常、供给异常和实体已注册的执行任务返回权限码；普通任务返回空向量。未注册执行对象返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn required_execution_permissions(
-    work_item_type: WorkItemType,
-    business_object_type: &str,
-) -> Option<Vec<&'static str>> {
-    if is_supplier_fulfillment_task(work_item_type, business_object_type) {
-        return Some(vec![
-            "supplier_fulfillment_order:detail",
-            "supplier_fulfillment_order:investigate",
-            "supplier_fulfillment_order:complete",
-        ]);
-    }
-    if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
-        return Some(vec!["supplier_offering:resolve_supply_exception"]);
-    }
-    work_item_type.required_execution_permissions(business_object_type).map(|codes| codes.to_vec())
+    is_supplier_fulfillment_task(kind, object_type) && owner == Some(access.task.actor_id.as_str())
 }
 
 /// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
@@ -739,11 +493,10 @@ pub fn required_execution_permissions(
 pub fn has_execution_permissions(
     work_item_type: WorkItemType,
     business_object_type: &str,
-    access: &ActorAccess,
+    access: &TaskEligibility,
 ) -> bool {
-    required_execution_permissions(work_item_type, business_object_type).is_some_and(|required| {
-        required.iter().all(|code| access.permissions.iter().any(|owned| permission_covers(owned, code)))
-    })
+    required_execution_permissions(work_item_type, business_object_type)
+        .is_some_and(|required| required.iter().all(|code| access.task.permits(code)))
 }
 
 /// 判断账号是否满足工作项的参与条件。
@@ -762,17 +515,18 @@ pub fn has_execution_permissions(
 /// # 错误
 /// 无；调用方必须另行验证对象权限。
 pub fn has_item_participation(
+    task_id: &str,
     work_item_type: WorkItemType,
     owner_user_id: Option<&str>,
     owner_role: &str,
     owner_organization_id: &str,
-    access: &ActorAccess,
+    access: &TaskEligibility,
     fact: &ObjectFact,
 ) -> bool {
-    let is_explicit_owner =
-        work_item_type.uses_explicit_owner_authorization() && owner_user_id == Some(access.actor_id.as_str());
+    let is_explicit_owner = work_item_type.uses_explicit_owner_authorization()
+        && owner_user_id == Some(access.task.actor_id.as_str());
     is_explicit_owner
-        || (access.can_manage && covers_owner(access, owner_user_id))
+        || access.task.can_manage(task_id)
         || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
@@ -790,97 +544,13 @@ pub fn has_item_participation(
 /// # 错误
 /// 无；空白创建人不授予创建人资格，调用方须独立验证权限及任务责任。
 pub fn has_object_participation(
-    access: &ActorAccess,
+    access: &TaskEligibility,
     _owner_role: &str,
     _owner_organization_id: &str,
     fact: &ObjectFact,
 ) -> bool {
-    (!fact.created_by.trim().is_empty() && fact.created_by == access.actor_id)
+    (!fact.created_by.trim().is_empty() && fact.created_by == access.task.actor_id)
         || access.participant_document_ids.contains(&fact.root_document_id)
-}
-
-pub struct ViewAccess {
-    pub processing_state: ProcessingState,
-    pub processing_blocker: Option<ProcessingBlockerView>,
-    pub allowed_actions: Vec<WorkItemAllowedAction>,
-    pub action_blockers: Vec<ProcessingBlockerView>,
-}
-
-impl ViewAccess {
-    /// 构造可处理的查看结果。
-    ///
-    /// # 参数
-    /// * `allowed_actions` - 当前允许的动作
-    ///
-    /// # 返回
-    /// 返回处理状态为就绪、无阻塞的视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn ready(allowed_actions: Vec<WorkItemAllowedAction>) -> Self {
-        Self {
-            processing_state: ProcessingState::Ready,
-            processing_blocker: None,
-            allowed_actions,
-            action_blockers: Vec::new(),
-        }
-    }
-
-    /// 构造审批受阻、不允许动作的查看结果。
-    ///
-    /// # 参数
-    /// * `blocker` - 处理阻塞原因
-    ///
-    /// # 返回
-    /// 返回处理状态为审批受阻、动作为空的视图。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn blocked(blocker: ProcessingBlockerView) -> Self {
-        Self {
-            processing_state: ProcessingState::ApprovalBlocked,
-            processing_blocker: Some(blocker.clone()),
-            allowed_actions: Vec::new(),
-            action_blockers: vec![blocker],
-        }
-    }
-}
-
-/// 计算当前账号在指定队列范围内可执行的工作项动作。
-///
-/// # 参数
-/// * `item` - 已完成对象授权的工作项投影
-/// * `scope` - 当前队列范围
-/// * `actor_id` - 当前账号 ID
-/// * `access` - 当前账号访问事实
-///
-/// # 返回
-/// 返回查看、处理、审批或管理动作集合。
-///
-/// # 错误
-/// 无；未满足责任或管理条件的动作不会出现在结果中。
-pub fn allowed_actions(
-    item: &dto::WorkItemFields,
-    scope: WorkItemScope,
-    actor_id: &str,
-    access: &ActorAccess,
-) -> Vec<WorkItemAllowedAction> {
-    item.action_policy().allowed_actions(
-        WorkItemActionAccess {
-            actor_id,
-            managed_queue: scope == WorkItemScope::Managed,
-            can_manage: access.can_manage,
-            managed_owner_ids: access.managed_owner_ids.as_deref(),
-        },
-        |requirement| match requirement {
-            WorkItemActionRequirement::Execute => {
-                has_execution_permissions(item.work_item_type, &item.business_object_type, access)
-            },
-            WorkItemActionRequirement::Decide => has_permission(access, "approval_instance:decide"),
-            WorkItemActionRequirement::Reassign => has_permission(access, REASSIGN_PERMISSION),
-            WorkItemActionRequirement::Close => has_permission(access, CLOSE_PERMISSION),
-        },
-    )
 }
 
 /// 将实体对审批任务的通用责任变更禁令映射为稳定审批错误码。
@@ -901,41 +571,6 @@ pub fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
         .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))
 }
 
-/// 要求访问快照具备非空的任务管理范围。
-///
-/// # 参数
-/// * `access` - 当前账号访问快照
-///
-/// # 返回
-/// 具备管理权限且负责人范围不是空列表时无返回值。
-///
-/// # 错误
-/// 否则返回禁止。
-pub fn ensure_managed_access(access: &ActorAccess) -> Result<()> {
-    if !access.can_manage || access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
-        return Err(Error::Forbidden("当前账号没有任务责任管理范围".to_string()));
-    }
-    Ok(())
-}
-
-/// 要求任务当前负责人落在管理范围内。
-///
-/// # 参数
-/// * `item` - 工作项
-/// * `access` - 当前账号访问快照
-///
-/// # 返回
-/// 具备管理权限且负责人被范围覆盖时无返回值。
-///
-/// # 错误
-/// 否则返回禁止。
-pub fn ensure_item_in_managed_scope(item: &WorkItem, access: &ActorAccess) -> Result<()> {
-    if access.can_manage && covers_owner(access, item.owner_user_id.as_deref()) {
-        return Ok(());
-    }
-    Err(Error::Forbidden("任务不在当前账号的责任管理范围内".to_string()))
-}
-
 /// 判断当前账号查看该任务时应使用的队列范围。
 ///
 /// # 参数
@@ -948,21 +583,17 @@ pub fn ensure_item_in_managed_scope(item: &WorkItem, access: &ActorAccess) -> Re
 ///
 /// # 错误
 /// 三种范围都不成立时返回禁止。
-pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
+pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &TaskEligibility) -> Result<WorkItemScope> {
     if item.is_terminal()
-        && (has_personal_history_access(item, actor_id)
-            || (access.can_manage && covers_owner(access, item.owner_user_id.as_deref())))
+        && (has_personal_history_access(item, actor_id) || access.task.can_manage(&item.base.id))
     {
-        return Ok(WorkItemScope::History);
+        return Ok(WorkItemScope::for_task(item, actor_id));
     }
     if item.is_owned_by(actor_id) {
-        return Ok(WorkItemScope::Mine);
+        return Ok(WorkItemScope::for_task(item, actor_id));
     }
-    if item.status == WorkItemStatus::Open
-        && access.can_manage
-        && covers_owner(access, item.owner_user_id.as_deref())
-    {
-        return Ok(WorkItemScope::Managed);
+    if item.status == WorkItemStatus::Open && access.task.can_manage(&item.base.id) {
+        return Ok(WorkItemScope::for_task(item, actor_id));
     }
     Err(Error::Forbidden("当前账号无权查看该任务".to_string()))
 }
@@ -982,24 +613,6 @@ pub fn has_personal_history_access(item: &WorkItem, actor_id: &str) -> bool {
     item.responsibility_actor_ids.iter().any(|id| id == actor_id)
         || item.completed_by.as_deref() == Some(actor_id)
         || item.closed_by.as_deref() == Some(actor_id)
-}
-
-/// 判断管理范围是否覆盖指定负责人。
-///
-/// # 参数
-/// * `access` - 当前账号访问快照
-/// * `owner` - 当前负责人；没有负责人时为 `None`
-///
-/// # 返回
-/// 管理范围未收窄时返回 `true`；否则仅当负责人 ID 在列表中时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
-    access
-        .managed_owner_ids
-        .as_ref()
-        .is_none_or(|ids| owner.is_some_and(|owner| ids.iter().any(|id| id == owner)))
 }
 
 fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &ObjectFact) {
@@ -1042,29 +655,36 @@ mod task_policy_tests {
             (ObjectKind::SupplierPortalRequest, "request".into()),
             ObjectFact::new("request", "供应商申请", "supplier"),
         )]);
-        let full = ActorAccess::new("reviewer".into()).with_permissions(vec![
-            "supplier_portal_request:detail".into(),
-            "supplier_portal_request:review".into(),
-        ]);
+        let full = TaskEligibility::new("reviewer".into()).with_permissions(PermissionSet::new(
+            vec!["supplier_portal_request:detail".into(), "supplier_portal_request:review".into()]
+                .into_iter()
+                .map(|code: String| Permission::parse(code).unwrap()),
+        ));
         let fields = authorized_item_fields(task.clone(), &full, &facts).unwrap();
         assert!(
-            allowed_actions(&fields, WorkItemScope::Mine, "reviewer", &full)
+            fields
+                .allowed_actions(WorkItemScope::Mine, "reviewer", &full.task)
                 .contains(&WorkItemAllowedAction::Process)
         );
         assert!(
-            !allowed_actions(&fields, WorkItemScope::Mine, "other", &full)
+            !fields
+                .allowed_actions(WorkItemScope::Mine, "other", &full.task)
                 .contains(&WorkItemAllowedAction::Process)
         );
         assert!(has_assignment_candidate_access(&task, &full, &facts));
-        let read_only = ActorAccess::new("reviewer".into())
-            .with_permissions(vec!["supplier_portal_request:detail".into()]);
+        let read_only = TaskEligibility::new("reviewer".into()).with_permissions(PermissionSet::new(
+            vec!["supplier_portal_request:detail".into()]
+                .into_iter()
+                .map(|code: String| Permission::parse(code).unwrap()),
+        ));
         let read_fields = authorized_item_fields(task.clone(), &read_only, &facts).unwrap();
         assert!(
-            !allowed_actions(&read_fields, WorkItemScope::Mine, "reviewer", &read_only)
+            !read_fields
+                .allowed_actions(WorkItemScope::Mine, "reviewer", &read_only.task)
                 .contains(&WorkItemAllowedAction::Process)
         );
         assert!(!has_assignment_candidate_access(&task, &read_only, &facts));
-        let unrelated = ActorAccess::new("other".into()).with_permissions(full.permissions.clone());
+        let unrelated = TaskEligibility::new("other".into()).with_permissions(full.task.permissions.clone());
         assert!(authorized_item_fields(task, &unrelated, &facts).is_none());
         assert!(WorkItemType::SupplierPortalReview.required_execution_permissions("unknown").is_none());
     }
@@ -1072,24 +692,24 @@ mod task_policy_tests {
     #[test]
     fn object_creator_participation_requires_exact_nonblank_identity() {
         let fact = ObjectFact::new("root", "资金单据", "creator");
-        let creator = ActorAccess::new("creator".into());
+        let creator = TaskEligibility::new("creator".into());
         assert!(has_object_participation(&creator, "finance", "organization", &fact));
         for actor_id in ["", "another", " creator "] {
-            let access = ActorAccess::new(actor_id.into());
+            let access = TaskEligibility::new(actor_id.into());
             assert!(!has_object_participation(&access, "finance", "organization", &fact));
         }
         for identity in ["", " ", "\t\n"] {
             let fact = ObjectFact::new("root", "资金单据", identity);
-            let access = ActorAccess::new(identity.into());
+            let access = TaskEligibility::new(identity.into());
             assert!(!has_object_participation(&access, "finance", "organization", &fact));
         }
     }
 
     #[test]
     fn root_participant_qualifies_independently_of_missing_creator() {
-        let participant =
-            ActorAccess::new("reader".into()).with_participant_document_ids(HashSet::from(["root".into()]));
-        let unrelated = ActorAccess::new("reader".into())
+        let participant = TaskEligibility::new("reader".into())
+            .with_participant_document_ids(HashSet::from(["root".into()]));
+        let unrelated = TaskEligibility::new("reader".into())
             .with_participant_document_ids(HashSet::from(["other-root".into()]));
         for identity in ["", " ", "\t\n", "another-creator"] {
             let fact = ObjectFact::new("root", "资金单据", identity);
@@ -1100,7 +720,7 @@ mod task_policy_tests {
 
     #[test]
     fn fulfillment_exception_owner_is_limited_to_exact_task_type_and_object() {
-        let owner = ActorAccess::new("handler".into());
+        let owner = TaskEligibility::new("handler".into());
         assert!(supplier_fulfillment_owner(
             WorkItemType::BusinessException,
             "SUPPLIER_FULFILLMENT_ORDER",

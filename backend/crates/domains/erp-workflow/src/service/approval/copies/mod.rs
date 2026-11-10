@@ -93,7 +93,6 @@ pub async fn save_config(
 #[cfg(test)]
 mod tests {
     use std::future::Future;
-    use std::pin::Pin;
 
     use erp_core::AccountKind;
     use persistence_core::NoTransaction;
@@ -101,94 +100,13 @@ mod tests {
     use super::super::definition_assignees::eligible_candidate;
     use super::*;
     use crate::entity::approval_copy::CopyTrigger;
-    use crate::ports::{RolePermissionSnapshotFact, WorkflowAccountFact};
+    use crate::ports::WorkflowAccountFact;
 
     #[derive(Clone)]
     struct AccountsOnly(Vec<WorkflowAccountFact>);
 
     #[allow(clippy::manual_async_fn)]
     impl WorkflowAuthorizationPort for AccountsOnly {
-        fn role_ids(
-            &self,
-            _account_kind: AccountKind,
-            _account_id: &str,
-        ) -> impl Future<Output = Result<Vec<String>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn role_ids_with_executor(
-            &self,
-            _account_kind: AccountKind,
-            _account_id: &str,
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<Vec<String>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn permission_codes(
-            &self,
-            _account_kind: AccountKind,
-            _account_id: &str,
-        ) -> impl Future<Output = Result<Vec<String>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn enforce(
-            &self,
-            _subject: &str,
-            _permission_code: &str,
-        ) -> impl Future<Output = Result<bool>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn permissions_cover(&self, _owned: &[String], _required: &[&str]) -> Result<bool> {
-            Err(Error::Internal("unexpected role permission check".into()))
-        }
-
-        fn roles_granting_permission(
-            &self,
-            _role_ids: &[String],
-            _permission_code: &str,
-        ) -> impl Future<Output = Result<Vec<String>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn role_permission_snapshot(
-            &self,
-            _account_kind: AccountKind,
-            _account_id: &str,
-            _required: &[&str],
-        ) -> impl Future<Output = Result<RolePermissionSnapshotFact>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn enabled_role_ids(
-            &self,
-            _role_ids: &[String],
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<Vec<String>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn ensure_policy_snapshot_with_executor(
-            &self,
-            _expected_revision: u64,
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<()>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn current_policy_revision(&self) -> impl Future<Output = Result<u64>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn policy_revision_with_executor(
-            &self,
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<u64>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
         fn load_account(
             &self,
             _account_id: &str,
@@ -220,30 +138,6 @@ mod tests {
             _executor: &mut dyn Executor,
         ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
             async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn run_authorized_policy_transaction<T, E, F>(
-            &self,
-            _policy_revision: u64,
-            _transaction: F,
-        ) -> impl Future<Output = std::result::Result<T, E>> + Send
-        where
-            T: Send + 'static,
-            E: From<Error>
-                + From<persistence_core::Error>
-                + From<application_core::Error>
-                + std::error::Error
-                + std::fmt::Display
-                + Send
-                + 'static,
-            F: for<'a> FnOnce(
-                    &'a mut dyn Executor,
-                )
-                    -> Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'a>>
-                + Send
-                + 'static,
-        {
-            async move { Err(E::from(Error::Internal("授权端口未接线".to_string()))) }
         }
     }
 

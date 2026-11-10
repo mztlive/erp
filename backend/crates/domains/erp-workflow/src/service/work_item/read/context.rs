@@ -1,13 +1,13 @@
 use application_core::{EmptyScopeVersion, ScopeVersion};
 
-use super::access::ActorAccess;
+use super::access::QueueAccess;
 use super::dto;
 use crate::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemDueFilter};
 use crate::{Error, Result};
 pub(crate) fn queue_context_id(
     actor_id: &str,
     query: &dto::WorkItemListQuery,
-    access: &ActorAccess,
+    access: &QueueAccess,
 ) -> String {
     QueueContextIdentity::new(
         "work-items",

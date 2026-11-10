@@ -7,6 +7,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::access::{detail_scope, ensure_generic_work_item_mutation};
 use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
+use crate::dto::work_item::ViewAccess;
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
 use crate::ports::{PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditPort};
@@ -243,14 +244,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedWorkItem> {
-        self.auth.require_task(actor, "detail", id, executor).await?;
+        self.authorization.require(actor, "detail", id, executor).await?;
         let item = self
             .db
             .work_items()
             .find_work_item(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-        let access = self.actor_access(actor, &item, executor).await?;
+        let access = self.task_eligibility(actor, &item, executor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
         let fields = self
             .authorized_fields_for_items(vec![item.clone()], &access, executor)
@@ -258,8 +259,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .into_iter()
             .next()
             .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".to_string()))?;
-        let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        self.auth.require_task(actor, "detail", id, executor).await?;
+        let view_access = ViewAccess::from_fields(&fields, scope, &access.task);
+        self.authorization.require(actor, "detail", id, executor).await?;
         Ok(AuthorizedWorkItem {
             item,
             allowed_actions: view_access.allowed_actions,

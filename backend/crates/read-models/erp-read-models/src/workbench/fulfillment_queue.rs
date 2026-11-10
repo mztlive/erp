@@ -11,7 +11,7 @@ use erp_core::common::time::Instant;
 use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
 use erp_workflow::WorkItemReadService;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority};
-use erp_workflow::service::work_item::read::access::{ActorAccess, has_permission};
+use erp_workflow::service::work_item::read::access::QueueAccess;
 use erp_workflow::service::work_item::read::context::{
     ensure_queue_context, ensure_scope_version, queue_scope_version,
 };
@@ -457,9 +457,9 @@ fn parse_operation_types(value: Option<&str>) -> Result<Vec<FulfillmentQueueOper
 
 fn visible_operation_types(
     requested: &[FulfillmentQueueOperationType],
-    access: &ActorAccess,
+    access: &QueueAccess,
 ) -> Vec<FulfillmentQueueOperationType> {
-    if !has_permission(access, "work_item:list") {
+    if !access.task.permits("work_item:list") {
         return Vec::new();
     }
     requested.to_vec()

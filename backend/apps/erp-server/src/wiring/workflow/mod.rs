@@ -76,10 +76,10 @@ pub fn account_fact(account: &erp_identity::AccountCore) -> WorkflowAccountFact 
 /// # 错误
 /// 不返回错误。
 pub fn work_item_service(db: Database, rbac: SharedRbacService) -> WorkItemService<WorkflowAuth> {
-    let auth = WorkflowAuth::new(db.clone(), rbac);
+    let auth = WorkflowAuth::new(db.clone(), rbac.clone());
     let facts = Arc::new(WorkflowObjectFacts::new(db.clone()));
     let audit = Arc::new(WorkflowAudit::new(db.clone()));
-    WorkItemService::with_ports(db, auth, facts, audit)
+    WorkItemService::with_ports(db, rbac, auth, facts, audit)
 }
 
 /// 为组合根构造工作流授权 adapter。

@@ -46,10 +46,8 @@ pub struct WorkItemActionAccess<'a> {
     pub actor_id: &'a str,
     /// 当前是否位于主管队列。
     pub managed_queue: bool,
-    /// 当前账号是否具备任务管理资格。
+    /// 当前账号是否已通过这个具体任务的管理授权。
     pub can_manage: bool,
-    /// 管理负责人名单；`None` 表示不限定，空切片表示无人可管理。
-    pub managed_owner_ids: Option<&'a [String]>,
 }
 
 /// 动作策略按需请求的权限事实，具体解析方式由调用方提供。
@@ -105,9 +103,6 @@ impl WorkItemActionPolicy<'_> {
         let approval_responsibility =
             self.work_item_type.is_document_approval() || self.has_approval_execution;
         if access.can_manage
-            && access
-                .managed_owner_ids
-                .is_none_or(|ids| self.owner_user_id.is_some_and(|owner| ids.iter().any(|id| id == owner)))
             && access.managed_queue
             && !approval_responsibility
             && self.work_item_type != WorkItemType::SalesInquiryProcessing
@@ -140,12 +135,7 @@ mod tests {
     }
 
     fn manager_access() -> WorkItemActionAccess<'static> {
-        WorkItemActionAccess {
-            actor_id: "owner",
-            managed_queue: true,
-            can_manage: true,
-            managed_owner_ids: None,
-        }
+        WorkItemActionAccess { actor_id: "owner", managed_queue: true, can_manage: true }
     }
 
     fn granted(_: WorkItemActionRequirement) -> bool {
@@ -252,38 +242,19 @@ mod tests {
         }
     }
 
+    /// 管理动作使用外层精确任务证明，不再重复解释负责人名单。
     #[test]
-    fn management_requires_managed_queue_qualification_and_owner_coverage() {
+    fn management_requires_queue_and_exact_task_qualification() {
         let policy = exception_policy();
-        let excluded_owners = vec!["someone-else".into()];
-        let no_owners = Vec::new();
         let access = WorkItemActionAccess { actor_id: "manager", ..manager_access() };
         for restricted in [
             WorkItemActionAccess { managed_queue: false, ..access },
             WorkItemActionAccess { can_manage: false, ..access },
-            WorkItemActionAccess { managed_owner_ids: Some(&excluded_owners), ..access },
-            WorkItemActionAccess { managed_owner_ids: Some(&no_owners), ..access },
         ] {
             assert_eq!(policy.allowed_actions(restricted, granted), vec![WorkItemAllowedAction::View]);
         }
-        let owners = vec!["owner".into()];
         assert_eq!(
-            policy.allowed_actions(
-                WorkItemActionAccess { managed_owner_ids: Some(&owners), ..access },
-                granted
-            ),
-            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign, WorkItemAllowedAction::Close]
-        );
-        let unowned = WorkItemActionPolicy { owner_user_id: None, ..policy };
-        assert_eq!(
-            unowned.allowed_actions(
-                WorkItemActionAccess { managed_owner_ids: Some(&owners), ..access },
-                granted
-            ),
-            vec![WorkItemAllowedAction::View]
-        );
-        assert_eq!(
-            unowned.allowed_actions(access, granted),
+            policy.allowed_actions(access, granted),
             vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign, WorkItemAllowedAction::Close]
         );
     }

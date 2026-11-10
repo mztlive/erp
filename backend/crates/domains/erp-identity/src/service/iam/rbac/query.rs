@@ -1,21 +1,22 @@
 use std::collections::HashMap;
+use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use casbin::RbacApi;
 use erp_core::AccountKind;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use super::policy::{
     collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
     permissions_for_actor, role_ids_for_account, role_key,
 };
 use super::{RbacService, subject};
-use crate::AccessControlExt;
 use crate::dto::RoleItem;
 use crate::entity::rbac::{PermissionSet, RoleId};
 use crate::entity::role::Role;
 use crate::error::Result;
 use crate::repository::prelude::*;
+use crate::{AccessControlExt, MongoCasbinAdapter};
 
 /// 由批量直接权限装配角色响应项（两个列表入口共用该映射）。
 ///
@@ -36,6 +37,55 @@ fn role_items_from_map(roles: Vec<Role>, permissions: &mut HashMap<String, Permi
 }
 
 impl RbacService {
+    /// 在调用方事务中读取仍启用的直接账号角色。
+    /// # 参数
+    /// account_kind、account_id 为账号身份，executor 为原事务执行器。
+    /// # 返回
+    /// 返回排序去重且仍启用的角色 ID。
+    /// # 错误
+    /// 角色身份非法或数据库读取失败时返回错误。
+    pub async fn role_ids_with_executor(
+        &self,
+        account_kind: AccountKind,
+        account_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<RoleId>> {
+        let keys = MongoCasbinAdapter::new(self.db.clone())
+            .subject_roles(&subject(account_kind, account_id), executor)
+            .await?;
+        let mut ids = keys
+            .iter()
+            .filter_map(|key| key.strip_prefix("role:"))
+            .map(RoleId::parse)
+            .collect::<StdResult<Vec<_>, _>>()?;
+        ids.sort();
+        ids.dedup();
+        let enabled = self.enabled_role_ids(&ids, executor).await?;
+        ids.retain(|id| enabled.contains(id));
+        Ok(ids)
+    }
+
+    /// 保留调用方快照中仍启用的角色。
+    /// # 参数
+    /// ids 为候选角色，executor 沿用调用方事务。
+    /// # 返回
+    /// 返回当前启用的类型化角色 ID；空候选不查询数据库。
+    /// # 错误
+    /// 角色数据非法或数据库读取失败时返回错误。
+    pub async fn enabled_role_ids(&self, ids: &[RoleId], executor: &mut dyn Executor) -> Result<Vec<RoleId>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .db
+            .roles()
+            .enabled_roles(ids, executor)
+            .await?
+            .into_iter()
+            .map(|role| RoleId::parse(role.base.id))
+            .collect::<StdResult<Vec<_>, _>>()?)
+    }
+
     /// 查询全部角色及其直接权限。
     ///
     /// # 参数

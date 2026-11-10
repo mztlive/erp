@@ -294,7 +294,7 @@ mod tests {
 
     use entity_core::BaseModel;
     use erp_workflow::ports::ObjectFact;
-    use erp_workflow::service::work_item::access::{ActorAccess, has_object_participation};
+    use erp_workflow::service::work_item::access::{TaskEligibility, has_object_participation};
     use serde::de::DeserializeOwned;
     use serde_json::json;
 
@@ -343,8 +343,8 @@ mod tests {
 
     #[test]
     fn six_funds_projections_use_domain_creator_and_keep_handlers_separate() {
-        let creator = ActorAccess::new("domain-creator".into());
-        let handler = ActorAccess::new("current-handler".into());
+        let creator = TaskEligibility::new("domain-creator".into());
+        let handler = TaskEligibility::new("current-handler".into());
         for authority in facts(Some("domain-creator")) {
             assert_eq!(authority.created_by, "domain-creator");
             assert!(has_object_participation(&creator, "", "", &authority));
@@ -357,8 +357,8 @@ mod tests {
 
     #[test]
     fn missing_domain_identity_never_grants_creator_participation() {
-        let creator = ActorAccess::new("domain-creator".into());
-        let handler = ActorAccess::new("current-handler".into());
+        let creator = TaskEligibility::new("domain-creator".into());
+        let handler = TaskEligibility::new("current-handler".into());
         for authority in facts(None) {
             assert!(authority.created_by.is_empty());
             assert!(!has_object_participation(&creator, "", "", &authority));

@@ -4,6 +4,9 @@
 //! 组织扩大范围。正式业务决定继续由各任务类型的强类型命令与审批运行时完成。
 
 mod abandon_rework;
+mod authorization;
+pub use authorization::WorkItemAuthorization;
+use erp_identity::SharedRbacService;
 pub mod access;
 pub mod approval_rework;
 pub use abandon_rework::AbandonApprovalReworkRequest;
@@ -22,8 +25,8 @@ use std::sync::Arc;
 
 #[cfg(test)]
 use access::{
-    ActorAccess, ViewAccess, allowed_actions, authorized_fields, authorized_item_fields, detail_scope,
-    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_policy,
+    TaskEligibility, authorized_item_fields, detail_scope, ensure_generic_work_item_mutation,
+    has_assignment_candidate_access, object_policy,
 };
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -36,11 +39,6 @@ pub use finance_responsibility::{
     FinanceResponsibilityRuleView, ResolvedFinanceResponsibility, UpdateFinanceResponsibilityRuleRequest,
 };
 use mongodb::Database;
-#[cfg(test)]
-use query_support::{
-    AUTHORIZED_SCAN_BATCH_SIZE, AuthorizedPage, AuthorizedPageCollector, business_day_bounds_at,
-    counts_as_processable_stat, family_counts_for_types, remove_approval_decision_actions,
-};
 #[cfg(test)]
 use reassign::{
     AssignmentSeparationPolicy, approval_assignment_separated, audited_fact_operator_actors,
@@ -61,6 +59,7 @@ pub type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 pub struct WorkItemService<A> {
     pub db: Database,
     pub auth: A,
+    pub authorization: WorkItemAuthorization,
     pub facts: Arc<dyn ObjectFactPort>,
     pub audit: Arc<dyn WorkflowAuditPort>,
 }
@@ -70,22 +69,24 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
-    /// * `auth` - 注入的授权 Port
+    /// * `rbac` - 与读取入口共享的 identity 服务
+    /// * `auth` - 注入的业务授权 Port
     ///
     /// # 返回
     /// 返回绑定当前应用授权源的服务。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, auth: A) -> Self {
-        Self::with_ports(db, auth, Arc::new(FailClosedObjectFactPort), Arc::new(FailClosedAuditPort))
+    pub fn new(db: Database, rbac: SharedRbacService, auth: A) -> Self {
+        Self::with_ports(db, rbac, auth, Arc::new(FailClosedObjectFactPort), Arc::new(FailClosedAuditPort))
     }
 
     /// 创建注入对象事实与审计端口的任务服务。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
-    /// * `auth` - 注入的授权 Port
+    /// * `rbac` - 与读取入口共享的 identity 服务
+    /// * `auth` - 注入的业务授权 Port
     /// * `facts` - 对象事实端口
     /// * `audit` - 审计写入端口
     ///
@@ -96,11 +97,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// 不返回错误。
     pub fn with_ports(
         db: Database,
+        rbac: SharedRbacService,
         auth: A,
         facts: Arc<dyn ObjectFactPort>,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        Self { db, auth, facts, audit }
+        let authorization = WorkItemAuthorization::new(db.clone(), rbac);
+        Self { db, auth, authorization, facts, audit }
     }
 }
 
@@ -110,27 +113,20 @@ mod tests {
 
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
+    use erp_identity::{Permission, PermissionSet};
 
     use super::{
-        AUTHORIZED_SCAN_BATCH_SIZE, ActorAccess, AssignmentSeparationPolicy, AuthorizedPage,
-        AuthorizedPageCollector, ObjectFact, ObjectFactMap, ObjectKind, ProcessingBlockerView, ViewAccess,
-        WorkItemAllowedAction, WorkItemScope, allowed_actions, approval_assignment_separated,
-        audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
-        counts_as_processable_stat, detail_scope, ensure_generic_work_item_mutation, expected_task_version,
-        family_counts_for_types, has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
-        purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions,
+        AssignmentSeparationPolicy, ObjectFact, ObjectFactMap, ObjectKind, TaskEligibility,
+        WorkItemAllowedAction, WorkItemScope, approval_assignment_separated, audited_fact_operator_actors,
+        authorized_item_fields, detail_scope, ensure_generic_work_item_mutation, expected_task_version,
+        has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
+        purchase_order_fulfillment_responsibility_id,
     };
     use crate::entity::work_item::{
-        AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
-        WorkItemStatus, WorkItemType,
+        AssignmentSource, DocumentApprovalWorkItemData, TaskAccess, WorkItem, WorkItemData, WorkItemPriority,
+        WorkItemType,
     };
     use crate::error::{Error, ErrorCode};
-
-    fn w13_access() -> ActorAccess {
-        ActorAccess::new("finance-user".to_string())
-            .with_permissions(vec!["receivable_account:detail".to_string()])
-            .with_participant_document_ids(HashSet::from(["sales-order-1".to_string()]))
-    }
 
     fn audit(
         resource_type: &str,
@@ -146,41 +142,6 @@ mod tests {
             (ObjectKind::ReceivableAccount, "account-1".to_string()),
             ObjectFact::new("sales-order-1", "应收子账 2", "sales-user"),
         )])
-    }
-
-    fn w13_delta_row() -> crate::repository::WorkItemRow {
-        crate::repository::WorkItemRow {
-            links: Vec::new(),
-            id: "wi-w13-delta".to_string(),
-            work_item_type: WorkItemType::CardFundsDeltaReview,
-            approval_node_execution_id: None,
-            business_object_type: "receivable_account".to_string(),
-            business_object_id: "account-1".to_string(),
-            subject_version: "revision-2".to_string(),
-            status: WorkItemStatus::Open,
-
-            owner_role: "role-finance".to_string(),
-            owner_organization_id: "company".to_string(),
-            owner_user_id: Some("alice".to_string()),
-            responsibility_actor_ids: Vec::new(),
-            assignment_source: AssignmentSource::SystemRule,
-            assigned_at: None,
-            started_at: None,
-            current_assignment_at: None,
-            last_activity_at: None,
-            priority: WorkItemPriority::High,
-            due_at: None,
-            reason_code: Some("CARD_FUNDS_DELTA_REVIEW".to_string()),
-            impact_summary: Some("同步差额待复核".to_string()),
-            completed_at: None,
-            completed_by: None,
-            closed_at: None,
-            closed_by: None,
-            close_reason: None,
-            version: 1,
-            created_at: 100,
-            updated_at: 100,
-        }
     }
 
     fn w13_delta_item() -> WorkItem {
@@ -206,10 +167,12 @@ mod tests {
         .unwrap()
     }
 
-    fn procurement_access(actor_id: &str) -> ActorAccess {
-        ActorAccess::new(actor_id.to_string())
-            .with_permissions(vec!["purchase_order:create".to_string()])
-            .with_managed_owner_ids(Some(Vec::new()))
+    fn procurement_access(actor_id: &str) -> TaskEligibility {
+        TaskEligibility::new(actor_id.to_string()).with_permissions(PermissionSet::new(
+            vec!["purchase_order:create".to_string()]
+                .into_iter()
+                .map(|code: String| Permission::parse(code).unwrap()),
+        ))
     }
 
     fn procurement_facts() -> ObjectFactMap {
@@ -298,7 +261,7 @@ mod tests {
         )])
     }
 
-    fn invoice_execution_access(actor_id: &str, full: bool) -> ActorAccess {
+    fn invoice_execution_access(actor_id: &str, full: bool) -> TaskEligibility {
         let codes: &[&str] = if full {
             &[
                 "receivable_account:list",
@@ -313,15 +276,15 @@ mod tests {
         } else {
             &["receivable_account:detail"]
         };
-        ActorAccess::new(actor_id.to_string())
-            .with_permissions(codes.iter().map(|code| (*code).to_string()).collect())
-            .with_managed_owner_ids(Some(Vec::new()))
+        TaskEligibility::new(actor_id.to_string())
+            .with_permissions(PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())))
     }
 
-    fn managed_action_access() -> ActorAccess {
-        ActorAccess::new("manager-1".to_string())
-            .with_permissions(["work_item:manage"].into_iter().map(|code| code.to_string()).collect())
-            .with_can_manage(true)
+    fn managed_action_access() -> TaskEligibility {
+        let mut access = TaskEligibility::new("manager-1".to_string())
+            .with_permissions(PermissionSet::new([Permission::parse("work_item:manage").unwrap()]));
+        access.task.managed_task_ids.insert("wi-managed-w29".into());
+        access
     }
 
     fn managed_w29_item() -> WorkItem {
@@ -398,9 +361,11 @@ mod tests {
     fn current_owner_does_not_bypass_revoked_object_participation() {
         let mut item = w13_delta_item();
         item.reassign("finance-user", Instant::from_unix_secs(101)).unwrap();
-        let access = ActorAccess::new("finance-user".to_string())
-            .with_permissions(vec!["receivable_account:detail".to_string()])
-            .with_managed_owner_ids(Some(Vec::new()));
+        let access = TaskEligibility::new("finance-user".to_string()).with_permissions(PermissionSet::new(
+            vec!["receivable_account:detail".to_string()]
+                .into_iter()
+                .map(|code: String| Permission::parse(code).unwrap()),
+        ));
 
         assert_eq!(item.owner_user_id.as_deref(), Some("finance-user"));
         assert!(authorized_item_fields(item, &access, &w13_facts()).is_none());
@@ -419,12 +384,13 @@ mod tests {
             ObjectFact::new("change-1", "采购变更单", "buyer"),
         )]);
         let mut access = procurement_access("alice");
-        access.permissions = vec!["purchase_change_order:detail".to_string()];
+        access.task.permissions =
+            PermissionSet::new([Permission::parse("purchase_change_order:detail").unwrap()]);
         assert!(authorized_item_fields(item.clone(), &access, &facts).is_some());
-        access.actor_id = "stranger".into();
+        access.task.actor_id = "stranger".into();
         assert!(authorized_item_fields(item.clone(), &access, &facts).is_none());
-        access.actor_id = "alice".into();
-        access.permissions.clear();
+        access.task.actor_id = "alice".into();
+        access.task.permissions = PermissionSet::default();
         assert!(authorized_item_fields(item, &access, &facts).is_none());
     }
 
@@ -454,16 +420,19 @@ mod tests {
             (ObjectKind::LegacyImportBatch, "batch-1".to_string()),
             ObjectFact::new("batch-1", "旧数据导入批次", "__system__"),
         )]);
-        let mut access = ActorAccess::new("confirmation-owner".to_string())
-            .with_permissions(vec!["legacy_import_batch:detail".to_string()])
-            .with_managed_owner_ids(Some(Vec::new()));
-        assert!(!access.can_manage);
+        let mut access =
+            TaskEligibility::new("confirmation-owner".to_string()).with_permissions(PermissionSet::new(
+                vec!["legacy_import_batch:detail".to_string()]
+                    .into_iter()
+                    .map(|code: String| Permission::parse(code).unwrap()),
+            ));
+        assert!(!access.task.can_manage(&item.base.id));
         assert!(authorized_item_fields(item.clone(), &access, &facts).is_some());
         assert!(authorized_item_fields(item.clone(), &access, &HashMap::new()).is_none());
-        access.actor_id = "stranger".to_string();
+        access.task.actor_id = "stranger".to_string();
         assert!(authorized_item_fields(item.clone(), &access, &facts).is_none());
-        access.actor_id = "confirmation-owner".to_string();
-        access.permissions.clear();
+        access.task.actor_id = "confirmation-owner".to_string();
+        access.task.permissions = PermissionSet::default();
         assert!(authorized_item_fields(item, &access, &facts).is_none());
     }
 
@@ -482,7 +451,8 @@ mod tests {
         );
         let fields = authorized_item_fields(item.clone(), &owner_access, &facts).unwrap();
         assert!(
-            allowed_actions(&fields, WorkItemScope::Mine, "buyer-1", &owner_access)
+            fields
+                .allowed_actions(WorkItemScope::Mine, "buyer-1", &owner_access.task)
                 .contains(&WorkItemAllowedAction::Process)
         );
 
@@ -493,12 +463,13 @@ mod tests {
     #[test]
     fn procurement_direct_assignment_still_requires_create_permission() {
         let item = procurement_item("buyer-1");
-        let access = ActorAccess {
-            actor_id: "buyer-1".to_string(),
-            permissions: Vec::new(),
+        let access = TaskEligibility {
+            task: TaskAccess {
+                actor_id: "buyer-1".to_string(),
+                permissions: PermissionSet::default(),
+                managed_task_ids: Default::default(),
+            },
             participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
         };
 
         assert!(authorized_item_fields(item.clone(), &access, &procurement_facts()).is_none());
@@ -517,12 +488,13 @@ mod tests {
             (ObjectKind::PurchaseReceipt, "purchase_receipt-1".to_string()),
             ObjectFact::new("po-1", "采购入库单 GRN-1", "__system__"),
         )]);
-        let access = |codes: &[&str]| ActorAccess {
-            actor_id: "candidate-1".to_string(),
-            permissions: codes.iter().map(|code| (*code).to_string()).collect(),
+        let access = |codes: &[&str]| TaskEligibility {
+            task: TaskAccess {
+                actor_id: "candidate-1".to_string(),
+                permissions: PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())),
+                managed_task_ids: Default::default(),
+            },
             participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
         };
         assert!(!has_assignment_candidate_access(&item, &access(&["purchase_receipt:post"]), &facts,));
         assert!(has_assignment_candidate_access(
@@ -562,12 +534,13 @@ mod tests {
             (ObjectKind::SalesOrder, "sales-order-1".to_string()),
             ObjectFact::new("sales-order-1", "销售单 SO-1", "sales-1"),
         )]);
-        let access = |codes: &[&str]| ActorAccess {
-            actor_id: "candidate-1".to_string(),
-            permissions: codes.iter().map(|code| (*code).to_string()).collect(),
+        let access = |codes: &[&str]| TaskEligibility {
+            task: TaskAccess {
+                actor_id: "candidate-1".to_string(),
+                permissions: PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())),
+                managed_task_ids: Default::default(),
+            },
             participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
         };
 
         assert!(!has_assignment_candidate_access(&item, &access(&["sales_order:detail"]), &facts,));
@@ -592,7 +565,8 @@ mod tests {
         let fields = authorized_item_fields(item.clone(), &revoked, &facts).unwrap();
 
         assert!(
-            !allowed_actions(&fields, WorkItemScope::Mine, "finance-1", &revoked)
+            !fields
+                .allowed_actions(WorkItemScope::Mine, "finance-1", &revoked.task)
                 .contains(&WorkItemAllowedAction::Process)
         );
         assert!(!has_assignment_candidate_access(&item, &revoked, &facts));
@@ -600,7 +574,8 @@ mod tests {
         let full = invoice_execution_access("finance-1", true);
         let fields = authorized_item_fields(item.clone(), &full, &facts).unwrap();
         assert!(
-            allowed_actions(&fields, WorkItemScope::Mine, "finance-1", &full)
+            fields
+                .allowed_actions(WorkItemScope::Mine, "finance-1", &full.task)
                 .contains(&WorkItemAllowedAction::Process)
         );
         assert!(has_assignment_candidate_access(&item, &full, &facts));
@@ -653,68 +628,18 @@ mod tests {
     }
 
     #[test]
-    fn business_day_bounds_use_fixed_asia_shanghai_timezone() {
-        let (previous_start, previous_end) = business_day_bounds_at(1_722_441_599).unwrap();
-        assert_eq!(previous_start.unix_secs(), 1_722_355_200);
-        assert_eq!(previous_end.unix_secs(), 1_722_441_600);
-
-        let (start, end) = business_day_bounds_at(1_722_441_600).unwrap();
-        assert_eq!(start.unix_secs(), 1_722_441_600);
-        assert_eq!(end.unix_secs(), 1_722_528_000);
-    }
-
-    #[test]
-    fn blocked_items_never_enter_processable_stats() {
-        let blocked = ViewAccess::blocked(ProcessingBlockerView {
-            code: "APPROVAL_BLOCKED".to_string(),
-            message: "审批当前受阻".to_string(),
-        });
-        assert!(!counts_as_processable_stat(WorkItemScope::Mine, &blocked));
-
-        let mine = ViewAccess::ready(vec![WorkItemAllowedAction::Process]);
-        assert!(counts_as_processable_stat(WorkItemScope::Mine, &mine));
-        assert!(!counts_as_processable_stat(WorkItemScope::Managed, &mine));
-        assert!(!counts_as_processable_stat(WorkItemScope::History, &mine));
-    }
-
-    #[test]
-    fn approval_tasks_count_even_though_they_never_get_process() {
-        // 单据审批任务的动作集只有 View/Approve/Reject，仍必须计入「待我处理」，
-        // 否则列表有条目而指标是 0。
-        let approval = ViewAccess::ready(vec![
-            WorkItemAllowedAction::View,
-            WorkItemAllowedAction::Approve,
-            WorkItemAllowedAction::Reject,
-        ]);
-        assert!(counts_as_processable_stat(WorkItemScope::Mine, &approval));
-
-        let view_only = ViewAccess::ready(vec![WorkItemAllowedAction::View]);
-        assert!(!counts_as_processable_stat(WorkItemScope::Mine, &view_only));
-    }
-
-    #[test]
-    fn missing_approval_context_removes_decisions_but_keeps_view() {
-        let mut actions =
-            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Approve, WorkItemAllowedAction::Reject];
-
-        assert!(remove_approval_decision_actions(&mut actions));
-        assert_eq!(actions, vec![WorkItemAllowedAction::View]);
-        assert!(!remove_approval_decision_actions(&mut actions));
-    }
-
-    #[test]
     fn managed_approval_items_never_project_generic_responsibility_actions() {
         let access = managed_action_access();
 
         let type_bound = document_approval_fields_without_execution();
         assert_eq!(
-            allowed_actions(&type_bound, WorkItemScope::Managed, "manager-1", &access),
+            type_bound.allowed_actions(WorkItemScope::Managed, "manager-1", &access.task),
             vec![WorkItemAllowedAction::View]
         );
 
         let execution_bound = managed_w29_fields(true);
         assert_eq!(
-            allowed_actions(&execution_bound, WorkItemScope::Managed, "manager-1", &access,),
+            execution_bound.allowed_actions(WorkItemScope::Managed, "manager-1", &access.task),
             vec![WorkItemAllowedAction::View]
         );
     }
@@ -725,7 +650,7 @@ mod tests {
         let item = managed_w29_fields(false);
 
         assert_eq!(
-            allowed_actions(&item, WorkItemScope::Managed, "manager-1", &access),
+            item.allowed_actions(WorkItemScope::Managed, "manager-1", &access.task),
             vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign, WorkItemAllowedAction::Close,]
         );
     }
@@ -770,24 +695,6 @@ mod tests {
     }
 
     #[test]
-    fn family_counts_use_the_registered_server_mapping() {
-        let counts = family_counts_for_types([
-            WorkItemType::DocumentApproval,
-            WorkItemType::ProcurementOrderCreation,
-            WorkItemType::SalesInvoiceExecution,
-            WorkItemType::InventoryAdjustmentReview,
-            WorkItemType::BusinessException,
-            WorkItemType::SupplierPaymentExecution,
-        ]);
-
-        assert_eq!(counts.approval, 1);
-        assert_eq!(counts.procurement, 1);
-        assert_eq!(counts.fulfillment, 1);
-        assert_eq!(counts.finance, 2);
-        assert_eq!(counts.exception, 1);
-    }
-
-    #[test]
     fn former_responsibility_actor_can_open_terminal_history_detail() {
         let mut item = WorkItem::new_at(
             WorkItemId::new("wi-history"),
@@ -811,12 +718,13 @@ mod tests {
         .unwrap();
         item.reassign("bob", Instant::from_unix_secs(110)).unwrap();
         item.complete_by_domain_command("bob", Instant::from_unix_secs(120)).unwrap();
-        let access = |actor_id: &str| ActorAccess {
-            actor_id: actor_id.to_string(),
-            permissions: Vec::new(),
+        let access = |actor_id: &str| TaskEligibility {
+            task: TaskAccess {
+                actor_id: actor_id.to_string(),
+                permissions: PermissionSet::default(),
+                managed_task_ids: Default::default(),
+            },
             participant_document_ids: HashSet::new(),
-            managed_owner_ids: Some(Vec::new()),
-            can_manage: false,
         };
 
         assert_eq!(detail_scope(&item, "alice", &access("alice")).unwrap(), WorkItemScope::History);
@@ -829,52 +737,6 @@ mod tests {
         assert!(expected_task_version("0").is_err());
         assert!(expected_task_version("1.0").is_err());
         assert!(expected_task_version("latest").is_err());
-    }
-
-    #[test]
-    fn authorized_pagination_reaches_later_batch_and_counts_full_total() {
-        let access = w13_access();
-        let facts = w13_facts();
-        let mut collector = AuthorizedPageCollector::new(1, 2).unwrap();
-        let first_candidate_batch = (0..AUTHORIZED_SCAN_BATCH_SIZE.get())
-            .map(|index| {
-                let mut row = w13_delta_row();
-                row.work_item_type = WorkItemType::SalesInvoiceExecution;
-                row.id = format!("denied-{index}");
-                row.business_object_id = format!("missing-{index}");
-                row
-            })
-            .collect();
-        let later_candidate_batch = (0..3)
-            .map(|index| {
-                let mut row = w13_delta_row();
-                row.work_item_type = WorkItemType::SalesInvoiceExecution;
-                row.id = format!("allowed-{index}");
-                row
-            })
-            .collect();
-
-        collector.extend(authorized_fields(first_candidate_batch, &access, &facts));
-        collector.extend(authorized_fields(later_candidate_batch, &access, &facts));
-
-        let page = collector.finish();
-        assert_eq!(page.items.len(), 2);
-        assert_eq!(page.items[0].id, "allowed-0");
-        assert_eq!(page.items[1].id, "allowed-1");
-        assert_eq!(page.total, 3);
-    }
-
-    #[test]
-    fn authorized_pagination_slices_after_authorization() {
-        let mut collector = AuthorizedPageCollector::new(2, 2).unwrap();
-
-        collector.extend(["authorized-1"]);
-        collector.extend(["authorized-2", "authorized-3", "authorized-4"]);
-
-        assert_eq!(
-            collector.finish(),
-            AuthorizedPage { items: vec!["authorized-3", "authorized-4"], total: 4 }
-        );
     }
 
     #[test]

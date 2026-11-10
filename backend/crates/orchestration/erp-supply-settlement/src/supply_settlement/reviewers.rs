@@ -1,8 +1,11 @@
 //! 指定结算复核人的启用账号、完整财务角色资格及岗位分离。
+use std::result::Result as StdResult;
+
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_identity::{Permission, PermissionSet};
 use erp_workflow::entity::work_item::AvailableWorkItemAccount;
-use erp_workflow::ports::{WorkflowAccountFact, WorkflowAuthorizationPort, permission_covers};
+use erp_workflow::ports::{WorkflowAccountFact, WorkflowAuthorizationPort};
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
@@ -24,7 +27,7 @@ pub struct SettlementReviewerOption {
 fn eligible(
     account: &WorkflowAccountFact,
     preparer_id: &str,
-    permissions: &[String],
+    permissions: &PermissionSet,
     scopes: &[(String, Option<String>)],
 ) -> bool {
     account.id != preparer_id
@@ -35,7 +38,7 @@ fn eligible(
             "work_item:detail",
         ]
         .iter()
-        .all(|required| permissions.iter().any(|owned| permission_covers(owned, required)))
+        .all(|required| permissions.covers_one(&Permission::parse(required).expect("固定复核权限合法")))
         && scopes.iter().any(|(role, _)| role == SETTLEMENT_REVIEW_OWNER_ROLE)
 }
 
@@ -50,10 +53,12 @@ async fn reviewer_scopes(
     let _ = (preparer, org);
     let required =
         ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"];
-    let snapshot = auth.role_permission_snapshot(account.kind, &account.id, &required).await?;
-    auth.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-    let roles = auth.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
-    Ok(roles.into_iter().map(|role| (role, None)).collect())
+    let required = required.into_iter().map(Permission::parse).collect::<StdResult<Vec<_>, _>>()?;
+    let snapshot = auth.rbac()?.role_permission_snapshot(account.kind, &account.id, &required).await?;
+    auth.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+    let roles =
+        auth.rbac()?.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
+    Ok(roles.into_iter().map(|role| (role.to_string(), None)).collect())
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
@@ -85,7 +90,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             {
                 continue;
             }
-            let permissions = auth.permission_codes(account.kind, &account.id).await?;
+            let permissions = auth.rbac()?.permissions(account.kind, &account.id).await?;
             let scopes = reviewer_scopes(
                 &auth,
                 &account,
@@ -127,9 +132,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         org: &str,
     ) -> Result<u64> {
         for _ in 0..3 {
-            let revision = auth.current_policy_revision().await?;
+            let revision = auth.rbac()?.current_policy_revision().await?;
             ensure_reviewer(auth, reviewer_id, preparer_id, org, &mut NoTransaction).await?;
-            if revision == auth.current_policy_revision().await? {
+            if revision == auth.rbac()?.current_policy_revision().await? {
                 return Ok(revision);
             }
         }
@@ -163,7 +168,7 @@ pub(super) async fn ensure_reviewer(
         .load_account(reviewer_id, executor)
         .await?
         .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
-    let permissions = auth.permission_codes(account.kind, reviewer_id).await?;
+    let permissions = auth.rbac()?.permissions(account.kind, reviewer_id).await?;
     let scopes = reviewer_scopes(auth, &account, preparer_id, org, executor).await?;
     if !eligible(&account, preparer_id, &permissions, &scopes) {
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
@@ -178,7 +183,10 @@ mod tests {
     #[test]
     fn reviewer_requires_available_separate_account_permissions_and_finance_scope() {
         let account = WorkflowAccountFact::new("reviewer", AccountKind::Admin, true);
-        let permissions = vec!["supplier_settlement_statement:*".into(), "work_item:detail".into()];
+        let permissions = PermissionSet::new(
+            ["supplier_settlement_statement:*", "work_item:detail"]
+                .map(|code| Permission::parse(code).unwrap()),
+        );
         let scopes = vec![(SETTLEMENT_REVIEW_OWNER_ROLE.into(), None)];
         assert!(eligible(&account, "preparer", &permissions, &scopes));
         assert!(eligible(
@@ -194,7 +202,12 @@ mod tests {
             &permissions,
             &scopes
         ));
-        assert!(!eligible(&account, "preparer", &["supplier_settlement_statement:detail".into()], &scopes));
+        assert!(!eligible(
+            &account,
+            "preparer",
+            &PermissionSet::new([Permission::parse("supplier_settlement_statement:detail").unwrap()]),
+            &scopes
+        ));
         assert!(!eligible(&account, "preparer", &permissions, &[("role-other".into(), None)]));
     }
 }

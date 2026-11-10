@@ -1,8 +1,7 @@
 //! 受阻筛选复用正式任务投影，保持与办理入口一致的资格判断。
-use application_core::AuditActor;
 use persistence_core::Executor;
 
-use super::super::access::ActorAccess;
+use super::super::access::QueueAccess;
 use super::super::dto::WorkItemFields;
 use super::super::{ProcessingState, WorkItemReadService, WorkItemScope};
 use crate::Result;
@@ -19,11 +18,10 @@ impl WorkItemReadService {
         &self,
         fields: &mut [WorkItemFields],
         scope: WorkItemScope,
-        actor: &AuditActor,
-        access: &ActorAccess,
+        access: &QueueAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let projected = self.project_fields(fields.to_vec(), scope, actor, access, "", executor).await?;
+        let projected = self.project_fields(fields.to_vec(), scope, access, "", executor).await?;
         for (field, view) in fields.iter_mut().zip(projected) {
             field.search.blocked = matches!(
                 view.processing_state,
