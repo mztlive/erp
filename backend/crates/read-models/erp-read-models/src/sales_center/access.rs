@@ -133,12 +133,12 @@ impl SalesAccess {
         let mut scope = sales_scope(&access, actor.id(), &customers, Vec::new());
         if allows_history(resource, action) {
             let entry = Permission::parse(format!("{resource}:{action}"))?;
-            let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
+            let query = ResourceAccessService::new(self.db.clone(), self.rbac.clone())
                 .resolve(actor, &entry, ResourceKind::SalesOrder, executor)
                 .await?;
-            access.scope_version = format!("{}:{}", access.scope_version, query.constraints().3);
+            access.map_read_version(|base| format!("{base}:{}", query.constraints().3));
             let revision = participant_access::revision(&self.db, actor.id(), executor).await?;
-            access.scope_version = format!("{}:{revision}", access.scope_version);
+            access.map_read_version(|base| format!("{base}:{revision}"));
             scope.history_lookup = participant_access::lookup(actor.id());
             scope.grant_lookup = lookup_stages(&query);
         }

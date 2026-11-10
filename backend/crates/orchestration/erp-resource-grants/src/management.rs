@@ -1,7 +1,7 @@
 //! 管理请求只接受来源身份和固定维护范围，不接受客户端业务分配证据。
 use erp_core::validation::normalize_required_text_ref;
 use erp_identity::entity::resource_access::{GrantTarget, SourceKey, SourceUpdate};
-use erp_identity::service::resource_access::{GrantRecompute, ResourceAccessService};
+use erp_identity::service::resource_access::{GrantRecompute, ResourceGrantService};
 use erp_identity::{Error, Result};
 pub use erp_workflow::repository::grant_history::GrantHistoryKind;
 use serde::{Deserialize, Serialize};
@@ -132,7 +132,7 @@ impl ResourceGrantProcess {
     /// grant/revoke/sources 均自行校验管理员权限的服务。
     /// # 错误
     /// 构造不执行 I/O。
-    pub fn management(&self) -> ResourceAccessService {
+    pub fn management(&self) -> ResourceGrantService {
         self.access(None)
     }
 }

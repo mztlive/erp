@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::service::access_control::consumers::registration;
 use crate::service::access_control::resolve::AuthorizedDataScope;
+#[cfg(test)]
+use crate::service::access_control::resolve::DataScopeFacts;
 use crate::{Error, Result};
 
 /// 管理员发起的只读访问检查。
@@ -181,35 +183,33 @@ mod tests {
     }
     /// 创建无数据库依赖的真实解析上下文。
     fn access() -> AuthorizedDataScope {
-        use std::collections::BTreeMap;
-
         use erp_core::common::time::Instant;
 
         use crate::access_control::ResolvedScope;
         use crate::entity::organization_change::OrganizationState;
-        AuthorizedDataScope {
+        AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "u".into(),
             resource: "sales_order".into(),
             action: "detail".into(),
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-            role_scopes: BTreeMap::new(),
+            qualified_roles: Default::default(),
             organizations: OrganizationState::default(),
             policy_version: 1,
             scope_version: "v1".into(),
             as_of: Instant::from_unix_secs(100),
-        }
+        })
     }
 
     #[test]
     fn empty_role_scope_is_review_and_personal_cap_never_grants_access() {
         use crate::access_control::ScopeClause;
         let mut access = access();
-        access.scope.user_limit = Some(ScopeClause { company: true, ..ScopeClause::default() });
+        access.facts.scope.user_limit = Some(ScopeClause { company: true, ..ScopeClause::default() });
         let view = AccessInspectionView::from_access(&access);
         assert_eq!(view.steps[1].status, "review");
         assert_eq!(view.steps.len(), 2);
         assert_eq!(view.scope_version.as_deref(), Some("v1"));
-        access.scope.role_clauses.push(ScopeClause { self_owned: true, ..ScopeClause::default() });
+        access.facts.scope.role_clauses.push(ScopeClause { self_owned: true, ..ScopeClause::default() });
         let view = AccessInspectionView::from_access(&access);
         assert_eq!(view.steps[1].status, "passed");
         assert_eq!(view.steps.len(), 2);

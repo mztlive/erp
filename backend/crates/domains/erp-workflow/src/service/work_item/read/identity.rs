@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use persistence_core::Executor;
 
@@ -118,11 +120,11 @@ mod tests {
             changed_by: "admin".into(),
             reason: "fixture".into(),
         };
-        let mut context = AuthorizedDataScope {
+        let mut context = AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "manager".into(),
             resource: "work_item".into(),
             action: "manage".into(),
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             scope: ResolvedScope {
                 role_clauses: vec![ScopeClause {
                     org_unit_ids: BTreeSet::from(["dept-a".into()]),
@@ -134,8 +136,8 @@ mod tests {
             policy_version: 1,
             scope_version: "v1".into(),
             as_of: Instant::from_unix_secs(10),
-        };
-        context.organizations.memberships = vec![
+        });
+        context.test_facts_mut().organizations.memberships = vec![
             membership("a", "worker-a", "dept-a", None),
             membership("b", "worker-b", "dept-b", None),
             membership("old", "expired", "dept-a", Some(10)),
@@ -147,13 +149,14 @@ mod tests {
     fn task_manager_uses_current_membership_not_responsibility_organization() {
         let mut scope = context();
         assert_eq!(owners(&scope), Some(vec!["worker-a".into()]));
-        scope.scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
+        scope.test_facts_mut().scope.user_limit =
+            Some(ScopeClause { self_owned: true, ..Default::default() });
         assert_eq!(owners(&scope), Some(vec![]));
-        scope.scope.role_clauses = vec![ScopeClause { company: true, ..Default::default() }];
+        scope.test_facts_mut().scope.role_clauses = vec![ScopeClause { company: true, ..Default::default() }];
         assert_eq!(owners(&scope), Some(vec!["manager".into()]));
-        scope.scope.user_limit = None;
+        scope.test_facts_mut().scope.user_limit = None;
         assert_eq!(owners(&scope), None);
-        scope.scope.role_clauses.clear();
+        scope.test_facts_mut().scope.role_clauses.clear();
         assert_eq!(owners(&scope), Some(vec![]));
     }
 
@@ -161,8 +164,8 @@ mod tests {
     #[test]
     fn managed_owner_limit_preserves_exact_boundary() {
         let mut scope = context();
-        let template = scope.organizations.memberships[0].clone();
-        scope.organizations.memberships = (0..20_000)
+        let template = scope.test_facts_mut().organizations.memberships[0].clone();
+        scope.test_facts_mut().organizations.memberships = (0..20_000)
             .map(|index| {
                 let mut membership = template.clone();
                 membership.user_id = format!("worker-{index}");
@@ -172,7 +175,7 @@ mod tests {
         assert_eq!(compile_task_owners(&scope).unwrap().unwrap().len(), 20_000);
         let mut extra = template;
         extra.user_id = "extra-worker".into();
-        scope.organizations.memberships.push(extra);
+        scope.test_facts_mut().organizations.memberships.push(extra);
         assert!(
             matches!(compile_task_owners(&scope), Err(Error::ValidationError(message)) if message == "任务管理范围超过 20000 人，请缩小配置范围")
         );

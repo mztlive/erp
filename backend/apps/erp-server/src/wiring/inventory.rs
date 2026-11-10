@@ -14,6 +14,8 @@ use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment_execution::inventory_adjustment::InventoryAdjustmentProcess;
 use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
 use erp_identity::access_control::ScopedObject;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeBatch, DataScopeService};
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_inventory::{
@@ -768,32 +770,33 @@ mod tests {
 
     #[test]
     fn inventory_scope_keeps_dimension_and_user_limit_without_fallback() {
-        let mut access = AuthorizedDataScope {
+        let mut access = AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "warehouse".into(),
             resource: "stock_balance".into(),
             action: "list".into(),
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             organizations: Default::default(),
             policy_version: 1,
             scope_version: "1".into(),
             as_of: Instant::from_unix_secs(1),
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-        };
+        });
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
         access
+            .test_facts_mut()
             .scope
             .role_clauses
             .push(ScopeClause { org_unit_ids: BTreeSet::from(["same-id".into()]), ..Default::default() });
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
-        access.scope.role_clauses.push(ScopeClause { company: true, ..Default::default() });
+        access.test_facts_mut().scope.role_clauses.push(ScopeClause { company: true, ..Default::default() });
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::company());
-        access.scope.user_limit =
+        access.test_facts_mut().scope.user_limit =
             Some(ScopeClause { warehouse_ids: BTreeSet::from(["warehouse-a".into()]), ..Default::default() });
         assert_eq!(
             warehouse_scope(&access).unwrap(),
             WarehouseScope::from_targets(vec!["warehouse-a".into()])
         );
-        access.scope.user_limit = Some(ScopeClause::default());
+        access.test_facts_mut().scope.user_limit = Some(ScopeClause::default());
         assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
     }
 }

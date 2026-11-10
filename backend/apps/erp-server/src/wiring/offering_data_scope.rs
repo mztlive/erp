@@ -127,6 +127,7 @@ impl OfferingDataScopePort for MongoOfferingDataScope {
 fn map_access(
     access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
 ) -> erp_supply::Result<OfferingResolvedScope> {
+    let access = access.into_facts();
     Ok(OfferingResolvedScope {
         user_id: access.user_id,
         resource: access.resource,

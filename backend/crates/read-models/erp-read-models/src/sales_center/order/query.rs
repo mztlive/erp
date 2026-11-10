@@ -82,7 +82,7 @@ impl SalesOrderReadService {
         }
 
         Ok(super::SalesListView {
-            scope_version: context.scope_version,
+            scope_version: context.scope_version.clone(),
             policy_version: context.policy_version,
             organization_version: context.organizations.version,
             as_of: context.as_of.as_utc().to_rfc3339(),

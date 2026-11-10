@@ -66,16 +66,16 @@ impl OrganizationService {
     pub async fn state(&self, actor: &AuditActor) -> Result<OrganizationStateView> {
         let mut no_tx = NoTransaction;
         let mut access = self.access(actor, "list", &mut no_tx).await?;
-        let organizations = take(&mut access.organizations);
+        let organizations = take(&mut access.facts.organizations);
         let visible = visible_state(organizations, &access);
         let people = people_for(&self.db, &visible, access.as_of, &mut no_tx).await?;
         let roles = roles_for(&self.db, &mut no_tx).await?;
         Ok(OrganizationStateView::compose(
             visible,
-            access.scope_version,
-            access.policy_version,
-            access.as_of.as_utc().to_rfc3339(),
-            !access.scope.has_role_scope(),
+            access.facts.scope_version,
+            access.facts.policy_version,
+            access.facts.as_of.as_utc().to_rfc3339(),
+            !access.facts.scope.has_role_scope(),
             people,
             roles,
         ))
@@ -188,7 +188,7 @@ impl OrganizationService {
         )?;
         if persist {
             self.update_profile_name(&receipt.request.change, true, executor).await?;
-            self.assign_profile_roles(actor, &receipt.request.change, access.policy_version, executor)
+            self.assign_profile_roles(actor, &receipt.request.change, access.facts.policy_version, executor)
                 .await?;
             repository.save(&mut receipt, executor).await?;
         }

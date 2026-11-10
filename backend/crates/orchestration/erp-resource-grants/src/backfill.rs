@@ -80,11 +80,10 @@ impl ResourceGrantProcess {
         ex: &mut dyn Executor,
     ) -> Result<PreparedHistory> {
         let events = self.historical_events(entry, ex).await?;
-        let access = self.access(None);
         let mut prepared = PreparedHistory::default();
         for evidence in events {
             let event = GrantEvent::new(evidence)?;
-            if access.source(&event.source, ex).await?.is_some_and(|source| source.terminated) {
+            if self.queue().source(&event.source, ex).await?.is_some_and(|source| source.terminated) {
                 prepared.terminated += 1;
                 continue;
             }
@@ -92,7 +91,7 @@ impl ResourceGrantProcess {
             let update = facts.compute(&event, ex).await?;
             facts.validate_targets(&update.targets, ex).await?;
             if planned.contains(&event.source.id()?)
-                || access.source_event(&event.source, ex).await?.is_some()
+                || self.queue().source_event(&event.source, ex).await?.is_some()
             {
                 prepared.existing += 1;
                 continue;

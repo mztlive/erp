@@ -111,7 +111,7 @@ impl ActualProfitLossReadModel {
         )?;
         self.recheck(&query, actor, &context.scope_version).await?;
         view.scope.permission_version = context.scope_version.clone();
-        view.scope_version = context.scope_version;
+        view.scope_version = context.scope_version.clone();
         view.policy_version = context.policy_version;
         view.organization_version = context.organizations.version;
         if no_scope {
@@ -169,7 +169,7 @@ impl ActualProfitLossReadModel {
                     let (mut context, scope) = this.authorized_scope(&actor, executor).await?;
                     let no_scope = scope.is_empty();
                     let sources = source::Sources::load(&this.db, &query, bounds, scope, executor).await?;
-                    context.scope_version = source::version(&context.scope_version, &sources.orders);
+                    context.map_read_version(|base| source::version(base, &sources.orders));
                     ensure_version(query.scope_version.as_deref(), &context.scope_version)?;
                     Ok((sources, query, context, no_scope))
                 })

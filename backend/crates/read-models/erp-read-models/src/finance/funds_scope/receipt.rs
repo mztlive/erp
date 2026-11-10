@@ -363,7 +363,7 @@ impl FundsAccess {
                     let (_, authorization) =
                         this.resolve(&actor, "customer_receipt", "list", executor).await?;
                     if authorization.empty() {
-                        return Ok(authorization.context.scope_version);
+                        return Ok(authorization.context.scope_version.clone());
                     }
                     let condition = this.receipt_condition(&query, executor).await?;
                     let filter = this.receipt_filter(&query).await?;

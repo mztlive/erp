@@ -10,6 +10,8 @@ use erp_identity::access_control::ScopeClause;
 use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
 use erp_identity::entity::resource_access::ResourceKind;
 use erp_identity::repository::resource_grants::lookup_stages;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_identity::service::resource_access::ResourceAccessService;
 use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt, SharedRbacService};
@@ -70,18 +72,18 @@ impl FundsAccess {
         let ledger_read = batch.has_permission(&ledger_permission).await?;
         let (mut access, mut authorization) =
             source_authorization(context, sales, settlement, actor.id(), purchase, ledger_read);
-        let resolver = ResourceAccessService::reader(self.db.clone(), self.rbac.clone());
+        let resolver = ResourceAccessService::new(self.db.clone(), self.rbac.clone());
         if !purchase || dual {
             let query =
                 resolver.resolve(actor, &entry_permission, ResourceKind::SalesOrder, executor).await?;
             authorization.sales.grant_lookup = lookup_stages(&query);
-            authorization.context.scope_version.push_str(query.constraints().3);
+            authorization.context.map_read_version(|base| format!("{base}{}", query.constraints().3));
         }
         if let Some(scope) = &mut authorization.purchase_scope {
             let query =
                 resolver.resolve(actor, &entry_permission, ResourceKind::PurchaseOrder, executor).await?;
             scope.grant_lookup = lookup_stages(&query);
-            authorization.context.scope_version.push_str(query.constraints().3);
+            authorization.context.map_read_version(|base| format!("{base}{}", query.constraints().3));
         }
         access.scope_version = authorization.context.scope_version.clone();
         authorization.no_scope = authorization.empty();
@@ -114,7 +116,7 @@ fn source_authorization(
         access.scope_version.hash(&mut fingerprint);
     }
     ledger_read.hash(&mut fingerprint);
-    context.scope_version = format!("{:x}", fingerprint.finish());
+    context.map_read_version(|_| format!("{:x}", fingerprint.finish()));
     let access = resolved_funds(&context);
     let mut authorization =
         FundsAuthorization { sales, ledger_read, settlement, purchase_scope, context, no_scope: false };
@@ -195,17 +197,17 @@ mod tests {
 
     /// 构造独立来源上下文，以范围指纹代表该来源已完成的当前资格取证。
     fn context(version: &str, clause: Option<ScopeClause>) -> AuthorizedDataScope {
-        AuthorizedDataScope {
+        AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "actor".into(),
             resource: "invoice".into(),
             action: "list".into(),
             scope: ResolvedScope { role_clauses: clause.into_iter().collect(), user_limit: None },
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             organizations: Default::default(),
             policy_version: 1,
             scope_version: version.into(),
             as_of: Instant::from_unix_secs(1),
-        }
+        })
     }
 
     /// 发票双来源分别保留销售与采购实际范围，各来源撤权与整账变化都使版本失效。

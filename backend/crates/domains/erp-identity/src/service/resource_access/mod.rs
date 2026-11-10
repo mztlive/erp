@@ -2,7 +2,6 @@
 mod command;
 pub use command::append_event;
 mod queue;
-mod reader;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -24,18 +23,17 @@ use crate::{Error, Permission, Result, SharedRbacService};
 pub struct ResourceAccessService {
     db: Database,
     rbac: SharedRbacService,
-    facts: Arc<dyn ResourceGrantFacts>,
 }
 impl ResourceAccessService {
     /// 装配身份数据库、权限服务和可信业务事实端口。
     /// # 参数
-    /// db、rbac 为现有身份设施；facts 为组合根适配器。
+    /// db、rbac 为现有身份设施。
     /// # 返回
-    /// 统一授权服务。
+    /// 仅提供读取判定的授权服务。
     /// # 错误
-    /// 不返回错误；没有事实端口不得启用管理写入。
-    pub fn new(db: Database, rbac: SharedRbacService, facts: Arc<dyn ResourceGrantFacts>) -> Self {
-        Self { db, rbac, facts }
+    /// 不返回错误；该类型不提供写入方法。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
     }
     /// 检查入口并生成列表查询约束，只读取账号资源修订号，不装载授权 ID。
     /// # 参数
@@ -61,7 +59,7 @@ impl ResourceAccessService {
         Ok(AuthorizedResourceQuery {
             user_id: actor.id().into(),
             resource,
-            scope: base.scope,
+            scope: base.facts.scope,
             scope_version,
             grant_revision,
         })
@@ -105,5 +103,43 @@ impl ResourceAccessService {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权范围已变化，请重新读取".into()));
         }
         Ok(())
+    }
+}
+
+/// 人工授权及自动来源发布；可信事实由组合根装配。
+#[derive(Clone)]
+pub struct ResourceGrantService {
+    db: Database,
+    rbac: SharedRbacService,
+    facts: Arc<dyn ResourceGrantFacts>,
+}
+impl ResourceGrantService {
+    /// 装配授权来源管理服务。
+    /// # 参数
+    /// db、rbac 为身份设施，facts 为可信业务事实端口。
+    /// # 返回
+    /// 可发布及撤销来源的服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn new(db: Database, rbac: SharedRbacService, facts: Arc<dyn ResourceGrantFacts>) -> Self {
+        Self { db, rbac, facts }
+    }
+}
+
+/// 授权后台事件处理能力，不承担读取授权判定。
+#[derive(Clone)]
+pub struct GrantEventService {
+    db: Database,
+}
+impl GrantEventService {
+    /// 装配事件队列服务。
+    /// # 参数
+    /// db 为身份集合数据库。
+    /// # 返回
+    /// 不启动后台循环的事件服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn new(db: Database) -> Self {
+        Self { db }
     }
 }

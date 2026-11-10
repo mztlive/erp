@@ -1,4 +1,6 @@
 //! 授权 BSON 的受限内存解释器；不替代真实 MongoDB 执行等价性验收。
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use test_support::matches_filter as matches;
 
 #[test]
@@ -41,11 +43,11 @@ fn public_sales_decision_matches_database_conditions() {
         for role in 0..16 {
             for second in [0, 2, 8] {
                 for limit in -1..16 {
-                    let access = AuthorizedDataScope {
+                    let access = AuthorizedDataScope::test_fixture(DataScopeFacts {
                         user_id: "actor".into(),
                         resource: "sales_order".into(),
                         action: action.into(),
-                        role_scopes: Default::default(),
+                        qualified_roles: Default::default(),
                         scope: ResolvedScope {
                             role_clauses: vec![clause(role), clause(second)],
                             user_limit: (limit >= 0).then(|| clause(limit)),
@@ -54,7 +56,7 @@ fn public_sales_decision_matches_database_conditions() {
                         policy_version: 1,
                         scope_version: "v1".into(),
                         as_of: Instant::from_unix_secs(0),
-                    };
+                    });
                     for bits in 0..16 {
                         order.sales_owner_user_id = if bits & 1 != 0 { "actor" } else { "other" }.into();
                         order.business_org_unit_id = if bits & 4 != 0 { "org-a" } else { "org-b" }.into();

@@ -51,7 +51,7 @@ pub(super) async fn readable_batch(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let access = ResourceAccessService::reader(db.clone(), rbac.clone())
+    let access = ResourceAccessService::new(db.clone(), rbac.clone())
         .resolve_targets(
             actor,
             &Permission::parse(entry)?,

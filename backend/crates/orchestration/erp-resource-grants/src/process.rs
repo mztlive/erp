@@ -3,7 +3,9 @@ use std::sync::Arc;
 use erp_finance::repository::extensions::ReceivableExt;
 use erp_identity::entity::resource_access::SourceKey;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventStatus};
-use erp_identity::service::resource_access::{GrantQueueHealth, GrantRecompute, ResourceAccessService};
+use erp_identity::service::resource_access::{
+    GrantEventService, GrantQueueHealth, GrantRecompute, ResourceGrantService,
+};
 use erp_identity::{Error, Result, SharedRbacService};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -65,8 +67,26 @@ impl ResourceGrantProcess {
         Self { db, rbac }
     }
 
-    pub(crate) fn access(&self, event: Option<GrantEvent>) -> ResourceAccessService {
-        ResourceAccessService::new(
+    /// 装配独立队列能力。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 绑定当前数据库的事件服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub(crate) fn queue(&self) -> GrantEventService {
+        GrantEventService::new(self.db.clone())
+    }
+
+    /// 装配可信来源发布能力。
+    /// # 参数
+    /// event 为自动发布时需要重验的事件。
+    /// # 返回
+    /// 绑定可信事实端口的来源管理服务。
+    /// # 错误
+    /// 不执行 I/O。
+    pub(crate) fn access(&self, event: Option<GrantEvent>) -> ResourceGrantService {
+        ResourceGrantService::new(
             self.db.clone(),
             self.rbac.clone(),
             Arc::new(Facts { db: self.db.clone(), event }),
@@ -81,7 +101,7 @@ impl ResourceGrantProcess {
     /// # 错误
     /// 读取或发布失败返回错误，业务事务不会重放。
     pub async fn tick(&self, token: &str, now: u64) -> Result<bool> {
-        let queue = self.access(None);
+        let queue = self.queue();
         let Some(event) = queue.claim_event(token, now).await? else {
             return Ok(false);
         };
@@ -107,14 +127,14 @@ impl ResourceGrantProcess {
 
     async fn publish(&self, claim: GrantEvent, ex: &mut dyn Executor) -> Result<()> {
         let access = self.access(Some(claim.clone()));
-        let current = access.claimed_event(&claim, ex).await?;
+        let current = self.queue().claimed_event(&claim, ex).await?;
         if current.status == GrantEventStatus::Applied {
             return Ok(());
         }
 
-        let old = access.source(&current.source, ex).await?;
+        let old = self.queue().source(&current.source, ex).await?;
         if old.as_ref().is_some_and(|s| s.terminated) {
-            return access.complete_event(current, ex).await;
+            return self.queue().complete_event(current, ex).await;
         }
 
         let update = Facts { db: self.db.clone(), event: None }.compute(&current, ex).await?;
@@ -122,7 +142,7 @@ impl ResourceGrantProcess {
             access.apply_source(update, ex).await?;
         }
 
-        access.complete_event(current, ex).await
+        self.queue().complete_event(current, ex).await
     }
 }
 
@@ -150,7 +170,7 @@ impl ResourceGrantProcess {
         after: Option<&str>,
         now: u64,
     ) -> Result<Option<String>> {
-        self.access(None).requeue(selection, after, now).await
+        self.queue().requeue(selection, after, now).await
     }
     /// 查询授权积压与故障统计。
     /// # 参数
@@ -160,7 +180,7 @@ impl ResourceGrantProcess {
     /// # 错误
     /// 查询失败时返回错误。
     pub async fn health(&self, now: u64) -> Result<GrantQueueHealth> {
-        self.access(None).grant_health(now).await
+        self.queue().grant_health(now).await
     }
 }
 
@@ -185,12 +205,11 @@ impl ResourceGrantProcess {
         expected: &GrantEvent,
         executor: &mut dyn Executor,
     ) -> Result<GrantReadiness> {
-        let access = self.access(Some(expected.clone()));
-        let Some(event) = access.event(expected, executor).await? else {
+        let Some(event) = self.queue().event(expected, executor).await? else {
             return Ok(GrantReadiness::Absent);
         };
         let update = Facts { db: self.db.clone(), event: None }.compute(&event, executor).await?;
-        let source = access.source(&event.source, executor).await?;
+        let source = self.queue().source(&event.source, executor).await?;
         Ok(match source {
             Some(s) if s.terminated => GrantReadiness::Terminated,
             Some(s)
@@ -218,7 +237,7 @@ impl ResourceGrantProcess {
         source: &SourceKey,
         executor: &mut dyn Executor,
     ) -> Result<GrantReadiness> {
-        let Some(event) = self.access(None).source_event(source, executor).await? else {
+        let Some(event) = self.queue().source_event(source, executor).await? else {
             return Ok(GrantReadiness::Absent);
         };
         self.readiness(&event, executor).await

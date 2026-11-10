@@ -84,6 +84,7 @@ impl SettlementDataScopePort for MongoSettlementDataScope {
             .resolve(actor, "supplier_settlement_statement", action, executor)
             .await
             .map_err(map_identity_error)?;
+        let access = access.into_facts();
         Ok(SettlementResolvedScope {
             user_id: access.user_id,
             resource: access.resource,

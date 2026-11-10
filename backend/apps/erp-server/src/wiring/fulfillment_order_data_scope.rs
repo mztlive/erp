@@ -83,6 +83,7 @@ impl FulfillmentOrderDataScopePort for MongoFulfillmentOrderDataScope {
             .resolve(actor, "supplier_fulfillment_order", action, executor)
             .await
             .map_err(map_identity_error)?;
+        let access = access.into_facts();
         Ok(FulfillmentOrderResolvedScope {
             user_id: access.user_id,
             resource: access.resource,

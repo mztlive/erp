@@ -21,4 +21,4 @@ jwt = { workspace = true }
 jwt-hmac = { workspace = true }
 jwt-sha2 = { workspace = true }
 erp-core = { workspace = true }
-erp-identity = { workspace = true }
+erp-identity = { workspace = true, features = ["test-support"] }

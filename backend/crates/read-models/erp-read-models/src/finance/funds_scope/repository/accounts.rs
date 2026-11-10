@@ -11,6 +11,8 @@ use erp_finance::repository::receivable::ReceivableAccountRow;
 use erp_finance::repository::{
     PayableAccountFilter, PayableAccountRow, PayableExt, ReceivableAccountFilter, ReceivableExt,
 };
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_supply::repository::SupplierSettlementExt;
@@ -381,17 +383,17 @@ mod tests {
             settlement: None,
             purchase_scope: None,
             no_scope: false,
-            context: AuthorizedDataScope {
+            context: AuthorizedDataScope::test_fixture(DataScopeFacts {
                 user_id: "u".into(),
                 resource: "receivable_account".into(),
                 action: "list".into(),
                 scope: ResolvedScope { role_clauses: Vec::new(), user_limit: None },
-                role_scopes: Default::default(),
+                qualified_roles: Default::default(),
                 organizations: Default::default(),
                 policy_version: 1,
                 scope_version: "scope".into(),
                 as_of: Instant::from_unix_secs(1),
-            },
+            }),
         }
     }
 
@@ -430,7 +432,7 @@ mod tests {
         });
         assert_ne!(rows.version(&access).unwrap(), original);
         let mut changed = authorization();
-        changed.context.scope_version = "revoked".into();
+        changed.context.test_facts_mut().scope_version = "revoked".into();
         assert_ne!(snapshot().version(&changed).unwrap(), original);
     }
 

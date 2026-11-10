@@ -334,7 +334,7 @@ impl FundsAccess {
                     let (_, authorization) =
                         this.resolve(&actor, "receivable_account", "list", executor).await?;
                     if authorization.empty() {
-                        return Ok(authorization.context.scope_version);
+                        return Ok(authorization.context.scope_version.clone());
                     }
                     let condition = this.receivable_condition(&query, executor).await?;
                     this.receivable_database_snapshot(&query, &authorization, &condition, false, executor)

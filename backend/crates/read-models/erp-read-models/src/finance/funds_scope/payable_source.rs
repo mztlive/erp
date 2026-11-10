@@ -4,6 +4,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use erp_finance::entity::payable::PayableSourceType;
 use erp_identity::access_control::ScopedObject;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_procurement::repository::{PurchaseOrderExt, PurchaseOrderRepositoryScopeExt};
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
@@ -149,7 +151,7 @@ mod tests {
     use super::*;
 
     fn context(resource: &str, organization: &str) -> AuthorizedDataScope {
-        AuthorizedDataScope {
+        AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "user".into(),
             resource: resource.into(),
             action: "list".into(),
@@ -160,12 +162,12 @@ mod tests {
                 }],
                 user_limit: None,
             },
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             organizations: Default::default(),
             policy_version: 1,
             scope_version: "v1".into(),
             as_of: Instant::from_unix_secs(1),
-        }
+        })
     }
 
     fn authorization() -> FundsAuthorization {
@@ -203,7 +205,7 @@ mod tests {
     #[test]
     fn ledger_duty_keeps_unallocated_candidates_without_any_source_scope() {
         let mut access = authorization();
-        access.context.scope.role_clauses.clear();
+        access.context.test_facts_mut().scope.role_clauses.clear();
         access.settlement = None;
         assert!(access.empty());
         access.ledger_read = true;

@@ -39,3 +39,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
 tracing = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }

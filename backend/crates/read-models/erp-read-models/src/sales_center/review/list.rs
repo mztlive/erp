@@ -49,7 +49,8 @@ impl SalesChangeReadService {
                         change_list_query(&access, &params, &actor, executor).await?;
                     let page = db.sales_change_orders().search_sales_change_orders(&filter, executor).await?;
                     let versions = db.sales_change_orders().query_change_versions(&filter, executor).await?;
-                    context.scope_version = change_scope_version(&context.scope_version, &versions)?;
+                    let version = change_scope_version(&context.scope_version, &versions)?;
+                    context.map_read_version(|_| version);
                     Ok(change_list_view(page, context, no_scope, &filter))
                 })
             })
@@ -157,7 +158,7 @@ fn change_list_view(
         .collect();
     SalesChangeListView {
         page: PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
-        scope_version: context.scope_version,
+        scope_version: context.scope_version.clone(),
         policy_version: context.policy_version,
         organization_version: context.organizations.version,
         as_of: context.as_of.as_utc().to_rfc3339(),

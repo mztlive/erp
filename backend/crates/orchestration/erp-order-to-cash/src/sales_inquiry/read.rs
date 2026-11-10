@@ -205,7 +205,7 @@ impl InquiryReadService {
         {
             return Err(scope_changed());
         }
-        Ok(list_view(items, page.total, params, access.scope_version, !access.scope.has_role_scope()))
+        Ok(list_view(items, page.total, params, access.scope_version.clone(), !access.scope.has_role_scope()))
     }
 
     /// 读取销售安全详情，工作报价不会进入响应。

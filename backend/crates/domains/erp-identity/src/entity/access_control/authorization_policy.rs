@@ -17,6 +17,17 @@ pub enum AuthorizationPolicy {
 }
 
 impl AuthorizationPolicy {
+    /// 管理维护和任务负责人编译需要完整成员事实。
+    /// # 参数
+    /// resource 为完成消费者登记的来源资源。
+    /// # 返回
+    /// 需要全员组织关系时为 true；普通业务只需要操作人关系。
+    /// # 错误
+    /// 不返回错误；不授予任何访问资格。
+    pub(crate) fn needs_all_members(resource: &str) -> bool {
+        matches!(resource, "org_unit" | "work_item")
+    }
+
     /// 取得已知业务动作采用的授权方式。
     /// # 参数
     /// `resource` 与 `action` 为已经由消费者目录校验的资源动作。

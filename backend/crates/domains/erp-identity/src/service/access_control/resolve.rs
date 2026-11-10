@@ -1,8 +1,9 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
 mod batch;
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::future::Future;
+use std::ops::Deref;
 
 use application_core::AuditActor;
 pub use batch::DataScopeBatch;
@@ -10,8 +11,6 @@ use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use self::batch::scope_version;
-use super::consumers::scope_registration;
 use crate::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::governance::root_scope;
@@ -20,21 +19,83 @@ use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::repository::prelude::*;
 use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
 
 /// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。
 pub struct AuthorizedDataScope {
+    pub(crate) facts: DataScopeFacts,
+}
+
+/// 授权解析器产生的只读事实；构造事实本身不授予授权资格。
+pub struct DataScopeFacts {
     pub user_id: String,
     pub resource: String,
     pub action: String,
     pub scope: ResolvedScope,
-    /// 已通过同角色完整动作权限证明的角色键；值不参与范围计算。
-    pub role_scopes: BTreeMap<String, ScopeClause>,
+    /// 已通过同角色完整动作权限证明的角色集合。
+    pub qualified_roles: BTreeSet<String>,
     pub organizations: OrganizationState,
     pub policy_version: u64,
     pub scope_version: String,
     pub as_of: Instant,
+}
+
+impl Deref for AuthorizedDataScope {
+    type Target = DataScopeFacts;
+
+    /// 只读访问本次解析事实；不提供可变解引用。
+    fn deref(&self) -> &Self::Target {
+        &self.facts
+    }
+}
+
+impl AuthorizedDataScope {
+    /// 消费授权结果，将只读事实移交给业务 Port 的范围转换。
+    /// # 参数
+    /// self 为当前解析结果。
+    /// # 返回
+    /// 拥有的数据事实；不能反向构造授权结果。
+    /// # 错误
+    /// 不返回错误。
+    pub fn into_facts(self) -> DataScopeFacts {
+        self.facts
+    }
+
+    /// 组合业务事实与当前读取版本，沿用消费方已有的版本编码合同。
+    /// # 参数
+    /// derive 接收当前版本，必须将原版本与业务事实一并纳入结果。
+    /// # 返回
+    /// 更新组合读取版本；身份、范围、策略版本和角色资格保持不变。
+    /// # 错误
+    /// 不返回错误；该版本用于读取复验，不能代替当前授权重验。
+    pub fn map_read_version(&mut self, derive: impl FnOnce(&str) -> String) {
+        self.facts.scope_version = derive(&self.facts.scope_version);
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl AuthorizedDataScope {
+    /// 为行为测试构造授权夹具，生产依赖不得启用 test-support。
+    /// # 参数
+    /// facts 为测试声明的身份与范围。
+    /// # 返回
+    /// 仅用于测试的授权上下文。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn test_fixture(facts: DataScopeFacts) -> Self {
+        Self { facts }
+    }
+
+    /// 调整行为测试夹具。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 夹具的可变事实。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn test_facts_mut(&mut self) -> &mut DataScopeFacts {
+        &mut self.facts
+    }
 }
 
 /// 身份域应用解析器，不持有其他业务域实体或数据库集合。
@@ -78,30 +139,7 @@ impl DataScopeService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<String> {
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(actor.id(), executor)
-            .await?
-            .filter(|account| account.is_active_backoffice() && account.kind == actor.kind())
-            .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
-        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &[]).await?;
-        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        let mut roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
-        roles.sort_by(|a, b| a.base.id.cmp(&b.base.id));
-        let state = OrganizationRepository::new(&self.db).state(executor).await?;
-        let active = active_relations(&state, Instant::now());
-        Ok(format!(
-            "{:x}",
-            md5::compute(format!(
-                "{}:{}:{}:{}:{:?}:{active:?}",
-                actor.id(),
-                account.base.version,
-                snapshot.policy_revision(),
-                state.version,
-                roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>()
-            ))
-        ))
+        self.batch(actor, &[], executor).authorization_version().await
     }
 
     /// 绑定身份数据库及现有 RBAC 实例。
@@ -197,53 +235,14 @@ impl DataScopeService {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        let target = (entry_permission.resource(), entry_permission.action());
-        let source = (source_permission.resource(), source_permission.action());
-        let (resource, action) = target;
-        ensure_resource(resource, action)?;
-        scope_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
         required.push(entry_permission.clone());
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(actor.id(), executor)
-            .await?
-            .filter(|a| a.is_active_backoffice() && a.kind == actor.kind())
-            .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
-        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        let role_ids = snapshot.granting_role_ids_for_all(&required);
-        let roles = self.db.roles().enabled_roles(&role_ids, executor).await?;
-        if roles.is_empty() {
-            return Err(Error::Forbidden(snapshot.denial_message(&required)));
-        }
-        let as_of = Instant::now();
-        let state = self.scope_organizations(actor.id(), source.0, as_of, executor).await?;
-        let (scope, role_scopes) = self.resolved(actor.id(), &roles, source, &state, as_of, executor).await?;
-        let scope_version = scope_version(
-            actor.id(),
-            target,
-            source,
-            (account.base.version, snapshot.policy_revision()),
-            &roles,
-            &state,
-            &scope,
-        );
-        Ok(AuthorizedDataScope {
-            user_id: actor.id().into(),
-            resource: resource.into(),
-            action: action.into(),
-            scope,
-            role_scopes,
-            organizations: state,
-            policy_version: snapshot.policy_revision(),
-            scope_version,
-            as_of,
-        })
+        self.batch(actor, &required, executor)
+            .resolve_boundary(entry_permission, source_permission, permissions)
+            .await
     }
 
-    /// 目录只装载有界组织树及操作人关系，其他资源保留既有组织事实合同。
+    /// 管理及工作项需要全员事实，其他授权只装载组织树及操作人关系。
     async fn scope_organizations(
         &self,
         actor_id: &str,
@@ -252,17 +251,10 @@ impl DataScopeService {
         executor: &mut dyn Executor,
     ) -> Result<OrganizationState> {
         let repository = OrganizationRepository::new(&self.db);
-        if matches!(
-            resource,
-            "sales_person"
-                | "procurement_person"
-                | "business_person"
-                | "person_query_qualification"
-                | "warehouse"
-        ) {
-            repository.directory_state(actor_id, at, executor).await
-        } else {
+        if AuthorizationPolicy::needs_all_members(resource) {
             Ok(repository.state(executor).await?)
+        } else {
+            repository.directory_state(actor_id, at, executor).await
         }
     }
 
@@ -275,11 +267,10 @@ impl DataScopeService {
         state: &OrganizationState,
         at: Instant,
         executor: &mut dyn Executor,
-    ) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
+    ) -> Result<(ResolvedScope, BTreeSet<String>)> {
         let (resource, action) = resource_action;
         let registration = super::consumers::registration(resource, action)?;
-        let qualifications =
-            roles.iter().map(|role| (role.base.id.clone(), ScopeClause::default())).collect();
+        let qualifications = roles.iter().map(|role| role.base.id.clone()).collect();
         let policy = AuthorizationPolicy::for_action(resource, action)?;
         let scope = resolve_policy_scope(policy, roles, async {
             state.own_org(user, at)?;
@@ -369,6 +360,40 @@ mod tests {
     use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgValidity};
     use crate::entity::role::{ROOT_ROLE_ID, RoleData};
     use crate::service::access_control::consumers::registration;
+
+    /// 绑定业务事实只改变读取版本，不扩大身份、角色资格或原始范围。
+    #[test]
+    fn business_versions_preserve_authorization_evidence() {
+        let context = |version: &str| {
+            AuthorizedDataScope::test_fixture(DataScopeFacts {
+                user_id: "alice".into(),
+                resource: "sales_order".into(),
+                action: "list".into(),
+                scope: PersonDataScope::denied(),
+                qualified_roles: BTreeSet::from(["sales".into()]),
+                organizations: OrganizationState::default(),
+                policy_version: 3,
+                scope_version: version.into(),
+                as_of: Instant::from_unix_secs(10),
+            })
+        };
+        let mut first = context("identity-v1");
+        first.map_read_version(|base| format!("{base}:business-v1"));
+        let mut replay = context("identity-v1");
+        replay.map_read_version(|base| format!("{base}:business-v1"));
+        assert_eq!(first.scope_version, replay.scope_version);
+        let mut changed = context("identity-v2");
+        changed.map_read_version(|base| format!("{base}:business-v1"));
+        assert_ne!(first.scope_version, changed.scope_version);
+        replay.map_read_version(|base| format!("{base}:business-v2"));
+        assert_ne!(first.scope_version, replay.scope_version);
+        assert_eq!(first.user_id, "alice");
+        assert_eq!(first.resource, "sales_order");
+        assert_eq!(first.action, "list");
+        assert_eq!(first.policy_version, 3);
+        assert_eq!(first.qualified_roles, BTreeSet::from(["sales".into()]));
+        assert_eq!(first.scope, PersonDataScope::denied());
+    }
 
     /// 岗位共享不读取旧的撤权、本人或部门配置，且不会变成销售授权。
     #[tokio::test]

@@ -1830,7 +1830,7 @@
     },
     {
       "path": "crates/domains/erp-identity/src/service/iam/rbac/command.rs",
-      "function": "update_role_name",
+      "function": "update_role_attributes",
       "policy": "Audited",
       "stage": "SpecialLifecycle",
       "boundaries": [

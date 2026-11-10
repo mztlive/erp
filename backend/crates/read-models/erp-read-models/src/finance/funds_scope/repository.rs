@@ -19,7 +19,7 @@ pub(super) use source::{linked_condition_document, source_scope_document, source
 pub(super) mod tests {
     use erp_core::common::time::Instant;
     use erp_identity::entity::access_control::ResolvedScope;
-    use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+    use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeFacts};
 
     use super::super::FundsAuthorization;
 
@@ -31,17 +31,17 @@ pub(super) mod tests {
             settlement: None,
             purchase_scope: None,
             no_scope: true,
-            context: AuthorizedDataScope {
+            context: AuthorizedDataScope::test_fixture(DataScopeFacts {
                 user_id: "actor".into(),
                 resource: "invoice".into(),
                 action: "list".into(),
                 scope: ResolvedScope { role_clauses: Vec::new(), user_limit: None },
-                role_scopes: Default::default(),
+                qualified_roles: Default::default(),
                 organizations: Default::default(),
                 policy_version: 1,
                 scope_version: "scope".into(),
                 as_of: Instant::from_unix_secs(1),
-            },
+            }),
         }
     }
 }

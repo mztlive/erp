@@ -85,7 +85,7 @@ impl ExpenseSourceReadService {
             .resolve_source_scope(actor, &entry_permission, &source_permission, executor)
             .await?;
         let scope = sales_scope(&access, actor.id(), &[], Vec::new());
-        Ok((access.scope_version, scope))
+        Ok((access.scope_version.clone(), scope))
     }
 
     /// 分页搜索可追加费用的销售单摘要。

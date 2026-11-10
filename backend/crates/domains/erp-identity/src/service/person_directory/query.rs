@@ -138,11 +138,11 @@ async fn authorize(
         .resolve(actor, category.resource(), "list", executor)
         .await?;
     Ok(AuthorizedDirectory {
-        scope: resolved.scope,
-        organizations: resolved.organizations,
-        policy_version: resolved.policy_version,
-        scope_version: resolved.scope_version,
-        as_of: resolved.as_of,
+        scope: resolved.facts.scope,
+        organizations: resolved.facts.organizations,
+        policy_version: resolved.facts.policy_version,
+        scope_version: resolved.facts.scope_version,
+        as_of: resolved.facts.as_of,
         actor_id: actor.id().to_string(),
     })
 }

@@ -157,7 +157,7 @@ impl Role {
     /// # 错误
     /// 系统角色属于内建安全边界，禁止删除时返回业务错误。
     pub fn ensure_deletable(&self) -> Result<()> {
-        if self.system {
+        if self.system || self.base.id == ROOT_ROLE_ID {
             return Err(Error::from("系统角色不能删除"));
         }
         Ok(())
@@ -174,7 +174,7 @@ impl Role {
     /// # 错误
     /// 系统角色属于内建安全边界，禁止修改时返回业务错误。
     pub fn ensure_mutable(&self) -> Result<()> {
-        if self.system {
+        if self.system || self.base.id == ROOT_ROLE_ID {
             return Err(Error::from("系统角色不能修改"));
         }
         Ok(())
@@ -191,7 +191,7 @@ impl Role {
     /// # 错误
     /// 系统角色或已停用角色不能分配时返回业务错误。
     pub fn ensure_assignable(&self) -> Result<()> {
-        if self.system {
+        if self.system || self.base.id == ROOT_ROLE_ID {
             return Err(Error::from("系统角色不能通过普通接口分配"));
         }
         if self.disabled {
@@ -223,7 +223,16 @@ impl Role {
 
 #[cfg(test)]
 mod tests {
-    use super::{Role, RoleData, RoleUpdate};
+    use super::{ROOT_ROLE_ID, Role, RoleData, RoleUpdate};
+
+    #[test]
+    fn reserved_root_identity_remains_protected_without_system_flag() {
+        let role = Role::new(ROOT_ROLE_ID.into(), RoleData::new("root")).unwrap();
+        assert!(!role.system);
+        assert!(role.ensure_assignable().is_err());
+        assert!(role.ensure_mutable().is_err());
+        assert!(role.ensure_deletable().is_err());
+    }
 
     #[test]
     fn constructor_builds_non_system_data_by_default() {

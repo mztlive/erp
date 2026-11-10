@@ -2,13 +2,13 @@
 use application_core::AuditActor;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
-use super::ResourceAccessService;
+use super::{GrantEventService, ResourceGrantService};
 use crate::Result;
 use crate::entity::resource_access::event::GrantEvent;
 use crate::entity::resource_access::{GrantSource, SourceKey};
 use crate::repository::resource_grants::queue::GrantQueue;
 pub use crate::repository::resource_grants::queue::{GrantQueueHealth, GrantRecompute, GrantRule};
-impl ResourceAccessService {
+impl ResourceGrantService {
     /// 管理员在同一事务校验资格并重排一页正式事件。
     /// # 参数
     /// actor 为管理员，selection 为维护范围，after 为排他游标，now 为当前秒数。
@@ -38,7 +38,9 @@ impl ResourceAccessService {
             })
             .await
     }
+}
 
+impl GrantEventService {
     /// 原子领取到期事件或回收过期租约。
     /// # 参数
     /// owner 为每次领取唯一令牌，now 为秒级时间。
@@ -116,7 +118,7 @@ impl ResourceAccessService {
     }
 }
 
-impl ResourceAccessService {
+impl GrantEventService {
     /// 取得并校验正式事件的当前状态。
     /// # 参数
     /// expected 为已校验的业务事件，executor 为调用方执行器。
@@ -133,7 +135,7 @@ impl ResourceAccessService {
     }
 }
 
-impl ResourceAccessService {
+impl GrantEventService {
     /// 精确读取一个来源的正式事件，供业务入口核对授权处理状态。
     /// # 参数
     /// source 为服务端确定的来源身份；executor 为请求原执行器。

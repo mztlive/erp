@@ -73,7 +73,7 @@ async fn manage_target(
     executor: &mut dyn Executor,
 ) -> Result<Option<PersonQueryQualification>> {
     let mut scope = access.resolve(actor, "person_query_qualification", "manage", executor).await?;
-    scope.organizations.memberships = OrganizationRepository::new(db)
+    scope.facts.organizations.memberships = OrganizationRepository::new(db)
         .directory_memberships(Some(&[account_id.to_owned()]), None, scope.as_of, executor)
         .await?;
     let org = scope.organizations.own_org(account_id, scope.as_of)?;

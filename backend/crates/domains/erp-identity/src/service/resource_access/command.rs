@@ -1,17 +1,16 @@
 use application_core::AuditActor;
-use entity_core::BaseModel;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use super::ResourceAccessService;
+use super::ResourceGrantService;
 use crate::entity::resource_access::event::{GrantEvent, GrantEventEvidence};
 use crate::entity::resource_access::query::GrantSourcePage;
-use crate::entity::resource_access::{GrantSource, ResourceGrant, SourceKey, SourceUpdate};
+use crate::entity::resource_access::{GrantSource, SourceKey, SourceUpdate};
 use crate::repository::resource_grants;
 use crate::service::access_control::resolve::DataScopeService;
 use crate::{AccessControlExt, Error, Permission, Result};
 
-impl ResourceAccessService {
+impl ResourceGrantService {
     /// 管理员按稳定来源授予指定记录；重放不写库。
     /// # 参数
     /// actor 为管理员；update 的 rule 必须为 manual，business_id 为稳定命令号。
@@ -118,21 +117,6 @@ impl ResourceAccessService {
         self.authorize_manager(actor, executor).await?;
         resource_grants::for_recipient(&self.db, recipient, after, executor).await
     }
-    /// 在开票审批通过或审批节点正式分配事务追加事件；同键异载荷拒绝。
-    /// # 参数
-    /// evidence 来自对应业务事务的正式事实；executor 为相同事务执行器。
-    /// # 返回
-    /// 新事件为 true；完全相同重放为 false。
-    /// # 错误
-    /// 无事务、证据不完整、幂等冲突或数据库失败拒绝。
-    pub async fn append_event(
-        &self,
-        evidence: GrantEventEvidence,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        append_event(&self.db, evidence, executor).await
-    }
-
     /// 校验读取授权的维护资格。
     /// # 参数
     /// actor 为当前管理员，executor 为维护事务。
@@ -182,53 +166,11 @@ impl ResourceAccessService {
         } else {
             repo.update(&mut source, executor).await?;
         }
-        self.sync_rows(&source, executor).await?;
+        resource_grants::sync_rows(&self.db, &source, executor).await?;
         affected.extend(source.resources());
         resource_grants::advance(&self.db, &source.key.recipient, &affected, executor).await?;
         resource_grants::audit_source(&self.db, &source, executor).await?;
         Ok(source)
-    }
-    async fn sync_rows(&self, source: &GrantSource, executor: &mut dyn Executor) -> Result<()> {
-        let repo = resource_grants::grants(&self.db);
-        self.refresh_rows(source, executor).await?;
-        for target in &source.targets {
-            let id = resource_grants::row_id(&source.base.id, target.resource, &target.id)?;
-            if repo.find_by_id(&id, executor).await?.is_some() {
-                continue;
-            }
-            let row = ResourceGrant {
-                base: BaseModel::new(id),
-                recipient: source.key.recipient.clone(),
-                source_id: source.base.id.clone(),
-                source_version: source.base.version,
-                resource: target.resource,
-                resource_id: target.id.clone(),
-                action: "read".into(),
-                active: true,
-            };
-            repo.create(&row, executor).await?;
-        }
-        Ok(())
-    }
-    /// 以来源主键游标逐页同步历史行，内存只保留当前页。
-    async fn refresh_rows(&self, source: &GrantSource, executor: &mut dyn Executor) -> Result<()> {
-        let repo = resource_grants::grants(&self.db);
-        let mut after = None;
-        loop {
-            let mut rows =
-                resource_grants::source_rows(&self.db, &source.base.id, after.as_deref(), executor).await?;
-            let Some(last) = rows.last() else {
-                break;
-            };
-            after = Some(last.base.id.clone());
-            for row in &mut rows {
-                row.active =
-                    source.targets.iter().any(|t| t.resource == row.resource && t.id == row.resource_id);
-                row.source_version = source.base.version;
-                repo.update(row, executor).await?;
-            }
-        }
-        Ok(())
     }
 }
 fn require_transaction(executor: &mut dyn Executor) -> Result<()> {

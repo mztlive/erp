@@ -163,6 +163,7 @@ fn ensure_selection_resource(resource: &str) -> erp_sales::Result<()> {
 fn map_access(
     access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
 ) -> erp_sales::Result<SelectionResolvedScope> {
+    let access = access.into_facts();
     Ok(SelectionResolvedScope {
         user_id: access.user_id,
         resource: access.resource,

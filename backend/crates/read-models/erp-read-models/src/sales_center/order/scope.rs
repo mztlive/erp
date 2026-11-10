@@ -128,7 +128,7 @@ impl SalesOrderReadService {
                         .await?;
                     let mut fingerprint = DefaultHasher::new();
                     versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+                    context.map_read_version(|base| format!("{base}:{:x}", fingerprint.finish()));
                     let no_scope = scope.is_empty();
                     Ok(SalesSnapshot { no_scope, page, context })
                 })

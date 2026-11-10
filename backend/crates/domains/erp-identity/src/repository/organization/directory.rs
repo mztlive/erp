@@ -43,6 +43,17 @@ impl OrganizationRepository<'_> {
         .await
     }
 
+    /// 读取有界组织树，供路径启用检查使用。
+    /// # 参数
+    /// executor 为调用方执行器。
+    /// # 返回
+    /// 当前未删除组织单元，不读取成员或管理关系。
+    /// # 错误
+    /// 超过组织上限或查询失败时拒绝。
+    pub(crate) async fn units(&self, executor: &mut dyn Executor) -> Result<Vec<OrgUnit>> {
+        bounded::<OrgUnit>(self.db, ORG_UNITS, doc! {}, executor).await
+    }
+
     /// 读取目录授权所需的组织树和操作人当前关系。
     /// # 参数
     /// `actor_id` 为操作人，`at` 为同一授权时点，`executor` 为调用方事务。
@@ -58,7 +69,7 @@ impl OrganizationRepository<'_> {
     ) -> Result<OrganizationState> {
         Ok(OrganizationState {
             version: self.revision(executor).await?.map_or(0, |row| row.revision),
-            units: bounded::<OrgUnit>(self.db, ORG_UNITS, doc! {}, executor).await?,
+            units: self.units(executor).await?,
             memberships: self.directory_memberships(Some(&[actor_id.to_owned()]), None, at, executor).await?,
             management: Vec::new(),
         })

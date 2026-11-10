@@ -365,63 +365,10 @@ pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count
 /// # 错误
 /// 任一角色是系统角色或已停用时返回 `Forbidden`。
 pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
-    roles.iter().try_for_each(ensure_role_delegable)
-}
-
-/// 复用单个角色的可分配规则，拒绝系统或已停用角色。
-fn ensure_role_delegable(role: &Role) -> Result<()> {
-    if !role_is_assignable(role) {
-        return Err(Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".to_string()));
-    }
-    Ok(())
-}
-
-/// 判断角色能否经普通管理入口分配。
-///
-/// # 参数
-/// * `role` - 待判断角色。
-///
-/// # 返回
-/// 不是 root，且领域规则允许分配时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn role_is_assignable(role: &Role) -> bool {
-    role.base.id != ROOT_ROLE_ID && role.ensure_assignable().is_ok()
-}
-
-/// 拒绝修改 root 或其他不可变角色。
-///
-/// # 参数
-/// * `role` - 待修改角色。
-///
-/// # 返回
-/// 角色允许修改时无返回值。
-///
-/// # 错误
-/// root 或领域规则禁止修改时返回 `Forbidden`。
-pub(super) fn ensure_role_mutable(role: &Role) -> Result<()> {
-    if role.base.id == ROOT_ROLE_ID || role.ensure_mutable().is_err() {
-        return Err(Error::Forbidden("系统角色不能修改".to_string()));
-    }
-    Ok(())
-}
-
-/// 拒绝删除 root 或其他不可删除角色。
-///
-/// # 参数
-/// * `role` - 待删除角色。
-///
-/// # 返回
-/// 角色允许删除时无返回值。
-///
-/// # 错误
-/// root 或领域规则禁止删除时返回 `Forbidden`。
-pub(super) fn ensure_role_deletable(role: &Role) -> Result<()> {
-    if role.base.id == ROOT_ROLE_ID || role.ensure_deletable().is_err() {
-        return Err(Error::Forbidden("系统角色不能删除".to_string()));
-    }
-    Ok(())
+    roles.iter().try_for_each(|role| {
+        role.ensure_assignable()
+            .map_err(|_| Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".into()))
+    })
 }
 
 /// 在同一 Enforcer 快照内要求目标账号现有权限和待分配角色权限都不超过操作人。
@@ -473,7 +420,10 @@ fn authorized_role_grant(
 ) -> Result<AuthorizedRoleGrant> {
     let requested_roles = role_ids.iter().filter_map(|role_id| roles.get(role_id)).collect::<Vec<_>>();
     ensure_all_roles_assignable(role_ids.len(), requested_roles.len())?;
-    requested_roles.into_iter().try_for_each(ensure_role_delegable)?;
+    requested_roles.into_iter().try_for_each(|role| {
+        role.ensure_assignable()
+            .map_err(|_| Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".into()))
+    })?;
     Ok(AuthorizedRoleGrant { role_ids, policy_revision })
 }
 

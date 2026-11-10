@@ -29,8 +29,8 @@ pub async fn ensure_org_enabled(
     let Some(org) = target_org.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(());
     };
-    let state = OrganizationRepository::new(db).state(executor).await?;
-    let tree = OrgTree::new(&state.units)?;
+    let units = OrganizationRepository::new(db).units(executor).await?;
+    let tree = OrgTree::new(&units)?;
     let path = tree.path(org)?;
     if path.iter().any(|node| !node.enabled) {
         return Err(Error::BusinessLogicError("目标业务组织已停用".into()));

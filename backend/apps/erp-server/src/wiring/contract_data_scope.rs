@@ -84,6 +84,7 @@ impl ContractDataScopePort for MongoContractDataScope {
             .resolve(actor, "contract", action, executor)
             .await
             .map_err(map_identity_error)?;
+        let access = access.into_facts();
         Ok(ContractResolvedScope {
             user_id: access.user_id,
             resource: access.resource,

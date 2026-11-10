@@ -9,6 +9,8 @@ use erp_core::common::time::Instant;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::entity::resource_access::ResourceKind;
 use erp_identity::repository::resource_grants::lookup_stages;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::service::resource_access::ResourceAccessService;
 use erp_identity::{Permission, SharedRbacService};
@@ -90,7 +92,7 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
         let mut mapped = map_access(access)?;
         if matches!(action, "list" | "detail") {
             let entry = Permission::parse(format!("purchase_order:{action}"))?;
-            let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
+            let query = ResourceAccessService::new(self.db.clone(), self.rbac.clone())
                 .resolve(actor, &entry, ResourceKind::PurchaseOrder, executor)
                 .await
                 .map_err(map_identity_error)?;
@@ -118,7 +120,7 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
         let mut mapped = map_access(access)?;
         if matches!(action, "list" | "detail") {
             let entry = Permission::parse(format!("purchase_order:{action}"))?;
-            let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
+            let query = ResourceAccessService::new(self.db.clone(), self.rbac.clone())
                 .resolve(actor, &entry, ResourceKind::PurchaseOrder, executor)
                 .await
                 .map_err(map_identity_error)?;
@@ -180,6 +182,7 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
 fn map_access(
     access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
 ) -> erp_procurement::Result<PurchaseResolvedScope> {
+    let access = access.into_facts();
     Ok(PurchaseResolvedScope {
         grant_lookup: Vec::new(),
         user_id: access.user_id,
@@ -406,17 +409,17 @@ mod equivalence_tests {
                 },
             };
             let scope = config.resolve(&state, &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
-            let access = map_access(AuthorizedDataScope {
+            let access = map_access(AuthorizedDataScope::test_fixture(DataScopeFacts {
                 user_id: "actor".into(),
                 resource: "purchase_order".into(),
                 action: "detail".into(),
                 scope,
-                role_scopes: Default::default(),
+                qualified_roles: Default::default(),
                 organizations: state.clone(),
                 policy_version: 1,
                 scope_version: "v1".into(),
                 as_of: Instant::now(),
-            })
+            }))
             .unwrap();
             let query = purchase_scope(&access, "actor", vec!["history".into()]);
             for (id, owned, department) in

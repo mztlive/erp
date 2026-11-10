@@ -10,7 +10,7 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::Executor;
 
-use super::{AuthorizedDataScope, DataScopeService, active_relations, ensure_resource};
+use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService, active_relations, ensure_resource};
 use crate::access_control::ResolvedScope;
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::organization_change::OrganizationState;
@@ -111,24 +111,6 @@ impl<'a> DataScopeBatch<'a> {
     /// 未声明权限、账号失效、策略漂移或持久化失败时拒绝。
     pub async fn has_permission(&mut self, permission: &Permission) -> Result<bool> {
         self.ensure_declared(slice::from_ref(permission))?;
-        if !self.reuse {
-            let snapshot = self
-                .service
-                .rbac
-                .role_permission_snapshot(self.actor.kind(), self.actor.id(), slice::from_ref(permission))
-                .await?;
-            self.service
-                .rbac
-                .ensure_policy_snapshot_with_executor(snapshot.policy_revision(), self.executor)
-                .await?;
-            let roles = self
-                .service
-                .db
-                .roles()
-                .enabled_roles(&snapshot.granting_role_ids(permission), self.executor)
-                .await?;
-            return Ok(!roles.is_empty());
-        }
         self.load_identity().await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let ids = facts.snapshot.granting_role_ids(permission);
@@ -145,9 +127,6 @@ impl<'a> DataScopeBatch<'a> {
     /// # 错误
     /// 账号失效、策略漂移或持久化失败时拒绝。
     pub async fn authorization_version(&mut self) -> Result<String> {
-        if !self.reuse {
-            return self.service.authorization_version(self.actor, self.executor).await;
-        }
         self.load_identity().await?;
         let ids = self.facts.as_ref().expect("公共身份事实已成功加载").snapshot.role_ids().to_vec();
         self.load_roles(&ids).await?;
@@ -189,7 +168,7 @@ impl<'a> DataScopeBatch<'a> {
     }
 
     /// 保留调用顺序和各动作失败顺序，只去重同阶段公共事实。
-    async fn resolve_boundary(
+    pub(super) async fn resolve_boundary(
         &mut self,
         entry_permission: &Permission,
         source_permission: &Permission,
@@ -202,12 +181,6 @@ impl<'a> DataScopeBatch<'a> {
         let mut required = permissions.to_vec();
         required.push(entry_permission.clone());
         self.ensure_declared(&required)?;
-        if !self.reuse {
-            return self
-                .service
-                .resolve_boundary(self.actor, entry_permission, source_permission, permissions, self.executor)
-                .await;
-        }
         self.load_identity().await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let ids = facts.snapshot.granting_role_ids_for_all(&required);
@@ -219,7 +192,7 @@ impl<'a> DataScopeBatch<'a> {
         }
         let at = facts.as_of;
         let state = self.scope_organizations(source.0, at).await?;
-        let (scope, role_scopes) =
+        let (scope, qualified_roles) =
             self.service.resolved(self.actor.id(), &roles, source, &state, at, self.executor).await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let scope_version = scope_version(
@@ -232,15 +205,17 @@ impl<'a> DataScopeBatch<'a> {
             &scope,
         );
         Ok(AuthorizedDataScope {
-            user_id: self.actor.id().into(),
-            resource: target.0.into(),
-            action: target.1.into(),
-            scope,
-            role_scopes,
-            organizations: state,
-            policy_version: facts.snapshot.policy_revision(),
-            scope_version,
-            as_of: at,
+            facts: DataScopeFacts {
+                user_id: self.actor.id().into(),
+                resource: target.0.into(),
+                action: target.1.into(),
+                scope,
+                qualified_roles,
+                organizations: state,
+                policy_version: facts.snapshot.policy_revision(),
+                scope_version,
+                as_of: at,
+            },
         })
     }
 
@@ -265,7 +240,7 @@ impl<'a> DataScopeBatch<'a> {
             .accounts()
             .find_by_id(self.actor.id(), self.executor)
             .await?
-            .filter(|account| account.is_active_backoffice() && account.kind == self.actor.kind())
+            .filter(|account| account.is_authorization_actor(self.actor.kind()))
             .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
         let snapshot = self
             .service
@@ -307,14 +282,7 @@ impl<'a> DataScopeBatch<'a> {
 
     /// 保留目录窄查询与普通业务完整组织事实的区别，不混用两种状态。
     async fn scope_organizations(&mut self, resource: &str, at: Instant) -> Result<OrganizationState> {
-        let directory = matches!(
-            resource,
-            "sales_person"
-                | "procurement_person"
-                | "business_person"
-                | "person_query_qualification"
-                | "warehouse"
-        );
+        let directory = !AuthorizationPolicy::needs_all_members(resource);
         let current = if directory { &self.directory } else { &self.organizations };
         if let Some(state) = current {
             return Ok(state.clone());

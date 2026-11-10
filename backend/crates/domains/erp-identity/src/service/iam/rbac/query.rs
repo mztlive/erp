@@ -5,7 +5,6 @@ use casbin::RbacApi;
 use erp_core::AccountKind;
 use persistence_core::NoTransaction;
 
-use super::authorize::role_is_assignable;
 use super::policy::{
     collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
     permissions_for_actor, role_ids_for_account, role_key,
@@ -72,7 +71,7 @@ impl RbacService {
             .list_enabled(&mut NoTransaction)
             .await?
             .into_iter()
-            .filter(role_is_assignable)
+            .filter(|role| role.ensure_assignable().is_ok())
             .collect::<Vec<_>>();
         self.assignable_role_items(roles, actor).await
     }

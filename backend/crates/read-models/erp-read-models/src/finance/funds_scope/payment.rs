@@ -268,7 +268,7 @@ impl FundsAccess {
                         .resolve_with_purchase(&actor, "supplier_payment", "list", &purchase_access, executor)
                         .await?;
                     if authorization.empty() {
-                        return Ok(authorization.context.scope_version);
+                        return Ok(authorization.context.scope_version.clone());
                     }
                     let condition = this.payment_condition(&query, executor).await?;
                     let filter = this.payment_filter(&query).await?;

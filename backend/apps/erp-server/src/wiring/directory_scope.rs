@@ -24,6 +24,7 @@ pub(super) fn directory_scope(
     access: AuthorizedDataScope,
     dimension: ScopeDimension,
 ) -> Result<DirectoryScope> {
+    let access = access.into_facts();
     let ids = allowed_ids(&access.scope, dimension);
     if ids.as_ref().is_some_and(|ids| ids.len() > DIRECTORY_LIMIT) {
         return Err(Error::ValidationError("目录授权目标超过10000项，请收窄范围".into()));

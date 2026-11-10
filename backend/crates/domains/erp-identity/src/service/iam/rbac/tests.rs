@@ -9,10 +9,9 @@ use persistence_core::Executor;
 use super::{
     RBAC_MODEL, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot, collect_role_ids,
     collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable, ensure_management_subset,
-    ensure_permission_subset, ensure_policy_snapshot_revision, ensure_role_deletable, ensure_role_mutable,
-    ensure_roles_delegable, ensure_target_roles_manageable, parse_policy_permissions, permission_pairs,
-    permissions_for_roles, policy_revisions_match, role_key, role_or_not_found, root_role_is_current,
-    stable_policy_revision,
+    ensure_permission_subset, ensure_policy_snapshot_revision, ensure_roles_delegable,
+    ensure_target_roles_manageable, parse_policy_permissions, permission_pairs, permissions_for_roles,
+    policy_revisions_match, role_key, role_or_not_found, root_role_is_current, stable_policy_revision,
 };
 use crate::entity::{Permission, PermissionSet, Role, RoleData};
 use crate::error::Error;
@@ -155,8 +154,8 @@ fn root_id_is_protected_even_when_legacy_metadata_is_not_system() {
     let root = Role::new(ROOT_ROLE_ID.to_string(), RoleData::new("错误元数据")).unwrap();
 
     assert!(matches!(ensure_roles_delegable(std::slice::from_ref(&root)), Err(Error::Forbidden(_))));
-    assert!(matches!(ensure_role_mutable(&root), Err(Error::Forbidden(_))));
-    assert!(matches!(ensure_role_deletable(&root), Err(Error::Forbidden(_))));
+    assert!(root.ensure_mutable().is_err());
+    assert!(root.ensure_deletable().is_err());
 }
 
 #[test]

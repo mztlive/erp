@@ -287,6 +287,17 @@ impl AccountCore {
         self.is_kind(AccountKind::Admin) && self.can_login()
     }
 
+    /// 检查本次授权身份是否为当前有效后台账号。
+    /// # 参数
+    /// kind 为已认证操作人的账号类型。
+    /// # 返回
+    /// 账号可用且类型一致时为 true。
+    /// # 错误
+    /// 不返回错误。
+    pub fn is_authorization_actor(&self, kind: AccountKind) -> bool {
+        !self.base.is_deleted() && self.is_active_backoffice() && self.kind == kind
+    }
+
     /// 应用名称更新。
     ///
     /// # 参数
@@ -418,6 +429,20 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn authorization_actor_rejects_inactive_deleted_and_wrong_kind() {
+        let mut account = sample_account(AccountKind::Admin, AccountStatus::Active);
+        assert!(account.is_authorization_actor(AccountKind::Admin));
+        assert!(!account.is_authorization_actor(AccountKind::Supplier));
+        for status in [AccountStatus::Suspended, AccountStatus::Archived] {
+            account.status = status;
+            assert!(!account.is_authorization_actor(AccountKind::Admin));
+        }
+        account.status = AccountStatus::Active;
+        account.base.deleted_at = 1;
+        assert!(!account.is_authorization_actor(AccountKind::Admin));
     }
 
     #[test]

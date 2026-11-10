@@ -219,7 +219,7 @@ impl FundsAccess {
                         .resolve_with_purchase(&actor, "payable_account", "list", &purchase_access, executor)
                         .await?;
                     if authorization.empty() {
-                        return Ok(authorization.context.scope_version);
+                        return Ok(authorization.context.scope_version.clone());
                     }
                     let condition = this.payable_account_condition(&query, executor).await?;
                     this.payable_database_snapshot(&query, &authorization, &condition, false, executor)

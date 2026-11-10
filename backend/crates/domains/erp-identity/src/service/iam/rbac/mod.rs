@@ -23,8 +23,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 
 #[cfg(test)]
 use authorize::{
-    ensure_all_roles_assignable, ensure_management_subset, ensure_permission_subset, ensure_role_deletable,
-    ensure_role_mutable, ensure_roles_delegable, ensure_target_roles_manageable,
+    ensure_all_roles_assignable, ensure_management_subset, ensure_permission_subset, ensure_roles_delegable,
+    ensure_target_roles_manageable,
 };
 use casbin::Enforcer;
 use erp_core::AccountKind;

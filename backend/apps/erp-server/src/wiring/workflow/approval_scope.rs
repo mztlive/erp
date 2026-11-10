@@ -1,13 +1,13 @@
 //! 工作流管理读取复用业务来源范围；该适配器不授予审批任务访问权。
 
-use std::slice;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
-use erp_identity::repository::prelude::*;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use erp_identity::{AccessControlExt, Error as IdentityError, Permission, SharedRbacService};
+use erp_identity::{Error as IdentityError, SharedRbacService};
 use erp_workflow::ports::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopePredicate};
 use erp_workflow::{Error, Result};
 use mongodb::Database;
@@ -33,7 +33,7 @@ impl WorkflowScopePredicate for Predicate {
         )
     }
     fn allows_role(&self, role: &str, object: &WorkflowScopeObject) -> bool {
-        self.0.role_scopes.contains_key(role) && self.allows(object)
+        self.0.qualified_roles.contains(role) && self.allows(object)
     }
 }
 
@@ -68,22 +68,7 @@ pub(super) async fn resolve(
         Err(IdentityError::Forbidden(_)) => return Ok(None),
         Err(error) => return Err(map_service(error.into())),
     };
-    let permission = Permission::parse(permission).map_err(|e| map_service(e.into()))?;
-    let snapshot = rbac
-        .role_permission_snapshot(actor.kind(), actor.id(), slice::from_ref(&permission))
-        .await
-        .map_err(|e| map_service(e.into()))?;
-    rbac.ensure_policy_snapshot_with_executor(scope.policy_version, executor)
-        .await
-        .map_err(|e| map_service(e.into()))?;
-    let role_ids = db
-        .roles()
-        .enabled_roles(&snapshot.granting_role_ids(&permission), executor)
-        .await
-        .map_err(|e| map_service(e.into()))?
-        .into_iter()
-        .map(|role| role.base.id)
-        .collect();
+    let role_ids = scope.qualified_roles.iter().cloned().collect();
     Ok(Some(WorkflowDataScope::new(
         scope.resource.clone(),
         scope.action.clone(),
@@ -106,11 +91,11 @@ mod tests {
 
     #[test]
     fn source_identity_dimensions_and_user_cap_do_not_cross_grant() {
-        let mut predicate = Predicate(AuthorizedDataScope {
+        let mut predicate = Predicate(AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "approver".into(),
             resource: "supplier_settlement_statement".into(),
             action: "detail".into(),
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             scope: ResolvedScope {
                 role_clauses: vec![ScopeClause {
                     org_unit_ids: BTreeSet::from(["same-id".into()]),
@@ -122,7 +107,7 @@ mod tests {
             policy_version: 1,
             scope_version: "v1".into(),
             as_of: Instant::from_unix_secs(10),
-        });
+        }));
         let order = WorkflowScopeObject {
             owner_user_id: "owner".into(),
             business_org_unit_id: Some("same-id".into()),
@@ -133,38 +118,36 @@ mod tests {
         assert!(predicate.allows(&order));
         assert!(!predicate.allows(&warehouse));
         assert!(!predicate.allows(&party));
-        predicate.0.scope.role_clauses[0] =
+        predicate.0.test_facts_mut().scope.role_clauses[0] =
             ScopeClause { warehouse_ids: BTreeSet::from(["same-id".into()]), ..Default::default() };
         assert!(predicate.allows(&warehouse));
         assert!(!predicate.allows(&order));
-        predicate.0.role_scopes.insert(
-            "finance".into(),
-            ScopeClause { warehouse_ids: BTreeSet::from(["other".into()]), ..Default::default() },
-        );
-        predicate.0.role_scopes.insert("other-role".into(), predicate.0.scope.role_clauses[0].clone());
+        predicate.0.test_facts_mut().qualified_roles.insert("finance".into());
+        predicate.0.test_facts_mut().qualified_roles.insert("other-role".into());
         assert!(predicate.allows_role("finance", &warehouse));
         assert!(!predicate.allows_role("missing-role", &warehouse));
         assert!(predicate.allows_role("other-role", &warehouse));
-        predicate.0.scope.user_limit = Some(ScopeClause::default());
+        predicate.0.test_facts_mut().scope.user_limit = Some(ScopeClause::default());
         assert!(!predicate.allows(&warehouse));
-        predicate.0.scope.role_clauses.clear();
-        predicate.0.scope.user_limit = Some(ScopeClause { company: true, ..Default::default() });
+        predicate.0.test_facts_mut().scope.role_clauses.clear();
+        predicate.0.test_facts_mut().scope.user_limit =
+            Some(ScopeClause { company: true, ..Default::default() });
         assert!(!predicate.allows(&warehouse));
     }
     #[test]
     fn settlement_review_uses_saved_business_org_without_preparer_membership() {
         let clause = ScopeClause { org_unit_ids: BTreeSet::from(["saved-org".into()]), ..Default::default() };
-        let mut predicate = Predicate(AuthorizedDataScope {
+        let mut predicate = Predicate(AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "reviewer".into(),
             resource: "supplier_settlement_statement".into(),
             action: "detail".into(),
-            role_scopes: [("finance".into(), clause.clone())].into(),
+            qualified_roles: ["finance".into()].into(),
             scope: ResolvedScope { role_clauses: vec![clause], user_limit: None },
             organizations: Default::default(),
             policy_version: 1,
             scope_version: "v1".into(),
             as_of: Instant::from_unix_secs(10),
-        });
+        }));
         // 经办人已无有效成员关系，保存的业务组织仍是判断依据。
         let mut statement = WorkflowScopeObject {
             owner_user_id: "former-preparer".into(),
@@ -177,7 +160,7 @@ mod tests {
         assert!(!predicate.allows(&statement));
         assert!(!predicate.allows_role("finance", &statement));
         statement.business_org_unit_id = Some("saved-org".into());
-        predicate.0.scope.user_limit = Some(ScopeClause::default());
+        predicate.0.test_facts_mut().scope.user_limit = Some(ScopeClause::default());
         assert!(!predicate.allows_role("finance", &statement));
     }
 }

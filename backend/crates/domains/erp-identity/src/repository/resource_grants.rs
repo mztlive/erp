@@ -2,6 +2,7 @@
 mod query;
 pub mod queue;
 mod revision;
+mod rows;
 use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -9,6 +10,7 @@ use persistence_core::{Error as PersistenceError, Executor, Repository, persiste
 pub(crate) use query::target_ids;
 pub use query::{lookup_stages, read_stages};
 pub(crate) use revision::{advance, revision};
+pub(crate) use rows::sync_rows;
 use serde::de::DeserializeOwned;
 
 use crate::entity::resource_access::event::GrantEvent;

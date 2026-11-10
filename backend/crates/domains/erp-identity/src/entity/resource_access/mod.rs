@@ -3,3 +3,5 @@ pub mod event;
 pub mod query;
 pub mod source;
 pub use source::{GrantSource, GrantTarget, ResourceGrant, ResourceKind, SourceKey, SourceUpdate};
+
+pub(crate) mod rows;

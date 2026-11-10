@@ -14,6 +14,8 @@ use erp_identity::access_control::ResolvedScope;
 #[cfg(test)]
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::service::access_control::resolve::AuthorizedDataScope;
+#[cfg(test)]
+use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_procurement::PurchaseAccess;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_sales::repository::SalesOrderExt;
@@ -714,17 +716,17 @@ mod tests {
 
     #[test]
     pub(super) fn scope_versions_bind_authorization_and_linked_documents() {
-        let context = AuthorizedDataScope {
+        let context = AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "u1".into(),
             resource: "customer_receipt".into(),
             action: "list".into(),
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             organizations: organization_version(7),
             policy_version: 1,
             scope_version: "base".into(),
             as_of: erp_core::common::time::Instant::from_unix_secs(0),
-        };
+        });
         let first = scope_version(&context, &["so-1:3".to_string()]);
         let second = scope_version(&context, &["so-1:4".to_string()]);
         assert_ne!(first, second);

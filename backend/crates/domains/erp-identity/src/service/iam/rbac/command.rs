@@ -3,7 +3,6 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use persistence_core::NoTransaction;
 
-use super::authorize::{ensure_role_deletable, ensure_role_mutable};
 use super::policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found};
 use super::{AuthorizedRoleUpdate, RbacService};
 use crate::AccessControlExt;
@@ -58,50 +57,27 @@ impl RbacService {
         actor: AuditActor,
     ) -> Result<Role> {
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
-        ensure_role_mutable(&role)?;
+        role.ensure_mutable().map_err(|_| Error::Forbidden("系统角色不能修改".into()))?;
         let authorized =
             self.authorize_role_update(&actor, role.base.id.as_str(), params.permissions).await?;
         let audit = self.audit.resource_log(actor, "role.update", "role", role.base.id.clone())?;
         let AuthorizedRoleUpdate { permissions, policy_revision } = authorized;
 
         let update = RoleUpdate { name: params.name, workbenches: params.workbenches, ..Default::default() };
-        if update.workbenches.is_some() {
-            return match permissions {
-                Some(permissions) => {
-                    self.update_role_with_permissions(role, update, permissions, policy_revision, audit).await
-                },
-                None => self.update_role_name(role, update, audit, policy_revision).await,
-            };
-        }
-        match (update.name, permissions) {
-            (None, None) => self.audit_role_update(role, audit, policy_revision).await,
-            (Some(name), None) => {
-                self.update_role_name(
-                    role,
-                    RoleUpdate { name: Some(name), ..Default::default() },
-                    audit,
-                    policy_revision,
-                )
-                .await
-            },
-            (None, Some(permissions)) => {
+        match (update.name.is_some() || update.workbenches.is_some(), permissions) {
+            (false, None) => self.audit_role_update(role, audit, policy_revision).await,
+            (true, None) => self.update_role_attributes(role, update, audit, policy_revision).await,
+            (false, Some(permissions)) => {
                 self.replace_role_permissions(
-                    role.base.id.as_str(),
+                    &role.base.id,
                     permissions.into_vec(),
                     Some(audit),
                     Some(policy_revision),
                 )
                 .await
             },
-            (Some(name), Some(permissions)) => {
-                self.update_role_with_permissions(
-                    role,
-                    RoleUpdate { name: Some(name), ..Default::default() },
-                    permissions,
-                    policy_revision,
-                    audit,
-                )
-                .await
+            (true, Some(permissions)) => {
+                self.update_role_with_permissions(role, update, permissions, policy_revision, audit).await
             },
         }
     }
@@ -119,7 +95,7 @@ impl RbacService {
     /// 当角色不存在、角色为系统角色或删除失败时返回错误。
     pub async fn delete_role(self: &Arc<Self>, id: &str, actor: AuditActor) -> Result<()> {
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
-        ensure_role_deletable(&role)?;
+        role.ensure_deletable().map_err(|_| Error::Forbidden("系统角色不能删除".into()))?;
         let authorized = self.authorize_role_update(&actor, role.base.id.as_str(), None).await?;
         let audit = self.audit.resource_log(actor, "role.delete", "role", role.base.id.clone())?;
 
@@ -139,8 +115,8 @@ impl RbacService {
         .await
     }
 
-    /// 在同一事务中更新角色名称并写入审计日志。
-    async fn update_role_name(
+    /// 在同一事务中更新角色属性并写入审计日志。
+    async fn update_role_attributes(
         self: &Arc<Self>,
         mut role: Role,
         update: RoleUpdate,

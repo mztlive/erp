@@ -313,7 +313,7 @@ impl FundsAccess {
                     let (authorization, snapshot) =
                         this.allocation_projection(&query, &actor, &purchase_access, false, executor).await?;
                     if authorization.empty() {
-                        return Ok(authorization.context.scope_version);
+                        return Ok(authorization.context.scope_version.clone());
                     }
                     Ok(allocation_scope_version(&authorization, &snapshot.versions))
                 })

@@ -630,6 +630,7 @@ async fn open_approval_assignees(
 #[cfg(test)]
 mod tests {
     use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId};
+    use erp_identity::service::access_control::resolve::DataScopeFacts;
     use erp_sales::entity::sales_order::{
         BusinessType, CommercialStatus, OriginSystem, SalesOrder, SalesOrderData,
     };
@@ -734,7 +735,7 @@ mod tests {
         use erp_identity::service::access_control::resolve::AuthorizedDataScope;
         use erp_read_models::sales_center::access::SalesAccess;
         use erp_sales::repository::sales_order::scope::SalesReadScope;
-        let mut access = AuthorizedDataScope {
+        let mut access = AuthorizedDataScope::test_fixture(DataScopeFacts {
             user_id: "recipient".into(),
             resource: "sales_order".into(),
             action: "detail".into(),
@@ -742,18 +743,18 @@ mod tests {
                 role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
                 user_limit: None,
             },
-            role_scopes: Default::default(),
+            qualified_roles: Default::default(),
             organizations: Default::default(),
             policy_version: 1,
             scope_version: "v".into(),
             as_of: Instant::from_unix_secs(1),
-        };
+        });
         let scope = SalesReadScope::default();
         let mut order = sales_order_owned_by("old-owner", "org-a");
         assert!(!SalesAccess::allows(&access, &scope, &order).unwrap());
         order.handover("recipient".into(), None, "operator").unwrap();
         assert!(SalesAccess::allows(&access, &scope, &order).unwrap());
-        access.scope.user_limit =
+        access.test_facts_mut().scope.user_limit =
             Some(ScopeClause { org_unit_ids: ["org-b".into()].into(), ..Default::default() });
         assert!(!SalesAccess::allows(&access, &scope, &order).unwrap());
         order.handover("recipient".into(), Some("org-b".into()), "operator").unwrap();

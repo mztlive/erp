@@ -139,6 +139,7 @@ fn ensure_integration_resource(resource: &str) -> erp_integration::Result<()> {
 fn map_access(
     access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
 ) -> erp_integration::Result<IntegrationResolvedScope> {
+    let access = access.into_facts();
     Ok(IntegrationResolvedScope {
         user_id: access.user_id,
         resource: access.resource,

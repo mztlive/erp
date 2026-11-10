@@ -78,7 +78,7 @@ impl FundsAccess {
         if ids.is_empty() {
             return Err(Error::Forbidden("操作缺少真实销售来源".into()));
         }
-        let service = ResourceAccessService::reader(self.db.clone(), self.rbac.clone());
+        let service = ResourceAccessService::new(self.db.clone(), self.rbac.clone());
         let entry = Permission::parse(permission)?;
         for batch in ids.chunks(500) {
             let targets = ResourceTargets::new(&batch.iter().map(String::as_str).collect::<Vec<_>>())?;
