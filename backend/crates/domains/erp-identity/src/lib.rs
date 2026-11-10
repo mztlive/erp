@@ -21,9 +21,9 @@ pub use repository::authorization::{AuthorizedQuery, CompiledAccess};
 pub use repository::portal::{PortalBindingRepository, PortalBindingRepositoryExt, PortalIdentityExt};
 pub use repository::{
     AccessControlExt, AccountCoreRepository, AccountCoreRepositoryExt, AuditEventFilter,
-    AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES, DataScopeRepository,
-    DataScopeRepositoryExt, MongoCasbinAdapter, PermissionFilter, PermissionRepository,
-    PermissionRepositoryExt, RoleRepository, RoleRepositoryExt, UserRoleRepository, UserRoleRepositoryExt,
+    AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES, MongoCasbinAdapter,
+    PermissionFilter, PermissionRepository, PermissionRepositoryExt, RoleRepository, RoleRepositoryExt,
+    UserRoleRepository, UserRoleRepositoryExt,
 };
 pub use service::access_control::AccessControlService;
 pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
@@ -32,10 +32,9 @@ pub use service::authorization::{
 };
 pub use service::iam::{
     AccountProfile, AccountProfileService, AdminItem, AdminService, AuthorizedAccountManagement,
-    AuthorizedRoleGrant, BootstrapSuperAdminResult, CreateAdminParams, CreateRoleParams,
-    InitializeSuperAdminParams, InitializeSuperAdminResult, QualifiedPermissions, ROOT_ROLE_ID, RbacService,
-    ResetAdminPasswordParams, ResetAdminPasswordResult, RoleItem, RolePermissionSnapshot, SharedRbacService,
-    UpdateAdminParams, UpdateAdminRoleParams, UpdateRoleParams, ensure_root_role, shared_rbac_service,
-    subject,
+    AuthorizedRoleGrant, CreateAdminParams, CreateRoleParams, InitializeSuperAdminParams,
+    InitializeSuperAdminResult, QualifiedPermissions, ROOT_ROLE_ID, RbacService, ResetAdminPasswordParams,
+    ResetAdminPasswordResult, RoleItem, RolePermissionSnapshot, SharedRbacService, UpdateAdminParams,
+    UpdateAdminRoleParams, UpdateRoleParams, ensure_root_role, shared_rbac_service, subject,
 };
 pub use service::portal::{PortalIdentityService, PreparedPortalAccount, PreparedPortalPassword};

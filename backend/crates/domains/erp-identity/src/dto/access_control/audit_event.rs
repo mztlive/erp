@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::PageParams;
-use crate::entity::access_control::{AuditEvent, AuditEventResult};
+use crate::entity::access_control::AuditEventResult;
 use crate::error::Result;
 use crate::repository::AuditEventFilter;
 
@@ -43,30 +43,6 @@ pub struct AuditEventView {
     pub device_context: Option<String>,
     /// 创建时间（秒级时间戳，即事件发生时间）。
     pub created_at: u64,
-}
-
-impl From<AuditEvent> for AuditEventView {
-    /// 从实体构造响应视图。
-    fn from(event: AuditEvent) -> Self {
-        Self {
-            id: event.base.id,
-            actor_id: event.actor_id,
-            actor_label: event.actor_label,
-            actor_role: event.actor_role,
-            action_type: event.action_type,
-            object_type: event.object_type,
-            object_id: event.object_id,
-            object_label: event.object_label,
-            request_id: event.request_id,
-            trace_id: event.trace_id,
-            result: event.result,
-            changed_field_names: event.changed_field_names,
-            safe_digest: event.safe_digest,
-            source_ip: event.source_ip,
-            device_context: event.device_context,
-            created_at: event.base.created_at,
-        }
-    }
 }
 
 impl From<crate::repository::AuditEventRow> for AuditEventView {

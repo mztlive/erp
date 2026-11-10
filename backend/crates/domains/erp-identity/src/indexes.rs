@@ -1,7 +1,4 @@
-//! 域 D06 `access_control` 的索引声明：账号、角色、审计日志、Casbin 规则。
-//!
-//! P0 从 `indexes.rs` 整体迁入既有索引（accounts/roles/audit_logs/casbin），
-//! 职责不变；P2 追加 permission、user_role、data_scope、audit_event 的索引声明。
+//! 身份域账号、权限、人员范围、组织及审计事件的索引登记。
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
@@ -43,8 +40,6 @@ const ROLES: &str = "roles";
 const PERMISSIONS: &str = <mongodb::Database as AccessControlExt>::PERMISSIONS;
 /// `user_role` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
-/// `data_scope` 集合名（单一来源：`AccessControlExt` 关联常量）。
-const DATA_SCOPES: &str = <mongodb::Database as AccessControlExt>::DATA_SCOPES;
 /// `audit_event` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS;
 
@@ -55,7 +50,6 @@ const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS
 /// - `permission`：`(resource, action)` 全局唯一（定义目录身份），停用标记查询索引；
 /// - `user_role`：同一用户同一角色同时最多一条**未撤权**绑定（部分唯一索引，
 ///   理由与回滚方式见 `user_role_indexes` 注释）；按用户分列展示索引；
-/// - `data_scope`：同一主体同一范围类型唯一；范围类型查询索引；
 /// - `audit_event`：事实型审计留痕（§4.5.4），**不设 TTL**（长期保留），
 ///   按操作者、业务对象、请求追踪号与时间倒序查询索引。
 ///
@@ -102,26 +96,11 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, CASBIN_RULES, casbin_indexes()).await?;
     create_indexes(db, PERMISSIONS, permission_indexes()).await?;
     create_indexes(db, USER_ROLES, user_role_indexes()).await?;
-    create_indexes(db, DATA_SCOPES, data_scope_indexes()).await?;
-    remove_obsolete_scope_index(db).await?;
     create_indexes(db, AUDIT_EVENTS, audit_event_indexes()).await?;
     create_indexes(
         db,
         <mongodb::Database as AccessControlExt>::PERSON_QUERY_QUALIFICATIONS,
         person_query_qualification_indexes(),
-    )
-    .await?;
-    create_indexes(
-        db,
-        <Database as AccessControlExt>::PERSONAL_BUSINESS_GRANTS,
-        vec![
-            unique_index("uk_personal_business_grants_id", doc! { "id": 1 }),
-            named_index(
-                "idx_personal_grants_user_resource",
-                doc! { "user_id": 1, "resource": 1, "deleted_at": 1 },
-            ),
-            named_index("idx_personal_grants_role", doc! { "role_id": 1, "deleted_at": 1 }),
-        ],
     )
     .await?;
     ensure_resource_grants(db).await?;
@@ -234,22 +213,6 @@ fn user_role_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `data_scope` 的主体范围唯一约束与范围类型查询索引。
-///
-/// `(subject_type, subject_id, scope_type)` 是数据范围身份：同一主体同一范围
-/// 类型一条记录承载全部范围目标（W19 §5.1）；身份类字段全局唯一（与 accounts
-/// 处理一致），软删除后不释放身份。
-fn data_scope_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index("uk_data_scopes_id", doc! { "id": 1 }),
-        named_index("idx_data_scopes_scope_type", doc! { "scope_type": 1 }),
-        named_index(
-            "idx_data_scopes_subject_resource_action",
-            doc! { "subject_type": 1, "subject_id": 1, "resource": 1, "actions": 1, "enabled": 1, "deleted_at": 1 },
-        ),
-    ]
-}
-
 /// 返回 `audit_event` 的追加式审计查询索引。
 ///
 /// 审计事件是事实型留痕（§4.5.4，不可编辑、不可删除、**不设 TTL**，长期保留），
@@ -307,16 +270,7 @@ async fn ensure_organizations(db: &Database) -> Result<()> {
     .await
 }
 
-/// 移除阻止同主体按资源配置多条规则的旧索引；不回填或解释旧范围数据。
-async fn remove_obsolete_scope_index(db: &Database) -> Result<()> {
-    let collection = db.collection::<Document>(DATA_SCOPES);
-    if collection.list_index_names().await?.iter().any(|name| name == "uk_data_scopes_subject_scope") {
-        collection.drop_index("uk_data_scopes_subject_scope").await?;
-    }
-    Ok(())
-}
-
-/// 确保人员范围唯一键；迁移应用在事务前调用，预览不得调用。
+/// 确保当前人员范围的唯一键和查询索引。
 /// # 参数
 /// * `db` - 目标数据库。
 ///
@@ -440,8 +394,7 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        account_indexes, audit_event_indexes, casbin_indexes, data_scope_indexes, permission_indexes,
-        user_role_indexes,
+        account_indexes, audit_event_indexes, casbin_indexes, permission_indexes, user_role_indexes,
     };
 
     #[test]
@@ -504,17 +457,6 @@ mod tests {
             Some(doc! { "revoked_at": null })
         );
         assert!(indexes.iter().any(|index| { index.keys == doc! { "user_id": 1, "effective_from": -1 } }));
-    }
-
-    #[test]
-    fn data_scope_identity_is_unique_and_resource_rules_can_coexist() {
-        let indexes = data_scope_indexes();
-
-        assert!(indexes.iter().any(|index| {
-            index.options.as_ref().and_then(|options| options.name.as_deref()) == Some("uk_data_scopes_id")
-                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
-        }));
-        assert!(indexes.iter().any(|index| index.keys == doc! { "scope_type": 1 }));
     }
 
     #[test]

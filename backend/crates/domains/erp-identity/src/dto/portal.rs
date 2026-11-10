@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::AccountCore;
-use crate::entity::portal::{PortalActor, PortalBinding, PortalRole};
+use crate::entity::portal::{PortalBinding, PortalRole};
 
 /// 内部开通供应商实名账号的数据，不接收内部角色或组织。
 #[derive(Deserialize, Validate)]
@@ -82,22 +82,6 @@ impl PortalAccountView {
             active: account.kind == AccountKind::Supplier && account.can_login() && binding.active,
             account_version: account.base.version,
             binding_version: binding.base.version,
-        }
-    }
-}
-
-impl From<PortalActor> for PortalAccountView {
-    /// 将已验证身份映射为不含凭证的账号视图。
-    fn from(actor: PortalActor) -> Self {
-        Self {
-            account_id: actor.account_id,
-            account: actor.account,
-            name: actor.name,
-            supplier_id: actor.supplier_id,
-            role: actor.role,
-            active: true,
-            account_version: actor.account_version,
-            binding_version: actor.binding_version,
         }
     }
 }

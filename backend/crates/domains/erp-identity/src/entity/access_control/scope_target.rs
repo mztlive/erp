@@ -1,7 +1,7 @@
 //! 将持久化范围字段解析为不可混用的内部目标形态。
 use erp_core::{Error, Result};
 
-use super::data_scope::normalize_scope_targets;
+use super::scope_type::normalize_scope_targets;
 use super::{DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode};
 
 /// 已校验目标；各模式只携带适用字段，不改变持久化协议。
@@ -79,20 +79,6 @@ impl BoundScopeTarget {
                     ScopeDimension::Warehouse => ScopeTarget::Warehouses(ids),
                 }))
             },
-        }
-    }
-
-    /// 返回已验证范围的显式目标身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 静态目标切片，动态或隐式范围返回空切片。
-    /// # 错误
-    /// 不返回错误。
-    pub(crate) fn ids(&self) -> &[String] {
-        match self {
-            Self::Personal(target) => target.ids(),
-            Self::ManagedOrgs => &[],
         }
     }
 }

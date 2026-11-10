@@ -98,19 +98,6 @@
       "removal_condition": "保留人员数据范围政策修改的身份域事件；普通业务事件不得替代该授权及策略版本事务。"
     },
     {
-      "path": "crates/domains/erp-identity/src/service/access_control/person_scope_migration.rs",
-      "function": "migrate",
-      "operation": "audit_events.create",
-      "max_occurrences": 1,
-      "policy": "Audited",
-      "contract_items": [
-        "E02",
-        "V04",
-        "V14"
-      ],
-      "removal_condition": "保留身份域明确范围政策变更事件与其原策略事务；本次不执行真实数据操作。"
-    },
-    {
       "path": "crates/domains/erp-identity/src/service/access_control/policy_bundle/apply.rs",
       "function": "persist",
       "operation": "audit_events.create",

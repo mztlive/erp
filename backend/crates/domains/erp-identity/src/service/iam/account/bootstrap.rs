@@ -10,17 +10,6 @@ use crate::error::{Error, Result};
 use crate::repository::prelude::AccountCoreRepositoryExt;
 use crate::service::iam::ensure_root_role;
 
-/// 启动配置创建超级管理员的结果。
-///
-/// 已有账号时不改密码、状态或角色。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BootstrapSuperAdminResult {
-    /// 本次启动新建了超级管理员。
-    Created,
-    /// 账号已存在，初始密码未使用。
-    Unchanged,
-}
-
 /// 根据是否已有管理员账号决定启动时要不要创建。
 #[derive(Debug)]
 enum SuperAdminBootstrapPlan {
@@ -38,21 +27,18 @@ impl AdminService {
     /// * `params` - 账号、初始密码与名称
     ///
     /// # 返回
-    /// 返回本次是新建还是未改动已有账号。
+    /// 创建完成或已有账号无需改动时返回成功。
     ///
     /// # 错误
     /// 参数不合法、同名账号不是系统管理员，或创建过程中的非重复冲突失败时返回错误。
-    pub async fn bootstrap_super_admin_if_absent(
-        &self,
-        params: InitializeSuperAdminParams,
-    ) -> Result<BootstrapSuperAdminResult> {
+    pub async fn bootstrap_super_admin_if_absent(&self, params: InitializeSuperAdminParams) -> Result<()> {
         let (account, password, name) = params.into_validated_parts()?;
         ensure_root_role(&self.rbac).await?;
         let existing = self.load_account(&account).await?;
         match plan_super_admin_bootstrap(existing)? {
             SuperAdminBootstrapPlan::LeaveUnchanged => {
                 info!(account = account.as_str(), "超级管理员账号已存在，启动配置中的初始密码未使用");
-                return Ok(BootstrapSuperAdminResult::Unchanged);
+                return Ok(());
             },
             SuperAdminBootstrapPlan::Create => {},
         }
@@ -60,7 +46,7 @@ impl AdminService {
         match self.create_super_admin(account.clone(), password, name).await {
             Ok(admin) => {
                 info!(account = account.as_str(), admin_id = %admin.base.id, "已按启动配置创建超级管理员");
-                Ok(BootstrapSuperAdminResult::Created)
+                Ok(())
             },
             Err(error @ Error::ConflictError(_)) => {
                 let existing = self.load_account(&account).await?;
@@ -97,11 +83,11 @@ fn finish_bootstrap_create_conflict(
     existing_is_admin: Option<bool>,
     conflict: Error,
     account: &str,
-) -> Result<BootstrapSuperAdminResult> {
+) -> Result<()> {
     match plan_super_admin_bootstrap(existing_is_admin)? {
         SuperAdminBootstrapPlan::LeaveUnchanged => {
             info!(account, "超级管理员账号已由其他实例创建，启动配置中的初始密码未使用");
-            Ok(BootstrapSuperAdminResult::Unchanged)
+            Ok(())
         },
         SuperAdminBootstrapPlan::Create => Err(conflict),
     }
@@ -109,7 +95,7 @@ fn finish_bootstrap_create_conflict(
 
 #[cfg(test)]
 mod tests {
-    use super::{BootstrapSuperAdminResult, finish_bootstrap_create_conflict, plan_super_admin_bootstrap};
+    use super::{finish_bootstrap_create_conflict, plan_super_admin_bootstrap};
     use crate::error::Error;
 
     #[test]
@@ -132,10 +118,7 @@ mod tests {
     fn create_conflict_keeps_existing_admin_and_preserves_other_conflicts() {
         let conflict = Error::ConflictError("唯一索引冲突".to_string());
 
-        assert_eq!(
-            finish_bootstrap_create_conflict(Some(true), conflict, "admin").unwrap(),
-            BootstrapSuperAdminResult::Unchanged
-        );
+        assert!(finish_bootstrap_create_conflict(Some(true), conflict, "admin").is_ok());
 
         let conflict = Error::ConflictError("唯一索引冲突".to_string());
         let error = finish_bootstrap_create_conflict(None, conflict, "admin").unwrap_err();

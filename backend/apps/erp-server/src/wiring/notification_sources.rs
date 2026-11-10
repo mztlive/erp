@@ -51,8 +51,6 @@ pub(crate) fn sources(app: &Application) -> Vec<ChangeSource<RefreshTopic>> {
         db.user_roles().changes(Authorization),
         db.permissions().changes(Authorization),
         db.person_data_scopes().changes(Authorization),
-        db.personal_business_grants().changes(Authorization),
-        db.data_scopes().changes(Authorization),
         organization::changes(Authorization),
     ]
 }

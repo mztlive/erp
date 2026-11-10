@@ -1,5 +1,4 @@
 use std::fmt;
-use std::str::FromStr;
 
 use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
@@ -94,60 +93,6 @@ impl LoginAccount {
 impl AsRef<str> for LoginAccount {
     fn as_ref(&self) -> &str {
         self.as_str()
-    }
-}
-
-impl TryFrom<String> for LoginAccount {
-    type Error = Error;
-
-    /// 按 [`LoginAccount::new`] 校验并收编已拥有的字符串。
-    ///
-    /// # 参数
-    /// * `value` - 原始登录账号。
-    ///
-    /// # 返回
-    /// 成功时返回已去除首尾空白的登录账号。
-    ///
-    /// # 错误
-    /// 账号为空或字符数不在允许区间时返回 `Error::LogicError`。
-    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
-
-impl TryFrom<&str> for LoginAccount {
-    type Error = Error;
-
-    /// 按 [`LoginAccount::new`] 校验并复制字符串切片。
-    ///
-    /// # 参数
-    /// * `value` - 原始登录账号。
-    ///
-    /// # 返回
-    /// 成功时返回已去除首尾空白的登录账号。
-    ///
-    /// # 错误
-    /// 账号为空或字符数不在允许区间时返回 `Error::LogicError`。
-    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
-
-impl FromStr for LoginAccount {
-    type Err = Error;
-
-    /// 按 [`LoginAccount::new`] 解析并规范化登录账号。
-    ///
-    /// # 参数
-    /// * `value` - 原始登录账号。
-    ///
-    /// # 返回
-    /// 返回去除首尾空白且保持大小写的登录账号。
-    ///
-    /// # 错误
-    /// 规范化后账号字符数不在允许区间时返回 `Error::LogicError`。
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        Self::new(value)
     }
 }
 
@@ -384,13 +329,13 @@ mod tests {
     }
 
     #[test]
-    fn standard_account_parsing_keeps_normalization_and_length_boundaries() {
-        assert_eq!("  Admin01  ".parse::<LoginAccount>().unwrap().as_str(), "Admin01");
+    fn account_constructor_keeps_normalization_and_length_boundaries() {
+        assert_eq!(LoginAccount::new("  Admin01  ").unwrap().as_str(), "Admin01");
         for value in ["abc".to_string(), "a".repeat(64)] {
-            assert_eq!(value.parse::<LoginAccount>().unwrap(), LoginAccount::try_from(value).unwrap());
+            assert_eq!(LoginAccount::new(&value).unwrap().as_str(), value);
         }
         for value in [String::new(), "  ab  ".to_string(), "a".repeat(65)] {
-            assert!(value.parse::<LoginAccount>().is_err());
+            assert!(LoginAccount::new(value).is_err());
         }
     }
 

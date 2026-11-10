@@ -65,17 +65,6 @@ impl AuthorizedQuery {
         compiled.ensure_current(executor)?;
         Ok(compiled)
     }
-
-    /// 读取授权版本，用于跨页版本比较。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 本次身份、范围及读取授权版本。
-    /// # 错误
-    /// 不返回错误；不证明业务映射事实仍有效。
-    pub fn version(&self) -> &str {
-        &self.proof.version
-    }
 }
 
 /// 编译器生成的查询计划；业务不能自行构造。

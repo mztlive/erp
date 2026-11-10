@@ -15,16 +15,16 @@ pub mod portal;
 pub mod prelude;
 mod role;
 pub use access_control::{
-    AuditEventFilter, AuditEventRepositoryExt, AuditEventRow, DataScopeRepositoryExt, PermissionFilter,
-    PermissionRepositoryExt, UserRoleRepositoryExt,
+    AuditEventFilter, AuditEventRepositoryExt, AuditEventRow, PermissionFilter, PermissionRepositoryExt,
+    UserRoleRepositoryExt,
 };
 pub use account_core::AccountCoreRepositoryExt;
 pub use casbin_adapter::{CASBIN_RULES, MongoCasbinAdapter};
 pub use extensions::AccessControlExt;
 pub use organization::OrganizationRepository;
 pub use owned::{
-    AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
-    PersonQueryQualificationRepository, RoleRepository, UserRoleRepository,
+    AccountCoreRepository, AuditEventRepository, PermissionRepository, PersonQueryQualificationRepository,
+    RoleRepository, UserRoleRepository,
 };
 pub use person_directory::PersonQueryQualificationRepositoryExt;
 pub use role::RoleRepositoryExt;

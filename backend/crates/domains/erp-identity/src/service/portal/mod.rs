@@ -18,20 +18,6 @@ pub struct PreparedPortalAccount {
     role: PortalRole,
 }
 
-impl PreparedPortalAccount {
-    /// 返回预生成的稳定账号身份，用于命令与审计关联。
-    ///
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 尚未写入数据库的账号 ID。
-    /// # 错误
-    /// 无。
-    pub fn account_id(&self) -> &str {
-        &self.account.base.id
-    }
-}
-
 /// 已核对原密码并完成新凭证哈希的自助密码命令。
 pub struct PreparedPortalPassword {
     actor: PortalActor,

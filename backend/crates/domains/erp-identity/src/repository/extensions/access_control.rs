@@ -1,17 +1,10 @@
-//! 域 D06 `access_control`：`role`、`permission`、`user_role`、`data_scope`、`audit_event`。
-//!
-//! P0 从 `repository/extensions.rs` 整体迁入既有访问器（accounts/audit_logs/roles），
-//! **调用点签名保持不变**；后续增补（permission/user_role/data_scope/audit_event）
-//! 写入本文件。新集合的集合名常量定义为 trait 关联常量（唯一权威来源，
-//! conventions §4.3「Repository 与索引共用同一常量」），`indexes/` 与
-//! `repository/` 两侧统一取 `<mongodb::Database as AccessControlExt>::` 值。
+//! 身份域集合访问器；集合名由 trait 关联常量统一定义，仓储与索引共用。
 
 use mongodb::Database;
 
 use crate::repository::owned::{
-    AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
-    PersonDataScopeRepository, PersonQueryQualificationRepository, PersonalBusinessGrantRepository,
-    RoleRepository, UserRoleRepository,
+    AccountCoreRepository, AuditEventRepository, PermissionRepository, PersonDataScopeRepository,
+    PersonQueryQualificationRepository, RoleRepository, UserRoleRepository,
 };
 
 /// 访问控制域仓储访问器。
@@ -29,25 +22,10 @@ pub trait AccessControlExt {
     /// # 错误
     /// 不返回错误。
     fn person_data_scopes(&self) -> PersonDataScopeRepository<'_>;
-    /// 独立个人业务扩展授权集合。
-    const PERSONAL_BUSINESS_GRANTS: &'static str = "personal_business_grants";
-    /// 获取个人业务授权仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回本领域个人业务授权集合仓储。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn personal_business_grants(&self) -> PersonalBusinessGrantRepository<'_>;
     /// `permission` 集合名。
     const PERMISSIONS: &'static str = "permissions";
     /// `user_role` 集合名。
     const USER_ROLES: &'static str = "user_roles";
-    /// `data_scope` 集合名。
-    const DATA_SCOPES: &'static str = "data_scopes";
     /// `audit_event` 集合名。
     const AUDIT_EVENTS: &'static str = "audit_events";
     /// 人员查询资格集合名。
@@ -101,18 +79,6 @@ pub trait AccessControlExt {
     /// 不返回错误。
     fn user_roles(&self) -> UserRoleRepository<'_>;
 
-    /// 获取 `data_scope` 集合的仓储。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回 `DataScopeRepository`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn data_scopes(&self) -> DataScopeRepository<'_>;
-
     /// 获取 `audit_event` 集合的仓储。
     ///
     /// # 参数
@@ -142,10 +108,6 @@ impl AccessControlExt for Database {
     fn person_data_scopes(&self) -> PersonDataScopeRepository<'_> {
         PersonDataScopeRepository::new(self, Self::PERSON_DATA_SCOPES)
     }
-    fn personal_business_grants(&self) -> PersonalBusinessGrantRepository<'_> {
-        PersonalBusinessGrantRepository::new(self, Self::PERSONAL_BUSINESS_GRANTS)
-    }
-
     /// 获取统一账号Repository，固定打开集合 `accounts`。
     ///
     /// # 参数
@@ -180,10 +142,6 @@ impl AccessControlExt for Database {
 
     fn user_roles(&self) -> UserRoleRepository<'_> {
         UserRoleRepository::new(self, Self::USER_ROLES)
-    }
-
-    fn data_scopes(&self) -> DataScopeRepository<'_> {
-        DataScopeRepository::new(self, Self::DATA_SCOPES)
     }
 
     fn audit_events(&self) -> AuditEventRepository<'_> {

@@ -18,6 +18,7 @@ pub struct OrganizationState {
     pub units: Vec<OrgUnit>,
     pub memberships: Vec<OrgMembership>,
     /// 旧管理关系审计快照；不参与当前授权与组织变更约束。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub management: Vec<OrgManagementAssignment>,
 }
 
@@ -613,6 +614,9 @@ mod tests {
             granted_by: "admin".into(),
             reason: "历史".into(),
         });
+        let snapshot = serde_json::to_value(&before).unwrap();
+        assert_eq!(snapshot["management"].as_array().unwrap().len(), 1);
+        let before: OrganizationState = serde_json::from_value(snapshot).unwrap();
         let after = before
             .changed(
                 &request(OrganizationOperation::DisableUnit { org_unit_id: "two".into() }),
@@ -623,6 +627,17 @@ mod tests {
             .unwrap();
         assert!(!after.units[1].enabled);
         assert_eq!(after.management, before.management);
+    }
+
+    /// 新快照省略旧管理关系，缺失字段和历史空数组均可读取。
+    #[test]
+    fn current_snapshots_omit_retired_management_and_accept_empty_history() {
+        let before = state();
+        let mut snapshot = serde_json::to_value(&before).unwrap();
+        assert!(snapshot.get("management").is_none());
+        assert_eq!(serde_json::from_value::<OrganizationState>(snapshot.clone()).unwrap(), before);
+        snapshot["management"] = serde_json::json!([]);
+        assert_eq!(serde_json::from_value::<OrganizationState>(snapshot).unwrap(), before);
     }
 
     #[test]

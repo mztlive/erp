@@ -1,38 +1,22 @@
-//! 域 D06 `access_control`：role、permission、user_role、data_scope、audit_event（页面：W19）。
-//!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype、`entities::rbac`
-//! 的既有 RBAC 基元（`RoleId` / `Permission`）与 `common` 基元。
-//! - `role` 沿用既有 `entities::role::Role` / `entities::rbac::RoleId`（P0 前
-//!   已存在且带解析校验），本域不重定义；
-//! - `permission` 是「配置化权限」的定义目录（§5.1），模块与动作权限的
-//!   授权绑定仍由既有 Casbin 规则承载，本实体不做重建；
-//! - `audit_event` 与既有 `audit_log` 字段对齐（domains.md 注：`audit_log →
-//!   audit_event` 字段对齐），字段口径见 W19 §5.2 审计事件与数据模型 §4.5.4
-//!   （敏感字段只记录「已变更」和摘要，不记录完整旧值或新值）；
-//! - `data_scope` 按 W19 §5.1 数据范围（公司、组织、团队、本人负责、协作等
-//!   固定策略）建模，是本域的新增能力。
+//! 身份权限、人员数据范围及审计事件的领域模型。
 
 pub mod audit_actions;
 pub mod audit_event;
 pub mod authorization_policy;
 pub mod consumer_spec;
-pub mod data_scope;
 pub(crate) mod governance;
 pub mod permission;
 pub mod person_scope;
-pub(crate) mod person_scope_migration;
-pub mod personal_grant;
 pub mod resolved_scope;
-pub mod responsibility_scope;
+pub mod scope_type;
 pub use resolved_scope::{ResolvedScope, ScopeClause, ScopedObject};
 pub mod scope_binding;
 pub mod user_role;
 pub use audit_event::{AuditEvent, AuditEventData, AuditEventResult};
-pub use data_scope::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-pub use erp_core::ids::{AuditEventId, DataScopeId, PermissionId, UserRoleId};
+pub use erp_core::ids::{AuditEventId, PermissionId, UserRoleId};
 pub use permission::{PermissionData, PermissionDefinition, PermissionUpdate};
-pub use responsibility_scope::{OrganizationCoverage, ResponsibilityScopeSet};
 pub use scope_binding::{ScopeBinding, ScopeDimension, ScopeTargetMode};
+pub use scope_type::DataScopeType;
 pub use user_role::{UserRole, UserRoleData, UserRoleRevokeData};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids；

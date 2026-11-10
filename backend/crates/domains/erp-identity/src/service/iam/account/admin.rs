@@ -10,6 +10,7 @@ use validator::Validate;
 use super::dto::{
     AdminItem, CreateAdminParams, InitializeSuperAdminParams, UpdateAdminParams, UpdateAdminRoleParams,
 };
+use super::scope::seed_company;
 use crate::AccessControlExt;
 use crate::entity::account_core::{
     AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, ExistingSuperAdminState,
@@ -19,7 +20,6 @@ use crate::entity::rbac::RoleIdSet;
 use crate::error::Result;
 use crate::ports::PreparedResourceAudit;
 use crate::repository::prelude::*;
-use crate::service::access_control::person_scope_migration::seed_company;
 use crate::service::account_support::{account_of_kind, apply_account_update, ensure_account_available};
 use crate::service::auth::password;
 use crate::service::iam::{AuthorizedAccountManagement, AuthorizedRoleGrant, SharedRbacService};
@@ -323,7 +323,7 @@ impl AdminService {
     /// * `audit` - 已准备的管理端资源审计
     ///
     /// # 返回值
-    /// 返回已持久化的管理员实体。
+    /// 账号、角色绑定和审计写入成功时返回成功。
     ///
     /// # 错误
     /// 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
@@ -332,7 +332,7 @@ impl AdminService {
         account: AccountCore,
         grant: AuthorizedRoleGrant,
         audit: PreparedResourceAudit,
-    ) -> Result<AccountCore> {
+    ) -> Result<()> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
@@ -341,7 +341,7 @@ impl AdminService {
             Box::pin(async move {
                 db.accounts().create(&account, executor).await?;
                 rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
-                Ok(account)
+                Ok(())
             })
         })
         .await
@@ -355,7 +355,7 @@ impl AdminService {
     /// * `audit` - 已准备的管理端资源审计
     ///
     /// # 返回值
-    /// 返回已更新持久化元数据的管理员实体。
+    /// 账号、角色绑定和审计更新成功时返回成功。
     ///
     /// # 错误
     /// 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
@@ -364,7 +364,7 @@ impl AdminService {
         mut account: AccountCore,
         grant: AuthorizedRoleGrant,
         audit: PreparedResourceAudit,
-    ) -> Result<AccountCore> {
+    ) -> Result<()> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
@@ -373,7 +373,7 @@ impl AdminService {
             Box::pin(async move {
                 db.accounts().update(&mut account, executor).await?;
                 rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
-                Ok(account)
+                Ok(())
             })
         })
         .await

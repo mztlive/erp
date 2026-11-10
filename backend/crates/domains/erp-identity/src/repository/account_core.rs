@@ -62,23 +62,6 @@ pub trait AccountCoreRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<AccountCore>>;
 
-    /// 根据 ID 查询统一账号，包含已软删除记录。
-    ///
-    /// # 参数
-    /// * `id` - 账号 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配的账号记录，包含已软删除记录；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    async fn find_by_id_including_deleted(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<AccountCore>>;
-
     /// 按账号 ID 集合批量查询统一账号。
     ///
     /// # 参数
@@ -272,14 +255,6 @@ impl AccountCoreRepositoryExt for Repository<'_, AccountCore> {
         executor: &mut dyn Executor,
     ) -> Result<Option<AccountCore>> {
         mongo_ops::find_one(&self.collection(), doc! { "account": account }, executor).await
-    }
-
-    async fn find_by_id_including_deleted(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<AccountCore>> {
-        mongo_ops::find_one(&self.collection(), doc! { "id": id }, executor).await
     }
 
     async fn list_by_ids(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Vec<AccountCore>> {

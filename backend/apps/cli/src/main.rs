@@ -5,7 +5,6 @@
 mod adapters;
 mod indexes;
 mod migrate_contract_templates;
-mod migrate_scopes;
 
 mod error;
 mod init_admin;
@@ -49,7 +48,6 @@ async fn run() -> Result<()> {
         Command::JdVopCredentialImport(args) => jd_vop::import(&cli.config, args).await,
         Command::JdVopCredentialStatus => jd_vop::status(&cli.config).await,
         Command::MigrateContractTemplates => migrate_contract_templates::run(&cli.config).await,
-        Command::MigratePersonScopes(args) => migrate_scopes::run(&cli.config, args).await,
         Command::InitAdmin(args) => init_admin::run(&cli.config, args).await,
         Command::ResetPassword(args) => reset_password::run(&cli.config, args).await,
     }

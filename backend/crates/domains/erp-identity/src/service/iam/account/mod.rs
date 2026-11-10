@@ -3,9 +3,9 @@ mod bootstrap;
 mod dto;
 mod profile;
 mod reset_password;
+mod scope;
 
 pub use admin::{AdminService, InitializeSuperAdminResult};
-pub use bootstrap::BootstrapSuperAdminResult;
 pub use dto::{
     AdminItem, CreateAdminParams, InitializeSuperAdminParams, ResetAdminPasswordParams, UpdateAdminParams,
     UpdateAdminRoleParams,

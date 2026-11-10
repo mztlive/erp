@@ -202,20 +202,6 @@ impl RoleIdSet {
         role_ids.sort();
         Ok(Self::from(role_ids))
     }
-
-    /// 返回角色 ID 切片。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回内部角色 ID 的只读视图，顺序与解析结果一致。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn as_slice(&self) -> &[RoleId] {
-        &self.0
-    }
 }
 
 impl From<Vec<RoleId>> for RoleIdSet {

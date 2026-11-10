@@ -27,7 +27,6 @@ pub(crate) struct DataScopeBatch<'a> {
     organizations: Option<OrganizationState>,
     directory: Option<OrganizationState>,
     reuse: bool,
-    revalidate: bool,
     as_of: Instant,
 }
 
@@ -64,7 +63,6 @@ impl<'a> DataScopeBatch<'a> {
             organizations: None,
             directory: None,
             reuse,
-            revalidate: false,
             as_of: Instant::now(),
         }
     }
@@ -135,11 +133,6 @@ impl<'a> DataScopeBatch<'a> {
     /// 账号有效性、策略 revision 与启用角色均在调用方事务中读一次。
     async fn load_identity(&mut self) -> Result<()> {
         if self.reuse && self.facts.is_some() {
-            if self.revalidate {
-                let revision = self.service.rbac.current_policy_revision().await?;
-                self.service.rbac.ensure_policy_snapshot_with_executor(revision, self.executor).await?;
-                self.revalidate = false;
-            }
             return Ok(());
         }
         let account = self

@@ -35,7 +35,6 @@ use crate::ports::ScopeTargetPort;
 use crate::repository::prelude::*;
 pub mod consumers;
 mod person_scope;
-pub mod person_scope_migration;
 mod person_scope_query;
 pub mod policy_bundle;
 pub(crate) mod resolve;

@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::consumer_spec::registration;
 use super::scope_target::{BoundScopeTarget, ScopeTarget};
-use super::{
-    DataScope, DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode,
-};
+use super::{DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode};
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::{Error, Result};
@@ -52,26 +50,6 @@ pub struct PersonDataScope {
 }
 
 impl PersonScopeTerm {
-    /// 创建无主体的迁移范围项。
-    /// # 参数
-    /// * `rule` - 旧范围规则。
-    /// # 返回
-    /// 不携带旧主体身份的范围项。
-    /// # 错误
-    /// 管理部门依赖角色，必须人工重设，不允许静态替代。
-    pub fn from_legacy(rule: &DataScope) -> Result<Self> {
-        if rule.binding.target_mode == Some(ScopeTargetMode::ManagedOrgs) {
-            return Err(Error::ValidationError("管理部门范围依赖旧角色，必须显式重设人员范围".into()));
-        }
-        Ok(Self {
-            scope_type: rule.scope_type,
-            target_dimension: rule.binding.target_dimension,
-            target_mode: rule.binding.target_mode,
-            include_descendants: rule.binding.include_descendants,
-            scope_targets: rule.scope_targets.clone(),
-        })
-    }
-
     /// 将原始人员范围解析为已验证目标，拒绝角色专用动态模式。
     /// # 参数
     /// resource、actions 为所属业务和操作。

@@ -1,28 +1,16 @@
-//! 域 D06 `access_control` 仓储：permission、user_role、data_scope、audit_event。
-//!
-//! P0 已实现 accounts / roles / audit_logs 仓储（`account_core.rs` / `role.rs` /
-//! `audit_log.rs`），本目录只承载四个新增集合（按集合拆分为子模块，经本文件重导出）。
-//! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：`update`/`soft_delete` /
-//! `restore` 比较 `id + version` 做 CAS，版本不匹配返回
-//! [`persistence_core::Error::OptimisticLockingError`]）；子模块只补充域特有查询与
-//! 跨集合多步骤写入入口。集合名常量统一从 `extensions::AccessControlExt`
-//! 关联常量定义（conventions §4.3），调用方签名不变。
-//!
-//! `audit_event` 是事实型审计留痕（§4.5.4：不可编辑、不可删除），本目录
-//! **不提供**软删除/恢复方法；筛选类型定义在各子模块；相同字段的查询投影直接复用响应 DTO。
+//! 权限、角色绑定、人员数据范围和审计事件的专用查询。
+//! 审计事件只追加，不提供软删除或恢复入口。
+
 use application_core::SortDir;
 use mongodb::bson::{Document, doc};
 
 use crate::entity::access_control::paging::{PageParams, TimeSort};
 
 pub mod audit_event;
-pub mod data_scope;
 pub mod permission;
 pub mod person_scope;
-pub mod personal_grant;
 
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
-pub use data_scope::{DataScopeRepositoryExt, data_scope_subjects_filter};
 pub use permission::{PermissionFilter, PermissionRepositoryExt, UserRoleRepositoryExt};
 
 /// 将已验证时间排序编译为稳定的数据库排序。
@@ -92,13 +80,11 @@ pub(super) fn audit_event_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::{Bson, doc};
-    use persistence_core::{NoTransaction, QueryFilter};
+    use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
 
-    use super::{AuditEventFilter, PageParams, PermissionFilter, data_scope_subjects_filter, sort_doc};
-    use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType};
-    use crate::repository::owned::DataScopeRepository;
-    use crate::repository::prelude::*;
+    use super::{AuditEventFilter, PageParams, PermissionFilter, sort_doc};
+    use crate::entity::access_control::AuditEventResult;
 
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {
@@ -115,34 +101,6 @@ mod tests {
         assert_eq!(resource.get_str("$regex").unwrap(), "sales_order");
         assert!(!document.get_bool("disabled").unwrap());
         assert!(document.get_bool("system").unwrap());
-    }
-
-    /// 批量主体查询保留正常与可能缺失的 ID，由 MongoDB 只返回实际事实。
-    #[test]
-    fn data_scope_subjects_filter_uses_subject_type_and_id_set() {
-        let ids = vec!["role-1".to_string(), "missing-role".to_string()];
-        let filter = data_scope_subjects_filter(DataScopeSubjectType::Role, &ids).unwrap();
-
-        assert_eq!(filter.get_i32("schema_version").unwrap(), 2);
-        assert_eq!(filter.get_str("subject_type").unwrap(), "role");
-        assert_eq!(
-            filter.get_document("subject_id").unwrap().get_array("$in").unwrap(),
-            &vec![Bson::String("role-1".to_string()), Bson::String("missing-role".to_string())]
-        );
-    }
-
-    /// 空主体集合必须短路，不得构造可扩大范围的查询。
-    #[tokio::test]
-    async fn data_scope_subjects_empty_input_does_not_touch_database() {
-        assert!(data_scope_subjects_filter(DataScopeSubjectType::Role, &[]).is_none());
-        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
-        let database = client.database("repository_data_scope_empty_subject_ids");
-        let repository = DataScopeRepository::new(&database, "data_scopes");
-
-        let scopes =
-            repository.list_by_subjects(DataScopeSubjectType::Role, &[], &mut NoTransaction).await.unwrap();
-
-        assert!(scopes.is_empty());
     }
 
     #[test]

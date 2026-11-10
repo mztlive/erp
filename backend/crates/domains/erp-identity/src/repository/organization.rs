@@ -45,7 +45,7 @@ impl<'a> OrganizationRepository<'a> {
     /// * `executor` - 调用方事务或非事务执行器
     ///
     /// # 返回
-    /// 返回组织单元、成员、管理范围和版本；尚无版本文档时版本为 `0`。
+    /// 返回组织单元、成员和版本；旧管理关系仅从历史回执读取；尚无版本文档时版本为 `0`。
     ///
     /// # 错误
     /// 任一集合读取失败时返回仓储错误，不返回残缺状态。
@@ -56,9 +56,7 @@ impl<'a> OrganizationRepository<'a> {
             memberships: Repository::<OrgMembership>::new(self.db, ORG_MEMBERSHIPS)
                 .list_all(executor)
                 .await?,
-            management: Repository::<OrgManagementAssignment>::new(self.db, ORG_MANAGEMENT)
-                .list_all(executor)
-                .await?,
+            management: Vec::new(),
         })
     }
 
