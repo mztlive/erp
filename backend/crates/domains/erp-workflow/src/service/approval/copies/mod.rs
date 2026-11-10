@@ -79,13 +79,7 @@ pub async fn save_config(
 ) -> Result<()> {
     let rules = ApprovalCopyRule::prepare(rules, graph.nodes.len())?;
     let ids = rules.iter().flat_map(|r| r.recipient_user_ids.iter().cloned()).collect::<Vec<_>>();
-    let recipient_names = identity_service
-        .directory()
-        .accounts(&ids, ex)
-        .await?
-        .into_iter()
-        .map(|a| (a.id, a.display_name))
-        .collect();
+    let recipient_names = identity_service.directory().names(&ids, ex).await?.into_iter().collect();
     db.approval_copies()
         .save_config(
             &ApprovalCopyConfig {

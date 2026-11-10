@@ -5,16 +5,28 @@ use persistence_core::Executor;
 use super::{RbacService, RolePermissionSnapshot};
 use crate::repository::prelude::*;
 use crate::service::directory::AccountDirectoryService;
-use crate::{AccessControlExt, Error, Permission, PermissionSet, Result, Role, RoleId};
+use crate::{AccessControlExt, AccountSummary, Error, Permission, PermissionSet, Result, Role, RoleId};
 
 /// 已核验账号及启用角色的功能资格；不授予对象访问权。
 #[derive(Debug, Clone)]
 pub struct QualifiedPermissions {
     snapshot: RolePermissionSnapshot,
+    account: AccountSummary,
     version: String,
 }
 
 impl QualifiedPermissions {
+    /// 返回本次资格检查读取的无凭证账号摘要。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 与权限及身份版本来自同次取证的账号资料，供调用方冻结显示名。
+    /// # 错误
+    /// 无；仅有效内部账号能形成资格结果。
+    pub fn account(&self) -> &AccountSummary {
+        &self.account
+    }
+
     /// 取得单项权限的有效授权角色。
     /// # 参数
     /// permission 为本批取证的具体权限。
@@ -111,7 +123,7 @@ impl RbacService {
         let snapshot = self.role_permission_snapshot(actor.kind(), actor.id(), permissions).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         self.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        Ok(Some(qualified(snapshot, &roles, actor, account.base.version)))
+        Ok(Some(qualified(snapshot, &roles, actor, account.base.version, AccountSummary::from(&account))))
     }
 }
 
@@ -121,6 +133,7 @@ fn qualified(
     roles: &[Role],
     actor: &AuditActor,
     account_version: u64,
+    account: AccountSummary,
 ) -> QualifiedPermissions {
     snapshot.role_ids.retain(|id| roles.iter().any(|role| role.base.id == id.as_str()));
     snapshot.grants.retain(|id, _| snapshot.role_ids.contains(id));
@@ -132,7 +145,7 @@ fn qualified(
         actor.kind(),
         snapshot.policy_revision()
     );
-    QualifiedPermissions { snapshot, version }
+    QualifiedPermissions { snapshot, account, version }
 }
 
 #[cfg(test)]
@@ -161,13 +174,13 @@ mod tests {
         };
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let roles = [role("a"), role("b")];
-        let both = qualified(snapshot.clone(), &roles, &actor, 1);
+        let both = qualified(snapshot.clone(), &roles, &actor, 1, account());
         assert!(both.permissions().covers_one(&read));
         assert!(both.permissions().covers_one(&write));
         assert!(!both.same_role(&[read.clone(), write.clone()]));
         assert!(both.same_role(std::slice::from_ref(&read)));
         assert!(!both.same_role(&[]));
-        let reduced = qualified(snapshot, &roles[..1], &actor, 1);
+        let reduced = qualified(snapshot, &roles[..1], &actor, 1, account());
         assert!(reduced.permissions().covers_one(&read));
         assert!(!reduced.permissions().covers_one(&write));
         assert!(reduced.roles(&write).is_empty());
@@ -187,13 +200,21 @@ mod tests {
         };
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let mut roles = [role("a")];
-        let original = qualified(snapshot.clone(), &roles, &actor, 1);
+        let original = qualified(snapshot.clone(), &roles, &actor, 1, account());
         assert!(original.same_role(&[read, write]));
-        assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 2).version());
+        assert_eq!(original.account(), &account());
+        assert_eq!(original.account().display_name, "审批人");
+        assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 2, account()).version());
         roles[0].base.version += 1;
-        assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 1).version());
-        let empty = qualified(snapshot, &[], &actor, 1);
+        assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 1, account()).version());
+        let empty = qualified(snapshot, &[], &actor, 1, account());
         assert!(empty.permissions().into_vec().is_empty());
+    }
+
+    fn account() -> AccountSummary {
+        AccountSummary::new("user", AccountKind::Admin, true)
+            .with_display_name("审批人")
+            .with_login_account("login")
     }
 
     fn role(id: &str) -> Role {

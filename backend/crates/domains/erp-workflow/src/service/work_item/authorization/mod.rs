@@ -7,8 +7,8 @@ use application_core::AuditActor;
 use erp_identity::entity::authorization::{AccessSubject, AccessTarget, FactKind, ReadAccess};
 use erp_identity::ports::AccessMapping;
 use erp_identity::{
-    AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService, CompiledAccess,
-    Permission, ResourceTargets, SharedRbacService,
+    AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService,
+    CompiledAccess, DataAccess, Permission, ResourceTargets, SharedRbacService,
 };
 use facts::WorkItemFacts;
 use mongodb::Database;
@@ -51,13 +51,17 @@ fn authorization(
         .map(|action| {
             let permission = permission(action).expect("固定任务动作合法");
             AccessRegistration {
-                policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
-                permission,
-                subject: AccessSubject::Direct,
+                permission: permission.clone(),
                 required_permissions: vec![],
-                required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                mapping: Some(mapping.clone()),
-                facts: Some(facts.clone()),
+                access: AccessMode::QueryAndObject {
+                    data: DataAccess {
+                        subject: AccessSubject::Direct,
+                        required_facts: [FactKind::Owner, FactKind::Organization].into(),
+                        policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
+                    },
+                    mapping: mapping.clone(),
+                    facts: facts.clone(),
+                },
             }
         })
         .collect();

@@ -66,20 +66,28 @@ authorization.validate(&compiled, executor).await?;
 
 跨页游标使用 `CompiledAccess::version()`，包含身份和业务映射依赖；`AuthorizedQuery::version()` 只包含编译前身份授权依赖。复验发现账号停用、权限撤销、版本变化或有效期到达时返回 `DATA_SCOPE_CHANGED`，丢弃结果并重新查询；数据库和接入错误保留原类别。
 
+`MappingFacts` 仅携带业务映射的修订号与有效期。查询指纹使用 `authorization-query-v3` 格式；升级前的分页版本按 `DATA_SCOPE_CHANGED` 合同失效，调用方须重新查询。
+
 记录授权在数据库内按有效来源关联，不预加载账号全部授权 ID。关联采用存在性查询，不增加根记录数量。事务读取以原事务快照为准；非事务映射必须提供完整修订号，不能用前后读取代替缺失的版本证据。
 
 ## 服务端登记与 Mapping
 
 组合根创建 `AuthorizationRegistry`，传给 `AuthorizationService::new(db, rbac, registry)`。登记不可由 HTTP 参数生成；未登记操作拒绝。
 
-每个 `AccessRegistration` 固定以下内容：
+每个 `AccessRegistration` 固定入口 `Permission`、额外必需权限和 `AccessMode`。全部必需权限须由同一个有效角色提供。接入形态按下表构造：
 
-- 入口 `Permission`、额外必需权限及 `AccessSubject`。全部必需权限须由同一个有效角色提供。
-- `AccessPolicy`：无对象操作、范围、任务分配、参与、与或组合、来源关系。
-- 根对象和各来源的必需事实，以及每个范围节点的 `ReadAccess` 读取补充开关。
-- 可选 Mapping 实例及可选的 `AccessFactsPort`。
+| `AccessMode` | 必需内容 | 可用入口 |
+| --- | --- | --- |
+| `Operation` | 无数据政策和端口，主体固定为 `Direct` | 无对象操作检查 |
+| `Query` | `DataAccess`、Mapping | 查询 |
+| `Object` | `DataAccess`、`AccessFactsPort` | 完整对象检查 |
+| `QueryAndObject` | 同一份 `DataAccess`、Mapping、`AccessFactsPort` | 查询及完整对象检查 |
 
-查询接入需要 Mapping；对象检查需要事实端口。只做对象检查可以不登记 Mapping，不执行查询准备和编译。`View` 的标识须与模型一致，`Source` 必须对应政策中的实际关系。
+`DataAccess` 固定 `AccessSubject`、根对象必需事实和 `AccessPolicy`。数据政策支持范围、任务分配、参与、与或组合、来源关系；无对象操作不得嵌入数据政策。各范围节点通过 `ReadAccess` 声明读取补充开关。
+
+只做对象检查时使用 `Object`，不执行查询准备和编译。`View` 的标识须与模型一致，`Source` 必须对应政策中的实际关系。任一来源命中的政策只允许用于受限只读视图；`QueryAndObject` 必须使用完整对象模型。
+
+目录构造必须校验具体权限、动作范围、政策深度、来源关系、模型身份和必需事实。已有对象范围要求的动作不得登记为 `Operation`；读取范围不得替代同资源写入范围。
 
 | Mapping 能力 | 职责 |
 | --- | --- |
@@ -94,7 +102,7 @@ authorization.validate(&compiled, executor).await?;
 
 `QueryOutput::Object` 表示完整对象。`Share` 和 `Existence` 必须登记为独立只读视图并列出输出字段，编译器执行字段投影。份额模型每行只对应一个来源，金额只能来自该份额；存在性视图不能登记其他来源内容或完整单据金额。受限视图不能用于 `require` 完整对象检查。
 
-`AccessRegistration.required_facts` 声明根对象必需事实，`AccessPolicy::Related.required_facts` 声明来源必需事实，Mapping 在 `QueryModel.facts` 中声明支持的维度。对象字段使用 `FactValue`：`Missing` 表示未读取；`Known(None)` 或已知空集合表示确认没有值。必需事实缺失时返回接入错误，其他授权分支命中不能掩盖缺失。
+`DataAccess.required_facts` 声明根对象必需事实，`AccessPolicy::Related.required_facts` 声明来源必需事实，Mapping 在 `QueryModel.facts` 中声明支持的维度。对象字段使用 `FactValue`：`Missing` 表示未读取；`Known(None)` 或已知空集合表示确认没有值。必需事实缺失时返回接入错误，其他授权分支命中不能掩盖缺失。
 
 查询缺少映射、对象检查缺少事实端口、未知事实、错误模型或不支持维度均返回错误，不能降级成全量查询。Mapping 与事实端口执行相同责任定义，并验证对象判定与列表成员判断一致。
 

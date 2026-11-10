@@ -40,7 +40,6 @@ pub(super) fn sales_create_bind_command(
             actor.id().to_string(),
         )
         .with_order_source(Some(OrderTaskSource::Sales(order.base.id.clone())))
-        .with_customer_id(Some(order.customer_id.to_string()))
         .with_business_org_unit_id(Some(order.business_org_unit_id.clone()))
         .with_scope_owner_user_id(Some(order.sales_owner_user_id.clone())),
     })

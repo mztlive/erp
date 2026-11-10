@@ -10,10 +10,10 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use mongodb::Database;
 use persistence_core::Executor;
-pub use registry::{AccessPolicy, AccessRegistration, AuthorizationRegistry};
+pub use registry::{AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, DataAccess};
 
 use crate::entity::authorization::AccessSubject;
-use crate::{AuthorizedQuery, Error, Permission, QualifiedPermissions, Result, SharedRbacService};
+use crate::{AuthorizedQuery, Permission, QualifiedPermissions, Result, SharedRbacService};
 
 /// 授权服务。组合根装配不可变目录，业务只提供操作与目标。
 #[derive(Clone)]
@@ -83,8 +83,7 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedQuery> {
         let entry = self.registry.entry(permission, &subject)?;
-        let mapping =
-            entry.mapping.clone().ok_or_else(|| Error::ValidationError("本操作未接入查询 Mapping".into()))?;
+        let mapping = entry.access.mapping()?.clone();
         let model = mapping.model().clone();
         let proof = self.resolve(actor, entry, executor).await?;
         Ok(AuthorizedQuery { proof, mapping, model })

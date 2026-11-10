@@ -1,17 +1,14 @@
-use std::collections::HashMap;
-
 use application_core::AuditActor;
 use bpm::model::types::ModelError;
-use erp_identity::{AccountSummary, SharedRbacService};
+use erp_core::AccountKind;
+use erp_identity::{Permission, SharedRbacService};
 use persistence_core::Executor;
 
 use super::super::business_adapter::{BindingRevalidationContext, ensure_separation_of_duties};
 use super::super::policy::ProcessRequiredApprovalPolicy;
-use super::super::scope::approval_participant_permissions_with_executor;
 use super::process_not_configured;
 use super::upgrade::map_model_error;
 use crate::error::{Error, Result};
-use crate::ports::OrderTaskSource;
 use crate::repository::bpm::DefinitionGraph;
 
 /// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
@@ -60,79 +57,18 @@ pub async fn revalidate_binding_graph(
 ) -> Result<()> {
     let assignee_ids = graph.assignee_ids();
     ensure_separation_of_duties(policy.separation_of_duties_policy, &context.creator_id, &assignee_ids)?;
-    let accounts = load_assignee_accounts(identity_service, &assignee_ids, executor).await?;
+    let required =
+        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
     for user_id in &assignee_ids {
-        let account = require_ready_assignee(accounts.get(user_id))?;
-        let assignee = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-        let object = context.scope_object(policy.document_type);
-        if OrderTaskSource::approval_kind(policy.document_type).is_some()
-            && (object.business_org_unit_id.as_deref().is_none_or(str::is_empty)
-                || object.order_source.is_none()
-                || object.owner_user_id.is_empty())
-        {
-            return Err(Error::ValidationError("订单审批绑定缺少内部业务部门".into()));
-        }
-        if !approval_participant_permissions_with_executor(identity_service, &assignee, executor).await? {
+        let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
+        let qualified = identity_service
+            .qualified_permissions(&actor, &required, executor)
+            .await?
+            .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()))?;
+        context.ensure_order_facts(policy.document_type)?;
+        if !qualified.same_role(&required) {
             return Err(Error::ValidationError("指定审批人缺少审批读取或决定权限".into()));
         }
     }
     Ok(())
-}
-
-/// 一次批量读取定义内全部审批人账号事实。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `assignee_ids` - BPM 按确定顺序提取的审批人 ID
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 返回按账号 ID 索引的未软删除账号事实；缺失 ID 不会补齐。
-///
-/// # 错误
-/// 授权端口批量读取账号失败时返回错误。
-///
-/// # 关键业务约束
-/// Repository 不保证 `$in` 结果顺序；Service 必须继续按 `assignee_ids`
-/// 逐用户查表与重验 RBAC，保留首错与精确错误语义。
-async fn load_assignee_accounts(
-    identity_service: &SharedRbacService,
-    assignee_ids: &[String],
-    executor: &mut dyn Executor,
-) -> Result<HashMap<String, AccountSummary>> {
-    Ok(identity_service
-        .directory()
-        .accounts(assignee_ids, executor)
-        .await?
-        .into_iter()
-        .map(|account| (account.id.clone(), account))
-        .collect())
-}
-
-/// 按当前审批人 ID 从批量快照映射中取回可承担责任的账号。
-///
-/// # 参数
-/// * `account` - 批量映射中按当前审批人 ID 查得的可选账号
-///
-/// # 返回
-/// 账号存在且当前可承担后台审批责任时返回其引用。
-///
-/// # 错误
-/// 账号缺失、已停用或任职失效时返回合同固定的校验错误。
-///
-/// # 关键业务约束
-/// 调用方必须按 BPM 审批人顺序逐个调用，不得依赖 `HashMap` 迭代顺序。
-pub(super) fn require_ready_assignee(account: Option<&AccountSummary>) -> Result<&AccountSummary> {
-    account.filter(|account| account.is_active_backoffice()).ok_or_else(assignee_unavailable_error)
-}
-
-/// 构造审批人账号不可用的合同固定错误。
-///
-/// # 返回
-/// 返回同时覆盖缺失、停用与任职失效的校验错误。
-///
-/// # 错误
-/// 无；本方法只构造 Service 错误值。
-fn assignee_unavailable_error() -> Error {
-    Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string())
 }

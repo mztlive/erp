@@ -5,7 +5,7 @@ use erp_core::common::time::Instant;
 use futures_util::future::BoxFuture;
 use persistence_core::Executor;
 
-use super::{AccessPolicy, AccessRegistration, AuthorizationService};
+use super::{AccessMode, AccessPolicy, AccessRegistration, AuthorizationService};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::authorization::{AccessContext, AccessFact, AccessRule, AccessSubject, ReadAccess};
 use crate::entity::fingerprint::Fingerprint;
@@ -27,10 +27,14 @@ impl AuthorizationService {
         entry: Arc<AccessRegistration>,
         executor: &mut dyn Executor,
     ) -> Result<AccessProof> {
+        let data = entry.access.data()?;
         let version = self.identity(actor, &entry, executor).await?;
-        let model = match &entry.subject {
-            AccessSubject::View(key) => Some(key.clone()),
-            _ => entry.mapping.as_ref().map(|mapping| mapping.model().key.clone()),
+        let model = match (&data.subject, &entry.access) {
+            (AccessSubject::View(key), _) => Some(key.clone()),
+            (_, AccessMode::Query { mapping, .. } | AccessMode::QueryAndObject { mapping, .. }) => {
+                Some(mapping.model().key.clone())
+            },
+            _ => None,
         };
         let context = AccessContext {
             actor: actor.clone(),
@@ -41,18 +45,18 @@ impl AuthorizationService {
         };
         let mut resolution = Resolution { versions: vec![version], valid_until: None };
         let rule = self
-            .policy(&entry.policy, &entry, &context, &mut resolution, executor)
+            .policy(&data.policy, &entry, &context, &mut resolution, executor)
             .await?
-            .requiring(&entry.required_facts);
+            .requiring(&data.required_facts);
         // v2 字段顺序：无序版本依赖、主体、规则、可选模型标识。
         let mut version = Fingerprint::new("authorization-proof-v2");
         version.unordered(&resolution.versions, |hash, value| hash.text(value));
-        version.subject(&entry.subject);
+        version.subject(&data.subject);
         version.rule(&rule);
         version.optional(model.as_ref(), |hash, key| hash.text(key.as_str()));
         Ok(AccessProof {
             context,
-            subject: entry.subject.clone(),
+            subject: data.subject.clone(),
             rule,
             version: version.finish(),
             valid_until: resolution.valid_until,
@@ -101,7 +105,6 @@ impl AuthorizationService {
     ) -> BoxFuture<'a, Result<AccessRule>> {
         Box::pin(async move {
             match policy {
-                AccessPolicy::Operation => Err(Error::ValidationError("无对象政策不能生成查询范围".into())),
                 AccessPolicy::Assigned => Ok(AccessRule::Fact(AccessFact::AssignedTo)),
                 AccessPolicy::Participant => Ok(AccessRule::Fact(AccessFact::Participant)),
                 AccessPolicy::Scope { permission, read } => {

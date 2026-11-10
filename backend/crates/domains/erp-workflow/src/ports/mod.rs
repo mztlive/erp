@@ -3,7 +3,7 @@ pub mod approver_directory;
 
 mod audit;
 mod authorization;
-mod data_scope;
+mod binding_facts;
 mod finance_responsibility;
 pub use finance_responsibility::FinanceResponsibilityPort;
 mod object_facts;
@@ -16,7 +16,7 @@ pub use audit::{
     WorkflowAuditPort,
 };
 pub use authorization::{FailClosedWorkflowAuthorizationPort, WorkflowAuthorizationPort};
-pub use data_scope::{WorkflowScopeObject, WorkflowScopeObjects};
+pub use binding_facts::ApprovalBindingFacts;
 pub use object_facts::{
     FailClosedObjectFactPort, ObjectFact, ObjectFactKey, ObjectFactMap, ObjectFactPort, ObjectKind,
     OrderTaskSource, SubjectBrief, W29CloseFact,

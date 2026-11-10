@@ -264,6 +264,9 @@ fn exists(alias: String, lookup: Document) -> Fragment {
 }
 
 #[cfg(test)]
+pub(crate) use tests::model_mapping;
+
+#[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -346,6 +349,18 @@ mod tests {
                     .ok_or_else(|| Error::ValidationError("missing relation".into()))?,
             })
         }
+    }
+
+    /// 复用查询编译器的无 I/O Mapping 替身，验证服务端模型登记。
+    pub(crate) fn model_mapping(model: QueryModel) -> Arc<dyn AccessMapping> {
+        Arc::new(Mapping {
+            model,
+            child: None,
+            versioned: true,
+            revision: AtomicU64::new(1),
+            live_only: false,
+            key_expression: None,
+        })
     }
 
     fn mapping(resource: &str, child: Option<Arc<dyn AccessMapping>>) -> Arc<dyn AccessMapping> {

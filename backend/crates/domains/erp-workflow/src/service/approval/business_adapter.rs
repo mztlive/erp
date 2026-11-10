@@ -13,7 +13,7 @@ use super::policy::{
 use super::process_kind::process_kind_of;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
-use crate::ports::{OrderTaskSource, WorkflowScopeObject};
+use crate::ports::OrderTaskSource;
 
 /// 适配器读取范围：按单据责任组织重验 对象范围 与对象读取权。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,8 +54,6 @@ pub struct ApprovalAdapterSpec {
 pub struct BindingRevalidationContext {
     /// 当前或拟创建订单来源，变更单必须指向原单。
     pub order_source: Option<OrderTaskSource>,
-    /// 销售订单当前客户，用于独立详情范围的协作事实。
-    pub customer_id: Option<String>,
     /// 订单及变更沿当前原单取得的内部业务部门；不得填入结算主体。
     pub business_org_unit_id: Option<String>,
     /// 当前业务负责人；非订单类型可使用不可变创建人。
@@ -82,7 +80,6 @@ impl BindingRevalidationContext {
     pub fn new(organization_id: String, creator_id: String) -> Self {
         Self {
             order_source: None,
-            customer_id: None,
             business_org_unit_id: None,
             scope_owner_user_id: None,
             organization_id,
@@ -102,21 +99,6 @@ impl BindingRevalidationContext {
     /// 无。
     pub fn with_order_source(mut self, order_source: Option<OrderTaskSource>) -> Self {
         self.order_source = order_source;
-        self
-    }
-
-    /// 设置销售订单当前客户。
-    ///
-    /// # 参数
-    /// * `customer_id` - 销售订单当前客户
-    ///
-    /// # 返回
-    /// 返回更新后的上下文。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_customer_id(mut self, customer_id: Option<String>) -> Self {
-        self.customer_id = customer_id;
         self
     }
 
@@ -150,29 +132,22 @@ impl BindingRevalidationContext {
         self
     }
 
-    /// 按单据类型从绑定上下文投影工作项范围对象。
-    ///
+    /// 校验订单绑定必需的来源、部门和负责人事实。
     /// # 参数
-    /// * `document_type` - 固定单据类型
-    ///
+    /// document_type 为当前强业务主体类型。
     /// # 返回
-    /// 订单类型带上来源、客户与业务部门；库存调整使用仓库；其余类型使用结算主体。负责人缺省时回落到创建人。
-    ///
+    /// 非订单类型不增加订单约束，订单事实完整时成功。
     /// # 错误
-    /// 不返回错误。
-    pub fn scope_object(&self, document_type: DocumentType) -> WorkflowScopeObject {
-        let order = OrderTaskSource::approval_kind(document_type).is_some();
-        let department_owned = order || document_type == DocumentType::PurchasePaymentRequest;
-        WorkflowScopeObject {
-            order_source: order.then(|| self.order_source.clone()).flatten(),
-            customer_id: order.then(|| self.customer_id.clone()).flatten(),
-            owner_user_id: self.scope_owner_user_id.clone().unwrap_or_else(|| self.creator_id.clone()),
-            business_org_unit_id: department_owned.then(|| self.business_org_unit_id.clone()).flatten(),
-            warehouse_id: (document_type == DocumentType::StockAdjustment)
-                .then(|| self.organization_id.clone()),
-            settlement_party_id: (!department_owned && document_type != DocumentType::StockAdjustment)
-                .then(|| self.organization_id.clone()),
+    /// 订单来源、部门或负责人缺失时拒绝绑定；负责人未覆盖时沿用创建人。
+    pub fn ensure_order_facts(&self, document_type: DocumentType) -> Result<()> {
+        if OrderTaskSource::approval_kind(document_type).is_some()
+            && (self.business_org_unit_id.as_deref().is_none_or(str::is_empty)
+                || self.order_source.is_none()
+                || self.scope_owner_user_id.as_deref().unwrap_or(&self.creator_id).is_empty())
+        {
+            return Err(Error::ValidationError("订单审批绑定缺少内部业务部门".into()));
         }
+        Ok(())
     }
 }
 
@@ -324,37 +299,31 @@ pub fn ensure_separation_of_duties(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn binding_revalidation_context_new_defaults_options_to_none() {
-        let context = super::BindingRevalidationContext::new("org-1".into(), "creator-1".into())
-            .with_customer_id(Some("customer-1".into()));
-        assert_eq!(context.organization_id, "org-1");
-        assert_eq!(context.creator_id, "creator-1");
-        assert_eq!(context.customer_id.as_deref(), Some("customer-1"));
-        assert!(context.order_source.is_none() && context.business_org_unit_id.is_none());
-    }
-
-    #[test]
-    fn scope_facts_keep_business_org_warehouse_and_settlement_separate() {
-        let context = super::BindingRevalidationContext::new("responsibility-id".into(), "creator".into())
-            .with_order_source(Some(super::OrderTaskSource::Sales("order".into())))
-            .with_customer_id(Some("customer".into()))
-            .with_business_org_unit_id(Some("department".into()))
-            .with_scope_owner_user_id(Some("sales-owner".into()));
-        let sales = context.scope_object(super::DocumentType::SalesOrder);
-        assert_eq!(sales.business_org_unit_id.as_deref(), Some("department"));
-        assert_eq!(sales.owner_user_id, "sales-owner");
-        assert!(sales.warehouse_id.is_none() && sales.settlement_party_id.is_none());
-        let payment_request = context.scope_object(super::DocumentType::PurchasePaymentRequest);
-        assert_eq!(payment_request.business_org_unit_id.as_deref(), Some("department"));
-        assert!(payment_request.settlement_party_id.is_none());
-        assert!(payment_request.order_source.is_none());
-        let warehouse = context.scope_object(super::DocumentType::StockAdjustment);
-        assert_eq!(warehouse.warehouse_id.as_deref(), Some("responsibility-id"));
-        assert!(warehouse.business_org_unit_id.is_none() && warehouse.settlement_party_id.is_none());
-        let finance = context.scope_object(super::DocumentType::CustomerReceipt);
-        assert_eq!(finance.settlement_party_id.as_deref(), Some("responsibility-id"));
-        assert!(finance.business_org_unit_id.is_none() && finance.warehouse_id.is_none());
-        assert_eq!(context.organization_id, "responsibility-id");
+    fn order_binding_requires_source_department_and_owner() {
+        let empty = BindingRevalidationContext::new("settlement-party".into(), "creator".into());
+        assert!(empty.ensure_order_facts(DocumentType::SalesOrder).is_err());
+        assert!(empty.ensure_order_facts(DocumentType::StockAdjustment).is_ok());
+        assert!(empty.ensure_order_facts(DocumentType::CustomerReceipt).is_ok());
+        let complete = empty
+            .with_order_source(Some(OrderTaskSource::Sales("order".into())))
+            .with_business_org_unit_id(Some("department".into()));
+        assert!(complete.ensure_order_facts(DocumentType::SalesOrder).is_ok());
+        assert!(
+            complete
+                .clone()
+                .with_business_org_unit_id(Some(String::new()))
+                .ensure_order_facts(DocumentType::SalesOrder)
+                .is_err()
+        );
+        assert!(
+            complete.clone().with_order_source(None).ensure_order_facts(DocumentType::SalesOrder).is_err()
+        );
+        assert!(
+            complete
+                .with_scope_owner_user_id(Some(String::new()))
+                .ensure_order_facts(DocumentType::SalesOrder)
+                .is_err()
+        );
     }
 
     use super::*;

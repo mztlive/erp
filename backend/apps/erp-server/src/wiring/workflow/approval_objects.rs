@@ -1,6 +1,6 @@
-//! 审批当前范围事实批量读取；每种强实体及父链按去重 ID 一次查询。
+//! 绑定升级按精确主体读取订单事实，并保留非订单主体及其父链存在性检查。
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::HashSet;
 
 use erp_customer::CustomerExt;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt, ReceivableExt};
@@ -11,277 +11,131 @@ use erp_returns::repository::ReturnsExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_supplier::SupplierExt;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::{OrderTaskSource, WorkflowScopeObject, WorkflowScopeObjects};
+use erp_workflow::ports::{ApprovalBindingFacts, OrderTaskSource};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::wiring::errors::{Error, Result};
 
-type Keys = HashSet<(DocumentType, String)>;
-
-/// 按单据类型去重后批量读取审批范围事实。
-///
+/// 读取一个审批主体的绑定事实；不构造未被业务消费的范围维度。
 /// # 参数
-/// * `db` - 各业务单据集合所在数据库。
-/// * `keys` - 单据类型与编号。
-/// * `executor` - 调用方执行器。
-///
+/// db 为业务数据库，kind/id 为精确主体，executor 沿用升级事务。
 /// # 返回
-/// 返回已找到的范围对象；缺失键不出现在结果中。
-///
+/// 主体及原有必要父链存在时返回绑定事实，缺失时返回 None。
 /// # 错误
-/// 键超过 500 条时返回校验错误；单据或读模型查询失败时返回对应仓储或流程错误。
+/// 查询失败或订单权威来源不完整时拒绝。
 pub(super) async fn load(
     db: &Database,
-    keys: &Keys,
+    kind: DocumentType,
+    id: &str,
     executor: &mut dyn Executor,
-) -> Result<WorkflowScopeObjects> {
-    if keys.len() > 500 {
-        return Err(Error::ValidationError("单批审批范围事实超过 500 条".into()));
+) -> Result<Option<ApprovalBindingFacts>> {
+    if OrderTaskSource::approval_kind(kind).is_some() {
+        return order(db, kind, id, executor).await;
     }
-    let mut result = orders(db, keys, executor).await?;
-    let stock_ids = ids(keys, DocumentType::StockAdjustment);
-    for row in db.stock_adjustments().list_active_by_ids(&stock_ids, executor).await? {
-        result.insert(
-            (DocumentType::StockAdjustment, row.base.id),
-            WorkflowScopeObject {
-                owner_user_id: row.created_by,
-                warehouse_id: Some(row.warehouse_id.to_string()),
-                ..Default::default()
-            },
-        );
-    }
-    let request_ids = ids(keys, DocumentType::SalesInvoiceRequest);
-    for row in db.sales_invoice_requests().list_active_by_ids(&request_ids, executor).await? {
-        result.insert(
-            (DocumentType::SalesInvoiceRequest, row.base.id),
-            party(row.created_by, row.counterparty_party_id.to_string()),
-        );
-    }
-    for row in db
-        .purchase_payment_requests()
-        .list_active_by_ids(&ids(keys, DocumentType::PurchasePaymentRequest), executor)
-        .await?
-    {
-        result.insert(
-            (DocumentType::PurchasePaymentRequest, row.base.id),
-            WorkflowScopeObject {
-                owner_user_id: row.created_by,
-                business_org_unit_id: row.org_unit_id,
-                settlement_party_id: Some(row.payer_party_id),
-                ..Default::default()
-            },
-        );
-    }
-    let receipt_ids = ids(keys, DocumentType::CustomerReceipt);
-    for row in db.customer_receipts().list_active_by_ids(&receipt_ids, executor).await? {
-        result.insert(
-            (DocumentType::CustomerReceipt, row.base.id),
-            party(row.created_by, row.counterparty_party_id.to_string()),
-        );
-    }
-    refunds(db, keys, &mut result, executor).await?;
-    reversals(db, keys, &mut result, executor).await?;
-    Ok(result)
+    let exists = match kind {
+        DocumentType::StockAdjustment => db.stock_adjustments().find_by_id(id, executor).await?.is_some(),
+        DocumentType::SalesInvoiceRequest => {
+            db.sales_invoice_requests().find_by_id(id, executor).await?.is_some()
+        },
+        DocumentType::PurchasePaymentRequest => {
+            db.purchase_payment_requests().find_by_id(id, executor).await?.is_some()
+        },
+        DocumentType::CustomerReceipt => db.customer_receipts().find_by_id(id, executor).await?.is_some(),
+        DocumentType::CustomerRefund | DocumentType::SupplierRefund => {
+            refund_exists(db, kind, id, executor).await?
+        },
+        DocumentType::ReceiptReversal | DocumentType::PaymentReversal => {
+            reversal_exists(db, kind, id, executor).await?
+        },
+        _ => false,
+    };
+    Ok(exists.then(ApprovalBindingFacts::default))
 }
 
-fn ids(keys: &Keys, kind: DocumentType) -> Vec<String> {
-    keys.iter().filter(|(k, _)| *k == kind).map(|(_, id)| id.clone()).collect()
-}
-fn party(owner: String, id: String) -> WorkflowScopeObject {
-    WorkflowScopeObject { owner_user_id: owner, settlement_party_id: Some(id), ..Default::default() }
-}
-
-async fn orders(db: &Database, keys: &Keys, executor: &mut dyn Executor) -> Result<WorkflowScopeObjects> {
-    let fact_keys = keys
-        .iter()
-        .filter_map(|(kind, id)| OrderTaskSource::approval_kind(*kind).map(|k| (k, id.clone())))
-        .collect();
-    let facts = WorkItemFactsReader::new(db.clone()).load(&fact_keys, executor).await?;
-    let sources = facts.values().filter_map(|f| f.order_scope_source.clone()).collect::<BTreeSet<_>>();
-    let by_source = load_order_sources(db, &sources, executor).await?;
-    let mut result = HashMap::new();
-    for (kind, id) in keys {
-        let Some(fact_kind) = OrderTaskSource::approval_kind(*kind) else {
-            continue;
-        };
-        let Some(fact) = facts.get(&(fact_kind, id.clone())) else {
-            continue;
-        };
-        let source = fact
-            .order_scope_source
-            .as_ref()
-            .filter(|s| s.matches_kind(fact_kind))
-            .ok_or_else(|| Error::Internal("审批订单缺少权威来源".into()))?;
-        if let Some(object) = by_source.get(source) {
-            result.insert((*kind, id.clone()), object.clone());
-        }
-    }
-    Ok(result)
-}
-
-async fn refunds(
+/// 订单变更仍沿强事实定位原订单，不从展示单号推断来源。
+async fn order(
     db: &Database,
-    keys: &Keys,
-    result: &mut WorkflowScopeObjects,
+    kind: DocumentType,
+    id: &str,
     executor: &mut dyn Executor,
-) -> Result<()> {
-    let customers =
-        db.customer_refunds().list_active_by_ids(&ids(keys, DocumentType::CustomerRefund), executor).await?;
-    let customer_ids = customers
-        .iter()
-        .map(|r| r.customer_id.to_string())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let parties = db
-        .customer_accounts()
-        .list_active_by_ids(&customer_ids, executor)
-        .await?
-        .into_iter()
-        .map(|r| (r.base.id, r.party_id.to_string()))
-        .collect::<HashMap<_, _>>();
-    for row in customers {
-        if let Some(id) = parties.get(row.customer_id.as_ref()) {
-            result.insert((DocumentType::CustomerRefund, row.base.id), party(row.created_by, id.clone()));
-        }
-    }
-    let suppliers =
-        db.supplier_refunds().list_active_by_ids(&ids(keys, DocumentType::SupplierRefund), executor).await?;
-    let supplier_ids = suppliers
-        .iter()
-        .map(|r| r.supplier_id.to_string())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let parties = db
-        .supplier_accounts()
-        .list_active_by_ids(&supplier_ids, executor)
-        .await?
-        .into_iter()
-        .map(|r| (r.base.id, r.party_id.to_string()))
-        .collect::<HashMap<_, _>>();
-    for row in suppliers {
-        if let Some(id) = parties.get(row.supplier_id.as_ref()) {
-            result.insert((DocumentType::SupplierRefund, row.base.id), party(row.created_by, id.clone()));
-        }
-    }
-    Ok(())
-}
-
-async fn reversals(
-    db: &Database,
-    keys: &Keys,
-    result: &mut WorkflowScopeObjects,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let rows = db
-        .receipt_reversals()
-        .list_active_by_ids(&ids(keys, DocumentType::ReceiptReversal), executor)
-        .await?;
-    let receipt_ids = rows
-        .iter()
-        .map(|r| r.original_customer_receipt_id.to_string())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let parties = db
-        .customer_receipts()
-        .list_active_by_ids(&receipt_ids, executor)
-        .await?
-        .into_iter()
-        .map(|r| (r.base.id, r.counterparty_party_id.to_string()))
-        .collect::<HashMap<_, _>>();
-    for row in rows {
-        if let Some(id) = parties.get(row.original_customer_receipt_id.as_ref()) {
-            result.insert((DocumentType::ReceiptReversal, row.base.id), party(row.created_by, id.clone()));
-        }
-    }
-    payment_reversals(db, keys, result, executor).await?;
-    Ok(())
-}
-
-async fn load_order_sources(
-    db: &Database,
-    sources: &BTreeSet<OrderTaskSource>,
-    executor: &mut dyn Executor,
-) -> Result<BTreeMap<OrderTaskSource, WorkflowScopeObject>> {
-    let sales = sources
-        .iter()
-        .filter_map(|s| if let OrderTaskSource::Sales(id) = s { Some(id.clone()) } else { None })
-        .collect::<Vec<_>>();
-    let purchases = sources
-        .iter()
-        .filter_map(|s| if let OrderTaskSource::Purchase(id) = s { Some(id.clone()) } else { None })
-        .collect::<Vec<_>>();
-    let mut by_source = BTreeMap::new();
-    for row in db.sales_orders().list_active_by_ids(&sales, executor).await? {
-        let source = OrderTaskSource::Sales(row.base.id);
-        by_source.insert(
-            source.clone(),
-            WorkflowScopeObject {
-                customer_id: Some(row.customer_id.to_string()),
+) -> Result<Option<ApprovalBindingFacts>> {
+    let Some(fact_kind) = OrderTaskSource::approval_kind(kind) else { return Ok(None) };
+    let key = (fact_kind, id.to_owned());
+    let facts = WorkItemFactsReader::new(db.clone()).load(&HashSet::from([key.clone()]), executor).await?;
+    let Some(fact) = facts.get(&key) else { return Ok(None) };
+    let source = fact
+        .order_scope_source
+        .as_ref()
+        .filter(|source| source.matches_kind(fact_kind))
+        .ok_or_else(|| Error::Internal("审批订单缺少权威来源".into()))?;
+    let result = match source {
+        OrderTaskSource::Sales(id) => {
+            db.sales_orders().find_by_id(id, executor).await?.map(|row| ApprovalBindingFacts {
+                order_source: Some(source.clone()),
                 owner_user_id: row.sales_owner_user_id,
                 business_org_unit_id: Some(row.business_org_unit_id),
-                order_source: Some(source),
-                ..Default::default()
-            },
-        );
-    }
-    for row in db.purchase_orders().list_active_by_ids(&purchases, executor).await? {
-        let owner = row.current_owner_user_id()?.to_string();
-        let source = OrderTaskSource::Purchase(row.base.id);
-        by_source.insert(
-            source.clone(),
-            WorkflowScopeObject {
-                owner_user_id: owner,
+            })
+        },
+        OrderTaskSource::Purchase(id) => {
+            let Some(row) = db.purchase_orders().find_by_id(id, executor).await? else { return Ok(None) };
+            Some(ApprovalBindingFacts {
+                order_source: Some(source.clone()),
+                owner_user_id: row.current_owner_user_id()?.to_string(),
                 business_org_unit_id: Some(row.business_org_unit_id),
-                order_source: Some(source),
-                ..Default::default()
-            },
-        );
-    }
-    Ok(by_source)
+            })
+        },
+    };
+    Ok(result)
 }
 
-async fn payment_reversals(
+/// 退款必须仍能定位原有客户或供应商，不再为未消费的结算主体字段创建映射。
+async fn refund_exists(
     db: &Database,
-    keys: &Keys,
-    result: &mut WorkflowScopeObjects,
+    kind: DocumentType,
+    id: &str,
     executor: &mut dyn Executor,
-) -> Result<()> {
-    let rows = db
-        .payment_reversals()
-        .list_active_by_ids(&ids(keys, DocumentType::PaymentReversal), executor)
-        .await?;
-    let payment_ids = rows
-        .iter()
-        .map(|r| r.original_supplier_payment_id.to_string())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let payments = db.supplier_payments().list_active_by_ids(&payment_ids, executor).await?;
-    let supplier_ids = payments
-        .iter()
-        .map(|p| p.supplier_id.to_string())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let suppliers = db
-        .supplier_accounts()
-        .list_active_by_ids(&supplier_ids, executor)
-        .await?
-        .into_iter()
-        .map(|s| (s.base.id, s.party_id.to_string()))
-        .collect::<HashMap<_, _>>();
-    let parties = payments
-        .into_iter()
-        .filter_map(|p| suppliers.get(p.supplier_id.as_ref()).map(|party| (p.base.id, party.clone())))
-        .collect::<HashMap<_, _>>();
-    for row in rows {
-        if let Some(id) = parties.get(row.original_supplier_payment_id.as_ref()) {
-            result.insert((DocumentType::PaymentReversal, row.base.id), party(row.created_by, id.clone()));
-        }
+) -> Result<bool> {
+    match kind {
+        DocumentType::CustomerRefund => {
+            let Some(row) = db.customer_refunds().find_by_id(id, executor).await? else { return Ok(false) };
+            Ok(db.customer_accounts().find_by_id(row.customer_id.as_ref(), executor).await?.is_some())
+        },
+        DocumentType::SupplierRefund => {
+            let Some(row) = db.supplier_refunds().find_by_id(id, executor).await? else { return Ok(false) };
+            Ok(db.supplier_accounts().find_by_id(row.supplier_id.as_ref(), executor).await?.is_some())
+        },
+        _ => Ok(false),
     }
-    Ok(())
+}
+
+/// 冲销保留原收款单或原付款单及供应商的完整存在性要求。
+async fn reversal_exists(
+    db: &Database,
+    kind: DocumentType,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    match kind {
+        DocumentType::ReceiptReversal => {
+            let Some(row) = db.receipt_reversals().find_by_id(id, executor).await? else { return Ok(false) };
+            Ok(db
+                .customer_receipts()
+                .find_by_id(row.original_customer_receipt_id.as_ref(), executor)
+                .await?
+                .is_some())
+        },
+        DocumentType::PaymentReversal => {
+            let Some(row) = db.payment_reversals().find_by_id(id, executor).await? else { return Ok(false) };
+            let Some(payment) = db
+                .supplier_payments()
+                .find_by_id(row.original_supplier_payment_id.as_ref(), executor)
+                .await?
+            else {
+                return Ok(false);
+            };
+            Ok(db.supplier_accounts().find_by_id(payment.supplier_id.as_ref(), executor).await?.is_some())
+        },
+        _ => Ok(false),
+    }
 }

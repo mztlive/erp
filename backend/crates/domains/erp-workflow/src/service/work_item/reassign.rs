@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::future::Future;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_core::Result as CoreResult;
+use erp_core::{AccountKind, Result as CoreResult};
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
@@ -456,13 +456,7 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: crate::ports::Workflow
     target_user_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let account = service
-        .identity
-        .directory()
-        .account(target_user_id, executor)
-        .await?
-        .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-    let actor = AuditActor::new(account.id, account.login_account, account.kind);
+    let actor = AuditActor::new(target_user_id.into(), target_user_id.into(), AccountKind::Admin);
     let required = tasks
         .iter()
         .map(WorkItem::qualification_permissions)

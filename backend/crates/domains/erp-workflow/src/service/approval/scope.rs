@@ -155,22 +155,20 @@ pub async fn definition_management_visibility_with_executor(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionManagementVisibility> {
-    let policies = ALL_DOCUMENT_TYPES
-        .iter()
-        .copied()
-        .filter_map(|document_type| match policy_of(document_type) {
-            Ok(DocumentApprovalPolicy::ProcessRequired(policy)) => {
-                Some(Ok((document_type, policy.definition_admin_permission, policy.runtime_admin_permission)))
-            },
-            Ok(DocumentApprovalPolicy::NoApproval(_)) => None,
-            Err(error) => Some(Err(error)),
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let mut policies = Vec::new();
+    for document_type in ALL_DOCUMENT_TYPES {
+        if let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? {
+            policies.push((
+                document_type,
+                Permission::parse(policy.definition_admin_permission)?,
+                Permission::parse(policy.runtime_admin_permission)?,
+            ));
+        }
+    }
     let required = policies
         .iter()
-        .flat_map(|(_, define, runtime)| [define.as_str(), runtime.as_str()])
-        .map(Permission::parse)
-        .collect::<StdResult<Vec<_>, _>>()?;
+        .flat_map(|(_, define, runtime)| [define.clone(), runtime.clone()])
+        .collect::<Vec<_>>();
     let qualification = identity_service.qualified_permissions(actor, &required, executor).await?;
     let Some(qualification) = qualification else {
         return Ok(DefinitionManagementVisibility::default());
@@ -178,8 +176,8 @@ pub async fn definition_management_visibility_with_executor(
     let permissions = qualification.permissions();
     let mut enforced = Vec::new();
     for (document_type, definition_permission, runtime_permission) in policies {
-        let can_define = permissions.covers_one(&Permission::parse(&definition_permission)?);
-        let can_runtime = permissions.covers_one(&Permission::parse(&runtime_permission)?);
+        let can_define = permissions.covers_one(&definition_permission);
+        let can_runtime = permissions.covers_one(&runtime_permission);
         enforced.push((document_type, can_define, can_runtime));
     }
     Ok(visibility_from_enforced_permissions(enforced))

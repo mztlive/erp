@@ -7,7 +7,8 @@ use bpm::engine::Eligibility;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_identity::SharedRbacService;
+use erp_core::AccountKind;
+use erp_identity::{Permission, SharedRbacService};
 use persistence_core::Executor;
 
 use super::super::authorization::{AuthorizationFailure, converge_eligibility};
@@ -18,7 +19,6 @@ use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkI
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{OrderTaskSource, WorkflowAuthorizationPort};
 use crate::repository::bpm::ApprovalInstanceSummary;
-use crate::service::approval::approval_participant_permissions_with_executor;
 use crate::service::approval::business_adapter::{adapter_spec_of, ensure_separation_of_duties};
 use crate::service::approval::policy::{DocumentApprovalPolicy, SeparationOfDutiesPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
@@ -93,36 +93,30 @@ pub(super) async fn revalidate_decision_approver(
     if spec.document_type != snapshot.document_type {
         return Err(hidden_not_found());
     }
-    let account = identity_service.directory().account(assignee_id, executor).await?;
-    let failure = match account {
+    let actor = authenticated_actor
+        .cloned()
+        .unwrap_or_else(|| AuditActor::new(assignee_id.into(), assignee_id.into(), AccountKind::Admin));
+    let required =
+        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+    let qualified = if actor.id() == assignee_id {
+        identity_service.qualified_permissions(&actor, &required, executor).await?
+    } else {
+        None
+    };
+    let failure = match qualified {
         None => Some(AuthorizationFailure::AccountInactive),
-        Some(account)
-            if !account.is_active_backoffice()
-                || authenticated_actor
-                    .is_some_and(|actor| actor.id() != account.id || actor.kind() != account.kind) =>
-        {
-            Some(AuthorizationFailure::AccountInactive)
-        },
-        Some(account) => {
-            let scope_actor = authenticated_actor
-                .cloned()
-                .unwrap_or_else(|| AuditActor::new(account.id.clone(), account.id.clone(), account.kind));
-            if !approval_participant_permissions_with_executor(identity_service, &scope_actor, executor)
-                .await?
-            {
-                Some(AuthorizationFailure::NotEligible)
-            } else if ensure_separation_of_duties(
+        Some(qualified) if !qualified.same_role(&required) => Some(AuthorizationFailure::NotEligible),
+        Some(_)
+            if ensure_separation_of_duties(
                 separation_policy,
                 &snapshot.payload.submitted_by,
                 &[assignee_id.to_string()],
             )
-            .is_err()
-            {
-                Some(AuthorizationFailure::SeparationOfDuties)
-            } else {
-                None
-            }
+            .is_err() =>
+        {
+            Some(AuthorizationFailure::SeparationOfDuties)
         },
+        Some(_) => None,
     };
     if failure.is_none()
         && let Some(actor) = authenticated_actor

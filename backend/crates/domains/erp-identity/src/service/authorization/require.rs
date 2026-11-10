@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use application_core::AuditActor;
 use persistence_core::Executor;
 
-use super::{AccessPolicy, AuthorizationService};
+use super::{AccessMode, AuthorizationService};
 use crate::entity::authorization::{AccessSubject, AccessTarget, ObjectFacts, ResourceTargets};
 use crate::repository::authorization::AccessProof;
 use crate::repository::resource_grants;
@@ -27,7 +27,7 @@ impl AuthorizationService {
         match target {
             AccessTarget::Operation => {
                 let entry = self.registry.entry(permission, &AccessSubject::Direct)?;
-                if !matches!(entry.policy, AccessPolicy::Operation) {
+                if !matches!(entry.access, AccessMode::Operation) {
                     return Err(Error::ValidationError("本操作必须提供对象".into()));
                 }
                 self.identity(actor, &entry, executor).await.map(|_| ())
@@ -51,8 +51,7 @@ impl AuthorizationService {
             return Err(Error::ValidationError("授权目标不能为空".into()));
         }
         let entry = self.registry.entry(permission, &subject)?;
-        let port =
-            entry.facts.clone().ok_or_else(|| Error::ValidationError("操作缺少对象事实端口".into()))?;
+        let port = entry.access.facts()?.clone();
         let query = self.resolve(actor, entry, executor).await?;
         let objects = port.load(&query.context, &ids, executor).await?;
         ids.ensure_objects(&query.context.resource, &objects)?;

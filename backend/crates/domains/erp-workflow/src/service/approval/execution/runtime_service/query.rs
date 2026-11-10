@@ -10,6 +10,7 @@ use bpm::engine::TaskIntent;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use erp_core::Result as CoreResult;
 use erp_core::common::time::Instant;
 use erp_identity::Permission;
 use persistence_core::NoTransaction;
@@ -259,20 +260,25 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let subject = self.load_runtime_read_subject(instance_id).await?;
         self.ensure_management_runtime_read(actor, &subject).await?;
         let blocked = subject.instance.status == ApprovalProcessInstanceStatus::Blocked;
+        let candidates = recovery_options_for(blocked, subject.instance.blocker_code);
+        let required = candidates
+            .iter()
+            .map(|action| match action {
+                RuntimeRecoveryAction::ResumeCurrentApprover => Permission::parse("approval_instance:resume"),
+                RuntimeRecoveryAction::CancelBlocked => Permission::parse("approval_instance:cancel_blocked"),
+            })
+            .collect::<CoreResult<Vec<_>>>()?;
         let mut actions = Vec::new();
-        for action in recovery_options_for(blocked, subject.instance.blocker_code) {
-            let permission = match action {
-                RuntimeRecoveryAction::ResumeCurrentApprover => "approval_instance:resume",
-                RuntimeRecoveryAction::CancelBlocked => "approval_instance:cancel_blocked",
-            };
-            if self
-                .identity
-                .qualified_permissions(actor, &[Permission::parse(permission)?], &mut NoTransaction)
-                .await?
-                .is_some_and(|qualified| !qualified.permissions().is_empty())
-            {
-                actions.push(action);
-            }
+        if !required.is_empty()
+            && let Some(qualified) =
+                self.identity.qualified_permissions(actor, &required, &mut NoTransaction).await?
+        {
+            let granted = qualified.permissions();
+            actions = candidates
+                .into_iter()
+                .zip(&required)
+                .filter_map(|(action, permission)| granted.covers_one(permission).then_some(action))
+                .collect();
         }
         let hints = self.resume_version_hints(&subject).await?;
         Ok(RuntimeRecoveryOptionsView {

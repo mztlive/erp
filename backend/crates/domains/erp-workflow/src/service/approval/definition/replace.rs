@@ -5,7 +5,8 @@ use bpm::ParticipantId;
 use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition};
-use erp_identity::{AccountSummary, SharedRbacService};
+use erp_core::AccountKind;
+use erp_identity::{AccountSummary, Permission, SharedRbacService};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -14,10 +15,7 @@ use super::super::assignee_source::AssigneeSource;
 use super::super::definition_dto::{
     DefinitionDetailView, DefinitionNodeRequest, ReplaceDefinitionNodesRequest,
 };
-use super::super::policy::{
-    ApproverEligibilityPolicy, ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy,
-};
-use super::super::scope::approval_participant_permissions_with_executor;
+use super::super::policy::ProcessRequiredApprovalPolicy;
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity, applied_definition,
@@ -30,6 +28,7 @@ use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::error::{Error, ErrorCode, Result};
 use crate::repository::BpmExt;
 use crate::repository::approval_copy::ApprovalCopyExt;
+#[cfg(test)]
 use crate::repository::bpm::CasWriteOutcome;
 use crate::service::approval::copies::{save_config, validate_recipients};
 
@@ -198,9 +197,7 @@ async fn replace_nodes_tx(
     let reloaded =
         reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
-    let prepared =
-        prepare_replacement(identity_service, db, &reloaded, &policy, &request.nodes, actor, executor)
-            .await?;
+    let prepared = prepare_replacement(identity_service, &reloaded, &request.nodes, executor).await?;
     let repository = db.approval_copies();
     let rules = match request.copy_rules {
         Some(rules) => rules,
@@ -270,8 +267,7 @@ pub(super) async fn reload_draft_for_cas(
         .load_definition_graph(&ApprovalProcessDefinitionId::new(original.base.id.clone()), session)
         .await?
         .ok_or_else(definition_not_found)?;
-    let ReplaceNodesWriteStep::PrepareAndReplaceGraph =
-        allow_prepare_replacement(&graph.definition, expected)?;
+    ensure_draft_lock(&graph.definition, expected)?;
     Ok(graph)
 }
 
@@ -279,11 +275,8 @@ pub(super) async fn reload_draft_for_cas(
 ///
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - MongoDB 数据库
 /// * `graph` - 当前草稿图
-/// * `policy` - 当前单据类型必须审批政策
 /// * `requests` - 客户端整组节点请求
-/// * `actor` - 已认证定义管理员
 /// * `session` - 调用方事务执行器
 ///
 /// # 返回
@@ -296,21 +289,13 @@ pub(super) async fn reload_draft_for_cas(
 /// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
 async fn prepare_replacement(
     identity_service: &SharedRbacService,
-    db: &Database,
     graph: &DefinitionGraph,
-    policy: &ProcessRequiredApprovalPolicy,
     requests: &[DefinitionNodeRequest],
-    actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let _ = actor;
     let drafts = node_replacement_drafts(requests)?;
     let planned = graph.plan_replacement_nodes(&drafts, now()?).map_err(map_model_error)?;
-    let assignee_ids = assignee_ids(&planned);
-    let snapshots = load_assignee_snapshots(identity_service, &assignee_ids, session).await?;
-    let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph = allow_replace_after_assignees(
-        validate_assignees(identity_service, db, policy, &assignee_ids, session).await,
-    )?;
+    let snapshots = validate_assignees(identity_service, &assignee_ids(&planned), session).await?;
     let nodes = apply_snapshots(planned, &snapshots)?;
     rebuild_draft_graph(&graph.definition, nodes)
 }
@@ -366,7 +351,7 @@ pub(super) async fn replace_graph(
         .replace_draft_graph(&graph.definition, &graph.nodes, &graph.transitions, expected, session)
         .await?;
     Ok(DefinitionGraph {
-        definition: allow_apply_replaced_definition(outcome)?,
+        definition: applied_definition(outcome)?,
         nodes: graph.nodes,
         transitions: graph.transitions,
     })
@@ -418,115 +403,33 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
         })
         .collect()
 }
-
-/// 批量读取审批人并校验账号、静态权限与可静态判断的岗位分离。
-///
+/// 在同一执行器内校验审批人并返回该次取证的账号摘要。
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `_db` - 数据库参数；本函数不读取
-/// * `policy` - 当前单据类型必须审批政策
-/// * `user_ids` - BPM 确定性提取的审批人 ID
-/// * `session` - 调用方事务执行器
-///
+/// identity_service 为共享身份服务，user_ids 为 BPM 提取的有序账号，executor 为原事务。
 /// # 返回
-/// 全部审批人通过定义期静态资格校验时返回 `Ok(())`。
-///
+/// 已核验账号和同角色读写资格的显示资料，不再次查询账号目录。
 /// # 错误
-/// 账号缺失、后台有效性、静态权限或岗位分离失败时返回错误。
-///
-/// # 关键业务约束
-/// 定义期不读取具体实例 DataScopeFact，运行时对象访问资格由绑定与执行阶段重验。
+/// 账号失效返回校验错误，权限不足返回业务错误；基础设施失败原样传播。
 pub(super) async fn validate_assignees(
     identity_service: &SharedRbacService,
-    _db: &Database,
-    policy: &ProcessRequiredApprovalPolicy,
     user_ids: &[String],
-    session: &mut dyn Executor,
-) -> Result<()> {
-    let accounts = load_assignee_snapshots(identity_service, user_ids, session).await?;
-    for user_id in user_ids {
-        let account = require_active_backoffice_assignee(accounts.get(user_id))?;
-        ensure_static_eligibility(identity_service, policy, account, session).await?;
-    }
-    validate_static_separation(policy.separation_of_duties_policy, user_ids)
-}
-
-/// 批量读取账号快照。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `user_ids` - 去重后的审批人账号 ID
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回按账号 ID 索引的账号快照；空输入直接返回空映射。
-///
-/// # 错误
-/// 授权端口批量读取账号失败时返回错误。
-///
-/// # 关键业务约束
-/// 查询条件由账号 Repository 的 `list_by_ids` 封装，禁止 Service 拼装 MongoDB 条件。
-pub(super) async fn load_assignee_snapshots(
-    identity_service: &SharedRbacService,
-    user_ids: &[String],
-    session: &mut dyn Executor,
-) -> Result<HashMap<String, AccountSummary>> {
-    if user_ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let accounts = identity_service.directory().accounts(user_ids, session).await?;
-    Ok(accounts.into_iter().map(|account| (account.id.clone(), account)).collect())
-}
-
-/// 校验后台有效账号与静态审批权限，不伪造实例 DataScopeFact。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `policy` - 当前单据类型审批人资格政策
-/// * `account` - Repository 返回的账号快照
-///
-/// # 返回
-/// 账号当前有效且具有静态审批权限时返回 `Ok(())`。
-///
-/// # 错误
-/// 后台有效性、权限常量解析或 RBAC 查询失败时返回错误。
-///
-/// # 关键业务约束
-/// 账号类型与状态组合由实体判断；本方法只编排 RBAC 权限重验。
-async fn ensure_static_eligibility(
-    identity_service: &SharedRbacService,
-    policy: &ProcessRequiredApprovalPolicy,
-    account: &AccountSummary,
     executor: &mut dyn Executor,
-) -> Result<()> {
-    match policy.approver_eligibility_policy {
-        ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {},
+) -> Result<HashMap<String, AccountSummary>> {
+    let required =
+        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+    let mut accounts = HashMap::new();
+    for user_id in user_ids {
+        let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
+        let qualified = identity_service
+            .qualified_permissions(&actor, &required, executor)
+            .await?
+            .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()))?;
+        if !qualified.same_role(&required) {
+            return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
+        }
+        accounts.insert(user_id.clone(), qualified.account().clone());
     }
-    require_active_backoffice_assignee(Some(account))?;
-    let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-    let allowed = approval_participant_permissions_with_executor(identity_service, &actor, executor).await?;
-    ensure_static_decide_permission(allowed)
-}
-
-/// 定义期只能判断节点间岗位分离；提交人隔离留到运行时。
-///
-/// # 参数
-/// * `policy` - 岗位分离策略
-/// * `_user_ids` - 审批人 ID；当前策略不使用
-///
-/// # 返回
-/// 两类政策均允许节点间复用审批人，通过时无返回值。
-///
-/// # 错误
-/// 当前策略不会失败。
-pub(super) fn validate_static_separation(
-    policy: SeparationOfDutiesPolicy,
-    _user_ids: &[String],
-) -> Result<()> {
-    match policy {
-        SeparationOfDutiesPolicy::AllowSubmitterAsApprover
-        | SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => Ok(()),
-    }
+    Ok(accounts)
 }
 
 /// 把账号显示名写入节点快照。
@@ -662,96 +565,6 @@ pub(super) fn prepare_definition_nodes(
     Ok(prepared)
 }
 
-/// 草稿替换在锁通过后的下一步。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReplaceNodesWriteStep {
-    /// 允许 prepare_replacement 与 apply_draft_graph。
-    PrepareAndReplaceGraph,
-}
-
-/// 账号/静态权限校验通过后才允许写替换图。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReplaceAssigneesWriteStep {
-    /// 允许刷新账号快照并调用 BPM 重建草稿图。
-    ApplySnapshotsAndReplaceGraph,
-}
-
-/// 替换路径在审批人校验失败时不得写图。
-///
-/// # 参数
-/// * `assignees` - `validate_assignees` 的结果
-///
-/// # 返回
-/// 校验通过时返回写图步骤。
-///
-/// # 错误
-/// 透传账号不存在、不可登录、缺静态权限或岗位分离失败。
-///
-/// # 约束
-/// 必须先于 `apply_snapshots` / `replace_graph` 调用。
-fn allow_replace_after_assignees(assignees: Result<()>) -> Result<ReplaceAssigneesWriteStep> {
-    assignees?;
-    Ok(ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph)
-}
-
-/// 陈旧锁立即失败，替换路径不得继续规划或写图。
-///
-/// # 错误
-/// 非草稿或锁版本不匹配时返回冲突。
-fn allow_prepare_replacement(
-    definition: &ApprovalProcessDefinition,
-    expected: u64,
-) -> Result<ReplaceNodesWriteStep> {
-    ensure_draft_lock(definition, expected)?;
-    Ok(ReplaceNodesWriteStep::PrepareAndReplaceGraph)
-}
-
-/// CAS 冲突时不得把替换结果当成功写回。
-///
-/// # 错误
-/// `VersionConflict` 映射为陈旧锁，其它失败原样返回。
-fn allow_apply_replaced_definition(
-    outcome: CasWriteOutcome<ApprovalProcessDefinition>,
-) -> Result<ApprovalProcessDefinition> {
-    applied_definition(outcome)
-}
-
-/// 收敛定义期审批人账号存在性与后台有效性。
-///
-/// # 参数
-/// * `account` - 仓储按审批人 ID 返回的可选账号
-///
-/// # 返回
-/// 返回可承担后台责任的有效账号引用。
-///
-/// # 错误
-/// 账号缺失、已停用或不满足后台责任身份时返回校验错误。
-///
-/// # 关键业务约束
-/// 账号类型与状态规则由 `AccountSummary::is_active_backoffice` 唯一提供，本层只映射错误语义。
-fn require_active_backoffice_assignee(account: Option<&AccountSummary>) -> Result<&AccountSummary> {
-    account
-        .filter(|item| item.is_active_backoffice())
-        .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))
-}
-
-/// 定义期静态 `approval_instance:decide` 闸门。
-///
-/// # 参数
-/// * `has_decide` - 审批人是否具备静态决定权限
-///
-/// # 返回
-/// 具备权限时无返回值。
-///
-/// # 错误
-/// 缺少静态审批权限时返回业务错误。
-pub(super) fn ensure_static_decide_permission(has_decide: bool) -> Result<()> {
-    if has_decide {
-        return Ok(());
-    }
-    Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".to_string()))
-}
-
 #[cfg(test)]
 mod tests {
     use bpm::model::NewNodeDefinition;
@@ -760,6 +573,32 @@ mod tests {
     use super::super::test_support::draft_definition;
     use super::*;
     use crate::entity::approval_copy::CopyTrigger;
+
+    #[test]
+    fn snapshots_refresh_all_assignees_and_reject_missing_or_invalid_names() {
+        let mut graph = super::super::test_support::two_node_publish_graph();
+        graph.nodes[0] = graph.nodes[0]
+            .clone()
+            .with_additional_assignees(vec![
+                ApprovalParticipant::new(ParticipantId::new("u3").unwrap(), "旧或签人").unwrap(),
+            ])
+            .unwrap();
+        let mut accounts = [("u3", "或签人"), ("u2", "复核人"), ("u1", "初审人")]
+            .into_iter()
+            .map(|(id, name)| {
+                (id.to_owned(), AccountSummary::new(id, AccountKind::Admin, true).with_display_name(name))
+            })
+            .collect::<HashMap<_, _>>();
+        let refreshed = apply_snapshots(graph.nodes.clone(), &accounts).unwrap();
+        assert_eq!(refreshed[0].assignee_label_snapshot, "初审人");
+        assert_eq!(refreshed[0].additional_assignees[0].name, "或签人");
+        assert_eq!(refreshed[1].assignee_label_snapshot, "复核人");
+        accounts.remove("u3");
+        assert!(matches!(apply_snapshots(graph.nodes.clone(), &accounts),
+            Err(Error::ValidationError(message)) if message == "指定审批人账号不存在、已停用或任职失效"));
+        accounts.insert("u3".into(), AccountSummary::new("u3", AccountKind::Admin, true));
+        assert!(apply_snapshots(graph.nodes, &accounts).is_err());
+    }
 
     #[test]
     fn omitted_copy_rules_follow_node_identity_and_reject_deleted_nodes() {
@@ -793,15 +632,12 @@ mod tests {
     #[test]
     fn stale_lock_has_no_partial_write() {
         let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
-        let stale = allow_prepare_replacement(&definition, 99).unwrap_err();
+        let stale = ensure_draft_lock(&definition, 99).unwrap_err();
         assert_eq!(stale.code(), Some(ErrorCode::ApprovalDefinitionVersionConflict));
         let current = definition.definition_lock_version();
+        assert!(matches!(ensure_draft_lock(&definition, current), Ok(())));
         assert!(matches!(
-            allow_prepare_replacement(&definition, current),
-            Ok(ReplaceNodesWriteStep::PrepareAndReplaceGraph)
-        ));
-        assert!(matches!(
-            allow_apply_replaced_definition(CasWriteOutcome::VersionConflict(definition.clone())),
+            applied_definition(CasWriteOutcome::VersionConflict(definition.clone())),
             Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
     }
@@ -819,24 +655,5 @@ mod tests {
             .retire(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(3).unwrap())
             .unwrap();
         assert!(ensure_draft_lock(&definition, 1).is_err());
-    }
-
-    /// 替换路径账号/权限失败不得写图。
-    #[test]
-    fn replace_assignee_failure_does_not_write_graph() {
-        assert!(matches!(
-            allow_replace_after_assignees(Ok(())),
-            Ok(ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph)
-        ));
-        assert!(matches!(
-            allow_replace_after_assignees(Err(Error::ValidationError(
-                "指定审批人账号不存在、已停用或任职失效".into()
-            ))),
-            Err(Error::ValidationError(message)) if message.contains("账号不存在")
-        ));
-        assert!(matches!(
-            allow_replace_after_assignees(Err(Error::Forbidden("缺少静态审批权限".into()))),
-            Err(Error::Forbidden(_))
-        ));
     }
 }

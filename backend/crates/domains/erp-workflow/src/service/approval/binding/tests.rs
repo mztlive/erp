@@ -1,12 +1,9 @@
-use std::collections::HashMap;
-
 use application_core::AuditActor;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessDefinitionId};
 use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
 use erp_core::AccountKind;
-use erp_identity::AccountSummary;
 
-use super::revalidate::{require_ready_assignee, revalidate_published_graph};
+use super::revalidate::revalidate_published_graph;
 use super::upgrade::{ensure_registered_upgrade_subject, upgrade_result_from_action};
 use super::*;
 use crate::entity::document_registry::workflow_action::ApprovalBindingActionContext;
@@ -14,18 +11,13 @@ use crate::entity::document_registry::{
     BusinessDocumentId, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionId,
     WorkflowActionType,
 };
-use crate::error::{Error, ErrorCode};
+use crate::error::ErrorCode;
 use crate::repository::bpm::DefinitionGraph;
 use crate::service::approval::business_adapter::ensure_runtime_cut_over;
 use crate::service::approval::execution::upgrade_binding_identity;
 use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, ApprovalRequirement, policy_of};
 use crate::service::approval::upgrade_subject::ApprovalUpgradeSubjectFacts;
 use crate::service::document_registry::new_registered_document;
-
-/// 构造审批人账号快照。
-fn assignee_account(id: &str, can_login: bool) -> AccountSummary {
-    AccountSummary::new(id, AccountKind::Admin, can_login).with_display_name(id)
-}
 
 /// 构造严格回读单测命令。
 fn upgrade_command() -> UpgradeUnsubmittedDefinitionCommand {
@@ -264,35 +256,6 @@ fn business_document_registration_inventory() {
         assert!(seen.insert(*document_type));
         let _ = new_registered_document("id-1", *document_type, "").expect("空编号草稿可注册");
     }
-}
-
-/// 批量账号映射必须按 BPM 审批人顺序查表，不得依赖 Repository 返回顺序。
-#[test]
-fn assignee_account_map_preserves_bpm_validation_order() {
-    let accounts = [assignee_account("u1", true), assignee_account("u2", true)]
-        .into_iter()
-        .map(|account| (account.id.clone(), account))
-        .collect::<HashMap<_, _>>();
-    let assignee_ids = ["u2", "u1"];
-
-    let ordered = assignee_ids
-        .iter()
-        .map(|user_id| require_ready_assignee(accounts.get(*user_id)).unwrap().id.as_str())
-        .collect::<Vec<_>>();
-
-    assert_eq!(ordered, assignee_ids);
-}
-
-/// 缺失与停用审批人必须保留同一精确校验错误。
-#[test]
-fn missing_and_inactive_assignees_keep_exact_error() {
-    let expected = "指定审批人账号不存在、已停用或任职失效";
-    let missing = require_ready_assignee(None).unwrap_err();
-    let inactive = assignee_account("u1", false);
-    let inactive = require_ready_assignee(Some(&inactive)).unwrap_err();
-
-    assert!(matches!(missing, Error::ValidationError(message) if message == expected));
-    assert!(matches!(inactive, Error::ValidationError(message) if message == expected));
 }
 
 /// 草稿允许空编号；正式号原样登记。

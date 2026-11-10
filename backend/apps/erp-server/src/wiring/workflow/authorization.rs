@@ -1,6 +1,6 @@
 //! 将身份域权限与 policy 事务装配到工作流授权端口。
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_approval_runtime::resource_grants::append_assignments;
@@ -8,9 +8,7 @@ use erp_identity::SharedRbacService;
 use erp_supplier_catalog::supplier_portal::authorization::request_readable as portal_request_readable;
 use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_reviewable;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::{
-    OrderTaskSource, WorkflowAuthorizationPort, WorkflowScopeObject, WorkflowScopeObjects,
-};
+use erp_workflow::ports::{ApprovalBindingFacts, OrderTaskSource, WorkflowAuthorizationPort};
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
@@ -140,23 +138,15 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         contract_readable_result(result)
     }
 
-    async fn approval_scope_objects(
-        &self,
-        keys: &HashSet<(DocumentType, String)>,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<WorkflowScopeObjects> {
-        super::approval_objects::load(&self.db, keys, executor).await.map_err(map_service)
-    }
-
-    async fn approval_scope_object(
+    async fn approval_binding_facts(
         &self,
         document_type: DocumentType,
         document_id: &str,
         executor: &mut dyn Executor,
-    ) -> WorkflowResult<WorkflowScopeObject> {
-        self.approval_scope_objects(&HashSet::from([(document_type, document_id.to_string())]), executor)
-            .await?
-            .remove(&(document_type, document_id.to_string()))
+    ) -> WorkflowResult<ApprovalBindingFacts> {
+        super::approval_objects::load(&self.db, document_type, document_id, executor)
+            .await
+            .map_err(map_service)?
             .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
     }
 

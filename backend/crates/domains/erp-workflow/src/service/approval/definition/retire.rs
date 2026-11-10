@@ -173,14 +173,8 @@ async fn retire_tx(
         return Ok(view);
     }
     let published = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, executor).await?;
-    let RetireWriteStep::RetireCurrentPublished = decide_retire_write(
-        published.as_ref(),
-        &graph.definition.base.id,
-        request.expected_definition_lock_version,
-    )?;
-    let Some(mut retired) = published else {
-        return Err(Error::BusinessLogicError("当前没有可退役的已发布定义".to_string()));
-    };
+    let mut retired =
+        retire_target(published, &graph.definition.base.id, request.expected_definition_lock_version)?;
     let expected = retired.definition_lock_version();
     retired.retire(participant(actor)?, now()?).map_err(map_model_error)?;
     let mut graph =
@@ -202,41 +196,21 @@ async fn retire_tx(
     detail_with_copies(db, &graph, executor).await
 }
 
-/// 退役写库步骤。仅当前 PUBLISHED 且锁匹配才允许写回。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RetireWriteStep {
-    /// 允许对当前已发布定义执行 retire + CAS 写回。
-    RetireCurrentPublished,
-}
-
-/// 只能退役当前已发布定义。
-///
+/// 取得目标和锁版本均匹配的当前发布定义。
 /// # 错误
-/// 无 PUBLISHED 或请求 ID 不是当前发布版时返回业务错误。
-fn ensure_retire_target(published_id: Option<&str>, requested_id: &str) -> Result<()> {
-    let Some(published_id) = published_id else {
-        return Err(Error::BusinessLogicError("当前没有可退役的已发布定义".to_string()));
-    };
-    if published_id != requested_id {
-        return Err(Error::BusinessLogicError("只能退役当前已发布定义".to_string()));
-    }
-    Ok(())
-}
-
-/// 目标与锁均匹配后才允许退役写回。
-///
-/// # 错误
-/// 无发布版、ID 不匹配或锁版本陈旧时返回错误。
-fn decide_retire_write(
-    published: Option<&ApprovalProcessDefinition>,
+/// 无发布版、ID 不匹配或锁版本陈旧时拒绝。
+fn retire_target(
+    published: Option<ApprovalProcessDefinition>,
     requested_id: &str,
     expected_lock: u64,
-) -> Result<RetireWriteStep> {
-    ensure_retire_target(published.map(|item| item.base.id.as_str()), requested_id)?;
+) -> Result<ApprovalProcessDefinition> {
     let published =
-        published.ok_or_else(|| Error::BusinessLogicError("当前没有可退役的已发布定义".to_string()))?;
-    ensure_lock(published, expected_lock)?;
-    Ok(RetireWriteStep::RetireCurrentPublished)
+        published.ok_or_else(|| Error::BusinessLogicError("当前没有可退役的已发布定义".into()))?;
+    if published.base.id != requested_id {
+        return Err(Error::BusinessLogicError("只能退役当前已发布定义".into()));
+    }
+    ensure_lock(&published, expected_lock)?;
+    Ok(published)
 }
 
 #[cfg(test)]
@@ -253,16 +227,6 @@ mod tests {
     /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
     #[test]
     fn retire_only_current_published() {
-        assert!(matches!(
-            ensure_retire_target(None, "def-1"),
-            Err(Error::BusinessLogicError(message)) if message.contains("没有可退役")
-        ));
-        assert!(matches!(
-            ensure_retire_target(Some("def-pub"), "def-draft"),
-            Err(Error::BusinessLogicError(message)) if message.contains("只能退役当前已发布定义")
-        ));
-        ensure_retire_target(Some("def-1"), "def-1").expect("ID 匹配应放行");
-
         let published = {
             let mut definition = draft_definition(ProcessKind::StockAdjustment, "n1");
             definition
@@ -272,21 +236,18 @@ mod tests {
         };
         let lock = published.definition_lock_version();
         assert!(matches!(
-            decide_retire_write(None, "def-1", lock),
+            retire_target(None, "def-1", lock),
             Err(Error::BusinessLogicError(message)) if message.contains("没有可退役")
         ));
         assert!(matches!(
-            decide_retire_write(Some(&published), "other-id", lock),
+            retire_target(Some(published.clone()), "other-id", lock),
             Err(Error::BusinessLogicError(message)) if message.contains("只能退役当前已发布定义")
         ));
         assert!(matches!(
-            decide_retire_write(Some(&published), &published.base.id, lock + 1),
+            retire_target(Some(published.clone()), &published.base.id, lock + 1),
             Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
-        assert!(matches!(
-            decide_retire_write(Some(&published), &published.base.id, lock),
-            Ok(RetireWriteStep::RetireCurrentPublished)
-        ));
+        assert_eq!(retire_target(Some(published.clone()), &published.base.id, lock).unwrap(), published);
         assert_eq!(
             configuration_status(ApprovalRequirement::ProcessRequired, None, None),
             DefinitionConfigurationStatus::MissingConfiguration

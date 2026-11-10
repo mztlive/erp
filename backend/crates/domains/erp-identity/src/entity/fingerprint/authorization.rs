@@ -102,17 +102,13 @@ impl Fingerprint {
         self.unordered(facts, Self::kind);
     }
 
-    /// 映射事实字段顺序：修订号、到期时刻、命名集合；时刻保留秒及纳秒。
+    /// 映射事实字段顺序：修订号、到期时刻；时刻保留秒及纳秒。
     pub(crate) fn facts(&mut self, facts: &MappingFacts) {
-        let MappingFacts { version, valid_until, sets } = facts;
+        let MappingFacts { version, valid_until } = facts;
         self.optional(version.as_deref(), Self::text);
         self.optional(*valid_until, |hash, until| {
             hash.text(&until.unix_secs().to_string());
             hash.number(u64::from(until.as_utc().timestamp_subsec_nanos()));
-        });
-        self.unordered(sets, |hash, (name, values)| {
-            hash.text(name);
-            hash.unordered(values, |hash, value| hash.text(value));
         });
     }
 }
@@ -202,16 +198,15 @@ mod tests {
         let facts = MappingFacts {
             version: Some("revision".into()),
             valid_until: Some(Instant::from_unix_secs(100)),
-            sets: [("owners".into(), ["u1".into()].into())].into(),
         };
         let hash = |model: &QueryModel, facts: &MappingFacts| {
-            let mut hash = Fingerprint::new("mapping-test-v2");
+            let mut hash = Fingerprint::new("mapping-test-v3");
             hash.model(model);
             hash.facts(facts);
             hash.finish()
         };
         let original = hash(&model, &facts);
-        assert_eq!(original, "487280d5206a5462cf4b2cdccf8dfad3");
+        assert_eq!(original, "1d4065d4218375da9e6d5b8c6eeda8a4");
         let changed_models = [
             QueryModel { key: QueryModelKey::parse("other").unwrap(), ..model.clone() },
             QueryModel { resource: "other".into(), ..model.clone() },
@@ -229,8 +224,6 @@ mod tests {
             MappingFacts { version: Some("other".into()), ..facts.clone() },
             MappingFacts { valid_until: None, ..facts.clone() },
             MappingFacts { valid_until: Some(Instant::from_unix_secs(101)), ..facts.clone() },
-            MappingFacts { sets: [("other".into(), ["u1".into()].into())].into(), ..facts.clone() },
-            MappingFacts { sets: [("owners".into(), ["u2".into()].into())].into(), ..facts.clone() },
         ];
         for changed in changed_facts {
             assert_ne!(original, hash(&model, &changed));

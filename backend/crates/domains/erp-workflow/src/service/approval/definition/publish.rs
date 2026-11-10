@@ -19,8 +19,7 @@ use super::command::{
 };
 use super::mapping::detail_with_copies;
 use super::replace::{
-    apply_snapshots, load_assignee_snapshots, rebuild_draft_graph, reload_draft_for_cas, replace_graph,
-    validate_assignees,
+    apply_snapshots, rebuild_draft_graph, reload_draft_for_cas, replace_graph, validate_assignees,
 };
 use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::error::Result;
@@ -260,116 +259,14 @@ async fn publish_candidate(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let current = reload_draft_for_cas(db, &graph.definition, expected_lock, executor).await?;
-    let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
-        current.validate_linear().map_err(map_model_error),
-        validate_required_purposes(policy, &current.purpose_refs()),
-        validate_assignees(identity_service, db, policy, &current.assignee_ids(), executor).await,
-        ensure_actions_registered(policy),
-    )?;
+    current.validate_linear().map_err(map_model_error)?;
+    validate_required_purposes(policy, &current.purpose_refs())?;
+    let snapshots = validate_assignees(identity_service, &current.assignee_ids(), executor).await?;
+    ensure_actions_registered(policy)?;
     if let Some(config) = db.approval_copies().config(&current.definition.base.id, executor).await? {
         let rules = ApprovalCopyRule::prepare(config.rules, current.nodes.len())?;
         validate_recipients(identity_service, &rules, executor).await?;
     }
-    prepare_publish_graph(identity_service, db, current, executor).await
-}
-
-/// 刷新快照并构造待写草稿图，供发布事务在 receipt-first 后持久化。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - MongoDB 数据库
-/// * `graph` - 已完成发布前校验的草稿图
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回尚未写库的完整草稿图。
-///
-/// # 错误
-/// 账号快照缺失或 BPM 重建失败时返回错误。
-///
-/// # 关键业务约束
-/// 发布前必须以当前账号显示名刷新全部节点快照；本函数不得产生物理写入。
-async fn prepare_publish_graph(
-    identity_service: &SharedRbacService,
-    _db: &Database,
-    graph: DefinitionGraph,
-    session: &mut dyn Executor,
-) -> Result<DefinitionGraph> {
-    let assignee_ids = graph.assignee_ids();
-    let snapshots = load_assignee_snapshots(identity_service, &assignee_ids, session).await?;
-    let nodes = apply_snapshots(graph.nodes, &snapshots)?;
-    rebuild_draft_graph(&graph.definition, nodes)
-}
-
-/// 发布写库步骤。仅在全部重验通过后允许刷新快照并退役旧版本。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PublishWriteStep {
-    /// 允许准备快照并在 receipt-first 后替换图与发布定义。
-    RefreshSnapshotsAndRetirePrevious,
-}
-
-/// 图、用途、账号或动作任一失败都不得进入发布写库。
-///
-/// # 错误
-/// 返回第一个失败的校验错误。
-fn decide_publish_write(
-    graph: Result<()>,
-    purposes: Result<()>,
-    assignees: Result<()>,
-    actions: Result<()>,
-) -> Result<PublishWriteStep> {
-    graph?;
-    purposes?;
-    assignees?;
-    actions?;
-    Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::super::policy::SeparationOfDutiesPolicy;
-    use super::super::replace::{ensure_static_decide_permission, validate_static_separation};
-    use super::*;
-    use crate::error::Error;
-
-    /// 发布重验岗位分离不把提交人隔离伪装成实例 DataScopeFact。
-    #[test]
-    fn publish_static_separation_does_not_forge_instance_data_scope() {
-        validate_static_separation(
-            SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
-            &["u1".to_string(), "u1".to_string()],
-        )
-        .unwrap();
-        let failed_assignees = Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
-        assert!(decide_publish_write(Ok(()), Ok(()), failed_assignees, Ok(())).is_err());
-    }
-
-    /// 账号或静态权限重验失败时发布不得进入写库步骤。
-    #[test]
-    fn publish_revalidation_failure_blocks_write_step() {
-        let no_decide = ensure_static_decide_permission(false).unwrap_err();
-        assert!(matches!(
-            no_decide,
-            Error::BusinessLogicError(message) if message.contains("approval") || message.contains("静态审批")
-        ));
-        ensure_static_decide_permission(true).unwrap();
-        assert!(
-            decide_publish_write(
-                Ok(()),
-                Ok(()),
-                Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into())),
-                Ok(()),
-            )
-            .is_err()
-        );
-        assert!(
-            decide_publish_write(
-                Ok(()),
-                Ok(()),
-                Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into())),
-                Ok(()),
-            )
-            .is_err()
-        );
-    }
+    let nodes = apply_snapshots(current.nodes, &snapshots)?;
+    rebuild_draft_graph(&current.definition, nodes)
 }

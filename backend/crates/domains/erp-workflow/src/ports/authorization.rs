@@ -1,6 +1,6 @@
 //! 工作流消费的跨域业务授权事实；账号查询直接使用 identity。
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::future::Future;
 
 use application_core::AuditActor;
@@ -8,8 +8,8 @@ use application_core::AuditActor;
 use erp_core::AccountKind;
 use persistence_core::Executor;
 
+use super::ApprovalBindingFacts;
 use super::object_facts::OrderTaskSource;
-use super::{WorkflowScopeObject, WorkflowScopeObjects};
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 
@@ -133,26 +133,7 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("审批合同材料读取授权未装配".into())) }
     }
 
-    /// 有界批量读取当前审批对象事实；缺失对象不进入结果，配置失败不得吞掉。
-    ///
-    /// # 参数
-    /// * `keys` - 单据类型与单据 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回已找到的当前审批对象事实。
-    ///
-    /// # 错误
-    /// 默认实现返回未装配的内部错误；配置失败时返回错误，不得当成空结果。
-    fn approval_scope_objects(
-        &self,
-        _keys: &HashSet<(DocumentType, String)>,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<WorkflowScopeObjects>> + Send {
-        async { Err(Error::Internal("审批批量范围事实未装配".into())) }
-    }
-
-    /// 从当前强业务实体映射审批范围维度，不使用历史责任字段推断部门。
+    /// 读取当前主体的存在性及订单绑定事实，不使用历史责任字段推断部门。
     ///
     /// # 参数
     /// * `document_type` - 单据类型。
@@ -160,16 +141,16 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
-    /// 返回当前强业务实体上的范围维度。
+    /// 返回已确认主体存在性的订单来源、负责人和业务部门。
     ///
     /// # 错误
     /// 默认实现返回未装配的内部错误；对象缺失或读取失败时返回错误。
-    fn approval_scope_object(
+    fn approval_binding_facts(
         &self,
         _document_type: DocumentType,
         _document_id: &str,
         _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<WorkflowScopeObject>> + Send {
+    ) -> impl Future<Output = Result<ApprovalBindingFacts>> + Send {
         async { Err(Error::Internal("审批范围事实未装配".into())) }
     }
 

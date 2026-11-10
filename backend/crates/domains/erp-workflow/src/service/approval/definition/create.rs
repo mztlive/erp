@@ -181,8 +181,7 @@ async fn create_draft_tx(
     {
         return Ok(view);
     }
-    let CreateDraftWriteStep::PersistNewDraftAndReceipt =
-        decide_create_draft_write(db.bpm_workflow().find_active_draft(policy.process_kind, executor).await?)?;
+    ensure_no_active_draft(db.bpm_workflow().find_active_draft(policy.process_kind, executor).await?)?;
     let graph =
         build_new_draft(identity_service, db, policy, name, request.draft_source, actor, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
@@ -282,7 +281,7 @@ async fn copy_published_draft(
     let identities = next_copied_node_identities(source.nodes.len());
     let nodes = copy_nodes_for_definition(&source.nodes, definition_id.clone(), &identities, at)
         .map_err(map_model_error)?;
-    validate_assignees(identity_service, db, policy, &assignee_ids(&nodes), session).await?;
+    validate_assignees(identity_service, &assignee_ids(&nodes), session).await?;
     let transition_ids = next_transition_ids(nodes.len());
     DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
         definition_id,
@@ -355,22 +354,15 @@ async fn next_definition_version(
     ApprovalProcessDefinition::next_version_after(current).map_err(map_model_error)
 }
 
-/// 创建草稿写库步骤。仅在无活动草稿时允许持久化。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CreateDraftWriteStep {
-    /// 允许 persist_new_draft 与 write_receipt。
-    PersistNewDraftAndReceipt,
-}
-
 /// 已有活动草稿则冲突，不得进入 persist_new_draft / write_receipt。
 ///
 /// # 错误
 /// 已存在活动草稿时返回冲突。
-fn decide_create_draft_write<T>(existing_active_draft: Option<T>) -> Result<CreateDraftWriteStep> {
+fn ensure_no_active_draft<T>(existing_active_draft: Option<T>) -> Result<()> {
     if existing_active_draft.is_some() {
         return Err(second_draft_error());
     }
-    Ok(CreateDraftWriteStep::PersistNewDraftAndReceipt)
+    Ok(())
 }
 
 /// `CURRENT_PUBLISHED` 必须命中当前发布定义，缺失则失败关闭。
@@ -394,13 +386,10 @@ mod tests {
     #[test]
     fn second_active_draft_is_conflict() {
         assert!(matches!(
-            decide_create_draft_write(Some("draft-1")),
+            ensure_no_active_draft(Some("draft-1")),
             Err(Error::ConflictError(message)) if message.contains("活动草稿")
         ));
-        assert!(matches!(
-            decide_create_draft_write::<&str>(None),
-            Ok(CreateDraftWriteStep::PersistNewDraftAndReceipt)
-        ));
+        assert!(matches!(ensure_no_active_draft::<&str>(None), Ok(())));
     }
 
     /// draft_source=CURRENT_PUBLISHED 缺发布源必须失败关闭。

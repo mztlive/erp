@@ -321,10 +321,9 @@ async fn apply_fresh_upgrade(
         .ok_or_else(|| Error::ValidationError("尚未绑定审批定义".to_string()))?;
 
     let published = load_published_graph(db, facts.document_type, executor).await?;
-    let object = rbac.approval_scope_object(facts.document_type, &facts.document_id, executor).await?;
+    let object = rbac.approval_binding_facts(facts.document_type, &facts.document_id, executor).await?;
     let mut context = facts.binding_context();
     context.order_source = object.order_source;
-    context.customer_id = object.customer_id;
     context.business_org_unit_id = object.business_org_unit_id;
     context.scope_owner_user_id = Some(object.owner_user_id);
     revalidate_binding_graph(identity, policy, &context, &published, executor).await?;

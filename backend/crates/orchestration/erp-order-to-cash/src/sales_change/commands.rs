@@ -94,7 +94,6 @@ impl SalesChangeProcess {
                 actor.id().to_string(),
             )
             .with_order_source(Some(OrderTaskSource::Sales(source_order.base.id.clone())))
-            .with_customer_id(Some(source_order.customer_id.to_string()))
             .with_business_org_unit_id(Some(source_order.business_org_unit_id.clone()))
             .with_scope_owner_user_id(Some(source_order.sales_owner_user_id.clone())),
         };

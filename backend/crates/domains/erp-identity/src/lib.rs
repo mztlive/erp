@@ -28,7 +28,7 @@ pub use repository::{
 pub use service::access_control::AccessControlService;
 pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
 pub use service::authorization::{
-    AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService,
+    AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService, DataAccess,
 };
 pub use service::iam::{
     AccountProfile, AccountProfileService, AdminItem, AdminService, AuthorizedAccountManagement,

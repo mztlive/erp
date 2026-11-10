@@ -150,8 +150,8 @@ impl CompiledAccess {
     /// # 错误
     /// 不返回错误；不能替代执行前后的 validate。
     pub fn version(&self) -> String {
-        // v2 字段顺序：证明版本、无序映射依赖（模型、事实、查询键）。
-        let mut version = Fingerprint::new("authorization-query-v2");
+        // v3 字段顺序：证明版本、无序映射依赖（模型、修订号及有效期、查询键）。
+        let mut version = Fingerprint::new("authorization-query-v3");
         version.text(&self.proof.version);
         version.unordered(&self.dependencies, |hash, dependency| {
             hash.model(&dependency.model);

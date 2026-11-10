@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use erp_core::common::time::Instant;
 
@@ -59,12 +59,11 @@ fn valid_segment(value: &str) -> bool {
         && value.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
 
-/// 映射准备的有界事实。无修订号时只能用于调用方事务快照。
+/// 映射准备的修订号和有效期。无修订号时只能用于调用方事务快照。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MappingFacts {
     pub version: Option<String>,
     pub valid_until: Option<Instant>,
-    pub sets: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl MappingFacts {

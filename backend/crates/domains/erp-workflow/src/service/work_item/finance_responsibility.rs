@@ -1,6 +1,5 @@
 //! 财务责任规则管理、负责人候选与任务生产时的严格解析。
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::result::Result as StdResult;
 use std::sync::Arc;
@@ -413,13 +412,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         let invoice = required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)?;
         let accounts =
             self.identity.directory().accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
+        let requested = payment.union(&invoice).into_vec();
         let mut options = Vec::new();
         for account in accounts {
             if !account.is_active_backoffice() {
                 continue;
             }
             let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-            let requested = payment.union(&invoice).into_vec();
             let Some(qualified) =
                 self.identity.qualified_permissions(&actor, &requested, &mut NoTransaction).await?
             else {
@@ -454,7 +453,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.identity.current_policy_revision().await?;
             for owner in owner_user_ids {
-                self.ensure_finance_owner_eligible(operation, owner.clone()).await?;
+                self.ensure_finance_owner_eligible(operation, owner, &mut NoTransaction).await?;
             }
             let after = self.identity.current_policy_revision().await?;
             if before == after {
@@ -497,7 +496,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .select(&rule.owner_user_ids, current.last_owner_user_id.as_deref())
             .map_err(|error| Error::ValidationError(error.to_string()))?
             .to_owned();
-        self.ensure_finance_owner_eligible(operation, owner.clone()).await?;
+        self.ensure_finance_owner_eligible(operation, &owner, executor).await?;
         finance_rotation::advance(&self.db, &rule.base.id, &current, Some(&owner), executor).await?;
         Ok(ResolvedFinanceResponsibility {
             owner_user_id: owner,
@@ -541,10 +540,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .await?
             .map(|qualified| qualified.permissions())
             .unwrap_or_default();
-        if !required
-            .iter()
-            .all(|code| granted.covers_one(&Permission::parse(code).expect("任务注册权限合法")))
-        {
+        if !requested.iter().all(|permission| granted.covers_one(permission)) {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少退货处理权限，请调整财务责任配置",
                 operation.label()
@@ -567,7 +563,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         }
         if validate_owner {
             for owner in &probe.owner_user_ids {
-                self.ensure_finance_owner_eligible(probe.operation, owner.clone()).await?;
+                self.ensure_finance_owner_eligible(probe.operation, owner, executor).await?;
             }
         }
         Ok(probe)
@@ -600,41 +596,33 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         }
     }
 
-    fn ensure_finance_owner_eligible(
+    /// 沿用任务写入执行器核验账号及完整财务权限，资格失败不得推进轮次。
+    async fn ensure_finance_owner_eligible(
         &self,
         operation: FinanceResponsibilityOperation,
-        owner_user_id: String,
-    ) -> impl Future<Output = Result<()>> + Send + 'static {
-        let identity_service = self.identity.clone();
-        async move {
-            let account = identity_service
-                .directory()
-                .account(&owner_user_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| {
-                    Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
-                })?;
-            if !account.is_active_backoffice() {
-                return Err(Error::BusinessLogicError(format!(
-                    "{}负责人账号不可用，请重新选择",
-                    operation.label()
-                )));
-            }
-            let required = required_finance_permissions(operation)?;
-            let actor = AuditActor::new(account.id, account.login_account, account.kind);
-            let granted = identity_service
-                .qualified_permissions(&actor, &required.clone().into_vec(), &mut NoTransaction)
-                .await?
-                .map(|qualified| qualified.permissions())
-                .unwrap_or_default();
-            if granted.covers(&required) {
-                return Ok(());
-            }
-            Err(Error::BusinessLogicError(format!(
+        owner_user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let required = required_finance_permissions(operation)?;
+        let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
+        let qualified =
+            self.identity.qualified_permissions(&actor, &required.clone().into_vec(), executor).await?;
+        let Some(qualified) = qualified else {
+            // 仅拒绝路径读取目录以保留缺失与停用的既有提示，不重复读取成功账号。
+            let exists = self.identity.directory().account(owner_user_id, executor).await?.is_some();
+            let reason = if exists { "不可用" } else { "不存在" };
+            return Err(Error::BusinessLogicError(format!(
+                "{}负责人账号{reason}，请重新选择",
+                operation.label()
+            )));
+        };
+        if !qualified.permissions().covers(&required) {
+            return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少完整执行权限，请先调整财务角色或重新选择",
                 operation.label()
-            )))
+            )));
         }
+        Ok(())
     }
 
     async fn single_finance_responsibility_view(
@@ -650,14 +638,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         rules: Vec<FinanceResponsibilityRule>,
     ) -> Result<Vec<FinanceResponsibilityRuleView>> {
         let owner_ids = rules.iter().flat_map(|rule| rule.owner_user_ids.iter().cloned()).collect::<Vec<_>>();
-        let owner_names = self
-            .identity
-            .directory()
-            .accounts(&owner_ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|account| (account.id, account.display_name))
-            .collect::<HashMap<_, _>>();
+        let owner_names = self.identity.directory().names(&owner_ids, &mut NoTransaction).await?;
         let supplier_ids = rules
             .iter()
             .filter(|rule| rule.operation == FinanceResponsibilityOperation::SupplierPayment)
