@@ -193,3 +193,35 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod history_scope_tests {
+    use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
+    use erp_workflow::repository::document_registry::participant_access;
+    use mongodb::bson::doc;
+    use serde_json::json;
+    use test_support::matches_filter;
+    #[test]
+    fn history_lookup_grants_only_matched_orders_and_keeps_personal_limit() {
+        let mut scope =
+            SalesReadScope { history_lookup: participant_access::lookup("reader"), ..Default::default() };
+        let historical =
+            json!({"id":"S001", "__document_participant":[{"_id":"p"}], "business_org_unit_id":"dept"});
+        let unrelated = json!({"id":"S002", "__document_participant":[]});
+        assert!(!scope.is_empty());
+        assert!(matches_filter(&scope.document(), &historical));
+        assert!(!matches_filter(&scope.document(), &unrelated));
+        scope.user_limit = Some(SalesScopeClause::default());
+        assert!(!matches_filter(&scope.document(), &historical));
+        scope.grant_lookup = vec![doc! {"$lookup":{}}];
+        let explicit = json!({"id":"S001", "__resource_grant":[{"id":"g"}]});
+        assert!(matches_filter(&scope.document(), &explicit));
+        assert!(!matches_filter(&scope.document(), &unrelated));
+        let stages = scope.lookup_after(doc! {"id":"S001"});
+        assert_eq!(stages[0], doc! {"$match":{"id":"S001"}});
+        let lookup = stages[1].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! {"document":"$id"});
+        assert_eq!(lookup.get_array("pipeline").unwrap()[1], doc! {"$limit":1}.into());
+        assert!(scope.historical_order_ids.is_empty());
+    }
+}

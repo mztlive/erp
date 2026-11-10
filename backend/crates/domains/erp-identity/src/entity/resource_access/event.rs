@@ -11,6 +11,10 @@ use crate::{Error, Result};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GrantEventPayload {
+    InvoiceTaskReassigned {
+        work_item_id: String,
+        command_receipt_id: String,
+    },
     InvoiceApproved {
         invoice_request_id: String,
         approval_instance_id: String,
@@ -39,6 +43,9 @@ impl GrantEventPayload {
     /// 证据或接收账号为空、超长、含首尾空白时拒绝。
     pub fn source(&self, recipient: &str) -> Result<SourceKey> {
         let (rule, business_type, business_id, ids) = match self {
+            Self::InvoiceTaskReassigned { work_item_id, command_receipt_id } => {
+                ("invoice_task_reassigned", "work_item", work_item_id, vec![work_item_id, command_receipt_id])
+            },
             Self::InvoiceApproved { invoice_request_id, approval_instance_id, work_item_id } => (
                 "invoice_approved",
                 "sales_invoice_request",
@@ -87,6 +94,9 @@ impl GrantEventPayload {
     /// 提取稳定事件身份，不将可变关联目标混入幂等键。
     fn identity(&self) -> (&'static str, &str, &str, &str) {
         match self {
+            Self::InvoiceTaskReassigned { command_receipt_id, .. } => {
+                ("invoice_task_reassigned", command_receipt_id, "", "")
+            },
             Self::InvoiceApproved { invoice_request_id, approval_instance_id, .. } => {
                 ("invoice_approved", invoice_request_id, approval_instance_id, "")
             },
@@ -106,7 +116,7 @@ impl GrantEventPayload {
 pub struct GrantEventEvidence {
     pub payload: GrantEventPayload,
     pub recipient: String,
-    /// 开票使用申请版本；销售、采购审批使用审批实例版本，禁止混用节点局部版本。
+    /// 开票通过使用申请版本；转派使用任务版本；订单审批使用实例版本。
     pub fact_version: u64,
     pub occurred_at: u64,
 }
@@ -220,6 +230,10 @@ mod tests {
 
     fn payloads() -> Vec<GrantEventPayload> {
         vec![
+            GrantEventPayload::InvoiceTaskReassigned {
+                work_item_id: "task-1".into(),
+                command_receipt_id: "command-1".into(),
+            },
             GrantEventPayload::InvoiceApproved {
                 invoice_request_id: "request-1".into(),
                 approval_instance_id: "approval-1".into(),
@@ -245,6 +259,7 @@ mod tests {
     #[test]
     fn typed_events_round_trip_json_and_derive_sources() {
         let cases = payloads().into_iter().zip([
+            ("invoice_task_reassigned", "work_item", "task-1"),
             ("invoice_approved", "sales_invoice_request", "request-1"),
             ("sales_order_approval_assigned", "approval_instance", "approval-1"),
             ("purchase_order_approval_assigned", "approval_instance", "approval-1"),
@@ -287,6 +302,9 @@ mod tests {
             original.ensure_replay(&retry).unwrap();
             let mut changed = original.evidence.clone();
             match &mut changed.payload {
+                GrantEventPayload::InvoiceTaskReassigned { work_item_id, .. } => {
+                    *work_item_id = "other".into()
+                },
                 GrantEventPayload::InvoiceApproved { work_item_id, .. } => {
                     *work_item_id = "other-task".into()
                 },

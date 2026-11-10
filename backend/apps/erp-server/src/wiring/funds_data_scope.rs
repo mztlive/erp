@@ -11,10 +11,9 @@ use erp_finance::ports::funds_scope::{
 };
 use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
-use erp_identity::entity::resource_access::SourceKey;
 use erp_read_models::Result as ReadResult;
 use erp_read_models::ports::invoice_grants::InvoiceGrantReadiness;
-use erp_resource_grants::{GrantReadiness, ResourceGrantProcess};
+use erp_resource_grants::ResourceGrantProcess;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -205,16 +204,9 @@ impl InvoiceGrantReadiness for InvoiceReadiness {
         recipient: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        let source = SourceKey {
-            rule: "invoice_approved".into(),
-            business_type: "sales_invoice_request".into(),
-            business_id: request_id.into(),
-            recipient: recipient.into(),
-        };
-        let status = ResourceGrantProcess::new(self.db.clone(), self.rbac.clone())
-            .source_readiness(&source, executor)
-            .await?;
-        Ok(status == GrantReadiness::NotReady)
+        Ok(ResourceGrantProcess::new(self.db.clone(), self.rbac.clone())
+            .invoice_pending(request_id, recipient, executor)
+            .await?)
     }
 }
 
@@ -282,6 +274,7 @@ mod equivalence_tests {
                             roles: vec![scope_clause(role, "actor"), scope_clause(second, "actor")],
                             user_limit: (limit >= 0).then(|| scope_clause(limit as u8, "actor")),
                             grant_lookup: Vec::new(),
+                            history_lookup: Vec::new(),
                             historical_order_ids: vec![],
                             required_scopes: vec![],
                         };

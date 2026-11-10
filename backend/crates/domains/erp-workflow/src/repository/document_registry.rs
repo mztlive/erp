@@ -13,6 +13,7 @@ use mongodb::bson::{Document, doc};
 mod business_document;
 mod document_participant;
 mod document_relation;
+pub mod participant_access;
 mod timeline;
 mod workflow_action;
 pub use business_document::{

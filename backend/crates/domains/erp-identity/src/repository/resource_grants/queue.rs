@@ -1,9 +1,9 @@
 //! 授权事件领取、租约隔离和事务结果保存。
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use mongodb::options::ReturnDocument;
-use persistence_core::{Error as PersistenceError, Executor};
+use mongodb::options::{FindOptions, ReturnDocument};
+use persistence_core::{Error as PersistenceError, Executor, mongo_ops};
+use serde::{Deserialize, Serialize};
 
 use crate::entity::resource_access::event::{GrantEvent, GrantEventStatus};
 use crate::entity::resource_access::{GrantSource, ResourceKind, SourceKey};
@@ -181,6 +181,7 @@ impl GrantQueue {
         filter: &GrantRecompute,
         after: Option<&str>,
         now: u64,
+        executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
         let mut query = filter.query()?;
         query.insert("deleted_at", 0);
@@ -188,25 +189,25 @@ impl GrantQueue {
             query.insert("id", doc! { "$gt": after });
         }
         let collection = self.db.collection::<GrantEvent>("resource_grant_events");
-        let events: Vec<GrantEvent> = collection
-            .find(query)
-            .sort(doc! { "id": 1 })
-            .limit(100)
-            .await
-            .map_err(PersistenceError::from)?
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?;
+        let events = mongo_ops::find_many(
+            &collection,
+            query,
+            FindOptions::builder().sort(doc! { "id": 1 }).limit(100).build(),
+            executor,
+        )
+        .await?;
         let now = i64::try_from(now).map_err(|_| Error::ValidationError("时间溢出".into()))?;
         for event in &events {
-            collection.update_one(doc! { "id": &event.base.id, "status": "applied", "version": i64::try_from(event.base.version).map_err(|_| Error::Internal("版本溢出".into()))? },
-                doc! { "$set": { "status": "pending", "available_at": now }, "$inc": { "version": 1 } })
-                .await.map_err(PersistenceError::from)?;
+            mongo_ops::update_one(&collection, doc! { "id": &event.base.id, "status": "applied", "version": i64::try_from(event.base.version).map_err(|_| Error::Internal("版本溢出".into()))? },
+                doc! { "$set": { "status": "pending", "available_at": now }, "$inc": { "version": 1 } }, false, executor)
+                .await?;
         }
         Ok(events.last().map(|e| e.base.id.clone()))
     }
 }
 /// 维护入口仅允许固定规则、资源类型或稳定来源。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GrantRecompute {
     All,
     Source(SourceKey),
@@ -214,7 +215,10 @@ pub enum GrantRecompute {
     Rule(GrantRule),
 }
 /// 已实现的规则版本固定为 1；新增规则必须增加类型化变体。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GrantRule {
+    InvoiceTaskReassigned,
     InvoiceApproved,
     SalesOrderApprovalAssigned,
     PurchaseOrderApprovalAssigned,
@@ -223,6 +227,7 @@ impl GrantRule {
     fn code(&self) -> &'static str {
         match self {
             Self::InvoiceApproved => "invoice_approved",
+            Self::InvoiceTaskReassigned => "invoice_task_reassigned",
             Self::SalesOrderApprovalAssigned => "sales_order_approval_assigned",
             Self::PurchaseOrderApprovalAssigned => "purchase_order_approval_assigned",
         }
@@ -238,7 +243,7 @@ impl GrantRecompute {
             },
             Self::Rule(rule) => doc! { "source.rule": rule.code() },
             Self::Resource(ResourceKind::SalesOrder) => {
-                doc! { "source.rule": { "$in": ["invoice_approved", "sales_order_approval_assigned"] } }
+                doc! { "source.rule": { "$in": ["invoice_approved", "invoice_task_reassigned", "sales_order_approval_assigned"] } }
             },
             Self::Resource(ResourceKind::PurchaseOrder) => {
                 doc! { "source.rule": "purchase_order_approval_assigned" }

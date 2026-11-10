@@ -732,7 +732,10 @@
         "erp-workflow",
         "mongodb",
         "persistence-core",
-        "tokio"
+        "tokio",
+        "application-core",
+        "serde",
+        "serde_json"
       ]
     }
   }

@@ -104,6 +104,10 @@ fn transition_definition_indexes() -> Vec<IndexModel> {
 
 fn instance_indexes() -> Vec<IndexModel> {
     vec![
+        named_index(
+            "idx_approval_instances_grant_backfill",
+            doc! {"subject.subject_kind":1, "status":1, "deleted_at":1, "id":1},
+        ),
         unique_index("uk_approval_process_instances_id", doc! { "id": 1 }),
         unique_partial_index(
             "uk_approval_process_instances_active_subject",
@@ -144,6 +148,7 @@ fn instance_indexes() -> Vec<IndexModel> {
 
 fn execution_indexes() -> Vec<IndexModel> {
     vec![
+        named_index("idx_approval_executions_grant_backfill", doc! {"deleted_at":1, "id":1}),
         unique_index("uk_approval_node_executions_id", doc! { "id": 1 }),
         unique_index(
             "uk_approval_node_executions_instance_no",

@@ -1,7 +1,9 @@
 use async_trait::async_trait;
+use bpm::SubjectRef;
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use erp_finance::entity::receivable::InvoiceRequestStatus;
 use erp_finance::repository::extensions::ReceivableExt;
+use erp_finance::repository::receivable::SalesInvoiceRequestRepositoryExt;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventPayload};
 use erp_identity::entity::resource_access::{GrantTarget, ResourceKind, SourceUpdate};
 use erp_identity::ports::ResourceGrantFacts;
@@ -9,7 +11,7 @@ use erp_identity::{Error, Result};
 use erp_procurement::repository::extensions::PurchaseOrderExt;
 use erp_sales::repository::extensions::SalesOrderExt;
 use erp_workflow::entity::work_item::WorkItemType;
-use erp_workflow::repository::{BpmExt, WorkItemExt};
+use erp_workflow::repository::{BpmExt, BpmWorkflowRepository, WorkItemCommandExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -28,7 +30,26 @@ impl Facts {
     /// # 错误
     /// 读取失败、缺失或关联错配时拒绝。
     pub(crate) async fn compute(&self, event: &GrantEvent, ex: &mut dyn Executor) -> Result<SourceUpdate> {
-        let (target, version) = match &event.evidence.payload {
+        let (target, version) = self.target(event, ex).await?;
+        if event.source != event.evidence.payload.source(&event.evidence.recipient)?
+            || version < event.evidence.fact_version
+        {
+            return Err(conflict());
+        }
+        Ok(SourceUpdate {
+            key: event.source.clone(),
+            rule_version: 1,
+            fact_version: version,
+            targets: vec![target],
+            reason: "正式业务分配自动读取授权".into(),
+        })
+    }
+
+    async fn target(&self, event: &GrantEvent, ex: &mut dyn Executor) -> Result<(GrantTarget, u64)> {
+        Ok(match &event.evidence.payload {
+            GrantEventPayload::InvoiceTaskReassigned { work_item_id, command_receipt_id } => {
+                self.reassignment(event, work_item_id, command_receipt_id, ex).await?
+            },
             GrantEventPayload::InvoiceApproved { invoice_request_id, approval_instance_id, work_item_id } => {
                 self.invoice(event, invoice_request_id, approval_instance_id, work_item_id, ex).await?
             },
@@ -64,19 +85,32 @@ impl Facts {
                 )
                 .await?
             },
-        };
-        if event.source != event.evidence.payload.source(&event.evidence.recipient)?
-            || version < event.evidence.fact_version
-        {
+        })
+    }
+
+    async fn reassignment(
+        &self,
+        event: &GrantEvent,
+        task_id: &str,
+        receipt_id: &str,
+        ex: &mut dyn Executor,
+    ) -> Result<(GrantTarget, u64)> {
+        let task = self.db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
+        let receipt =
+            self.db.work_item_command_receipts().find_by_id(receipt_id, ex).await?.ok_or_else(conflict)?;
+        let expected = receipt.invoice_grant(&task).map_err(|_| conflict())?.ok_or_else(conflict)?;
+        if expected != event.evidence {
             return Err(conflict());
         }
-        Ok(SourceUpdate {
-            key: event.source.clone(),
-            rule_version: 1,
-            fact_version: version,
-            targets: vec![target],
-            reason: "正式业务分配自动读取授权".into(),
-        })
+        let request =
+            self.db.sales_invoice_requests().find_for_task(task_id, ex).await?.ok_or_else(conflict)?;
+        let subject = SubjectRef::new("sales_invoice_request", &request.base.id).map_err(|_| conflict())?;
+        let approval = BpmWorkflowRepository::new(&self.db)
+            .find_latest_by_subject(&subject, ex)
+            .await?
+            .ok_or_else(conflict)?;
+        let (target, _) = self.invoice(event, &request.base.id, &approval.base.id, task_id, ex).await?;
+        Ok((target, task.base.version))
     }
 
     async fn invoice(

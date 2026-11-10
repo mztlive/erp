@@ -30,6 +30,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(binding_routes(rbac))
         .merge(inspection_routes(rbac))
         .merge(people_routes(rbac))
+        .merge(resource_grant_routes(rbac))
 }
 
 /// 文件入口复用认证链路，应用仍要求底层角色和范围配置资格。
@@ -259,4 +260,50 @@ fn person_scope_routes(rbac: &SharedRbacService) -> Router<HttpState> {
                 permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
+}
+
+/// 指定记录授权管理沿用范围维护入口，领域服务再次核验全公司管理资格。
+fn resource_grant_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/resource-grants",
+            with_permission(
+                post(access_control::resource_grants::grant),
+                rbac,
+                permissions::access_control::RESOURCE_GRANT_MANAGE,
+            ),
+        )
+        .route(
+            "/resource-grants/sources",
+            with_permission(
+                get(access_control::resource_grants::sources),
+                rbac,
+                permissions::access_control::RESOURCE_GRANT_MANAGE,
+            ),
+        )
+        .route(
+            "/resource-grants/revoke",
+            with_permission(
+                post(access_control::resource_grants::revoke),
+                rbac,
+                permissions::access_control::RESOURCE_GRANT_MANAGE,
+            ),
+        )
+        .route(
+            "/resource-grants/recompute",
+            with_permission(
+                post(access_control::resource_grants::recompute),
+                rbac,
+                permissions::access_control::RESOURCE_GRANT_MANAGE,
+            ),
+        )
+        .route(
+            "/resource-grants/backfill",
+            with_permission(
+                post(access_control::resource_grants::backfill),
+                rbac,
+                permissions::access_control::RESOURCE_GRANT_MANAGE,
+            ),
+        )
+        .layer(DefaultBodyLimit::max(256 * 1024))
 }

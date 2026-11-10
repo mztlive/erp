@@ -404,10 +404,9 @@
   "warehouse_sku_policy:delete",
   "warehouse_sku_policy:list",
   "warehouse_sku_policy:update",
-  "work_item:close",
   "work_item:detail",
   "work_item:list",
-  "work_item:reassign",
+  "work_item:manage",
   "workflow_action:create",
   "workflow_action:list"
 ]

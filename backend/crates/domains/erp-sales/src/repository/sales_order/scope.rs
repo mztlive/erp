@@ -19,6 +19,8 @@ pub struct SalesScopeClause {
 pub struct SalesReadScope {
     /// 由统一授权接口生成的关联阶段，必须在范围条件和分页之前执行。
     pub grant_lookup: Vec<Document>,
+    /// 由 workflow 按当前单据与账号编译的历史参与存在性查询。
+    pub history_lookup: Vec<Document>,
     /// 其他敏感资源的独立范围，全部必须同时满足。
     pub required_scopes: Vec<SalesReadScope>,
     pub roles: Vec<SalesScopeClause>,
@@ -72,6 +74,7 @@ impl SalesReadScope {
     /// 不执行 I/O。
     pub fn lookup_after(&self, filter: Document) -> Vec<Document> {
         let mut stages = vec![doc! { "$match": filter }];
+        stages.extend(self.history_lookup.clone());
         stages.extend(self.grant_lookup.clone());
         stages
     }
@@ -116,7 +119,9 @@ impl SalesReadScope {
             return self.required_scopes.iter().any(Self::is_empty);
         }
         self.required_scopes.iter().any(Self::is_empty)
-            || (self.roles.iter().all(SalesScopeClause::is_empty) && self.historical_order_ids.is_empty())
+            || (self.roles.iter().all(SalesScopeClause::is_empty)
+                && self.historical_order_ids.is_empty()
+                && self.history_lookup.is_empty())
             || self.user_limit.as_ref().is_some_and(SalesScopeClause::is_empty)
     }
     /// 生成角色并集与个人上限交集，历史业绩字段不参与授权。
@@ -133,6 +138,9 @@ impl SalesReadScope {
         let mut grants = self.roles.iter().map(SalesScopeClause::document).collect::<Vec<_>>();
         if !self.historical_order_ids.is_empty() {
             grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
+        }
+        if !self.history_lookup.is_empty() {
+            grants.push(doc! { "__document_participant.0": { "$exists": true } });
         }
         let mut roles = union(grants);
         if let Some(limit) = &self.user_limit {
@@ -389,6 +397,7 @@ mod tests {
             roles: vec![SalesScopeClause { company: true, ..Default::default() }],
             user_limit: Some(SalesScopeClause::default()),
             grant_lookup: Vec::new(),
+            history_lookup: Vec::new(),
             historical_order_ids: vec![],
         };
         assert_eq!(scope.document(), doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] });
@@ -422,6 +431,7 @@ mod tests {
             }],
             user_limit: None,
             grant_lookup: Vec::new(),
+            history_lookup: Vec::new(),
             historical_order_ids: vec![],
         };
         assert!(!scope.is_empty());

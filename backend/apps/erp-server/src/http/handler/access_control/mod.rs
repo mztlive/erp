@@ -6,6 +6,7 @@
 pub mod inspection;
 pub mod person_directory;
 pub mod policy_bundle;
+pub mod resource_grants;
 
 use application_core::AuditActor;
 use axum::Extension;

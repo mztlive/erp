@@ -3,8 +3,10 @@
 use application_core::{CommandReceipt, StructuredCommandReceipt, StructuredReceiptMatch};
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_identity::entity::resource_access::event::{GrantEventEvidence, GrantEventPayload};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::work_item::{WorkItem, WorkItemType};
 use crate::{Error, Result};
 
 /// 工作项命令的强类型成功结果；任务当前视图由消费方重新授权读取。
@@ -29,6 +31,40 @@ pub struct WorkItemCommandReceipt {
 }
 
 impl WorkItemCommandReceipt {
+    /// 从正式转派回执构造独立开票授权事件。
+    /// # 参数
+    /// task 为当前任务，允许已再次转派、完成或关闭。
+    /// # 返回
+    /// 开票转派返回稳定事件；其他任务或命令不生成事件。
+    /// # 错误
+    /// 回执损坏、任务错配、版本倒退或历史分配缺失时拒绝。
+    pub fn invoice_grant(&self, task: &WorkItem) -> Result<Option<GrantEventEvidence>> {
+        self.validate()?;
+        let WorkItemCommandResult::Reassigned { work_item_id, task_version, target_user_id, .. } =
+            &self.result
+        else {
+            return Ok(None);
+        };
+        if task.base.id != *work_item_id || task.base.version < *task_version || task.base.is_deleted() {
+            return Err(corrupted());
+        }
+        if task.work_item_type != WorkItemType::SalesInvoiceExecution {
+            return Ok(None);
+        }
+        if !task.responsibility_actor_ids.contains(target_user_id) {
+            return Err(corrupted());
+        }
+        Ok(Some(GrantEventEvidence {
+            payload: GrantEventPayload::InvoiceTaskReassigned {
+                work_item_id: work_item_id.clone(),
+                command_receipt_id: self.base.id.clone(),
+            },
+            recipient: target_user_id.clone(),
+            fact_version: *task_version,
+            occurred_at: self.base.created_at,
+        }))
+    }
+
     /// 构造已成功执行的领域命令回执。
     /// # 参数
     /// * `command` - 保持原算法的命令身份。
@@ -128,7 +164,68 @@ fn corrupted() -> Error {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+
     use super::*;
+    use crate::entity::work_item::{
+        SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItemStatus, new_approved_sales_invoice_task,
+    };
+
+    fn invoice_task() -> WorkItem {
+        new_approved_sales_invoice_task(
+            WorkItemId::new("task"),
+            SalesInvoiceTaskSpec {
+                account_id: "account".into(),
+                subject_version: "1".into(),
+                owner_organization_id: "company".into(),
+                owner_user_id: "initial".into(),
+                reason: SalesInvoiceTaskReason::ApprovedInvoiceRequest,
+                open_invoiceable_total: "100.00".parse().unwrap(),
+            },
+            "finance:SALES_INVOICE:rule",
+            "request",
+            "KP-001",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn invoice_transfer_uses_receipt_and_preserves_history_after_later_transfer() {
+        let mut task = invoice_task();
+        task.reassign("owner", Instant::now()).unwrap();
+        task.base.version = 2;
+        let receipt = WorkItemCommandReceipt::new(
+            &command("owner"),
+            WorkItemCommandResult::Reassigned {
+                work_item_id: "task".into(),
+                task_version: 2,
+                target_user_id: "owner".into(),
+                reason: "transfer".into(),
+            },
+            "audit".into(),
+        )
+        .unwrap();
+        let event = receipt.invoice_grant(&task).unwrap().unwrap();
+        assert_eq!(event.recipient, "owner");
+        assert_eq!(event.fact_version, 2);
+        assert_eq!(event.payload.source("owner").unwrap().rule, "invoice_task_reassigned");
+        task.reassign("next", Instant::now()).unwrap();
+        task.base.version = 3;
+        task.status = WorkItemStatus::Completed;
+        assert_eq!(receipt.invoice_grant(&task).unwrap(), Some(event));
+        task.responsibility_actor_ids.retain(|id| id != "owner");
+        assert!(receipt.invoice_grant(&task).is_err());
+        task.responsibility_actor_ids.push("owner".into());
+        task.base.version = 1;
+        assert!(receipt.invoice_grant(&task).is_err());
+        task.base.version = 3;
+        task.base.id = "other".into();
+        assert!(receipt.invoice_grant(&task).is_err());
+        task.base.id = "task".into();
+        task.work_item_type = WorkItemType::CardFundsReview;
+        assert!(receipt.invoice_grant(&task).unwrap().is_none());
+    }
     fn command(target: &str) -> CommandReceipt {
         CommandReceipt::from_resource_parts(
             "work-item-command-",

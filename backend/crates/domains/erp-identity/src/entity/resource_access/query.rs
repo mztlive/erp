@@ -7,7 +7,7 @@ use crate::entity::access_control::{ResolvedScope, ScopedObject};
 use crate::{Error, Permission, Result};
 
 /// 来源管理页；next_cursor 为下一次读取的排他主键游标。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct GrantSourcePage {
     pub items: Vec<GrantSource>,
     pub next_cursor: Option<String>,

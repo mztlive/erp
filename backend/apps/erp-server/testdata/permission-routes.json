@@ -435,48 +435,48 @@
     "method": "POST",
     "path": "/work-items/{id}/reassign",
     "handler": "work_item::work_item_reassign",
-    "code": "work_item:reassign",
+    "code": "work_item:manage",
     "group": "统一待办",
     "group_desc": "待办队列与责任处理",
-    "description": "在授权范围内受控转交非审批任务",
+    "description": "转交待办",
     "guards": [
-      "work_item:reassign"
+      "work_item:manage"
     ]
   },
   {
     "method": "GET",
     "path": "/work-items/{id}/reassign-candidates",
     "handler": "work_item::work_item_reassign_candidates",
-    "code": "work_item:reassign",
+    "code": "work_item:manage",
     "group": "统一待办",
     "group_desc": "待办队列与责任处理",
     "description": "查询非审批任务可转交人员",
     "guards": [
-      "work_item:reassign"
+      "work_item:manage"
     ]
   },
   {
     "method": "POST",
     "path": "/work-items/{id}/close",
     "handler": "work_item::work_item_close",
-    "code": "work_item:close",
+    "code": "work_item:manage",
     "group": "统一待办",
     "group_desc": "待办队列与责任处理",
-    "description": "关闭重复、误派或已有替代的非审批任务",
+    "description": "关闭待办",
     "guards": [
-      "work_item:close"
+      "work_item:manage"
     ]
   },
   {
     "method": "POST",
     "path": "/work-items/{id}/abandon-rework",
     "handler": "work_item::abandon_rework",
-    "code": "work_item:detail",
+    "code": "work_item:manage",
     "group": "统一待办",
     "group_desc": "待办队列与责任处理",
     "description": "原提交人放弃本人驳回处理任务",
     "guards": [
-      "work_item:detail"
+      "work_item:manage"
     ]
   },
   {
@@ -1495,6 +1495,66 @@
     "group": "权限与审计",
     "group_desc": "权限目录、数据范围、用户授权与审计查询",
     "description": "创建数据范围",
+    "guards": [
+      "data_scope:create"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/resource-grants",
+    "handler": "access_control::resource_grants::grant",
+    "code": "data_scope:create",
+    "group": "权限与审计",
+    "group_desc": "权限目录、数据范围、用户授权与审计查询",
+    "description": "维护指定记录读取授权",
+    "guards": [
+      "data_scope:create"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/resource-grants/sources",
+    "handler": "access_control::resource_grants::sources",
+    "code": "data_scope:create",
+    "group": "权限与审计",
+    "group_desc": "权限目录、数据范围、用户授权与审计查询",
+    "description": "维护指定记录读取授权",
+    "guards": [
+      "data_scope:create"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/resource-grants/revoke",
+    "handler": "access_control::resource_grants::revoke",
+    "code": "data_scope:create",
+    "group": "权限与审计",
+    "group_desc": "权限目录、数据范围、用户授权与审计查询",
+    "description": "维护指定记录读取授权",
+    "guards": [
+      "data_scope:create"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/resource-grants/recompute",
+    "handler": "access_control::resource_grants::recompute",
+    "code": "data_scope:create",
+    "group": "权限与审计",
+    "group_desc": "权限目录、数据范围、用户授权与审计查询",
+    "description": "维护指定记录读取授权",
+    "guards": [
+      "data_scope:create"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/resource-grants/backfill",
+    "handler": "access_control::resource_grants::backfill",
+    "code": "data_scope:create",
+    "group": "权限与审计",
+    "group_desc": "权限目录、数据范围、用户授权与审计查询",
+    "description": "维护指定记录读取授权",
     "guards": [
       "data_scope:create"
     ]

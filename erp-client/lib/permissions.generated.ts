@@ -1793,6 +1793,56 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "create",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/resource-grants",
+                description: "维护指定记录读取授权",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/resource-grants/sources",
+                description: "维护指定记录读取授权",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/resource-grants/revoke",
+                description: "维护指定记录读取授权",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/resource-grants/recompute",
+                description: "维护指定记录读取授权",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/resource-grants/backfill",
+                description: "维护指定记录读取授权",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
         ],
     },
     {

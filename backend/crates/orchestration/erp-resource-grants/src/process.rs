@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use erp_finance::repository::extensions::ReceivableExt;
 use erp_identity::entity::resource_access::SourceKey;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventStatus};
 use erp_identity::service::resource_access::{GrantQueueHealth, GrantRecompute, ResourceAccessService};
@@ -11,11 +12,48 @@ use super::facts::Facts;
 
 #[derive(Clone)]
 pub struct ResourceGrantProcess {
-    db: Database,
-    rbac: SharedRbacService,
+    pub(crate) db: Database,
+    pub(crate) rbac: SharedRbacService,
 }
 
 impl ResourceGrantProcess {
+    /// 查询开票审批及后续转派的独立授权来源是否仍在生成。
+    /// # 参数
+    /// request_id 为申请 ID，recipient 为读取账号，executor 为当前读取事务。
+    /// # 返回
+    /// 任一已核实来源尚未生成时返回 true；永久终止或无证据不会提示待处理。
+    /// # 错误
+    /// 事实关联或读取失败时拒绝。
+    pub async fn invoice_pending(
+        &self,
+        request_id: &str,
+        recipient: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let initial = SourceKey {
+            rule: "invoice_approved".into(),
+            business_type: "sales_invoice_request".into(),
+            business_id: request_id.into(),
+            recipient: recipient.into(),
+        };
+        if self.source_readiness(&initial, executor).await? == GrantReadiness::NotReady {
+            return Ok(true);
+        }
+        let Some(request) = self.db.sales_invoice_requests().find_by_id(request_id, executor).await? else {
+            return Ok(false);
+        };
+        let Some(task_id) = request.work_item_id else {
+            return Ok(false);
+        };
+        let reassigned = SourceKey {
+            rule: "invoice_task_reassigned".into(),
+            business_type: "work_item".into(),
+            business_id: task_id,
+            recipient: recipient.into(),
+        };
+        Ok(self.source_readiness(&reassigned, executor).await? == GrantReadiness::NotReady)
+    }
+
     /// 装配独立授权处理器。
     /// # 参数
     /// db、rbac 为组合根共享设施。
@@ -27,7 +65,7 @@ impl ResourceGrantProcess {
         Self { db, rbac }
     }
 
-    fn access(&self, event: Option<GrantEvent>) -> ResourceAccessService {
+    pub(crate) fn access(&self, event: Option<GrantEvent>) -> ResourceAccessService {
         ResourceAccessService::new(
             self.db.clone(),
             self.rbac.clone(),

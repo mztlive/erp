@@ -1,12 +1,13 @@
 //! 转交命令的事务内策略重验与写入。
 
 use std::num::NonZeroU32;
-use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
+use erp_identity::service::resource_access::append_event;
 use id_generator::next_id;
-use persistence_core::Executor;
+use persistence_core::{Error as PersistenceError, Executor};
 
 use super::WorkItemService;
 use super::order_access::task_read_error;
@@ -18,13 +19,26 @@ use super::write::{WorkItemWriteOutcome, record_command_attempt, recover_command
 use crate::entity::work_item::WorkItem;
 use crate::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
 use crate::error::{Error, Result};
-use crate::ports::{PreparedWorkflowAudit, WorkflowAuditOperation};
+use crate::ports::{PreparedWorkflowAudit, WorkflowAuditOperation, WorkflowAuthorizationPort};
 use crate::repository::prelude::*;
 use crate::repository::{WorkItemCommandExt, WorkItemExt};
 
 const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
 
-impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
+struct ReassignmentContext {
+    item_id: String,
+    expected_task_version: u64,
+    target_user_id: String,
+    actor: AuditActor,
+    receipt: CommandReceipt,
+    audit_detail: String,
+    authorization: AssignmentAuthorizationSnapshot,
+    purchase_order_id: Option<String>,
+    audit: PreparedWorkflowAudit,
+    purchase_order_audit: Option<PreparedWorkflowAudit>,
+}
+
+impl<A: WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
     ///
     /// # 用途
@@ -45,116 +59,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         &self,
         input: AssignmentPolicyAuditInput<'_>,
     ) -> Result<WorkItemWriteOutcome> {
-        let AssignmentPolicyAuditInput {
-            item,
-            expected_task_version,
-            target_user_id,
-            actor,
-            receipt,
-            audit_detail,
-            authorization,
-        } = input;
-        let replay_receipt = receipt.clone();
-        let replay_item_id = item.base.id.clone();
-        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
-        let (audit, purchase_order_audit) =
-            self.prepare_reassignment_audits(actor, &receipt, &item, purchase_order_id.as_deref())?;
-        let item_id = item.base.id;
-        let actor_id = actor.id().to_string();
-        let actor_kind = actor.kind();
-        let policy_revision = authorization.policy_revision;
-        let policy_rbac = self.auth.clone();
+        let context = self.prepare_reassignment(input)?;
+        let replay_receipt = context.receipt.clone();
+        let replay_item_id = context.item_id.clone();
+        let actor = context.actor.clone();
+        let attempt_audit = context.audit.clone();
         let validation = self.clone();
-        let attempt_audit = audit.clone();
-        let audit_port = Arc::clone(&self.audit);
-        let db = self.db.clone();
-        let result = policy_rbac
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(async move {
-                    let mut current = db
-                        .work_items()
-                        .find_work_item(&item_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
-                    if current.base.version != expected_task_version {
-                        return Err(Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string()));
-                    }
-                    let allow_current_owner =
-                        current.owner_user_id.as_deref() == Some(target_user_id.as_str());
-                    ensure_assignment_policy(
-                        &validation,
-                        AssignmentPolicyCheck {
-                            actor_kind,
-                            actor_id: &actor_id,
-                            assignee_id: &target_user_id,
-                            item: &current,
-                            require_manager: true,
-                            authorization: &authorization,
-                            allow_current_owner,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    current = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
-                        reassign_purchase_order_fulfillment_responsibility(
-                            &validation,
-                            ReassignPurchaseOrderFulfillmentInput {
-                                selected: current,
-                                purchase_order_id,
-                                target_user_id: &target_user_id,
-                                actor_id: &actor_id,
-                                authorization: &authorization,
-                            },
-                            executor,
-                        )
-                        .await?
-                    } else {
-                        current.reassign(target_user_id.clone(), Instant::now())?;
-                        validation
-                            .facts
-                            .reassign_integration_handler(&mut current, &target_user_id, executor)
-                            .await?;
-                        db.work_items().update(&mut current, executor).await.map_err(
-                            |error| match error {
-                                persistence_core::Error::OptimisticLockingError => {
-                                    Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
-                                },
-                                error => Error::from(error),
-                            },
-                        )?;
-                        current
-                    };
-                    ensure_assignment_policy(
-                        &validation,
-                        AssignmentPolicyCheck {
-                            actor_kind,
-                            actor_id: &actor_id,
-                            assignee_id: &target_user_id,
-                            item: &current,
-                            require_manager: true,
-                            authorization: &authorization,
-                            allow_current_owner: true,
-                        },
-                        executor,
-                    )
-                    .await?;
-                    if let Some(purchase_order_audit) = &purchase_order_audit {
-                        audit_port.persist(purchase_order_audit, executor).await?;
-                    }
-                    audit_port.persist(&audit, executor).await?;
-                    let committed = WorkItemCommandReceipt::new(
-                        &receipt,
-                        WorkItemCommandResult::Reassigned {
-                            work_item_id: current.base.id.clone(),
-                            task_version: current.base.version,
-                            target_user_id: target_user_id.clone(),
-                            reason: audit_detail.clone(),
-                        },
-                        audit.id.clone(),
-                    )?;
-                    db.work_item_command_receipts().create(&committed, executor).await?;
-                    Ok(current)
-                })
+        let result = self
+            .auth
+            .run_authorized_policy_transaction(context.authorization.policy_revision, move |executor| {
+                Box::pin(async move { validation.apply_reassignment(context, executor).await })
             })
             .await;
         if let Err(error) = &result {
@@ -167,10 +81,125 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             },
             Err(error) => recover_command_error(
                 error,
-                self.idempotent_replay(&replay_receipt, &replay_item_id, actor).await,
+                self.idempotent_replay(&replay_receipt, &replay_item_id, &actor).await,
             )
             .map(|item| WorkItemWriteOutcome::Updated(Box::new(item))),
         }
+    }
+
+    fn prepare_reassignment(&self, input: AssignmentPolicyAuditInput<'_>) -> Result<ReassignmentContext> {
+        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&input.item)?;
+        let (audit, purchase_order_audit) = self.prepare_reassignment_audits(
+            input.actor,
+            &input.receipt,
+            &input.item,
+            purchase_order_id.as_deref(),
+        )?;
+        Ok(ReassignmentContext {
+            item_id: input.item.base.id,
+            expected_task_version: input.expected_task_version,
+            target_user_id: input.target_user_id,
+            actor: input.actor.clone(),
+            receipt: input.receipt,
+            audit_detail: input.audit_detail,
+            authorization: input.authorization,
+            purchase_order_id,
+            audit,
+            purchase_order_audit,
+        })
+    }
+
+    async fn apply_reassignment(
+        &self,
+        context: ReassignmentContext,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItem> {
+        let current = self
+            .db
+            .work_items()
+            .find_work_item(&context.item_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
+        if current.base.version != context.expected_task_version {
+            return Err(Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string()));
+        }
+        let allow_current_owner = current.owner_user_id.as_deref() == Some(context.target_user_id.as_str());
+        self.check_reassignment(&context, &current, allow_current_owner, executor).await?;
+        let current = self.move_reassignment(&context, current, executor).await?;
+        self.check_reassignment(&context, &current, true, executor).await?;
+        if let Some(audit) = &context.purchase_order_audit {
+            self.audit.persist(audit, executor).await?;
+        }
+        self.audit.persist(&context.audit, executor).await?;
+        let committed = WorkItemCommandReceipt::new(
+            &context.receipt,
+            WorkItemCommandResult::Reassigned {
+                work_item_id: current.base.id.clone(),
+                task_version: current.base.version,
+                target_user_id: context.target_user_id,
+                reason: context.audit_detail,
+            },
+            context.audit.id,
+        )?;
+        self.db.work_item_command_receipts().create(&committed, executor).await?;
+        if let Some(evidence) = committed.invoice_grant(&current)? {
+            append_event(&self.db, evidence, executor).await?;
+        }
+        Ok(current)
+    }
+
+    async fn check_reassignment(
+        &self,
+        context: &ReassignmentContext,
+        item: &WorkItem,
+        allow_current_owner: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        ensure_assignment_policy(
+            self,
+            AssignmentPolicyCheck {
+                actor_kind: context.actor.kind(),
+                actor_id: context.actor.id(),
+                assignee_id: &context.target_user_id,
+                item,
+                require_manager: true,
+                authorization: &context.authorization,
+                allow_current_owner,
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn move_reassignment(
+        &self,
+        context: &ReassignmentContext,
+        mut current: WorkItem,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItem> {
+        if let Some(purchase_order_id) = context.purchase_order_id.as_deref() {
+            return reassign_purchase_order_fulfillment_responsibility(
+                self,
+                ReassignPurchaseOrderFulfillmentInput {
+                    selected: current,
+                    purchase_order_id,
+                    target_user_id: &context.target_user_id,
+                    actor_id: context.actor.id(),
+                    authorization: &context.authorization,
+                },
+                executor,
+            )
+            .await;
+        }
+        current.reassign(context.target_user_id.clone(), Instant::now())?;
+        self.facts.reassign_integration_handler(&mut current, &context.target_user_id, executor).await?;
+        self.db.work_items().update(&mut current, executor).await.map_err(|error| match error {
+            PersistenceError::OptimisticLockingError => {
+                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+            },
+            error => Error::from(error),
+        })?;
+        Ok(current)
     }
 
     /// 在转交事务前冻结并校验任务与采购履约的安全审计上下文。
@@ -265,7 +294,7 @@ fn reassignment_audits(
 /// 操作人身份必须与授权快照一致。
 struct AssignmentPolicyCheck<'a> {
     /// 操作人账号类型。
-    actor_kind: erp_core::AccountKind,
+    actor_kind: AccountKind,
     /// 操作人 ID。
     actor_id: &'a str,
     /// 目标责任人 ID。
@@ -298,7 +327,7 @@ struct AssignmentPolicyCheck<'a> {
 ///
 /// # 关键业务约束
 /// 必须在同一任务责任事务内调用。
-async fn ensure_assignment_policy<A: crate::ports::WorkflowAuthorizationPort>(
+async fn ensure_assignment_policy<A: WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,
@@ -357,7 +386,7 @@ struct ReassignPurchaseOrderFulfillmentInput<'a> {
 ///
 /// # 关键业务约束
 /// 完成和关闭的历史任务保持不变；只有同一 `purchase_order:{id}` 下的开放履约任务级联。
-async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::WorkflowAuthorizationPort>(
+async fn reassign_purchase_order_fulfillment_responsibility<A: WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     input: ReassignPurchaseOrderFulfillmentInput<'_>,
     executor: &mut dyn Executor,
@@ -391,7 +420,7 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::Wor
     for mut task in tasks {
         task.reassign(input.target_user_id.to_string(), reassigned_at)?;
         service.db.work_items().update(&mut task, executor).await.map_err(|error| match error {
-            persistence_core::Error::OptimisticLockingError => {
+            PersistenceError::OptimisticLockingError => {
                 Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
             },
             error => Error::from(error),

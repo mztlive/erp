@@ -60,6 +60,12 @@ pub async fn ensure(db: &Database) -> Result<()> {
                 .build(),
         )
         .await?;
+    db.collection::<Document>(Database::WORK_ITEM_COMMAND_RECEIPTS)
+        .create_index(named_index(
+            "idx_work_item_receipts_grant_backfill",
+            doc! {"result.kind":1,"deleted_at":1,"id":1},
+        ))
+        .await?;
     Ok(())
 }
 

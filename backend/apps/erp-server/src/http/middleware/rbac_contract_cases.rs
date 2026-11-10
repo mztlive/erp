@@ -1142,9 +1142,9 @@ pub(super) fn cases() -> Vec<(&'static str, Permission)> {
         ("work_item:list", permissions::work_item::FULFILLMENT_QUEUE_LIST.permission()),
         ("work_item:list", permissions::work_item::STATS.permission()),
         ("work_item:detail", permissions::work_item::DETAIL.permission()),
-        ("work_item:reassign", permissions::work_item::REASSIGN_CANDIDATES.permission()),
-        ("work_item:reassign", permissions::work_item::REASSIGN.permission()),
-        ("work_item:close", permissions::work_item::CLOSE.permission()),
+        ("work_item:manage", permissions::work_item::REASSIGN_CANDIDATES.permission()),
+        ("work_item:manage", permissions::work_item::REASSIGN.permission()),
+        ("work_item:manage", permissions::work_item::CLOSE.permission()),
         ("work_item:detail", permissions::work_item::TIMELINE_TASK_TIMELINE.permission()),
     ]
 }

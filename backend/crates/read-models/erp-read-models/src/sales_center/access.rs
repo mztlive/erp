@@ -1,7 +1,6 @@
 //! 报表按销售单当前访问责任授权，历史快照仅用于贡献分组。
 
 use std::collections::BTreeSet;
-use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
@@ -18,8 +17,7 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::repository::prelude::*;
+use erp_workflow::repository::document_registry::participant_access;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -132,23 +130,16 @@ impl SalesAccess {
             .await?;
         let customers =
             self.collaborating_customers(actor.id(), business_date(access.as_of)?, executor).await?;
-        let history = if allows_history(resource, action) {
-            self.participant_orders(actor.id(), executor).await?
-        } else {
-            Vec::new()
-        };
-        // 历史参与变化必须使跨页凭据失效。协作客户不再进入指纹。
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        customers.hash(&mut fingerprint);
-        history.hash(&mut fingerprint);
-        access.scope_version = format!("{}:{:x}", access.scope_version, fingerprint.finish());
-        let mut scope = sales_scope(&access, actor.id(), &customers, history);
+        let mut scope = sales_scope(&access, actor.id(), &customers, Vec::new());
         if allows_history(resource, action) {
             let entry = Permission::parse(format!("{resource}:{action}"))?;
             let query = ResourceAccessService::reader(self.db.clone(), self.rbac.clone())
                 .resolve(actor, &entry, ResourceKind::SalesOrder, executor)
                 .await?;
             access.scope_version = format!("{}:{}", access.scope_version, query.constraints().3);
+            let revision = participant_access::revision(&self.db, actor.id(), executor).await?;
+            access.scope_version = format!("{}:{revision}", access.scope_version);
+            scope.history_lookup = participant_access::lookup(actor.id());
             scope.grant_lookup = lookup_stages(&query);
         }
         Ok((access, scope))
@@ -361,14 +352,6 @@ impl SalesAccess {
         Ok(())
     }
 
-    /// 完整读取动作已由身份域证明，参与事实独立补充读取并继续受个人上限约束。
-    async fn participant_orders(&self, user: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
-        let ids = self.db.document_participants().document_ids_by_user(user, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("历史参与范围超过查询上限".into()));
-        }
-        Ok(ids)
-    }
     /// 协作销售不再纳入销售单范围。空集合不得被调用方解释为全部客户。
     async fn collaborating_customers(
         &self,
@@ -432,6 +415,7 @@ pub fn sales_scope(
     SalesReadScope {
         required_scopes: vec![],
         grant_lookup: Vec::new(),
+        history_lookup: Vec::new(),
         historical_order_ids: history,
         roles: access.scope.role_clauses.iter().map(|c| clause(c, user, customers)).collect(),
         user_limit: access.scope.user_limit.as_ref().map(|c| clause(c, user, customers)),

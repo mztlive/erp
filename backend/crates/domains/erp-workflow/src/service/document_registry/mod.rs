@@ -34,6 +34,7 @@ use crate::error::{Error, Result};
 use crate::ports::{
     FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, PreparedWorkflowAudit, WorkflowAuditPort,
 };
+use crate::repository::document_registry::participant_access;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalBindingLookup, DocumentRegistryExt};
 
@@ -654,7 +655,7 @@ impl DocumentRegistryService {
                 {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
                 }
-                tx_db.document_participants().create(&participant_for_tx, executor).await?;
+                participant_access::append(tx_db, &participant_for_tx, executor).await?;
                 audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
             })

@@ -3,3 +3,9 @@ mod facts;
 mod process;
 mod rules;
 pub use process::{GrantReadiness, ResourceGrantProcess};
+
+mod backfill;
+pub mod management;
+pub use management::{
+    BackfillReport, BackfillRequest, ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery,
+};

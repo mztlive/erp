@@ -133,7 +133,14 @@ impl ResourceAccessService {
         append_event(&self.db, evidence, executor).await
     }
 
-    async fn authorize_manager(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
+    /// 校验读取授权的维护资格。
+    /// # 参数
+    /// actor 为当前管理员，executor 为维护事务。
+    /// # 返回
+    /// 同角色具备范围维护及全公司组织管理资格时成功。
+    /// # 错误
+    /// 身份失效、资格不足或数据库失败时拒绝。
+    pub async fn authorize_manager(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         let permissions = [Permission::parse("data_scope:create")?];
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
             .resolve_permissions(actor, "org_unit", "manage", &permissions, executor)

@@ -2823,16 +2823,28 @@
       "stage": "Command",
       "boundaries": [
         ".run_authorized_policy_transaction",
-        "audit_port.persist",
         "record_command_attempt"
       ],
       "call_counts": {
         ".run_authorized_policy_transaction": 1,
-        "audit_port.persist": 2,
         "record_command_attempt": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 reassign_with_assignment_policy_audit 通过 .run_authorized_policy_transaction、audit_port.persist、record_command_attempt 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "转派入口保留授权策略事务及失败审计；正式业务审计由同一 Executor 中的 apply_reassignment 保存，禁止嵌套事务和未知提交结果自动重放。"
+    },
+    {
+      "path": "crates/domains/erp-workflow/src/service/work_item/reassign_apply.rs",
+      "function": "apply_reassignment",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "audit.persist"
+      ],
+      "call_counts": {
+        "audit.persist": 2
+      },
+      "location_count": 1,
+      "reason": "转派步骤沿用入口 Executor，依次保存可选采购责任审计及任务审计，并原子保存任务命令回执和开票转派授权事件；本步骤不创建事务、不重放业务命令。"
     },
     {
       "path": "crates/domains/erp-workflow/src/service/work_item/reassign_apply.rs",

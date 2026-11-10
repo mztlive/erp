@@ -1,5 +1,6 @@
 //! 授权队列公开用例；持久化逻辑由身份仓储拥有。
-use persistence_core::Executor;
+use application_core::AuditActor;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::ResourceAccessService;
 use crate::Result;
@@ -8,6 +9,36 @@ use crate::entity::resource_access::{GrantSource, SourceKey};
 use crate::repository::resource_grants::queue::GrantQueue;
 pub use crate::repository::resource_grants::queue::{GrantQueueHealth, GrantRecompute, GrantRule};
 impl ResourceAccessService {
+    /// 管理员在同一事务校验资格并重排一页正式事件。
+    /// # 参数
+    /// actor 为管理员，selection 为维护范围，after 为排他游标，now 为当前秒数。
+    /// # 返回
+    /// 本页末尾游标；空页返回 None。
+    /// # 错误
+    /// 越权、查询或写入冲突时整页拒绝；未知提交结果不自动重试。
+    pub async fn recompute_managed(
+        &self,
+        actor: &AuditActor,
+        selection: GrantRecompute,
+        after: Option<String>,
+        now: u64,
+    ) -> Result<Option<String>> {
+        let this = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.authorize_manager(&actor, executor).await?;
+                    GrantQueue { db: this.db.clone() }
+                        .requeue(&selection, after.as_deref(), now, executor)
+                        .await
+                })
+            })
+            .await
+    }
+
     /// 原子领取到期事件或回收过期租约。
     /// # 参数
     /// owner 为每次领取唯一令牌，now 为秒级时间。
@@ -81,7 +112,7 @@ impl ResourceAccessService {
         after: Option<&str>,
         now: u64,
     ) -> Result<Option<String>> {
-        GrantQueue { db: self.db.clone() }.requeue(filter, after, now).await
+        GrantQueue { db: self.db.clone() }.requeue(filter, after, now, &mut NoTransaction).await
     }
 }
 
