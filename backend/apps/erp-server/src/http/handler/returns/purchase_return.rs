@@ -97,7 +97,6 @@ pub async fn purchase_return_order_create(
 ) -> Result<PurchaseReturnOrderView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_purchase_return_order(req, &actor)
             .await?;
 
@@ -124,7 +123,6 @@ pub async fn purchase_direct_return_confirm(
         state.application().db(),
         reverse_flow_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .confirm_direct_return(&id, req, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(result))

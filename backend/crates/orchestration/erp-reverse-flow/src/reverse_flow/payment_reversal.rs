@@ -77,14 +77,7 @@ impl ReturnsProcess {
     ) -> Result<PaymentReversalView> {
         req.validate()?;
         let reversal = new_payment_reversal(req, actor.id())?;
-        persist_created_payment_reversal(
-            &self.db,
-            &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
-            reversal.clone(),
-            actor.clone(),
-        )
-        .await?;
+        persist_created_payment_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
         self.reads().payment_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
     }
 
@@ -331,7 +324,6 @@ impl ReturnsProcess {
 async fn persist_created_payment_reversal(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     reversal: PaymentReversal,
     actor: AuditActor,
 ) -> Result<()> {
@@ -356,7 +348,7 @@ async fn persist_created_payment_reversal(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -364,7 +356,6 @@ async fn persist_created_payment_reversal(
                 persist_bound_payment_reversal_document(
                     &db,
                     &rbac,
-                    object_read.as_ref(),
                     document,
                     &bind_command,
                     &actor,
@@ -430,7 +421,6 @@ async fn validate_payment_reversal_source(
 async fn persist_bound_payment_reversal_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -440,7 +430,7 @@ async fn persist_bound_payment_reversal_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("付款冲正单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, executor).await?;

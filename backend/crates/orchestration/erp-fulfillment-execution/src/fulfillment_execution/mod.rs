@@ -38,7 +38,6 @@ pub struct FulfillmentProcess {
     pub(super) fingerprint_key: Vec<u8>,
     pub(super) sensitive_data: Arc<SensitiveDataCodec>,
     pub(super) task_identity: FulfillmentIdentityFactory,
-    pub(super) object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl FulfillmentProcess {
@@ -63,29 +62,7 @@ impl FulfillmentProcess {
         task_identity: FulfillmentIdentityFactory,
         workflow: Arc<dyn FulfillmentWorkflow>,
     ) -> Self {
-        Self {
-            workflow,
-            db,
-            fingerprint_key,
-            sensitive_data,
-            task_identity,
-            object_read: Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
-    }
-
-    /// 注入组合根已经配置的审批对象读取能力。
-    ///
-    /// # 参数
-    /// * `object_read` - 组合根配置的审批对象读取端口。
-    ///
-    /// # 返回
-    /// 返回替换对象读取端口后的履约流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>) -> Self {
-        self.object_read = object_read;
-        self
+        Self { workflow, db, fingerprint_key, sensitive_data, task_identity }
     }
 
     /// 用本流程的数据库构造履约领域服务，不另开事务。

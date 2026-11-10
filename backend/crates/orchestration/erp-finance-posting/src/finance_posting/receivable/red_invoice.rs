@@ -59,13 +59,12 @@ impl ReceivableProcess {
         let prepared = RedInvoiceCommand::prepare(actor, id, &req)?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
+
         let client = db.client().clone();
         let red_invoice_id = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let outcome =
-                        apply_red_invoice(&db, &rbac, object_read.as_ref(), &prepared, executor).await?;
+                    let outcome = apply_red_invoice(&db, &rbac, &prepared, executor).await?;
                     Ok::<String, crate::Error>(outcome)
                 })
             })
@@ -152,7 +151,6 @@ fn red_number(req: &CommitRedInvoiceRequest, digest: &str) -> String {
 /// # 参数
 /// * `db` - 数据库
 /// * `rbac` - 审批绑定授权源
-/// * `object_read` - 单据可读性端口
 /// * `command` - 事务外命令快照
 /// * `executor` - 调用方事务执行器
 ///
@@ -164,7 +162,6 @@ fn red_number(req: &CommitRedInvoiceRequest, digest: &str) -> String {
 async fn apply_red_invoice(
     db: &mongodb::Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     command: &RedInvoiceCommand,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<String> {
@@ -200,7 +197,7 @@ async fn apply_red_invoice(
     let red_mut =
         build_red_invoice(&original, &command.red_no, red_gross, red_net, red_tax, &command.actor_id)?;
     let mut original_mut = original;
-    register_created_invoice_document(db, rbac, object_read, &red_mut, &command.actor, executor).await?;
+    register_created_invoice_document(db, rbac, &red_mut, &command.actor, executor).await?;
     let sales_ids = erp_finance::service::receivable::red_invoice_posting::persist_red_invoice(
         db,
         &red_mut,

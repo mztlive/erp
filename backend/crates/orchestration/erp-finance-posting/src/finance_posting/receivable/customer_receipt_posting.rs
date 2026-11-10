@@ -67,7 +67,6 @@ pub(super) struct CommitTransactionRequest {
 /// # 参数
 /// * `db` - 数据库实例
 /// * `rbac` - 授权源
-/// * `object_read` - 对象读取端口
 /// * `request` - 待提交候选、分配与幂等身份
 ///
 /// # 返回
@@ -78,7 +77,6 @@ pub(super) struct CommitTransactionRequest {
 pub(super) async fn run_commit_transaction(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     request: CommitTransactionRequest,
 ) -> Result<CustomerReceipt> {
     let CommitTransactionRequest {
@@ -103,8 +101,7 @@ pub(super) async fn run_commit_transaction(
                 {
                     return Ok(receipt);
                 }
-                let (receipt, binding) =
-                    load_commit_receipt(&db, &rbac, object_read.as_ref(), pending, &actor, executor).await?;
+                let (receipt, binding) = load_commit_receipt(&db, &rbac, pending, &actor, executor).await?;
                 persist_loaded_commit_start(
                     &db,
                     &rbac,
@@ -267,7 +264,6 @@ pub async fn reject_customer_receipt_approval_apply(
 /// # 参数
 /// * `db` - 数据库实例
 /// * `rbac` - 授权源
-/// * `object_read` - 对象读取端口
 /// * `receipt` - 新建回款候选
 /// * `actor` - 提交人
 ///
@@ -279,7 +275,6 @@ pub async fn reject_customer_receipt_approval_apply(
 pub(super) async fn persist_created_customer_receipt(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     receipt: CustomerReceipt,
     actor: AuditActor,
 ) -> Result<()> {
@@ -297,7 +292,7 @@ pub(super) async fn persist_created_customer_receipt(
         actor.clone().resource_log("customer_receipt.create", "customer_receipt", receipt.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -305,7 +300,6 @@ pub(super) async fn persist_created_customer_receipt(
                 persist_bound_customer_receipt_document(
                     &db,
                     &rbac,
-                    object_read.as_ref(),
                     document,
                     &bind_command,
                     &actor,
@@ -325,7 +319,6 @@ pub(super) async fn persist_created_customer_receipt(
 /// # 参数
 /// * `db` - 数据库实例
 /// * `rbac` - 授权源
-/// * `object_read` - 对象读取端口
 /// * `document` - 待登记单据
 /// * `bind_command` - 绑定命令
 /// * `actor` - 提交人
@@ -339,7 +332,6 @@ pub(super) async fn persist_created_customer_receipt(
 pub(super) async fn persist_bound_customer_receipt_document(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -349,7 +341,7 @@ pub(super) async fn persist_bound_customer_receipt_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户回款单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, executor).await?;
@@ -423,7 +415,6 @@ pub(super) fn prepare_customer_receipt_commit_candidate(
 /// # 参数
 /// * `db` - 数据库
 /// * `rbac` - 授权源
-/// * `object_read` - 对象读取端口
 /// * `candidate` - 新建回款候选
 /// * `actor` - 提交人
 /// * `executor` - 调用方执行器
@@ -436,7 +427,6 @@ pub(super) fn prepare_customer_receipt_commit_candidate(
 pub(super) async fn create_new_commit_records(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     candidate: CustomerReceipt,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -457,16 +447,8 @@ pub(super) async fn create_new_commit_records(
         candidate.receipt_no.clone(),
     )
     .map_err(crate::Error::from)?;
-    let binding = persist_bound_customer_receipt_document(
-        db,
-        rbac,
-        object_read,
-        document,
-        &bind_command,
-        actor,
-        executor,
-    )
-    .await?;
+    let binding =
+        persist_bound_customer_receipt_document(db, rbac, document, &bind_command, actor, executor).await?;
     db.customer_receipts().create(&candidate, executor).await?;
     Ok((candidate, binding))
 }
@@ -524,7 +506,6 @@ pub(super) struct LoadedCommitStart {
 /// # 参数
 /// * `db` - 数据库
 /// * `rbac` - 授权源
-/// * `object_read` - 对象读取端口
 /// * `pending` - 待提交的新建候选或已有草稿身份
 /// * `actor` - 提交人
 /// * `executor` - 调用方执行器
@@ -537,14 +518,13 @@ pub(super) struct LoadedCommitStart {
 pub(super) async fn load_commit_receipt(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     pending: PendingCustomerReceiptCommit,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(CustomerReceipt, ApprovalDefinitionBinding)> {
     let PendingCustomerReceiptCommit { new_receipt, requested_id, expected_version, .. } = pending;
     match new_receipt {
-        Some(candidate) => create_new_commit_records(db, rbac, object_read, candidate, actor, executor).await,
+        Some(candidate) => create_new_commit_records(db, rbac, candidate, actor, executor).await,
         None => {
             let receipt_id = requested_id
                 .as_deref()

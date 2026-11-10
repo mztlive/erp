@@ -46,7 +46,6 @@ pub async fn invoice_create_with_files(
     };
     let outcome =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_invoice_with_assets(req, pending, &actor)
             .await;
     let view = finish_asset_command(&state, &uploads, outcome, |_| true).await?;
@@ -81,7 +80,6 @@ pub async fn invoice_commit_with_files(
     };
     let outcome =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_invoice_with_assets(req, pending, &actor)
             .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;
@@ -116,7 +114,6 @@ pub async fn invoice_complete_with_files(
     };
     let outcome =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .complete_invoice_with_assets(req, pending, &actor)
             .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;

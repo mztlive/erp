@@ -15,7 +15,6 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::PaymentSettlementFacts;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::{FileAssetExt, FileAssetView, PendingAttachmentBatch};
-use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
@@ -228,7 +227,6 @@ impl PayableProcess {
         let transaction = SupplierPaymentTransaction {
             db: self.db.clone(),
             rbac: self.authorization_rbac.clone(),
-            object_read: Arc::clone(&self.object_read),
             prepared,
             pending_assets,
             actor: actor.clone(),
@@ -390,7 +388,6 @@ impl PreparedSupplierPayment {
 struct SupplierPaymentTransaction {
     db: Database,
     rbac: FinancePostingPorts,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
     prepared: PreparedSupplierPayment,
     pending_assets: Arc<dyn PendingAttachmentBatch>,
     actor: AuditActor,
@@ -511,7 +508,6 @@ impl SupplierPaymentTransaction {
         persist_unbound_supplier_payment_document(
             &self.db,
             &self.rbac,
-            self.object_read.as_ref(),
             document,
             &bind_command,
             &self.actor,
@@ -538,13 +534,12 @@ impl SupplierPaymentTransaction {
 async fn persist_unbound_supplier_payment_document(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn ApprovalObjectReadPort,
     document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     if binding.is_some() || document.approval_binding.is_some() {
         return Err(Error::Internal("供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string()));
     }

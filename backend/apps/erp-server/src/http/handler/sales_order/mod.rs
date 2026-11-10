@@ -74,8 +74,7 @@ pub async fn sales_order_create(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
-    )
-    .with_object_read(state.application().approval_object_read());
+    );
     if let Some(contract_id) = req.contract_id.as_ref() {
         ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
     }
@@ -135,8 +134,7 @@ pub async fn sales_order_save_working_copy(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
-    )
-    .with_object_read(state.application().approval_object_read());
+    );
     let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.save_working_copy(&id, req, &actor).await?;
@@ -173,8 +171,7 @@ pub async fn sales_order_submit(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
-    )
-    .with_object_read(state.application().approval_object_read());
+    );
     let customer_id = service.sales_command_customer_id(&actor, &req.contract_id, &req.customer_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.submit_sales_order(&id, req, &actor).await?;
@@ -203,7 +200,6 @@ pub async fn sales_order_cancel_approval(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .cancel_approval_submission(&id, req, &actor)
     .await?;
 
@@ -231,7 +227,6 @@ pub async fn sales_order_void(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .void_sales_order(&id, req, &actor)
     .await?;
 
@@ -262,7 +257,6 @@ pub async fn sales_order_handover(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .handover_sales_order(&id, req, &actor)
     .await?;
 
@@ -288,7 +282,6 @@ pub async fn sales_order_handover_candidates(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .handover_candidates(&id, &actor)
     .await?;
 
@@ -373,7 +366,6 @@ pub async fn sales_order_bind_contract(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .bind_sales_order_contract(&id, req, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(view))

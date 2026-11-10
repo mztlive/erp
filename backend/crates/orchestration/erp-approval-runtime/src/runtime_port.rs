@@ -8,6 +8,7 @@ use bpm::engine::DefinitionGraph;
 use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_support::FileAsset;
+use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -18,7 +19,6 @@ use erp_workflow::service::approval::binding::{
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::service::approval::policy::ProcessRequiredApprovalPolicy;
-use erp_workflow::{ApprovalObjectReadPort, WorkflowAuthorizationPort};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -60,7 +60,7 @@ pub trait ApprovalRuntimePort: Send + Sync {
 
     /// 用应用授权与审计提供者绑定已发布定义。
     /// # 参数
-    /// `db`、`object_read`、`command`、`actor` 和 `executor` 为原绑定上下文。
+    /// `db`、`command`、`actor` 和 `executor` 为原绑定上下文。
     /// # 返回
     /// 返回原策略决定的绑定或无审批结果。
     /// # 错误
@@ -68,7 +68,6 @@ pub trait ApprovalRuntimePort: Send + Sync {
     async fn bind_document(
         &self,
         db: &Database,
-        object_read: &dyn ApprovalObjectReadPort,
         command: &BindPublishedDefinitionCommand,
         actor: &AuditActor,
         executor: &mut dyn Executor,
@@ -136,15 +135,13 @@ pub trait ApprovalRuntimePort: Send + Sync {
 
     /// 在原事务重验精确绑定定义、指派人和来源资格。
     /// # 参数
-    /// `db`、`object_read`、`policy`、`context`、`graph` 和 `executor` 为原绑定重验上下文。
+    /// `policy`、`context`、`graph` 和 `executor` 为原绑定重验上下文。
     /// # 返回
     /// 定义、当前人员和来源资格全部成立时返回。
     /// # 错误
     /// 任一绑定或人员资格失效时返回原错误。
     async fn revalidate_binding(
         &self,
-        db: &Database,
-        object_read: &dyn ApprovalObjectReadPort,
         policy: &ProcessRequiredApprovalPolicy,
         context: &BindingRevalidationContext,
         graph: &DefinitionGraph,
@@ -195,7 +192,6 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
     async fn bind_document(
         &self,
         db: &Database,
-        object_read: &dyn ApprovalObjectReadPort,
         command: &BindPublishedDefinitionCommand,
         actor: &AuditActor,
         executor: &mut dyn Executor,
@@ -203,7 +199,6 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         Ok(bind_published_definition_on_document_create(
             &self.identity,
             db,
-            object_read,
             self.audit.as_ref(),
             command,
             actor,
@@ -254,14 +249,11 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
 
     async fn revalidate_binding(
         &self,
-        db: &Database,
-        object_read: &dyn ApprovalObjectReadPort,
         policy: &ProcessRequiredApprovalPolicy,
         context: &BindingRevalidationContext,
         graph: &DefinitionGraph,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(revalidate_binding_graph(&self.identity, db, object_read, policy, context, graph, executor)
-            .await?)
+        Ok(revalidate_binding_graph(&self.identity, policy, context, graph, executor).await?)
     }
 }

@@ -24,12 +24,12 @@ use erp_read_models::purchase_center::repository::{
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::new_registered_document;
-use erp_workflow::{ApprovalObjectReadPort, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -190,7 +190,7 @@ impl PurchaseOrderProcess {
         } = input;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
+
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.to_string();
@@ -208,15 +208,7 @@ impl PurchaseOrderProcess {
                     request_fingerprint: &transaction_fingerprint,
                     actor: &transaction_actor,
                 };
-                create_from_basis_apply(
-                    &db,
-                    ports.as_ref(),
-                    &binding_rbac,
-                    object_read.as_ref(),
-                    &command,
-                    executor,
-                )
-                .await
+                create_from_basis_apply(&db, ports.as_ref(), &binding_rbac, &command, executor).await
             })
         })
         .await
@@ -243,7 +235,6 @@ async fn create_from_basis_apply(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     command: &CreateBasisCommand<'_>,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
@@ -286,7 +277,7 @@ async fn create_from_basis_apply(
         selected_lines: &selected_lines,
         facts: &latest_facts,
     };
-    persist_basis_draft(db, ports, rbac, object_read, &input, command, executor).await
+    persist_basis_draft(db, ports, rbac, &input, command, executor).await
 }
 
 /// guard 重算后的事务内创建输入：已完成 CAS 的销售单、最新依据范围、
@@ -313,7 +304,6 @@ pub struct VerifiedBasisInput<'a> {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
-/// * `object_read` - 创建并提交时证明采购对象范围的读取端口
 /// * `input` - guard 重算后的事务内创建输入（销售单、依据范围、本次行与事实）
 /// * `command` - 原始请求、命令收据与审计操作人
 /// * `executor` - 数据访问执行器
@@ -332,7 +322,6 @@ pub async fn persist_basis_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
     rbac: &SharedRbacService,
-    object_read: &dyn ApprovalObjectReadPort,
     input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
     executor: &mut dyn Executor,
@@ -342,7 +331,7 @@ pub async fn persist_basis_draft(
     reserve_selected_quotes(db, &order, &lines, executor).await?;
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: command.actor };
-    let document = write_prepared_draft(db, ports, rbac, object_read, &write, executor).await?;
+    let document = write_prepared_draft(db, ports, rbac, &write, executor).await?;
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
         order,
@@ -500,7 +489,6 @@ pub(in crate::procure_to_pay) async fn write_prepared_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
     _rbac: &SharedRbacService,
-    object_read: &dyn ApprovalObjectReadPort,
     write: &PreparedDraftWrite<'_>,
     executor: &mut dyn Executor,
 ) -> Result<BusinessDocument> {
@@ -517,7 +505,7 @@ pub(in crate::procure_to_pay) async fn write_prepared_draft(
     };
     let binding = ports
         .approval
-        .bind_document(db, object_read, &bind_command, write.actor, executor)
+        .bind_document(db, &bind_command, write.actor, executor)
         .await?
         .ok_or_else(|| Error::Internal("采购单必须绑定已发布定义".to_string()))?;
     let mut document = new_registered_document(&write.order.base.id, DocumentType::PurchaseOrder, "")

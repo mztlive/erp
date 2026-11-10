@@ -115,18 +115,10 @@ impl PurchaseOrderProcess {
         let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
+
         rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
             Box::pin(async move {
-                apply_expense_create(
-                    &db,
-                    ports.as_ref(),
-                    &binding_rbac,
-                    object_read.as_ref(),
-                    &command,
-                    executor,
-                )
-                .await
+                apply_expense_create(&db, ports.as_ref(), &binding_rbac, &command, executor).await
             })
         })
         .await
@@ -138,7 +130,6 @@ async fn apply_expense_create(
     db: &Database,
     ports: &PurchaseOrderPorts,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     command: &ExpenseCommand,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
@@ -159,7 +150,7 @@ async fn apply_expense_create(
     reserve_purchase(db, &order, &lines, &command.actor, executor).await?;
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: &command.actor };
-    let document = write_prepared_draft(db, ports, rbac, object_read, &write, executor).await?;
+    let document = write_prepared_draft(db, ports, rbac, &write, executor).await?;
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
         order,

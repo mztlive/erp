@@ -24,7 +24,6 @@ async fn files(
             state.application().db(),
             receivable_posting_ports(state.application().db()),
         )
-        .with_object_read(state.application().approval_object_read())
         .customer_receipt_draft_files(id, actor)
         .await?)
     } else {

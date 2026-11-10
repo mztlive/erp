@@ -39,7 +39,6 @@ fn process(state: &HttpState) -> PurchasePaymentRequestProcess {
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
 }
 
 /// 仅交付全部来源获准的整单申请列表。

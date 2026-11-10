@@ -20,7 +20,6 @@ use erp_returns::entity::returns::{
 use erp_returns::repository::ReturnsExt;
 use erp_returns::repository::direct_return::{direct_return_command, purchase_settlements};
 use erp_sales::repository::SalesOrderExt;
-use erp_workflow::ApprovalObjectReadPort;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -97,7 +96,7 @@ impl ReturnsProcess {
         let actor = actor.clone();
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let object_read = self.object_read.clone();
+
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -123,7 +122,6 @@ impl ReturnsProcess {
                     register_direct_return_documents(
                         &db,
                         &rbac,
-                        object_read.as_ref(),
                         &return_order,
                         &sales_case,
                         &actor,
@@ -143,14 +141,13 @@ impl ReturnsProcess {
 async fn register_direct_return_documents(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn ApprovalObjectReadPort,
     return_order: &PurchaseReturnOrder,
     sales_case: &SalesReturnCase,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    register_created_sales_return_document(db, rbac, object_read, sales_case, actor, executor).await?;
-    register_created_purchase_return_document(db, rbac, object_read, return_order, actor, executor).await?;
+    register_created_sales_return_document(db, rbac, sales_case, actor, executor).await?;
+    register_created_purchase_return_document(db, rbac, return_order, actor, executor).await?;
     Ok(())
 }
 

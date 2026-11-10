@@ -297,7 +297,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
         self.identity.ensure_policy_snapshot_with_executor(authorization.policy_revision, executor).await?;
-        let access = self.business_eligibility(&actor, qualified.permissions(), executor).await?;
+        let access = TaskEligibility::new(actor).with_permissions(qualified.permissions());
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
             .map_err(task_read_error)?;
@@ -401,7 +401,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             executor,
         )
         .await?;
-        if !has_assignment_candidate_access(item, access, &facts) {
+        let access = self.participation(access, &facts, executor).await?;
+        if !has_assignment_candidate_access(item, &access, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
         Ok(())

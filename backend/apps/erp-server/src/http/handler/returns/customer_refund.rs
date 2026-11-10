@@ -77,7 +77,6 @@ pub async fn customer_refund_create(
 ) -> Result<CustomerRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_customer_refund(req, &actor)
             .await?;
 
@@ -103,7 +102,6 @@ pub async fn customer_refund_commit(
 ) -> Result<CustomerRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_customer_refund(req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -130,7 +128,6 @@ pub async fn customer_refund_submit(
 ) -> Result<CustomerRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .submit_customer_refund(&id, req, &actor)
             .await?;
 
@@ -158,7 +155,6 @@ pub async fn customer_refund_cancel_approval(
 ) -> Result<CustomerRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .cancel_customer_refund_approval(&id, req, &actor)
             .await?;
 

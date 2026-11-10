@@ -132,7 +132,6 @@ pub async fn purchase_order_create(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .create_from_basis(req, &actor)
     .await?;
 
@@ -158,7 +157,6 @@ pub async fn purchase_order_create_from_sourcing(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .create_from_sourcing(req, &actor)
     .await?;
 
@@ -186,7 +184,6 @@ pub async fn purchase_order_save_draft(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .save_draft(&id, req, &actor)
     .await?;
 
@@ -214,7 +211,6 @@ pub async fn purchase_order_void(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .void_draft(&id, req, &actor)
     .await?;
 
@@ -242,7 +238,6 @@ pub async fn purchase_order_submit(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .submit(&id, req, &actor)
     .await?;
 
@@ -296,7 +291,6 @@ pub async fn purchase_order_cancel_approval(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .cancel_approval(&id, req, &actor)
     .await?;
 
@@ -343,7 +337,6 @@ pub async fn purchase_change_create(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .start_change(&id, req, &actor)
     .await?;
 
@@ -371,7 +364,6 @@ pub async fn purchase_change_submit(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .submit_change_view(&id, req, &actor)
     .await?;
 
@@ -421,7 +413,6 @@ pub async fn purchase_change_cancel_approval(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .cancel_change_approval(&id, req, &actor)
     .await?;
 

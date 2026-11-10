@@ -31,7 +31,6 @@ fn acceptance_process(state: &HttpState) -> CustomerAcceptanceProcess {
         service(state),
         state.application().rbac(),
         fulfillment_identity_factory(state.application().db()),
-        state.application().approval_object_read(),
         Arc::new(FulfillmentWorkflowServices::new(
             work_item_service(state.application().db(), state.application().rbac()),
             approval_runtime(state.application().db(), state.application().rbac()),

@@ -78,14 +78,7 @@ impl ReceivableProcess {
             },
             actor.id(),
         )?;
-        persist_created_customer_receipt(
-            &self.db,
-            &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
-            receipt.clone(),
-            actor.clone(),
-        )
-        .await?;
+        persist_created_customer_receipt(&self.db, &self.rbac, receipt.clone(), actor.clone()).await?;
         self.read.customer_receipt_detail(&receipt.base.id).await.map_err(crate::Error::from)
     }
 
@@ -130,7 +123,6 @@ impl ReceivableProcess {
         let transaction_result = run_commit_transaction(
             &self.db,
             &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
             CommitTransactionRequest {
                 resubmission_reason: req.resubmission_reason,
                 pending: pending_commit,
@@ -366,7 +358,7 @@ impl ReceivableProcess {
     /// * `BusinessLogicError` - 跨主体核销、超额核销或重复过账
     pub async fn post_customer_receipt(&self, id: &str, actor: &AuditActor) -> Result<CustomerReceiptView> {
         let db = self.db.clone();
-        let _object_read = std::sync::Arc::clone(&self.object_read);
+
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let receipt_id = id.to_string();

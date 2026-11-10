@@ -1,12 +1,9 @@
 //! 应付命令：在同一过账事务中登记银行回单文件。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_file_assets::PendingFileAssets;
 use erp_finance::dto::payable::CommitSupplierPaymentRequest;
 use erp_support::{BankReceiptEvidencePolicy, PendingFileAssetRequest};
-use erp_workflow::ApprovalObjectReadPort;
 use mongodb::Database;
 
 use crate::finance_posting::payable::{PayableProcess, SupplierPaymentWithAssetsResult};
@@ -17,7 +14,6 @@ use crate::{FinancePostingPorts, Result};
 /// # 参数
 /// * `db` - 付款与附件使用的数据库
 /// * `rbac` - 组合根共享授权读取器；付款 policy 事务实例保持局部装配
-/// * `object_read` - 组合根装配的单据读取端口
 /// * `req` - 付款事实、核销分配及原始幂等键
 /// * `asset_requests` - 已上传、须随付款登记的银行回单元数据
 /// * `actor` - 已通过鉴权的当前操作人
@@ -32,7 +28,6 @@ use crate::{FinancePostingPorts, Result};
 pub async fn commit_supplier_payment_with_assets(
     db: Database,
     rbac: FinancePostingPorts,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
     req: CommitSupplierPaymentRequest,
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
@@ -47,8 +42,5 @@ pub async fn commit_supplier_payment_with_assets(
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
     let pending = PendingFileAssets::prepare(asset_requests, &actor)?.shared();
-    PayableProcess::new(db, rbac)
-        .with_object_read(object_read)
-        .commit_supplier_payment_with_assets(req, pending, &actor)
-        .await
+    PayableProcess::new(db, rbac).commit_supplier_payment_with_assets(req, pending, &actor).await
 }

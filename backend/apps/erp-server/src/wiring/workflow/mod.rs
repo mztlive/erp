@@ -109,12 +109,11 @@ pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
 
 /// 经组合根端口绑定已发布审批定义。
 ///
-/// 领域流程必须从组合根取得 `object_read`。本函数不另开嵌套事务。
+/// 绑定沿用调用方事务。
 ///
 /// # 参数
 /// * `db` - 单据与审批集合所在数据库。
 /// * `rbac` - 现有 RBAC 快照服务。
-/// * `object_read` - 组合根提供的审批对象读取端口。
 /// * `command` - 绑定已发布定义的命令。
 /// * `actor` - 当前操作人。
 /// * `executor` - 调用方执行器。
@@ -127,20 +126,13 @@ pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
 pub async fn bind_published_definition_on_document_create(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     command: &erp_workflow::service::approval::binding::BindPublishedDefinitionCommand,
     actor: &application_core::AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>> {
     let audit = WorkflowAudit::new(db.clone());
     erp_workflow::service::approval::binding::bind_published_definition_on_document_create(
-        rbac,
-        db,
-        object_read,
-        &audit,
-        command,
-        actor,
-        executor,
+        rbac, db, &audit, command, actor, executor,
     )
     .await
     .map_err(map_service_err)

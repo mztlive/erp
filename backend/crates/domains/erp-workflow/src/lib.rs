@@ -9,8 +9,8 @@ pub mod repository;
 pub mod service;
 
 pub use dto::approval::{
-    ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
-    ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
+    ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand, ApprovalResumeCommand,
+    ApprovalStartCommand,
 };
 pub use dto::work_item::{
     WorkItemListParams, WorkItemPageView, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
@@ -28,8 +28,8 @@ pub use entity::work_item::{
 };
 pub use error::{Error, ErrorCode, Result, known_duplicate_index_message};
 pub use ports::{
-    ApprovalObjectReadPort, ApprovalUpgradeSubjectFacts, FailClosedObjectReadPort,
-    FailClosedWorkflowAuthorizationPort, ObjectFactPort, UpgradeSubjectPort, WorkflowAuthorizationPort,
+    ApprovalUpgradeSubjectFacts, FailClosedWorkflowAuthorizationPort, ObjectFactPort, UpgradeSubjectPort,
+    WorkflowAuthorizationPort,
 };
 pub use repository::{
     ApprovalBindingLookup, ApprovalIntegrationExt, BpmExt, BpmWorkflowRepository, DocumentRegistryExt,

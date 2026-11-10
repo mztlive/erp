@@ -77,7 +77,6 @@ pub use source_withdraw::SalesChangeWithdrawal;
 pub struct PurchaseOrderProcess {
     db: Database,
     rbac: Option<SharedRbacService>,
-    object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     ports: Arc<PurchaseOrderPorts>,
 }
 impl PurchaseOrderProcess {
@@ -93,7 +92,7 @@ impl PurchaseOrderProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, ports: Arc<PurchaseOrderPorts>) -> Self {
-        Self { db, rbac: None, object_read: Arc::new(erp_workflow::FailClosedObjectReadPort), ports }
+        Self { db, rbac: None, ports }
     }
     /// 创建可绑定发布定义的采购单服务。
     ///
@@ -108,21 +107,7 @@ impl PurchaseOrderProcess {
     /// # 错误
     /// 不返回错误。
     pub fn with_rbac(db: Database, rbac: SharedRbacService, ports: Arc<PurchaseOrderPorts>) -> Self {
-        Self { db, rbac: Some(rbac), ports, object_read: Arc::new(erp_workflow::FailClosedObjectReadPort) }
-    }
-    /// 消耗 `self`，换入组合根提供的审批对象读取端口。
-    ///
-    /// # 参数
-    /// * `object_read` - 审批绑定使用的对象读取端口。
-    ///
-    /// # 返回
-    /// 返回替换端口后的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>) -> Self {
-        self.object_read = object_read;
-        self
+        Self { db, rbac: Some(rbac), ports }
     }
     /// 为单域采购构造和事务内写入提供本地服务。
     fn domain(&self) -> PurchaseOrderService {

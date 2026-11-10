@@ -57,7 +57,6 @@ pub async fn receipt_reversal_create(
 ) -> Result<ReceiptReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_receipt_reversal(req, &actor)
             .await?;
 
@@ -83,7 +82,6 @@ pub async fn receipt_reversal_commit(
 ) -> Result<ReceiptReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_receipt_reversal(req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -110,7 +108,6 @@ pub async fn receipt_reversal_submit(
 ) -> Result<ReceiptReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .submit_receipt_reversal(&id, req, &actor)
             .await?;
 
@@ -138,7 +135,6 @@ pub async fn receipt_reversal_cancel_approval(
 ) -> Result<ReceiptReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .cancel_receipt_reversal_approval(&id, req, &actor)
             .await?;
 

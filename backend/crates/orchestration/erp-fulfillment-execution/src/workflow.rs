@@ -17,7 +17,7 @@ use erp_workflow::service::approval::binding::{
     BindPublishedDefinitionCommand, bind_published_definition_on_document_create,
 };
 use erp_workflow::service::approval::execution::PlannedWrites;
-use erp_workflow::{ApprovalObjectReadPort, WorkItemService, WorkflowAuthorizationPort};
+use erp_workflow::{WorkItemService, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
 use crate::Result;
@@ -31,14 +31,13 @@ pub trait FulfillmentWorkflow: Send + Sync {
     /// 在原创建事务中绑定发布定义或记录无审批政策事实。
     ///
     /// # 参数
-    /// `object_read` 是原对象读取端口；`command`、`actor` 和 `executor` 属于原创建命令。
+    /// `command`、`actor` 和 `executor` 属于原创建命令。
     /// # 返回
     /// 必须审批时返回绑定，无审批时返回空值。
     /// # 错误
     /// 定义、人员、范围、政策或审计校验失败时返回原错误。
     async fn bind_document(
         &self,
-        object_read: &dyn ApprovalObjectReadPort,
         command: &BindPublishedDefinitionCommand,
         actor: &AuditActor,
         executor: &mut dyn Executor,
@@ -177,7 +176,6 @@ where
 {
     async fn bind_document(
         &self,
-        object_read: &dyn ApprovalObjectReadPort,
         command: &BindPublishedDefinitionCommand,
         actor: &AuditActor,
         executor: &mut dyn Executor,
@@ -185,7 +183,6 @@ where
         Ok(bind_published_definition_on_document_create(
             &self.service.identity,
             &self.service.db,
-            object_read,
             self.service.audit.as_ref(),
             command,
             actor,

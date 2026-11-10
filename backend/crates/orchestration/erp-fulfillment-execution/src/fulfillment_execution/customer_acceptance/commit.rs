@@ -14,7 +14,6 @@ use erp_identity::SharedRbacService;
 use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::repository::SalesOrderExt;
-use erp_workflow::ApprovalObjectReadPort;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -141,7 +140,6 @@ struct PreparedAcceptanceCommit {
     rbac: SharedRbacService,
     task_identity: FulfillmentIdentityFactory,
     workflow: Arc<dyn FulfillmentWorkflow>,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
     req: CommitCustomerAcceptanceRequest,
     actor: AuditActor,
     receipt: CommandReceipt,
@@ -174,7 +172,6 @@ impl PreparedAcceptanceCommit {
             rbac: process.rbac.clone(),
             task_identity: process.task_identity.clone(),
             workflow: process.workflow.clone(),
-            object_read: Arc::clone(&process.object_read),
             req,
             actor: actor.clone(),
             receipt,
@@ -230,7 +227,6 @@ impl PreparedAcceptanceCommit {
             db: &self.db,
             workflow: self.workflow.as_ref(),
             rbac: &self.rbac,
-            object_read: self.object_read.as_ref(),
             actor: &self.actor,
         };
         document.prepare(&acceptance, is_new, executor).await?;
@@ -284,7 +280,6 @@ struct CustomerAcceptanceDocument<'a> {
     db: &'a Database,
     workflow: &'a dyn FulfillmentWorkflow,
     rbac: &'a SharedRbacService,
-    object_read: &'a dyn ApprovalObjectReadPort,
     actor: &'a AuditActor,
 }
 
@@ -302,7 +297,6 @@ impl CustomerAcceptanceDocument<'_> {
                 self.db,
                 self.workflow,
                 self.rbac,
-                self.object_read,
                 acceptance,
                 self.actor,
                 executor,

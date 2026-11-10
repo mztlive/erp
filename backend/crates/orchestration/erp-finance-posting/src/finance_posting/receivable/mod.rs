@@ -59,7 +59,6 @@ pub struct ReceivableProcess {
     read: erp_read_models::finance::receivable::ReceivableReadService,
     finance: erp_finance::service::receivable::ReceivableService,
     rbac: FinancePostingPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 
 impl ReceivableProcess {
@@ -79,25 +78,6 @@ impl ReceivableProcess {
             finance: erp_finance::service::receivable::ReceivableService::new(db.clone()),
             db,
             rbac,
-            object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
         }
-    }
-
-    /// 注入组合根的审批对象读取端口，供单据绑定使用。
-    ///
-    /// # 参数
-    /// * `object_read` - 组合根装配的对象读取端口。
-    ///
-    /// # 返回
-    /// 返回已绑定该端口的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(
-        mut self,
-        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
-    ) -> Self {
-        self.object_read = object_read;
-        self
     }
 }

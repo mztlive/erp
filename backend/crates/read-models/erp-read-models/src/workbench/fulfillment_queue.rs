@@ -356,7 +356,8 @@ impl WorkbenchReadService {
         tasks: WorkItemReadService,
         executor: &mut dyn Executor,
     ) -> Result<FulfillmentQueuePageView> {
-        let (access, identity_version) = tasks.queue_access_with_version(&actor, executor).await?;
+        let access = tasks.task_access(&actor, "list", executor).await?;
+        let identity_version = access.version();
         let visible_types = visible_operation_types(&query.operation_types, &access);
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);
         ensure_queue_context(&query.queue_context_id, &context_id)?;

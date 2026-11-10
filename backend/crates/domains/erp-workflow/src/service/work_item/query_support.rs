@@ -38,7 +38,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
             let mut facts = self.facts.load_object_facts(&keys, executor).await?;
             filter_order_facts(&self.auth, actor, &mut facts, executor).await?;
-            has_item_access(item, access, &facts)
+            let access = self.participation(access, &facts, executor).await?;
+            has_item_access(item, &access, &facts)
         };
         if !readable {
             return Err(Error::Forbidden("当前账号无权查看该业务对象".into()));

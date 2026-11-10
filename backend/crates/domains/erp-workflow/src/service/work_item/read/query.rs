@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
+use erp_identity::{ResourceTargets, SharedRbacService};
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -146,7 +146,8 @@ impl WorkItemReadService {
         actor: AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemPageView> {
-        let (access, identity_version) = self.queue_access_with_version(&actor, executor).await?;
+        let access = self.task_access(&actor, "list", executor).await?;
+        let identity_version = access.version();
         let queue_context_id = queue_context_id(actor.id(), &query, &access.version());
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
         let mut filter = access.scope_filter(&query)?;
@@ -424,15 +425,16 @@ impl WorkItemReadService {
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<WorkItemView>> {
         Box::pin(async move {
-            self.authorization.require(actor, action, id, executor).await?;
-            let item = self
-                .db
-                .work_items()
-                .find_work_item(id, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
-            let item_id = item.base.id.clone();
+            ResourceTargets::new(&[id])?;
             let access = self.task_access(actor, action, executor).await?;
+            let filter =
+                WorkItemFilter { authorization: Some(access.read_access().clone()), ..Default::default() };
+            let Some(item) = self.db.work_items().find_visible_by_id(id, &filter, executor).await? else {
+                // 仅拒绝分支复用点查错误分类；成功读取只执行一次授权查询。
+                self.authorization.require(actor, action, id, executor).await?;
+                return Err(Error::NotFound("任务不存在".into()));
+            };
+            let item_id = item.base.id.clone();
             let scope = WorkItemScope::for_task(&item, actor.id());
             let fields = dto::WorkItemFields::from(item);
             let queue_context_id = single_item_context_id(actor.id(), &item_id);

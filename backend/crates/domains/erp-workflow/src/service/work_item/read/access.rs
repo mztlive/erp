@@ -10,8 +10,6 @@ use super::{WorkItemFilter, WorkItemReadService, WorkItemScope, dto};
 use crate::entity::work_item::TaskAccess;
 use crate::error::{Error, Result};
 
-pub const MANAGE_PERMISSION: &str = "work_item:manage";
-
 /// 队列读取凭证与当前展示批次的动作事实；不能代替业务办理资格。
 #[derive(Clone)]
 pub struct QueueAccess {
@@ -113,27 +111,15 @@ impl WorkItemReadService {
     ) -> Result<QueueAccess> {
         let read = self.authorization.query(actor, action, executor).await?;
         let mut access = QueueAccess::new(read);
-        let manage = Permission::parse(MANAGE_PERMISSION)?;
-        if self.authorization.service.has_permission(actor, &manage, executor).await? {
-            access.manage = Some(self.authorization.query(actor, "manage", executor).await?);
-        }
+        access.manage = if action == "manage" {
+            Some(access.read.clone())
+        } else {
+            match self.authorization.query(actor, "manage", executor).await {
+                Ok(manage) => Some(manage),
+                Err(Error::Forbidden(_)) => None,
+                Err(error) => return Err(error),
+            }
+        };
         Ok(access)
-    }
-
-    /// 首末授权版本保护跨页和当前请求的数据范围一致性。
-    /// # 参数
-    /// `actor` 为当前账号，`executor` 为读取执行器。
-    /// # 返回
-    /// 列表访问范围及身份版本。
-    /// # 错误
-    /// 权限、范围或版本读取失败时返回错误。
-    pub async fn queue_access_with_version(
-        &self,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<(QueueAccess, String)> {
-        let access = self.task_access(actor, "list", executor).await?;
-        let version = access.version();
-        Ok((access, version))
     }
 }

@@ -57,7 +57,6 @@ pub async fn supplier_refund_create(
 ) -> Result<SupplierRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_supplier_refund(req, &actor)
             .await?;
 
@@ -83,7 +82,6 @@ pub async fn supplier_refund_commit(
 ) -> Result<SupplierRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_supplier_refund(req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -110,7 +108,6 @@ pub async fn supplier_refund_submit(
 ) -> Result<SupplierRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .submit_supplier_refund(&id, req, &actor)
             .await?;
 
@@ -138,7 +135,6 @@ pub async fn supplier_refund_cancel_approval(
 ) -> Result<SupplierRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .cancel_supplier_refund_approval(&id, req, &actor)
             .await?;
 

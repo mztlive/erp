@@ -65,7 +65,6 @@ pub async fn invoice_request_submit(
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .submit_invoice_request(req, &actor)
             .await?,
     ))
@@ -89,7 +88,6 @@ pub async fn invoice_request_update(
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .update_invoice_request(&id, req, &actor)
             .await?,
     ))
@@ -106,7 +104,6 @@ pub async fn invoice_request_cancel(
 ) -> Result<InvoiceRequestView> {
     Ok(ApiResponse::ok_with_data(
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .cancel_invoice_request(&id, req, &actor)
             .await?,
     ))

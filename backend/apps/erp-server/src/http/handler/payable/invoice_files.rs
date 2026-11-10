@@ -42,7 +42,6 @@ pub async fn purchase_invoice_allocation_post_with_files(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .register_purchase_invoice_with_assets(req, pending, &actor)
     .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;

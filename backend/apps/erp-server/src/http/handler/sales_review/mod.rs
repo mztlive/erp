@@ -152,7 +152,6 @@ pub async fn sales_change_order_create(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .create_sales_change_order(req, &actor, &rbac)
     .await?;
 
@@ -180,7 +179,6 @@ pub async fn sales_change_order_submit_impact(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .submit_sales_change(&id, req, &actor)
     .await?;
 
@@ -208,7 +206,6 @@ pub async fn sales_change_order_void(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .void_sales_change(&id, req, &actor)
     .await?;
 
@@ -236,7 +233,6 @@ pub async fn sales_change_order_cancel_approval(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .cancel_approval(&id, req, &actor)
     .await?;
 

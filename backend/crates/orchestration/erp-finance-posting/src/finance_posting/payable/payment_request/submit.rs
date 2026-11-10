@@ -39,7 +39,6 @@ use crate::finance_posting::receivable::start_approval;
 pub(super) async fn create_and_submit(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn ApprovalObjectReadPort,
     data: PurchasePaymentRequestData,
     actor: &AuditActor,
     command: &CommandReceipt,
@@ -52,9 +51,8 @@ pub(super) async fn create_and_submit(
         expected_version: draft.base.version,
         idempotency_key: command.id().to_owned(),
     };
-    let id = SubmitWrite { db, rbac, object_read, id: &draft.base.id, req: &req, actor, command }
-        .persist(executor)
-        .await?;
+    let id =
+        SubmitWrite { db, rbac, id: &draft.base.id, req: &req, actor, command }.persist(executor).await?;
     load(db, &id, executor).await
 }
 
@@ -95,7 +93,7 @@ impl PurchasePaymentRequestProcess {
         }
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let object_read = self.object_read.clone();
+
         let response_actor = actor.clone();
         let actor = actor.clone();
         let id = id.to_owned();
@@ -105,17 +103,9 @@ impl PurchasePaymentRequestProcess {
             .clone()
             .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
-                    SubmitWrite {
-                        db: &db,
-                        rbac: &rbac,
-                        object_read: object_read.as_ref(),
-                        id: &id,
-                        req: &req,
-                        actor: &actor,
-                        command: &command,
-                    }
-                    .persist(executor)
-                    .await
+                    SubmitWrite { db: &db, rbac: &rbac, id: &id, req: &req, actor: &actor, command: &command }
+                        .persist(executor)
+                        .await
                 })
             })
             .await;
@@ -144,7 +134,6 @@ impl PurchasePaymentRequestProcess {
 async fn bind(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn ApprovalObjectReadPort,
     request: &PurchasePaymentRequest,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -163,7 +152,7 @@ async fn bind(
     };
     let binding = rbac
         .runtime
-        .bind_document(db, object_read, &command, actor, executor)
+        .bind_document(db, &command, actor, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("请先发布采购付款申请审批流程".into()))?;
     let mut document: BusinessDocument = new_registered_document(
@@ -253,7 +242,6 @@ async fn assign_approval_due(
 struct SubmitWrite<'a> {
     db: &'a Database,
     rbac: &'a FinancePostingPorts,
-    object_read: &'a dyn ApprovalObjectReadPort,
     id: &'a str,
     req: &'a SubmitPurchasePaymentRequest,
     actor: &'a AuditActor,
@@ -262,7 +250,7 @@ struct SubmitWrite<'a> {
 
 impl SubmitWrite<'_> {
     async fn persist(&self, executor: &mut dyn Executor) -> Result<String> {
-        let Self { db, rbac, object_read, id, req, actor, command } = *self;
+        let Self { db, rbac, id, req, actor, command } = *self;
         let receipts = FinanceCommandReceiptService::new(db.clone());
         if let Some(id) = receipts.committed_resource_id(command, executor).await? {
             return Ok(id);
@@ -274,7 +262,7 @@ impl SubmitWrite<'_> {
         let submission = source::prepare_submission(db, rbac, &request, actor, true, executor).await?;
         request.submit(submission)?;
         db.purchase_payment_requests().update(&mut request, executor).await?;
-        let binding = bind(db, rbac, object_read, &request, actor, executor).await?;
+        let binding = bind(db, rbac, &request, actor, executor).await?;
         self.start(&mut request, &binding, executor).await?;
         let audit = actor.clone().resource_log(
             "purchase_payment_request.submit",
@@ -295,7 +283,7 @@ impl SubmitWrite<'_> {
         now: Instant,
         executor: &mut dyn Executor,
     ) -> Result<PlannedWrites> {
-        let Self { db, rbac, object_read, req, actor, .. } = *self;
+        let Self { db, rbac, req, actor, .. } = *self;
         let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
         let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
         let context =
@@ -303,8 +291,6 @@ impl SubmitWrite<'_> {
                 .with_business_org_unit_id(request.org_unit_id.clone());
         rbac.runtime
             .revalidate_binding(
-                db,
-                object_read,
                 &require_process_required(DocumentType::PurchasePaymentRequest)?,
                 &context,
                 &graph,

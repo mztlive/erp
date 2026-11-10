@@ -5,7 +5,6 @@ use std::sync::Arc;
 use erp_identity::SharedRbacService;
 use erp_inventory::InventoryService;
 use erp_read_models::inventory_center::InventoryAdjustmentReadService;
-use erp_workflow::ApprovalObjectReadPort;
 use mongodb::Database;
 
 use crate::workflow::FulfillmentWorkflow;
@@ -37,7 +36,6 @@ pub struct InventoryAdjustmentProcess {
     workflow: Arc<dyn FulfillmentWorkflow>,
     db: Database,
     rbac: SharedRbacService,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
 }
 
 impl InventoryAdjustmentProcess {
@@ -60,30 +58,7 @@ impl InventoryAdjustmentProcess {
         workflow: Arc<dyn FulfillmentWorkflow>,
         inventory_service: Arc<InventoryService>,
     ) -> Self {
-        Self {
-            workflow,
-            inventory_service,
-            db,
-            rbac,
-            object_read: Arc::new(erp_workflow::FailClosedObjectReadPort),
-        }
-    }
-
-    /// 注入组合根的对象读取端口，供审批绑定使用。
-    ///
-    /// 消耗 `self` 并替换对象读取实现。
-    ///
-    /// # 参数
-    /// * `object_read` - 组合根提供的审批对象读取端口。
-    ///
-    /// # 返回
-    /// 返回替换对象读取端口后的流程服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, object_read: Arc<dyn ApprovalObjectReadPort>) -> Self {
-        self.object_read = object_read;
-        self
+        Self { workflow, inventory_service, db, rbac }
     }
 
     /// 装配库存调整跨域读取与正式命令共用的动作政策。

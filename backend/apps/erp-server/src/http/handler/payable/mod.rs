@@ -106,7 +106,6 @@ pub async fn payment_recipient_reveal(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
     .await?;
 
@@ -131,7 +130,6 @@ pub async fn payable_account_create(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .create_payable_account(req, &actor)
     .await?;
 
@@ -203,7 +201,6 @@ pub async fn supplier_payment_merge_candidates(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .payment_merge_candidates(params, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -235,7 +232,6 @@ pub async fn supplier_payment_commit(
     let result = commit_supplier_payment_with_assets(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
-        state.application().approval_object_read(),
         req,
         pending.clone(),
         actor,
@@ -257,8 +253,7 @@ pub async fn supplier_payment_bank_receipt(
     let payable = PayableProcess::new(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
-    )
-    .with_object_read(state.application().approval_object_read());
+    );
     let snapshot = payable.supplier_payment_bank_receipt(&id, &actor).await?;
     let view = &snapshot.asset;
     if !matches!(view.content_type.as_str(), "image/jpeg" | "image/png" | "image/webp") {
@@ -333,7 +328,6 @@ pub async fn purchase_invoice_allocation_post(
         state.application().db(),
         finance_posting_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .register_purchase_invoice(req, &actor)
     .await?;
 

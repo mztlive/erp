@@ -53,7 +53,6 @@ impl FulfillmentProcess {
             &self.db,
             self.workflow.clone(),
             &self.task_identity,
-            std::sync::Arc::clone(&self.object_read),
             receipt.clone(),
             lines,
             actor.clone(),
@@ -237,7 +236,6 @@ fn apply_purchase_receipt_create_binding(
 async fn persist_unbound_purchase_receipt_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -245,7 +243,7 @@ async fn persist_unbound_purchase_receipt_document(
 ) -> Result<()> {
     let _ = ensure_purchase_receipt_skips_approval_binding()?;
     ensure_purchase_receipt_has_no_adapter()?;
-    let binding = workflow.bind_document(object_read, bind_command, actor, executor).await?;
+    let binding = workflow.bind_document(bind_command, actor, executor).await?;
     apply_purchase_receipt_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
@@ -257,7 +255,6 @@ async fn persist_unbound_purchase_receipt_document(
 async fn register_created_purchase_receipt_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     receipt: &PurchaseReceipt,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -266,16 +263,7 @@ async fn register_created_purchase_receipt_document(
     let document =
         new_registered_document(&receipt.base.id, DocumentType::PurchaseReceipt, receipt.receipt_no.clone())
             .map_err(crate::Error::from)?;
-    persist_unbound_purchase_receipt_document(
-        db,
-        workflow,
-        object_read,
-        document,
-        &bind_command,
-        actor,
-        executor,
-    )
-    .await
+    persist_unbound_purchase_receipt_document(db, workflow, document, &bind_command, actor, executor).await
 }
 
 /// 在创建事务内写入采购收货草稿并登记无绑定单据。
@@ -286,7 +274,6 @@ async fn persist_created_purchase_receipt(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
     task_identity: &FulfillmentIdentityFactory,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     receipt: PurchaseReceipt,
     lines: Vec<PurchaseReceiptLine>,
     actor: AuditActor,
@@ -295,7 +282,7 @@ async fn persist_created_purchase_receipt(
         actor.clone().resource_log("purchase_receipt.create", "purchase_receipt", receipt.base.id.clone())?;
     let db = db.clone();
     let task_identity = task_identity.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -303,7 +290,6 @@ async fn persist_created_purchase_receipt(
                 register_created_purchase_receipt_document(
                     &db,
                     workflow.as_ref(),
-                    object_read.as_ref(),
                     &receipt,
                     &actor,
                     executor,

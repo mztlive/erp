@@ -112,7 +112,6 @@ impl SalesChangeProcess {
         persist_created_change_order(
             &self.db,
             rbac,
-            Arc::clone(&self.object_read),
             CreatedChangeOrderPersistInput {
                 approvals: self.services.approvals.clone(),
                 sales_write,
@@ -531,14 +530,13 @@ struct CreatedChangeOrderPersistInput {
 async fn persist_created_change_order(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
-    object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     input: CreatedChangeOrderPersistInput,
 ) -> Result<()> {
     let CreatedChangeOrderPersistInput { approvals, sales_write, mut document, bind_command, audit, actor } =
         input;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -550,7 +548,6 @@ async fn persist_created_change_order(
                 persist_bound_change_document(
                     &db,
                     approvals.as_ref(),
-                    object_read.as_ref(),
                     &mut document,
                     &bind_command,
                     &actor,
@@ -571,7 +568,6 @@ async fn persist_created_change_order(
 async fn persist_bound_change_document(
     db: &mongodb::Database,
     approvals: &dyn ApprovalRuntimePort,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -581,7 +577,7 @@ async fn persist_bound_change_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = approvals.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = approvals.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售变更单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding)?;
     db.business_documents().create(document, executor).await?;

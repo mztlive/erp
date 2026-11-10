@@ -40,40 +40,20 @@ use crate::{Error, Result};
 pub struct ReturnsProcess {
     db: Database,
     rbac: ReverseFlowPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 impl ReturnsProcess {
-    /// 使用原共享 RBAC 和失败关闭对象读取端口构造命令入口。
+    /// 使用共享业务端口构造命令入口。
     ///
     /// # 参数
     /// * `db` - 组合根数据库。
     ///
     /// # 返回
-    /// 返回命令入口。对象读取端口为失败关闭实现。
+    /// 返回使用给定业务端口的命令入口。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: ReverseFlowPorts) -> Self {
-        Self { db, rbac, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
-    }
-    /// 注入组合根已配置的对象读取授权能力。
-    ///
-    /// 消耗 `self`。
-    ///
-    /// # 参数
-    /// * `object_read` - 组合根已配置的对象读取端口。
-    ///
-    /// # 返回
-    /// 返回换入该端口后的命令入口。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(
-        mut self,
-        object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
-    ) -> Self {
-        self.object_read = object_read;
-        self
+        Self { db, rbac }
     }
     /// 注入组合根持有的共享 RBAC，保持所有命令使用同一授权提供方。
     ///

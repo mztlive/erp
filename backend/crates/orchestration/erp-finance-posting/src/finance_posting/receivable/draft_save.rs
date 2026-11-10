@@ -72,8 +72,7 @@ impl ReceivableProcess {
         req.validate_identity()?;
         let command = receipt_files::receipt(&req, actor, pending.as_ref())?;
         receipt_files::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
-        let process = Self::new(self.db.clone(), self.rbac.fresh_receivable()?)
-            .with_object_read(self.object_read.clone());
+        let process = Self::new(self.db.clone(), self.rbac.fresh_receivable()?);
         let actor = actor.clone();
         self.db
             .client()
@@ -175,15 +174,7 @@ impl ReceivableProcess {
             },
             actor.id(),
         )?;
-        let (receipt, _) = create_new_commit_records(
-            &self.db,
-            &self.rbac,
-            self.object_read.as_ref(),
-            receipt,
-            actor,
-            executor,
-        )
-        .await?;
+        let (receipt, _) = create_new_commit_records(&self.db, &self.rbac, receipt, actor, executor).await?;
         Ok(receipt)
     }
 

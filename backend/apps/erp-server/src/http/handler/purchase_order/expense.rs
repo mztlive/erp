@@ -83,7 +83,6 @@ pub async fn expense_purchase_create(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .create_expense_purchase(&id, req, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(view))

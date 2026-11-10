@@ -1,5 +1,6 @@
 //! 任务读取和对象检查统一调用 identity，登记不接受请求覆盖。
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::Result as CoreResult;
@@ -26,7 +27,9 @@ impl WorkItemReadService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.authorization.service.validate(access.read_access(), executor).await?;
-        if let Some(manage) = &access.manage {
+        if let Some(manage) = &access.manage
+            && !Arc::ptr_eq(access.read_access(), manage)
+        {
             self.authorization.service.validate(manage, executor).await?;
         }
         Ok(())
@@ -77,8 +80,11 @@ impl WorkItemReadService {
         let ids = fields.iter().map(|field| field.id.clone()).collect::<Vec<_>>();
         if let Some(manage) = &access.manage {
             self.authorization.service.validate(manage, executor).await?;
-            projected.task.managed_task_ids =
-                self.db.work_items().authorized_ids(&ids, manage, executor).await?.into_iter().collect();
+            projected.task.managed_task_ids = if Arc::ptr_eq(access.read_access(), manage) {
+                ids.into_iter().collect()
+            } else {
+                self.db.work_items().authorized_ids(&ids, manage, executor).await?.into_iter().collect()
+            };
             self.authorization.service.validate(manage, executor).await?;
         }
         Ok(projected)

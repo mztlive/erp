@@ -103,7 +103,6 @@ impl ReceivableProcess {
         persist_created_invoice(
             &self.db,
             &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
             invoice.clone(),
             actor.clone(),
             attachment_ids,
@@ -169,7 +168,6 @@ impl ReceivableProcess {
         let transaction = InvoiceCommitTransaction {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
-            object_read: Arc::clone(&self.object_read),
             prepared: req.prepare()?,
             pending,
             attachment_ids: req.attachment_asset_ids.clone(),
@@ -435,7 +433,6 @@ fn apply_invoice_create_binding(
 async fn persist_unbound_invoice_document(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -443,7 +440,7 @@ async fn persist_unbound_invoice_document(
 ) -> Result<()> {
     let _ = ensure_invoice_skips_approval_binding()?;
     ensure_invoice_has_no_adapter()?;
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     apply_invoice_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
@@ -453,7 +450,6 @@ async fn persist_unbound_invoice_document(
 /// # 参数
 /// * `db` - 数据库。
 /// * `rbac` - 授权源。
-/// * `object_read` - 审批对象读取端口。
 /// * `invoice` - 已构造、尚未登记单据的发票。
 /// * `actor` - 登记人。
 /// * `executor` - 调用方执行器。
@@ -466,7 +462,6 @@ async fn persist_unbound_invoice_document(
 pub(super) async fn register_created_invoice_document(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     invoice: &Invoice,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -478,7 +473,7 @@ pub(super) async fn register_created_invoice_document(
         invoice.invoice_no.clone().unwrap_or_else(|| format!("开票登记-{}", invoice.base.id)),
     )
     .map_err(crate::Error::from)?;
-    persist_unbound_invoice_document(db, rbac, object_read, document, &bind_command, actor, executor).await
+    persist_unbound_invoice_document(db, rbac, document, &bind_command, actor, executor).await
 }
 
 /// 在创建事务内写入发票草稿并登记无绑定单据。
@@ -488,7 +483,6 @@ pub(super) async fn register_created_invoice_document(
 async fn persist_created_invoice(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     invoice: Invoice,
     actor: AuditActor,
     attachment_ids: Vec<FileAssetId>,
@@ -497,20 +491,12 @@ async fn persist_created_invoice(
     let audit = actor.clone().resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                register_created_invoice_document(
-                    &db,
-                    &rbac,
-                    object_read.as_ref(),
-                    &invoice,
-                    &actor,
-                    executor,
-                )
-                .await?;
+                register_created_invoice_document(&db, &rbac, &invoice, &actor, executor).await?;
                 db.invoices().create(&invoice, executor).await?;
                 super::invoice_attachments::persist(
                     &db,

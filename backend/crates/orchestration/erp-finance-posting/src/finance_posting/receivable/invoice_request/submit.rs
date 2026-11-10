@@ -55,7 +55,7 @@ impl ReceivableProcess {
         }
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let object_read = self.object_read.clone();
+
         let response_actor = actor.clone();
         let actor = actor.clone();
         let recover = command.clone();
@@ -64,16 +64,9 @@ impl ReceivableProcess {
             .clone()
             .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
-                    SubmitWrite {
-                        db: &db,
-                        rbac: &rbac,
-                        object_read: object_read.as_ref(),
-                        req: &req,
-                        actor: &actor,
-                        command: &command,
-                    }
-                    .apply(executor)
-                    .await
+                    SubmitWrite { db: &db, rbac: &rbac, req: &req, actor: &actor, command: &command }
+                        .apply(executor)
+                        .await
                 })
             })
             .await;
@@ -84,7 +77,6 @@ impl ReceivableProcess {
 struct SubmitWrite<'a> {
     db: &'a Database,
     rbac: &'a FinancePostingPorts,
-    object_read: &'a dyn erp_workflow::ApprovalObjectReadPort,
     req: &'a SubmitInvoiceRequest,
     actor: &'a AuditActor,
     command: &'a CommandReceipt,
@@ -92,7 +84,7 @@ struct SubmitWrite<'a> {
 impl SubmitWrite<'_> {
     /// 原事务内先授权或恢复回执，再冻结额度、审批与成功审计。
     async fn apply(&self, executor: &mut dyn Executor) -> Result<String> {
-        let Self { db, rbac, object_read, req, actor, command } = *self;
+        let Self { db, rbac, req, actor, command } = *self;
         let receipts = FinanceCommandReceiptService::new(db.clone());
         let access = MongoAccess { db, rbac };
         if access.replay(actor, command, executor).await?.is_some() {
@@ -110,7 +102,7 @@ impl SubmitWrite<'_> {
             authorize(&access, actor, &request.base.id, RequestAction::Submit, executor).await?;
         }
         request.submit(available)?;
-        let binding = bind(db, rbac, object_read, &request, actor, executor).await?;
+        let binding = bind(db, rbac, &request, actor, executor).await?;
         let id = request.base.id.clone();
         start(db, rbac, &mut request, &binding, req, actor, executor).await?;
         let audit = super::command::event(actor, &request, super::command::SUBMIT, Some(command))?;
@@ -160,7 +152,6 @@ async fn candidate(
 /// # 参数
 /// * `db` - 数据库。
 /// * `rbac` - 共享 RBAC。
-/// * `object_read` - 审批对象读取端口。
 /// * `request` - 已写入的开票申请。
 /// * `actor` - 提交人。
 /// * `executor` - 调用方执行器。
@@ -177,7 +168,6 @@ async fn candidate(
 async fn bind(
     db: &Database,
     rbac: &FinancePostingPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     request: &SalesInvoiceRequest,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -198,7 +188,7 @@ async fn bind(
     };
     let binding = rbac
         .runtime
-        .bind_document(db, object_read, &command, actor, executor)
+        .bind_document(db, &command, actor, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("请先发布开票申请审批流程".into()))?;
     let mut document: BusinessDocument = new_registered_document(

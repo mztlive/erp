@@ -289,7 +289,6 @@ fn ensure_or_sign_tasks(
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库。
 /// * `rbac` - 授权端口。
-/// * `object_read` - 被审对象读取端口。
 /// * `actor` - 当前决定人。
 /// * `command` - 决定命令。
 /// * `loaded` - 已加载的开放运行时。
@@ -372,7 +371,6 @@ async fn revalidate_decision_eligibilities(
 async fn revalidate_node_eligibility(
     identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-
     loaded: &OpenDecisionRuntime,
     node: &ApprovalNodeDefinition,
     executor: &mut dyn Executor,
@@ -502,7 +500,6 @@ fn finish_prepared_open_decision(
 async fn blocked_runtime_admin_ids(
     identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-
     loaded: &OpenDecisionRuntime,
     writes: &PlannedWrites,
     executor: &mut dyn Executor,

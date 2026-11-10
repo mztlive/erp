@@ -13,7 +13,6 @@ use erp_inventory::{
 };
 use erp_read_models::inventory_center::document_approval_view_with_history;
 use erp_warehouse::WarehouseExt;
-use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
@@ -89,7 +88,6 @@ impl InventoryAdjustmentProcess {
         persist_created_adjustment(
             &self.db,
             &self.rbac,
-            Arc::clone(&self.object_read),
             CreatedAdjustmentPersist {
                 inventory: self.inventory_service.clone(),
                 workflow: self.workflow.clone(),
@@ -154,7 +152,6 @@ struct CreatedAdjustmentPersist {
 /// # 参数
 /// * `db` - 数据库。
 /// * `rbac` - 共享 RBAC 服务。
-/// * `object_read` - 绑定发布定义时重验对象读取权的端口。
 /// * `persist` - 调整单、单据绑定与审计。
 ///
 /// # 返回
@@ -168,7 +165,6 @@ struct CreatedAdjustmentPersist {
 async fn persist_created_adjustment(
     db: &Database,
     rbac: &SharedRbacService,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
     persist: CreatedAdjustmentPersist,
 ) -> Result<StockAdjustmentDetailView> {
     let db = db.clone();
@@ -176,9 +172,7 @@ async fn persist_created_adjustment(
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                apply_created_adjustment(&db, &rbac, object_read.as_ref(), persist, executor).await
-            })
+            Box::pin(async move { apply_created_adjustment(&db, &rbac, persist, executor).await })
         })
         .await
 }
@@ -220,7 +214,6 @@ async fn validate_creation_source(
 async fn apply_created_adjustment(
     db: &Database,
     rbac: &SharedRbacService,
-    object_read: &dyn ApprovalObjectReadPort,
     persist: CreatedAdjustmentPersist,
     executor: &mut dyn Executor,
 ) -> Result<StockAdjustmentDetailView> {
@@ -245,16 +238,8 @@ async fn apply_created_adjustment(
             Err(Error::Forbidden(_)) => false,
             Err(error) => return Err(error),
         };
-    let binding = persist_bound_document(
-        db,
-        workflow.as_ref(),
-        object_read,
-        &mut document,
-        &bind_command,
-        &actor,
-        executor,
-    )
-    .await?;
+    let binding =
+        persist_bound_document(db, workflow.as_ref(), &mut document, &bind_command, &actor, executor).await?;
     persist_log(db, &audit, executor).await?;
     created_adjustment_detail(adjustment, lines, binding, can_submit)
 }
@@ -302,13 +287,12 @@ fn created_adjustment_detail(
 async fn persist_bound_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
-    object_read: &dyn ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalDefinitionBinding> {
-    let binding = workflow.bind_document(object_read, bind_command, actor, executor).await?;
+    let binding = workflow.bind_document(bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("库存调整单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
     persist_registered_document(db, document, executor).await.map_err(crate::Error::from)?;

@@ -26,8 +26,7 @@ use super::super::view::OpenTaskSummary;
 pub(crate) use super::query_contract::parse_document_type;
 pub use super::query_contract::{RuntimeInstanceListCursor, RuntimeInstanceListQuery};
 use super::read_auth::{
-    RuntimeReadAuthorizationFacts, RuntimeReadSubject, current_execution_matches_instance,
-    task_proves_current_responsibility,
+    RuntimeReadSubject, current_execution_matches_instance, task_proves_current_responsibility,
 };
 use super::{ApprovalRuntimeService, hidden_not_found};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
@@ -435,14 +434,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
-        let facts = RuntimeReadAuthorizationFacts {
-            actor_active: true,
-            initiator: subject.instance.started_by.as_str() == actor.id(),
-            current_responsibility: self.current_runtime_responsibility(actor, subject).await?
-                || self.historical_runtime_participant(actor, subject).await?,
-            ..Default::default()
-        };
-        if facts.ordinary_allowed() {
+        let current = self.current_runtime_responsibility(actor, subject).await?;
+        let participant = current || self.historical_runtime_participant(actor, subject).await?;
+        if subject.instance.started_by.as_str() == actor.id() || participant {
             return Ok(());
         }
         self.ensure_management_runtime_read(actor, subject).await
@@ -666,7 +660,7 @@ pub(super) fn item_from_summary(
     })
 }
 
-/// 对聚合页行重新执行对象读取与授权矩阵，然后映射公开列表行。
+/// 核对已授权聚合行的视图归属和流程类型，然后映射公开列表行。
 ///
 /// # 参数
 /// * `row` - 已聚合的实例与可选快照。
@@ -690,17 +684,9 @@ pub(super) fn item_from_runtime_read_row(
     )
     .map_err(|_| hidden_not_found())?;
     let type_allowed = type_scopes.iter().any(|scope| scope.process_kind == row.instance.process_kind);
-    let facts = RuntimeReadAuthorizationFacts {
-        actor_active: true,
-        initiator: row.instance.started_by == actor.id(),
-        current_responsibility: false,
-        object_readable: type_allowed,
-        scope_covers: type_allowed,
-        runtime_admin: type_allowed,
-    };
     let allowed = match view {
-        RuntimeInstanceListView::Started => facts.started_allowed(),
-        RuntimeInstanceListView::Managed | RuntimeInstanceListView::Blocked => facts.management_allowed(),
+        RuntimeInstanceListView::Started => row.instance.started_by == actor.id(),
+        RuntimeInstanceListView::Managed | RuntimeInstanceListView::Blocked => type_allowed,
         RuntimeInstanceListView::Mine => false,
     };
     if !allowed {

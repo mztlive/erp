@@ -8,13 +8,10 @@
 //! 分别由 `erp-procurement`、`erp-supplier`、`erp-supply` 的公开读取合同提供。
 //! 展示读取复用 `erp-read-models`，文件上传与其他外部 I/O 在数据库事务外执行。
 
-use std::sync::Arc;
-
 use erp_finance::dto::payable::{self as dto, SupplierPaymentView};
 use erp_identity::SharedRbacService as IdentityRbac;
 use erp_read_models::finance::payable::{PayableReadService, mapping};
 use erp_support::FileAssetView;
-use erp_workflow::{ApprovalObjectReadPort, FailClosedObjectReadPort};
 use mongodb::Database;
 
 use crate::{FinancePostingPorts, Result};
@@ -39,7 +36,6 @@ pub struct PayableProcess {
     authorization_rbac: FinancePostingPorts,
     /// 保持本流程局部 policy 写锁与提交未知隔离边界的事务实例。
     transaction_rbac: IdentityRbac,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
 }
 
 /// 已确认付款结果的详情读取与本次银行回单提交状态。
@@ -73,12 +69,7 @@ impl PayableProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
-        Self {
-            db,
-            authorization_rbac: rbac.clone(),
-            transaction_rbac: rbac.transaction_identity.clone(),
-            object_read: Arc::new(FailClosedObjectReadPort),
-        }
+        Self { db, authorization_rbac: rbac.clone(), transaction_rbac: rbac.transaction_identity.clone() }
     }
 
     /// 注入应用共享授权读取实例，保持付款 policy 事务实例独立。
@@ -93,21 +84,6 @@ impl PayableProcess {
     /// 本方法不执行 I/O，不返回错误。
     pub fn with_rbac(mut self, rbac: FinancePostingPorts) -> Self {
         self.authorization_rbac = rbac;
-        self
-    }
-
-    /// 注入组合根的审批对象读取端口，供单据绑定使用。
-    ///
-    /// # 参数
-    /// * `object_read` - 组合根装配的对象读取端口。
-    ///
-    /// # 返回
-    /// 返回已绑定该端口的流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, object_read: Arc<dyn ApprovalObjectReadPort>) -> Self {
-        self.object_read = object_read;
         self
     }
 }

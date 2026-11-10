@@ -135,7 +135,6 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `_db` - 保留给调用形参，本函数不直接查库。
 /// * `rbac` - 账号与权限端口。
-/// * `_object_read` - 保留给调用形参，本函数不读取对象正文。
 /// * `document_type` - 需要运行管理权限的单据类型。
 /// * `snapshot` - 冻结主体，用于来源可读性。
 /// * `executor` - 调用方执行器。
@@ -148,7 +147,6 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 pub(super) async fn runtime_admin_notification_recipients(
     identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,

@@ -321,98 +321,6 @@ pub fn ensure_separation_of_duties(
     Ok(())
 }
 
-/// 领域 Adapter 按单据组织/创建人上下文给出对象读取权。
-///
-/// 使用失败关闭的对象读取端口；未接线时返回 `None`。
-///
-/// # 参数
-/// * `spec` - 适配器规格
-/// * `context` - 单据组织与创建人
-/// * `assignee_user_id` - 待重验的审批人
-///
-/// # 返回
-/// 端口给出读取结论；未接线时为 `None`。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误；端口失败时返回对应错误。
-pub fn adapter_object_read_decision(
-    spec: &ApprovalAdapterSpec,
-    context: &BindingRevalidationContext,
-    assignee_user_id: &str,
-) -> Result<Option<bool>> {
-    adapter_object_read_decision_with(
-        spec,
-        context,
-        assignee_user_id,
-        &crate::ports::FailClosedObjectReadPort,
-    )
-}
-
-/// 用注入的对象读取端口判断审批人能否读取被审对象。
-///
-/// # 参数
-/// * `spec` - 适配器规格
-/// * `context` - 单据组织与创建人
-/// * `assignee_user_id` - 待重验的审批人
-/// * `port` - 对象读取端口
-///
-/// # 返回
-/// 返回端口的读取结论；端口未接线时为 `None`。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误；端口失败时返回对应错误。
-pub fn adapter_object_read_decision_with(
-    spec: &ApprovalAdapterSpec,
-    context: &BindingRevalidationContext,
-    assignee_user_id: &str,
-    port: &dyn crate::ports::ApprovalObjectReadPort,
-) -> Result<Option<bool>> {
-    match spec.read_scope {
-        AdapterReadScope::DocumentOrganizationAndCreator => {},
-    }
-    if context.organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
-        return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
-    }
-    let _ = context.creator_id.as_str();
-    port.object_read_decision(
-        spec.document_type,
-        &context.organization_id,
-        &context.creator_id,
-        assignee_user_id,
-    )
-}
-
-/// 未接线的对象读取权必须失败关闭。
-///
-/// # 参数
-/// * `decision` - 对象读取结论；`None` 表示未接线
-///
-/// # 返回
-/// 已接线时返回该布尔结论。
-///
-/// # 错误
-/// `None` 表示 Adapter 未接线，禁止默认放行。
-pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
-    decision.ok_or_else(|| Error::ValidationError("对象读取权未接线，已按安全策略拒绝".to_string()))
-}
-
-/// 校验指定用户具备对象读取权。
-///
-/// # 参数
-/// * `can_read` - 是否能读取被审对象
-///
-/// # 返回
-/// 可以读取时无返回值。
-///
-/// # 错误
-/// 不能读取被审对象时返回校验错误。
-pub fn ensure_object_readable(can_read: bool) -> Result<()> {
-    if can_read {
-        return Ok(());
-    }
-    Err(Error::ValidationError("审批人不能读取被审单据".to_string()))
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -503,8 +411,6 @@ mod tests {
         let policy = SeparationOfDutiesPolicy::ForbidSubmitterAsApprover;
         assert!(ensure_separation_of_duties(policy, "u1", &["u2".into()]).is_ok());
         assert!(ensure_separation_of_duties(policy, "u1", &["u1".into()]).is_err());
-        assert!(ensure_object_readable(true).is_ok());
-        assert!(ensure_object_readable(false).is_err());
     }
 
     /// 销售类单据允许提交人位于单人或或签审批集合；其他审批类型继续拒绝。
@@ -533,54 +439,5 @@ mod tests {
                     .is_ok()
             );
         }
-    }
-
-    /// 读取权未接线或显式拒绝必须失败关闭。
-    #[test]
-    fn object_read_unwired_and_denied_fail_closed() {
-        let context = BindingRevalidationContext::new("org-1".to_string(), "creator-1".to_string());
-        let pilot = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
-        assert_eq!(
-            adapter_object_read_decision(&pilot, &context, "creator-1")
-                .expect("库存读取由真实权限范围端口接线"),
-            None
-        );
-        let sales = adapter_spec_of(DocumentType::SalesOrder).expect("销售单必须有适配器");
-        assert_eq!(
-            adapter_object_read_decision(&sales, &context, "u1")
-                .expect("领域读取已迁出，workflow 默认失败关闭"),
-            None
-        );
-        assert!(adapter_spec_of(DocumentType::SupplierPayment).is_err());
-        let payment_reversal = adapter_spec_of(DocumentType::PaymentReversal).expect("付款冲正必须有适配器");
-        assert_eq!(
-            adapter_object_read_decision(&payment_reversal, &context, "u1")
-                .expect("领域读取已迁出，workflow 默认失败关闭"),
-            None
-        );
-        assert_eq!(
-            adapter_object_read_decision(&pilot, &context, "u1").expect("库存读取不得恢复常量 helper"),
-            None
-        );
-        assert!(require_wired_object_read(None).is_err());
-        assert!(ensure_object_readable(false).is_err());
-
-        struct AllowAll;
-        impl crate::ports::ApprovalObjectReadPort for AllowAll {
-            fn object_read_decision(
-                &self,
-                _document_type: DocumentType,
-                _organization_id: &str,
-                _creator_id: &str,
-                _assignee_user_id: &str,
-            ) -> Result<Option<bool>> {
-                Ok(Some(true))
-            }
-        }
-        assert_eq!(
-            adapter_object_read_decision_with(&sales, &context, "u1", &AllowAll)
-                .expect("注入端口后必须返回领域判定"),
-            Some(true)
-        );
     }
 }

@@ -34,7 +34,6 @@ pub async fn customer_receipt_update(
 ) -> Result<CustomerReceiptView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .update_customer_receipt(&id, req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -56,7 +55,6 @@ pub async fn customer_receipt_save_draft(
 ) -> Result<CustomerReceiptView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .save_customer_receipt_draft(req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))

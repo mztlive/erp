@@ -1,4 +1,4 @@
-//! 运行读取授权矩阵与当前责任链判定。
+//! 审批资格与当前责任链判定。
 
 use std::collections::{HashMap, HashSet};
 
@@ -29,17 +29,6 @@ pub(super) struct RuntimeReadSubject {
     pub(super) current_execution: Option<ApprovalNodeExecution>,
     pub(super) snapshot: ApprovalSubjectSnapshot,
     pub(super) document_type: DocumentType,
-}
-
-/// 纯授权矩阵输入；I/O 与政策解析由 Service 先完成。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(super) struct RuntimeReadAuthorizationFacts {
-    pub(super) actor_active: bool,
-    pub(super) initiator: bool,
-    pub(super) current_responsibility: bool,
-    pub(super) object_readable: bool,
-    pub(super) scope_covers: bool,
-    pub(super) runtime_admin: bool,
 }
 
 /// 决定审批人写时重验输入。
@@ -76,7 +65,6 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - 数据库
 /// * `rbac` - 共享 RBAC 服务
-/// * `object_read` - 注入的对象读取端口
 /// * `input` - 审批人、快照与分离政策
 /// * `executor` - 调用方持有的数据库执行器
 ///
@@ -91,7 +79,6 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 pub(super) async fn revalidate_decision_approver(
     identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
-
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Eligibility> {
@@ -188,59 +175,6 @@ pub(super) fn current_execution_matches_instance(
                 && execution.process_instance_id.as_ref() == instance.base.id
         },
         _ => false,
-    }
-}
-
-impl RuntimeReadAuthorizationFacts {
-    /// 普通详情/历史读取：发起人、当前责任人，或对象读取与 DataScopeFact 同时成立。
-    ///
-    /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 允许读取时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn ordinary_allowed(self) -> bool {
-        self.actor_active
-            && (self.initiator
-                || self.current_responsibility
-                || (self.runtime_admin && self.object_readable && self.scope_covers))
-    }
-
-    /// 管理读取：同时具备类型级运行管理、对象读取与 DataScopeFact。
-    ///
-    /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 允许读取时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn management_allowed(self) -> bool {
-        self.actor_active && self.runtime_admin && self.object_readable && self.scope_covers
-    }
-
-    /// Started 视图：由 BPM 启动人事实独立证明普通读取权。
-    ///
-    /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 允许读取时返回 `true`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn started_allowed(self) -> bool {
-        self.actor_active && self.initiator
     }
 }
 
@@ -508,18 +442,4 @@ async fn require_decision_source(
         .await?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn read_authorization_facts_default_denies_by_default() {
-        let facts = RuntimeReadAuthorizationFacts::default();
-        assert!(!facts.actor_active && !facts.initiator);
-        assert!(!facts.ordinary_allowed());
-        assert!(!facts.management_allowed());
-        assert!(!facts.started_allowed());
-    }
 }

@@ -37,7 +37,7 @@ use storage::S3Storage;
 use tokio::sync::watch;
 
 use super::notification::ApprovalNotifications;
-use crate::wiring::approval_dispatch::{ApprovalActionRegistry, ApprovalObjectRead};
+use crate::wiring::approval_dispatch::ApprovalActionRegistry;
 use crate::wiring::catalog_supply_query::MongoCatalogSupplyQuery;
 use crate::wiring::identity::shared_rbac_service;
 use crate::wiring::supplier_api::UnavailableSupplierApiGateway;
@@ -186,7 +186,6 @@ impl Application {
             rbac.clone(),
             workflow_auth(db.clone(), Arc::clone(&rbac)),
             approval_action_port,
-            Arc::new(ApprovalObjectRead),
             Arc::new(ApprovalUpgradeReadModel::new(db.clone())),
             workflow_audit(db.clone()),
         ));
@@ -296,11 +295,6 @@ impl Application {
             self.db(),
             crate::wiring::support_audit::MongoSupportAudit::shared(self.db()),
         )
-    }
-
-    /// Composition-root object-read port for approval binding.
-    pub fn approval_object_read(&self) -> Arc<dyn erp_workflow::ApprovalObjectReadPort> {
-        Arc::new(ApprovalObjectRead)
     }
 
     /// 返回进程内注入的目标审批运行服务。
@@ -643,7 +637,6 @@ impl Application {
     /// Inventory-adjustment process that owns approval submit/cancel/post.
     pub fn inventory_adjustment_process(&self) -> erp_fulfillment_execution::InventoryAdjustmentProcess {
         crate::wiring::inventory_adjustment_process(self.db(), self.rbac())
-            .with_object_read(self.approval_object_read())
     }
 }
 

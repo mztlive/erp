@@ -1,12 +1,12 @@
 use application_core::AuditActor;
 use erp_approval_runtime::ApprovalRuntimePort;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
-use erp_workflow::{ApprovalObjectReadPort, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -51,7 +51,6 @@ pub(super) fn sales_create_bind_command(
 /// # 参数
 /// * `db` - 业务数据库。
 /// * `rbac` - 授权源。
-/// * `object_read` - 审批对象读取端口。
 /// * `document` - 待写入的单据注册行。
 /// * `bind_command` - 创建时绑定命令。
 /// * `actor` - 创建人。
@@ -65,7 +64,6 @@ pub(super) fn sales_create_bind_command(
 pub(super) async fn persist_bound_sales_document(
     db: &Database,
     approvals: &dyn ApprovalRuntimePort,
-    object_read: &dyn ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -73,7 +71,7 @@ pub(super) async fn persist_bound_sales_document(
 ) -> Result<ApprovalDefinitionBinding> {
     let _ =
         sales_order_object_readable(&bind_command.context.organization_id, &bind_command.context.creator_id)?;
-    let binding = approvals.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = approvals.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding.clone())?;
     db.business_documents().create(document, executor).await?;

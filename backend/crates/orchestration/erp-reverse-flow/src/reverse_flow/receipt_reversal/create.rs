@@ -43,14 +43,7 @@ impl ReturnsProcess {
     ) -> Result<ReceiptReversalView> {
         req.validate()?;
         let reversal = build_create(req, actor.id())?;
-        persist_created_receipt_reversal(
-            &self.db,
-            &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
-            reversal.clone(),
-            actor.clone(),
-        )
-        .await?;
+        persist_created_receipt_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
         self.reads().receipt_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
     }
 }
@@ -64,7 +57,6 @@ impl ReturnsProcess {
 async fn persist_created_receipt_reversal(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     reversal: ReceiptReversal,
     actor: AuditActor,
 ) -> Result<()> {
@@ -89,7 +81,7 @@ async fn persist_created_receipt_reversal(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -97,7 +89,6 @@ async fn persist_created_receipt_reversal(
                 persist_bound_receipt_reversal_document(
                     &db,
                     &rbac,
-                    object_read.as_ref(),
                     document,
                     &bind_command,
                     &actor,

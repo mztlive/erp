@@ -31,7 +31,6 @@ pub async fn sales_order_contract_check(
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .check_sales_order_contract(&id, req, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(check))

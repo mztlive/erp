@@ -48,15 +48,7 @@ impl ReturnsProcess {
     ) -> Result<PurchaseReturnOrderView> {
         req.validate()?;
         let (order_id, order, line) = build_purchase_return_order_and_line(req, actor.id())?;
-        persist_created_purchase_return_order(
-            &self.db,
-            &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
-            order,
-            line,
-            actor.clone(),
-        )
-        .await?;
+        persist_created_purchase_return_order(&self.db, &self.rbac, order, line, actor.clone()).await?;
         ReturnsReadService::new(self.db.clone())
             .with_purchase_scope(self.rbac.purchase_scope.clone())
             .purchase_return_order_detail(&order_id, actor)
@@ -187,7 +179,6 @@ fn apply_purchase_return_create_binding(
 async fn persist_unbound_purchase_return_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -195,7 +186,7 @@ async fn persist_unbound_purchase_return_document(
 ) -> Result<()> {
     let _ = ensure_purchase_return_skips_approval_binding()?;
     ensure_purchase_return_has_no_adapter()?;
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     apply_purchase_return_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
@@ -207,7 +198,6 @@ async fn persist_unbound_purchase_return_document(
 pub(super) async fn register_created_purchase_return_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     order: &PurchaseReturnOrder,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -219,8 +209,7 @@ pub(super) async fn register_created_purchase_return_document(
         order.purchase_return_no.clone(),
     )
     .map_err(crate::Error::from)?;
-    persist_unbound_purchase_return_document(db, rbac, object_read, document, &bind_command, actor, executor)
-        .await
+    persist_unbound_purchase_return_document(db, rbac, document, &bind_command, actor, executor).await
 }
 
 /// 在创建事务内写入采购退货草稿并登记无绑定单据。
@@ -230,7 +219,6 @@ pub(super) async fn register_created_purchase_return_document(
 async fn persist_created_purchase_return_order(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     order: PurchaseReturnOrder,
     line: PurchaseReturnLine,
     actor: AuditActor,
@@ -242,7 +230,7 @@ async fn persist_created_purchase_return_order(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -250,7 +238,6 @@ async fn persist_created_purchase_return_order(
                 let mut creation = MongoCreation {
                     db: &db,
                     rbac: &rbac,
-                    object_read: object_read.as_ref(),
                     order: &order,
                     line: &line,
                     actor: &actor,
@@ -284,7 +271,6 @@ async fn persist_creation(steps: &mut impl CreationSteps, executor: &mut dyn Exe
 struct MongoCreation<'a> {
     db: &'a Database,
     rbac: &'a ReverseFlowPorts,
-    object_read: &'a dyn erp_workflow::ApprovalObjectReadPort,
     order: &'a PurchaseReturnOrder,
     line: &'a PurchaseReturnLine,
     actor: &'a AuditActor,
@@ -294,15 +280,7 @@ struct MongoCreation<'a> {
 #[async_trait::async_trait]
 impl CreationSteps for MongoCreation<'_> {
     async fn register_document(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        register_created_purchase_return_document(
-            self.db,
-            self.rbac,
-            self.object_read,
-            self.order,
-            self.actor,
-            executor,
-        )
-        .await
+        register_created_purchase_return_document(self.db, self.rbac, self.order, self.actor, executor).await
     }
     async fn persist_return(&mut self, executor: &mut dyn Executor) -> Result<()> {
         persist_purchase_return_order_with_line(self.db, self.order, self.line, executor).await?;

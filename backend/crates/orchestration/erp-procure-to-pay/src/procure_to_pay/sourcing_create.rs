@@ -144,7 +144,7 @@ impl PurchaseOrderProcess {
             input;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
-        let object_read = std::sync::Arc::clone(&self.object_read);
+
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.to_string();
@@ -158,7 +158,6 @@ impl PurchaseOrderProcess {
                     ports.as_ref(),
                     CreateFromSourcingApplyInput {
                         rbac: &binding_rbac,
-                        object_read: object_read.as_ref(),
                         req: &transaction_req,
                         assignments: &assignments,
                         sales_order_id: &transaction_sales_order_id,
@@ -197,8 +196,6 @@ async fn replay_sourcing_command(
 struct CreateFromSourcingApplyInput<'a> {
     /// 审批绑定授权源。
     rbac: &'a SharedRbacService,
-    /// 组合根审批对象读取端口。
-    object_read: &'a dyn erp_workflow::ApprovalObjectReadPort,
     /// 原始选源请求。
     req: &'a CreatePurchaseOrdersFromSourcingRequest,
     /// 已规范化且稳定行不重复的选源集合。

@@ -11,7 +11,6 @@ use erp_returns::dto::CommitSupplierRefundRequest;
 use erp_returns::entity::returns::SupplierRefund;
 use erp_returns::service::ReturnsService;
 use erp_returns::service::approval::start_supplier_refund_approval;
-use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
@@ -74,15 +73,14 @@ impl ReturnsProcess {
         let command = command_receipt.clone();
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let object_read = self.object_read.clone();
+
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let transaction_result = client
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    apply_commit(&db, &rbac, object_read.as_ref(), input, &command, &actor_owned, executor)
-                        .await
-                })
+                Box::pin(
+                    async move { apply_commit(&db, &rbac, input, &command, &actor_owned, executor).await },
+                )
             })
             .await;
         let detail_id = match transaction_result {
@@ -156,7 +154,6 @@ struct CommitPreparation {
 async fn apply_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn ApprovalObjectReadPort,
     mut input: CommitPreparation,
     command: &CommandReceipt,
     actor: &AuditActor,
@@ -177,7 +174,7 @@ async fn apply_commit(
     }
     validate_settlement(db, &input.refund, executor).await?;
     freeze_confirmation(db, &mut input.refund, executor).await?;
-    write_commit(db, rbac, object_read, input, command, actor, executor).await?;
+    write_commit(db, rbac, input, command, actor, executor).await?;
     Ok(None)
 }
 
@@ -185,7 +182,6 @@ async fn apply_commit(
 async fn write_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn ApprovalObjectReadPort,
     input: CommitPreparation,
     command: &CommandReceipt,
     actor: &AuditActor,
@@ -194,7 +190,6 @@ async fn write_commit(
     let binding = persist_bound_supplier_refund_document(
         db,
         rbac,
-        object_read,
         input.document,
         &input.bind_command,
         actor,

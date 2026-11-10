@@ -31,7 +31,6 @@ pub struct SalesChangeProcess {
     services: Arc<SalesServices>,
     db: Database,
     rbac: SharedRbacService,
-    object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 impl SalesChangeProcess {
     /// 使用组合根数据库和授权源创建流程。
@@ -42,7 +41,7 @@ impl SalesChangeProcess {
     /// * `rbac` - 当前 RBAC 快照
     ///
     /// # 返回
-    /// 返回未注入对象读取端口的流程。
+    /// 返回使用当前业务服务和身份服务的流程。
     ///
     /// # 错误
     /// 无。
@@ -50,7 +49,7 @@ impl SalesChangeProcess {
     /// # 关键业务约束
     /// 变更命令必须沿原销售单范围独立重验，不得退回路由级授权。
     pub fn new(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
-        Self { db, rbac, services, object_read: Arc::new(erp_workflow::FailClosedObjectReadPort) }
+        Self { db, rbac, services }
     }
 
     /// 返回写命令使用的授权源。
@@ -68,21 +67,6 @@ impl SalesChangeProcess {
     /// 不得用空授权源补公司范围。
     fn require_rbac(&self) -> Result<SharedRbacService> {
         Ok(self.rbac.clone())
-    }
-
-    /// 换上组合根的审批对象读取能力。未调用时沿用构造时的失败关闭端口。消耗 `self`。
-    ///
-    /// # 参数
-    /// * `object_read` - 审批对象读取端口。
-    ///
-    /// # 返回
-    /// 绑定该端口后的流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>) -> Self {
-        self.object_read = object_read;
-        self
     }
 
     /// 最终通过并生效：生成生效修订并改写销售单。

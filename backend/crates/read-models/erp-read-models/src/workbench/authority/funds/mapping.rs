@@ -357,8 +357,8 @@ mod tests {
         ));
         for authority in facts(Some("domain-creator")) {
             assert_eq!(authority.created_by, "domain-creator");
-            assert!(has_object_participation(&creator, "", "", &authority));
-            assert!(!has_object_participation(&handler, "", "", &authority));
+            assert!(has_object_participation(&creator, &authority));
+            assert!(!has_object_participation(&handler, &authority));
             let brief = WorkbenchObjectFact::from_authority(authority.clone());
             assert_eq!(brief.authority.created_by, authority.created_by);
             assert_eq!(brief.authority.root_document_id, authority.root_document_id);
@@ -379,8 +379,8 @@ mod tests {
         ));
         for authority in facts(None) {
             assert!(authority.created_by.is_empty());
-            assert!(!has_object_participation(&creator, "", "", &authority));
-            assert!(!has_object_participation(&handler, "", "", &authority));
+            assert!(!has_object_participation(&creator, &authority));
+            assert!(!has_object_participation(&handler, &authority));
             let brief = WorkbenchObjectFact::from_authority(authority);
             assert!(brief.authority.created_by.is_empty());
         }

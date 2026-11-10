@@ -12,7 +12,6 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::invoice_commit::{PreparedInvoiceCommit, ensure_sales_invoice};
 use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
 use erp_support::PendingAttachmentBatch;
-use erp_workflow::ApprovalObjectReadPort;
 use mongodb::Database;
 use persistence_core::Executor;
 use validator::Validate;
@@ -25,7 +24,6 @@ use crate::{Error, FinancePostingPorts, Result};
 pub(super) struct InvoiceCommitTransaction {
     pub db: Database,
     pub rbac: FinancePostingPorts,
-    pub object_read: Arc<dyn ApprovalObjectReadPort>,
     pub prepared: PreparedInvoiceCommit,
     pub pending: Arc<dyn PendingAttachmentBatch>,
     pub attachment_ids: Vec<FileAssetId>,
@@ -89,15 +87,8 @@ impl InvoiceCommitTransaction {
             PreparedInvoiceCommit::New { invoice, allocations } => {
                 invoice.validate()?;
                 let invoice = new_invoice(invoice, self.actor.id())?;
-                register_created_invoice_document(
-                    &self.db,
-                    &self.rbac,
-                    self.object_read.as_ref(),
-                    &invoice,
-                    &self.actor,
-                    executor,
-                )
-                .await?;
+                register_created_invoice_document(&self.db, &self.rbac, &invoice, &self.actor, executor)
+                    .await?;
                 self.db.invoices().create(&invoice, executor).await?;
                 Ok((invoice, allocations.clone()))
             },

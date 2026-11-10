@@ -61,7 +61,6 @@ impl CustomerAcceptanceProcess {
             &self.db,
             self.workflow.clone(),
             &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
             acceptance.clone(),
             lines,
             actor.clone(),
@@ -78,7 +77,6 @@ async fn persist_created_customer_acceptance(
     db: &Database,
     workflow: Arc<dyn crate::workflow::FulfillmentWorkflow>,
     rbac: &SharedRbacService,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     acceptance: CustomerAcceptance,
     lines: Vec<CustomerAcceptanceLine>,
     actor: AuditActor,
@@ -90,7 +88,7 @@ async fn persist_created_customer_acceptance(
     )?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -102,7 +100,6 @@ async fn persist_created_customer_acceptance(
                     &db,
                     workflow.as_ref(),
                     &rbac,
-                    object_read.as_ref(),
                     &acceptance,
                     &actor,
                     executor,

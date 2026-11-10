@@ -91,7 +91,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
         let identity_service = self.identity.clone();
-        let object_read = Arc::clone(&self.object_read);
+
         let upgrade = Arc::clone(&self.upgrade);
         let audit = Arc::clone(&self.audit);
         let actor = actor.clone();
@@ -103,7 +103,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         &identity_service,
                         &db,
                         &rbac,
-                        object_read.as_ref(),
                         upgrade.as_ref(),
                         audit.as_ref(),
                         &command,

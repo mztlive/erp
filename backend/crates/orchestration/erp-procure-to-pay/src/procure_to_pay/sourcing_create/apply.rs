@@ -147,7 +147,7 @@ async fn persist_order(
         request_fingerprint: input.request_fingerprint,
         actor: input.actor,
     };
-    persist_basis_draft(db, ports, input.rbac, input.object_read, verified, &command, executor).await
+    persist_basis_draft(db, ports, input.rbac, verified, &command, executor).await
 }
 
 /// 按原字段和行顺序组装单张采购请求，不改变规范化或首错处理。

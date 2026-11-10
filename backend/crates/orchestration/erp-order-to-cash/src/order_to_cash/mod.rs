@@ -36,10 +36,9 @@ pub struct SalesOrderCommandProcess {
     services: Arc<SalesServices>,
     db: Database,
     rbac: Option<SharedRbacService>,
-    object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 impl SalesOrderCommandProcess {
-    /// 用失败关闭的审批绑定默认值构造，不执行 I/O。
+    /// 构造业务流程；审批命令须显式注入共享身份服务。
     ///
     /// # 参数
     /// * `db` - 业务数据库。
@@ -51,9 +50,9 @@ impl SalesOrderCommandProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, services: Arc<SalesServices>) -> Self {
-        Self { db, services, rbac: None, object_read: Arc::new(erp_workflow::FailClosedObjectReadPort) }
+        Self { db, services, rbac: None }
     }
-    /// 用授权源构造，对象读取仍默认失败关闭。
+    /// 用共享授权源构造审批业务流程。
     ///
     /// # 参数
     /// * `db` - 业务数据库。
@@ -67,20 +66,6 @@ impl SalesOrderCommandProcess {
     /// 不返回错误。
     pub fn with_rbac(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
         Self { rbac: Some(rbac), ..Self::new(db, services) }
-    }
-    /// 注入组合根的对象读取端口，供审批绑定使用。
-    ///
-    /// # 参数
-    /// * `port` - 组合根配置的审批对象读取端口。
-    ///
-    /// # 返回
-    /// 返回替换对象读取端口后的命令流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, port: Arc<dyn erp_workflow::ApprovalObjectReadPort>) -> Self {
-        self.object_read = port;
-        self
     }
     /// 未注入授权源时拒绝，避免审批绑定退回无范围读取。
     fn require_rbac(&self) -> Result<&SharedRbacService> {

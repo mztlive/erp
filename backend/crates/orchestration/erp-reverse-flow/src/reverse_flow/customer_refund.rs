@@ -77,14 +77,7 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
         let refund = erp_returns::service::ReturnsService::prepare_customer_refund(req, actor.id())?;
-        persist_created_customer_refund(
-            &self.db,
-            &self.rbac,
-            std::sync::Arc::clone(&self.object_read),
-            refund.clone(),
-            actor.clone(),
-        )
-        .await?;
+        persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone()).await?;
         self.reads().customer_refund_detail(&refund.base.id).await.map_err(crate::Error::from)
     }
 
@@ -184,7 +177,7 @@ impl ReturnsProcess {
     /// * `BusinessLogicError` - 累计退款超原回款、重复过账或超额冲减
     pub async fn post_customer_refund(&self, id: &str, actor: &AuditActor) -> Result<CustomerRefundView> {
         let db = self.db.clone();
-        let _object_read = std::sync::Arc::clone(&self.object_read);
+
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
@@ -324,7 +317,6 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
 async fn persist_created_customer_refund(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     refund: CustomerRefund,
     actor: AuditActor,
 ) -> Result<()> {
@@ -342,21 +334,13 @@ async fn persist_created_customer_refund(
         actor.clone().resource_log("customer_refund.create", "customer_refund", refund.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                persist_bound_customer_refund_document(
-                    &db,
-                    &rbac,
-                    object_read.as_ref(),
-                    document,
-                    &bind_command,
-                    &actor,
-                    executor,
-                )
-                .await?;
+                persist_bound_customer_refund_document(&db, &rbac, document, &bind_command, &actor, executor)
+                    .await?;
                 erp_returns::service::ReturnsService::new(db.clone())
                     .create_customer_refund(&refund, executor)
                     .await?;
@@ -447,7 +431,6 @@ async fn validate_customer_refund_source(
 async fn persist_bound_customer_refund_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -457,7 +440,7 @@ async fn persist_bound_customer_refund_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户退款单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, executor).await?;

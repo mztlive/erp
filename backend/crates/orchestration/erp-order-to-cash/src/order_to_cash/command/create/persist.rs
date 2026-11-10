@@ -10,11 +10,11 @@ use erp_sales::entity::sales_order::inquiry_source::InquirySalesSourceRequest;
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::entity::sales_order::{SalesOrder, SalesOrderWorkingCopyLine};
 use erp_sales::service::sales_order::SalesOrderService;
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::execution::{PreparedExecution, prepare_start};
-use erp_workflow::{ApprovalObjectReadPort, DocumentRegistryExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -37,7 +37,6 @@ pub(super) struct CreationWriteContext {
     services: Arc<SalesServices>,
     db: Database,
     rbac: SharedRbacService,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
     actor: AuditActor,
     access: SalesCommandAccess,
     bind_command: BindPublishedDefinitionCommand,
@@ -63,13 +62,12 @@ impl SalesOrderCommandProcess {
     ) -> Result<CreationWriteContext> {
         let bind_command = sales_create_bind_command(plan.order(), actor)?;
         let rbac = self.require_rbac().cloned()?;
-        let object_read = Arc::clone(&self.object_read);
+
         let sellable_refs = SalesOrderService::sellable_working_copy_refs(plan.working_copy_lines())?;
         Ok(CreationWriteContext {
             services: self.services.clone(),
             db: self.db.clone(),
             rbac,
-            object_read,
             actor: actor.clone(),
             access: access.clone(),
             bind_command,
@@ -184,7 +182,6 @@ async fn persist_creation_binding(
     persist_bound_sales_document(
         &context.db,
         context.services.approvals.as_ref(),
-        context.object_read.as_ref(),
         document,
         &context.bind_command,
         &context.actor,

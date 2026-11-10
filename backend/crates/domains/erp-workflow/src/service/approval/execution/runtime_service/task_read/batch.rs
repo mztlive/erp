@@ -5,15 +5,15 @@ use std::collections::{HashMap, HashSet};
 use application_core::AuditActor;
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_identity::SharedRbacService;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::{ensure_exact_runtime_snapshot, runtime_document_type, runtime_snapshot_mismatch};
-use super::{RuntimeReadSubject, task_read_candidate, task_subject_readable};
+use super::{RuntimeReadSubject, manager_can_read, task_chain_matches_subject};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::entity::work_item::{WorkItem, WorkItemStatus};
-use crate::error::Result;
+use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
+use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
@@ -26,7 +26,7 @@ struct RuntimeBatchFacts {
     snapshots: HashMap<String, ApprovalSubjectSnapshot>,
 }
 
-/// 对同一读者逐任务证明资格，再批量读取必要运行事实并按输入顺序判定。
+/// 同一批次只取得一次读者资格，逐任务读取责任事实，返回前复验身份版本。
 ///
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
@@ -42,7 +42,7 @@ struct RuntimeBatchFacts {
 /// 保留逐任务权限、冻结主体、责任链及管理来源的原错误映射。
 ///
 /// # 关键业务约束
-/// 逐项保留账号、同角色授权及政策版本重验；不为权限拒绝项加载运行链。
+/// 账号及同角色读写资格仅在本批次复用；返回前核对完整身份版本，不为拒绝项加载运行链。
 /// 原单任务入口复用此入口，运行事实不得跨批次或独立授权快照缓存。
 ///
 /// # Panics
@@ -55,10 +55,48 @@ pub async fn approval_tasks_readable_with_executor(
     items: &[&WorkItem],
     executor: &mut dyn Executor,
 ) -> Result<Vec<bool>> {
-    if items.is_empty() {
-        return Ok(Vec::new());
+    if !items.iter().any(|item| {
+        item.work_item_type == WorkItemType::DocumentApproval
+            && item.assignment_source == AssignmentSource::ApprovalRuntime
+    }) {
+        return Ok(vec![false; items.len()]);
     }
-    let checks = candidate_checks(identity_service, actor, items, executor).await;
+    let required =
+        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+    let Some(qualified) = identity_service.qualified_permissions(actor, &required, executor).await? else {
+        return Ok(vec![false; items.len()]);
+    };
+    if !qualified.permissions().covers_one(&required[0]) {
+        return Ok(vec![false; items.len()]);
+    }
+    let result =
+        read_tasks(identity_service, db, auth, actor, items, qualified.same_role(&required), executor)
+            .await?;
+    let current = identity_service.qualified_permissions(actor, &required, executor).await?;
+    if current.as_ref().is_none_or(|current| current.version() != qualified.version()) {
+        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：审批读取资格已改变".into()));
+    }
+    Ok(result)
+}
+
+/// 在已证明的账号资格内批量读取责任链；逐任务错误按输入顺序返回。
+async fn read_tasks(
+    identity_service: &SharedRbacService,
+    db: &Database,
+    auth: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    items: &[&WorkItem],
+    can_decide: bool,
+    executor: &mut dyn Executor,
+) -> Result<Vec<bool>> {
+    let checks = items
+        .iter()
+        .map(|item| {
+            item.work_item_type == WorkItemType::DocumentApproval
+                && item.assignment_source == AssignmentSource::ApprovalRuntime
+                && item.approval_node_execution_id.is_some()
+        })
+        .collect::<Vec<_>>();
     let candidates = eligible_items(items, &checks);
     let facts = load_runtime_facts(db, &candidates, executor).await?;
     let subjects = candidates.iter().map(|item| subject_for_task(item, &facts)).collect::<Vec<_>>();
@@ -66,7 +104,7 @@ pub async fn approval_tasks_readable_with_executor(
     let mut subjects = subjects.into_iter();
     let mut result = Vec::with_capacity(items.len());
     for (item, check) in items.iter().zip(checks) {
-        if !check? {
+        if !check {
             result.push(false);
             continue;
         }
@@ -80,57 +118,33 @@ pub async fn approval_tasks_readable_with_executor(
             .as_ref()
             .and_then(|id| open_tasks.get(id.as_ref()))
             .map_or(&[][..], Vec::as_slice);
-        result.push(
-            task_subject_readable(identity_service, auth, actor, item, &subject, tasks, executor).await?,
-        );
+        let readable = if !task_chain_matches_subject(item, &subject, tasks)? {
+            false
+        } else if item.owner_user_id.as_deref() == Some(actor.id())
+            && (item.status != WorkItemStatus::Open || can_decide)
+        {
+            true
+        } else {
+            manager_can_read(identity_service, auth, actor, &subject, executor).await?
+        };
+        result.push(readable);
     }
     Ok(result)
-}
-
-/// 按原任务顺序保留独立权限证明，首个权限错误之后不再读取其他账号事实。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `identity_service` / `actor` - 当前权限事实和读者
-/// * `items` - 原输入任务
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回逐项资格结果，错误保留到原任务位置以供最终有序判定。
-///
-/// # 错误
-/// 错误保存在对应结果中，不提前覆盖较早任务的冻结主体错误。
-async fn candidate_checks(
-    identity_service: &SharedRbacService,
-    actor: &AuditActor,
-    items: &[&WorkItem],
-    executor: &mut dyn Executor,
-) -> Vec<Result<bool>> {
-    let mut checks = Vec::with_capacity(items.len());
-    for item in items {
-        let check = task_read_candidate(identity_service, actor, item, executor).await;
-        let failed = check.is_err();
-        checks.push(check);
-        if failed {
-            break;
-        }
-    }
-    checks
 }
 
 /// 只保留原权限阶段已经成功准入的任务引用。
 ///
 /// # 参数
 /// * `items` - 原任务顺序
-/// * `checks` - 同顺序独立权限证明
+/// * `checks` - 同顺序任务类型及执行引用准入结果
 ///
 /// # 返回
 /// 返回准入任务的有序子集，不克隆任务事实。
 ///
 /// # 错误
-/// 无；权限错误仍由最终按原任务顺序传播。
-fn eligible_items<'a>(items: &[&'a WorkItem], checks: &[Result<bool>]) -> Vec<&'a WorkItem> {
-    items.iter().zip(checks).filter_map(|(item, check)| matches!(check, Ok(true)).then_some(*item)).collect()
+/// 无；冻结主体和责任链错误由最终按原任务顺序传播。
+fn eligible_items<'a>(items: &[&'a WorkItem], checks: &[bool]) -> Vec<&'a WorkItem> {
+    items.iter().zip(checks).filter_map(|(item, check)| check.then_some(*item)).collect()
 }
 
 /// 按准入任务执行引用批量读取执行、存在实例和合法类型的冻结快照。
@@ -341,7 +355,6 @@ mod tests {
     use super::super::tests::fixture;
     use super::*;
     use crate::entity::document_registry::DocumentType;
-    use crate::error::Error;
 
     /// 将同一条真实运行夹具拆成批量 loader 消费的身份映射。
     fn facts(mut subject: RuntimeReadSubject) -> RuntimeBatchFacts {
@@ -356,16 +369,16 @@ mod tests {
         }
     }
 
-    /// 权限拒绝及错误任务不进入运行读取集合，准入任务保留原次序。
+    /// 未准入任务不进入运行读取集合，准入任务保留原次序。
     #[test]
-    fn approval_task_batch_candidates_exclude_denied_and_error_items() {
+    fn approval_task_batch_candidates_preserve_eligible_order() {
         let (_, task) = fixture();
         let mut other = task.clone();
         other.base.id = "task-2".into();
         let mut failed = task.clone();
         failed.base.id = "task-3".into();
         let items = [&task, &other, &failed];
-        let checks = [Ok(false), Ok(true), Err(Error::Forbidden("policy".into()))];
+        let checks = [false, true, false];
         let selected = eligible_items(&items, &checks);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].base.id, "task-2");

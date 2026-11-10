@@ -52,7 +52,6 @@ pub async fn pay(
             state.application().db(),
             finance_posting_ports(state.application().db(), state.application().rbac()),
         )
-        .with_object_read(state.application().approval_object_read())
         .commit_purchase_payment_request_with_assets(&id, req, batch, &actor)
         .await
     }

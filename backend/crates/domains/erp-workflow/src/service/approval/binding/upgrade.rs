@@ -32,7 +32,7 @@ use crate::entity::document_registry::{
     BusinessDocument, BusinessDocumentId, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
 use crate::error::{Error, Result};
-use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
+use crate::ports::PreparedWorkflowAudit;
 use crate::repository::bpm::DefinitionGraph;
 use crate::repository::{BpmExt, DocumentRegistryExt};
 
@@ -45,7 +45,6 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 共享 RBAC 服务
-/// * `object_read` - 注入的对象读取端口
 /// * `upgrade` - 升级主体端口
 /// * `audit` - 审计写入端口
 /// * `command` - 精确对象、强版本、绑定 CAS、原因和预构造幂等身份
@@ -65,7 +64,6 @@ pub async fn upgrade_unsubmitted_document_definition(
     identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn ApprovalObjectReadPort,
     upgrade: &dyn crate::ports::UpgradeSubjectPort,
     audit: &dyn crate::ports::WorkflowAuditPort,
     command: &UpgradeUnsubmittedDefinitionCommand,
@@ -94,7 +92,6 @@ pub async fn upgrade_unsubmitted_document_definition(
         identity_service,
         db,
         rbac,
-        object_read,
         audit,
         ApplyFreshUpgradeInput {
             command,
@@ -308,7 +305,6 @@ async fn apply_fresh_upgrade(
     identity: &SharedRbacService,
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
-    object_read: &dyn ApprovalObjectReadPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     input: ApplyFreshUpgradeInput<'_>,
     executor: &mut dyn Executor,
@@ -331,7 +327,7 @@ async fn apply_fresh_upgrade(
     context.customer_id = object.customer_id;
     context.business_org_unit_id = object.business_org_unit_id;
     context.scope_owner_user_id = Some(object.owner_user_id);
-    revalidate_binding_graph(identity, db, object_read, policy, &context, &published, executor).await?;
+    revalidate_binding_graph(identity, policy, &context, &published, executor).await?;
     ensure_upgrade_changes_definition(&previous, &published)?;
 
     let current_definition_id = ApprovalProcessDefinitionId::new(published.definition.base.id.clone());

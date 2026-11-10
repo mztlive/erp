@@ -2,19 +2,7 @@
 //!
 //! 旧步骤实例、旧决定枚举和旧责任模式投影已删除。
 
-use erp_core::AccountKind;
 use serde::{Deserialize, Serialize};
-
-/// 阻塞审批恢复的不可伪造授权锚点。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ApprovalRecoveryAuthorization {
-    /// 已认证账号类型。
-    pub actor_kind: AccountKind,
-    /// Casbin 持久化策略单调版本。
-    pub policy_revision: u64,
-    /// 在该版本下实际授予运行恢复权的角色。
-    pub granting_role_ids: Vec<String>,
-}
 
 /// 目标运行编排的启动命令。不得包含 definition key 或审批人。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

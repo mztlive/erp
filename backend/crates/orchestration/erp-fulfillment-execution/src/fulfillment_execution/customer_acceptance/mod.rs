@@ -27,7 +27,6 @@ pub struct CustomerAcceptanceProcess {
     read: FulfillmentReadService,
     rbac: SharedRbacService,
     task_identity: FulfillmentIdentityFactory,
-    object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 impl CustomerAcceptanceProcess {
     /// 使用入口已有配置构造流程；领域查询与跨域工作台分别持有实际读取接口。
@@ -37,7 +36,6 @@ impl CustomerAcceptanceProcess {
     /// * `read` - 已构造的履约领域服务，存为领域写入端。
     /// * `rbac` - 调用方授权源。
     /// * `task_identity` - 每次任务资格核验独立创建身份的工厂。
-    /// * `object_read` - 审批对象读取端口。
     /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
     ///
     /// # 返回
@@ -50,7 +48,6 @@ impl CustomerAcceptanceProcess {
         read: FulfillmentService,
         rbac: SharedRbacService,
         task_identity: FulfillmentIdentityFactory,
-        object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>,
         workflow: Arc<dyn FulfillmentWorkflow>,
     ) -> Self {
         Self {
@@ -60,7 +57,6 @@ impl CustomerAcceptanceProcess {
             domain: read,
             rbac,
             task_identity,
-            object_read,
         }
     }
 }

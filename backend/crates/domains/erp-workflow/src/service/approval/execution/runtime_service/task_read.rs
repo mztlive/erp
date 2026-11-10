@@ -3,18 +3,16 @@
 use application_core::AuditActor;
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::read_auth::{RuntimeReadSubject, task_proves_current_responsibility};
-use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
+use crate::entity::work_item::{WorkItem, WorkItemStatus};
 use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
 use crate::service::approval::business_adapter::adapter_spec_of;
-use crate::service::approval::{
-    approval_participant_permissions_with_executor, require_approval_management_with_executor,
-};
+use crate::service::approval::require_approval_management_with_executor;
 
 mod batch;
 pub use batch::approval_tasks_readable_with_executor;
@@ -44,73 +42,6 @@ pub async fn approval_task_readable_with_executor(
     let readable =
         approval_tasks_readable_with_executor(identity_service, db, auth, actor, &[item], executor).await?;
     Ok(readable.first().copied().unwrap_or(false))
-}
-
-/// 在加载具体运行事实之前逐任务证明静态读取资格。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `identity_service` / `actor` - 当前权限端口与认证身份
-/// * `item` - 服务端任务事实
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 仅正式运行审批任务、仍启用的读取角色与执行引用都存在时返回 true。
-///
-/// # 错误
-/// 保持每任务原有账号、角色和策略版本失败语义。
-async fn task_read_candidate(
-    identity_service: &SharedRbacService,
-    actor: &AuditActor,
-    item: &WorkItem,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    if item.work_item_type != WorkItemType::DocumentApproval
-        || item.assignment_source != AssignmentSource::ApprovalRuntime
-        || identity_service
-            .qualified_permissions(actor, &[Permission::parse("approval_instance:read")?], executor)
-            .await?
-            .is_none_or(|qualified| qualified.permissions().is_empty())
-    {
-        return Ok(false);
-    }
-    Ok(item.approval_node_execution_id.is_some())
-}
-
-/// 在已装载的精确运行主体上执行原责任链与逐任务动态权限分支。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `auth` / `actor` - 当前权限事实与认证身份
-/// * `item` / `subject` - 本次快照下的任务和冻结主体
-/// * `open_tasks` - 同一执行关联的全部开放任务
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 当前负责人、实际完成人或原管理范围满足时返回 true。
-///
-/// # 错误
-/// 决定能力、管理来源或策略重验失败时保持原错误。
-async fn task_subject_readable(
-    identity_service: &SharedRbacService,
-    auth: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    item: &WorkItem,
-    subject: &RuntimeReadSubject,
-    open_tasks: &[WorkItem],
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    if !task_chain_matches_subject(item, subject, open_tasks)? {
-        return Ok(false);
-    }
-    let owner = item.owner_user_id.as_deref().unwrap_or_default();
-    if owner == actor.id()
-        && (item.status != WorkItemStatus::Open
-            || approval_participant_permissions_with_executor(identity_service, actor, executor).await?)
-    {
-        return Ok(true);
-    }
-    manager_can_read(identity_service, auth, actor, subject, executor).await
 }
 
 /// 对单任务和批量任务共用同一开放唯一链及实际完成链规则。

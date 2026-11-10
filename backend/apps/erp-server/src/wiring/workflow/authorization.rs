@@ -17,7 +17,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::map_service;
-use super::order_access::{approval_readable, readable_sources};
+use super::order_access::readable_sources;
 use crate::wiring::contract_access;
 use crate::wiring::errors::{Error, Result};
 
@@ -140,17 +140,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         contract_readable_result(result)
     }
 
-    async fn binding_order_readable(
-        &self,
-        actor: &AuditActor,
-        object: &WorkflowScopeObject,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<bool> {
-        super::order_access::binding_readable(&self.db, &self.rbac, actor, object, executor)
-            .await
-            .map_err(map_service)
-    }
-
     async fn approval_scope_objects(
         &self,
         keys: &HashSet<(DocumentType, String)>,
@@ -169,16 +158,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             .await?
             .remove(&(document_type, document_id.to_string()))
             .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
-    }
-
-    async fn order_approval_readable(
-        &self,
-        actor: &AuditActor,
-        document_type: DocumentType,
-        document_id: &str,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<bool> {
-        approval_readable(&self.db, &self.rbac, actor, document_type, document_id, executor).await
     }
 
     async fn readable_order_sources(

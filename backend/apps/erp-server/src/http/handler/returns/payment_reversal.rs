@@ -57,7 +57,6 @@ pub async fn payment_reversal_create(
 ) -> Result<PaymentReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_payment_reversal(req, &actor)
             .await?;
 
@@ -83,7 +82,6 @@ pub async fn payment_reversal_commit(
 ) -> Result<PaymentReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_payment_reversal(req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -110,7 +108,6 @@ pub async fn payment_reversal_submit(
 ) -> Result<PaymentReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .submit_payment_reversal(&id, req, &actor)
             .await?;
 
@@ -138,7 +135,6 @@ pub async fn payment_reversal_cancel_approval(
 ) -> Result<PaymentReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .cancel_payment_reversal_approval(&id, req, &actor)
             .await?;
 

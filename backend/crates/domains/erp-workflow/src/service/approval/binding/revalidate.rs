@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use bpm::model::types::ModelError;
 use erp_identity::{AccountSummary, SharedRbacService};
-use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::business_adapter::{BindingRevalidationContext, ensure_separation_of_duties};
@@ -12,7 +11,7 @@ use super::super::scope::approval_participant_permissions_with_executor;
 use super::process_not_configured;
 use super::upgrade::map_model_error;
 use crate::error::{Error, Result};
-use crate::ports::{ApprovalObjectReadPort, OrderTaskSource};
+use crate::ports::OrderTaskSource;
 use crate::repository::bpm::DefinitionGraph;
 
 /// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
@@ -35,29 +34,25 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
     })
 }
 
-/// Adapter 重验指定用户、权限、对象范围、读取权与岗位分离。
+/// 重验指定审批人的账号、审批权限、订单必要事实与岗位分离。
 ///
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `_db` - 数据库参数；本函数不读取
-/// * `_object_read` - 对象读取端口；本函数不读取
 /// * `policy` - 当前单据类型必须审批政策
 /// * `context` - 当前单据组织与创建人事实
 /// * `graph` - 已由 BPM 校验的定义图
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 全部定义审批人通过静态与对象访问重验时返回 `Ok(())`。
+/// 全部定义审批人资格和绑定事实有效时返回 `Ok(())`。
 ///
 /// # 错误
-/// 岗位分离、账号、权限、数据范围或对象读取权失败时返回错误。
+/// 岗位分离、账号、审批权限或订单必要事实校验失败时返回错误。
 ///
 /// # 关键业务约束
 /// 审批人集合由 BPM 图确定性提取，Service 只编排外部资格判断。
 pub async fn revalidate_binding_graph(
     identity_service: &SharedRbacService,
-    _db: &Database,
-    _object_read: &dyn ApprovalObjectReadPort,
     policy: &ProcessRequiredApprovalPolicy,
     context: &BindingRevalidationContext,
     graph: &DefinitionGraph,

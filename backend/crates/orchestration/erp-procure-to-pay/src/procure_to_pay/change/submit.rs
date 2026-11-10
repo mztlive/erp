@@ -267,7 +267,6 @@ impl PurchaseOrderProcess {
         persist_created_change_order(
             &self.db,
             ports.as_ref(),
-            std::sync::Arc::clone(&self.object_read),
             change.clone(),
             document,
             bind_command,
@@ -633,7 +632,6 @@ pub(super) struct FrozenChangeSubmission {
 async fn persist_created_change_order(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
-    object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
     change_order: PurchaseChangeOrder,
     mut document: BusinessDocument,
     bind_command: BindPublishedDefinitionCommand,
@@ -642,7 +640,7 @@ async fn persist_created_change_order(
 ) -> Result<()> {
     let db = db.clone();
     let ports = (*ports).clone();
-    let object_read = object_read.clone();
+
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -651,16 +649,8 @@ async fn persist_created_change_order(
                     .access(db.clone())
                     .require_object(&actor, "update", change_order.purchase_order_id.as_ref(), &[], executor)
                     .await?;
-                persist_bound_change_document(
-                    &db,
-                    &ports,
-                    object_read.as_ref(),
-                    &mut document,
-                    &bind_command,
-                    &actor,
-                    executor,
-                )
-                .await?;
+                persist_bound_change_document(&db, &ports, &mut document, &bind_command, &actor, executor)
+                    .await?;
                 db.purchase_change_orders().create(&change_order, executor).await?;
                 persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
@@ -676,7 +666,6 @@ async fn persist_created_change_order(
 async fn persist_bound_change_document(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -686,7 +675,7 @@ async fn persist_bound_change_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = ports.approval.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = ports.approval.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("采购变更单必须绑定已发布定义".to_string()))?;
     attach_published_binding(document, binding)?;
     db.business_documents().create(document, executor).await?;

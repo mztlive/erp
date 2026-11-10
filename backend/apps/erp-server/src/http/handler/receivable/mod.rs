@@ -94,7 +94,6 @@ pub async fn receivable_account_create(
 ) -> Result<ReceivableAccountView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_receivable_account(req, &actor)
             .await?;
 
@@ -162,7 +161,6 @@ pub async fn customer_receipt_create(
 ) -> Result<CustomerReceiptView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_customer_receipt(req, &actor)
             .await?;
 
@@ -185,7 +183,6 @@ pub async fn customer_receipt_commit(
 ) -> Result<CustomerReceiptView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_customer_receipt(req, &actor)
             .await?;
 
@@ -210,7 +207,6 @@ pub async fn customer_receipt_submit(
 ) -> Result<CustomerReceiptView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .submit_customer_receipt(&id, req, &actor)
             .await?;
 
@@ -235,7 +231,6 @@ pub async fn customer_receipt_cancel_approval(
 ) -> Result<CustomerReceiptView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .cancel_customer_receipt_approval(&id, req, &actor)
             .await?;
 
@@ -329,7 +324,6 @@ pub async fn invoice_create(
 ) -> Result<InvoiceView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_invoice(req, &actor)
             .await?;
 
@@ -352,7 +346,6 @@ pub async fn invoice_commit(
 ) -> Result<InvoiceView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .commit_invoice(req, &actor)
             .await?;
 
@@ -377,7 +370,6 @@ pub async fn invoice_post(
 ) -> Result<InvoiceView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .post_invoice(&id, req, &actor)
             .await?;
 
@@ -402,7 +394,6 @@ pub async fn invoice_red_issue(
 ) -> Result<InvoiceView> {
     let view =
         ReceivableProcess::new(state.application().db(), receivable_posting_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .issue_red_invoice(&id, req, &actor)
             .await?;
 

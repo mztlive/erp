@@ -1,14 +1,12 @@
 //! 普通采购付款申请：来源、额度、审批与执行在同一事务协调。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
 use erp_procure_to_pay::procure_to_pay::sync_payment_arrangement;
-use erp_workflow::{ApprovalActionContext, ApprovalObjectReadPort, FailClosedObjectReadPort};
+use erp_workflow::ApprovalActionContext;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -32,7 +30,6 @@ pub use execution::{approve, restore_reversed_payment, sync_task};
 pub struct PurchasePaymentRequestProcess {
     db: Database,
     rbac: FinancePostingPorts,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
 }
 
 impl PurchasePaymentRequestProcess {
@@ -40,11 +37,11 @@ impl PurchasePaymentRequestProcess {
     /// # 参数
     /// * `db` - 应用数据库。
     /// # 返回
-    /// 返回尚未装配审批对象读取端口的流程。
+    /// 返回绑定共享财务业务端口的流程。
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
-        Self { rbac, db, object_read: Arc::new(FailClosedObjectReadPort) }
+        Self { rbac, db }
     }
     /// 注入共享授权实例。
     /// # 参数
@@ -57,18 +54,6 @@ impl PurchasePaymentRequestProcess {
         self.rbac = rbac;
         self
     }
-    /// 注入审批对象读取端口。
-    /// # 参数
-    /// * `object_read` - 组合根审批对象资格端口。
-    /// # 返回
-    /// 返回装配后的流程。
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_object_read(mut self, object_read: Arc<dyn ApprovalObjectReadPort>) -> Self {
-        self.object_read = object_read;
-        self
-    }
-
     async fn authorized_result(&self, id: &str, actor: &AuditActor) -> Result<PurchasePaymentRequest> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();

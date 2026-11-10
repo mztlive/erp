@@ -37,7 +37,6 @@ pub async fn purchase_change_void(
         state.application().rbac(),
         purchase_ports(state.application().db(), state.application().rbac()),
     )
-    .with_object_read(state.application().approval_object_read())
     .void_change(&id, req, &actor)
     .await?;
     Ok(ApiResponse::ok_with_data(view))

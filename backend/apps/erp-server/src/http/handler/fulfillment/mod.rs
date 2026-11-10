@@ -43,7 +43,6 @@ fn process(state: &HttpState) -> FulfillmentProcess {
             approval_runtime(state.application().db(), rbac),
         )),
     )
-    .with_object_read(state.application().approval_object_read())
 }
 
 pub mod address_arrangement;

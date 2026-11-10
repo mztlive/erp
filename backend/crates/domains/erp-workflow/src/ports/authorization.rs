@@ -133,27 +133,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("审批合同材料读取授权未装配".into())) }
     }
 
-    /// 绑定前按当前或拟创建订单事实独立核对详情范围；未装配时失败关闭。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人。
-    /// * `object` - 当前或拟创建的订单范围事实。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 详情范围允许时返回 `true`，不允许时返回 `false`。
-    ///
-    /// # 错误
-    /// 默认实现返回未装配的内部错误；实现无法完成核验时返回错误。
-    fn binding_order_readable(
-        &self,
-        _actor: &AuditActor,
-        _object: &WorkflowScopeObject,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<bool>> + Send {
-        async { Err(Error::Internal("订单绑定读取范围未装配".into())) }
-    }
-
     /// 有界批量读取当前审批对象事实；缺失对象不进入结果，配置失败不得吞掉。
     ///
     /// # 参数
@@ -192,27 +171,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         _executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<WorkflowScopeObject>> + Send {
         async { Err(Error::Internal("审批范围事实未装配".into())) }
-    }
-
-    /// 在审批原事务内重验 S2 订单对象当前详情权限。
-    ///
-    /// # 参数
-    /// * `actor` - 当前审批人。
-    /// * `document_type` - 审批快照固定的订单类型。
-    /// * `document_id` - 业务单据主键，变更单由 adapter 沿原单解析。
-    /// * `executor` - 审批决定、恢复或读取的执行器。
-    /// # 返回
-    /// 当前对象可读时为 true；业务越界返回 false，供审批引擎记录受阻。
-    /// # 错误
-    /// 未装配和基础设施失败不得转换成成功。
-    fn order_approval_readable(
-        &self,
-        _actor: &AuditActor,
-        _document_type: DocumentType,
-        _document_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<bool>> + Send {
-        async { Err(Error::Internal("订单审批范围授权未装配".into())) }
     }
 
     /// 批量返回当前详情范围允许的关联订单，用于任务列表、统计及详情。

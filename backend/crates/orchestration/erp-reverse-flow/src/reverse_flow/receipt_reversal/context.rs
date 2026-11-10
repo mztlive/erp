@@ -41,7 +41,6 @@ pub(super) async fn load_receipt_reversal_context(
 /// # 参数
 /// * `db` - 数据库。
 /// * `rbac` - 绑定重验使用的共享 RBAC。
-/// * `object_read` - 对象读取授权端口。
 /// * `document` - 待登记单据；成功时写入绑定后持久化。消耗该值。
 /// * `bind_command` - 发布定义绑定命令。
 /// * `actor` - 审计操作人。
@@ -55,7 +54,6 @@ pub(super) async fn load_receipt_reversal_context(
 pub(super) async fn persist_bound_receipt_reversal_document(
     db: &Database,
     rbac: &ReverseFlowPorts,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -65,7 +63,7 @@ pub(super) async fn persist_bound_receipt_reversal_document(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
     )?;
-    let binding = rbac.runtime.bind_document(db, object_read, bind_command, actor, executor).await?;
+    let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("回款冲正单必须绑定已发布定义".to_string()))?;
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, executor).await?;

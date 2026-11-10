@@ -1,19 +1,15 @@
 //! 审批静态资格、类型管理权限与真实业务来源授权。
 
 use std::result::Result as StdResult;
-use std::slice;
 
 use application_core::AuditActor;
 use erp_identity::{Permission, PermissionSet, SharedRbacService};
 use persistence_core::{Executor, NoTransaction};
 
-use super::dto::ApprovalRecoveryAuthorization;
 use super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
-
-const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
 /// 定义管理的类型级可见范围。不是具体单据 对象范围。
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -272,46 +268,6 @@ pub async fn require_approval_management_with_executor(
     }
     identity_service.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?;
     Ok(())
-}
-
-/// 在稳定 Casbin policy 版本下形成恢复授权锚点。
-///
-/// Handler 必须把返回值原样注入恢复命令；运行时在同一恢复事务内重新读取账号、
-/// 角色绑定、启用角色和 policy 版本；具体恢复命令另验类型管理与真实业务来源。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `actor` - 已认证操作人
-///
-/// # 返回
-/// 账号可登录、具备恢复权限且策略版本在读取前后未变化时返回授权锚点。
-///
-/// # 错误
-/// 账号失效、缺少恢复权限、授权读取失败，或有限次重试后策略版本仍在变化时返回错误。
-pub async fn approval_recovery_authorization(
-    identity_service: &SharedRbacService,
-    actor: &AuditActor,
-) -> Result<ApprovalRecoveryAuthorization> {
-    let permission = Permission::parse("approval_instance:resume")?;
-
-    for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-        let qualified = identity_service
-            .qualified_permissions(actor, slice::from_ref(&permission), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Forbidden("恢复账号不存在、已停用或身份已变化".into()))?;
-        let roles = qualified.roles(&permission);
-        if roles.is_empty() {
-            return Err(Error::Forbidden("缺少审批恢复权限".into()));
-        }
-        if qualified.policy_revision() == identity_service.current_policy_revision().await? {
-            return Ok(ApprovalRecoveryAuthorization {
-                actor_kind: actor.kind(),
-                policy_revision: qualified.policy_revision(),
-                granting_role_ids: roles.into_iter().map(|role| role.to_string()).collect(),
-            });
-        }
-    }
-    Err(Error::Rbac("审批恢复授权策略持续变化，无法形成稳定快照".into()))
 }
 
 /// 绑定升级在同一授权快照中得到的服务端身份。

@@ -36,7 +36,6 @@ pub async fn customer_refund_update(
 ) -> Result<CustomerRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .update_customer_refund(&id, req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -63,7 +62,6 @@ pub async fn supplier_refund_update(
 ) -> Result<SupplierRefundView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .update_supplier_refund(&id, req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -90,7 +88,6 @@ pub async fn receipt_reversal_update(
 ) -> Result<ReceiptReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .update_receipt_reversal(&id, req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -117,7 +114,6 @@ pub async fn payment_reversal_update(
 ) -> Result<PaymentReversalView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .update_payment_reversal(&id, req, &actor)
             .await?;
     Ok(ApiResponse::ok_with_data(view))

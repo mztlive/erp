@@ -1,25 +1,19 @@
 //! 批量订单任务授权；按来源分别解析详情动作，不复制范围运算。
 
 use std::collections::{BTreeSet, HashSet};
-use std::slice;
 
 use application_core::AuditActor;
-use erp_identity::access_control::ScopedObject;
+use erp_identity::SharedRbacService;
 use erp_identity::entity::resource_access::ResourceKind;
-use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
-use erp_procurement::repository::PurchaseOrderExt;
-use erp_read_models::sales_center::access::SalesAccess;
 use erp_read_models::workbench::authority::WorkItemFactsReader;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::{OrderTaskSource, WorkflowScopeObject};
+use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::map_service;
 use crate::wiring::errors::{Error, Result};
-use crate::wiring::purchase_access;
 
 /// 审批沿强实体外键取得当前订单，展示根节点不提供读取权。
 ///
@@ -121,125 +115,6 @@ fn read_result(result: Result<Vec<OrderTaskSource>>) -> WorkflowResult<Vec<Order
         Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(Vec::new()),
         Err(error) => Err(map_service(error)),
     }
-}
-
-async fn purchase_sources(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    ids: &[String],
-    executor: &mut dyn Executor,
-) -> Result<Vec<OrderTaskSource>> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let access = purchase_access(db.clone(), rbac.clone());
-    let (context, scope) = access.resolve(actor, "detail", executor).await?;
-    let mut allowed = Vec::new();
-    for order in db.purchase_orders().list_active_by_ids(ids, executor).await? {
-        if access.allows(&context, &scope, &order)? {
-            allowed.push(OrderTaskSource::Purchase(order.base.id));
-        }
-    }
-    Ok(allowed)
-}
-
-/// 绑定本地事实与运行时保持同一详情动作；销售协作与历史沿公共读模型解析。
-///
-/// 缺失来源、客户或内部部门时拒绝，不使用结算主体代替内部组织。
-///
-/// # 参数
-/// * `db` - 订单集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
-/// * `actor` - 当前操作人。
-/// * `object` - 已装载的工作流范围对象。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 详情动作允许该对象时返回 `true`；缺来源、负责人为空或缺内部组织时返回 `false`。
-///
-/// # 错误
-/// 订单查询或范围解析中的非拒绝类错误原样返回；采购详情被拒绝时返回 `false`。
-pub(super) async fn binding_readable(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    object: &WorkflowScopeObject,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    let Some(source) = &object.order_source else {
-        return Ok(false);
-    };
-    if object.business_org_unit_id.as_deref().is_none_or(str::is_empty) || object.owner_user_id.is_empty() {
-        return Ok(false);
-    }
-    match source {
-        OrderTaskSource::Sales(id) => sales_binding_readable(db, rbac, actor, object, id, executor).await,
-        OrderTaskSource::Purchase(id) => {
-            if !db.purchase_orders().list_active_by_ids(slice::from_ref(id), executor).await?.is_empty() {
-                return Ok(purchase_sources(db, rbac, actor, slice::from_ref(id), executor)
-                    .await?
-                    .contains(source));
-            }
-            let scope = match DataScopeService::new(db.clone(), rbac.clone())
-                .resolve(actor, &Permission::parse("purchase_order:detail")?, executor)
-                .await
-            {
-                Ok(scope) => scope,
-                Err(IdentityError::Forbidden(_)) => return Ok(false),
-                Err(error) => return Err(error.into()),
-            };
-            Ok(scope.scope.allows(
-                &ScopedObject {
-                    owned: object.owner_user_id == actor.id(),
-                    org_unit_id: object.business_org_unit_id.as_deref(),
-                    collaborating: false,
-                    historical_read_participant: false,
-                    settlement_party_id: None,
-                    warehouse_id: None,
-                },
-                true,
-            ))
-        },
-    }
-}
-
-async fn sales_binding_readable(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    object: &WorkflowScopeObject,
-    id: &str,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    let Some(customer) = &object.customer_id else {
-        return Ok(false);
-    };
-    let (access, scope) = match SalesAccess::new(db.clone(), rbac.clone())
-        .resolve(actor, "detail", &[], executor)
-        .await
-        .map_err(Error::from)
-    {
-        Ok(scope) => scope,
-        Err(Error::Forbidden(_)) => return Ok(false),
-        Err(error) => return Err(error),
-    };
-    let collaborating = scope
-        .roles
-        .iter()
-        .chain(scope.user_limit.iter())
-        .any(|clause| clause.collaborative_customer_ids.contains(customer));
-    Ok(access.scope.allows(
-        &ScopedObject {
-            owned: object.owner_user_id == actor.id(),
-            org_unit_id: object.business_org_unit_id.as_deref(),
-            collaborating,
-            historical_read_participant: scope.historical_order_ids.iter().any(|existing| existing == id),
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        true,
-    ))
 }
 
 #[cfg(test)]

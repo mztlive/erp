@@ -73,7 +73,6 @@ pub async fn sales_return_case_create(
 ) -> Result<SalesReturnCaseView> {
     let view =
         ReturnsProcess::new(state.application().db(), local_reverse_flow_ports(state.application().db()))
-            .with_object_read(state.application().approval_object_read())
             .create_sales_return_case(req, &actor)
             .await?;
 

@@ -25,7 +25,7 @@ impl PurchasePaymentRequestProcess {
         let commands = batch_commands(&req, actor.id())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let object_read = self.object_read.clone();
+
         let writer = actor.clone();
         let recovery = commands.clone();
         let revision = rbac.current_policy_revision().await?;
@@ -38,16 +38,8 @@ impl PurchasePaymentRequestProcess {
                     }
                     let mut rows = Vec::with_capacity(req.requests.len());
                     for (data, command) in req.requests.into_iter().zip(&commands) {
-                        let row = submit::create_and_submit(
-                            &db,
-                            &rbac,
-                            object_read.as_ref(),
-                            data,
-                            &writer,
-                            command,
-                            executor,
-                        )
-                        .await?;
+                        let row =
+                            submit::create_and_submit(&db, &rbac, data, &writer, command, executor).await?;
                         rows.push(row);
                     }
                     Ok(rows)

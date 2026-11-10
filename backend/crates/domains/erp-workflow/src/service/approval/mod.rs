@@ -26,12 +26,12 @@ pub use action::{
     DecisionActionParams, FailClosedApprovalActionPort,
 };
 pub use dto::{
-    ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand,
-    ApprovalRecoveryAuthorization, ApprovalResumeCommand, ApprovalStartCommand,
+    ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand, ApprovalResumeCommand,
+    ApprovalStartCommand,
 };
 pub use scope::{
-    approval_participant_permissions_with_executor, approval_recovery_authorization,
-    definition_management_visibility_with_executor, require_approval_management_with_executor,
+    approval_participant_permissions_with_executor, definition_management_visibility_with_executor,
+    require_approval_management_with_executor,
 };
 pub use upgrade_subject::{
     ApprovalUpgradeSubjectFacts, ensure_initial_unsubmitted_approval_upgrade_subject,

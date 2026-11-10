@@ -9,7 +9,6 @@ use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_support::PendingAttachmentBatch;
-use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::service::work_item::expected_task_version;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -52,7 +51,6 @@ impl ReceivableProcess {
         let command = EvidenceCommand {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
-            object_read: Arc::clone(&self.object_read),
             req,
             pending,
             actor: actor.clone(),
@@ -71,7 +69,6 @@ impl ReceivableProcess {
 struct EvidenceCommand {
     db: Database,
     rbac: FinancePostingPorts,
-    object_read: Arc<dyn ApprovalObjectReadPort>,
     req: CompleteInvoiceRequest,
     pending: Arc<dyn PendingAttachmentBatch>,
     actor: AuditActor,
@@ -108,15 +105,7 @@ impl EvidenceCommand {
             request.completion_amount(self.req.expected_request_version)?,
             self.actor.id(),
         )?;
-        register_created_invoice_document(
-            db,
-            &self.rbac,
-            self.object_read.as_ref(),
-            &invoice,
-            &self.actor,
-            executor,
-        )
-        .await?;
+        register_created_invoice_document(db, &self.rbac, &invoice, &self.actor, executor).await?;
         db.invoices().create(&invoice, executor).await?;
         post_invoice_apply(
             db,

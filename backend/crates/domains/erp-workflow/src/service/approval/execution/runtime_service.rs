@@ -40,7 +40,7 @@ use super::view::{ApprovalCommandView, OpenTaskSummary, map_command_view};
 use crate::entity::approval_integration::{ApprovalSubjectSnapshot, resolve_runtime_document_type};
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
-use crate::ports::{ApprovalObjectReadPort, FailClosedObjectReadPort, UpgradeSubjectPort, WorkflowAuditPort};
+use crate::ports::{UpgradeSubjectPort, WorkflowAuditPort};
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActionPort};
@@ -52,7 +52,6 @@ pub struct ApprovalRuntimeService<A> {
     pub(crate) db: Database,
     pub(crate) auth: A,
     action_port: Arc<dyn ApprovalDomainActionPort>,
-    pub(crate) object_read: Arc<dyn ApprovalObjectReadPort>,
     pub(crate) upgrade: Arc<dyn UpgradeSubjectPort>,
     pub(crate) audit: Arc<dyn WorkflowAuditPort>,
 }
@@ -85,7 +84,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             identity,
             auth,
             Arc::new(FailClosedApprovalActionPort),
-            Arc::new(FailClosedObjectReadPort),
             Arc::new(crate::ports::FailClosedUpgradeSubjectPort),
             Arc::new(crate::ports::FailClosedAuditPort),
         )
@@ -98,7 +96,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// * `db` - MongoDB。
     /// * `auth` - 授权端口。
     /// * `action_port` - 领域动作端口。
-    /// * `object_read` - 被审对象读取端口。
     /// * `upgrade` - 未提交绑定升级端口。
     /// * `audit` - 审计端口。
     ///
@@ -112,11 +109,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         identity: SharedRbacService,
         auth: A,
         action_port: Arc<dyn ApprovalDomainActionPort>,
-        object_read: Arc<dyn ApprovalObjectReadPort>,
         upgrade: Arc<dyn UpgradeSubjectPort>,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        Self { db, identity, auth, action_port, object_read, upgrade, audit }
+        Self { db, identity, auth, action_port, upgrade, audit }
     }
 }
 
@@ -415,8 +411,8 @@ mod tests {
         RuntimeInstanceListItem, cursor_from_summary, item_from_runtime_read_row, item_from_summary,
     };
     use super::read_auth::{
-        RuntimeReadAuthorizationFacts, RuntimeReadSubject, ensure_mine_page_integrity, mine_execution_ids,
-        mine_instance_ids, mine_runtime_chain_matches, task_proves_current_responsibility, unique_by_id,
+        RuntimeReadSubject, ensure_mine_page_integrity, mine_execution_ids, mine_instance_ids,
+        mine_runtime_chain_matches, task_proves_current_responsibility, unique_by_id,
     };
     use super::tasks::{CompleteOrCloseTasksInput, approval_task_ending};
     use crate::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
@@ -661,36 +657,6 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_read_matrix_supports_only_signed_sources() {
-        let denied = RuntimeReadAuthorizationFacts {
-            actor_active: true,
-            initiator: false,
-            current_responsibility: false,
-            object_readable: false,
-            scope_covers: false,
-            runtime_admin: false,
-        };
-        assert!(!denied.ordinary_allowed());
-        assert!(RuntimeReadAuthorizationFacts { initiator: true, ..denied }.ordinary_allowed());
-        assert!(RuntimeReadAuthorizationFacts { current_responsibility: true, ..denied }.ordinary_allowed());
-        assert!(
-            !RuntimeReadAuthorizationFacts { object_readable: true, scope_covers: true, ..denied }
-                .ordinary_allowed()
-        );
-        assert!(
-            !RuntimeReadAuthorizationFacts {
-                actor_active: false,
-                initiator: true,
-                current_responsibility: true,
-                object_readable: true,
-                scope_covers: true,
-                ..denied
-            }
-            .ordinary_allowed()
-        );
-    }
-
-    #[test]
     fn current_responsibility_requires_exact_open_runtime_task_chain() {
         let (subject, task) = runtime_responsibility_fixture();
         let execution = subject.current_execution.as_ref().expect("当前执行");
@@ -833,39 +799,6 @@ mod tests {
     }
 
     #[test]
-    fn management_requires_every_gate_while_started_uses_initiator_fact() {
-        let allowed = RuntimeReadAuthorizationFacts {
-            actor_active: true,
-            initiator: true,
-            current_responsibility: false,
-            object_readable: true,
-            scope_covers: true,
-            runtime_admin: true,
-        };
-        assert!(allowed.management_allowed());
-        assert!(allowed.started_allowed());
-        for denied in [
-            RuntimeReadAuthorizationFacts { actor_active: false, ..allowed },
-            RuntimeReadAuthorizationFacts { object_readable: false, ..allowed },
-            RuntimeReadAuthorizationFacts { scope_covers: false, ..allowed },
-        ] {
-            assert!(!denied.management_allowed());
-        }
-        assert!(!RuntimeReadAuthorizationFacts { actor_active: false, ..allowed }.started_allowed());
-        assert!(
-            RuntimeReadAuthorizationFacts {
-                object_readable: false,
-                scope_covers: false,
-                runtime_admin: false,
-                ..allowed
-            }
-            .started_allowed()
-        );
-        assert!(!RuntimeReadAuthorizationFacts { runtime_admin: false, ..allowed }.management_allowed());
-        assert!(!RuntimeReadAuthorizationFacts { initiator: false, ..allowed }.started_allowed());
-    }
-
-    #[test]
     fn scoped_row_revalidates_snapshot_and_view_authorization() {
         let actor = AuditActor::new("starter".to_string(), "starter".to_string(), AccountKind::Admin);
         let type_scopes = [ApprovalRuntimeReadTypeScope {
@@ -898,6 +831,56 @@ mod tests {
             None
         );
         assert_eq!(item_from_summary(summary(), None).expect("缺失快照保留运行实例").document_label, None);
+    }
+
+    #[test]
+    fn runtime_rows_follow_started_and_management_view_boundaries() {
+        let scopes = [ApprovalRuntimeReadTypeScope {
+            organization_ids: None,
+            process_kind: ProcessKind::StockAdjustment,
+        }];
+        let other = AuditActor::new("other".into(), "other".into(), AccountKind::Admin);
+        for view in [RuntimeInstanceListView::Managed, RuntimeInstanceListView::Blocked] {
+            assert!(
+                item_from_runtime_read_row(
+                    ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
+                    &other,
+                    view,
+                    &scopes,
+                )
+                .is_ok()
+            );
+            assert!(
+                item_from_runtime_read_row(
+                    ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
+                    &other,
+                    view,
+                    &[],
+                )
+                .is_err()
+            );
+        }
+        for view in [RuntimeInstanceListView::Started, RuntimeInstanceListView::Mine] {
+            assert!(
+                item_from_runtime_read_row(
+                    ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
+                    &other,
+                    view,
+                    &scopes,
+                )
+                .is_err()
+            );
+        }
+        let starter = AuditActor::new("starter".into(), "starter".into(), AccountKind::Admin);
+        assert!(
+            item_from_runtime_read_row(
+                ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
+                &starter,
+                RuntimeInstanceListView::Started,
+                &[],
+            )
+            .is_ok()
+        );
     }
 
     #[test]

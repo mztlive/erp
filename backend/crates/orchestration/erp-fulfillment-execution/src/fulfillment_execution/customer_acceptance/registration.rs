@@ -137,7 +137,6 @@ fn apply_customer_acceptance_create_binding(
 async fn persist_unbound_customer_acceptance_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     mut document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
@@ -145,7 +144,7 @@ async fn persist_unbound_customer_acceptance_document(
 ) -> Result<()> {
     let _ = ensure_customer_acceptance_skips_approval_binding()?;
     ensure_customer_acceptance_has_no_adapter()?;
-    let binding = workflow.bind_document(object_read, bind_command, actor, executor).await?;
+    let binding = workflow.bind_document(bind_command, actor, executor).await?;
     apply_customer_acceptance_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
@@ -155,7 +154,6 @@ async fn persist_unbound_customer_acceptance_document(
 /// # 参数
 /// * `db` - 业务数据库。
 /// * `rbac` - 授权源。
-/// * `object_read` - 审批对象读取端口。
 /// * `acceptance` - 已构造的客户验收。
 /// * `actor` - 创建人。
 /// * `executor` - 调用方事务执行器。
@@ -169,7 +167,6 @@ pub async fn register_created_customer_acceptance_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
     rbac: &SharedRbacService,
-    object_read: &dyn erp_workflow::ApprovalObjectReadPort,
     acceptance: &CustomerAcceptance,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -184,16 +181,7 @@ pub async fn register_created_customer_acceptance_document(
         acceptance.acceptance_no.clone(),
     )
     .map_err(crate::Error::from)?;
-    persist_unbound_customer_acceptance_document(
-        db,
-        workflow,
-        object_read,
-        document,
-        &bind_command,
-        actor,
-        executor,
-    )
-    .await
+    persist_unbound_customer_acceptance_document(db, workflow, document, &bind_command, actor, executor).await
 }
 
 #[cfg(test)]
