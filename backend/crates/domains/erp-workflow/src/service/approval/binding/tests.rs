@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessDefinitionId};
 use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
 use erp_core::AccountKind;
+use erp_identity::AccountSummary;
 
 use super::revalidate::{require_ready_assignee, revalidate_published_graph};
 use super::upgrade::{ensure_registered_upgrade_subject, upgrade_result_from_action};
@@ -13,7 +14,6 @@ use crate::entity::document_registry::{
     BusinessDocumentId, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionId,
     WorkflowActionType,
 };
-use crate::entity::work_item::WorkflowAccountFact;
 use crate::error::{Error, ErrorCode};
 use crate::repository::bpm::DefinitionGraph;
 use crate::service::approval::business_adapter::ensure_runtime_cut_over;
@@ -23,8 +23,8 @@ use crate::service::approval::upgrade_subject::ApprovalUpgradeSubjectFacts;
 use crate::service::document_registry::new_registered_document;
 
 /// 构造审批人账号快照。
-fn assignee_account(id: &str, can_login: bool) -> WorkflowAccountFact {
-    WorkflowAccountFact::new(id, AccountKind::Admin, can_login).with_display_name(id)
+fn assignee_account(id: &str, can_login: bool) -> AccountSummary {
+    AccountSummary::new(id, AccountKind::Admin, can_login).with_display_name(id)
 }
 
 /// 构造严格回读单测命令。

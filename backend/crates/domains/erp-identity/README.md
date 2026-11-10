@@ -8,7 +8,7 @@
 
 | 用途 | 方法 | 返回 |
 | --- | --- | --- |
-| 操作、单条、批量、拟创建对象检查 | `AuthorizationService::require` | `Result<()>` |
+| 操作、单条、批量对象检查 | `AuthorizationService::require` | `Result<()>` |
 | 列表、计数、汇总、查询式导出 | `AuthorizationService::query` | `AuthorizedQuery` |
 | 查询条件编译 | `AuthorizedQuery::compile` | `CompiledAccess` |
 | 仓储执行前后复验 | `AuthorizationService::validate` | `Result<()>` |
@@ -41,7 +41,6 @@ authorization.require(
 - 事实端口必须返回完整根目标及实际来源。缺失、重复、额外或资源错配的根对象导致整次失败。
 - 来源保留全部引用 ID 和实际读取对象。`AllNonEmpty` 要求集合非空、全部来源存在且有权。
 - 无对象操作使用 `AccessTarget::Operation`，仅接受已登记的无对象政策。
-- 创建使用 `AccessTarget::Proposed`。事实端口核实拟写入的责任字段及来源；历史参与和记录读取授权不能单独放行创建。
 - 对象及来源事实展开最多 1000 项、最多 8 层，超限失败，不截断。
 - 写入前在业务事务内执行检查，授权读取、业务读取和写入使用同一执行器。状态、金额、业务版本、幂等及所需并发冲突保护由业务用例负责。
 
@@ -78,9 +77,9 @@ authorization.validate(&compiled, executor).await?;
 - 入口 `Permission`、额外必需权限及 `AccessSubject`。全部必需权限须由同一个有效角色提供。
 - `AccessPolicy`：无对象操作、范围、任务分配、参与、与或组合、来源关系。
 - 根对象和各来源的必需事实，以及每个范围节点的 `ReadAccess` 读取补充开关。
-- 可选 Mapping 实例、是否接受拟创建对象，以及可选的 `AccessFactsPort`。
+- 可选 Mapping 实例及可选的 `AccessFactsPort`。
 
-查询接入需要 Mapping；对象或拟创建对象检查需要事实端口。只做对象检查可以不登记 Mapping，不执行查询准备和编译。`View` 的标识须与模型一致，`Source` 必须对应政策中的实际关系。
+查询接入需要 Mapping；对象检查需要事实端口。只做对象检查可以不登记 Mapping，不执行查询准备和编译。`View` 的标识须与模型一致，`Source` 必须对应政策中的实际关系。
 
 | Mapping 能力 | 职责 |
 | --- | --- |

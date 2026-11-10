@@ -9,8 +9,8 @@ pub use mapping::{MappingFacts, QueryModel, QueryOutput};
 pub use rule::AccessFact;
 pub(crate) use rule::AccessRule;
 pub use target::{
-    AccessContext, AccessSubject, AccessTarget, ObjectFacts, ProposedFacts, QueryModelKey, RelatedObjects,
-    RelationKey, RelationMatch,
+    AccessContext, AccessSubject, AccessTarget, ObjectFacts, QueryModelKey, RelatedObjects, RelationKey,
+    RelationMatch,
 };
 
 mod targets;

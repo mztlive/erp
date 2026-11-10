@@ -17,8 +17,8 @@ pub use predefined_roles::{
     ensure_predefined_roles, predefined_role_permissions,
 };
 pub use rbac::{
-    AuthorizedAccountManagement, AuthorizedRoleGrant, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot,
-    SharedRbacService, ensure_root_role, shared_rbac_service, subject,
+    AuthorizedAccountManagement, AuthorizedRoleGrant, QualifiedPermissions, ROOT_ROLE_ID, RbacService,
+    RolePermissionSnapshot, SharedRbacService, ensure_root_role, shared_rbac_service, subject,
 };
 
 pub use crate::dto::{CreateRoleParams, RoleItem, UpdateRoleParams};

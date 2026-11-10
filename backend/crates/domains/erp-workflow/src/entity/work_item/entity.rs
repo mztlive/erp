@@ -1,5 +1,7 @@
 //! `work_item`：审批与独立人工任务的当前责任事实。
 
+#[cfg(test)]
+use erp_identity::AccountSummary;
 mod approval;
 mod import_confirmation;
 mod payment_arrangement;
@@ -22,7 +24,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_core::{Error, Result};
 pub use import_confirmation::ImportConfirmationTaskIdentity;
-pub use permissions::{AvailableWorkItemAccount, WorkflowAccountFact, casbin_subject};
+pub use permissions::AvailableWorkItemAccount;
 use serde::{Deserialize, Serialize};
 pub use status::WorkItemCloseData;
 pub use supplier_portal::{SupplierPortalReviewIdentity, SupplierPortalReviewTaskData};
@@ -291,8 +293,8 @@ fn approval_item(id: &str) -> WorkItem {
 }
 
 #[cfg(test)]
-fn account(can_login: bool) -> WorkflowAccountFact {
-    WorkflowAccountFact::new("account-1", AccountKind::Admin, can_login)
+fn account(can_login: bool) -> AccountSummary {
+    AccountSummary::new("account-1", AccountKind::Admin, can_login)
 }
 
 #[cfg(test)]

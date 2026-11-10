@@ -2,14 +2,12 @@
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
-use erp_workflow::ports::WorkflowAccountFact;
 use erp_workflow::{Error as WorkflowError, WorkItemService};
 use mongodb::Database;
 
 use crate::wiring::errors::{Error, Result};
 
 mod approval_objects;
-mod approval_scope;
 mod approval_source;
 mod audit;
 mod authorization;
@@ -46,22 +44,6 @@ fn map_service(error: Error) -> WorkflowError {
         Error::RepositoryError(error) => WorkflowError::from(error),
         Error::Coded(code) => WorkflowError::Coded(code),
     }
-}
-
-/// 把身份账号转换成工作流账号事实。
-///
-/// # 参数
-/// * `account` - 身份域账号核心。
-///
-/// # 返回
-/// 返回带显示名和登录名的 `WorkflowAccountFact`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn account_fact(account: &erp_identity::AccountCore) -> WorkflowAccountFact {
-    WorkflowAccountFact::new(account.base.id.clone(), account.kind, account.can_login())
-        .with_display_name(account.name.clone())
-        .with_login_account(account.secret.account().to_string())
 }
 
 /// 装配授权、对象事实与审计端口齐全的工作项命令服务。

@@ -5,6 +5,7 @@ use bpm::ParticipantId;
 use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition};
+use erp_identity::AccountSummary;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -465,11 +466,11 @@ pub(super) async fn load_assignee_snapshots(
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     user_ids: &[String],
     session: &mut dyn Executor,
-) -> Result<HashMap<String, crate::entity::work_item::WorkflowAccountFact>> {
+) -> Result<HashMap<String, AccountSummary>> {
     if user_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let accounts = rbac.load_accounts(user_ids, session).await?;
+    let accounts = rbac.rbac()?.directory().accounts(user_ids, session).await?;
     Ok(accounts.into_iter().map(|account| (account.id.clone(), account)).collect())
 }
 
@@ -491,7 +492,7 @@ pub(super) async fn load_assignee_snapshots(
 async fn ensure_static_eligibility(
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     policy: &ProcessRequiredApprovalPolicy,
-    account: &crate::entity::work_item::WorkflowAccountFact,
+    account: &AccountSummary,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     match policy.approver_eligibility_policy {
@@ -540,7 +541,7 @@ pub(super) fn validate_static_separation(
 /// Service 只把仓储快照与节点关联，不复制节点重建或名称规范化规则。
 pub(super) fn apply_snapshots(
     nodes: Vec<ApprovalNodeDefinition>,
-    accounts: &HashMap<String, crate::entity::work_item::WorkflowAccountFact>,
+    accounts: &HashMap<String, AccountSummary>,
 ) -> Result<Vec<ApprovalNodeDefinition>> {
     let at = now()?;
     let mut refreshed = Vec::with_capacity(nodes.len());
@@ -723,10 +724,8 @@ fn allow_apply_replaced_definition(
 /// 账号缺失、已停用或不满足后台责任身份时返回校验错误。
 ///
 /// # 关键业务约束
-/// 账号类型与状态规则由 `crate::entity::work_item::WorkflowAccountFact::is_active_backoffice` 唯一提供，本层只映射错误语义。
-fn require_active_backoffice_assignee(
-    account: Option<&crate::entity::work_item::WorkflowAccountFact>,
-) -> Result<&crate::entity::work_item::WorkflowAccountFact> {
+/// 账号类型与状态规则由 `AccountSummary::is_active_backoffice` 唯一提供，本层只映射错误语义。
+fn require_active_backoffice_assignee(account: Option<&AccountSummary>) -> Result<&AccountSummary> {
     account
         .filter(|item| item.is_active_backoffice())
         .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))

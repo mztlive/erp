@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-#[cfg(test)]
-use erp_identity::Permission;
-use erp_identity::{CompiledAccess, PermissionSet};
+use erp_identity::{CompiledAccess, Permission, PermissionSet};
 use persistence_core::Executor;
 
 #[cfg(test)]
@@ -136,7 +134,12 @@ impl WorkItemReadService {
     ) -> Result<QueueAccess> {
         let read = self.authorization.query(actor, action, executor).await?;
         let mut access = QueueAccess::new(actor.id().to_owned());
-        access.task.permissions = self.task_permissions(actor, executor).await?;
+        let manage = Permission::parse(MANAGE_PERMISSION)?;
+        let mut permissions = vec![Permission::parse(format!("work_item:{action}"))?];
+        if self.authorization.service.has_permission(actor, &manage, executor).await? {
+            permissions.push(manage);
+        }
+        access.task.permissions = PermissionSet::new(permissions);
         access.read = Some(read);
         access.read_action = action;
         if access.task.permits(MANAGE_PERMISSION) {

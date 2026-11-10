@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use bpm::model::types::ModelError;
+use erp_identity::AccountSummary;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -11,7 +12,7 @@ use super::super::scope::approval_participant_permissions_with_executor;
 use super::process_not_configured;
 use super::upgrade::map_model_error;
 use crate::error::{Error, Result};
-use crate::ports::{ApprovalObjectReadPort, OrderTaskSource, WorkflowAccountFact, WorkflowAuthorizationPort};
+use crate::ports::{ApprovalObjectReadPort, OrderTaskSource, WorkflowAuthorizationPort};
 use crate::repository::bpm::DefinitionGraph;
 
 /// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
@@ -103,9 +104,11 @@ async fn load_assignee_accounts(
     rbac: &impl WorkflowAuthorizationPort,
     assignee_ids: &[String],
     executor: &mut dyn Executor,
-) -> Result<HashMap<String, WorkflowAccountFact>> {
+) -> Result<HashMap<String, AccountSummary>> {
     Ok(rbac
-        .load_accounts(assignee_ids, executor)
+        .rbac()?
+        .directory()
+        .accounts(assignee_ids, executor)
         .await?
         .into_iter()
         .map(|account| (account.id.clone(), account))
@@ -125,7 +128,7 @@ async fn load_assignee_accounts(
 ///
 /// # 关键业务约束
 /// 调用方必须按 BPM 审批人顺序逐个调用，不得依赖 `HashMap` 迭代顺序。
-pub(super) fn require_ready_assignee(account: Option<&WorkflowAccountFact>) -> Result<&WorkflowAccountFact> {
+pub(super) fn require_ready_assignee(account: Option<&AccountSummary>) -> Result<&AccountSummary> {
     account.filter(|account| account.is_active_backoffice()).ok_or_else(assignee_unavailable_error)
 }
 

@@ -26,7 +26,7 @@ pub async fn require_reader(
     actor: &AuditActor,
     ex: &mut dyn Executor,
 ) -> Result<()> {
-    let account = auth.load_account(actor.id(), ex).await?;
+    let account = auth.rbac()?.directory().account(actor.id(), ex).await?;
     if !account.is_some_and(|a| a.kind == actor.kind() && a.is_active_backoffice()) {
         return Err(Error::Forbidden("当前账号不可读取抄送".into()));
     }
@@ -49,12 +49,9 @@ pub async fn validate_recipients(
         .iter()
         .flat_map(|r| r.recipient_user_ids.iter().cloned())
         .collect::<std::collections::BTreeSet<_>>();
-    let accounts = auth.load_accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
-    for id in ids {
-        accounts
-            .iter()
-            .find(|a| a.id == id && a.is_active_backoffice())
-            .ok_or_else(|| Error::ValidationError("抄送人不存在、已停用或不是内部账号，请重新选择".into()))?;
+    let accounts = auth.rbac()?.directory().accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
+    for rule in rules {
+        rule.validate_accounts(&accounts)?;
     }
     Ok(())
 }
@@ -75,8 +72,14 @@ pub async fn save_config(
 ) -> Result<()> {
     let rules = ApprovalCopyRule::prepare(rules, graph.nodes.len())?;
     let ids = rules.iter().flat_map(|r| r.recipient_user_ids.iter().cloned()).collect::<Vec<_>>();
-    let recipient_names =
-        auth.load_accounts(&ids, ex).await?.into_iter().map(|a| (a.id, a.display_name)).collect();
+    let recipient_names = auth
+        .rbac()?
+        .directory()
+        .accounts(&ids, ex)
+        .await?
+        .into_iter()
+        .map(|a| (a.id, a.display_name))
+        .collect();
     db.approval_copies()
         .save_config(
             &ApprovalCopyConfig {
@@ -92,58 +95,14 @@ pub async fn save_config(
 
 #[cfg(test)]
 mod tests {
-    use std::future::Future;
-
     use erp_core::AccountKind;
+    use erp_identity::AccountSummary;
     use persistence_core::NoTransaction;
 
     use super::super::definition_assignees::eligible_candidate;
     use super::*;
     use crate::entity::approval_copy::CopyTrigger;
-    use crate::ports::WorkflowAccountFact;
-
-    #[derive(Clone)]
-    struct AccountsOnly(Vec<WorkflowAccountFact>);
-
-    #[allow(clippy::manual_async_fn)]
-    impl WorkflowAuthorizationPort for AccountsOnly {
-        fn load_account(
-            &self,
-            _account_id: &str,
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<Option<WorkflowAccountFact>>> + Send {
-            async move { Ok(self.0.iter().find(|a| a.id == _account_id).cloned()) }
-        }
-
-        fn load_accounts(
-            &self,
-            _account_ids: &[String],
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-            async move { Ok(self.0.iter().filter(|a| _account_ids.contains(&a.id)).cloned().collect()) }
-        }
-
-        fn list_accounts_by_kind(
-            &self,
-            _account_kind: AccountKind,
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-
-        fn list_active_approval_candidates(
-            &self,
-            _search: Option<&str>,
-            _limit: u32,
-            _executor: &mut dyn Executor,
-        ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-            async move { Err(Error::Internal("unexpected role permission check".into())) }
-        }
-    }
-
-    fn account(id: &str, active: bool) -> WorkflowAccountFact {
-        WorkflowAccountFact::new(id, AccountKind::Admin, active).with_login_account(id)
-    }
+    use crate::ports::FailClosedWorkflowAuthorizationPort;
 
     fn rule(id: &str) -> ApprovalCopyRule {
         ApprovalCopyRule {
@@ -155,41 +114,33 @@ mod tests {
 
     #[tokio::test]
     async fn internal_recipient_needs_no_role_or_approval_permission() {
-        let member = account("member", true);
-        let auth = AccountsOnly(vec![member.clone()]);
+        let member = AccountSummary::new("member", AccountKind::Admin, true);
+        let auth = FailClosedWorkflowAuthorizationPort;
         assert!(eligible_candidate(&auth, &member, true).await.unwrap());
-        validate_recipients(&auth, &[rule("member")], &mut NoTransaction).await.unwrap();
-        let actor = AuditActor::new("member".into(), "member".into(), AccountKind::Admin);
-        require_reader(&auth, &actor, &mut NoTransaction).await.unwrap();
-        // 同一个人当审批人时仍须校验角色权限；替身拒绝所有角色读取。
+        rule("member").validate_accounts(std::slice::from_ref(&member)).unwrap();
         assert!(eligible_candidate(&auth, &member, false).await.is_err());
     }
 
     #[tokio::test]
     async fn missing_disabled_and_non_internal_recipients_are_rejected() {
-        let disabled = account("disabled", false);
-        let external = WorkflowAccountFact::new("external", AccountKind::Supplier, true);
-        let auth = AccountsOnly(vec![disabled.clone(), external.clone()]);
-        for member in [&disabled, &external] {
-            assert!(!eligible_candidate(&auth, member, true).await.unwrap());
+        let accounts = [
+            AccountSummary::new("disabled", AccountKind::Admin, false),
+            AccountSummary::new("external", AccountKind::Supplier, true),
+        ];
+        for member in &accounts {
+            assert!(!eligible_candidate(&FailClosedWorkflowAuthorizationPort, member, true).await.unwrap());
         }
         for id in ["missing", "disabled", "external"] {
-            assert!(validate_recipients(&auth, &[rule(id)], &mut NoTransaction).await.is_err());
-            let actor = AuditActor::new(id.into(), id.into(), AccountKind::Admin);
-            assert!(matches!(
-                require_reader(&auth, &actor, &mut NoTransaction).await,
-                Err(Error::Forbidden(_))
-            ));
+            assert!(rule(id).validate_accounts(&accounts).is_err());
         }
-    }
-
-    #[tokio::test]
-    async fn reader_kind_mismatch_and_account_lookup_failure_are_rejected() {
-        let auth = AccountsOnly(vec![account("member", true)]);
-        let actor = AuditActor::new("member".into(), "member".into(), AccountKind::Supplier);
-        assert!(require_reader(&auth, &actor, &mut NoTransaction).await.is_err());
-        let auth = crate::ports::FailClosedWorkflowAuthorizationPort;
-        assert!(require_reader(&auth, &actor, &mut NoTransaction).await.is_err());
-        assert!(validate_recipients(&auth, &[rule("member")], &mut NoTransaction).await.is_err());
+        let actor = AuditActor::new("member".into(), "member".into(), AccountKind::Admin);
+        assert!(
+            require_reader(&FailClosedWorkflowAuthorizationPort, &actor, &mut NoTransaction).await.is_err()
+        );
+        assert!(
+            validate_recipients(&FailClosedWorkflowAuthorizationPort, &[rule("member")], &mut NoTransaction)
+                .await
+                .is_err()
+        );
     }
 }

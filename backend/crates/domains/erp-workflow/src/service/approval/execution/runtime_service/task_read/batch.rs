@@ -388,7 +388,7 @@ mod tests {
         .await;
         assert_eq!(checks.len(), 2);
         assert!(matches!(&checks[0], Ok(false)));
-        assert!(matches!(&checks[1], Err(Error::Internal(message)) if message == "授权端口未接线"));
+        assert!(matches!(&checks[1], Err(Error::Internal(message)) if message == "身份服务未装配"));
     }
 
     /// 缺失执行或实例保持不可读，不把缺关联改成冻结主体冲突。

@@ -1,100 +1,10 @@
 //! 工作项执行权限与可用账号身份。
 
 use erp_core::{AccountKind, Error, Result};
+use erp_identity::{AccountSummary, Permission};
 
-use super::WorkItemType;
-
-/// Login/identity snapshot for work-item account checks.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowAccountFact {
-    /// Stable account id.
-    pub id: String,
-    /// Frozen account kind.
-    pub kind: AccountKind,
-    /// Whether the account may log in.
-    pub can_login: bool,
-    /// Display name used by work-item projections.
-    pub display_name: String,
-    /// Login account used by candidate pickers.
-    pub login_account: String,
-}
-
-impl WorkflowAccountFact {
-    /// 构造账号事实；显示名和登录账号初始为空。
-    ///
-    /// # 参数
-    /// * `id` - 稳定账号 ID。
-    /// * `kind` - 账号类型。
-    /// * `can_login` - 是否允许登录。
-    ///
-    /// # 返回
-    /// 返回尚未附带显示名和登录账号的事实。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn new(id: impl Into<String>, kind: AccountKind, can_login: bool) -> Self {
-        Self { id: id.into(), kind, can_login, display_name: String::new(), login_account: String::new() }
-    }
-
-    /// 附上显示名。
-    ///
-    /// # 参数
-    /// * `display_name` - 工作项投影使用的显示名。
-    ///
-    /// # 返回
-    /// 返回写入显示名后的事实。消耗 `self`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_display_name(mut self, display_name: impl Into<String>) -> Self {
-        self.display_name = display_name.into();
-        self
-    }
-
-    /// 附上登录账号。
-    ///
-    /// # 参数
-    /// * `login_account` - 候选人选择使用的登录账号。
-    ///
-    /// # 返回
-    /// 返回写入登录账号后的事实。消耗 `self`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_login_account(mut self, login_account: impl Into<String>) -> Self {
-        self.login_account = login_account.into();
-        self
-    }
-
-    /// 判断账号是否可以承担后台责任。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 账号类型为 `Admin` 且允许登录时返回 `true`，否则返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn is_active_backoffice(&self) -> bool {
-        self.kind == AccountKind::Admin && self.can_login
-    }
-}
-
-/// 返回账号的 Casbin 主体键。
-///
-/// # 参数
-/// * `account_kind` - 账号类型。
-/// * `account_id` - 账号 ID。
-///
-/// # 返回
-/// 返回 `user:{kind}:{account_id}`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn casbin_subject(account_kind: AccountKind, account_id: &str) -> String {
-    format!("user:{}:{account_id}", account_kind.as_str())
-}
+use super::{WorkItem, WorkItemType};
+use crate::entity::work_item::required_execution_permissions;
 
 /// 已验证可参与工作项授权计算的账号身份。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,7 +24,7 @@ impl AvailableWorkItemAccount {
     ///
     /// # 错误
     /// 账号已停用或归档时返回错误。
-    pub fn from_account(account: &WorkflowAccountFact) -> Result<Self> {
+    pub fn from_account(account: &AccountSummary) -> Result<Self> {
         if !account.can_login {
             return Err(Error::from("工作项账号不可登录"));
         }
@@ -132,7 +42,7 @@ impl AvailableWorkItemAccount {
     ///
     /// # 错误
     /// 账号不可登录或类型已变化时返回错误。
-    pub fn from_account_kind(account: &WorkflowAccountFact, expected_kind: AccountKind) -> Result<Self> {
+    pub fn from_account_kind(account: &AccountSummary, expected_kind: AccountKind) -> Result<Self> {
         let available = Self::from_account(account)?;
         if available.kind != expected_kind {
             return Err(Error::from("工作项账号类型已变化"));
@@ -493,5 +403,24 @@ mod settlement_owner_tests {
     fn settlement_review_requires_explicit_owner_participation() {
         assert!(WorkItemType::SupplierSettlementReview.uses_explicit_owner_authorization());
         assert!(!WorkItemType::BusinessException.uses_explicit_owner_authorization());
+    }
+}
+
+impl WorkItem {
+    /// 收集当前任务办理所需的读取与执行权限。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前已登记任务的具体权限，允许不同权限由不同角色授予。
+    /// # 错误
+    /// 任务关系、执行权限未登记或权限格式错误时拒绝。
+    pub fn qualification_permissions(&self) -> Result<Vec<Permission>> {
+        let relation = self
+            .work_item_type
+            .brief_relation(&self.business_object_type)
+            .ok_or_else(|| Error::from("任务类型未注册责任策略"))?;
+        let execution = required_execution_permissions(self.work_item_type, &self.business_object_type)
+            .ok_or_else(|| Error::from("任务类型未注册完整执行权限"))?;
+        execution.into_iter().chain([relation.read_permission]).map(Permission::parse).collect()
     }
 }

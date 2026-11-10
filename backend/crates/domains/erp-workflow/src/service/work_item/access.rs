@@ -1,47 +1,27 @@
 //! 命令与候选人的业务资格；任务范围由共享 identity 授权服务证明。
 
 use std::collections::HashSet;
-use std::result::Result as StdResult;
 
 use application_core::AuditActor;
-use erp_identity::{Permission, PermissionSet, RoleId};
+use erp_core::Result as CoreResult;
+use erp_identity::{Permission, PermissionSet};
 use persistence_core::{Executor, NoTransaction};
 
-use super::dto;
+#[cfg(test)]
+use super::WorkItemAllowedAction;
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
     task_read_error,
 };
+use super::{WorkItemScope, WorkItemService, dto};
 use crate::entity::work_item::{
-    AvailableWorkItemAccount, TaskAccess, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
-    required_execution_permissions,
+    TaskAccess, WorkItem, WorkItemStatus, WorkItemType, required_execution_permissions,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFact, ObjectFactMap};
 use crate::repository::DocumentRegistryExt;
 use crate::repository::prelude::*;
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
-
-/// 按任务类型和业务对象类型查找固定责任关系。
-///
-/// # 参数
-/// * `work_item_type` - 工作项类型
-/// * `business_object_type` - 业务对象类型稳定码
-///
-/// # 返回
-/// 已注册时返回关系；未注册时返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn object_policy(
-    work_item_type: WorkItemType,
-    business_object_type: &str,
-) -> Option<&'static WorkItemBriefRelation> {
-    work_item_type.brief_relation(business_object_type)
-}
-#[cfg(test)]
-use super::WorkItemAllowedAction;
-use super::{WorkItemScope, WorkItemService};
 
 /// 办理人或转交候选人的操作权限与业务参与事实；查询范围另由 identity 证明。
 pub struct TaskEligibility {
@@ -110,25 +90,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         self.ensure_task_manage(actor, item, &mut NoTransaction).await
     }
 
-    /// 用当前访问快照确认该任务能投影为已授权字段。
-    ///
-    /// # 参数
-    /// * `item` - 待访问的工作项
-    /// * `access` - 当前账号访问快照
-    ///
-    /// # 返回
-    /// 投影非空时无返回值。
-    ///
-    /// # 错误
-    /// 投影为空时返回禁止；对象事实读取失败时返回对应错误。
-    pub async fn ensure_item_access(&self, item: &WorkItem, access: &TaskEligibility) -> Result<()> {
-        if self.authorized_fields_for_items(vec![item.clone()], access, &mut NoTransaction).await?.is_empty()
-        {
-            return Err(Error::Forbidden("业务对象不可访问".to_string()));
-        }
-        Ok(())
-    }
-
     /// 按操作人账号类型与 ID 构造访问快照。
     ///
     /// # 参数
@@ -147,66 +108,48 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<TaskEligibility> {
-        let permissions = self.auth.rbac()?.permissions(actor.kind(), actor.id()).await?;
-        let participant_document_ids = self
-            .db
-            .document_participants()
-            .document_ids_by_user(actor.id(), executor)
+        let mut required = item.qualification_permissions()?;
+        required.extend(
+            ["work_item:list", "work_item:detail", "work_item:manage", "approval_instance:decide"]
+                .into_iter()
+                .map(Permission::parse)
+                .collect::<CoreResult<Vec<_>>>()?,
+        );
+        let permissions = self
+            .identity
+            .qualified_permissions(actor, &required, executor)
             .await?
-            .into_iter()
-            .collect();
+            .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?
+            .permissions();
         let can_manage = match self.authorization.require(actor, "manage", &item.base.id, executor).await {
             Ok(()) => true,
             Err(Error::Forbidden(_)) => false,
             Err(error) => return Err(error),
         };
-        let mut access = TaskEligibility::new(actor.id().to_owned())
-            .with_permissions(permissions)
-            .with_participant_document_ids(participant_document_ids);
+        let mut access = self.business_eligibility(actor.id(), permissions, executor).await?;
         if can_manage {
             access.task.managed_task_ids.insert(item.base.id.clone());
         }
         Ok(access)
     }
 
-    /// 事务内按 MongoDB 权威角色、范围、对象和审批事实构造访问快照。
-    ///
+    /// 在已核验功能资格后读取任务业务参与事实。
     /// # 参数
-    /// * `account_kind` - 账号类型
-    /// * `actor_id` - 账号 ID
-    /// * `read_permission` - 对象读取权限
-    /// * `read_role_ids` - 已证明授予读取权的角色
-    /// * `executor` - 调用方执行器
-    ///
+    /// actor_id、permissions 为已经证明的身份与功能资格，executor 为原执行器。
     /// # 返回
-    /// 返回只包含当前事务仍有效角色所对应权限的访问快照。
-    ///
+    /// 返回当前参与单据事实，不产生额外任务管理授权。
     /// # 错误
-    /// 角色、参与单据或管理范围读取失败时返回对应错误。
-    pub async fn assignment_eligibility(
+    /// 参与关系读取失败时拒绝。
+    pub(super) async fn business_eligibility(
         &self,
-        account_kind: erp_core::AccountKind,
         actor_id: &str,
-        read_permission: &str,
-        read_role_ids: &[RoleId],
+        permissions: PermissionSet,
         executor: &mut dyn Executor,
     ) -> Result<TaskEligibility> {
-        let role_ids = self.auth.rbac()?.role_ids_with_executor(account_kind, actor_id, executor).await?;
-        let active_read_roles = intersect_role_ids(&role_ids, read_role_ids);
-        let mut permissions = Vec::with_capacity(1);
-        if !active_read_roles.is_empty() {
-            permissions.push(Permission::parse(read_permission)?);
-        }
-        let participant_document_ids = self
-            .db
-            .document_participants()
-            .document_ids_by_user(actor_id, executor)
-            .await?
-            .into_iter()
-            .collect();
-        Ok(TaskEligibility::new(actor_id.to_string())
-            .with_permissions(PermissionSet::new(permissions))
-            .with_participant_document_ids(participant_document_ids))
+        let participants = self.db.document_participants().document_ids_by_user(actor_id, executor).await?;
+        Ok(TaskEligibility::new(actor_id.to_owned())
+            .with_permissions(permissions)
+            .with_participant_document_ids(participants.into_iter().collect()))
     }
 
     /// 使用调用方 executor 读取固定注册表对象事实并重验参与权。
@@ -229,8 +172,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ) -> Result<()> {
         if item.work_item_type.is_document_approval() {
             let account = self
-                .auth
-                .load_account(&access.task.actor_id, executor)
+                .identity
+                .directory()
+                .account(&access.task.actor_id, executor)
                 .await?
                 .ok_or_else(|| Error::Forbidden("审批任务账号不存在".into()))?;
             let actor = AuditActor::new(account.id, account.login_account, account.kind);
@@ -242,7 +186,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                 Err(Error::Forbidden("审批任务责任链不匹配".into()))
             };
         }
-        let policy = object_policy(item.work_item_type, &item.business_object_type)
+        let policy = item
+            .work_item_type
+            .brief_relation(&item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.facts.load_object_facts(&keys, executor).await?;
@@ -285,43 +231,21 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let account = self
-            .auth
-            .load_account(actor.id(), executor)
+        let policy = item
+            .work_item_type
+            .brief_relation(&item.business_object_type)
+            .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
+        let required = item.qualification_permissions()?;
+        let qualified = self
+            .identity
+            .qualified_permissions(actor, &required, executor)
             .await?
-            .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
-        AvailableWorkItemAccount::from_account_kind(&account, actor.kind())
-            .map_err(|_| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
-        let policy = object_policy(item.work_item_type, &item.business_object_type)
-            .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
-        let read_permission = policy.read_permission;
-        let policy_revision = self.auth.rbac()?.policy_revision_with_executor(executor).await?;
-        let role_ids = self.auth.rbac()?.role_ids_with_executor(actor.kind(), actor.id(), executor).await?;
-        let execution_permissions =
-            required_execution_permissions(item.work_item_type, &item.business_object_type)
-                .ok_or_else(|| Error::Forbidden("任务类型未注册完整执行权限".to_string()))?;
-        let required = execution_permissions
-            .iter()
-            .copied()
-            .chain([read_permission])
-            .map(Permission::parse)
-            .collect::<StdResult<Vec<_>, _>>()?;
-        let snapshot =
-            self.auth.rbac()?.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-        self.auth.rbac()?.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        for permission in &required[..execution_permissions.len()] {
-            if intersect_role_ids(&role_ids, &snapshot.granting_role_ids(permission)).is_empty() {
-                return Err(Error::Forbidden("当前账号已不具备任务所需的完整执行权限".into()));
-            }
+            .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".into()))?;
+        let permissions = qualified.permissions();
+        if !required.iter().all(|permission| permissions.covers_one(permission)) {
+            return Err(Error::Forbidden("当前账号已不具备任务所需的完整执行或读取权限".into()));
         }
-        let read_role_ids =
-            intersect_role_ids(&role_ids, &snapshot.granting_role_ids(&Permission::parse(read_permission)?));
-        if read_role_ids.is_empty() {
-            return Err(Error::Forbidden("当前账号已不具备任务业务对象读取权限".into()));
-        }
-        let access = self
-            .assignment_eligibility(actor.kind(), actor.id(), read_permission, &read_role_ids, executor)
-            .await?;
+        let access = self.business_eligibility(actor.id(), permissions, executor).await?;
         self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)?;
         require_supplier_portal_task_review(
             &self.auth,
@@ -331,7 +255,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             executor,
         )
         .await?;
-        Ok(self.auth.rbac()?.ensure_policy_snapshot_with_executor(policy_revision, executor).await?)
+        Ok(self.identity.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?)
     }
 
     /// 在操作执行器内验证 work_item:manage 及其 DataScope。
@@ -351,21 +275,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     }
 }
 
-/// 取当前启用角色与已授权角色的交集。
-///
-/// # 参数
-/// * `active` - 当前启用角色
-/// * `authorized` - 已授权角色
-///
-/// # 返回
-/// 返回两边都出现的角色 ID，保留 `active` 的顺序。
-///
-/// # 错误
-/// 不返回错误。
-pub fn intersect_role_ids(active: &[RoleId], authorized: &[RoleId]) -> Vec<RoleId> {
-    active.iter().filter(|role_id| authorized.contains(role_id)).cloned().collect()
-}
-
 /// 按对象权限、参与关系与权威版本形成单个工作项投影。
 ///
 /// # 参数
@@ -383,7 +292,7 @@ pub fn authorized_item_fields(
     access: &TaskEligibility,
     facts: &ObjectFactMap,
 ) -> Option<dto::WorkItemFields> {
-    let policy = object_policy(item.work_item_type, &item.business_object_type)?;
+    let policy = item.work_item_type.brief_relation(&item.business_object_type)?;
     let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
     if item.work_item_type == WorkItemType::SalesInquiryProcessing {
         let ids = fact.responsibility_scope_ids.as_ref()?;
@@ -441,7 +350,7 @@ pub fn has_assignment_candidate_access(
     if item.work_item_type == WorkItemType::ProcurementOrderCreation && !item.is_open_procurement_task() {
         return false;
     }
-    let Some(policy) = object_policy(item.work_item_type, &item.business_object_type) else {
+    let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else {
         return false;
     };
     let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else {

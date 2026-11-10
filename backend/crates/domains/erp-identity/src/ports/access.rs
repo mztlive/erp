@@ -5,8 +5,7 @@ use persistence_core::Executor;
 use super::{QueryFragment, RelationMapping};
 use crate::Result;
 use crate::entity::authorization::{
-    AccessContext, AccessFact, MappingFacts, ObjectFacts, ProposedFacts, QueryModel, RelationKey,
-    ResourceTargets,
+    AccessContext, AccessFact, MappingFacts, ObjectFacts, QueryModel, RelationKey, ResourceTargets,
 };
 
 /// 业务字段与关系映射。所有组合规则由身份域编译器执行。
@@ -93,18 +92,4 @@ pub trait AccessFactsPort: Send + Sync {
         ids: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ObjectFacts>>;
-
-    /// 核实拟写入责任和实际来源。
-    /// # 参数
-    /// context 为身份及解释时点；facts 为业务校验后的输入；executor 为原执行器。
-    /// # 返回
-    /// 拟创建对象的有效责任事实。
-    /// # 错误
-    /// 责任、关联或版本不成立时拒绝。
-    async fn proposed(
-        &self,
-        context: &AccessContext,
-        facts: &ProposedFacts,
-        executor: &mut dyn Executor,
-    ) -> Result<ObjectFacts>;
 }

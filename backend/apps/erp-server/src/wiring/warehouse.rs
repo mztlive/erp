@@ -8,13 +8,12 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{AccessControlExt, AccountSummary, Permission, SharedRbacService};
 use erp_support::content_fingerprint;
 use erp_warehouse::{
     AttachmentFingerprintPort, HandlerIdentityFact, IdentityFactPort, PreparedWarehouseAudit,
     WarehouseAuditPort, WarehouseService,
 };
-use erp_workflow::entity::work_item::WorkflowAccountFact;
 use erp_workflow::{AvailableWorkItemAccount, WorkItemType};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -143,7 +142,7 @@ impl MongoWarehouseIdentity {
         &self,
         account: &erp_identity::AccountCore,
     ) -> erp_warehouse::Result<HandlerIdentityFact> {
-        let fact = account_fact(account);
+        let fact = AccountSummary::from(account);
         let can_login = AvailableWorkItemAccount::from_account(&fact).is_ok();
         let inbound = handler_permissions(required_fulfillment_permissions("purchase_receipt"));
         let outbound = handler_permissions(required_fulfillment_permissions("delivery"));
@@ -223,12 +222,6 @@ pub fn warehouse_service(db: Database, rbac: SharedRbacService) -> WarehouseServ
         MongoWarehouseAudit::shared(db),
         Arc::new(SupportFingerprint),
     )
-}
-
-fn account_fact(account: &erp_identity::AccountCore) -> WorkflowAccountFact {
-    WorkflowAccountFact::new(account.base.id.clone(), account.kind, account.can_login())
-        .with_display_name(account.name.clone())
-        .with_login_account(account.secret.account().to_string())
 }
 
 /// 取已登记履约对象的完整执行权限。

@@ -154,7 +154,7 @@ pub(super) async fn runtime_admin_notification_recipients(
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let accounts = rbac.list_accounts_by_kind(erp_core::AccountKind::Admin, executor).await?;
+    let accounts = rbac.rbac()?.directory().accounts_by_kind(erp_core::AccountKind::Admin, executor).await?;
     let mut recipients = Vec::new();
     for account in accounts {
         if !account.is_active_backoffice() {

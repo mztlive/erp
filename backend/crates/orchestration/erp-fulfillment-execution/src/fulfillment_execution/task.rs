@@ -10,7 +10,7 @@ use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccessControlExt, AccountSummary, Permission, PermissionSet, SharedRbacService};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
@@ -19,7 +19,6 @@ use erp_workflow::entity::work_item::{AvailableWorkItemAccount, WorkItem, WorkIt
 use erp_workflow::repository::prelude::*;
 use persistence_core::Executor;
 
-use crate::workflow::account_fact;
 use crate::{Error, Result};
 
 mod command;
@@ -401,7 +400,7 @@ pub async fn ensure_fulfillment_owner_eligible(
     let account = db.accounts().find_work_item_account(owner_user_id, executor).await?.ok_or_else(|| {
         Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
     })?;
-    AvailableWorkItemAccount::from_account(&account_fact(&account)).map_err(|_| {
+    AvailableWorkItemAccount::from_account(&AccountSummary::from(&account)).map_err(|_| {
         Error::BusinessLogicError("履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string())
     })?;
     let granted = rbac.permissions(account.kind, owner_user_id).await?;

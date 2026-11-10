@@ -2,11 +2,11 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts, ProposedFacts};
+use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts};
 use erp_identity::entity::organization::OrgMembership;
 use erp_identity::ports::AccessFactsPort;
 use erp_identity::repository::organization::OrganizationRepository;
-use erp_identity::{Error, ResourceTargets, Result};
+use erp_identity::{ResourceTargets, Result};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -53,13 +53,5 @@ impl AccessFactsPort for WorkItemFacts {
             });
         }
         Ok(facts)
-    }
-    async fn proposed(
-        &self,
-        _: &AccessContext,
-        _: &ProposedFacts,
-        _: &mut dyn Executor,
-    ) -> Result<ObjectFacts> {
-        Err(Error::ValidationError("任务创建由业务责任分配规则执行".into()))
     }
 }

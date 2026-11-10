@@ -1,27 +1,23 @@
 //! 将身份域权限与 policy 事务装配到工作流授权端口。
 
 use std::collections::{BTreeSet, HashSet};
-use std::future::Future;
 
 use application_core::AuditActor;
 use erp_approval_runtime::resource_grants::append_assignments;
-use erp_core::AccountKind;
-use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, SharedRbacService};
+use erp_identity::SharedRbacService;
 use erp_supplier_catalog::supplier_portal::authorization::request_readable as portal_request_readable;
 use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_reviewable;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::{
-    OrderTaskSource, WorkflowAccountFact, WorkflowAuthorizationPort, WorkflowScopeObject,
-    WorkflowScopeObjects,
+    OrderTaskSource, WorkflowAuthorizationPort, WorkflowScopeObject, WorkflowScopeObjects,
 };
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::map_service;
 use super::order_access::{approval_readable, readable_sources};
-use super::{account_fact, map_service};
 use crate::wiring::contract_access;
 use crate::wiring::errors::{Error, Result};
 
@@ -51,14 +47,6 @@ impl WorkflowAuth {
     #[cfg(test)]
     pub(crate) fn shares_policy_state(&self, other: &Self) -> bool {
         SharedRbacService::ptr_eq(&self.rbac, &other.rbac)
-    }
-
-    fn map_persistence(error: persistence_core::Error) -> WorkflowError {
-        WorkflowError::from(error)
-    }
-
-    fn account_fact(account: erp_identity::AccountCore) -> WorkflowAccountFact {
-        account_fact(&account)
     }
 }
 
@@ -226,80 +214,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             return Err(WorkflowError::Forbidden("没有任务来源的读取资格".into()));
         }
         Ok(())
-    }
-
-    fn load_account(
-        &self,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Option<WorkflowAccountFact>>> + Send {
-        let db = self.db.clone();
-        let account_id = account_id.to_string();
-        async move {
-            Ok(db
-                .accounts()
-                .find_account(&account_id, executor)
-                .await
-                .map_err(Self::map_persistence)?
-                .map(Self::account_fact))
-        }
-    }
-
-    fn load_accounts(
-        &self,
-        account_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<WorkflowAccountFact>>> + Send {
-        let db = self.db.clone();
-        let account_ids = account_ids.to_vec();
-        async move {
-            Ok(db
-                .accounts()
-                .list_by_ids(&account_ids, executor)
-                .await
-                .map_err(Self::map_persistence)?
-                .into_iter()
-                .map(Self::account_fact)
-                .collect())
-        }
-    }
-
-    fn list_accounts_by_kind(
-        &self,
-        account_kind: AccountKind,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<WorkflowAccountFact>>> + Send {
-        let db = self.db.clone();
-        async move {
-            Ok(db
-                .accounts()
-                .list_by_kind(account_kind, executor)
-                .await
-                .map_err(Self::map_persistence)?
-                .into_iter()
-                .map(Self::account_fact)
-                .collect())
-        }
-    }
-
-    fn list_active_approval_candidates(
-        &self,
-        search: Option<&str>,
-        limit: u32,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = WorkflowResult<Vec<WorkflowAccountFact>>> + Send {
-        let db = self.db.clone();
-        let search = search.map(str::to_string);
-        async move {
-            Ok(db
-                .accounts()
-                .list_active_approval_candidates(search.as_deref(), limit, executor)
-                .await
-                .map_err(Self::map_persistence)?
-                .into_iter()
-                .map(Self::account_fact)
-                .collect())
-        }
     }
 }
 

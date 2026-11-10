@@ -3,9 +3,9 @@ use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{AccountSummary, Permission, PermissionSet};
 use erp_workflow::entity::work_item::AvailableWorkItemAccount;
-use erp_workflow::ports::{WorkflowAccountFact, WorkflowAuthorizationPort};
+use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
@@ -25,7 +25,7 @@ pub struct SettlementReviewerOption {
 
 /// 判断账号是否满足结算复核的岗位、权限与责任范围要求。
 fn eligible(
-    account: &WorkflowAccountFact,
+    account: &AccountSummary,
     preparer_id: &str,
     permissions: &PermissionSet,
     scopes: &[(String, Option<String>)],
@@ -45,7 +45,7 @@ fn eligible(
 /// 候选资格由同一启用财务角色提供完整动作；对象访问由指定复核任务证明。
 async fn reviewer_scopes(
     auth: &impl WorkflowAuthorizationPort,
-    account: &WorkflowAccountFact,
+    account: &AccountSummary,
     preparer: &str,
     org: &str,
     executor: &mut dyn Executor,
@@ -82,7 +82,8 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
         let auth = self.work_items.auth.clone();
-        let accounts = auth.list_accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
+        let accounts =
+            auth.rbac()?.directory().accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
         let mut options = Vec::new();
         for account in accounts {
             if account.id == actor.id()
@@ -165,7 +166,9 @@ pub(super) async fn ensure_reviewer(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let account = auth
-        .load_account(reviewer_id, executor)
+        .rbac()?
+        .directory()
+        .account(reviewer_id, executor)
         .await?
         .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
     let permissions = auth.rbac()?.permissions(account.kind, reviewer_id).await?;
@@ -182,7 +185,7 @@ mod tests {
     /// 岗位分离、停用账号、权限不完整及错误角色范围均不进入候选。
     #[test]
     fn reviewer_requires_available_separate_account_permissions_and_finance_scope() {
-        let account = WorkflowAccountFact::new("reviewer", AccountKind::Admin, true);
+        let account = AccountSummary::new("reviewer", AccountKind::Admin, true);
         let permissions = PermissionSet::new(
             ["supplier_settlement_statement:*", "work_item:detail"]
                 .map(|code| Permission::parse(code).unwrap()),
@@ -197,7 +200,7 @@ mod tests {
         ));
         assert!(!eligible(&account, "reviewer", &permissions, &scopes));
         assert!(!eligible(
-            &WorkflowAccountFact::new("reviewer", AccountKind::Admin, false),
+            &AccountSummary::new("reviewer", AccountKind::Admin, false),
             "preparer",
             &permissions,
             &scopes

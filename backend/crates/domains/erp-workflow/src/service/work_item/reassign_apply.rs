@@ -65,8 +65,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
         let attempt_audit = context.audit.clone();
         let validation = self.clone();
         let result = self
-            .auth
-            .rbac()?
+            .identity
             .run_authorized_policy_transaction(context.authorization.policy_revision, move |executor| {
                 Box::pin(async move { validation.apply_reassignment(context, executor).await })
             })
@@ -183,7 +182,6 @@ impl<A: WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
                     purchase_order_id,
                     target_user_id: &context.target_user_id,
                     actor_id: context.actor.id(),
-                    authorization: &context.authorization,
                 },
                 executor,
             )
@@ -352,8 +350,6 @@ struct ReassignPurchaseOrderFulfillmentInput<'a> {
     target_user_id: &'a str,
     /// 管理员账号 ID。
     actor_id: &'a str,
-    /// 事务外冻结的授权快照。
-    authorization: &'a AssignmentAuthorizationSnapshot,
 }
 
 /// 原子变更采购单当前责任人与其全部开放采购履约任务。
@@ -380,15 +376,9 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: WorkflowAuthoriza
         .facts
         .purchase_order_fulfillment_scope(&input.selected, input.purchase_order_id, executor)
         .await?;
-    ensure_fulfillment_tasks_candidate(
-        service,
-        &tasks,
-        input.target_user_id,
-        &input.authorization.assignee_permissions,
-        executor,
-    )
-    .await
-    .map_err(task_read_error)?;
+    ensure_fulfillment_tasks_candidate(service, &tasks, input.target_user_id, executor)
+        .await
+        .map_err(task_read_error)?;
 
     service
         .facts

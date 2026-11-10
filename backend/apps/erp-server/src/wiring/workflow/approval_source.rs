@@ -4,15 +4,15 @@ use application_core::AuditActor;
 use erp_core::ids::{CustomerRefundId, PaymentReversalId, ReceiptReversalId, SupplierRefundId};
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_identity::SharedRbacService;
-use erp_inventory::InventoryExt;
 use erp_returns::repository::ReturnsExt;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::{OrderTaskSource, WorkflowScopeObject};
+use erp_workflow::ports::OrderTaskSource;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::{approval_scope, order_access};
+use super::order_access;
 use crate::wiring::errors::{Error, Result};
+use crate::wiring::inventory::inventory_service;
 use crate::wiring::{funds_access_with_rbac, purchase_access};
 
 /// 管理访问必须覆盖完整来源对象；缺失来源和未接入类型一律拒绝。
@@ -66,17 +66,15 @@ async fn stock_readable(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let Some(row) = db.stock_adjustments().list_active_by_ids(&[id.to_string()], executor).await?.pop()
-    else {
-        return Ok(false);
-    };
-    let scope = approval_scope::resolve(db, rbac, actor, "stock_adjustment:detail", executor).await?;
-    let object = WorkflowScopeObject {
-        owner_user_id: row.created_by,
-        warehouse_id: Some(row.warehouse_id.to_string()),
-        ..Default::default()
-    };
-    Ok(scope.is_some_and(|scope| scope.allows(&object)))
+    match inventory_service(db.clone(), rbac.clone())
+        .readable_stock_adjustment(id, actor, executor)
+        .await
+        .map_err(Error::from)
+    {
+        Ok(_) => Ok(true),
+        Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 /// 按强外键取得财务源，结算主体身份不得代替来源授权。

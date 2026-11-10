@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_core::ids::WarehouseId;
 
 use super::{FactValue, ResourceTargets};
 use crate::{Error, Permission, Result};
@@ -59,17 +58,6 @@ pub enum AccessSubject {
 pub enum AccessTarget {
     Operation,
     Records { subject: AccessSubject, ids: ResourceTargets },
-    Proposed { subject: AccessSubject, facts: ProposedFacts },
-}
-
-/// 拟创建对象的业务输入，责任和来源有效性由事实端口核实。
-#[derive(Debug, Clone, Default)]
-pub struct ProposedFacts {
-    pub owner_id: Option<String>,
-    pub org_unit_id: Option<String>,
-    pub settlement_party_id: Option<String>,
-    pub warehouse_id: Option<WarehouseId>,
-    pub sources: BTreeMap<RelationKey, BTreeSet<String>>,
 }
 
 /// 同一授权阶段使用的事实解释上下文；构造上下文本身不产生授权。

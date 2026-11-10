@@ -16,10 +16,8 @@ pub use audit::{
     FailClosedAuditPort, PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditOperation,
     WorkflowAuditPort,
 };
-pub use authorization::{
-    FailClosedWorkflowAuthorizationPort, WorkflowAccountFact, WorkflowAuthorizationPort,
-};
-pub use data_scope::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects, WorkflowScopePredicate};
+pub use authorization::{FailClosedWorkflowAuthorizationPort, WorkflowAuthorizationPort};
+pub use data_scope::{WorkflowScopeObject, WorkflowScopeObjects};
 pub use object_facts::{
     FailClosedObjectFactPort, ObjectFact, ObjectFactKey, ObjectFactMap, ObjectFactPort, ObjectKind,
     OrderTaskSource, SubjectBrief, W29CloseFact,

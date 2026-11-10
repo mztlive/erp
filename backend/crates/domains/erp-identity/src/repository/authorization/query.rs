@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::{fmt, ptr};
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::bson::{Bson, Document};
 use persistence_core::Executor;
@@ -108,6 +109,17 @@ impl MappingDependency {
 }
 
 impl CompiledAccess {
+    /// 返回查询凭证绑定的真实账号。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 只读身份，供当前展示批次补充功能资格。
+    /// # 错误
+    /// 无；账号有效性仍由 validate 重验。
+    pub fn actor(&self) -> &AuditActor {
+        &self.proof.context.actor
+    }
+
     /// 在所有异步复验完成后检查整体有效期。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         self.proof.ensure_current(executor)?;

@@ -33,7 +33,7 @@ pub use service::authorization::{
 pub use service::iam::{
     AccountProfile, AccountProfileService, AdminItem, AdminService, AuthorizedAccountManagement,
     AuthorizedRoleGrant, BootstrapSuperAdminResult, CreateAdminParams, CreateRoleParams,
-    InitializeSuperAdminParams, InitializeSuperAdminResult, ROOT_ROLE_ID, RbacService,
+    InitializeSuperAdminParams, InitializeSuperAdminResult, QualifiedPermissions, ROOT_ROLE_ID, RbacService,
     ResetAdminPasswordParams, ResetAdminPasswordResult, RoleItem, RolePermissionSnapshot, SharedRbacService,
     UpdateAdminParams, UpdateAdminRoleParams, UpdateRoleParams, ensure_predefined_roles, ensure_root_role,
     shared_rbac_service, subject,

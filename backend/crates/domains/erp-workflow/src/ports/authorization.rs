@@ -1,9 +1,10 @@
-//! 工作流消费的授权事实；适配器位于组合根。
+//! 工作流消费的跨域业务授权事实；账号查询直接使用 identity。
 
 use std::collections::{BTreeSet, HashSet};
 use std::future::Future;
 
 use application_core::AuditActor;
+#[cfg(test)]
 use erp_core::AccountKind;
 use erp_identity::SharedRbacService;
 use persistence_core::Executor;
@@ -11,10 +12,9 @@ use persistence_core::Executor;
 use super::object_facts::OrderTaskSource;
 use super::{WorkflowScopeObject, WorkflowScopeObjects};
 use crate::entity::document_registry::DocumentType;
-pub use crate::entity::work_item::WorkflowAccountFact;
 use crate::error::{Error, Result};
 
-/// Authorization facts and policy-bound transactions for workflow commands.
+/// 工作流消费的业务来源取证与共享身份设施。
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
     /// 取得共享 identity 服务；通用权限与策略事务直接使用 identity API。
     /// # 参数
@@ -264,121 +264,13 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<()>> + Send {
         async { Err(Error::Internal("任务对象范围授权未装配".into())) }
     }
-
-    /// 按 ID 加载账号快照。
-    ///
-    /// # 参数
-    /// * `account_id` - 账号 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 找到时返回账号事实；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// 实现无法读取账号时返回错误。
-    fn load_account(
-        &self,
-        account_id: &str,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Option<WorkflowAccountFact>>> + Send;
-
-    /// 按 ID 批量加载账号快照。
-    ///
-    /// # 参数
-    /// * `account_ids` - 账号 ID。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回已加载的账号事实。
-    ///
-    /// # 错误
-    /// 实现无法读取账号时返回错误。
-    fn load_accounts(
-        &self,
-        account_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send;
-
-    /// 列出某一账号类型的账号，供候选人选择。
-    ///
-    /// # 参数
-    /// * `account_kind` - 账号类型。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回该类型的账号事实。
-    ///
-    /// # 错误
-    /// 实现无法列出账号时返回错误。
-    fn list_accounts_by_kind(
-        &self,
-        account_kind: AccountKind,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send;
-
-    /// 列出可作为定义审批人的启用后台账号。
-    ///
-    /// # 参数
-    /// * `search` - 可选搜索词；`None` 表示不按搜索收窄。
-    /// * `limit` - 返回条数上限。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回启用的后台账号事实。
-    ///
-    /// # 错误
-    /// 实现无法列出候选人时返回错误。
-    fn list_active_approval_candidates(
-        &self,
-        search: Option<&str>,
-        limit: u32,
-        executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send;
 }
 
 /// Fail-closed authorization port used when composition has not injected an adapter.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FailClosedWorkflowAuthorizationPort;
 
-fn unwired_auth<T>() -> Result<T> {
-    Err(Error::Internal("授权端口未接线".to_string()))
-}
-
-#[allow(clippy::manual_async_fn)]
-impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
-    fn load_account(
-        &self,
-        _account_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Option<WorkflowAccountFact>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn load_accounts(
-        &self,
-        _account_ids: &[String],
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn list_accounts_by_kind(
-        &self,
-        _account_kind: AccountKind,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-        async move { unwired_auth() }
-    }
-
-    fn list_active_approval_candidates(
-        &self,
-        _search: Option<&str>,
-        _limit: u32,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Vec<WorkflowAccountFact>>> + Send {
-        async move { unwired_auth() }
-    }
-}
+impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {}
 
 #[cfg(test)]
 mod permission_tests {

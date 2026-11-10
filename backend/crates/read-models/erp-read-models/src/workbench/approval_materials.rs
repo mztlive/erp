@@ -134,7 +134,9 @@ async fn direct_materials(
         return Err(Error::ConflictError("审批材料引用的文件不存在或已删除".into()));
     }
     let account = auth
-        .load_account(&snapshot.payload.submitted_by, executor)
+        .rbac()?
+        .directory()
+        .account(&snapshot.payload.submitted_by, executor)
         .await?
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::Forbidden("审批材料原提交账号不存在或已失效".into()))?;

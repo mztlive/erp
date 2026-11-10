@@ -122,12 +122,11 @@ mod tests {
     }
 
     #[test]
-    fn explicit_required_fact_survives_unconditional_union_and_create_conversion() {
+    fn explicit_required_fact_survives_unconditional_union() {
         let required = AccessRule::Allow.requiring(&[FactKind::Warehouse].into());
         let rule = AccessRule::any(vec![AccessRule::Allow, required]);
         let mut object = ObjectFacts::default();
         assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).is_err());
-        assert!(rule.without_reads().allows_object(&context(), &object, &BTreeSet::new()).is_err());
         object.warehouse_id = FactValue::Known(None);
         assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
     }

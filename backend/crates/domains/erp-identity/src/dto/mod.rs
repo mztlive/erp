@@ -20,3 +20,6 @@ pub use portal::*;
 pub use role_template::*;
 
 pub use crate::entity::person_directory::PersonDirectoryCategory;
+
+mod account_summary;
+pub use account_summary::AccountSummary;

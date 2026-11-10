@@ -4,9 +4,7 @@ use application_core::AuditActor;
 use persistence_core::Executor;
 
 use super::{AccessPolicy, AuthorizationService};
-use crate::entity::authorization::{
-    AccessSubject, AccessTarget, ObjectFacts, ProposedFacts, ResourceTargets,
-};
+use crate::entity::authorization::{AccessSubject, AccessTarget, ObjectFacts, ResourceTargets};
 use crate::repository::authorization::AccessProof;
 use crate::repository::resource_grants;
 use crate::{Error, Permission, Result};
@@ -37,9 +35,6 @@ impl AuthorizationService {
             AccessTarget::Records { subject, ids } => {
                 self.records(actor, permission, subject, ids, executor).await
             },
-            AccessTarget::Proposed { subject, facts } => {
-                self.proposed(actor, permission, subject, facts, executor).await
-            },
         }
     }
 
@@ -69,39 +64,6 @@ impl AuthorizationService {
         for object in &objects {
             object.flatten(&mut Vec::new(), 0)?;
         }
-        query.ensure_current(executor)?;
-        Ok(())
-    }
-
-    /// 拟创建对象由业务端口核实，不接受直接提交的授权布尔值。
-    async fn proposed(
-        &self,
-        actor: &AuditActor,
-        permission: &Permission,
-        subject: AccessSubject,
-        facts: ProposedFacts,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let entry = self.registry.entry(permission, &subject)?;
-        if !entry.allow_proposed {
-            return Err(Error::ValidationError("本操作不接受拟创建对象".into()));
-        }
-        let port =
-            entry.facts.clone().ok_or_else(|| Error::ValidationError("操作缺少对象事实端口".into()))?;
-        let query = self.resolve(actor, entry, executor).await?;
-        let object = port.proposed(&query.context, &facts, executor).await?;
-        if object.resource != query.context.resource {
-            return Err(Error::ValidationError("拟创建对象资源错配".into()));
-        }
-        object.flatten(&mut Vec::new(), 0)?;
-        if !query.rule.without_reads().allows_object(&query.context, &object, &BTreeSet::new())? {
-            return Err(Error::Forbidden("无权创建此对象".into()));
-        }
-        self.validate_proof(&query, executor).await?;
-        if port.proposed(&query.context, &facts, executor).await? != object {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：拟创建对象事实已改变".into()));
-        }
-        object.flatten(&mut Vec::new(), 0)?;
         query.ensure_current(executor)?;
         Ok(())
     }

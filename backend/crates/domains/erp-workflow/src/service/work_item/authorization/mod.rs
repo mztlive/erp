@@ -56,7 +56,6 @@ fn authorization(
                 subject: AccessSubject::Direct,
                 required_permissions: vec![],
                 required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                allow_proposed: false,
                 mapping: Some(mapping.clone()),
                 facts: Some(facts.clone()),
             }

@@ -140,7 +140,7 @@ async fn persist_event(
     if ids.is_empty() {
         return Ok(());
     }
-    let accounts = auth.load_accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
+    let accounts = auth.rbac()?.directory().accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
     let mut rows = Vec::new();
     for id in ids {
         let account = accounts.iter().find(|a| a.id == id);

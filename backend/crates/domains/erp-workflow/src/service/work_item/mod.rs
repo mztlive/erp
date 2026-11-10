@@ -26,7 +26,7 @@ use std::sync::Arc;
 #[cfg(test)]
 use access::{
     TaskEligibility, authorized_item_fields, detail_scope, ensure_generic_work_item_mutation,
-    has_assignment_candidate_access, object_policy,
+    has_assignment_candidate_access,
 };
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -59,6 +59,7 @@ pub type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 pub struct WorkItemService<A> {
     pub db: Database,
     pub auth: A,
+    pub identity: SharedRbacService,
     pub authorization: WorkItemAuthorization,
     pub facts: Arc<dyn ObjectFactPort>,
     pub audit: Arc<dyn WorkflowAuditPort>,
@@ -102,8 +103,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         facts: Arc<dyn ObjectFactPort>,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        let authorization = WorkItemAuthorization::new(db.clone(), rbac);
-        Self { db, auth, authorization, facts, audit }
+        let authorization = WorkItemAuthorization::new(db.clone(), rbac.clone());
+        Self { db, auth, identity: rbac, authorization, facts, audit }
     }
 }
 
@@ -119,7 +120,7 @@ mod tests {
         AssignmentSeparationPolicy, ObjectFact, ObjectFactMap, ObjectKind, TaskEligibility,
         WorkItemAllowedAction, WorkItemScope, approval_assignment_separated, audited_fact_operator_actors,
         authorized_item_fields, detail_scope, ensure_generic_work_item_mutation, expected_task_version,
-        has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
+        has_assignment_candidate_access, non_empty_assignment_actors,
         purchase_order_fulfillment_responsibility_id,
     };
     use crate::entity::work_item::{
@@ -351,7 +352,7 @@ mod tests {
 
     #[test]
     fn w29_business_exception_integration_error_object_policy_is_registered() {
-        let policy = object_policy(WorkItemType::BusinessException, "integration_error_task").unwrap();
+        let policy = WorkItemType::BusinessException.brief_relation("integration_error_task").unwrap();
 
         assert_eq!(policy.object_kind, ObjectKind::IntegrationErrorTask);
         assert_eq!(policy.read_permission, "integration_error_task:detail");
@@ -441,7 +442,7 @@ mod tests {
         let owner_access = procurement_access("buyer-1");
         let facts = procurement_facts();
         let item = procurement_item("buyer-1");
-        let policy = object_policy(WorkItemType::ProcurementOrderCreation, "sales_order").unwrap();
+        let policy = WorkItemType::ProcurementOrderCreation.brief_relation("sales_order").unwrap();
 
         assert_eq!(policy.object_kind, ObjectKind::SalesOrder);
         assert_eq!(policy.read_permission, "purchase_order:create");
@@ -853,7 +854,7 @@ mod tests {
             WorkItemType::DocumentApproval.assignment_separation_policy(),
             AssignmentSeparationPolicy::ApprovalHistory
         );
-        assert!(object_policy(WorkItemType::DocumentApproval, "stock_adjustment").is_some());
+        assert!(WorkItemType::DocumentApproval.brief_relation("stock_adjustment").is_some());
     }
 
     #[test]
@@ -934,14 +935,13 @@ mod tests {
 
 #[cfg(test)]
 mod retired_review_tests {
-    use super::*;
     use crate::entity::work_item::WorkItemType;
 
     /// 旧任务可解码，但不得通过通用工作台获得业务对象参与权。
     #[test]
     fn retired_review_has_no_object_policy() {
         for kind in [WorkItemType::CardFundsReview, WorkItemType::CardFundsDeltaReview] {
-            assert!(object_policy(kind, "receivable_account").is_none());
+            assert!(kind.brief_relation("receivable_account").is_none());
         }
     }
 }

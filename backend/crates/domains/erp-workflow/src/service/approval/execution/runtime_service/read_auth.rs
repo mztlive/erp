@@ -105,7 +105,7 @@ pub(super) async fn revalidate_decision_approver(
     if spec.document_type != snapshot.document_type {
         return Err(hidden_not_found());
     }
-    let account = rbac.load_account(assignee_id, executor).await?;
+    let account = rbac.rbac()?.directory().account(assignee_id, executor).await?;
     let failure = match account {
         None => Some(AuthorizationFailure::AccountInactive),
         Some(account)

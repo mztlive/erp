@@ -13,7 +13,7 @@ use persistence_core::Executor;
 pub use registry::{AccessPolicy, AccessRegistration, AuthorizationRegistry};
 
 use crate::entity::authorization::AccessSubject;
-use crate::{AuthorizedQuery, Error, Permission, Result, SharedRbacService};
+use crate::{AuthorizedQuery, Error, Permission, QualifiedPermissions, Result, SharedRbacService};
 
 /// 授权服务。组合根装配不可变目录，业务只提供操作与目标。
 #[derive(Clone)]
@@ -38,10 +38,23 @@ impl AuthorizationService {
         permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        if permission.resource().contains('*') || permission.action().contains('*') {
-            return Err(Error::ValidationError("功能资格查询必须指定具体权限".into()));
-        }
         Ok(self.qualification(actor, slice::from_ref(permission), executor).await?.is_some())
+    }
+
+    /// 批量读取功能资格，不生成对象授权凭证。
+    /// # 参数
+    /// actor、permissions 为真实账号与具体权限集合，executor 为原执行器。
+    /// # 返回
+    /// 返回逐项独立授权结果；账号失效时为 None。
+    /// # 错误
+    /// 身份设施、策略版本或非法权限错误透传。
+    pub async fn permissions(
+        &self,
+        actor: &AuditActor,
+        permissions: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<Option<QualifiedPermissions>> {
+        self.rbac.qualified_permissions(actor, permissions, executor).await
     }
 
     /// 绑定身份设施和服务端登记。

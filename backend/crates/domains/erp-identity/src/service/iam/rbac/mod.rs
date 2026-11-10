@@ -10,7 +10,9 @@ mod bundle;
 mod command;
 mod enforcer;
 mod policy;
+mod qualification;
 mod query;
+pub use qualification::QualifiedPermissions;
 mod root;
 mod transaction;
 

@@ -10,7 +10,7 @@
 
 | 调用目的 | API | 结果 |
 | --- | --- | --- |
-| 执行操作，检查单条、批量或拟创建对象 | `require` | 成功或错误 |
+| 执行操作，检查单条或批量对象 | `require` | 成功或错误 |
 | 查询列表、计数、汇总或导出 | `query` | `AuthorizedQuery` |
 | 仓储执行授权查询 | `AuthorizedQuery::compile`、`validate` | 查询阶段及复验结果，由公共执行流程使用 |
 
@@ -73,7 +73,7 @@
 | 登记项 | 内容 |
 | --- | --- |
 | 入口 | 资源、动作及额外必需权限；复用权限目录中的 `Permission` |
-| 目标要求 | 无对象操作、已有对象或拟创建对象；列出允许的调用形态 |
+| 目标要求 | 无对象操作或已有对象；列出允许的调用形态 |
 | 数据政策 | 公司共享、人员范围、来源范围、任务资格或管理范围 |
 | 范围配置来源 | 从哪个资源动作读取范围配置 |
 | 对象事实来源 | 使用当前对象还是指定关系中的对象事实 |
@@ -139,8 +139,7 @@ impl AuthorizationService {
 1. 解析登记规则，检查账号、有效角色及本次入口权限。
 2. 在原执行器中取得对象事实，按同一授权时点解释有效关系。
 3. 对已有对象检查完整目标；需要读取授权时，只查询本次目标的授权及来源。
-4. 对拟创建对象检查拟写入的责任事实和必要来源，不使用历史参与或记录读取授权。
-5. 任一目标不满足时返回错误；成功返回 `()`，不产生可跨请求复用的放行凭证。
+4. 任一目标不满足时返回错误；成功返回 `()`，不产生可跨请求复用的放行凭证。
 
 单条使用一个元素的目标集合。单次目标上限沿用 1000 项；空集合和超限请求拒绝，禁止静默截断。需要分批的大操作由业务入口保证完整集合及同一事务，任一批失败时整体失败。
 
@@ -189,7 +188,7 @@ pub async fn has_permission(
 | --- | --- |
 | `Permission` | 复用现有类型，表示实际入口权限 |
 | `AccessSubject` | 直接资源或已登记的来源关系与查询模型，不携带任意集合名和字段名 |
-| `AccessTarget` | 无对象操作、已有记录集合或拟创建对象 |
+| `AccessTarget` | 无对象操作或已有记录集合 |
 | `ResourceTargets` | 复用现有目标 ID 值对象；校验格式、去重和数量 |
 | `AuthorizedQuery` | identity 生成的只读查询约束，禁止业务代码构造、修改和反序列化 |
 
@@ -206,28 +205,12 @@ pub enum AccessTarget {
         subject: AccessSubject,
         ids: ResourceTargets,
     },
-    Proposed {
-        subject: AccessSubject,
-        facts: ProposedFacts,
-    },
 }
 ```
 
 查询时，`Direct` 使用入口资源的默认模型，`Source` 使用登记关系的模型。纯对象检查按相同主体定位事实端口，不要求查询模型。`View` 用于同一入口的其他查询粒度，必须登记所需来源与判定规则。`RelationKey`、`QueryModelKey` 使用服务端登记值，非法组合在授权入口拒绝。
 
 `Records.ids` 表示登记主体的根对象。来源检查由事实端口加载根对象的完整实际关联，不能将客户端传入的来源 ID 当作已验证关联。
-
-`ProposedFacts` 保存拟写入的负责人、组织、结算主体、仓库及来源引用。仓库复用 `WarehouseId`；负责人、组织、结算主体沿用现有字符串 ID。业务用例在原事务中校验输入，事实端口补充并核实有效关系。
-
-```rust
-pub struct ProposedFacts {
-    pub owner_id: Option<String>,
-    pub org_unit_id: Option<String>,
-    pub settlement_party_id: Option<String>,
-    pub warehouse_id: Option<WarehouseId>,
-    pub sources: BTreeMap<RelationKey, BTreeSet<String>>,
-}
-```
 
 不得接受客户端直接提交的 `owned=true`、`authorized=true` 等授权结论。
 
@@ -358,7 +341,7 @@ pub enum QueryOutput {
 }
 ```
 
-`QueryModel.output` 固定输出形态。`Share`、`Existence` 只能登记为 `View`，字段集合必须包含行主键。编译器在授权过滤后执行字段投影；`Share` 的任一来源条件还要求每行仅有一个来源。份额金额必须来自该行对应来源；存在性视图不得登记其他来源内容或完整单据金额。完整对象模型禁止 `Related::Any`，受限视图不能用于 `require` 或拟创建对象。
+`QueryModel.output` 固定输出形态。`Share`、`Existence` 只能登记为 `View`，字段集合必须包含行主键。编译器在授权过滤后执行字段投影；`Share` 的任一来源条件还要求每行仅有一个来源。份额金额必须来自该行对应来源；存在性视图不得登记其他来源内容或完整单据金额。完整对象模型禁止 `Related::Any`，受限视图不能用于 `require`。
 
 ## 5. Mapping 和对象事实
 
@@ -375,16 +358,15 @@ pub enum QueryOutput {
 | `AccessMapping::predicate` | 事实节点、`AccessContext`、本次准备事实 | `QueryFragment` |
 | `AccessMapping::relation` | 已登记关系、`AccessContext`、本次准备事实 | `RelationMapping` |
 | `AccessFactsPort::load` | 上下文、根目标集合、原执行器 | 实际存在的 `ObjectFacts`；identity 对比完整目标集合，缺失对象导致失败 |
-| `AccessFactsPort::proposed` | 上下文、拟写入事实、原执行器 | 经实际关系补充的拟创建对象事实 |
 
 Mapping 必须支持字段条件和关联存在性查询。需要准备额外事实时，在原执行器中按 `as_of` 读取，将事实版本和有效期边界加入 `CompiledAccess`。不允许读取后丢弃这些复验依据。
 
 只做查询接入时实现 Mapping。对象检查需要的事实读取由事实端口承担，不要求 identity 读取其他领域集合。
 
-`AccessRegistration` 固定入口、主体、额外权限、必需事实、`AccessPolicy`、可选 Mapping、可选事实端口及是否允许创建，由 `AuthorizationRegistry::new` 校验后冻结。
+`AccessRegistration` 固定入口、主体、额外权限、必需事实、`AccessPolicy`、可选 Mapping、可选事实端口，由 `AuthorizationRegistry::new` 校验后冻结。
 
 - 只做查询：提供 Mapping。
-- 只做对象或拟创建对象检查：提供事实端口，Mapping 可以为空。
+- 只做对象检查：提供事实端口，Mapping 可以为空。
 - 同时支持查询和对象检查：提供两者，使用同一套责任定义。
 - 调用 `query` 时没有 Mapping，或调用对象检查时没有事实端口，返回接入错误。
 
@@ -573,7 +555,7 @@ impl AuthorizationService {
 | `erp-identity/src/ports/` | Mapping、对象事实及版本读取合同 |
 | `erp-identity/src/repository/authorization/` | `AuthorizedQuery`、`CompiledAccess`、MongoDB 编译器和读取授权查询组合 |
 | 各业务领域的 `repository/` | 本域 Mapping、授权后的业务查询 |
-| 各业务领域的 `service/` | 对象与拟创建对象事实准备；状态和业务校验 |
+| 各业务领域的 `service/` | 对象事实准备；状态和业务校验 |
 | `erp-server/src/wiring/` | Mapping、事实端口和跨领域提供方装配 |
 
 复用现有 RBAC、范围解析、读取授权存储和版本机制。迁移完成后，普通业务不再直接使用 `RbacService::enforce`、`DataScopeService`、`ResourceAccessService` 或手工拼接授权查询阶段。

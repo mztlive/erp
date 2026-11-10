@@ -102,7 +102,6 @@ pub struct AccessRegistration {
     pub required_permissions: Vec<Permission>,
     pub required_facts: BTreeSet<FactKind>,
     pub policy: AccessPolicy,
-    pub allow_proposed: bool,
     pub mapping: Option<Arc<dyn AccessMapping>>,
     pub facts: Option<Arc<dyn AccessFactsPort>>,
 }
@@ -124,7 +123,6 @@ impl AccessRegistration {
         }
         if matches!(self.policy, AccessPolicy::Operation) {
             if self.subject != AccessSubject::Direct
-                || self.allow_proposed
                 || self.mapping.is_some()
                 || self.facts.is_some()
                 || !self.required_facts.is_empty()
@@ -135,9 +133,6 @@ impl AccessRegistration {
         }
         if self.mapping.is_none() && self.facts.is_none() {
             return Err(Error::ValidationError("数据政策至少提供查询 Mapping 或对象事实端口".into()));
-        }
-        if self.allow_proposed && self.facts.is_none() {
-            return Err(Error::ValidationError("创建政策必须登记对象事实端口".into()));
         }
         if self.facts.is_some() && self.policy.has_partial_relation() {
             return Err(Error::ValidationError("任一来源政策不能用于完整对象事实检查".into()));
@@ -173,14 +168,14 @@ impl AccessRegistration {
         model.validate()
     }
 
-    /// 部分读取必须使用独立视图和字段白名单，禁止用于创建。
+    /// 部分读取必须使用独立视图和字段白名单。
     fn validate_output(&self, output: &QueryOutput) -> Result<()> {
         match output {
             QueryOutput::Object if self.policy.has_partial_relation() => {
                 Err(Error::ValidationError("任一来源政策不能放行完整对象模型".into()))
             },
             QueryOutput::Share { .. } | QueryOutput::Existence { .. }
-                if !matches!(&self.subject, AccessSubject::View(_)) || self.allow_proposed =>
+                if !matches!(&self.subject, AccessSubject::View(_)) =>
             {
                 Err(Error::ValidationError("受限查询只能登记为只读视图".into()))
             },
@@ -239,9 +234,7 @@ mod tests {
     use persistence_core::Executor;
 
     use super::*;
-    use crate::entity::authorization::{
-        AccessContext, ObjectFacts, ProposedFacts, QueryModelKey, ResourceTargets,
-    };
+    use crate::entity::authorization::{AccessContext, ObjectFacts, QueryModelKey, ResourceTargets};
 
     struct Facts;
     #[async_trait]
@@ -254,14 +247,6 @@ mod tests {
         ) -> Result<Vec<ObjectFacts>> {
             Ok(vec![])
         }
-        async fn proposed(
-            &self,
-            _: &AccessContext,
-            _: &ProposedFacts,
-            _: &mut dyn Executor,
-        ) -> Result<ObjectFacts> {
-            Ok(ObjectFacts::default())
-        }
     }
 
     fn operation() -> AccessRegistration {
@@ -271,7 +256,6 @@ mod tests {
             required_permissions: vec![],
             required_facts: BTreeSet::new(),
             policy: AccessPolicy::Operation,
-            allow_proposed: false,
             mapping: None,
             facts: None,
         }
@@ -344,26 +328,23 @@ mod tests {
         assert!(entry.validate_output(&output).is_err());
         entry.subject = AccessSubject::View(QueryModelKey::parse("shares").unwrap());
         assert!(entry.validate_output(&output).is_ok());
-        entry.allow_proposed = true;
-        assert!(entry.validate_output(&output).is_err());
         assert!(entry.policy.has_relation(&RelationKey::parse("sources").unwrap()));
         assert!(!entry.policy.has_relation(&RelationKey::parse("unknown").unwrap()));
     }
     #[test]
-    fn object_and_create_registration_do_not_require_query_mapping() {
+    fn object_registration_requires_facts_without_query_mapping() {
         let mut entry = operation();
-        entry.permission = Permission::parse("sales_order:create").unwrap();
+        entry.permission = Permission::parse("sales_order:update").unwrap();
         entry.policy =
             AccessPolicy::Scope { permission: entry.permission.clone(), read: ReadAccess::default() };
         entry.required_facts = [FactKind::Owner].into();
-        entry.allow_proposed = true;
+        assert!(matches!(entry.validate(), Err(Error::ValidationError(_))));
         entry.facts = Some(Arc::new(Facts));
         let permission = entry.permission.clone();
         let registry = AuthorizationRegistry::new(vec![entry]).unwrap();
         let registered = registry.entry(&permission, &AccessSubject::Direct).unwrap();
         assert!(registered.mapping.is_none());
         assert!(registered.facts.is_some());
-        assert!(registered.allow_proposed);
     }
 
     #[test]

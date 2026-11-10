@@ -31,7 +31,9 @@ pub async fn require_supplier_portal_task_read(
         return Ok(());
     }
     let account = auth
-        .load_account(actor_id, executor)
+        .rbac()?
+        .directory()
+        .account(actor_id, executor)
         .await?
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::Forbidden("供应商申请任务账号不是当前启用的内部账号".into()))?;
@@ -66,7 +68,9 @@ pub(super) async fn require_supplier_portal_task_review(
         return Ok(());
     }
     let account = auth
-        .load_account(actor_id, executor)
+        .rbac()?
+        .directory()
+        .account(actor_id, executor)
         .await?
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::Forbidden("供应商申请确认人不是当前启用的内部账号".into()))?;
@@ -124,7 +128,9 @@ pub async fn require_order_task_read(
         .filter(|source| source.matches_kind(kind))
         .ok_or_else(|| Error::Internal("订单关联任务缺少权威范围来源".into()))?;
     let account = auth
-        .load_account(actor_id, executor)
+        .rbac()?
+        .directory()
+        .account(actor_id, executor)
         .await?
         .filter(|account| account.can_login)
         .ok_or_else(|| Error::Forbidden("任务账号不存在或已失效".into()))?;
@@ -155,7 +161,9 @@ pub async fn filter_order_facts(
         return Ok(());
     }
     let account = auth
-        .load_account(actor_id, executor)
+        .rbac()?
+        .directory()
+        .account(actor_id, executor)
         .await?
         .filter(|account| account.can_login)
         .ok_or_else(|| Error::Forbidden("任务账号不存在或已失效".into()))?;

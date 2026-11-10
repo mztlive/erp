@@ -6,14 +6,12 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use bpm::model::ApprovalProcessInstance;
 use erp_approval_runtime::ApprovalRuntimePort;
-use erp_identity::AccountCore;
 use erp_inventory::StockAdjustment;
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_support::FileAsset;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::ports::WorkflowAccountFact;
 use erp_workflow::repository::bpm::DefinitionGraph;
 use erp_workflow::service::approval::binding::{
     BindPublishedDefinitionCommand, bind_published_definition_on_document_create,
@@ -261,18 +259,4 @@ where
     ) -> Result<()> {
         Ok(self.service.ensure_domain_decision_access(actor, item, executor).await?)
     }
-}
-
-/// 将身份账号转换为工作流的窄资格事实。
-///
-/// # 参数
-/// `account` 为调用方在当前执行器已经读取的账号。
-/// # 返回
-/// 保留账号身份、登录资格与展示资料的工作流事实。
-/// # 错误
-/// 不返回错误。
-pub(crate) fn account_fact(account: &AccountCore) -> WorkflowAccountFact {
-    WorkflowAccountFact::new(account.base.id.clone(), account.kind, account.can_login())
-        .with_display_name(account.name.clone())
-        .with_login_account(account.secret.account().to_string())
 }

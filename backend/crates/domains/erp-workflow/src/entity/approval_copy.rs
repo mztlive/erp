@@ -5,6 +5,7 @@ use bpm::engine::{BpmEvent, BpmEventKind};
 use bpm::model::ApprovalProcessInstance;
 use entity_core::BaseModel;
 use entity_macros::Entity;
+use erp_identity::AccountSummary;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::approval_integration::{ApprovalSubjectSnapshot, resolve_runtime_document_type};
@@ -68,6 +69,22 @@ pub struct ApprovalCopyRule {
 }
 
 impl ApprovalCopyRule {
+    /// 验证本规则所有接收人均为有效内部账号。
+    /// # 参数
+    /// accounts 为当前执行器读取的账号事实。
+    /// # 返回
+    /// 全部接收人有效时成功，不要求角色或审批权限。
+    /// # 错误
+    /// 任一账号缺失、停用或类型不符时拒绝。
+    pub fn validate_accounts(&self, accounts: &[AccountSummary]) -> Result<()> {
+        for id in &self.recipient_user_ids {
+            if !accounts.iter().any(|account| account.id == *id && account.is_active_backoffice()) {
+                return Err(Error::ValidationError("抄送人不存在、已停用或不是内部账号，请重新选择".into()));
+            }
+        }
+        Ok(())
+    }
+
     /// 规范化整组规则并校验人员、节点和规模。
     /// # 参数
     /// `rules` 为完整规则，`node_count` 为同一请求的节点数。

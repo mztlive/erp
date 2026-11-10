@@ -135,8 +135,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         executor: &mut dyn Executor,
     ) -> Result<AuditActor> {
         let account = self
-            .auth
-            .load_account(actor_id, executor)
+            .identity
+            .directory()
+            .account(actor_id, executor)
             .await?
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::Forbidden("供应商申请确认人不是当前启用的内部账号".into()))?;

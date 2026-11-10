@@ -9,7 +9,7 @@ use crate::entity::approval_progress::ViewedApprovalProgress;
 use crate::error::Result;
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::BpmExt;
-use crate::service::approval::{approval_action_roles_with_executor, approval_actor_is_active_with_executor};
+use crate::service::approval::approval_action_roles_with_executor;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 查询当前有效账号发起的未读审批数量。
@@ -56,10 +56,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         version: u64,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if !approval_actor_is_active_with_executor(&self.auth, actor, executor).await?
-            || approval_action_roles_with_executor(&self.auth, actor, "approval_instance:read", executor)
-                .await?
-                .is_empty()
+        if approval_action_roles_with_executor(&self.auth, actor, "approval_instance:read", executor)
+            .await?
+            .is_empty()
         {
             return Err(hidden_not_found());
         }

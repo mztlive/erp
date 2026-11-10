@@ -41,8 +41,8 @@ use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{
-    approval_action_roles_with_executor, approval_actor_is_active,
-    approval_participant_permissions_with_executor, require_approval_management_with_executor,
+    approval_action_roles_with_executor, approval_participant_permissions_with_executor,
+    require_approval_management_with_executor,
 };
 use crate::service::work_item::approval_rework::open_rework_id;
 
@@ -358,15 +358,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
     pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
-        if approval_actor_is_active(&self.auth, actor).await?
-            && !approval_action_roles_with_executor(
-                &self.auth,
-                actor,
-                "approval_instance:read",
-                &mut NoTransaction,
-            )
-            .await?
-            .is_empty()
+        if !approval_action_roles_with_executor(
+            &self.auth,
+            actor,
+            "approval_instance:read",
+            &mut NoTransaction,
+        )
+        .await?
+        .is_empty()
         {
             return Ok(());
         }

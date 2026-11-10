@@ -35,8 +35,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let mut ordinary = Vec::new();
         let mut approval_fields = Vec::new();
         let actor = self
-            .auth
-            .load_account(&access.task.actor_id, executor)
+            .identity
+            .directory()
+            .account(&access.task.actor_id, executor)
             .await?
             .map(|account| AuditActor::new(account.id, account.login_account, account.kind));
         for item in items {

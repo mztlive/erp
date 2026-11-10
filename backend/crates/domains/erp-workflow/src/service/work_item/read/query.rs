@@ -270,8 +270,7 @@ impl WorkItemReadService {
         queue_context_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemView>> {
-        let ids = fields.iter().map(|field| field.id.clone()).collect::<Vec<_>>();
-        let projected = self.projected_access(actor_access, &ids, executor).await?;
+        let projected = self.projected_access(actor_access, &fields, executor).await?;
         let mut items = Vec::with_capacity(fields.len());
         for fields in fields {
             let access = ViewAccess::from_fields(&fields, scope, &projected.task);
@@ -437,7 +436,7 @@ impl WorkItemReadService {
             let scope = detail_scope(&item, actor.id(), &access)?;
             let fields = dto::WorkItemFields::from(item);
             let queue_context_id = single_item_context_id(actor.id(), &item_id);
-            let projected = self.projected_access(&access, &[item_id], executor).await?;
+            let projected = self.projected_access(&access, std::slice::from_ref(&fields), executor).await?;
             let view_access = ViewAccess::from_fields(&fields, scope, &projected.task);
             let mut view = WorkItemView::from_fields(fields, queue_context_id)?.with_access(
                 view_access.processing_state,

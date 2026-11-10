@@ -9,10 +9,9 @@ use super::{AccessPolicy, AccessRegistration, AuthorizationService};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::authorization::{AccessContext, AccessFact, AccessRule, AccessSubject, ReadAccess};
 use crate::repository::authorization::AccessProof;
-use crate::repository::prelude::*;
 use crate::repository::resource_grants;
 use crate::service::access_control::resolve::DataScopeService;
-use crate::{AccessControlExt, Error, Permission, Result};
+use crate::{Error, Permission, Result};
 
 struct Resolution {
     versions: Vec<String>,
@@ -80,31 +79,12 @@ impl AuthorizationService {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(actor.id(), executor)
+        Ok(self
+            .rbac
+            .qualified_permissions(actor, permissions, executor)
             .await?
-            .filter(|account| account.is_authorization_actor(actor.kind()));
-        let Some(account) = account else {
-            return Ok(None);
-        };
-        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), permissions).await?;
-        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        let ids = snapshot.granting_role_ids_for_all(permissions);
-        let roles = self.db.roles().enabled_roles(&ids, executor).await?;
-        if roles.is_empty() {
-            return Ok(None);
-        }
-        let mut versions = roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>();
-        versions.sort();
-        Ok(Some(format!(
-            "{}:{:?}:{}:{}:{versions:?}",
-            actor.id(),
-            actor.kind(),
-            account.base.version,
-            snapshot.policy_revision()
-        )))
+            .filter(|qualified| qualified.same_role(permissions))
+            .map(|qualified| qualified.version().to_owned()))
     }
 
     /// 按登记树解析，不接受调用方传入的授权表达式。

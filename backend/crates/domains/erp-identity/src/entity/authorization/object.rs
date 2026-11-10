@@ -82,23 +82,6 @@ impl AccessRule {
             _ => {},
         }
     }
-
-    /// 拟创建对象不以历史读取资格放行。
-    pub(crate) fn without_reads(&self) -> Self {
-        match self {
-            Self::RecordReadGrant(_) | Self::Fact(AccessFact::HistoryParticipant) => Self::Deny,
-            Self::All(rules) => Self::all(rules.iter().map(Self::without_reads).collect()),
-            Self::Any(rules) => Self::any(rules.iter().map(Self::without_reads).collect()),
-            Self::Related { relation, resource, mode, rule } => Self::Related {
-                relation: relation.clone(),
-                resource: resource.clone(),
-                mode: *mode,
-                rule: Box::new(rule.without_reads()),
-            },
-            Self::Required { facts, rule } => rule.without_reads().requiring(facts),
-            _ => self.clone(),
-        }
-    }
 }
 
 impl AccessFact {
@@ -252,15 +235,14 @@ mod tests {
         object.assignee_id = FactValue::Known(Some("u".into()));
         assert!(assigned.allows_object(&context(), &object, &grants).unwrap());
         assert!(
-            !AccessRule::Fact(AccessFact::HistoryParticipant)
-                .without_reads()
+            AccessRule::Fact(AccessFact::HistoryParticipant)
                 .allows_object(&context(), &object, &grants)
                 .unwrap()
         );
     }
 
     #[test]
-    fn exact_record_grant_cannot_bypass_independent_scope_or_authorize_creation() {
+    fn exact_record_grant_cannot_bypass_independent_scope() {
         let mut object = source("s1", "other");
         let read = AccessRule::any(vec![
             AccessRule::Fact(AccessFact::Owned),
@@ -269,7 +251,6 @@ mod tests {
         let grants = BTreeSet::from([(ResourceKind::SalesOrder, "s1".into())]);
         assert!(read.allows_object(&context(), &object, &grants).unwrap());
         assert!(!read.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
-        assert!(!read.without_reads().allows_object(&context(), &object, &grants).unwrap());
         let limited =
             AccessRule::all(vec![read, AccessRule::Fact(AccessFact::WarehouseIn(["w".into()].into()))]);
         assert!(!limited.allows_object(&context(), &object, &grants).unwrap());

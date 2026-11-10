@@ -1,6 +1,7 @@
 //! 定义期审批人候选：只做静态账号过滤，不读具体单据 DataScopeFact。
 
 use application_core::AuditActor;
+use erp_identity::AccountSummary;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +11,7 @@ use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
 use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
-use crate::ports::{WorkflowAccountFact, WorkflowAuthorizationPort};
+use crate::ports::WorkflowAuthorizationPort;
 
 /// 定义期候选人查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,7 +56,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         self.ensure_definition_admin(actor, &policy).await?;
         let accounts = self
             .auth
-            .list_active_approval_candidates(query.search.as_deref(), query.limit, &mut NoTransaction)
+            .rbac()?
+            .directory()
+            .active_backoffice(query.search.as_deref(), query.limit, &mut NoTransaction)
             .await?;
         let mut items = Vec::new();
         for account in accounts {
@@ -77,7 +80,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
 /// 审批权限读取失败时拒绝。
 pub(super) async fn eligible_candidate(
     auth: &impl WorkflowAuthorizationPort,
-    account: &WorkflowAccountFact,
+    account: &AccountSummary,
     copies: bool,
 ) -> Result<bool> {
     if !account.is_active_backoffice() {
