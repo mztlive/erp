@@ -3,9 +3,9 @@ use application_core::AuditActor;
 use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
-use super::consumers::WIRED_CONSUMERS;
 use super::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPersonScope};
+use crate::entity::access_control::consumer_spec::CONSUMERS;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt};
 
@@ -119,29 +119,34 @@ impl AccessControlService {
         if !account.is_active_backoffice() {
             return Ok(vec![]);
         }
-        let consumers = WIRED_CONSUMERS
+        let consumers = CONSUMERS
             .iter()
-            .filter(|(name, _, _)| resource.is_none_or(|resource| resource == *name))
+            .filter(|spec| resource.is_none_or(|resource| resource == spec.resource()))
             .collect::<Vec<_>>();
         let permissions = consumers
             .iter()
-            .flat_map(|(r, actions, _)| actions.iter().map(move |a| Permission::parse(format!("{r}:{a}"))))
+            .flat_map(|spec| {
+                spec.actions()
+                    .iter()
+                    .map(move |action| Permission::parse(format!("{}:{}", spec.resource(), action.action())))
+            })
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let rbac = self.rbac.clone();
         let snapshot = rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
         rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         let mut options = Vec::new();
-        for (resource, actions, dimensions) in consumers {
+        for spec in consumers {
+            let resource = spec.resource();
             let mut granted: Vec<String> = Vec::new();
-            for action in *actions {
+            for action in spec.actions().iter().map(|action| action.action()) {
                 let ids = snapshot.granting_role_ids(&Permission::parse(format!("{resource}:{action}"))?);
                 if roles.iter().any(|r| ids.iter().any(|id| id.as_str() == r.base.id)) {
-                    granted.push((*action).into());
+                    granted.push(action.into());
                 }
             }
             if !granted.is_empty() {
-                options.push(PersonBusinessOption::from_granted(resource, granted, dimensions)?);
+                options.push(PersonBusinessOption::from_granted(resource, granted, &spec.dimensions())?);
             }
         }
         Ok(options)

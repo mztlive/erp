@@ -3,8 +3,8 @@ use super::plan::{PolicyFacts, ensure_role};
 use super::{PolicyBinding, PolicyDocument, PolicyMode, PolicyRole, PolicyScope, PolicyVersion};
 use crate::dto::authorization_bundle::PolicyExport;
 use crate::dto::person_scope::PersonScopeGrant;
+use crate::entity::access_control::consumer_spec::{CONSUMERS, configurable_registration};
 use crate::entity::access_control::person_scope::PersonDataScope;
-use crate::service::access_control::consumers::{WIRED_CONSUMERS, configurable_registration};
 use crate::{Error, Permission, PermissionSet, Result, RoleId};
 
 impl PolicyFacts {
@@ -60,24 +60,25 @@ impl PolicyFacts {
                     .filter_map(|id| self.roles.get(id.as_str()))
                     .flat_map(|role| role.permissions.iter().cloned()),
             );
-            for (resource, actions, _) in WIRED_CONSUMERS {
+            for spec in CONSUMERS {
+                let resource = spec.resource();
                 let mut missing = Vec::new();
-                for action in *actions {
+                for action in spec.actions().iter().map(|action| action.action()) {
                     let configured = self
                         .scopes
                         .iter()
-                        .any(|s| s.user_id == *user_id && s.resource == *resource && s.action == *action);
+                        .any(|s| s.user_id == *user_id && s.resource == resource && s.action == action);
                     if !configured
                         && configurable_registration(resource, action).is_ok()
                         && permissions.covers_one(&Permission::parse(format!("{resource}:{action}"))?)
                     {
-                        missing.push((*action).to_owned());
+                        missing.push(action.to_owned());
                     }
                 }
                 if !missing.is_empty() {
                     document.data_scopes.push(PolicyScope {
                         user_id: user_id.clone(),
-                        resource: (*resource).into(),
+                        resource: resource.into(),
                         actions: missing,
                         mode: PolicyMode::Replace,
                         replace_legacy: false,

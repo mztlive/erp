@@ -31,7 +31,7 @@ impl PersonalBusinessGrant {
     /// # 错误
     /// 未支持个人部门授权的业务或非法形态拒绝。
     pub fn as_role_scope(&self) -> Result<DataScope> {
-        if !department_grant_resource(&self.resource) {
+        if !legacy_department_resource(&self.resource) {
             return Err(Error::ValidationError("该业务不支持按部门扩大个人范围".into()));
         }
         let mut rule = DataScope::new(
@@ -74,14 +74,14 @@ impl PersonalBusinessGrant {
     }
 }
 
-/// 已由业务对象责任/部门事实支撑的单组织维度业务。
+/// 冻结的旧个人部门授权资源集合，仅用于解释历史迁移输入。
 /// # 参数
 /// * `resource` - 资源代码。
 /// # 返回
-/// 是否可按部门扩大范围并设置本人默认范围。
+/// 旧记录是否属于历史上允许的部门授权资源。
 /// # 错误
 /// 不返回错误。
-pub fn department_grant_resource(resource: &str) -> bool {
+fn legacy_department_resource(resource: &str) -> bool {
     matches!(
         resource,
         "customer"

@@ -4,7 +4,7 @@
 use crate::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode,
 };
-use crate::service::access_control::consumers::validate_binding;
+use crate::entity::access_control::consumer_spec::validate_binding;
 
 /// 已接入 S2 的资源与完整动作目录；不得用通配符初始化范围。
 pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[

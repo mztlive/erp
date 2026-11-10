@@ -271,7 +271,7 @@ pub(crate) fn evaluate_registered<E>(
             settlement_party_id: None,
             warehouse_id: None,
         },
-        consumer.allows_history,
+        consumer.allows_history(),
     ))
 }
 

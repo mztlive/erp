@@ -413,7 +413,7 @@ mod equivalence_tests {
                     }]],
                 },
             };
-            let scope = config.resolve(&state, &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+            let scope = config.resolve(&state, Instant::now()).unwrap();
             let access = map_access(AuthorizedDataScope::test_fixture(DataScopeFacts {
                 user_id: "actor".into(),
                 resource: "purchase_order".into(),

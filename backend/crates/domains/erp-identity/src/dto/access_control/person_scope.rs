@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
-use crate::entity::access_control::scope_target::ScopeTarget;
-use crate::service::access_control::consumers::{
+use crate::entity::access_control::consumer_spec::{
     configurable_registration, registration, validate_binding, validate_scope_type,
 };
+use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
+use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::{Error, Result};
 
 #[derive(Debug, Deserialize)]
@@ -112,7 +112,7 @@ impl PersonBusinessOption {
             .collect();
         let default_self_actions = configurable_actions
             .iter()
-            .filter(|action| registration(resource, action).is_ok_and(|entry| entry.default_self))
+            .filter(|action| registration(resource, action).is_ok_and(|entry| entry.default_self()))
             .cloned()
             .collect::<Vec<_>>();
         let default_self =
@@ -190,11 +190,10 @@ impl SavePersonScopeRequest {
             enabled: true,
         }
         .validate(DataScopeType::Company, &[])?;
-        let dimensions = configurable_registration(&self.resource, &self.actions[0])?.required_dimensions;
         let mut grants = Vec::new();
         let mut targets = Vec::new();
         for mut grant in self.grants {
-            let grant_targets = grant.normalize(&self.resource, &self.actions, dimensions)?;
+            let grant_targets = grant.normalize(&self.resource, &self.actions)?;
             if !grants.contains(&grant) {
                 targets.extend(grant_targets);
                 grants.push(grant);
@@ -248,12 +247,7 @@ impl SavePersonScopeRequest {
 
 impl PersonScopeGrant {
     /// 每个授权条目独立完成规范化，禁止在多个不完整条目之间拼出完整授权。
-    fn normalize(
-        &mut self,
-        resource: &str,
-        actions: &[String],
-        dimensions: &[ScopeDimension],
-    ) -> Result<Vec<ScopeTarget>> {
+    fn normalize(&mut self, resource: &str, actions: &[String]) -> Result<Vec<ScopeTarget>> {
         self.actions.sort();
         self.actions.dedup();
         if self.actions.is_empty()
@@ -286,11 +280,27 @@ impl PersonScopeGrant {
         keyed.sort_by(|left, right| left.0.cmp(&right.0));
         keyed.dedup_by(|left, right| left.0 == right.0);
         self.terms = keyed.into_iter().map(|(_, term)| term).collect();
-        let company = self.terms.iter().any(|term| term.scope_type == DataScopeType::Company);
-        if !company && dimensions.iter().any(|d| !self.terms.iter().any(|term| term.target_dimension == *d)) {
-            return Err(Error::ValidationError("每项附加授权均须配置此业务全部必需维度".into()));
-        }
+        self.validate_dimensions(resource)?;
         Ok(targets)
+    }
+
+    /// 每个所选动作均须在同一授权条目中满足全部必需维度。
+    fn validate_dimensions(&self, resource: &str) -> Result<()> {
+        let company = self.terms.iter().any(|term| term.scope_type == DataScopeType::Company);
+        for action in &self.actions {
+            let spec = configurable_registration(resource, action)?;
+            if !company
+                && spec
+                    .required_dimensions()
+                    .iter()
+                    .any(|dimension| !self.terms.iter().any(|term| term.target_dimension == *dimension))
+            {
+                return Err(Error::ValidationError(format!(
+                    "每项附加授权均须配置 {resource}:{action} 全部必需维度"
+                )));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -399,6 +409,40 @@ mod tests {
         invalid.actions = vec!["*".into()];
         invalid.grants[0].actions = vec!["*".into()];
         assert!(invalid.normalized().is_err());
+    }
+
+    /// 每个授权条目按自己选择的动作验证完整维度，不能借用同批其他条目补齐。
+    #[test]
+    fn deposit_grants_require_both_dimensions_per_selected_action() {
+        use crate::access_control::ScopeTargetMode;
+
+        let org = PersonScopeTerm {
+            scope_type: DataScopeType::Organization,
+            target_dimension: ScopeDimension::InternalOrg,
+            target_mode: Some(ScopeTargetMode::Explicit),
+            include_descendants: Some(false),
+            scope_targets: vec!["org-one".into()],
+        };
+        let party = PersonScopeTerm {
+            target_dimension: ScopeDimension::SettlementParty,
+            include_descendants: None,
+            scope_targets: vec!["party-one".into()],
+            ..org.clone()
+        };
+        let mut input = request();
+        input.resource = "supplier_deposit".into();
+        input.actions = vec!["list".into(), "resolve".into()];
+        input.grants = vec![
+            PersonScopeGrant { actions: vec!["list".into()], terms: vec![org.clone(), party.clone()] },
+            PersonScopeGrant { actions: vec!["resolve".into()], terms: vec![org] },
+        ];
+        let mut invalid = input.grants[1].clone();
+        let error = invalid.normalize(&input.resource, &input.actions).unwrap_err();
+        assert!(error.to_string().contains("supplier_deposit:resolve"));
+        input.grants[1].terms.push(party);
+        let command = input.normalized().unwrap();
+        assert_eq!(command.grants.len(), 2);
+        assert!(command.grants.iter().all(|grant| grant.terms.len() == 2));
     }
 
     #[test]
@@ -534,9 +578,7 @@ mod tests {
         {
             let mut policy = PersonDataScope::default_for("alice", "sales_order", action);
             policy.expression = save.expression(action);
-            let scope = policy
-                .resolve(&state, &[ScopeDimension::InternalOrg], action == "list", Instant::now())
-                .unwrap();
+            let scope = policy.resolve(&state, Instant::now()).unwrap();
             let mut target = ScopedObject {
                 owned: false,
                 collaborating: false,

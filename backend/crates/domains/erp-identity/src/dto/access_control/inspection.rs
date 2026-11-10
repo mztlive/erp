@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::service::access_control::consumers::registration;
+use crate::entity::access_control::consumer_spec::registration;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 #[cfg(test)]
 use crate::service::access_control::resolve::DataScopeFacts;

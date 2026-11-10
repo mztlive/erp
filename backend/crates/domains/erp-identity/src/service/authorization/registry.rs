@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+use crate::entity::access_control::consumer_spec::ConsumerSpec;
 use crate::entity::authorization::{
     AccessSubject, FactKind, QueryModel, QueryOutput, ReadAccess, RelationKey, RelationMatch,
 };
@@ -77,7 +78,7 @@ impl AccessPolicy {
             Self::Operation if depth != 0 => Err(Error::ValidationError("无对象政策不能嵌入数据规则".into())),
             Self::Scope { permission, read } => {
                 let consumer = registration(permission.resource(), permission.action())?;
-                read.validate(permission, consumer.allows_history)
+                read.validate(permission, consumer.allows_history())
             },
             Self::All(items) | Self::Any(items) => {
                 if items.is_empty() || items.len() > 32 {
@@ -115,8 +116,9 @@ impl AccessRegistration {
             return Err(Error::ValidationError("业务入口必须登记具体权限".into()));
         }
         if matches!(self.policy, AccessPolicy::Operation)
-            && AuthorizationPolicy::for_action(self.permission.resource(), self.permission.action())
-                .is_ok_and(|policy| policy != AuthorizationPolicy::Role)
+            && ConsumerSpec::find(self.permission.resource()).is_some()
+            && AuthorizationPolicy::for_action(self.permission.resource(), self.permission.action())?
+                != AuthorizationPolicy::Role
         {
             return Err(Error::ValidationError("已有对象范围的操作不能登记为无对象政策".into()));
         }
@@ -307,8 +309,14 @@ mod tests {
 
     #[test]
     fn operation_registration_cannot_remove_existing_object_requirements() {
-        for permission in ["sales_order:update", "invoice:detail", "approval_instance:decide", "product:list"]
-        {
+        for permission in [
+            "sales_order:update",
+            "invoice:detail",
+            "approval_instance:decide",
+            "product:list",
+            "sales_order:unknown",
+            "integration_error_task:unknown",
+        ] {
             let mut entry = operation();
             entry.permission = Permission::parse(permission).unwrap();
             assert!(AuthorizationRegistry::new(vec![entry]).is_err());

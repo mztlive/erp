@@ -6,6 +6,7 @@ use entity_macros::{Entity, id_type};
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
+use super::consumer_spec::registration;
 use super::scope_target::{BoundScopeTarget, ScopeTarget};
 use super::{
     DataScope, DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode,
@@ -118,35 +119,7 @@ impl PersonScopeExpression {
     /// # 错误
     /// 不返回错误。
     pub fn default_self(resource: &str, action: &str) -> bool {
-        if resource == "work_item" {
-            return matches!(action, "list" | "detail");
-        }
-        matches!(
-            resource,
-            "customer"
-                | "contract"
-                | "sales_order"
-                | "sales_inquiry"
-                | "purchase_order"
-                | "cost_entry"
-                | "cost_allocation"
-                | "sales_selection_booklet"
-                | "sales_selection_proposal"
-                | "receivable_account"
-                | "customer_receipt"
-                | "invoice"
-                | "sales_invoice_request"
-                | "payable_account"
-                | "supplier_payment"
-                | "purchase_invoice_allocation"
-                | "supplier_settlement_statement"
-                | "supplier"
-                | "product"
-                | "supplier_offering"
-                | "supplier_fulfillment_order"
-                | "integration_error_task"
-                | "reconciliation_difference"
-        )
+        registration(resource, action).is_ok_and(|spec| spec.default_self())
     }
 
     /// 基础本人只加入新模型；旧配置原样保留，不因发布自动扩权。
@@ -197,6 +170,18 @@ impl PersonScopeExpression {
 }
 
 impl PersonDataScope {
+    /// 按资源动作的唯一规格解析人员范围，调用方不能覆盖维度或历史读取能力。
+    /// # 参数
+    /// `state` 为组织事实；`at` 为本次统一判断时点。
+    /// # 返回
+    /// 当前动作的分支并集与表达式条件。
+    /// # 错误
+    /// 未登记动作或非法范围表达式返回校验错误。
+    pub fn resolve(&self, state: &OrganizationState, at: Instant) -> Result<ResolvedScope> {
+        let spec = registration(&self.resource, &self.action)?;
+        self.compile(state, spec.required_dimensions(), spec.allows_history(), at)
+    }
+
     /// 将单份表达式编译为所有业务查询与对象检查共用的范围中间态。
     /// # 参数
     /// * `state` - 当前组织及成员有效期事实。
@@ -207,7 +192,7 @@ impl PersonDataScope {
     /// 分支并集与表达式条件的精确结果。
     /// # 错误
     /// 非法部门或不支持的动态模式拒绝。
-    pub fn resolve(
+    fn compile(
         &self,
         state: &OrganizationState,
         dimensions: &[ScopeDimension],
@@ -314,17 +299,17 @@ mod tests {
             target_mode: Some(ScopeTargetMode::ManagedOrgs),
             ..term(DataScopeType::Organization)
         }]);
-        assert!(policy.resolve(&state, &[], false, Instant::now()).is_err());
+        assert!(policy.compile(&state, &[], false, Instant::now()).is_err());
         policy.expression.alternatives = vec![vec![PersonScopeTerm {
             target_dimension: ScopeDimension::Warehouse,
             target_mode: Some(ScopeTargetMode::Explicit),
             scope_targets: vec!["*".into()],
             ..term(DataScopeType::Organization)
         }]];
-        assert!(policy.resolve(&state, &[], false, Instant::now()).is_err());
+        assert!(policy.compile(&state, &[], false, Instant::now()).is_err());
         policy.expression.alternatives.clear();
         policy.expression.history_read = true;
-        let scope = policy.resolve(&state, &[], true, Instant::now()).unwrap();
+        let scope = policy.compile(&state, &[], true, Instant::now()).unwrap();
         assert!(!scope.has_role_scope());
         assert!(!scope.allows(&object(true, false), false));
         assert!(scope.allows(&object(false, true), true));
@@ -334,7 +319,7 @@ mod tests {
             ..term(DataScopeType::Organization)
         }]);
         assert!(
-            !policy.resolve(&state, &[], true, Instant::now()).unwrap().allows(&object(false, true), true)
+            !policy.compile(&state, &[], true, Instant::now()).unwrap().allows(&object(false, true), true)
         );
     }
 
@@ -342,15 +327,11 @@ mod tests {
     fn explicit_self_does_not_add_history_and_company_is_explicit() {
         let state = OrganizationState::default();
         let at = Instant::from_unix_secs(10);
-        let own = config(vec![term(DataScopeType::SelfOwned)])
-            .resolve(&state, &[ScopeDimension::InternalOrg], true, at)
-            .unwrap();
+        let own = config(vec![term(DataScopeType::SelfOwned)]).resolve(&state, at).unwrap();
         assert!(own.allows(&object(true, false), true));
         assert!(!own.allows(&object(false, true), true));
         assert!(!PersonDataScope::denied().allows(&object(true, true), true));
-        let all = config(vec![term(DataScopeType::Company)])
-            .resolve(&state, &[ScopeDimension::InternalOrg], true, at)
-            .unwrap();
+        let all = config(vec![term(DataScopeType::Company)]).resolve(&state, at).unwrap();
         assert!(all.allows(&object(false, false), true));
     }
     #[test]
@@ -358,22 +339,18 @@ mod tests {
         let mut policy = config(vec![term(DataScopeType::Company)]);
         policy.expression.history_read = true;
         policy.expression.condition = Some(vec![term(DataScopeType::SelfOwned)]);
-        let scope = policy
-            .resolve(&OrganizationState::default(), &[ScopeDimension::InternalOrg], true, Instant::now())
-            .unwrap();
+        let scope = policy.resolve(&OrganizationState::default(), Instant::now()).unwrap();
         assert!(!scope.allows(&object(false, true), true));
         assert!(scope.allows(&object(true, true), true));
         policy.expression.history_read = false;
         policy.action = "update".into();
-        let scope = policy
-            .resolve(&OrganizationState::default(), &[ScopeDimension::InternalOrg], false, Instant::now())
-            .unwrap();
+        let scope = policy.resolve(&OrganizationState::default(), Instant::now()).unwrap();
         assert!(!scope.allows(&object(false, false), false));
         assert!(scope.allows(&object(true, false), false));
         policy.expression.condition = Some(vec![]);
         assert!(
             !policy
-                .resolve(&OrganizationState::default(), &[], false, Instant::now())
+                .compile(&OrganizationState::default(), &[], false, Instant::now())
                 .unwrap()
                 .allows(&object(true, true), true)
         );
@@ -413,7 +390,7 @@ mod tests {
         for (time, expected) in [(9, false), (10, true), (19, true), (20, false)] {
             assert_eq!(
                 policy
-                    .resolve(&state, &[ScopeDimension::InternalOrg], true, Instant::from_unix_secs(time))
+                    .resolve(&state, Instant::from_unix_secs(time))
                     .unwrap()
                     .allows(&object(false, true), true),
                 expected
@@ -435,7 +412,7 @@ mod tests {
         policy.expression.alternatives =
             vec![vec![warehouse("a"), party("x")], vec![warehouse("b"), party("y")]];
         let scope = policy
-            .resolve(
+            .compile(
                 &OrganizationState::default(),
                 &[ScopeDimension::Warehouse, ScopeDimension::SettlementParty],
                 false,
@@ -484,8 +461,7 @@ mod tests {
     fn additive_reads_union_self_and_departments_without_history_leak() {
         let mut policy = PersonDataScope::default_for("alice", "sales_order", "detail");
         policy.expression.alternatives = vec![vec![department("one")], vec![department("two")]];
-        let scope =
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         let mut target = object(false, true);
         assert!(scope.allows(&target, true));
         target.org_unit_id = Some("two");
@@ -495,8 +471,7 @@ mod tests {
         target.owned = true;
         assert!(scope.allows(&target, true));
         policy.expression.alternatives.clear();
-        let scope =
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(scope.allows(&target, true));
         target.owned = false;
         target.org_unit_id = Some("one");
@@ -509,21 +484,14 @@ mod tests {
         policy.expression.alternatives = vec![vec![department("one")], vec![term(DataScopeType::Company)]];
         let mut target = object(false, false);
         target.org_unit_id = Some("outside");
-        assert!(
-            policy
-                .resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now())
-                .unwrap()
-                .allows(&target, true)
-        );
+        assert!(policy.resolve(&departments(), Instant::now()).unwrap().allows(&target, true));
         policy.expression.alternatives.pop();
-        let scope =
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(!scope.allows(&target, true));
         target.org_unit_id = Some("one");
         assert!(scope.allows(&target, true));
         policy.expression.alternatives.clear();
-        let scope =
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).unwrap();
+        let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(!scope.allows(&target, true));
         target.owned = true;
         assert!(scope.allows(&target, true));
@@ -538,22 +506,13 @@ mod tests {
         assert!(!policy.expression.additive);
         let mut target = object(true, false);
         target.org_unit_id = Some("outside");
-        assert!(
-            !policy
-                .resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now())
-                .unwrap()
-                .allows(&target, true)
-        );
+        assert!(!policy.resolve(&departments(), Instant::now()).unwrap().allows(&target, true));
         policy.expression.additive = true;
         policy.expression.history_read = true;
-        assert!(
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], true, Instant::now()).is_err()
-        );
+        assert!(policy.resolve(&departments(), Instant::now()).is_err());
         policy.expression.history_read = false;
         policy.expression.condition = Some(vec![]);
-        assert!(
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], false, Instant::now()).is_err()
-        );
+        assert!(policy.resolve(&departments(), Instant::now()).is_err());
     }
 
     #[test]
@@ -572,28 +531,26 @@ mod tests {
         let mut target = object(true, false);
         assert!(
             !policy
-                .resolve(&departments(), &dimensions, false, Instant::now())
+                .compile(&departments(), &dimensions, false, Instant::now())
                 .unwrap()
                 .allows(&target, false)
         );
         policy.expression.alternatives =
             vec![vec![warehouse("a"), party("x")], vec![warehouse("b"), party("y")]];
-        let scope = policy.resolve(&departments(), &dimensions, false, Instant::now()).unwrap();
+        let scope = policy.compile(&departments(), &dimensions, false, Instant::now()).unwrap();
         target.warehouse_id = Some("a");
         target.settlement_party_id = Some("x");
         assert!(scope.allows(&target, false));
         target.settlement_party_id = Some("y");
         assert!(!scope.allows(&target, false));
-        assert!(policy.resolve(&departments(), &dimensions, true, Instant::now()).is_err());
+        assert!(policy.compile(&departments(), &dimensions, true, Instant::now()).is_err());
     }
     /// 无人员配置时只为任务读取提供本人基础，不能取得他人任务或管理范围。
     #[test]
     fn task_read_defaults_to_self_without_granting_manage() {
         for action in ["list", "detail", "manage"] {
             let policy = PersonDataScope::default_for("alice", "work_item", action);
-            let scope = policy
-                .resolve(&departments(), &[ScopeDimension::InternalOrg], false, Instant::now())
-                .unwrap();
+            let scope = policy.resolve(&departments(), Instant::now()).unwrap();
             assert_eq!(scope.allows(&object(true, false), false), action != "manage");
             assert!(!scope.allows(&object(false, true), false));
         }
@@ -604,9 +561,7 @@ mod tests {
     fn task_self_baseline_respects_explicit_scope_contract() {
         let mut policy = PersonDataScope::default_for("alice", "work_item", "detail");
         policy.expression.alternatives = vec![vec![department("two")]];
-        let resolve = |policy: &PersonDataScope| {
-            policy.resolve(&departments(), &[ScopeDimension::InternalOrg], false, Instant::now()).unwrap()
-        };
+        let resolve = |policy: &PersonDataScope| policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(resolve(&policy).allows(&object(true, false), false));
         policy.expression.additive = false;
         assert!(!resolve(&policy).allows(&object(true, false), false));
@@ -616,5 +571,29 @@ mod tests {
         policy.action = "manage".into();
         policy.expression.condition = None;
         assert!(resolve(&policy).allows(&object(true, false), false));
+    }
+    /// 公开入口使用动作规格；默认本人和历史读取不能由调用者覆盖。
+    #[test]
+    fn registered_resolution_uses_one_default_and_history_contract() {
+        let state = departments();
+        for (resource, action, expected_self, expected_history) in [
+            ("sales_order", "list", true, true),
+            ("sales_order", "update", true, false),
+            ("work_item", "list", true, false),
+            ("work_item", "manage", false, false),
+            ("product", "list", false, false),
+            ("reconciliation_difference", "create", false, false),
+        ] {
+            let spec = registration(resource, action).unwrap();
+            assert_eq!(spec.default_self(), expected_self);
+            assert_eq!(spec.allows_history(), expected_history);
+            assert_eq!(PersonScopeExpression::default_self(resource, action), expected_self);
+            let policy = PersonDataScope::default_for("alice", resource, action);
+            let scope = policy.resolve(&state, Instant::now()).unwrap();
+            assert_eq!(scope.allows(&object(true, false), false), expected_self);
+            assert!(!scope.allows(&object(false, true), spec.allows_history()));
+        }
+        let unknown = PersonDataScope::default_for("alice", "sales_order", "unknown");
+        assert!(unknown.resolve(&state, Instant::now()).is_err());
     }
 }

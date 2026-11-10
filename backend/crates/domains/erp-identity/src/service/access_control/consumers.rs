@@ -1,291 +1,27 @@
-//! 已接线 DataScope v2 消费者登记；不得用初始化清单代替准入。
-
-use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::person_scope::PersonScopeExpression;
-use crate::error::{Error, Result};
-
-/// 已由真实消费者接入公共解析的资源动作及必需维度。
-///
-/// 工作流按审批动作、任务管理及结算复核分别准入。采购变更单及退货沿 `purchase_order`
-/// 资源动作接入，不单独登记平行资源。
-/// `predefined_data_scopes` 仅保留旧合同测试样本，不得当作本表或当前初始化规则。
-pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
-    (
-        "approval_instance",
-        &["read", "decide", "resume", "cancel", "cancel_blocked", "upgrade_binding"],
-        &[ScopeDimension::InternalOrg, ScopeDimension::Warehouse, ScopeDimension::SettlementParty],
-    ),
-    ("stock_adjustment", &["list", "detail", "create", "update", "submit"], &[ScopeDimension::Warehouse]),
-    ("stock_balance", &["list", "detail"], &[ScopeDimension::Warehouse]),
-    ("stock_movement", &["list"], &[ScopeDimension::Warehouse]),
-    ("stock_reservation", &["list"], &[ScopeDimension::Warehouse]),
-    ("customer_refund", &["submit"], &[ScopeDimension::SettlementParty]),
-    ("supplier_refund", &["submit"], &[ScopeDimension::SettlementParty]),
-    (
-        "supplier_settlement_statement",
-        &["list", "detail", "create", "update", "submit", "confirm"],
-        &[ScopeDimension::InternalOrg],
-    ),
-    ("work_item", &["list", "detail", "manage"], &[ScopeDimension::InternalOrg]),
-    ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
-    ("customer", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
-    ("contract", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
-    (
-        "sales_order",
-        &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"],
-        &[ScopeDimension::InternalOrg],
-    ),
-    (
-        "sales_inquiry",
-        &[
-            "list",
-            "detail",
-            "create",
-            "update",
-            "submit",
-            "accept",
-            "reinquire",
-            "close",
-            "import",
-            "convert_sales",
-            "recover",
-        ],
-        &[ScopeDimension::InternalOrg],
-    ),
-    (
-        "procurement_inquiry",
-        &[
-            "list",
-            "detail",
-            "claim",
-            "supplement",
-            "reassign",
-            "internal_quote",
-            "save_feedback",
-            "publish",
-            "convert_expenses",
-            "recover",
-        ],
-        &[ScopeDimension::InternalOrg],
-    ),
-    (
-        "purchase_order",
-        &["list", "detail", "create", "update", "delete", "submit", "cancel_approval", "maintain_source"],
-        &[ScopeDimension::InternalOrg],
-    ),
-    ("cost_entry", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    ("cost_allocation", &["list"], &[ScopeDimension::InternalOrg]),
-    (
-        "sales_selection_booklet",
-        &[
-            "list",
-            "get",
-            "create",
-            "maintain",
-            "prepare",
-            "publish",
-            "copy_link",
-            "rotate_link",
-            "close",
-            "revoke",
-            "void",
-        ],
-        &[ScopeDimension::InternalOrg],
-    ),
-    ("sales_selection_proposal", &["list", "get"], &[ScopeDimension::InternalOrg]),
-    ("receivable_account", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    ("customer_receipt", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    ("invoice", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    ("sales_invoice_request", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    ("payable_account", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    (
-        "purchase_payment_request",
-        &["list", "detail", "create", "update", "submit", "withdraw", "close", "pay"],
-        &[ScopeDimension::InternalOrg],
-    ),
-    ("supplier_payment", &["list", "detail"], &[ScopeDimension::InternalOrg]),
-    (
-        "supplier_deposit",
-        &[
-            "list",
-            "detail",
-            "create",
-            "recharge_request",
-            "approve_recharge",
-            "pay_recharge",
-            "receive_recharge",
-            "authorize",
-            "revoke",
-            "reconcile",
-            "resolve",
-            "release",
-            "reserve",
-            "use",
-            "refund",
-            "bind",
-        ],
-        &[ScopeDimension::InternalOrg, ScopeDimension::SettlementParty],
-    ),
-    ("purchase_invoice_allocation", &["list"], &[ScopeDimension::InternalOrg]),
-    ("integration_error_task", &["list", "detail", "create"], &[ScopeDimension::InternalOrg]),
-    ("reconciliation_difference", &["list", "detail", "create", "decide"], &[ScopeDimension::InternalOrg]),
-    ("supplier", &["list", "detail", "create", "update", "delete"], &[ScopeDimension::InternalOrg]),
-    ("product", &["list", "detail", "create", "update"], &[ScopeDimension::InternalOrg]),
-    ("supplier_offering", &["list", "create", "update"], &[ScopeDimension::InternalOrg]),
-    (
-        "supplier_fulfillment_order",
-        &["list", "detail", "investigate", "complete", "submit", "cancel", "refund", "reject", "handover"],
-        &[ScopeDimension::InternalOrg],
-    ),
-    ("person_query_qualification", &["manage"], &[ScopeDimension::InternalOrg]),
-    ("warehouse", &["list"], &[ScopeDimension::Warehouse]),
-    ("business_person", &["list"], &[ScopeDimension::InternalOrg]),
-    ("sales_person", &["list"], &[ScopeDimension::InternalOrg]),
-    ("procurement_person", &["list"], &[ScopeDimension::InternalOrg]),
-];
-
-/// 已接线消费者的资源动作登记。
-pub struct ConsumerRegistration {
-    /// 已证明动作权限后是否提供本人负责的基础范围。
-    pub default_self: bool,
-    /// 本资源动作接受的身份维度；未列出的维度必须拒绝。
-    pub supported_dimensions: &'static [ScopeDimension],
-    /// 该资源动作解析所需维度。
-    pub required_dimensions: &'static [ScopeDimension],
-    /// 合法历史参与是否可补充该动作的正向读取范围。
-    pub allows_history: bool,
-}
-
-/// 按真实消费者登记查找资源动作。
-///
-/// # 参数
-/// * `resource` - 业务资源
-/// * `action` - 已注册动作
-///
-/// # 返回
-/// 返回该资源动作的消费者登记，含默认本人范围、支持维度、必需维度和历史参与。
-///
-/// # 错误
-/// 未接线资源或动作返回校验错误。
-///
-/// # 关键业务约束
-/// 不得把初始化清单当作消费者已接入的证据。
-pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration> {
-    let entry = WIRED_CONSUMERS
-        .iter()
-        .find(|(name, _, _)| *name == resource)
-        .ok_or_else(|| Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")))?;
-    if !entry.1.contains(&action) {
-        return Err(Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")));
-    }
-    Ok(ConsumerRegistration {
-        default_self: AuthorizationPolicy::for_action(resource, action)?.configurable()
-            && PersonScopeExpression::default_self(resource, action),
-        supported_dimensions: entry.2,
-        required_dimensions: if resource == "approval_instance" { &[] } else { entry.2 },
-        allows_history: matches!(resource, "customer" | "contract" | "sales_order" | "purchase_order")
-            && matches!(action, "list" | "detail"),
-    })
-}
-
-/// 拒绝对象目录和人员目录不接受的范围类型。
-///
-/// # 参数
-/// * `resource` - 业务资源
-/// * `scope_type` - 待写入或已存储的范围类型
-///
-/// # 返回
-/// 范围类型被该资源接受时无返回值。
-///
-/// # 错误
-/// `warehouse` 在类型不是 `Company` 或 `Organization` 时返回校验错误。
-/// `sales_person`、`procurement_person`、`business_person` 与 `person_query_qualification` 配置 `Collaborative` 时返回校验错误。
-///
-/// # 关键业务约束
-/// 协作参与不能从业务单据扩张出人员读取权。配置入口和解析都必须拒绝。
-pub fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> Result<()> {
-    if resource == "warehouse" && !matches!(scope_type, DataScopeType::Company | DataScopeType::Organization)
-    {
-        return Err(Error::ValidationError("对象目录仅接受公司或显式对象集合范围".into()));
-    }
-    if matches!(
-        resource,
-        "sales_person" | "procurement_person" | "business_person" | "person_query_qualification"
-    ) && scope_type == DataScopeType::Collaborative
-    {
-        return Err(Error::ValidationError(format!("{resource} 不接受协作参与范围")));
-    }
-    Ok(())
-}
-
-/// 对配置、初始化及已存储规则执行相同的消费者准入。
-///
-/// # 参数
-/// * `binding` - 已通过模型形态校验的资源动作绑定。
-///
-/// # 返回
-/// 全部动作及目标维度已接线时无返回值。
-///
-/// # 错误
-/// 任一动作未接线或维度不支持时返回校验错误，停用规则也不能绕过准入。
-pub fn validate_binding(binding: &ScopeBinding) -> Result<()> {
-    for action in &binding.actions {
-        let consumer = registration(&binding.resource, action)?;
-        if !consumer.supported_dimensions.contains(&binding.target_dimension) {
-            return Err(Error::ValidationError(format!(
-                "{}:{} 不支持 {:?} 范围维度",
-                binding.resource, action, binding.target_dimension
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// 校验独立范围配置准入；运行消费者登记不等于可编辑配置。
-/// # 参数
-/// `resource` 与 `action` 为待写入的资源动作。
-/// # 返回
-/// 可配置动作的消费者登记。
-/// # 错误
-/// 未接线或采用来源、任务、角色授权的动作拒绝。
-pub fn configurable_registration(resource: &str, action: &str) -> Result<ConsumerRegistration> {
-    let consumer = registration(resource, action)?;
-    AuthorizationPolicy::for_action(resource, action)?.ensure_configurable()?;
-    Ok(consumer)
-}
-
-/// 运行时范围来源接受人员范围及岗位共享，任务和来源继承必须由业务提供真实来源。
-/// # 参数
-/// `resource` 与 `action` 为本次授权的实际范围来源。
-/// # 返回
-/// 已登记且能直接解析的消费者。
-/// # 错误
-/// 未登记、任务、角色或间接来源策略拒绝，不以共享范围兜底。
-pub(super) fn scope_registration(resource: &str, action: &str) -> Result<ConsumerRegistration> {
-    let consumer = registration(resource, action)?;
-    let policy = AuthorizationPolicy::for_action(resource, action)?;
-    if policy != AuthorizationPolicy::Shared {
-        policy.ensure_configurable()?;
-    }
-    Ok(consumer)
-}
+//! 范围消费者准入的公开兼容导出；规则由实体层统一声明。
+pub(super) use crate::entity::access_control::consumer_spec::scope_registration;
+pub use crate::entity::access_control::consumer_spec::{
+    configurable_registration, registration, validate_binding, validate_scope_type,
+};
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Permission;
+    use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
+    use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+    use crate::entity::access_control::consumer_spec::CONSUMERS;
 
     #[test]
     fn deposit_resolution_and_release_require_the_account_scope() {
         for action in ["resolve", "release"] {
             let consumer = registration("supplier_deposit", action).unwrap();
             assert_eq!(
-                consumer.required_dimensions,
+                consumer.required_dimensions(),
                 &[ScopeDimension::InternalOrg, ScopeDimension::SettlementParty]
             );
-            assert!(!consumer.default_self);
-            assert!(!consumer.allows_history);
+            assert!(!consumer.default_self());
+            assert!(!consumer.allows_history());
         }
         assert!(registration("supplier_deposit", "force_release").is_err());
     }
@@ -293,13 +29,13 @@ mod tests {
     #[test]
     fn inquiry_sales_scope_and_procurement_task_grants_remain_separate() {
         let sales = configurable_registration("sales_inquiry", "detail").unwrap();
-        assert!(sales.default_self);
-        assert!(!sales.allows_history);
-        assert_eq!(sales.required_dimensions, &[ScopeDimension::InternalOrg]);
+        assert!(sales.default_self());
+        assert!(!sales.allows_history());
+        assert_eq!(sales.required_dimensions(), &[ScopeDimension::InternalOrg]);
         for action in ["detail", "publish", "internal_quote", "convert_expenses"] {
             let task = registration("procurement_inquiry", action).unwrap();
-            assert!(!task.default_self);
-            assert!(!task.allows_history);
+            assert!(!task.default_self());
+            assert!(!task.allows_history());
             assert!(configurable_registration("procurement_inquiry", action).is_err());
             assert!(scope_registration("procurement_inquiry", action).is_err());
         }
@@ -318,7 +54,7 @@ mod tests {
             "supplier_settlement_statement",
         ] {
             let registration = scope_registration(resource, "list").unwrap();
-            assert!(!registration.default_self);
+            assert!(!registration.default_self());
             assert!(configurable_registration(resource, "list").is_err());
         }
         for (resource, action) in [
@@ -330,19 +66,20 @@ mod tests {
         ] {
             assert!(scope_registration(resource, action).is_err());
         }
-        assert!(configurable_registration("sales_order", "list").unwrap().default_self);
+        assert!(configurable_registration("sales_order", "list").unwrap().default_self());
         assert!(configurable_registration("stock_balance", "list").is_ok());
     }
 
     #[test]
     fn wired_runtime_catalog_does_not_admit_retired_scope_configuration() {
-        for (resource, actions, _) in WIRED_CONSUMERS {
-            for action in *actions {
+        for spec in CONSUMERS {
+            let resource = spec.resource();
+            for action in spec.actions().iter().map(|action| action.action()) {
                 let policy = AuthorizationPolicy::for_action(resource, action).unwrap();
                 let runtime = registration(resource, action).unwrap();
                 assert_eq!(configurable_registration(resource, action).is_ok(), policy.configurable());
                 if !policy.configurable() {
-                    assert!(!runtime.default_self);
+                    assert!(!runtime.default_self());
                 }
             }
         }
@@ -377,19 +114,19 @@ mod tests {
         binding.actions.pop();
         binding.target_dimension = ScopeDimension::Warehouse;
         assert!(validate_binding(&binding).is_err());
-        assert!(registration("customer", "detail").unwrap().allows_history);
-        assert!(!registration("customer", "update").unwrap().allows_history);
-        assert!(!registration("org_unit", "list").unwrap().allows_history);
+        assert!(registration("customer", "detail").unwrap().allows_history());
+        assert!(!registration("customer", "update").unwrap().allows_history());
+        assert!(!registration("org_unit", "list").unwrap().allows_history());
     }
 
     /// 维持原采购沿采购责任范围授权，不从历史参与取得写权限。
     #[test]
     fn purchase_source_maintain_uses_shared_policy_without_history() {
         let registered = registration("purchase_order", "maintain_source").unwrap();
-        assert!(!registered.default_self);
-        assert!(!registered.allows_history);
-        assert_eq!(registered.supported_dimensions, &[ScopeDimension::InternalOrg]);
-        assert_eq!(registered.required_dimensions, &[ScopeDimension::InternalOrg]);
+        assert!(!registered.default_self());
+        assert!(!registered.allows_history());
+        assert_eq!(registered.supported_dimensions(), &[ScopeDimension::InternalOrg]);
+        assert_eq!(registered.required_dimensions(), &[ScopeDimension::InternalOrg]);
         assert!(registration("sales_order", "maintain_source").is_err());
     }
 
@@ -406,7 +143,7 @@ mod tests {
         assert!(registration("purchase_order", "submit").is_ok());
         assert!(registration("purchase_order", "cancel_approval").is_ok());
         assert!(registration("sales_person", "list").is_ok());
-        assert!(!registration("sales_person", "list").unwrap().allows_history);
+        assert!(!registration("sales_person", "list").unwrap().allows_history());
         assert!(registration("procurement_person", "list").is_ok());
         assert!(registration("sales_person", "create").is_err());
         assert!(validate_scope_type("sales_person", DataScopeType::Collaborative).is_err());
@@ -439,14 +176,14 @@ mod tests {
             "supplier_payment",
         ] {
             let list = registration(resource, "list").unwrap();
-            assert!(!list.allows_history);
+            assert!(!list.allows_history());
             let detail = registration(resource, "detail").unwrap();
-            assert!(!detail.allows_history);
+            assert!(!detail.allows_history());
             assert!(registration(resource, "submit").is_err());
             assert!(registration(resource, "commit").is_err());
         }
         let allocation = registration("purchase_invoice_allocation", "list").unwrap();
-        assert!(!allocation.allows_history);
+        assert!(!allocation.allows_history());
         assert!(registration("purchase_invoice_allocation", "detail").is_err());
     }
 
@@ -467,13 +204,13 @@ mod tests {
         }
         for action in ["list", "get"] {
             assert!(registration("sales_selection_proposal", action).is_ok());
-            assert!(!registration("sales_selection_proposal", action).unwrap().allows_history);
+            assert!(!registration("sales_selection_proposal", action).unwrap().allows_history());
         }
         assert!(registration("sales_selection_proposal", "create").is_err());
         assert!(registration("sales_selection_booklet", "approve").is_err());
         for action in ["list", "detail"] {
             assert!(registration("cost_entry", action).is_ok());
-            assert!(!registration("cost_entry", action).unwrap().allows_history);
+            assert!(!registration("cost_entry", action).unwrap().allows_history());
         }
         assert!(registration("cost_allocation", "list").is_ok());
         assert!(registration("cost_allocation", "detail").is_err());
@@ -482,7 +219,7 @@ mod tests {
         assert!(registration("handover", "update").is_err());
         for action in ["list", "detail", "create", "update", "delete"] {
             let consumer = registration("supplier", action).unwrap();
-            assert!(!consumer.allows_history);
+            assert!(!consumer.allows_history());
         }
         assert!(registration("supplier", "submit").is_err());
     }
@@ -491,12 +228,12 @@ mod tests {
     fn wired_integration_handlers_reject_history_writes() {
         for action in ["list", "detail", "create"] {
             let consumer = registration("integration_error_task", action).unwrap();
-            assert!(!consumer.allows_history);
-            assert_eq!(consumer.required_dimensions, &[ScopeDimension::InternalOrg]);
+            assert!(!consumer.allows_history());
+            assert_eq!(consumer.required_dimensions(), &[ScopeDimension::InternalOrg]);
         }
         for action in ["list", "detail", "create", "decide"] {
             let consumer = registration("reconciliation_difference", action).unwrap();
-            assert!(!consumer.allows_history);
+            assert!(!consumer.allows_history());
         }
         assert!(registration("integration_error_task", "decide").is_err());
         assert!(registration("reconciliation_difference", "update").is_err());
@@ -506,8 +243,8 @@ mod tests {
     fn wired_supplier_offering_admits_list_and_writes_without_history() {
         for action in ["list", "create", "update"] {
             let consumer = registration("supplier_offering", action).unwrap();
-            assert!(!consumer.allows_history);
-            assert_eq!(consumer.required_dimensions, &[ScopeDimension::InternalOrg]);
+            assert!(!consumer.allows_history());
+            assert_eq!(consumer.required_dimensions(), &[ScopeDimension::InternalOrg]);
         }
         assert!(registration("supplier_offering", "detail").is_err());
         assert!(registration("supplier_offering", "delete").is_err());
@@ -521,11 +258,12 @@ mod tests {
 
     #[test]
     fn defaults_only_apply_to_registered_business_ownership_dimensions() {
-        for (resource, actions, _) in WIRED_CONSUMERS {
-            for action in *actions {
+        for spec in CONSUMERS {
+            let resource = spec.resource();
+            for action in spec.actions().iter().map(|action| action.action()) {
                 let consumer = registration(resource, action).unwrap();
-                if consumer.default_self {
-                    assert_eq!(consumer.required_dimensions, &[ScopeDimension::InternalOrg]);
+                if consumer.default_self() {
+                    assert_eq!(consumer.required_dimensions(), &[ScopeDimension::InternalOrg]);
                 }
             }
         }
@@ -539,22 +277,22 @@ mod tests {
             ("procurement_person", "list"),
             ("business_person", "list"),
         ] {
-            assert!(!registration(resource, action).unwrap().default_self);
+            assert!(!registration(resource, action).unwrap().default_self());
         }
-        assert!(!registration("product", "list").unwrap().default_self);
-        assert!(!registration("supplier_payment", "detail").unwrap().default_self);
-        assert!(registration("integration_error_task", "list").unwrap().default_self);
+        assert!(!registration("product", "list").unwrap().default_self());
+        assert!(!registration("supplier_payment", "detail").unwrap().default_self());
+        assert!(registration("integration_error_task", "list").unwrap().default_self());
     }
     /// 工作台默认本人只应用于已登记读取动作。
     #[test]
     fn task_scope_defaults_are_action_specific() {
         for action in ["list", "detail"] {
             let scope = configurable_registration("work_item", action).unwrap();
-            assert!(scope.default_self);
-            assert!(!scope.allows_history);
-            assert_eq!(scope.required_dimensions, &[ScopeDimension::InternalOrg]);
+            assert!(scope.default_self());
+            assert!(!scope.allows_history());
+            assert_eq!(scope.required_dimensions(), &[ScopeDimension::InternalOrg]);
         }
-        assert!(!configurable_registration("work_item", "manage").unwrap().default_self);
+        assert!(!configurable_registration("work_item", "manage").unwrap().default_self());
         assert!(registration("work_item", "reassign").is_err());
     }
 }

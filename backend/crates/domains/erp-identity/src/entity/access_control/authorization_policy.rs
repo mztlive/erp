@@ -1,6 +1,7 @@
 //! 配置准入与运行消费分离；任务、来源和角色授权不生成独立人员范围。
 use serde::Serialize;
 
+use super::consumer_spec::{ConsumerSpec, registration};
 use crate::{Error, Permission, Result};
 
 /// 资源动作的权限边界；不替代拥有领域对具体对象的授权判断。
@@ -17,82 +18,15 @@ pub enum AuthorizationPolicy {
 }
 
 impl AuthorizationPolicy {
-    /// 管理维护和任务负责人编译需要完整成员事实。
-    /// # 参数
-    /// resource 为完成消费者登记的来源资源。
-    /// # 返回
-    /// 需要全员组织关系时为 true；普通业务只需要操作人关系。
-    /// # 错误
-    /// 不返回错误；不授予任何访问资格。
-    pub(crate) fn needs_all_members(resource: &str) -> bool {
-        matches!(resource, "org_unit" | "work_item")
-    }
-
     /// 取得已知业务动作采用的授权方式。
     /// # 参数
-    /// `resource` 与 `action` 为已经由消费者目录校验的资源动作。
+    /// `resource` 与 `action` 为待查询的资源动作。
     /// # 返回
     /// 明确登记的权限策略；未登记资源失败关闭。
     /// # 错误
-    /// 未知资源返回校验错误。
+    /// 资源或动作未登记时返回校验错误。
     pub fn for_action(resource: &str, action: &str) -> Result<Self> {
-        let policy = match (resource, action) {
-            ("approval_instance", _)
-            | ("procurement_inquiry", _)
-            | ("purchase_payment_request", "pay")
-            | ("supplier_settlement_statement", "confirm")
-            | ("reconciliation_difference", "decide") => Self::Task,
-            ("integration_error_task" | "reconciliation_difference", "create") => Self::Role,
-            (resource, _) if Self::shared_resource(resource) => Self::Shared,
-            (
-                "contract"
-                | "sales_selection_proposal"
-                | "customer_refund"
-                | "supplier_refund"
-                | "cost_entry"
-                | "cost_allocation"
-                | "receivable_account"
-                | "customer_receipt"
-                | "invoice"
-                | "sales_invoice_request"
-                | "payable_account"
-                | "purchase_payment_request"
-                | "supplier_payment"
-                | "purchase_invoice_allocation",
-                _,
-            ) => Self::SourceInherited,
-            ("work_item" | "org_unit" | "person_query_qualification", _) => Self::Governance,
-            ("warehouse" | "business_person" | "sales_person" | "procurement_person", _) => Self::Directory,
-            (
-                "customer"
-                | "sales_order"
-                | "sales_inquiry"
-                | "sales_selection_booklet"
-                | "stock_adjustment"
-                | "stock_balance"
-                | "stock_movement"
-                | "stock_reservation"
-                | "supplier_deposit"
-                | "integration_error_task"
-                | "reconciliation_difference",
-                _,
-            ) => Self::Business,
-            _ => return Err(Error::ValidationError(format!("{resource} 未登记授权策略"))),
-        };
-        Ok(policy)
-    }
-
-    /// 公司共享业务清单；具体任务动作在资源匹配前优先判定。
-    fn shared_resource(resource: &str) -> bool {
-        matches!(
-            resource,
-            "purchase_order"
-                | "supplier"
-                | "product"
-                | "supplier_offering"
-                | "supplier_fulfillment_order"
-                | "supplier_settlement_statement"
-        )
+        Ok(registration(resource, action)?.policy())
     }
 
     /// 资源的范围条款配置来源；动作权限及实际对象归属仍由目标资源证明。
@@ -102,16 +36,9 @@ impl AuthorizationPolicy {
     /// # 返回
     /// 来源权限，或无需映射时保持原值；只用于选择范围条款。
     /// # 错误
-    /// 映射后的权限格式无效时返回错误；消费者登记由解析入口验证。
+    /// 入口或来源动作未登记、映射后的权限格式无效时返回错误。
     pub fn scope_source(permission: &Permission) -> Result<Permission> {
-        let source = match permission.resource() {
-            "contract" => Permission::parse("customer:list")?,
-            "sales_selection_proposal" => {
-                Permission::parse(format!("sales_selection_booklet:{}", permission.action()))?
-            },
-            _ => permission.clone(),
-        };
-        Ok(source)
+        ConsumerSpec::scope_source(permission)
     }
 
     /// 当前策略是否接受独立人员范围配置。

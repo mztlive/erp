@@ -8,12 +8,11 @@ use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::AccessControlService;
-use super::consumers::{
-    WIRED_CONSUMERS, configurable_registration, registration, validate_binding, validate_scope_type,
-};
+use super::consumers::{configurable_registration, registration, validate_binding, validate_scope_type};
 use crate::access_control::{
     AuditEvent, AuditEventData, AuditEventId, AuditEventResult, DataScope, DataScopeSubjectType,
 };
+use crate::entity::access_control::consumer_spec::CONSUMERS;
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
 use crate::entity::access_control::person_scope_migration::expression;
 use crate::entity::access_control::personal_grant::PersonalBusinessGrant;
@@ -103,22 +102,24 @@ async fn migrate(
 /// # 错误
 /// 数据库失败拒绝原事务。
 pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn Executor) -> Result<()> {
-    for (resource, actions, dimensions) in WIRED_CONSUMERS {
-        for action in *actions {
+    for spec in CONSUMERS {
+        let resource = spec.resource();
+        for action_spec in spec.actions() {
+            let action = action_spec.action();
             if configurable_registration(resource, action).is_err() {
                 continue;
             }
             let scope = PersonDataScope {
                 base: BaseModel::new(id_generator::next_id()),
                 user_id: user.into(),
-                resource: (*resource).into(),
-                action: (*action).into(),
+                resource: resource.into(),
+                action: action.into(),
                 expression: PersonScopeExpression {
                     additive: false,
                     history_read: false,
                     alternatives: vec![vec![PersonScopeTerm {
                         scope_type: crate::access_control::DataScopeType::Company,
-                        target_dimension: dimensions[0],
+                        target_dimension: action_spec.supported_dimensions()[0],
                         target_mode: None,
                         include_descendants: None,
                         scope_targets: vec![],
@@ -157,12 +158,12 @@ async fn plan(
     }
     let state = OrganizationRepository::new(db).state(executor).await?;
     state.own_org(user, Instant::now())?;
-    for (resource, actions, _) in WIRED_CONSUMERS {
-        for action in *actions {
-            if configurable_registration(resource, action).is_err() {
-                continue;
-            }
-            if existing.iter().any(|s| s.resource == *resource && s.action == *action) {
+    for spec in CONSUMERS {
+        let resource = spec.resource();
+        for action in spec.actions().iter().map(|action| action.action()) {
+            if configurable_registration(resource, action).is_err()
+                || existing.iter().any(|s| s.resource == resource && s.action == action)
+            {
                 continue;
             }
             let eligible = snapshot
@@ -216,8 +217,7 @@ async fn validate_migration(
             targets.validate_targets(term.target_dimension, target.ids(), executor).await?;
         }
     }
-    let consumer = registration(&candidate.resource, &candidate.action)?;
-    candidate.resolve(state, consumer.required_dimensions, consumer.allows_history, Instant::now())?;
+    candidate.resolve(state, Instant::now())?;
     Ok(())
 }
 
@@ -274,7 +274,7 @@ async fn candidate(
         action,
         source.0,
         source.1,
-        registration(resource, action)?.allows_history,
+        registration(resource, action)?.allows_history(),
     )?;
     let candidate = PersonDataScope {
         base: BaseModel::new(id_generator::next_id()),
@@ -300,9 +300,13 @@ async fn migration_identity(
         .await?
         .filter(|a| a.is_active_backoffice())
         .ok_or_else(|| Error::ValidationError("迁移人员不存在或未启用".into()))?;
-    let permissions = WIRED_CONSUMERS
+    let permissions = CONSUMERS
         .iter()
-        .flat_map(|(r, actions, _)| actions.iter().map(move |a| Permission::parse(format!("{r}:{a}"))))
+        .flat_map(|spec| {
+            spec.actions()
+                .iter()
+                .map(move |action| Permission::parse(format!("{}:{}", spec.resource(), action.action())))
+        })
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let snapshot = rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
     rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;

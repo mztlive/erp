@@ -12,6 +12,7 @@ use persistence_core::Executor;
 
 use crate::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+use crate::entity::access_control::consumer_spec::{ConsumerSpec, OrganizationFacts};
 use crate::entity::access_control::governance::root_scope;
 use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::organization_change::OrganizationState;
@@ -188,7 +189,7 @@ impl DataScopeService {
         executor: &mut dyn Executor,
     ) -> Result<OrganizationState> {
         let repository = OrganizationRepository::new(&self.db);
-        if AuthorizationPolicy::needs_all_members(resource) {
+        if ConsumerSpec::get(resource)?.organization_facts() == OrganizationFacts::AllMembers {
             Ok(repository.state(executor).await?)
         } else {
             repository.directory_state(actor_id, at, executor).await
@@ -213,11 +214,10 @@ impl DataScopeService {
             let configs =
                 self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
             match configs.first() {
-                Some(config) => {
-                    config.resolve(state, registration.required_dimensions, registration.allows_history, at)
+                Some(config) => config.resolve(state, at),
+                None if registration.default_self() => {
+                    PersonDataScope::default_for(user, resource, action).resolve(state, at)
                 },
-                None if registration.default_self => PersonDataScope::default_for(user, resource, action)
-                    .resolve(state, registration.required_dimensions, registration.allows_history, at),
                 None => Ok(PersonDataScope::denied()),
             }
         })
@@ -261,7 +261,6 @@ mod tests {
     use crate::RoleId;
     use crate::access_control::ScopedObject;
     use crate::entity::role::{ROOT_ROLE_ID, RoleData};
-    use crate::service::access_control::consumers::registration;
 
     /// 岗位共享不读取旧的撤权、本人或部门配置，且不会变成销售授权。
     #[tokio::test]
@@ -341,11 +340,8 @@ mod tests {
         let roles = [Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("超级管理员")).unwrap()];
         let state = OrganizationState::default();
         let at = Instant::from_unix_secs(0);
-        let registration = registration("product", "create").unwrap();
         let config = PersonDataScope::default_for("admin", "product", "create");
-        let expected = config
-            .resolve(&state, registration.required_dimensions, registration.allows_history, at)
-            .unwrap();
+        let expected = config.resolve(&state, at).unwrap();
         let scope = resolve_scope(&roles, async { Ok(expected.clone()) }).await.unwrap();
         assert_eq!(scope, expected);
         assert!(!scope.role_clauses.iter().any(|clause| clause.company));

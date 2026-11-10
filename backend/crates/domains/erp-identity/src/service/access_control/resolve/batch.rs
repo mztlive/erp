@@ -9,6 +9,7 @@ use persistence_core::Executor;
 use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService};
 use crate::access_control::ResolvedScope;
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+use crate::entity::access_control::consumer_spec::{ConsumerSpec, OrganizationFacts};
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
@@ -188,7 +189,7 @@ impl<'a> DataScopeBatch<'a> {
 
     /// 保留目录窄查询与普通业务完整组织事实的区别，不混用两种状态。
     async fn scope_organizations(&mut self, resource: &str, at: Instant) -> Result<OrganizationState> {
-        let directory = !AuthorizationPolicy::needs_all_members(resource);
+        let directory = ConsumerSpec::get(resource)?.organization_facts() == OrganizationFacts::Actor;
         let current = if directory { &self.directory } else { &self.organizations };
         if let Some(state) = current {
             return Ok(state.clone());
