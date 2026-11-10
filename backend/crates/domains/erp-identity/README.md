@@ -4,6 +4,8 @@
 
 本 crate 不依赖其他业务领域。客户归谁负责、订单分配给谁等信息，由业务代码提供。
 
+统一权限 API 的待实施合同见 [identity 统一权限 API 设计](../../../../docs/identity-authorization-api-design.md)。下文说明当前接口。
+
 ## 检查权限
 
 管理端按以下顺序检查：

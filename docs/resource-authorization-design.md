@@ -6,6 +6,8 @@
 
 业务代码通过统一接口或本域注入的 Port 请求判定，提供负责人、部门、关联对象、任务分配和版本等可信事实；将现有分散的权限判断迁入该 crate。业务写入在同一 `Executor` 内重验授权。
 
+业务检查 API、查询约束类型及业务 Mapping 按 [identity 统一权限 API 设计](identity-authorization-api-design.md) 实施。
+
 ```text
 允许读取 = 身份有效
         AND 具备当前入口的功能权限
