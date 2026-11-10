@@ -31,11 +31,7 @@ pub(crate) fn queue_context_id(
             QueueContextField::set("purchase_orders", query.purchase_order_ids.iter().cloned()),
             QueueContextField::scalar("sort", query.sort_by),
             QueueContextField::scalar("ascending", query.sort_ascending.to_string()),
-            QueueContextField::scalar("all_owners", access.managed_owner_ids.is_none().to_string()),
-            QueueContextField::set("owners", access.managed_owner_ids.clone().unwrap_or_default()),
-            QueueContextField::scalar("can_manage", access.can_manage.to_string()),
-            QueueContextField::scalar("all_readers", access.readable_owner_ids.is_none().to_string()),
-            QueueContextField::set("readers", access.readable_owner_ids.clone().unwrap_or_default()),
+            QueueContextField::scalar("authorization", access.version().unwrap_or_default()),
         ],
     )
     .into_string()

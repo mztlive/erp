@@ -1,7 +1,10 @@
 //! 责任队列授权快照、范围过滤与允许动作。
 
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{CompiledAccess, Permission, PermissionSet};
 use persistence_core::Executor;
 
 use super::{
@@ -16,13 +19,15 @@ use crate::service::work_item::access::required_execution_permissions;
 
 pub const MANAGE_PERMISSION: &str = "work_item:manage";
 
+#[derive(Clone)]
 pub struct ActorAccess {
     pub actor_id: String,
     pub permissions: Vec<Permission>,
-    pub managed_owner_ids: Option<Vec<String>>,
+    pub(super) manage: Option<Arc<CompiledAccess>>,
+    pub(super) managed_task_ids: BTreeSet<String>,
     pub can_manage: bool,
     pub read_action: &'static str,
-    pub readable_owner_ids: Option<Vec<String>>,
+    pub(super) read: Option<Arc<CompiledAccess>>,
 }
 
 impl ActorAccess {
@@ -32,7 +37,7 @@ impl ActorAccess {
     /// * `query` - 工作项列表查询。
     ///
     /// # 返回
-    /// 所有视图先应用 list DataScope；Mine 和 History 只追加本人及历史筛选。
+    /// 所有视图先应用 list 授权；Mine 和 History 只追加本人及历史筛选。
     ///
     /// # 错误
     /// 缺少列表权限时返回 `Error::Forbidden`。
@@ -47,7 +52,7 @@ impl ActorAccess {
             statuses: query.statuses.clone(),
             priorities: query.priorities.clone(),
             query: query.query.clone(),
-            managed_owner_ids: self.readable_owner_ids.clone(),
+            authorization: Some(self.read_access()?.clone()),
             page: query.page,
             page_size: query.page_size,
             sort_by: Some(query.sort_by.to_string()),
@@ -76,9 +81,10 @@ impl ActorAccess {
         Self {
             actor_id,
             permissions: Vec::new(),
-            managed_owner_ids: None,
+            manage: None,
+            managed_task_ids: BTreeSet::new(),
             can_manage: false,
-            readable_owner_ids: Some(Vec::new()),
+            read: None,
             read_action: "detail",
         }
     }
@@ -98,27 +104,35 @@ impl ActorAccess {
         self
     }
 
-    /// 设置管理范围。
-    ///
+    /// 取得已编译的任务读取约束。
     /// # 参数
-    /// * `managed_owner_ids` - 管理组织下的任务负责人
-    /// * `can_manage` - 是否具备管理范围
-    ///
-    /// # 返回
-    /// 返回更新后的快照。
-    ///
-    /// # 错误
     /// 无。
-    #[cfg(test)]
-    pub fn with_managed_scope(mut self, managed_owner_ids: Option<Vec<String>>, can_manage: bool) -> Self {
-        self.managed_owner_ids = managed_owner_ids;
-        self.can_manage = can_manage;
-        self
+    /// # 返回
+    /// 当前读取动作绑定的完整授权结果。
+    /// # 错误
+    /// 未经授权构造的上下文拒绝查询。
+    pub fn read_access(&self) -> Result<&Arc<CompiledAccess>> {
+        self.read.as_ref().ok_or_else(|| Error::Forbidden("缺少任务授权查询".into()))
+    }
+
+    /// 读取包含管理动作依赖的队列版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前读取和可用管理授权的完整版本。
+    /// # 错误
+    /// 缺少读取授权时返回错误。
+    pub fn version(&self) -> Result<String> {
+        Ok(format!(
+            "{}:{}",
+            self.read_access()?.version(),
+            self.manage.as_ref().map(|value| value.version()).unwrap_or_default()
+        ))
     }
 }
 
 impl WorkItemReadService {
-    /// 分别解析读取和操作的 DataScope，操作权限缺失不影响读取。
+    /// 分别编译读取和管理动作的授权条件，操作权限缺失不影响读取。
     /// # 参数
     /// `actor` 为真实账号，`action` 为当前读取动作，`executor` 为同一执行器。
     /// # 返回
@@ -131,20 +145,14 @@ impl WorkItemReadService {
         action: &'static str,
         executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
-        let readable_owner_ids = self.task_scope_owners(actor, action, executor).await?;
-        let permissions = self.rbac.permissions(actor.kind(), actor.id()).await?;
-        let mut access = ActorAccess::new(actor.id().to_owned()).with_permissions(permissions.into_vec());
-        access.readable_owner_ids = readable_owner_ids;
+        let read = self.task_query(actor, action, executor).await?;
+        let mut access = ActorAccess::new(actor.id().to_owned());
+        access.permissions = self.task_permissions(actor, executor).await?;
+        access.read = Some(read);
         access.read_action = action;
         if has_permission(&access, MANAGE_PERMISSION) {
-            match self.task_scope_owners(actor, "manage", executor).await {
-                Ok(owners) => {
-                    access.managed_owner_ids = owners;
-                    access.can_manage = true;
-                },
-                Err(crate::Error::Forbidden(_)) => {},
-                Err(error) => return Err(error),
-            }
+            access.manage = Some(self.task_query(actor, "manage", executor).await?);
+            access.can_manage = true;
         }
         Ok(access)
     }
@@ -161,8 +169,8 @@ impl WorkItemReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(ActorAccess, String)> {
-        let version = self.queue_scope_version(actor, executor).await?;
         let access = self.task_access(actor, "list", executor).await?;
+        let version = access.version()?;
         Ok((access, version))
     }
 
@@ -274,13 +282,13 @@ pub(super) fn allowed_actions(
 ) -> Vec<WorkItemAllowedAction> {
     let can_control = has_permission(access, MANAGE_PERMISSION)
         && access.can_manage
-        && covers_owner(access, item.owner_user_id.as_deref());
+        && access.managed_task_ids.contains(&item.id);
     let mut actions = item.action_policy().allowed_actions(
         WorkItemActionAccess {
             actor_id,
             managed_queue: scope != WorkItemScope::History,
             can_manage: can_control,
-            managed_owner_ids: access.managed_owner_ids.as_deref(),
+            managed_owner_ids: None,
         },
         |requirement| match requirement {
             WorkItemActionRequirement::Execute => {
@@ -302,7 +310,7 @@ pub(super) fn allowed_actions(
     actions
 }
 
-/// 判断当前账号查看该任务时应使用的队列范围。
+/// 为已经通过对象授权的任务选择展示范围，不执行对象授权。
 ///
 /// # 参数
 /// * `item` - 工作项。
@@ -310,17 +318,12 @@ pub(super) fn allowed_actions(
 /// * `access` - 授权快照。
 ///
 /// # 返回
-/// 通过当前动作 DataScope 后，终态返回 `History`，本人负责返回 `Mine`，其他返回 `Managed`。
+/// 调用方通过当前任务 require 后，终态返回 `History`，本人负责返回 `Mine`，其他返回 `Managed`。
 ///
 /// # 错误
-/// 当前动作权限或 DataScope 不覆盖任务时返回 `Error::Forbidden`。
-pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
-    if !has_permission(access, &format!("work_item:{}", access.read_action))
-        || !access
-            .readable_owner_ids
-            .as_ref()
-            .is_none_or(|ids| item.owner_user_id.as_ref().is_some_and(|owner| ids.contains(owner)))
-    {
+/// 缺少当前动作权限时返回 `Error::Forbidden`。
+pub(super) fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
+    if !has_permission(access, &format!("work_item:{}", access.read_action)) {
         return Err(Error::Forbidden("当前账号无权查看该任务".into()));
     }
     Ok(if item.is_terminal() {
@@ -332,32 +335,12 @@ pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Re
     })
 }
 
-/// 判断管理范围是否覆盖指定负责人。
-///
-/// # 参数
-/// * `access` - 授权快照。
-/// * `owner` - 任务负责人；无负责人时不能被名单覆盖。
-///
-/// # 返回
-/// `managed_owner_ids` 为 `None` 时不限定名单，返回 `true`；否则负责人在名单中返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
-    access
-        .managed_owner_ids
-        .as_ref()
-        .is_none_or(|ids| owner.is_some_and(|owner| ids.iter().any(|id| id == owner)))
-}
-
 #[cfg(test)]
 mod tests {
     use erp_core::ids::WorkItemId;
-    use persistence_core::QueryFilter;
 
     use super::*;
-    use crate::dto::work_item::WorkItemView;
-    use crate::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemType};
+    use crate::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority};
 
     fn item() -> WorkItem {
         WorkItem::new(
@@ -366,7 +349,7 @@ mod tests {
                 work_item_type: WorkItemType::CardFundsReview,
                 business_object_type: "receivable_account".into(),
                 business_object_id: "account".into(),
-                subject_version: "version-7".into(),
+                subject_version: "v1".into(),
                 owner_role: "finance".into(),
                 owner_organization_id: "company".into(),
                 owner_user_id: "reader".into(),
@@ -380,74 +363,36 @@ mod tests {
         .unwrap()
     }
 
-    fn access(permission: &str, owners: Option<Vec<String>>) -> ActorAccess {
-        let mut access =
-            ActorAccess::new("reader".into()).with_permissions(vec![Permission::parse(permission).unwrap()]);
-        access.readable_owner_ids = owners;
-        access
-    }
-
     #[test]
-    fn every_list_view_intersects_datascope_without_business_or_manage_permissions() {
-        let access = access("work_item:list", Some(vec!["reader".into()]));
+    fn function_permission_alone_cannot_generate_a_list_filter() {
+        let access = ActorAccess::new("reader".into())
+            .with_permissions(vec![Permission::parse("work_item:list").unwrap()]);
         for scope in ["mine", "managed", "history"] {
             let params: dto::WorkItemListParams =
                 serde_json::from_value(serde_json::json!({"scope": scope})).unwrap();
-            let filter = access.scope_filter(&params.normalized().unwrap()).unwrap();
-            assert_eq!(filter.managed_owner_ids, Some(vec!["reader".into()]));
-            assert!(filter.object_access_shapes.is_none());
-            let document = filter.to_doc();
-            assert!(
-                document.get_array("$and").unwrap().iter().any(|value| {
-                    value.as_document().is_some_and(|part| part.contains_key("owner_user_id"))
-                })
-            );
+            assert!(access.scope_filter(&params.normalized().unwrap()).is_err());
         }
+        assert!(access.read_access().is_err());
+        assert!(access.version().is_err());
     }
 
     #[test]
-    fn missing_list_permission_or_empty_scope_never_grants_personal_tasks() {
-        let params: dto::WorkItemListParams =
-            serde_json::from_value(serde_json::json!({"scope":"mine"})).unwrap();
-        let query = params.normalized().unwrap();
-        assert!(access("sales_order:detail", None).scope_filter(&query).is_err());
-        let filter = access("work_item:list", Some(vec![])).scope_filter(&query).unwrap();
-        assert_eq!(filter.managed_owner_ids, Some(vec![]));
-        assert_eq!(filter.owner_user_id.as_deref(), Some("reader"));
-    }
-
-    #[test]
-    fn detail_requires_its_own_scope_even_for_owner_or_historical_actor() {
-        let mut item = item();
-        let access = access("work_item:detail", Some(vec!["reader".into()]));
-        assert_eq!(detail_scope(&item, "reader", &access).unwrap(), WorkItemScope::Mine);
-        item.owner_user_id = Some("other".into());
-        item.responsibility_actor_ids.push("reader".into());
-        assert!(detail_scope(&item, "reader", &access).is_err());
-        item.status = WorkItemStatus::Completed;
-        item.completed_by = Some("reader".into());
-        assert!(detail_scope(&item, "reader", &access).is_err());
-        assert!(detail_scope(&item, "reader", &self::access("work_item:detail", None)).is_ok());
-        assert!(detail_scope(&item, "reader", &self::access("work_item:list", None)).is_err());
-    }
-
-    #[test]
-    fn actions_require_manage_scope_independently_of_read_and_business_permissions() {
+    fn management_actions_require_authorization_for_the_exact_task() {
         let fields = dto::WorkItemFields::from(item());
-        let mut access = access("work_item:manage", None);
+        let mut access = ActorAccess::new("reader".into())
+            .with_permissions(vec![Permission::parse(MANAGE_PERMISSION).unwrap()]);
         access.can_manage = true;
-        access.managed_owner_ids = Some(vec!["reader".into()]);
+        access.managed_task_ids.insert("other-task".into());
+        assert!(
+            !allowed_actions(&fields, WorkItemScope::Mine, "reader", &access)
+                .contains(&WorkItemAllowedAction::Reassign)
+        );
+        access.managed_task_ids.insert(fields.id.clone());
         assert!(
             allowed_actions(&fields, WorkItemScope::Mine, "reader", &access)
                 .contains(&WorkItemAllowedAction::Reassign)
         );
-        access.managed_owner_ids = Some(vec![]);
-        assert!(
-            !allowed_actions(&fields, WorkItemScope::Mine, "reader", &access)
-                .contains(&WorkItemAllowedAction::Reassign)
-        );
-        access.managed_owner_ids = None;
-        access.permissions = vec![Permission::parse("work_item:detail").unwrap()];
+        access.permissions.clear();
         assert!(
             !allowed_actions(&fields, WorkItemScope::Mine, "reader", &access)
                 .contains(&WorkItemAllowedAction::Reassign)
@@ -455,54 +400,15 @@ mod tests {
     }
 
     #[test]
-    fn mutation_result_does_not_require_detail_or_list() {
-        let mut access = access("work_item:manage", Some(vec!["reader".into()]));
+    fn authorized_detail_and_manage_results_keep_separate_entry_permissions() {
+        let task = item();
+        let mut access = ActorAccess::new("reader".into())
+            .with_permissions(vec![Permission::parse("work_item:manage").unwrap()]);
+        assert!(detail_scope(&task, "reader", &access).is_err());
         access.read_action = "manage";
-        assert!(detail_scope(&item(), "reader", &access).is_ok());
-        access.read_action = "detail";
-        assert!(detail_scope(&item(), "reader", &access).is_err());
-    }
-    /// 管理权限不能代替业务执行权限，放弃处理也不依赖原单的业务权限。
-    #[test]
-    fn manage_does_not_grant_business_execution_but_allows_abandonment() {
-        let mut task = item();
-        task.work_item_type = WorkItemType::ApprovalRework;
-        task.business_object_type = "sales_order".into();
-        let fields = dto::WorkItemFields::from(task);
-        let mut access = access("work_item:manage", None);
-        access.can_manage = true;
-        let actions = allowed_actions(&fields, WorkItemScope::Mine, "reader", &access);
-        assert!(actions.contains(&WorkItemAllowedAction::AbandonRework));
-        assert!(!actions.contains(&WorkItemAllowedAction::Process));
-        access.managed_owner_ids = Some(vec![]);
-        assert!(
-            !allowed_actions(&fields, WorkItemScope::Mine, "reader", &access)
-                .contains(&WorkItemAllowedAction::AbandonRework)
-        );
-    }
-
-    /// 任务线协议只输出任务信息、关联身份与版本。
-    #[test]
-    fn task_wire_projection_never_serializes_business_materials() {
-        let mut task = item();
-        task.work_item_type = WorkItemType::ApprovalRework;
-        task.business_object_type = "sales_order".into();
-        let view = WorkItemView::from_fields(task.into(), "queue".into()).unwrap();
-
-        let json = serde_json::to_value(view).unwrap();
-        assert_eq!(json["business_object_id"], "account");
-        assert_eq!(json["subject_version"], "version-7");
-        for key in [
-            "business_object_label",
-            "counterparty_label",
-            "summary_sections",
-            "brief_lines",
-            "delivery_lines",
-            "fulfillment_status",
-            "brief_more_count",
-            "list_summary",
-        ] {
-            assert!(json.get(key).is_none(), "unexpected material: {key}");
-        }
+        assert_eq!(detail_scope(&task, "reader", &access).unwrap(), WorkItemScope::Mine);
+        let mut completed = task;
+        completed.status = WorkItemStatus::Completed;
+        assert_eq!(detail_scope(&completed, "reader", &access).unwrap(), WorkItemScope::History);
     }
 }

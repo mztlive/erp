@@ -1,184 +1,160 @@
-//! 任务授权直接使用 identity 的公开范围解析与 RBAC 服务。
+//! 任务读取和对象检查统一调用 identity，登记不接受请求覆盖。
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::Permission;
-use erp_identity::access_control::ScopedObject;
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
+use erp_identity::entity::authorization::{AccessSubject, AccessTarget, FactKind, ReadAccess};
+use erp_identity::ports::AccessMapping;
+use erp_identity::service::authorization::{AccessPolicy, AccessRegistration, AuthorizationRegistry};
+use erp_identity::{AuthorizationService, CompiledAccess, Permission, ResourceTargets, SharedRbacService};
+use mongodb::Database;
 use persistence_core::Executor;
 
 use super::WorkItemReadService;
-use crate::{Error, Result};
+use super::facts::WorkItemFacts;
+use crate::entity::work_item::WorkItemType;
+use crate::repository::work_item::authorization::WorkItemAuthorizationExt;
+use crate::service::work_item::access::required_execution_permissions;
+use crate::{Error, Result, WorkItemExt};
+
+/// 同一领域模型的读取、详情和管理分别证明各自动作范围。
+pub(super) fn authorization(
+    db: Database,
+    rbac: SharedRbacService,
+    mapping: Arc<dyn AccessMapping>,
+) -> AuthorizationService {
+    let facts = Arc::new(WorkItemFacts(db.clone()));
+    let entries = ["list", "detail", "manage"]
+        .into_iter()
+        .map(|action| {
+            let permission = permission(action).expect("固定任务动作合法");
+            AccessRegistration {
+                policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
+                permission,
+                subject: AccessSubject::Direct,
+                required_permissions: vec![],
+                required_facts: [FactKind::Owner, FactKind::Organization].into(),
+                allow_proposed: false,
+                mapping: Some(mapping.clone()),
+                facts: Some(facts.clone()),
+            }
+        })
+        .collect();
+    AuthorizationService::new(db, rbac, AuthorizationRegistry::new(entries).expect("固定任务登记完整"))
+}
+
+/// 仅服务端支持的任务动作可以解析为授权入口。
+fn permission(action: &str) -> Result<Permission> {
+    if !matches!(action, "list" | "detail" | "manage") {
+        return Err(Error::ValidationError("未登记的任务权限动作".into()));
+    }
+    Ok(Permission::parse(format!("work_item:{action}"))?)
+}
 
 impl WorkItemReadService {
-    /// 解析任务读取或管理动作的负责人范围。
-    /// # 参数
-    /// `actor` 为真实账号，`action` 为 list/detail/manage，`executor` 为原事务。
-    /// # 返回
-    /// 公司范围返回 None；空集合不授予读取资格。
-    /// # 错误
-    /// 非法动作、身份失效、权限拒绝或范围过大时返回错误。
-    pub async fn task_scope_owners(
+    /// 生成绑定当前事务的完整任务查询约束。
+    pub(super) async fn task_query(
         &self,
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Option<Vec<String>>> {
-        if !matches!(action, "list" | "detail" | "manage") {
-            return Err(Error::ValidationError("未登记的任务权限动作".into()));
-        }
-        let scope = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, &Permission::parse(format!("{}:{}", "work_item", action))?, executor)
-            .await?;
-        compile_task_owners(&scope)
+    ) -> Result<Arc<CompiledAccess>> {
+        let query =
+            self.authorization.query(actor, &permission(action)?, AccessSubject::Direct, executor).await?;
+        let compiled = query.compile(self.mapping.as_ref(), executor).await?;
+        self.authorization.validate(&compiled, executor).await?;
+        Ok(Arc::new(compiled))
     }
-    /// 读取当前身份授权版本，用于分页和首末复验。
+
+    /// 以完整对象合同检查一个任务，供详情和写命令复用。
     /// # 参数
-    /// `actor` 为当前账号，`executor` 沿用调用事务。
+    /// actor 为真实账号，action 为 detail/manage，id 为任务 ID，executor 沿用调用事务。
     /// # 返回
-    /// 返回 identity 生成的授权版本。
+    /// 入口权限和任务责任范围均成立时成功。
     /// # 错误
-    /// 身份失效或读取失败时传播错误。
-    pub async fn queue_scope_version(
+    /// 身份失效、无权、任务缺失或事实读取失败时返回错误。
+    pub async fn require_task(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.authorization
+            .require(
+                actor,
+                &permission(action)?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// 复验本次任务读取及管理动作的完整依赖。
+    /// # 参数
+    /// access 为本服务生成的访问上下文；executor 为原执行器。
+    /// # 返回
+    /// 所有已使用的权限和映射仍有效时成功。
+    /// # 错误
+    /// 撤权或版本变化返回 DATA_SCOPE_CHANGED，其他错误保留原类别。
+    pub async fn validate_access(
+        &self,
+        access: &super::access::ActorAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.authorization.validate(access.read_access()?, executor).await?;
+        if let Some(manage) = &access.manage {
+            self.authorization.validate(manage, executor).await?;
+        }
+        Ok(())
+    }
+}
+
+impl WorkItemReadService {
+    /// 按实际任务注册表检查按钮权限，通配权限仍由 identity 解释。
+    pub(super) async fn task_permissions(
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<String> {
-        Ok(DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .authorization_version(actor, executor)
-            .await?)
-    }
-}
-/// 将 identity 已授权范围转换为当前有效的任务负责人集合。
-/// # 参数
-/// `scope` 为当前事务解析的身份授权范围。
-/// # 返回
-/// 公司范围返回 None，否则返回去重的具体负责人。
-/// # 错误
-/// 负责人超过 20000 人时拒绝。
-pub fn compile_task_owners(scope: &AuthorizedDataScope) -> Result<Option<Vec<String>>> {
-    let owners = owners(scope);
-    if owners.as_ref().is_some_and(|ids| ids.len() > 20_000) {
-        return Err(Error::ValidationError("任务管理范围超过 20000 人，请缩小配置范围".into()));
-    }
-    Ok(owners)
-}
-
-/// 按公共授权范围与当前有效内部组织关系编译具体任务负责人。
-fn owners(context: &AuthorizedDataScope) -> Option<Vec<String>> {
-    let object = |user: &str, org: Option<&str>| {
-        context.scope.allows(
-            &ScopedObject {
-                owned: user == context.user_id,
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: org,
-                settlement_party_id: None,
-                warehouse_id: None,
-            },
-            false,
-        )
-    };
-    // 无归属、非本人仍获准，只可能由角色 Company 与个人上限共同证明。
-    if object("", None) {
-        return None;
-    }
-    let mut users = BTreeSet::new();
-    if object(&context.user_id, None) {
-        users.insert(context.user_id.clone());
-    }
-    for membership in &context.organizations.memberships {
-        if !membership.base.is_deleted()
-            && membership.validity.contains(context.as_of)
-            && object(&membership.user_id, Some(&membership.org_unit_id))
-        {
-            users.insert(membership.user_id.clone());
+    ) -> Result<Vec<Permission>> {
+        let mut codes = BTreeSet::from([
+            "work_item:list",
+            "work_item:detail",
+            "work_item:manage",
+            "approval_instance:decide",
+        ]);
+        for relation in WorkItemType::registered_brief_relations() {
+            if let Some(required) =
+                required_execution_permissions(relation.work_item_type, relation.business_object_type)
+            {
+                codes.extend(required);
+            }
         }
-    }
-    Some(users.into_iter().collect())
-}
-
-#[cfg(test)]
-mod tests {
-    use entity_core::BaseModel;
-    use erp_core::common::time::Instant;
-    use erp_identity::access_control::{ResolvedScope, ScopeClause};
-    use erp_identity::entity::organization::{OrgMembership, OrgValidity};
-
-    use super::*;
-
-    fn context() -> AuthorizedDataScope {
-        let membership = |id: &str, user: &str, org: &str, end: Option<i64>| OrgMembership {
-            base: BaseModel::new(id.into()),
-            user_id: user.into(),
-            org_unit_id: org.into(),
-            validity: OrgValidity {
-                valid_from: Instant::from_unix_secs(1),
-                valid_to: end.map(Instant::from_unix_secs),
-            },
-            changed_by: "admin".into(),
-            reason: "fixture".into(),
-        };
-        let mut context = AuthorizedDataScope::test_fixture(DataScopeFacts {
-            user_id: "manager".into(),
-            resource: "work_item".into(),
-            action: "manage".into(),
-            qualified_roles: Default::default(),
-            scope: ResolvedScope {
-                role_clauses: vec![ScopeClause {
-                    org_unit_ids: BTreeSet::from(["dept-a".into()]),
-                    ..Default::default()
-                }],
-                user_limit: None,
-            },
-            organizations: Default::default(),
-            policy_version: 1,
-            scope_version: "v1".into(),
-            as_of: Instant::from_unix_secs(10),
-        });
-        context.test_facts_mut().organizations.memberships = vec![
-            membership("a", "worker-a", "dept-a", None),
-            membership("b", "worker-b", "dept-b", None),
-            membership("old", "expired", "dept-a", Some(10)),
-        ];
-        context
+        let mut permissions = Vec::new();
+        for code in codes {
+            let permission = Permission::parse(code)?;
+            if self.authorization.has_permission(actor, &permission, executor).await? {
+                permissions.push(permission);
+            }
+        }
+        Ok(permissions)
     }
 
-    #[test]
-    fn task_manager_uses_current_membership_not_responsibility_organization() {
-        let mut scope = context();
-        assert_eq!(owners(&scope), Some(vec!["worker-a".into()]));
-        scope.test_facts_mut().scope.user_limit =
-            Some(ScopeClause { self_owned: true, ..Default::default() });
-        assert_eq!(owners(&scope), Some(vec![]));
-        scope.test_facts_mut().scope.role_clauses = vec![ScopeClause { company: true, ..Default::default() }];
-        assert_eq!(owners(&scope), Some(vec!["manager".into()]));
-        scope.test_facts_mut().scope.user_limit = None;
-        assert_eq!(owners(&scope), None);
-        scope.test_facts_mut().scope.role_clauses.clear();
-        assert_eq!(owners(&scope), Some(vec![]));
-    }
-
-    /// 管理范围上限在批量和原读取路径共用，边界人数允许且超限保持原验证错误。
-    #[test]
-    fn managed_owner_limit_preserves_exact_boundary() {
-        let mut scope = context();
-        let template = scope.test_facts_mut().organizations.memberships[0].clone();
-        scope.test_facts_mut().organizations.memberships = (0..20_000)
-            .map(|index| {
-                let mut membership = template.clone();
-                membership.user_id = format!("worker-{index}");
-                membership
-            })
-            .collect();
-        assert_eq!(compile_task_owners(&scope).unwrap().unwrap().len(), 20_000);
-        let mut extra = template;
-        extra.user_id = "extra-worker".into();
-        scope.test_facts_mut().organizations.memberships.push(extra);
-        assert!(
-            matches!(compile_task_owners(&scope), Err(Error::ValidationError(message)) if message == "任务管理范围超过 20000 人，请缩小配置范围")
-        );
+    /// 只查询当前展示批次的管理资格，不装载全部可管理任务。
+    pub(super) async fn projected_access(
+        &self,
+        access: &super::access::ActorAccess,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<super::access::ActorAccess> {
+        let mut projected = access.clone();
+        if let Some(manage) = &access.manage {
+            self.authorization.validate(manage, executor).await?;
+            projected.managed_task_ids =
+                self.db.work_items().authorized_ids(ids, manage, executor).await?.into_iter().collect();
+            self.authorization.validate(manage, executor).await?;
+        }
+        Ok(projected)
     }
 }

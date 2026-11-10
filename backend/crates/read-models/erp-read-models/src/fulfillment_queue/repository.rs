@@ -8,7 +8,10 @@ mod page;
 mod pipeline;
 mod prepayment;
 
+use std::sync::Arc;
+
 use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
+use erp_identity::CompiledAccess;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemPriority;
 use futures_util::TryStreamExt;
@@ -20,6 +23,7 @@ use serde::Deserialize;
 /// 履约责任队列的仓储筛选；所有字符串均已由 Service 白名单化或规范化。
 #[derive(Debug, Clone)]
 pub struct FulfillmentQueueFilter {
+    pub authorization: Option<Arc<CompiledAccess>>,
     /// 当前已认证个人责任人。
     pub owner_user_id: String,
     /// 服务端允许且调用方请求的作业类型稳定代码。
@@ -59,6 +63,7 @@ impl FulfillmentQueueFilter {
     /// 无。
     pub fn new(owner_user_id: String) -> Self {
         Self {
+            authorization: None,
             owner_user_id,
             operation_types: Vec::new(),
             operation_id: None,

@@ -8,7 +8,6 @@ use application_core::AuditActor;
 use erp_approval_runtime::resource_grants::append_assignments;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{
     AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService, subject,
 };
@@ -17,9 +16,10 @@ use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::ports::{
     OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact, WorkflowAuthorizationPort,
-    WorkflowDataScope, WorkflowQueueAccessFact, WorkflowScopeObject, WorkflowScopeObjects,
+    WorkflowScopeObject, WorkflowScopeObjects,
 };
 use erp_workflow::service::approval::execution::PlannedWrites;
+use erp_workflow::service::work_item::read::WorkItemReadService;
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -128,29 +128,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         .await
         .map_err(|error| map_service(error.into()))
     }
-    /// 同阶段复用首次身份范围事实；末尾版本校验仍由原队列入口独立执行。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人。
-    /// * `include_version` - 为真时让下层读取授权版本。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 成功时返回 `Some`，内含队列访问事实。本实现不返回 `None`。无 `work_item:manage` 时受管负责人列表为空向量；公司范围时该字段为 `None`。
-    ///
-    /// # 错误
-    /// 授权版本、角色、参与单据或范围解析失败时返回映射后的工作流错误。负责人超过 20000 时返回校验错误。
-    async fn queue_access_facts(
-        &self,
-        actor: &AuditActor,
-        include_version: bool,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<Option<WorkflowQueueAccessFact>> {
-        super::task_scope::queue_access(&self.db, &self.rbac, self, actor, include_version, executor)
-            .await
-            .map(Some)
-    }
-
     async fn approval_source_readable(
         &self,
         actor: &AuditActor,
@@ -187,15 +164,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         contract_readable_result(result)
     }
 
-    async fn resolve_workflow_scope(
-        &self,
-        actor: &AuditActor,
-        permission: &str,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<Option<WorkflowDataScope>> {
-        super::approval_scope::resolve(&self.db, &self.rbac, actor, permission, executor).await
-    }
-
     async fn binding_order_readable(
         &self,
         actor: &AuditActor,
@@ -227,32 +195,16 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
             .ok_or_else(|| WorkflowError::NotFound("审批当前业务对象不存在".into()))
     }
 
-    async fn task_scope_owners(
+    async fn require_task(
         &self,
         actor: &AuditActor,
         action: &str,
+        id: &str,
         executor: &mut dyn Executor,
-    ) -> WorkflowResult<Option<Vec<String>>> {
-        super::task_scope::task_owners(&self.db, &self.rbac, actor, action, executor).await
-    }
-
-    async fn managed_task_owners(
-        &self,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<Option<Vec<String>>> {
-        super::task_scope::managed_owners(&self.db, &self.rbac, actor, executor).await
-    }
-
-    async fn queue_scope_version(
-        &self,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> WorkflowResult<String> {
-        DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .authorization_version(actor, executor)
+    ) -> WorkflowResult<()> {
+        WorkItemReadService::new(self.db.clone(), self.rbac.clone())
+            .require_task(actor, action, id, executor)
             .await
-            .map_err(Self::map_identity)
     }
 
     async fn order_approval_readable(

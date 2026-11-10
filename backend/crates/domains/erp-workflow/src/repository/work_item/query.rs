@@ -2,8 +2,9 @@ use std::num::NonZeroU32;
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Repository, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Repository, Result, aggregate};
 
+use super::authorization::prefix;
 use super::{WorkItemFilter, WorkItemRow, WorkItemScan};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
@@ -18,7 +19,7 @@ pub trait WorkItemRepositoryExt {
     /// * `executor` - 调用方执行器；不另开会话。
     ///
     /// # 返回
-    /// 返回可逐批消费的游标；调用方仍负责完整授权、总数与版本计算。
+    /// 返回数据库授权后的游标；调用方负责业务筛选、总数和版本复验。
     ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
@@ -31,8 +32,8 @@ pub trait WorkItemRepositoryExt {
 
     /// 按固定批次读取队列候选任务投影。
     ///
-    /// 本方法不执行未授权候选总数统计；Service 必须逐批加载权威
-    /// 业务对象事实，完成参与权过滤后再形成分页和总数。
+    /// 本方法先应用已编译的完整任务授权，再排序和读取指定批次；
+    /// Service 完成剩余业务筛选后形成分页和总数。
     ///
     /// # 参数
     /// * `filter` - 服务端责任范围与业务筛选
@@ -242,7 +243,7 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
             .projection(work_item_projection())
             .build();
         let collection = self.collection().clone_with_type::<WorkItemRow>();
-        mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await
+        aggregate::find(&collection, filter.to_doc(), options, prefix(filter)?, executor).await
     }
 
     async fn find_visible_by_id(
@@ -253,7 +254,8 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
     ) -> Result<Option<WorkItem>> {
         let mut document = filter.to_doc();
         document.insert("id", id);
-        mongo_ops::find_one(&self.collection(), document, executor).await
+        let options = FindOptions::builder().limit(1).build();
+        Ok(aggregate::find(&self.collection(), document, options, prefix(filter)?, executor).await?.pop())
     }
 
     async fn list_active_by_object(

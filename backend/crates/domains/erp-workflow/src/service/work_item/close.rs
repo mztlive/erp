@@ -6,10 +6,10 @@ use std::sync::Arc;
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::access::{ActorAccess, ensure_generic_work_item_mutation, ensure_item_in_managed_scope};
+use super::access::ensure_generic_work_item_mutation;
 use super::write::{
     IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version,
     record_command_attempt, recover_command_error, required_text, work_item_update_error,
@@ -67,7 +67,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         req: CloseWorkItemRequest,
         actor: AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        let managed_access = self.managed_access(&actor).await?;
+        self.auth.require_task(&actor, "manage", &id, &mut NoTransaction).await?;
         let item = self.load(id.clone()).await?;
         ensure_generic_work_item_mutation(&item)?;
         req.validate()?;
@@ -84,20 +84,18 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let receipt = close_command_receipt(&id, &actor, &idempotency_key, expected_task_version, &decision)?;
         if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
             ensure_generic_work_item_mutation(&replayed)?;
-            ensure_item_in_managed_scope(&replayed, &managed_access)?;
             self.ensure_task_control_access(&actor, &replayed).await?;
             return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
             return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
         }
-        ensure_item_in_managed_scope(&item, &managed_access)?;
         self.ensure_task_control_access(&actor, &item).await?;
         if !item.is_w29_closable() {
             return Err(Error::BusinessLogicError("只有 W29 登记的异常任务允许受控关闭".to_string()));
         }
         if let Some(replacement_id) = decision.replacement_work_item_id.as_deref() {
-            self.ensure_w29_replacement(&item, replacement_id, &actor, &managed_access).await?;
+            self.ensure_w29_replacement(&item, replacement_id, &actor).await?;
         }
         let updated = self
             .close_with_domain_evidence(CloseDomainEvidenceInput { item, actor: &actor, decision, receipt })
@@ -116,7 +114,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         current: &WorkItem,
         replacement_id: &str,
         actor: &AuditActor,
-        access: &ActorAccess,
     ) -> Result<()> {
         if replacement_id == current.base.id {
             return Err(Error::ValidationError("替代任务不能引用自身".to_string()));
@@ -125,8 +122,22 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         if !replacement.is_w29_replacement_for(current) {
             return Err(Error::ConflictError("替代任务必须是同一 W29 对象类别的开放正式任务".to_string()));
         }
-        ensure_item_in_managed_scope(&replacement, access)?;
         self.ensure_task_control_access(actor, &replacement).await
+    }
+
+    /// 关闭目标及替代目标都必须在原写事务中重新证明管理资格。
+    async fn require_close_access(
+        &self,
+        actor: &AuditActor,
+        item: &WorkItem,
+        decision: &W29CloseFact,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.ensure_task_manage(actor, item, executor).await?;
+        if let Some(id) = decision.replacement_work_item_id.as_deref() {
+            self.auth.require_task(actor, "manage", id, executor).await?;
+        }
+        Ok(())
     }
 
     /// 在同一事务内写入 W29 领域证据、关闭任务并登记审计。
@@ -168,7 +179,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.ensure_task_manage(&close_actor, &item, executor).await?;
+                    service.require_close_access(&close_actor, &item, &decision, executor).await?;
                     facts
                         .persist_w29_close(
                             &item,

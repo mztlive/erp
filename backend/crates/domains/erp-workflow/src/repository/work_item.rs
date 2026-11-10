@@ -1,7 +1,10 @@
 //! 域 D03 `work_item` 仓储：指定责任人的人工任务队列查询。
 
+use std::sync::Arc;
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
+use erp_identity::CompiledAccess;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Pagination, QueryFilter};
 use serde::{Deserialize, Serialize};
@@ -11,6 +14,7 @@ use crate::entity::work_item::{
 };
 
 mod approval;
+pub(crate) mod authorization;
 mod finance;
 pub(crate) mod finance_rotation;
 mod fulfillment;
@@ -93,6 +97,8 @@ pub struct WorkItemRow {
 /// 待办列表筛选条件。
 #[derive(Debug, Clone, Default)]
 pub struct WorkItemFilter {
+    /// 统一授权生成的完整约束；由任务查询服务绑定。
+    pub authorization: Option<Arc<CompiledAccess>>,
     /// 关联销售单 ID；同字段 OR，与其他范围 AND。
     pub sales_order_ids: Vec<String>,
     /// 关联采购单 ID；同字段 OR，与其他范围 AND。

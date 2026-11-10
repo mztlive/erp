@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::access::{ActorAccess, authorized_item_fields};
 use super::order_access::filter_order_facts;
@@ -19,6 +19,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// # 参数
     /// * `items` - 待投影的工作项
     /// * `access` - 当前账号访问快照
+    /// * `executor` - 授权和业务读取共用的执行器
     ///
     /// # 返回
     /// 返回审批任务责任链匹配的投影，以及普通任务经对象事实过滤后的投影。
@@ -29,25 +30,20 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         &self,
         items: Vec<WorkItem>,
         access: &ActorAccess,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut ordinary = Vec::new();
         let mut approval_fields = Vec::new();
         let actor = self
             .auth
-            .load_account(&access.actor_id, &mut NoTransaction)
+            .load_account(&access.actor_id, executor)
             .await?
             .map(|account| AuditActor::new(account.id, account.login_account, account.kind));
         for item in items {
             if item.work_item_type.is_document_approval() {
                 if let Some(actor) = &actor
-                    && approval_task_readable_with_executor(
-                        &self.db,
-                        &self.auth,
-                        actor,
-                        &item,
-                        &mut NoTransaction,
-                    )
-                    .await?
+                    && approval_task_readable_with_executor(&self.db, &self.auth, actor, &item, executor)
+                        .await?
                 {
                     approval_fields.push(dto::WorkItemFields::from(item));
                 }
@@ -64,8 +60,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                     .map(|policy| (policy.object_kind, item.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
-        let mut facts: ObjectFactMap = self.facts.load_object_facts(&keys, &mut NoTransaction).await?;
-        filter_order_facts(&self.auth, &access.actor_id, &mut facts, &mut NoTransaction).await?;
+        let mut facts: ObjectFactMap = self.facts.load_object_facts(&keys, executor).await?;
+        filter_order_facts(&self.auth, &access.actor_id, &mut facts, executor).await?;
         approval_fields
             .extend(items.into_iter().filter_map(|item| authorized_item_fields(item, access, &facts)));
         Ok(approval_fields)

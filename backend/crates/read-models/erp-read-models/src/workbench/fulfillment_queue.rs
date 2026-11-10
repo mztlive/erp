@@ -364,10 +364,12 @@ impl WorkbenchReadService {
         if visible_types.is_empty() {
             let scope_version = queue_scope_version(&identity_version, &context_id, "");
             ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
+            tasks.validate_access(&access, executor).await?;
             return Ok(empty_page(query.page, query.page_size, context_id, scope_version));
         }
 
-        let filter = fulfillment_repository_filter(&mut query, actor.id(), &visible_types)?;
+        let mut filter = fulfillment_repository_filter(&mut query, actor.id(), &visible_types)?;
+        filter.authorization = Some(access.read_access()?.clone());
         let repository_page =
             FulfillmentQueueRepository::new(&self.db).search_fulfillment_queue(&filter, executor).await?;
 
@@ -387,8 +389,7 @@ impl WorkbenchReadService {
                 operation_type,
             })
             .collect();
-        let current_version = tasks.queue_scope_version(&actor, executor).await?;
-        ensure_scope_version(1, Some(&identity_version), &current_version)?;
+        tasks.validate_access(&access, executor).await?;
 
         Ok(FulfillmentQueuePageView {
             items,
@@ -458,9 +459,7 @@ fn visible_operation_types(
     requested: &[FulfillmentQueueOperationType],
     access: &ActorAccess,
 ) -> Vec<FulfillmentQueueOperationType> {
-    if !has_permission(access, "work_item:list")
-        || !access.readable_owner_ids.as_ref().is_none_or(|ids| ids.contains(&access.actor_id))
-    {
+    if !has_permission(access, "work_item:list") {
         return Vec::new();
     }
     requested.to_vec()

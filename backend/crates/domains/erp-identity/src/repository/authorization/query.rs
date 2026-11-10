@@ -1,5 +1,5 @@
-use std::ptr;
 use std::sync::Arc;
+use std::{fmt, ptr};
 
 use erp_core::common::time::Instant;
 use mongodb::bson::{Bson, Document};
@@ -152,5 +152,12 @@ impl CompiledAccess {
     /// 不返回错误。
     pub fn model(&self) -> &QueryModel {
         &self.model
+    }
+}
+
+impl fmt::Debug for CompiledAccess {
+    /// 诊断只输出查询模型，不输出身份及业务事实。
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("CompiledAccess").field("model", &self.model).finish_non_exhaustive()
     }
 }

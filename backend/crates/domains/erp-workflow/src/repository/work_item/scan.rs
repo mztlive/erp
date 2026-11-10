@@ -1,12 +1,14 @@
-//! 同一查询游标按固定批次供给候选，业务授权仍由调用方逐批执行。
+//! 完整授权先在数据库执行，再按固定批次读取任务；调用方完成业务筛选和复验。
 
 use std::num::NonZeroU32;
 
 use futures_util::{TryStream, TryStreamExt};
-use mongodb::options::FindOptions;
+use mongodb::bson::doc;
+use mongodb::options::AggregateOptions;
 use mongodb::{Collection, Cursor, SessionCursor};
 use persistence_core::{Error, Executor, QueryFilter, Result};
 
+use super::authorization::prefix;
 use super::query::{sort_doc, work_item_projection};
 use super::{WorkItemFilter, WorkItemRow};
 use crate::entity::work_item::WorkItem;
@@ -27,7 +29,7 @@ impl WorkItemScan {
     ///
     /// # 参数
     /// * `collection` - `work_items` 集合。
-    /// * `filter` - 与旧候选扫描相同的筛选。
+    /// * `filter` - 业务筛选及已编译的完整授权。
     /// * `batch_size` - 每次服务端取数上限。
     /// * `executor` - 调用方执行器；有会话时绑定该会话。
     ///
@@ -42,13 +44,12 @@ impl WorkItemScan {
         batch_size: NonZeroU32,
         executor: &mut dyn Executor,
     ) -> Result<Self> {
-        let collection = collection.clone_with_type::<WorkItemRow>();
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .batch_size(batch_size.get())
-            .projection(work_item_projection())
-            .build();
-        let query = collection.find(filter.to_doc()).with_options(options);
+        let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+        pipeline.extend(prefix(filter)?);
+        pipeline.push(doc! { "$sort": sort_doc(filter.sort_by.as_deref(), filter.sort_ascending) });
+        pipeline.push(doc! { "$project": work_item_projection() });
+        let options = AggregateOptions::builder().batch_size(batch_size.get()).build();
+        let query = collection.aggregate(pipeline).with_type::<WorkItemRow>().with_options(options);
         let cursor = match executor.session() {
             Some(session) => ScanCursor::Transactional(query.session(session).await?),
             None => ScanCursor::Independent(query.await?),

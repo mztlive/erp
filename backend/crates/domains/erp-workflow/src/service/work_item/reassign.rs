@@ -8,8 +8,8 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::access::{
-    ActorAccess, active_role_ids, ensure_generic_work_item_mutation, ensure_item_in_managed_scope,
-    has_assignment_candidate_access, object_policy,
+    ActorAccess, active_role_ids, ensure_generic_work_item_mutation, has_assignment_candidate_access,
+    object_policy,
 };
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
@@ -91,21 +91,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         id: String,
         actor: AuditActor,
     ) -> Result<Vec<WorkItemReassignCandidateView>> {
-        let managed_access = self.managed_access(&actor).await?;
+        self.auth.require_task(&actor, "manage", &id, &mut NoTransaction).await?;
         let item = self.load(id.clone()).await?;
         ensure_generic_work_item_mutation(&item)?;
-        ensure_item_in_managed_scope(&item, &managed_access)?;
 
-        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
-        let cascade_tasks = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
-            let (_, tasks) = self
-                .facts
-                .purchase_order_fulfillment_scope(&item, purchase_order_id, &mut NoTransaction)
-                .await?;
-            Some(tasks)
-        } else {
-            None
-        };
+        let cascade_tasks = self.cascade_tasks(&item, &mut NoTransaction).await?;
 
         let accounts =
             self.auth.list_accounts_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
@@ -152,6 +142,17 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         Ok(candidates)
     }
 
+    /// 采购责任转交必须同时覆盖该采购单的全部开放履约任务。
+    async fn cascade_tasks(
+        &self,
+        item: &WorkItem,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Vec<WorkItem>>> {
+        let Some(order_id) = purchase_order_fulfillment_responsibility_id(item)? else { return Ok(None) };
+        let (_, tasks) = self.facts.purchase_order_fulfillment_scope(item, &order_id, executor).await?;
+        Ok(Some(tasks))
+    }
+
     /// 受控转交开放任务。
     ///
     /// # 参数
@@ -175,7 +176,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         actor: AuditActor,
     ) -> impl Future<Output = Result<WorkItemMutationOutcome>> + Send {
         async move {
-            let managed_access = self.managed_access(&actor).await?;
+            self.auth.require_task(&actor, "manage", &id, &mut NoTransaction).await?;
             let item = self.load(id.clone()).await?;
             ensure_generic_work_item_mutation(&item)?;
             req.validate()?;
@@ -196,14 +197,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             )?;
             if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
                 ensure_generic_work_item_mutation(&replayed)?;
-                ensure_item_in_managed_scope(&replayed, &managed_access)?;
                 self.ensure_task_control_access(&actor, &replayed).await?;
                 return self.applied_outcome(replayed, &actor).await;
             }
             if item.base.version != expected_task_version {
                 return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
             }
-            ensure_item_in_managed_scope(&item, &managed_access)?;
+            self.ensure_task_control_access(&actor, &item).await?;
             let authorization =
                 self.assignment_authorization_snapshot(&actor, &target_user_id, &item, true).await?;
             let updated = self

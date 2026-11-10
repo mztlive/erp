@@ -75,7 +75,7 @@ impl FinanceTaskPort for FinanceWorkItems {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let service = self.caller_service();
-        let access = service.actor_access(actor).await?;
+        let access = service.actor_access(actor, task, executor).await?;
         service.ensure_item_access_with_executor(task, &access, executor).await
     }
 }

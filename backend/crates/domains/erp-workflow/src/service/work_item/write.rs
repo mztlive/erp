@@ -3,15 +3,16 @@
 use std::future::Future;
 
 use application_core::{AuditActor, CommandReceipt};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
-use super::access::{detail_scope, ensure_generic_work_item_mutation, ensure_item_in_managed_scope};
+use super::access::{detail_scope, ensure_generic_work_item_mutation};
 use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
 use crate::ports::{PreparedWorkflowAudit, WorkflowAuditAttemptResult, WorkflowAuditPort};
-use crate::repository::prelude::*;
-use crate::repository::{WorkItemCommandExt, WorkItemCommandRepositoryExt, WorkItemExt};
+use crate::repository::{
+    WorkItemCommandExt, WorkItemCommandRepositoryExt, WorkItemExt, WorkItemRepositoryExt,
+};
 
 pub(super) const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 
@@ -161,8 +162,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             return Err(Error::Internal("幂等回执任务版本与事实不一致".to_string()));
         }
         ensure_generic_work_item_mutation(&item)?;
-        let access = self.managed_access(actor).await?;
-        ensure_item_in_managed_scope(&item, &access)?;
         self.ensure_task_control_access(actor, &item).await?;
         Ok(Some(item))
     }
@@ -225,17 +224,42 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// # 错误
     /// 任务不存在、无权查看、对象不可访问或授权读取失败时返回错误。
     pub async fn authorize_work_item(&self, id: &str, actor: &AuditActor) -> Result<AuthorizedWorkItem> {
-        let item = self.load(id.to_string()).await?;
-        let access = self.actor_access(actor).await?;
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.authorized_task(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 任务、业务事实和完整授权在同一事务快照读取。
+    async fn authorized_task(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<AuthorizedWorkItem> {
+        self.auth.require_task(actor, "detail", id, executor).await?;
+        let item = self
+            .db
+            .work_items()
+            .find_work_item(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
+        let access = self.actor_access(actor, &item, executor).await?;
         let scope = detail_scope(&item, actor.id(), &access)?;
         let fields = self
-            .authorized_fields_for_items(vec![item.clone()], &access)
+            .authorized_fields_for_items(vec![item.clone()], &access, executor)
             .await?
             .into_iter()
             .next()
             .ok_or_else(|| Error::Forbidden("当前账号无权查看该业务对象".to_string()))?;
         let view_access = self.view_access(&fields, scope, actor, &access).await?;
-        let _ = fields;
+        self.auth.require_task(actor, "detail", id, executor).await?;
         Ok(AuthorizedWorkItem {
             item,
             allowed_actions: view_access.allowed_actions,

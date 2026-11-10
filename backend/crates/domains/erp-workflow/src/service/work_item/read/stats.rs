@@ -150,7 +150,7 @@ impl WorkItemReadService {
         all_families: bool,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
-        let (access, version) = self.queue_access_with_version(&actor, executor).await?;
+        let (access, _) = self.queue_access_with_version(&actor, executor).await?;
         access.scope_filter(&query)?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs())?;
@@ -175,8 +175,7 @@ impl WorkItemReadService {
         } else {
             self.stream_stats(&query, &context, executor).await?.selected
         };
-        let current = self.queue_scope_version(&actor, executor).await?;
-        super::context::ensure_scope_version(1, Some(&version), &current)?;
+        self.validate_access(&access, executor).await?;
         Ok(WorkItemStatsView {
             assigned,
             due_today: selected.due_today,

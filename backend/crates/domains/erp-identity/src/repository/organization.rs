@@ -1,7 +1,8 @@
 //! 内部组织持久化。Service 提供事务，仓储不自行开启事务。
 
+mod authorization;
 mod directory;
-
+pub use authorization::primary_membership_query;
 use entity_core::{BaseModel, HasBaseModel};
 use mongodb::Database;
 use persistence_core::change_feed::ChangeSource;

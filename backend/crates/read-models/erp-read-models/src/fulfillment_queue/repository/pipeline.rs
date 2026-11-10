@@ -2,9 +2,11 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_identity::entity::authorization::QueryOutput;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::WarehouseExt;
+use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -33,10 +35,24 @@ const WAREHOUSE_REVISIONS: &str = <Database as WarehouseExt>::WAREHOUSE_REVISION
 /// # 错误
 /// 分页偏移超出 MongoDB 可表示范围时返回错误。
 pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Result<Vec<Document>> {
+    let access = filter.authorization.as_ref().ok_or(Error::UnsupportedDeployment("履约队列缺少任务授权"))?;
+    if access.model().resource != "work_item"
+        || access.model().collection != <Database as WorkItemExt>::WORK_ITEMS
+        || access.model().key.as_str() != "work_items"
+        || access.model().output != QueryOutput::Object
+    {
+        return Err(Error::UnsupportedDeployment("履约队列任务授权模型不匹配"));
+    }
+    page_pipeline(filter, access.stages())
+}
+
+/// 授权阶段先于来源关联、指标和分页执行。
+fn page_pipeline(filter: &FulfillmentQueueFilter, authorization: &[Document]) -> Result<Vec<Document>> {
     let offset = i64::try_from(filter.offset)
         .map_err(|_| Error::EntityMetadataOutOfRange("fulfillment_queue_offset"))?;
     let page_size = i64::from(filter.page_size);
     let mut pipeline = fulfillment_facts_pipeline(base_match(filter));
+    pipeline.splice(1..1, authorization.iter().cloned());
     append_optional_filters(&mut pipeline, filter);
     pipeline.push(page_facet(offset, page_size));
     Ok(pipeline)
@@ -488,12 +504,14 @@ fn warehouse_lookup() -> Document {
 
 #[cfg(test)]
 mod tests {
+    use mongodb::bson::doc;
+
     use super::super::FulfillmentQueueFilter;
-    use super::fulfillment_queue_pipeline;
+    use super::{fulfillment_queue_pipeline, page_pipeline};
 
     #[test]
     fn pipeline_starts_from_owned_open_work_items_and_returns_one_facet() {
-        let pipeline = fulfillment_queue_pipeline(
+        let pipeline = page_pipeline(
             &FulfillmentQueueFilter::new("user-1".to_string())
                 .with_operation_types(vec![
                     "RECEIPT".to_string(),
@@ -510,6 +528,7 @@ mod tests {
                     Some("SATISFIED".to_string()),
                 )
                 .with_paging(20, 20),
+            &[doc! { "$match": { "owner_user_id": "user-1" } }],
         )
         .expect("测试分页应有效");
         let rendered = format!("{pipeline:?}");
@@ -538,12 +557,22 @@ mod tests {
 
     #[test]
     fn unknown_operation_type_fails_closed_in_initial_match() {
-        let pipeline = fulfillment_queue_pipeline(
+        let pipeline = page_pipeline(
             &FulfillmentQueueFilter::new("user-1".to_string())
                 .with_operation_types(vec!["UNKNOWN".to_string()]),
+            &[doc! { "$match": { "owner_user_id": "user-1" } }],
         )
         .expect("测试分页应有效");
         let rendered = format!("{pipeline:?}");
         assert!(rendered.contains("Array([])"));
+    }
+    #[test]
+    fn missing_authorization_is_rejected_and_filter_precedes_sources_and_pagination() {
+        let filter = FulfillmentQueueFilter::new("user-1".into());
+        assert!(fulfillment_queue_pipeline(&filter).is_err());
+        let deny = doc! { "$match": { "$expr": false } };
+        let stages = page_pipeline(&filter, std::slice::from_ref(&deny)).unwrap();
+        assert_eq!(stages[1], deny);
+        assert!(stages.last().unwrap().contains_key("$facet"));
     }
 }

@@ -160,7 +160,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     /// # 错误
     /// 投影为空时返回禁止；对象事实读取失败时返回对应错误。
     pub async fn ensure_item_access(&self, item: &WorkItem, access: &ActorAccess) -> Result<()> {
-        if self.authorized_fields_for_items(vec![item.clone()], access).await?.is_empty() {
+        if self.authorized_fields_for_items(vec![item.clone()], access, &mut NoTransaction).await?.is_empty()
+        {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
         Ok(())
@@ -170,45 +171,47 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
+    /// * `item` - 实际工作项
+    /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回含权限、参与单据与管理范围的快照。
+    /// 返回权限、参与单据及当前任务的管理资格，不用于其他任务。
     ///
     /// # 错误
     /// 角色、权限、参与单据或管理范围读取失败时返回对应错误。
-    pub async fn actor_access(&self, actor: &AuditActor) -> Result<ActorAccess> {
-        self.actor_access_for(actor.kind(), actor.id()).await
-    }
-
-    async fn actor_access_for(
+    pub async fn actor_access(
         &self,
-        account_kind: erp_core::AccountKind,
-        actor_id: &str,
+        actor: &AuditActor,
+        item: &WorkItem,
+        executor: &mut dyn Executor,
     ) -> Result<ActorAccess> {
-        let role_ids = self.auth.role_ids(account_kind, actor_id).await?;
-        let permissions = self.auth.permission_codes(account_kind, actor_id).await?;
+        let role_ids = self.auth.role_ids_with_executor(actor.kind(), actor.id(), executor).await?;
+        let permissions = self.auth.permission_codes(actor.kind(), actor.id()).await?;
         let participant_document_ids = self
             .db
             .document_participants()
-            .document_ids_by_user(actor_id, &mut NoTransaction)
+            .document_ids_by_user(actor.id(), executor)
             .await?
             .into_iter()
             .collect();
-        let has_manage_permission = self.auth.permissions_cover(&permissions, &[MANAGE_PERMISSION])?;
-        let manage_role_ids =
-            self.roles_granting_permission(&role_ids, MANAGE_PERMISSION, has_manage_permission).await?;
-        let managed_owner_ids = self
-            .auth
-            .managed_task_owners(
-                &AuditActor::new(actor_id.to_string(), actor_id.to_string(), account_kind),
-                &mut NoTransaction,
-            )
-            .await?;
-        Ok(ActorAccess::new(actor_id.to_string())
+        let has_manage = self.auth.permissions_cover(&permissions, &[MANAGE_PERMISSION])?;
+        let roles = self.roles_granting_permission(&role_ids, MANAGE_PERMISSION, has_manage).await?;
+        let can_manage = if roles.is_empty() {
+            false
+        } else {
+            match self.auth.require_task(actor, "manage", &item.base.id, executor).await {
+                Ok(()) => true,
+                Err(Error::Forbidden(_)) => false,
+                Err(error) => return Err(error),
+            }
+        };
+        let owners =
+            if can_manage { item.owner_user_id.clone().map(|owner| vec![owner]) } else { Some(vec![]) };
+        Ok(ActorAccess::new(actor.id().to_owned())
             .with_permissions(permissions)
             .with_participant_document_ids(participant_document_ids)
-            .with_managed_owner_ids(managed_owner_ids)
-            .with_can_manage(!manage_role_ids.is_empty()))
+            .with_managed_owner_ids(owners)
+            .with_can_manage(can_manage))
     }
 
     /// 定位实际授予指定权限的角色，使管理数据范围与权限来源关联。
@@ -316,17 +319,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?
             .into_iter()
             .collect();
-        let managed_owner_ids = self
-            .auth
-            .managed_task_owners(
-                &AuditActor::new(actor_id.to_string(), actor_id.to_string(), account_kind),
-                executor,
-            )
-            .await?;
+        if !active_manage_roles.is_empty() {
+            return Err(Error::ValidationError("任务管理必须提供实际任务执行对象检查".into()));
+        }
         Ok(ActorAccess::new(actor_id.to_string())
             .with_permissions(permissions)
             .with_participant_document_ids(participant_document_ids)
-            .with_managed_owner_ids(managed_owner_ids)
+            .with_managed_owner_ids(Some(vec![]))
             .with_can_manage(!active_manage_roles.is_empty()))
     }
 
@@ -465,35 +464,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let owners = self.auth.task_scope_owners(actor, "manage", executor).await?;
-        if owners
-            .as_ref()
-            .is_some_and(|ids| !item.owner_user_id.as_ref().is_some_and(|owner| ids.contains(owner)))
-        {
-            return Err(Error::Forbidden("任务不在操作数据范围内".into()));
-        }
-        Ok(())
-    }
-
-    /// 构造并要求操作人具备非空的任务管理范围。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 具备管理权限且管理负责人范围不是空列表时返回访问快照。
-    ///
-    /// # 错误
-    /// 没有管理权限或管理范围为空列表时返回禁止；快照读取失败时返回对应错误。
-    pub async fn managed_access(&self, actor: &AuditActor) -> Result<ActorAccess> {
-        let owners = self.auth.task_scope_owners(actor, "manage", &mut NoTransaction).await?;
-        if owners.as_ref().is_some_and(Vec::is_empty) {
-            return Err(Error::Forbidden("当前账号没有任务责任管理范围".into()));
-        }
-        Ok(ActorAccess::new(actor.id().to_owned())
-            .with_permissions(vec![MANAGE_PERMISSION.to_owned()])
-            .with_managed_owner_ids(owners)
-            .with_can_manage(true))
+        self.auth.require_task(actor, "manage", &item.base.id, executor).await
     }
 }
 

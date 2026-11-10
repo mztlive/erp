@@ -24,7 +24,7 @@
 
 术语与统一分工见[总索引](../../README.md#代码中常见名称的含义)。
 
-- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
+- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。允许依赖 identity 的公开身份和授权能力；不得依赖其他业务领域或组合层。
 - 流程图和纯状态迁移规则复用 bpm；账号资格、单据事实和领域动作通过 Port 取得。
 - 任务查询、授权范围和分页归本 crate；直接调用 identity 的公开服务。跨域审批动作由 web-api 分派，业务材料读取归 erp-read-models。
 - 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
@@ -68,3 +68,26 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-workflow --lib --locked
 - 来源筛选使用 `WorkItem.links` 的类型与 ID 配对引用；同字段取并集，不同字段取交集，不授予关联单据读取权限。
 - 创建任务及改变业务版本时，写流程须在原事务写入完整上级链路。审批任务须继承对应提交快照，后续节点和驳回处理不得从当前草稿重建历史链路。
 - 发布前按 [任务链路迁移合同](../../../docs/work-item-links-migration.md) 完成历史数据审计与回填。
+
+## 任务统一授权
+
+任务权限通过 `AuthorizationService` 执行。`WorkItemReadService::new` 装配固定的 `work_item:list`、`work_item:detail`、`work_item:manage` 登记，调用方不得改变政策或 Mapping。
+
+| 入口 | 授权执行 |
+| --- | --- |
+| 列表、检索、统计、焦点任务 | `query` → WorkItem Mapping → 数据库授权过滤 → 计数与分页 → `validate` |
+| 单条详情、业务模块检查任务可读性 | `require` 检查精确任务 ID |
+| 转派、关闭、放弃返工、替代任务、幂等回放 | `WorkflowAuthorizationPort::require_task` 接入相同对象授权；写事务内再次检查 |
+| 管理按钮 | 在当前展示批次内查询 `manage` 授权任务 ID，不以读取资格替代管理资格 |
+| 履约聚合队列 | 从 `ActorAccess::read_access` 取得完整约束，先授权任务，再关联业务事实、计算指标和分页 |
+
+映射合同：
+
+- `Owned` 对应任务当前 `owner_user_id`；组织范围对应该负责人在授权时点的唯一有效主属组织，不使用 `owner_organization_id` 代替。
+- 根对象必需事实为负责人和主属组织。已确认没有值时返回 `FactValue::Known(None)`，不能以未读取值代替。
+- 任务列表不增加历史参与或记录读取授权分支。Mine、Managed、History 视图均先通过 list 范围，再追加视图筛选。
+- 任务来源材料的读取资格、授权就绪状态和业务办理条件分别检查，不参与本人待办计数。
+- 查询 Mapping 只在调用方事务中编译和执行。事务内使用同一授权时点、组织版本和有效期边界；跨页版本包含读取及管理查询依赖。
+- 组织关联复用 identity 提供的查询片段及成员索引，按任务负责人查找当前关系，不预加载全部负责人名单。重复有效主属关系会被查询排除；对象检查返回事实错误。
+
+实现位置：[WorkItem Mapping](src/repository/work_item/authorization.rs)、[固定登记与统一调用](src/service/work_item/read/identity.rs)、[对象事实端口](src/service/work_item/read/facts.rs)。

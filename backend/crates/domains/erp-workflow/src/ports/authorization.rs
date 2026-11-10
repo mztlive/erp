@@ -9,7 +9,7 @@ use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use super::object_facts::OrderTaskSource;
-use super::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopeObjects};
+use super::{WorkflowScopeObject, WorkflowScopeObjects};
 use crate::entity::document_registry::DocumentType;
 pub use crate::entity::work_item::WorkflowAccountFact;
 use crate::error::{Error, Result};
@@ -254,46 +254,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("供应商申请业务确认资格未装配".into())) }
     }
 
-    /// 在同一只读阶段复用工作台身份事实，保留原查询及失败顺序。
-    ///
-    /// # 参数
-    /// * `actor` - 服务端认证身份。
-    /// * `include_version` - 原入口是否先读取身份授权版本。
-    /// * `executor` - 调用方同一事务执行器。
-    /// # 返回
-    /// 已装配优化器返回身份事实；`None` 要求调用方沿原授权路径读取，不授予访问权。
-    /// # 错误
-    /// 保留首拍版本、角色、权限、参与单据和管理范围的原首错顺序。
-    fn queue_access_facts(
-        &self,
-        _actor: &AuditActor,
-        _include_version: bool,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Option<WorkflowQueueAccessFact>>> + Send {
-        async { Ok(None) }
-    }
-
-    /// 解析工作流自身资源动作；缺权限返回空，配置和基础设施错误原样传播。
-    ///
-    /// # 参数
-    /// * `actor` - 当前操作人。
-    /// * `permission` - 待解析的资源动作。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 有权限时返回范围；没有该权限时返回 `None`。
-    ///
-    /// # 错误
-    /// 默认实现返回未装配的内部错误；配置或基础设施失败时返回错误。
-    fn resolve_workflow_scope(
-        &self,
-        _actor: &AuditActor,
-        _permission: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Option<WorkflowDataScope>>> + Send {
-        async { Err(Error::Internal("工作流范围解析未装配".into())) }
-    }
-
     /// 按真实来源领域证明管理者可读取整个审批主体。
     ///
     /// # 参数
@@ -396,55 +356,21 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         async { Err(Error::Internal("审批范围事实未装配".into())) }
     }
 
-    /// 解析 work_item:manage，并按当前有效内部组织关系编译任务负责人条件。
-    ///
+    /// 使用统一对象授权检查当前任务。
     /// # 参数
-    /// * `actor` - 当前操作人。
-    /// * `executor` - 调用方执行器。
-    ///
+    /// actor 为真实账号，action 为 detail/manage，id 为实际任务，executor 为调用方执行器。
     /// # 返回
-    /// None 仅表示显式公司范围；Some(空) 表示无管理范围。
+    /// 操作权限及任务责任范围同时成立时成功。
     /// # 错误
-    /// 配置、身份或版本错误失败关闭；不得用责任组织字段解释内部部门。
-    fn managed_task_owners(
-        &self,
-        _actor: &AuditActor,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Option<Vec<String>>>> + Send {
-        async { Err(Error::Internal("任务管理范围未装配".into())) }
-    }
-
-    /// 通过统一 DataScope 解析任务动作的数据范围。
-    /// # 参数
-    /// `actor` 为真实账号，`action` 只允许 list、detail、manage，`executor` 为当前执行器。
-    /// # 返回
-    /// 公司范围返回 None；受限范围返回负责人集合，空集合不得扩大。
-    /// # 错误
-    /// 缺少权限、范围未装配或读取失败时拒绝。
-    fn task_scope_owners(
+    /// 未装配、无权、对象缺失或事实读取失败时拒绝。
+    fn require_task(
         &self,
         _actor: &AuditActor,
         _action: &str,
+        _id: &str,
         _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<Option<Vec<String>>>> + Send {
-        async { Err(Error::Internal("任务数据范围未装配".into())) }
-    }
-
-    /// 获取任务队列身份授权版本；不提供对象授权结论。
-    ///
-    /// # 参数
-    /// * `actor` - 服务端认证身份。
-    /// * `executor` - 当前读取执行器。
-    /// # 返回
-    /// 包含策略、组织和关系有效期变化的版本。
-    /// # 错误
-    /// 未装配、账号失效或读取失败时拒绝。
-    fn queue_scope_version(
-        &self,
-        _actor: &AuditActor,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<String>> + Send {
-        async { Err(Error::Internal("任务队列范围版本未装配".into())) }
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { Err(Error::Internal("任务统一授权未装配".into())) }
     }
 
     /// 在审批原事务内重验 S2 订单对象当前详情权限。
