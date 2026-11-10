@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Error as PersistenceError, Executor};
+use persistence_core::Executor;
 
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Result};
@@ -26,8 +26,8 @@ pub(crate) async fn revision(
     let collection = db.collection::<Document>(REVISIONS);
     let find = collection.find_one(doc! { "_id": revision_id(user, resource)? });
     let row = match executor.session() {
-        Some(session) => find.session(session).await.map_err(PersistenceError::from)?,
-        None => find.await.map_err(PersistenceError::from)?,
+        Some(session) => find.session(session).await?,
+        None => find.await?,
     };
     row.map(|row| {
         let revision = row.get_i64("revision").map_err(|e| Error::Internal(e.to_string()))?;
@@ -55,14 +55,14 @@ pub(crate) async fn advance(
     for resource in resources {
         collection.update_one(doc! { "_id": revision_id(user, *resource)? },
             doc! { "$inc": { "revision": 1_i64 }, "$setOnInsert": { "recipient": user, "resource": resource.code() } })
-            .upsert(true).session(&mut *session).await.map_err(PersistenceError::from)?;
+            .upsert(true).session(&mut *session).await?;
     }
     Ok(())
 }
 
 /// 结构化主键避免账号与资源代码的拼接碰撞。
 fn revision_id(user: &str, resource: ResourceKind) -> Result<String> {
-    serde_json::to_string(&(user, resource)).map_err(|e| Error::Internal(e.to_string()))
+    Ok(serde_json::to_string(&(user, resource))?)
 }
 
 #[cfg(test)]

@@ -256,21 +256,6 @@ pub(super) fn commit_outcome_unknown(error: &(dyn std::error::Error + 'static)) 
     false
 }
 
-/// 仅当加载前后的 policy 版本相同才视为稳定快照。
-///
-/// # 参数
-/// * `before` - 加载前的 policy 版本。
-/// * `after` - 加载后的 policy 版本。
-///
-/// # 返回
-/// 两次版本相同返回 `Some(after)`，否则返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn stable_policy_revision(before: u64, after: u64) -> Option<u64> {
-    (before == after).then_some(after)
-}
-
 /// 判断 root 角色元数据与直接权限是否已是当前内建形态。
 ///
 /// # 参数
@@ -294,21 +279,6 @@ pub(super) fn root_role_is_current(
         && permissions == std::slice::from_ref(root_permission)
 }
 
-/// 比较已加载版本与数据库版本。
-///
-/// # 参数
-/// * `loaded` - 本地 Enforcer 已加载的版本。
-/// * `database` - 数据库当前版本。
-///
-/// # 返回
-/// 两者相等时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn policy_revisions_match(loaded: u64, database: u64) -> bool {
-    loaded == database
-}
-
 /// 冻结 Enforcer 与事务快照 revision 必须完全一致。
 ///
 /// # 参数
@@ -325,18 +295,4 @@ pub(super) fn ensure_policy_snapshot_revision(expected: u64, visible: u64) -> Re
         return Ok(());
     }
     Err(Error::Rbac("授权策略版本已变化，无法在当前事务中证明授权快照".to_string()))
-}
-
-/// 把展示用错误收成 RBAC 错误。
-///
-/// # 参数
-/// * `error` - 可展示的下层错误。
-///
-/// # 返回
-/// 返回 `Error::Rbac`。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn rbac_error(error: impl std::fmt::Display) -> Error {
-    Error::Rbac(error.to_string())
 }

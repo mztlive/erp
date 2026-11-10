@@ -21,8 +21,7 @@ pub use repository::{
     AccessControlExt, AccountCoreRepository, AccountCoreRepositoryExt, AuditEventFilter,
     AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES, DataScopeRepository,
     DataScopeRepositoryExt, MongoCasbinAdapter, PermissionFilter, PermissionRepository,
-    PermissionRepositoryExt, PermissionRow, RoleRepository, RoleRepositoryExt, UserRoleRepository,
-    UserRoleRepositoryExt,
+    PermissionRepositoryExt, RoleRepository, RoleRepositoryExt, UserRoleRepository, UserRoleRepositoryExt,
 };
 pub use service::access_control::AccessControlService;
 pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};

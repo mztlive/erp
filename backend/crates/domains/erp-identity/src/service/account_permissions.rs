@@ -93,7 +93,7 @@ pub async fn ensure_actor_permissions(
     required: &[Permission],
     executor: &mut dyn Executor,
 ) -> Result<u64> {
-    let account = db.accounts().find_by_id(actor.id(), executor).await.map_err(Error::from);
+    let account = db.accounts().find_by_id(actor.id(), executor).await?;
     with_actor_permissions(account, actor, required, |required| {
         ensure_role_permissions(db, rbac, actor, required, executor)
     })
@@ -101,7 +101,7 @@ pub async fn ensure_actor_permissions(
 }
 
 async fn with_actor_permissions<'a, F, Fut>(
-    account: Result<Option<AccountCore>>,
+    account: Option<AccountCore>,
     actor: &AuditActor,
     permissions: &'a [Permission],
     authorize: F,
@@ -110,7 +110,7 @@ where
     F: FnOnce(&'a [Permission]) -> Fut,
     Fut: Future<Output = Result<u64>>,
 {
-    account?
+    account
         .filter(|account| account.is_active_backoffice() && account.kind == actor.kind())
         .ok_or_else(|| Error::Forbidden("账号已失效".into()))?;
     authorize(permissions).await
@@ -177,7 +177,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use entity_core::BaseModel;
-    use persistence_core::Error as PersistenceError;
 
     use super::*;
     use crate::Error;
@@ -209,36 +208,25 @@ mod tests {
         let mut supplier = account("actor", "门户", "supplier");
         supplier.kind = AccountKind::Supplier;
         for value in [None, Some(suspended), Some(supplier)] {
-            let error = with_actor_permissions(Ok(value), &actor, &required, |_| -> Ready<Result<u64>> {
+            let error = with_actor_permissions(value, &actor, &required, |_| -> Ready<Result<u64>> {
                 panic!("无效账号不得读取授权")
             })
             .await
             .unwrap_err();
             assert!(matches!(error, Error::Forbidden(_)));
         }
-        let error = with_actor_permissions(
-            Err(Error::RepositoryError(PersistenceError::EntityMetadataOutOfRange("account-version"))),
-            &actor,
-            &required,
-            |_| -> Ready<Result<u64>> { panic!("读取失败不得继续授权") },
-        )
-        .await
-        .unwrap_err();
-        assert!(matches!(error, Error::RepositoryError(_)));
         for failure in [
             Error::Rbac("unavailable".into()),
             Error::ConflictError("changed".into()),
             Error::Forbidden("denied".into()),
         ] {
             let expected = discriminant(&failure);
-            let error = with_actor_permissions(
-                Ok(Some(account("actor", "采购", "buyer"))),
-                &actor,
-                &required,
-                |_| ready(Err(failure)),
-            )
-            .await
-            .unwrap_err();
+            let error =
+                with_actor_permissions(Some(account("actor", "采购", "buyer")), &actor, &required, |_| {
+                    ready(Err(failure))
+                })
+                .await
+                .unwrap_err();
             assert_eq!(discriminant(&error), expected);
         }
     }
@@ -251,7 +239,7 @@ mod tests {
             Permission::parse("supplier_offering:update").unwrap(),
         ];
         let revision = with_actor_permissions(
-            Ok(Some(account("actor", "采购", "buyer"))),
+            Some(account("actor", "采购", "buyer")),
             &actor,
             &required,
             |permissions| {

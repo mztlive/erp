@@ -112,11 +112,7 @@ impl PolicyScope {
         let mut keyed = request
             .grants
             .into_iter()
-            .map(|grant| {
-                serde_json::to_string(&grant)
-                    .map(|key| (key, grant))
-                    .map_err(|error| Error::Internal(error.to_string()))
-            })
+            .map(|grant| Ok((serde_json::to_string(&grant)?, grant)))
             .collect::<Result<Vec<_>>>()?;
         keyed.sort_by(|a, b| a.0.cmp(&b.0));
         self.grants = keyed.into_iter().map(|(_, grant)| grant).collect();

@@ -216,20 +216,6 @@ impl RoleIdSet {
     pub fn as_slice(&self) -> &[RoleId] {
         &self.0
     }
-
-    /// 转换为字符串集合。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 按当前顺序返回角色 ID 字符串。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn to_strings(&self) -> Vec<String> {
-        self.0.iter().map(ToString::to_string).collect()
-    }
 }
 
 impl From<Vec<RoleId>> for RoleIdSet {
@@ -553,12 +539,12 @@ impl PermissionSet {
 
 #[cfg(test)]
 mod tests {
-    use super::{Permission, PermissionSet, RoleIdSet};
+    use super::{Permission, PermissionSet, RoleId, RoleIdSet};
 
     #[test]
     fn role_set_wire_format_is_a_normalized_array() {
         let ids: RoleIdSet = serde_json::from_str(r#"[" role-a ","role-a","role-b"]"#).unwrap();
-        assert_eq!(ids.to_strings(), ["role-a", "role-b"]);
+        assert_eq!(ids.iter().map(RoleId::as_str).collect::<Vec<_>>(), ["role-a", "role-b"]);
         assert_eq!(serde_json::to_string(&ids).unwrap(), r#"["role-a","role-b"]"#);
         assert!(serde_json::from_str::<RoleIdSet>(r#"["bad/id"]"#).is_err());
     }
@@ -566,7 +552,7 @@ mod tests {
     #[test]
     fn role_ids_should_trim_deduplicate_and_preserve_order() {
         let role_ids = RoleIdSet::parse([" role-a ", "role-a", "role-b"]).unwrap();
-        assert_eq!(role_ids.to_strings(), vec!["role-a", "role-b"]);
+        assert_eq!(role_ids.iter().map(RoleId::as_str).collect::<Vec<_>>(), vec!["role-a", "role-b"]);
     }
 
     #[test]
@@ -581,7 +567,7 @@ mod tests {
             RoleIdSet::from_casbin_role_keys(["user:ignored", "role:role-b", "role:role-a", "role:role-b"])
                 .unwrap();
 
-        assert_eq!(role_ids.to_strings(), vec!["role-a", "role-b"]);
+        assert_eq!(role_ids.iter().map(RoleId::as_str).collect::<Vec<_>>(), vec!["role-a", "role-b"]);
         assert!(RoleIdSet::from_casbin_role_keys(["role:bad/id"]).is_err());
         assert!(RoleIdSet::from_casbin_role_keys(["role: role-a"]).is_err());
         assert!(RoleIdSet::from_casbin_role_keys(["role:role-a "]).is_err());

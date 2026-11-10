@@ -68,7 +68,7 @@ impl DataScopeSubjectType {
 
 /// 范围类型（数据模型 §4.6 / W19 §5.1：公司、组织、团队、本人负责、协作等
 /// 固定策略；固定枚举，其余范围类型属二期扩展的地基修订候选）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum DataScopeType {
     /// 公司级。

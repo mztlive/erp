@@ -19,7 +19,7 @@ use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
+use crate::{AccessControlExt, Error, Permission, Result, RoleId, SharedRbacService};
 
 /// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。
 pub struct AuthorizedDataScope {
@@ -33,7 +33,7 @@ pub struct DataScopeFacts {
     pub action: String,
     pub scope: ResolvedScope,
     /// 已通过同角色完整动作权限证明的角色集合。
-    pub qualified_roles: BTreeSet<String>,
+    pub qualified_roles: BTreeSet<RoleId>,
     pub organizations: OrganizationState,
     pub policy_version: u64,
     pub scope_version: String,
@@ -261,12 +261,11 @@ impl DataScopeService {
         state: &OrganizationState,
         at: Instant,
         executor: &mut dyn Executor,
-    ) -> Result<(ResolvedScope, BTreeSet<String>)> {
+    ) -> Result<ResolvedScope> {
         let (resource, action) = resource_action;
         let registration = super::consumers::registration(resource, action)?;
-        let qualifications = roles.iter().map(|role| role.base.id.clone()).collect();
         let policy = AuthorizationPolicy::for_action(resource, action)?;
-        let scope = resolve_policy_scope(policy, roles, async {
+        resolve_policy_scope(policy, roles, async {
             state.own_org(user, at)?;
             let configs =
                 self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
@@ -279,9 +278,7 @@ impl DataScopeService {
                 None => Ok(PersonDataScope::denied()),
             }
         })
-        .await?;
-        // 此映射只证明同角色完整动作资格，不以全公司范围替代审批角色或节点责任。
-        Ok((scope, qualifications))
+        .await
     }
 }
 
@@ -326,25 +323,6 @@ fn active_relations(state: &OrganizationState, at: Instant) -> Vec<&str> {
     members
 }
 
-/// 只有完成接线的资源可配置 v2，禁止将新规则交给旧解释器。
-///
-/// # 参数
-/// * `resource` - 业务资源
-/// * `action` - 已注册动作
-///
-/// # 返回
-/// 已接线时成功。
-///
-/// # 错误
-/// 未接线资源或动作返回校验错误。
-///
-/// # 关键业务约束
-/// 准入必须引用真实消费者登记，不得使用初始化清单。
-pub(super) fn ensure_resource(resource: &str, action: &str) -> Result<()> {
-    super::consumers::registration(resource, action)?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use entity_core::BaseModel;
@@ -365,7 +343,7 @@ mod tests {
                 resource: "sales_order".into(),
                 action: "list".into(),
                 scope: PersonDataScope::denied(),
-                qualified_roles: BTreeSet::from(["sales".into()]),
+                qualified_roles: BTreeSet::from([RoleId::parse("sales").unwrap()]),
                 organizations: OrganizationState::default(),
                 policy_version: 3,
                 scope_version: version.into(),
@@ -386,7 +364,7 @@ mod tests {
         assert_eq!(first.resource, "sales_order");
         assert_eq!(first.action, "list");
         assert_eq!(first.policy_version, 3);
-        assert_eq!(first.qualified_roles, BTreeSet::from(["sales".into()]));
+        assert_eq!(first.qualified_roles, BTreeSet::from([RoleId::parse("sales").unwrap()]));
         assert_eq!(first.scope, PersonDataScope::denied());
     }
 

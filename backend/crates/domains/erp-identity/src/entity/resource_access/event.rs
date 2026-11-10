@@ -158,9 +158,11 @@ impl GrantEvent {
         if evidence.fact_version == 0 || evidence.occurred_at == 0 {
             return Err(Error::ValidationError("业务事件事实版本和发生时间必须为正数".into()));
         }
-        let dedup_key =
-            serde_json::to_string(&(evidence.payload.identity(), &evidence.recipient, evidence.fact_version))
-                .map_err(|e| Error::Internal(e.to_string()))?;
+        let dedup_key = serde_json::to_string(&(
+            evidence.payload.identity(),
+            &evidence.recipient,
+            evidence.fact_version,
+        ))?;
         Ok(Self {
             base: BaseModel::new(next_id()),
             dedup_key,

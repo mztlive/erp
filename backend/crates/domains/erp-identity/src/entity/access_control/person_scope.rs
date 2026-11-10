@@ -17,7 +17,7 @@ use crate::{Error, Result};
 id_type!(PersonDataScopeId);
 
 /// 无角色引用的动态范围项；同组内同维度求并，不同维度求交。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 #[serde(deny_unknown_fields)]
 pub struct PersonScopeTerm {
     pub scope_type: DataScopeType,

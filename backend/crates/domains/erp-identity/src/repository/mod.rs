@@ -15,7 +15,7 @@ pub mod prelude;
 mod role;
 pub use access_control::{
     AuditEventFilter, AuditEventRepositoryExt, AuditEventRow, DataScopeRepositoryExt, PermissionFilter,
-    PermissionRepositoryExt, PermissionRow, UserRoleRepositoryExt,
+    PermissionRepositoryExt, UserRoleRepositoryExt,
 };
 pub use account_core::AccountCoreRepositoryExt;
 pub use casbin_adapter::{CASBIN_RULES, MongoCasbinAdapter};

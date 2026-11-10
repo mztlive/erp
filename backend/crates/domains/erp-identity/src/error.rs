@@ -1,7 +1,10 @@
 //! 身份领域应用错误，保留原来的 IAM、认证与访问控制映射。
 
 use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
-use persistence_core::impl_repository_error;
+use casbin::Error as CasbinError;
+use mongodb::error::Error as MongoError;
+use persistence_core::{Error as PersistenceError, impl_repository_error};
+use serde_json::Error as JsonError;
 
 /// Identity-domain result alias.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -84,12 +87,78 @@ impl Error {
     }
 }
 
-impl_repository_error!(
-    Error,
-    duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }
-);
+impl_repository_error!(Error, duplicate = |_| Error::ConflictError("数据已存在，请勿重复提交".into()));
 
-/// 将唯一键冲突映射为面向用户的冲突提示。
-fn duplicate_key_conflict_message(_error: &persistence_core::Error) -> String {
-    "数据已存在，请勿重复提交".to_string()
+impl From<MongoError> for Error {
+    /// 统一经过仓储分类，保留唯一键和瞬态事务语义。
+    /// # 参数
+    /// error 为 MongoDB 驱动错误。
+    /// # 返回
+    /// 对应身份领域错误。
+    /// # 错误
+    /// 不返回错误。
+    fn from(error: MongoError) -> Self {
+        PersistenceError::from(error).into()
+    }
+}
+
+impl From<CasbinError> for Error {
+    /// 保留 Casbin 失败的 RBAC 分类与展示信息。
+    /// # 参数
+    /// error 为策略加载或权限匹配错误。
+    /// # 返回
+    /// RBAC 错误。
+    /// # 错误
+    /// 不返回错误。
+    fn from(error: CasbinError) -> Self {
+        Self::Rbac(error.to_string())
+    }
+}
+
+impl From<JsonError> for Error {
+    /// 内部 JSON 编码失败统一归为内部错误。
+    /// # 参数
+    /// error 为内部数据编码错误；外部请求解析仍由协议边界处理。
+    /// # 返回
+    /// 保留原展示消息的内部错误。
+    /// # 错误
+    /// 不返回错误。
+    fn from(error: JsonError) -> Self {
+        Self::Internal(error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::{deserialize_from_document, doc};
+    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
+
+    use super::*;
+
+    #[test]
+    fn driver_errors_keep_repository_classification() {
+        let write_error: WriteError = deserialize_from_document(doc! {
+            "code": 11000, "errmsg": "duplicate", "errInfo": null,
+        })
+        .unwrap();
+        let duplicate: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
+        let error = Error::from(duplicate);
+        assert!(matches!(&error, Error::ConflictError(message) if message == "数据已存在，请勿重复提交"));
+        assert_eq!(error.class(), ErrorClass::Conflict);
+        let failure = Error::from(MongoError::custom("unavailable"));
+        assert!(matches!(failure, Error::RepositoryError(_)));
+        assert_eq!(failure.class(), ErrorClass::Internal);
+    }
+
+    #[test]
+    fn transaction_failures_preserve_retry_and_unknown_outcome() {
+        let transient =
+            Error::from(persistence_core::Error::TransientTransactionConflict(MongoError::custom("retry")));
+        assert!(matches!(transient, Error::TransientTransaction(_)));
+        assert_eq!(transient.class(), ErrorClass::Conflict);
+        let unknown =
+            Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("unknown")));
+        assert!(matches!(unknown, Error::OutcomeUnknown(_)));
+        assert_eq!(unknown.class(), ErrorClass::Internal);
+    }
 }

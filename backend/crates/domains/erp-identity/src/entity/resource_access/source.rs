@@ -69,7 +69,7 @@ impl SourceKey {
                 return Err(Error::ValidationError("来源身份不能带首尾空白".into()));
             }
         }
-        serde_json::to_string(self).map_err(|e| Error::Internal(e.to_string()))
+        Ok(serde_json::to_string(self)?)
     }
 }
 /// 读取目标；不包含写入或任务办理动作。

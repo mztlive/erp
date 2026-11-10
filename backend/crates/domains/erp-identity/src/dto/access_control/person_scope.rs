@@ -278,14 +278,10 @@ impl PersonScopeGrant {
             validate_scope_type(resource, term.scope_type)?;
             term.scope_targets = target.ids().to_vec();
             term.scope_targets.sort();
-            term.scope_targets.dedup();
             if !targets.contains(&target) {
                 targets.push(target);
             }
-            keyed.push((
-                serde_json::to_string(&term).map_err(|error| Error::Internal(error.to_string()))?,
-                term,
-            ));
+            keyed.push((serde_json::to_string(&term)?, term));
         }
         keyed.sort_by(|left, right| left.0.cmp(&right.0));
         keyed.dedup_by(|left, right| left.0 == right.0);

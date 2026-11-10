@@ -6,10 +6,7 @@ use erp_core::AccountKind;
 use persistence_core::{Executor, NoTransaction};
 use tokio::sync::RwLock;
 
-use super::policy::{
-    ensure_policy_snapshot_revision, policy_revisions_match, rbac_error, role_ids_for_account,
-    stable_policy_revision,
-};
+use super::policy::{ensure_policy_snapshot_revision, role_ids_for_account};
 use super::{MAX_STABLE_POLICY_LOAD_ATTEMPTS, RBAC_MODEL, RbacService, RolePermissionSnapshot};
 use crate::entity::Permission;
 use crate::error::{Error, Result};
@@ -19,9 +16,9 @@ impl RbacService {
     async fn enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.enforcer
             .get_or_try_init(|| async {
-                let model = DefaultModel::from_str(RBAC_MODEL).await.map_err(rbac_error)?;
+                let model = DefaultModel::from_str(RBAC_MODEL).await?;
                 let adapter = self.policy_store.clone();
-                let mut enforcer = Enforcer::new_raw(model, adapter).await.map_err(rbac_error)?;
+                let mut enforcer = Enforcer::new_raw(model, adapter).await?;
                 enforcer.enable_auto_save(false);
                 self.reload_enforcer(&mut enforcer).await?;
                 Ok(RwLock::new(enforcer))
@@ -65,7 +62,7 @@ impl RbacService {
             return Ok(false);
         }
         let database_revision = self.policy_store.policy_revision(&mut NoTransaction).await?;
-        Ok(policy_revisions_match(self.loaded_policy_revision.load(Ordering::Acquire), database_revision))
+        Ok(self.loaded_policy_revision.load(Ordering::Acquire) == database_revision)
     }
 
     /// 从 MongoDB 重新加载稳定 policy 快照，并维护 fail-closed stale 状态。
@@ -73,10 +70,10 @@ impl RbacService {
         self.policy_stale.store(true, Ordering::Release);
         for _ in 0..MAX_STABLE_POLICY_LOAD_ATTEMPTS {
             let before = self.policy_store.policy_revision(&mut NoTransaction).await?;
-            enforcer.load_policy().await.map_err(rbac_error)?;
+            enforcer.load_policy().await?;
             let after = self.policy_store.policy_revision(&mut NoTransaction).await?;
-            if let Some(revision) = stable_policy_revision(before, after) {
-                self.loaded_policy_revision.store(revision, Ordering::Release);
+            if before == after {
+                self.loaded_policy_revision.store(after, Ordering::Release);
                 self.policy_stale.store(false, Ordering::Release);
                 return Ok(());
             }
@@ -113,12 +110,11 @@ impl RbacService {
     /// # 错误
     /// 当 Casbin policy 加载或匹配失败时返回错误。
     pub async fn enforce(&self, subject: &str, permission: &Permission) -> Result<bool> {
-        self.fresh_enforcer()
-            .await?
-            .read()
-            .await
-            .enforce((subject, permission.resource(), permission.action()))
-            .map_err(rbac_error)
+        Ok(self.fresh_enforcer().await?.read().await.enforce((
+            subject,
+            permission.resource(),
+            permission.action(),
+        ))?)
     }
 
     /// 返回当前已稳定加载的授权策略版本。
@@ -175,10 +171,7 @@ impl RbacService {
             let role_subject = format!("role:{role_id}");
             let mut granted = HashSet::new();
             for permission in permissions {
-                if enforcer
-                    .enforce((role_subject.as_str(), permission.resource(), permission.action()))
-                    .map_err(rbac_error)?
-                {
+                if enforcer.enforce((role_subject.as_str(), permission.resource(), permission.action()))? {
                     granted.insert(permission.clone());
                 }
             }

@@ -2,7 +2,7 @@
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::{FindOptions, ReturnDocument};
-use persistence_core::{Error as PersistenceError, Executor, mongo_ops};
+use persistence_core::{Executor, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::resource_access::event::{GrantEvent, GrantEventStatus};
@@ -41,8 +41,7 @@ impl GrantQueue {
             )
             .sort(doc! { "available_at": 1, "id": 1 })
             .return_document(ReturnDocument::After)
-            .await
-            .map_err(PersistenceError::from)?)
+            .await?)
     }
     /// 在发布事务内读取并核验当前领取令牌。
     /// # 参数
@@ -106,8 +105,7 @@ impl GrantQueue {
                 doc! { "$set": { "status": "failed", "available_at": next, "failure": reason,
                 "lease_owner": null, "lease_until": null }, "$inc": { "version": 1 } },
             )
-            .await
-            .map_err(PersistenceError::from)?;
+            .await?;
         Ok(())
     }
     /// 读取单一来源状态，供发布时排除永久终止及旧事件。
@@ -122,7 +120,7 @@ impl GrantQueue {
         key: &SourceKey,
         executor: &mut dyn Executor,
     ) -> Result<Option<GrantSource>> {
-        resource_grants::sources(&self.db).find_by_id(&key.id()?, executor).await.map_err(Into::into)
+        Ok(resource_grants::sources(&self.db).find_by_id(&key.id()?, executor).await?)
     }
 }
 
@@ -145,23 +143,16 @@ impl GrantQueue {
     pub(crate) async fn grant_health(&self, now: u64) -> Result<GrantQueueHealth> {
         let collection = self.db.collection::<GrantEvent>("resource_grant_events");
         let filter = doc! { "status": { "$in": ["pending", "processing", "failed"] }, "deleted_at": 0 };
-        let backlog = collection.count_documents(filter.clone()).await.map_err(PersistenceError::from)?;
-        let oldest = collection
-            .find_one(filter)
-            .sort(doc! { "evidence.occurred_at": 1 })
-            .await
-            .map_err(PersistenceError::from)?;
-        let failures = collection
-            .count_documents(doc! { "status": "failed", "deleted_at": 0 })
-            .await
-            .map_err(PersistenceError::from)?;
+        let backlog = collection.count_documents(filter.clone()).await?;
+        let oldest = collection.find_one(filter).sort(doc! { "evidence.occurred_at": 1 }).await?;
+        let failures = collection.count_documents(doc! { "status": "failed", "deleted_at": 0 }).await?;
         let latest = self
             .db
             .collection::<GrantSource>("resource_grant_sources")
             .find_one(doc! { "key.rule": { "$in": ["invoice_approved", "sales_order_approval_assigned", "purchase_order_approval_assigned"] } })
             .sort(doc! { "updated_at": -1, "id": 1 })
             .await
-            .map_err(PersistenceError::from)?;
+            ?;
         Ok(GrantQueueHealth {
             latest_fact_version: latest.map(|s| s.fact_version),
             backlog,

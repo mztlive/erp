@@ -6,34 +6,11 @@ use mongodb::options::FindOptions;
 use persistence_core::{
     Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
 };
-use serde::{Deserialize, Serialize};
 
 use super::{permission_projection, sort_doc};
+use crate::dto::PermissionView;
 use crate::entity::access_control::paging::PageParams;
 use crate::entity::access_control::{PermissionDefinition, UserRole};
-
-/// 权限定义列表投影行（列表接口只取必要字段，禁止返回整文档）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PermissionRow {
-    /// 实体主键。
-    pub id: String,
-    /// 权限资源。
-    pub resource: String,
-    /// 权限动作。
-    pub action: String,
-    /// 展示名称。
-    pub name: String,
-    /// 描述。
-    pub description: Option<String>,
-    /// 系统内建权限标记。
-    pub system: bool,
-    /// 停用标记。
-    pub disabled: bool,
-    /// 乐观锁版本。
-    pub version: u64,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-}
 
 /// 权限定义列表筛选条件。
 #[derive(Debug, Clone)]
@@ -109,7 +86,7 @@ impl Pagination for PermissionFilter {
 pub trait PermissionRepositoryExt {
     /// 分页检索权限定义列表（投影查询，权限目录）。
     ///
-    /// 只返回 [`PermissionRow`] 所需的目录字段，不加载整文档；`resource` 按
+    /// 只返回 [`PermissionView`] 所需的目录字段，不加载整文档；`resource` 按
     /// 字面量忽略大小写模糊匹配（复用 `insert_literal_regex_filter`），停用/系统
     /// 标记精确匹配覆盖 `idx_permissions_disabled`。
     ///
@@ -126,7 +103,7 @@ pub trait PermissionRepositoryExt {
         &self,
         filter: &PermissionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<PermissionRow>>;
+    ) -> Result<PageResult<PermissionView>>;
 }
 
 impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
@@ -134,14 +111,14 @@ impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
         &self,
         filter: &PermissionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<PermissionRow>> {
+    ) -> Result<PageResult<PermissionView>> {
         let options = FindOptions::builder()
             .sort(sort_doc(&filter.paging))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(permission_projection())
             .build();
-        let collection = self.collection().clone_with_type::<PermissionRow>();
+        let collection = self.collection().clone_with_type::<PermissionView>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 

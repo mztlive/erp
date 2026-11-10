@@ -244,7 +244,7 @@ fn content_version(scope: &str, result: &DirectoryResult) -> Result<String> {
     let mut hash = md5::Context::new();
     hash.consume(scope.as_bytes());
     for row in &result.versions {
-        hash.consume(to_vec(row).map_err(|error| Error::Internal(error.to_string()))?);
+        hash.consume(to_vec(row)?);
     }
     Ok(format!("{:x}", hash.finalize()))
 }

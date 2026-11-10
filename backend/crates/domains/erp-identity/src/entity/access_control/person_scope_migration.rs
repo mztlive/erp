@@ -1,4 +1,6 @@
 //! 旧范围迁移的纯规则；不能等价解耦角色时明确阻断。
+use std::collections::BTreeSet;
+
 use super::person_scope::{PersonScopeExpression, PersonScopeTerm};
 use super::personal_grant::PersonalBusinessGrant;
 use super::{DataScope, DataScopeSubjectType};
@@ -38,7 +40,7 @@ pub fn expression(
         )?;
         alternatives.push(group);
     }
-    let keys = alternatives.iter().map(|terms| canonical(terms)).collect::<Result<Vec<_>>>()?;
+    let keys = alternatives.iter().map(|terms| terms.iter().collect::<BTreeSet<_>>()).collect::<Vec<_>>();
     if keys.windows(2).any(|pair| pair[0] != pair[1]) {
         return Err(Error::ValidationError(
             "多个角色的范围不同，合并可能扩大复合操作或审批节点范围；请人工设置人员范围".into(),
@@ -56,17 +58,6 @@ pub fn expression(
         alternatives,
         condition: (!condition.is_empty()).then_some(condition),
     })
-}
-
-/// 同维度项顺序不影响语义，用规范排序比较各角色分支。
-fn canonical(terms: &[PersonScopeTerm]) -> Result<Vec<String>> {
-    let mut values = terms
-        .iter()
-        .map(|term| serde_json::to_string(term).map_err(|e| Error::Internal(e.to_string())))
-        .collect::<Result<Vec<_>>>()?;
-    values.sort();
-    values.dedup();
-    Ok(values)
 }
 
 /// 每条动态规则保留语义，拒绝角色管理部门。
@@ -130,6 +121,27 @@ mod tests {
         assert!(result.history_read);
         assert_eq!(result.alternatives.len(), 2);
     }
+    #[test]
+    fn equivalent_role_branches_ignore_order_and_duplicates() {
+        let roles = vec!["one".into(), "two".into()];
+        let rules = [
+            rule("one", DataScopeType::SelfOwned),
+            rule("one", DataScopeType::Collaborative),
+            rule("one", DataScopeType::SelfOwned),
+            rule("two", DataScopeType::Collaborative),
+            rule("two", DataScopeType::SelfOwned),
+        ];
+        let migrated = expression("alice", &roles, "sales_order", "detail", &rules, &[], true).unwrap();
+        assert_eq!(migrated.alternatives.len(), 2);
+        assert!(migrated.history_read);
+        assert!(!migrated.additive);
+        let changed = [rule("one", DataScopeType::SelfOwned), rule("two", DataScopeType::Company)];
+        assert!(matches!(
+            expression("alice", &roles, "sales_order", "detail", &changed, &[], true),
+            Err(Error::ValidationError(_))
+        ));
+    }
+
     #[test]
     fn role_managed_departments_cannot_be_silently_frozen() {
         let mut managed = rule("sales", DataScopeType::SelfOwned);

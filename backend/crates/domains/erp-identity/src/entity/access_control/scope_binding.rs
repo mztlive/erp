@@ -16,7 +16,7 @@ pub enum ScopeDimension {
 }
 
 /// 组织目标的解析来源。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum ScopeTargetMode {
     Explicit,

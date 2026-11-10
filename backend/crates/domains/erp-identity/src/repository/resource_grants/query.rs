@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Error as PersistenceError, Executor};
+use persistence_core::Executor;
 use serde::Deserialize;
 
 use super::{GRANTS, SOURCES};
@@ -62,20 +62,8 @@ pub(crate) async fn target_ids(
     let collection = db.collection::<Document>(GRANTS);
     let aggregate = collection.aggregate(target_pipeline(user, resource, targets)).with_type::<TargetId>();
     let rows: Vec<TargetId> = match executor.session() {
-        Some(session) => aggregate
-            .session(&mut *session)
-            .await
-            .map_err(PersistenceError::from)?
-            .stream(session)
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-        None => aggregate
-            .await
-            .map_err(PersistenceError::from)?
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
+        Some(session) => aggregate.session(&mut *session).await?.stream(session).try_collect().await?,
+        None => aggregate.await?.try_collect().await?,
     };
     Ok(rows.into_iter().map(|row| row.id).collect())
 }

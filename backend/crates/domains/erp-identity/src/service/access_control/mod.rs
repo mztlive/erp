@@ -49,11 +49,6 @@ pub use crate::dto::{
 };
 use crate::error::{Error, Result};
 
-/// 权限定义列表筛选条件类型（经 `AccessControlExt` 关联类型跨 crate 可达）。
-type PermissionFilter = <mongodb::Database as crate::AccessControlExt>::PermissionFilter;
-/// 审计事件列表筛选条件类型。
-type AuditEventFilter = <mongodb::Database as crate::AccessControlExt>::AuditEventFilter;
-
 /// 访问控制服务。
 ///
 /// 提供权限目录、数据范围、用户角色绑定记录与审计事件的增补编排。
@@ -89,15 +84,9 @@ impl AccessControlService {
     /// * `RepositoryError` - 数据库查询失败
     pub async fn permission_list(&self, params: &PermissionListParams) -> Result<PageView<PermissionView>> {
         params.validate()?;
-        let query = params.normalized()?;
-        let filter = PermissionFilter {
-            resource: query.resource,
-            disabled: query.disabled,
-            system: query.system,
-            paging: query.paging,
-        };
+        let filter = params.normalized()?;
         let page = self.db.permissions().search_permissions(&filter, &mut NoTransaction).await?;
-        let items = page.items.into_iter().map(PermissionView::from).collect();
+        let items = page.items;
 
         Ok(PageView {
             items,
@@ -370,21 +359,7 @@ impl AccessControlService {
     /// * `RepositoryError` - 数据库查询失败
     pub async fn audit_event_list(&self, params: &AuditEventListParams) -> Result<PageView<AuditEventView>> {
         params.validate()?;
-        let query = params.normalized()?;
-        let filter = AuditEventFilter {
-            q: query.q,
-            keyword_actions: query.keyword_actions,
-            event_id: query.event_id,
-            trace_id: query.trace_id,
-            created_from: query.created_from,
-            created_before: query.created_before,
-            actor_id: query.actor_id,
-            action_type: query.action_type,
-            object_type: query.object_type,
-            object_id: query.object_id,
-            result: query.result,
-            paging: query.paging,
-        };
+        let filter = params.normalized()?;
         let page = self.db.audit_events().search_audit_events(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(AuditEventView::from).collect();
 
@@ -457,7 +432,7 @@ impl AccessControlService {
         }
         let account = self.db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
         let actor_label = account.map(|account| account.name).unwrap_or_else(|| "系统操作人".to_string());
-        AuditEvent::new(
+        Ok(AuditEvent::new(
             AuditEventId::new(next_id()),
             AuditEventData {
                 actor_id: actor.id().to_string(),
@@ -475,8 +450,7 @@ impl AccessControlService {
                 source_ip: None,
                 device_context: None,
             },
-        )
-        .map_err(Into::into)
+        )?)
     }
 
     /// 在同一事务中执行业务写入，成功后再追加审计事件。

@@ -4,7 +4,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::AccountKind;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Error as PersistenceError, Executor};
+use persistence_core::Executor;
 use serde::Deserialize;
 
 use crate::dto::PersonDirectoryItem;
@@ -54,28 +54,16 @@ pub async fn directory_page(
     let collection = db.collection::<Document>("accounts");
     let pipeline = directory_pipeline(read)?;
     let result = if let Some(session) = executor.session() {
-        let mut cursor = collection
-            .aggregate(pipeline)
-            .with_type::<DirectoryResult>()
-            .session(&mut *session)
-            .await
-            .map_err(PersistenceError::from)?;
-        if cursor.advance(session).await.map_err(PersistenceError::from)? {
-            cursor.deserialize_current().map_err(PersistenceError::from)?
+        let mut cursor =
+            collection.aggregate(pipeline).with_type::<DirectoryResult>().session(&mut *session).await?;
+        if cursor.advance(session).await? {
+            cursor.deserialize_current()?
         } else {
             DirectoryResult::default()
         }
     } else {
-        let mut cursor = collection
-            .aggregate(pipeline)
-            .with_type::<DirectoryResult>()
-            .await
-            .map_err(PersistenceError::from)?;
-        if cursor.advance().await.map_err(PersistenceError::from)? {
-            cursor.deserialize_current().map_err(PersistenceError::from)?
-        } else {
-            DirectoryResult::default()
-        }
+        let mut cursor = collection.aggregate(pipeline).with_type::<DirectoryResult>().await?;
+        if cursor.advance().await? { cursor.deserialize_current()? } else { DirectoryResult::default() }
     };
     if result.versions.len() > DIRECTORY_LIMIT {
         return Err(Error::ValidationError("人员目录超过查询上限，请收窄组织或搜索条件".into()));

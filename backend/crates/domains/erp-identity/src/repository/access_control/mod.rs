@@ -9,8 +9,7 @@
 //! 关联常量定义（conventions §4.3），调用方签名不变。
 //!
 //! `audit_event` 是事实型审计留痕（§4.5.4：不可编辑、不可删除），本目录
-//! **不提供**软删除/恢复方法；筛选/行类型定义在各子模块，经 `AccessControlExt`
-//! 的关联类型对外暴露。
+//! **不提供**软删除/恢复方法；筛选类型定义在各子模块；相同字段的查询投影直接复用响应 DTO。
 use application_core::SortDir;
 use mongodb::bson::{Document, doc};
 
@@ -24,7 +23,7 @@ pub mod personal_grant;
 
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
 pub use data_scope::{DataScopeRepositoryExt, data_scope_subjects_filter};
-pub use permission::{PermissionFilter, PermissionRepositoryExt, PermissionRow, UserRoleRepositoryExt};
+pub use permission::{PermissionFilter, PermissionRepositoryExt, UserRoleRepositoryExt};
 
 /// 将已验证时间排序编译为稳定的数据库排序。
 fn sort_doc(paging: &PageParams) -> Document {

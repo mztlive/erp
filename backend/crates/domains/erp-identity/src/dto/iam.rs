@@ -40,58 +40,6 @@ pub struct RoleItem {
 }
 
 impl RoleItem {
-    /// 由必填角色 ID 与名称构造响应项。
-    ///
-    /// # 参数
-    /// * `id` - 角色 ID
-    /// * `name` - 角色名称
-    ///
-    /// # 返回
-    /// 返回非系统、无权限、零时刻的响应项。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
-        Self {
-            system: false,
-            id: id.into(),
-            name: name.into(),
-            permissions: Vec::new(),
-            created_at: 0,
-            workbenches: BTreeSet::new(),
-        }
-    }
-
-    /// 设置系统角色标记。
-    ///
-    /// # 参数
-    /// * `system` - 系统角色标记
-    ///
-    /// # 返回
-    /// 返回更新后的响应项。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_system(mut self, system: bool) -> Self {
-        self.system = system;
-        self
-    }
-
-    /// 设置直接权限策略。
-    ///
-    /// # 参数
-    /// * `permissions` - 直接权限策略
-    ///
-    /// # 返回
-    /// 返回更新后的响应项。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_permissions(mut self, permissions: Vec<Permission>) -> Self {
-        self.permissions = permissions;
-        self
-    }
-
     /// 从角色实体与直接权限策略构建响应项。
     ///
     /// 系统标记取角色的 `system`，或角色 ID 等于 `ROOT_ROLE_ID`。
@@ -144,19 +92,6 @@ mod tests {
         let payload = UpdateRoleParams::default();
         assert!(payload.name.is_none());
         assert!(payload.permissions.is_none());
-    }
-
-    #[test]
-    fn role_item_constructor_sets_identity_only() {
-        let item = RoleItem::new("role-a", "管理员");
-        assert_eq!(item.id, "role-a");
-        assert_eq!(item.name, "管理员");
-        assert!(!item.system);
-        assert!(item.permissions.is_empty());
-        assert_eq!(item.created_at, 0);
-        let system = RoleItem { created_at: 42, ..RoleItem::new("role-a", "管理员").with_system(true) };
-        assert!(system.system);
-        assert_eq!(system.created_at, 42);
     }
 
     /// 系统角色及保留根角色身份均向客户端声明删除保护。

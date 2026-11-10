@@ -7,9 +7,10 @@ use validator::Validate;
 use super::PageParams;
 use crate::entity::access_control::{PermissionData, PermissionDefinition, PermissionUpdate};
 use crate::error::Result;
+use crate::repository::PermissionFilter;
 
 /// 权限定义响应视图（W19 权限目录）。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PermissionView {
     /// 实体主键。
     pub id: String,
@@ -46,23 +47,6 @@ impl From<PermissionDefinition> for PermissionView {
             disabled: permission.disabled,
             version: permission.base.version,
             created_at: permission.base.created_at,
-        }
-    }
-}
-
-impl From<crate::repository::PermissionRow> for PermissionView {
-    /// 从列表投影行构造响应视图（字段取值与实体转换一致）。
-    fn from(row: crate::repository::PermissionRow) -> Self {
-        Self {
-            id: row.id,
-            resource: row.resource,
-            action: row.action,
-            name: row.name,
-            description: row.description,
-            system: row.system,
-            disabled: row.disabled,
-            version: row.version,
-            created_at: row.created_at,
         }
     }
 }
@@ -183,19 +167,6 @@ pub struct PermissionListParams {
     pub sort_dir: Option<String>,
 }
 
-/// 归一化后的权限定义列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PermissionListQuery {
-    /// 权限资源模糊筛选。
-    pub resource: Option<String>,
-    /// 停用标记筛选。
-    pub disabled: Option<bool>,
-    /// 是否仅系统内建筛选。
-    pub system: Option<bool>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
 impl PermissionListParams {
     /// 归一化权限定义列表查询参数。
     ///
@@ -205,16 +176,41 @@ impl PermissionListParams {
     /// 无。
     ///
     /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
+    /// 返回服务与仓储共用的规范化筛选条件。
     ///
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<PermissionListQuery> {
-        Ok(PermissionListQuery {
+    pub(crate) fn normalized(&self) -> Result<PermissionFilter> {
+        Ok(PermissionFilter {
             resource: normalized_text(self.resource.as_deref()),
             disabled: self.disabled,
             system: self.system,
             paging: PageParams::parse(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mongodb::bson::{deserialize_from_document, serialize_to_document};
+
+    use super::*;
+    use crate::access_control::PermissionId;
+
+    #[test]
+    fn projection_and_entity_conversion_share_the_response_contract() {
+        let entity = PermissionDefinition::new(
+            PermissionId::new("permission-1"),
+            PermissionData::new("Sales_Order", "Detail", "查看销售单").with_description("说明"),
+        )
+        .unwrap();
+        let document = serialize_to_document(&entity).unwrap();
+        let projection: PermissionView = deserialize_from_document(document.clone()).unwrap();
+        assert_eq!(projection, PermissionView::from(entity));
+        assert_eq!(projection.resource, "sales_order");
+        assert_eq!(projection.action, "detail");
+        let mut incomplete = document;
+        incomplete.remove("resource");
+        assert!(deserialize_from_document::<PermissionView>(incomplete).is_err());
     }
 }

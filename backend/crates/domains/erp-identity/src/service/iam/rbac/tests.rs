@@ -11,7 +11,7 @@ use super::{
     collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable, ensure_management_subset,
     ensure_permission_subset, ensure_policy_snapshot_revision, ensure_roles_delegable,
     ensure_target_roles_manageable, parse_policy_permissions, permission_pairs, permissions_for_roles,
-    policy_revisions_match, role_key, role_or_not_found, root_role_is_current, stable_policy_revision,
+    role_key, role_or_not_found, root_role_is_current,
 };
 use crate::RoleId;
 use crate::entity::{Permission, PermissionSet, Role, RoleData};
@@ -49,12 +49,6 @@ fn commit_outcome_unknown_is_detected_separately_from_definite_errors() {
 
     assert!(commit_outcome_unknown(&unknown));
     assert!(!commit_outcome_unknown(&definite));
-}
-
-#[test]
-fn policy_snapshot_is_accepted_only_when_revision_stays_stable() {
-    assert_eq!(stable_policy_revision(7, 7), Some(7));
-    assert_eq!(stable_policy_revision(7, 8), None);
 }
 
 /// 角色绑定与逐角色授权必须来自同一个可验证 revision，禁止 R/R+1 拼接。
@@ -139,12 +133,6 @@ fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
     snapshot.grants.remove("cost");
     assert_eq!(snapshot.granting_role_ids(&sales), &[RoleId::parse("sales").unwrap()]);
     assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
-}
-
-#[test]
-fn remote_policy_revision_invalidates_the_local_snapshot() {
-    assert!(policy_revisions_match(7, 7));
-    assert!(!policy_revisions_match(7, 8));
 }
 
 #[test]

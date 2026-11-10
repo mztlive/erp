@@ -12,6 +12,7 @@
 //! `role-root` 由 [`super::ensure_root_role`] 单独维护，不在本清单中。
 
 use application_core::AuditActor;
+use erp_core::Result as CoreResult;
 use persistence_core::NoTransaction;
 
 use super::SharedRbacService;
@@ -332,7 +333,7 @@ fn initial_permissions(role: &PredefinedRoleDef) -> Result<Vec<Permission>> {
 /// # 错误
 /// 任一字符串不符合权限格式时返回错误。
 fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
-    raw.iter().map(|permission| Permission::parse(*permission).map_err(Into::into)).collect()
+    Ok(raw.iter().map(Permission::parse).collect::<CoreResult<_>>()?)
 }
 
 /// 返回预定义角色 ID 列表（测试与文档校验用）。

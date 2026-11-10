@@ -1,6 +1,7 @@
 //! 在原事务中读取账号及启用角色的完整权限，供跨域责任指派使用。
 use std::collections::HashSet;
 
+use erp_core::Result as CoreResult;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -28,12 +29,8 @@ pub async fn qualified_account(
         .filter(AccountCore::is_active_backoffice)
         .ok_or_else(|| Error::ValidationError("审批负责人账号不存在或已停用，请调整负责人".into()))?;
     let store = MongoCasbinAdapter::new(db.clone());
-    let required = PermissionSet::new(
-        required
-            .iter()
-            .map(|value| Permission::parse(value).map_err(Error::from))
-            .collect::<Result<Vec<_>>>()?,
-    );
+    let required =
+        PermissionSet::new(required.iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?);
     for key in store.subject_roles(&subject(account.kind, user), ex).await? {
         let Some(id) = key.strip_prefix("role:") else { continue };
         if db.roles().find_by_id(id, ex).await?.is_none_or(|role| role.disabled) {

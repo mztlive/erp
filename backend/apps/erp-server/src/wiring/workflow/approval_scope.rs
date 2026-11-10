@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
+#[cfg(test)]
+use erp_identity::{RoleId, service::access_control::resolve::DataScopeFacts};
 use erp_workflow::ports::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopePredicate};
 use erp_workflow::{Error, Result};
 use mongodb::Database;
@@ -68,7 +68,7 @@ pub(super) async fn resolve(
         Err(IdentityError::Forbidden(_)) => return Ok(None),
         Err(error) => return Err(map_service(error.into())),
     };
-    let role_ids = scope.qualified_roles.iter().cloned().collect();
+    let role_ids = scope.qualified_roles.iter().map(ToString::to_string).collect();
     Ok(Some(WorkflowDataScope::new(
         scope.resource.clone(),
         scope.action.clone(),
@@ -122,8 +122,8 @@ mod tests {
             ScopeClause { warehouse_ids: BTreeSet::from(["same-id".into()]), ..Default::default() };
         assert!(predicate.allows(&warehouse));
         assert!(!predicate.allows(&order));
-        predicate.0.test_facts_mut().qualified_roles.insert("finance".into());
-        predicate.0.test_facts_mut().qualified_roles.insert("other-role".into());
+        predicate.0.test_facts_mut().qualified_roles.insert(RoleId::parse("finance").unwrap());
+        predicate.0.test_facts_mut().qualified_roles.insert(RoleId::parse("other-role").unwrap());
         assert!(predicate.allows_role("finance", &warehouse));
         assert!(!predicate.allows_role("missing-role", &warehouse));
         assert!(predicate.allows_role("other-role", &warehouse));
@@ -141,7 +141,7 @@ mod tests {
             user_id: "reviewer".into(),
             resource: "supplier_settlement_statement".into(),
             action: "detail".into(),
-            qualified_roles: ["finance".into()].into(),
+            qualified_roles: [RoleId::parse("finance").unwrap()].into(),
             scope: ResolvedScope { role_clauses: vec![clause], user_limit: None },
             organizations: Default::default(),
             policy_version: 1,

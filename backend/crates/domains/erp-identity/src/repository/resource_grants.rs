@@ -6,7 +6,7 @@ mod rows;
 use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Error as PersistenceError, Executor, Repository, persisted_document};
+use persistence_core::{Executor, Repository, persisted_document};
 pub(crate) use query::target_ids;
 pub use query::{lookup_stages, read_stages};
 pub(crate) use revision::{advance, revision};
@@ -123,17 +123,8 @@ async fn page<T: DeserializeOwned + Unpin + Send + Sync>(
     let collection = db.collection::<T>(collection);
     let find = collection.find(filter).sort(doc! { "id": 1 }).limit(limit);
     Ok(match executor.session() {
-        Some(session) => find
-            .session(&mut *session)
-            .await
-            .map_err(PersistenceError::from)?
-            .stream(session)
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-        None => {
-            find.await.map_err(PersistenceError::from)?.try_collect().await.map_err(PersistenceError::from)?
-        },
+        Some(session) => find.session(&mut *session).await?.stream(session).try_collect().await?,
+        None => find.await?.try_collect().await?,
     })
 }
 /// 授权行身份使用结构化编码，避免任意分隔符碰撞。
@@ -144,7 +135,7 @@ async fn page<T: DeserializeOwned + Unpin + Send + Sync>(
 /// # 错误
 /// 构造仓储不执行 I/O；异步操作传播持久化、规模上限及事务约束错误。
 pub(crate) fn row_id(source: &str, resource: ResourceKind, id: &str) -> Result<String> {
-    serde_json::to_string(&(source, resource, id)).map_err(|e| Error::Internal(e.to_string()))
+    Ok(serde_json::to_string(&(source, resource, id))?)
 }
 /// 在授权事务中追加不可变来源审计快照。
 /// # 参数
@@ -161,11 +152,7 @@ pub(crate) async fn audit_source(
     let event = doc! { "id": format!("{}:{}", source.base.id, source.base.version), "source_id": &source.base.id,
     "snapshot": persisted_document(source)? };
     let session = executor.session().ok_or_else(|| Error::Internal("来源审计必须使用事务".into()))?;
-    db.collection("resource_grant_audits")
-        .insert_one(event)
-        .session(session)
-        .await
-        .map_err(PersistenceError::from)?;
+    db.collection("resource_grant_audits").insert_one(event).session(session).await?;
     Ok(())
 }
 

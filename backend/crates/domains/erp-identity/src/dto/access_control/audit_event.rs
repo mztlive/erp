@@ -7,6 +7,7 @@ use validator::Validate;
 use super::PageParams;
 use crate::entity::access_control::{AuditEvent, AuditEventResult};
 use crate::error::Result;
+use crate::repository::AuditEventFilter;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AuditEventView {
@@ -132,36 +133,6 @@ pub struct AuditEventListParams {
     pub sort_dir: Option<String>,
 }
 
-/// 归一化后的审计事件列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct AuditEventListQuery {
-    /// 操作者、动作、对象或追踪号字面量关键词。
-    pub q: Option<String>,
-    /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
-    pub keyword_actions: Option<String>,
-    /// 审计事件稳定身份。
-    pub event_id: Option<String>,
-    /// 链路追踪号或请求号精确筛选。
-    pub trace_id: Option<String>,
-    /// 创建时间下界（含，Unix 秒）。
-    pub created_from: Option<u64>,
-    /// 创建时间上界（不含，Unix 秒）。
-    pub created_before: Option<u64>,
-
-    /// 操作者 ID 模糊筛选。
-    pub actor_id: Option<String>,
-    /// 动作代码模糊筛选。
-    pub action_type: Option<String>,
-    /// 业务对象类型代码筛选。
-    pub object_type: Option<String>,
-    /// 业务对象 ID 筛选。
-    pub object_id: Option<String>,
-    /// 最终结果筛选。
-    pub result: Option<AuditEventResult>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
 impl AuditEventListParams {
     /// 归一化审计事件列表查询参数。
     ///
@@ -171,12 +142,12 @@ impl AuditEventListParams {
     /// 无。
     ///
     /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
+    /// 返回服务与仓储共用的规范化筛选条件。
     ///
     /// # 错误
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<AuditEventListQuery> {
-        Ok(AuditEventListQuery {
+    pub(crate) fn normalized(&self) -> Result<AuditEventFilter> {
+        Ok(AuditEventFilter {
             q: normalized_text(self.q.as_deref()),
             keyword_actions: normalized_text(self.keyword_actions.as_deref()),
             event_id: normalized_text(self.event_id.as_deref()),

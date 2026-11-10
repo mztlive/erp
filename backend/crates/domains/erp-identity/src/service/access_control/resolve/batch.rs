@@ -10,13 +10,13 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::Executor;
 
-use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService, active_relations, ensure_resource};
+use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService, active_relations};
 use crate::access_control::ResolvedScope;
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::scope_registration;
+use crate::service::access_control::consumers::{registration, scope_registration};
 use crate::{AccessControlExt, Error, Permission, Result, RoleId, RolePermissionSnapshot};
 
 /// 一次事务读取阶段的范围解析批次；持有原执行器以阻止夹入业务写入。
@@ -174,7 +174,7 @@ impl<'a> DataScopeBatch<'a> {
     ) -> Result<AuthorizedDataScope> {
         let target = (entry_permission.resource(), entry_permission.action());
         let source = (source_permission.resource(), source_permission.action());
-        ensure_resource(target.0, target.1)?;
+        registration(target.0, target.1)?;
         scope_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
         required.push(entry_permission.clone());
@@ -190,8 +190,7 @@ impl<'a> DataScopeBatch<'a> {
         }
         let at = facts.as_of;
         let state = self.scope_organizations(source.0, at).await?;
-        let (scope, qualified_roles) =
-            self.service.resolved(self.actor.id(), &roles, source, &state, at, self.executor).await?;
+        let scope = self.service.resolved(self.actor.id(), &roles, source, &state, at, self.executor).await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let scope_version = scope_version(
             self.actor.id(),
@@ -208,7 +207,10 @@ impl<'a> DataScopeBatch<'a> {
                 resource: target.0.into(),
                 action: target.1.into(),
                 scope,
-                qualified_roles,
+                qualified_roles: ids
+                    .into_iter()
+                    .filter(|id| roles.iter().any(|role| role.base.id == id.as_str()))
+                    .collect(),
                 organizations: state,
                 policy_version: facts.snapshot.policy_revision(),
                 scope_version,
