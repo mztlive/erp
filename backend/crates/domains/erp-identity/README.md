@@ -2,6 +2,8 @@
 
 负责账号登录、角色权限、组织成员、数据范围及指定记录读取授权。业务授权统一使用 `AuthorizationService`。
 
+所有权限判断必须统一通过本 crate 执行；业务模块只提供业务事实并调用授权入口，不得自行实现、解释或组合权限规则。
+
 本 crate 不依赖其他业务领域。业务模块提供 Mapping 和对象事实，组合根登记资源动作及查询模型。完整合同见 [identity 统一权限 API 设计](../../../../docs/identity-authorization-api-design.md)。
 
 ## 业务授权 API
@@ -13,10 +15,13 @@
 | 查询条件编译 | `AuthorizedQuery::compile` | `CompiledAccess` |
 | 仓储执行前后复验 | `AuthorizationService::validate` | `Result<()>` |
 | HTTP 入口、按钮功能资格 | `AuthorizationService::has_permission` | `Result<bool>` |
+| 批量功能资格 | `AuthorizationService::permissions` | `Result<Option<QualifiedPermissions>>` |
 
 `has_permission` 检查账号有效及启用角色授予的单个功能权限，不包含对象资格。业务用例仍执行 `require` 或 `query`。数据库或策略读取错误不转换为 `false`。
 
-业务不再调用 `RbacService::enforce`、`DataScopeService`、`ResourceAccessService`，也不再手工合并基础范围和记录授权。旧查询结果类型及 `read_stages`、`lookup_stages` 已移除。identity 管理用例使用的范围解析器仅在 crate 内可见。
+`permissions` 批量读取各项功能资格，账号失效时返回 `None`；身份设施、策略版本或非法权限错误直接返回。批量结果不代表同一角色具备全部权限，需要此约束时使用 `QualifiedPermissions::same_role`。功能资格不能替代 `require` 或 `query` 的对象授权。
+
+业务不要再调用 `RbacService::enforce`、`DataScopeService`、`ResourceAccessService`，也不要再手工合并基础范围和记录授权。旧查询结果类型及 `read_stages`、`lookup_stages` 已移除。identity 管理用例使用的范围解析器仅在 crate 内可见。
 
 供应商门户继续使用 `PortalIdentityService`，按供应商绑定和门户岗位检查。
 
@@ -64,7 +69,7 @@ authorization.validate(&compiled, executor).await?;
 
 `AuthorizedQuery` 不可由业务构造或修改，绑定账号、入口、资源、模型、授权时点及身份版本。`CompiledAccess` 继续绑定 Mapping 实例、准备事实、版本和有效期。两者只用于当前读取阶段，禁止跨请求或事务缓存。
 
-跨页游标使用 `CompiledAccess::version()`，包含身份和业务映射依赖；`AuthorizedQuery::version()` 只包含编译前身份授权依赖。复验发现账号停用、权限撤销、版本变化或有效期到达时返回 `DATA_SCOPE_CHANGED`，丢弃结果并重新查询；数据库和接入错误保留原类别。
+跨页游标使用 `CompiledAccess::version()`，包含身份和业务映射依赖。复验发现账号停用、权限撤销、版本变化或有效期到达时返回 `DATA_SCOPE_CHANGED`，丢弃结果并重新查询；数据库和接入错误保留原类别。
 
 `MappingFacts` 仅携带业务映射的修订号与有效期。查询指纹使用 `authorization-query-v3` 格式；升级前的分页版本按 `DATA_SCOPE_CHANGED` 合同失效，调用方须重新查询。
 

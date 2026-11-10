@@ -474,7 +474,7 @@ impl AuthorizedQuery {
 
 `compile` 调用 Mapping 的事实准备和条件转换，将所用业务版本、有效期与身份授权快照绑定到 `CompiledAccess`。
 
-跨页游标使用 `CompiledAccess::version()`，包含身份和映射依赖。`AuthorizedQuery::version()` 只含编译前身份授权版本，不能用于证明业务映射未变。
+跨页游标使用 `CompiledAccess::version()`，包含身份和映射依赖。
 
 Mapping 由组合根以 `Arc<dyn AccessMapping>` 登记，仓储向 `compile` 传入同一实例的借用。`CompiledAccess` 保留登记实例、准备事实和资源主键表达式，供执行前后复验，不接受仅名称相同但实现不同的 Mapping 替换。
 
