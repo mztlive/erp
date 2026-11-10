@@ -265,7 +265,7 @@ impl GrantQueue {
         expected: &GrantEvent,
         executor: &mut dyn Executor,
     ) -> Result<Option<GrantEvent>> {
-        let event = resource_grants::events(&self.db).find_by_id(&expected.base.id, executor).await?;
+        let event = resource_grants::event_by_key(&self.db, &expected.dedup_key, executor).await?;
         if let Some(event) = &event {
             event.ensure_replay(expected)?;
         }

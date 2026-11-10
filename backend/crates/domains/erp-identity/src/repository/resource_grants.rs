@@ -50,6 +50,21 @@ pub(crate) fn grants(db: &Database) -> Repository<'_, ResourceGrant> {
 pub(crate) fn events(db: &Database) -> Repository<'_, GrantEvent> {
     Repository::new(db, EVENTS)
 }
+/// 按业务幂等键读取正式事件，不依赖候选事件的新记录 ID。
+/// # 参数
+/// db 为身份数据库；dedup_key 为业务幂等键；executor 为调用方事务。
+/// # 返回
+/// 已持久化事件，缺失返回空值。
+/// # 错误
+/// 数据库读取失败时返回错误。
+pub(crate) async fn event_by_key(
+    db: &Database,
+    dedup_key: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<GrantEvent>> {
+    Ok(events(db).find_one(doc! { "dedup_key": dedup_key }, executor).await?)
+}
+
 /// 管理列表按稳定主键分页，保留终止来源供审计。
 /// # 参数
 /// user 为接收人；after 为上一页游标；executor 为调用执行器。
@@ -192,6 +207,8 @@ mod tests {
             .unwrap();
             let document = persisted_document(&event).unwrap();
             assert_eq!(document.get_str("status").unwrap(), "pending");
+            assert_eq!(document.get_str("id").unwrap(), event.base.id);
+            assert_eq!(document.get_str("dedup_key").unwrap(), event.dedup_key);
             assert_eq!(
                 document.get_document("source").unwrap().get_str("business_type").unwrap(),
                 event.source.business_type

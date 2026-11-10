@@ -198,10 +198,11 @@ pub async fn append_event(
     require_transaction(executor)?;
     let event = GrantEvent::new(evidence)?;
     let repo = resource_grants::events(db);
-    if let Some(old) = repo.find_by_id(&event.base.id, executor).await? {
+    if let Some(old) = resource_grants::event_by_key(db, &event.dedup_key, executor).await? {
         old.ensure_replay(&event)?;
         return Ok(false);
     }
+    // 唯一索引兜底并发去重；插入失败必须退出原业务事务，后续重试再读取已有事件。
     repo.create(&event, executor).await?;
     Ok(true)
 }

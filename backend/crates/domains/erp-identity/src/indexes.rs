@@ -410,6 +410,7 @@ async fn ensure_resource_grant_events(db: &Database) -> Result<()> {
             named_index("idx_resource_grant_events_recover", doc! { "status": 1, "lease_until": 1, "id": 1 }),
             named_index("idx_resource_grant_events_source_page", doc! { "source.rule": 1, "source.business_type": 1, "source.business_id": 1, "source.recipient": 1, "id": 1 }),
             unique_index("uk_resource_grant_events_id", doc! { "id": 1 }),
+            unique_index("uk_resource_grant_events_dedup_key", doc! { "dedup_key": 1 }),
             named_index(
                 "idx_resource_grant_events_claim",
                 doc! { "status": 1, "available_at": 1, "lease_until": 1, "id": 1 },
