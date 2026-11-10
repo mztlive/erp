@@ -514,7 +514,7 @@ async fn account_qualified_for_acceptance(
     if !account.is_active_backoffice() {
         return Ok(false);
     }
-    let granted = PermissionSet::new(rbac.permissions(account.kind, target).await?);
+    let granted = rbac.permissions(account.kind, target).await?;
     let Some(required_codes) = WorkItemType::CustomerAcceptanceRegistration
         .customer_acceptance_execution_permissions(ACCEPTANCE_OBJECT_TYPE)
     else {

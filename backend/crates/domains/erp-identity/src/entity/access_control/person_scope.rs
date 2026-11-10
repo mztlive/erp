@@ -6,9 +6,9 @@ use entity_macros::{Entity, id_type};
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
+use super::scope_target::{BoundScopeTarget, ScopeTarget};
 use super::{
-    DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType, ResolvedScope, ScopeBinding,
-    ScopeClause, ScopeDimension, ScopeTargetMode,
+    DataScope, DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode,
 };
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
@@ -71,41 +71,40 @@ impl PersonScopeTerm {
         })
     }
 
-    /// 为纯表达式编译器构建临时范围项，不读取旧集合。
-    ///
+    /// 将原始人员范围解析为已验证目标，拒绝角色专用动态模式。
     /// # 参数
-    /// * `resource` - 业务资源标识。
-    /// * `action` - 单个动作标识。
-    /// * `subject` - 临时主体 ID。
-    /// * `limit` - 为真时主体类型是用户上限，否则是角色分支。
-    ///
+    /// resource、actions 为所属业务和操作。
     /// # 返回
-    /// 返回启用的临时 `DataScope`。身份固定为 `expression`。
-    ///
+    /// 不包含角色管理部门模式的人员目标。
     /// # 错误
-    /// 目标模式为 `ManagedOrgs` 时返回校验错误。主体、绑定或目标不合法时传播 [`DataScope::new`] 的错误。
-    pub(crate) fn rule(&self, resource: &str, action: &str, subject: &str, limit: bool) -> Result<DataScope> {
-        if self.target_mode == Some(ScopeTargetMode::ManagedOrgs) {
-            return Err(Error::ValidationError("人员范围不接受角色管理部门模式".into()));
-        }
-        Ok(DataScope::new(
-            DataScopeId::new("expression"),
-            DataScopeData {
-                subject_type: if limit { DataScopeSubjectType::User } else { DataScopeSubjectType::Role },
-                subject_id: subject.into(),
-                scope_type: self.scope_type,
-                scope_targets: self.scope_targets.clone(),
-                binding: ScopeBinding {
-                    schema_version: 2,
-                    resource: resource.into(),
-                    actions: vec![action.into()],
-                    target_dimension: self.target_dimension,
-                    target_mode: self.target_mode,
-                    include_descendants: self.include_descendants,
-                    enabled: true,
-                },
+    /// 绑定、目标或人员动态模式非法时拒绝。
+    pub(crate) fn target(&self, resource: &str, actions: &[String]) -> Result<ScopeTarget> {
+        let target = self.binding(resource, actions).target(self.scope_type, &self.scope_targets)?;
+        match target {
+            BoundScopeTarget::Personal(target) => Ok(target),
+            BoundScopeTarget::ManagedOrgs => {
+                Err(Error::ValidationError("人员范围不接受角色管理部门模式".into()))
             },
-        )?)
+        }
+    }
+
+    /// 生成持久化协议绑定，仅在输入和历史数据边界使用。
+    /// # 参数
+    /// resource、actions 为所属业务和操作。
+    /// # 返回
+    /// 与原始范围字段对应的绑定，尚未证明有效性。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn binding(&self, resource: &str, actions: &[String]) -> ScopeBinding {
+        ScopeBinding {
+            schema_version: 2,
+            resource: resource.into(),
+            actions: actions.to_vec(),
+            target_dimension: self.target_dimension,
+            target_mode: self.target_mode,
+            include_descendants: self.include_descendants,
+            enabled: true,
+        }
     }
 }
 

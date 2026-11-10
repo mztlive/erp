@@ -9,7 +9,7 @@ use super::{PolicyDocument, PolicyMode, PolicyRole, PolicyScope};
 use crate::dto::authorization_bundle::{PolicyChange, PolicyPreview};
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression};
 use crate::entity::role::ROOT_ROLE_ID;
-use crate::{Error, Permission, PermissionSet, Result, Role};
+use crate::{Error, Permission, PermissionSet, Result, Role, RoleId};
 
 #[derive(Clone, Serialize)]
 pub(crate) struct PolicyRoleState {
@@ -21,7 +21,7 @@ pub(crate) struct PolicyRoleState {
 #[derive(Clone, Serialize)]
 pub(crate) struct PolicyUserState {
     pub version: u64,
-    pub role_ids: Vec<String>,
+    pub role_ids: Vec<RoleId>,
 }
 
 #[derive(Default, Serialize)]
@@ -39,7 +39,7 @@ pub(crate) struct PlannedRole {
 
 pub(crate) struct PlannedBinding {
     pub user_id: String,
-    pub role_ids: Vec<String>,
+    pub role_ids: Vec<RoleId>,
 }
 
 pub(crate) struct PlannedScope {
@@ -163,15 +163,17 @@ impl PolicyPlan {
             let user =
                 facts.users.get(&binding.user_id).ok_or_else(|| Error::NotFound("人员不存在".into()))?;
             for id in &user.role_ids {
-                let role =
-                    facts.roles.get(id).ok_or_else(|| Error::ValidationError("人员绑定角色缺失".into()))?;
+                let role = facts
+                    .roles
+                    .get(id.as_str())
+                    .ok_or_else(|| Error::ValidationError("人员绑定角色缺失".into()))?;
                 ensure_role(&role.role)?;
                 ensure_subset(actor, &role.permissions)?;
             }
-            let requested = binding.role_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+            let requested = binding.role_ids.clone();
             let role_ids = merge(binding.mode, &user.role_ids, &requested);
             for id in &role_ids {
-                ensure_subset(actor, self.role_permissions(id, facts)?)?;
+                ensure_subset(actor, self.role_permissions(id.as_str(), facts)?)?;
             }
             if role_ids != user.role_ids {
                 self.preview.changes.push(PolicyChange {
@@ -198,7 +200,7 @@ impl PolicyPlan {
             .unwrap_or(&user.role_ids);
         let mut permissions = vec![];
         for id in role_ids {
-            permissions.extend_from_slice(self.role_permissions(id, facts)?);
+            permissions.extend_from_slice(self.role_permissions(id.as_str(), facts)?);
         }
         let permissions = PermissionSet::new(permissions);
         let request = scope.request(self.preview.policy_version)?;
@@ -325,7 +327,10 @@ mod tests {
     fn facts() -> PolicyFacts {
         let mut facts = PolicyFacts::default();
         facts.roles.insert("reader".into(), role("reader", &["sales_order:list", "sales_order:detail"]));
-        facts.users.insert("alice".into(), PolicyUserState { version: 1, role_ids: vec!["reader".into()] });
+        facts.users.insert(
+            "alice".into(),
+            PolicyUserState { version: 1, role_ids: vec![RoleId::parse("reader").unwrap()] },
+        );
         facts
     }
 
@@ -386,7 +391,7 @@ mod tests {
             plan.preview.changes.iter().map(|c| c.kind.as_str()).collect::<Vec<_>>(),
             ["role", "binding", "data_scope"]
         );
-        assert_eq!(plan.bindings[0].role_ids, ["policy-new"]);
+        assert_eq!(plan.bindings[0].role_ids, [RoleId::parse("policy-new").unwrap()]);
         assert_eq!(plan.scopes[0].action, "list");
         assert_eq!(plan.scopes[0].expression.alternatives[0][0].scope_targets, ["east"]);
     }

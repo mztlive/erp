@@ -10,9 +10,9 @@ use erp_catalog::{
     CatalogService,
 };
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -80,7 +80,7 @@ impl CatalogDataScopePort for MongoCatalogDataScope {
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<CatalogResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "product", action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", "product", action))?, executor)
             .await
             .map_err(map_identity_error)?;
         map_access(access)

@@ -4,6 +4,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::DataScopeType;
+use super::scope_target::BoundScopeTarget;
 
 /// 各目标集合的身份类型；不同维度不得合并。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,6 +52,17 @@ impl ScopeBinding {
     /// 不需要目标的类型若携带模式、下级标记或目标则拒绝。
     /// 组织范围缺少模式、动态模式用在非内部组织、显式与动态的目标携带相反，或下级标记与模式不匹配时拒绝。
     pub fn validate(&self, scope_type: DataScopeType, targets: &[String]) -> Result<()> {
+        self.target(scope_type, targets).map(|_| ())
+    }
+
+    /// 在持久化或请求边界一次性验证绑定并返回内部目标。
+    /// # 参数
+    /// scope_type、targets 为同一条范围规则的类型和目标。
+    /// # 返回
+    /// 规范化后的目标形态。
+    /// # 错误
+    /// 版本、资源动作或范围字段组合不合法时拒绝。
+    pub(crate) fn target(&self, scope_type: DataScopeType, targets: &[String]) -> Result<BoundScopeTarget> {
         if self.schema_version != 2
             || !identifier(&self.resource)
             || self.actions.is_empty()
@@ -61,13 +73,7 @@ impl ScopeBinding {
         if self.actions.iter().any(|action| !identifier(action)) {
             return Err(Error::from("范围动作必须使用明确的注册标识"));
         }
-        if !scope_type.requires_targets() {
-            if self.target_mode.is_some() || self.include_descendants.is_some() || !targets.is_empty() {
-                return Err(Error::from("公司、本人及协作范围不得携带组织目标设置"));
-            }
-            return Ok(());
-        }
-        self.validate_targets(targets)
+        BoundScopeTarget::parse(self, scope_type, targets)
     }
 
     /// 判断规则是否适用于当前资源与动作。
@@ -86,23 +92,6 @@ impl ScopeBinding {
             && self.enabled
             && self.resource == resource
             && self.actions.iter().any(|value| value == action)
-    }
-
-    /// 校验组织目标模式，动态目标只能使用内部组织。
-    fn validate_targets(&self, targets: &[String]) -> Result<()> {
-        let mode = self.target_mode.ok_or_else(|| Error::from("组织范围必须指定目标模式"))?;
-        if mode != ScopeTargetMode::Explicit && self.target_dimension != ScopeDimension::InternalOrg {
-            return Err(Error::from("动态范围仅支持内部组织"));
-        }
-        if (mode == ScopeTargetMode::Explicit) == targets.is_empty() {
-            return Err(Error::from("显式模式必须指定目标，动态模式不得混入静态目标"));
-        }
-        let needs_descendants =
-            self.target_dimension == ScopeDimension::InternalOrg && mode != ScopeTargetMode::ManagedOrgs;
-        if needs_descendants != self.include_descendants.is_some() {
-            return Err(Error::from("内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置"));
-        }
-        Ok(())
     }
 }
 

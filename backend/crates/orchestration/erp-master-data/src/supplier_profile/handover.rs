@@ -506,7 +506,7 @@ async fn account_can_maintain(
     if !account.is_active_backoffice() {
         return Ok(false);
     }
-    let granted = PermissionSet::new(rbac.permissions(account.kind, target).await?);
+    let granted = rbac.permissions(account.kind, target).await?;
     let Ok(required) = Permission::parse("supplier:update") else {
         return Ok(false);
     };

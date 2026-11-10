@@ -70,7 +70,11 @@ impl AccessInspectionService {
             return self.inspect_contextual(actor, request, policy, executor).await;
         }
         let result = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(&actor, &request.resource, &request.action, executor)
+            .resolve(
+                &actor,
+                &Permission::parse(format!("{}:{}", request.resource, request.action))?,
+                executor,
+            )
             .await;
         match result {
             Ok(access) => {
@@ -148,7 +152,7 @@ impl AccessInspectionService {
             .map(Permission::parse)
             .collect::<StdResult<Vec<_>, _>>()?;
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "org_unit", "list", &permissions, executor)
+            .resolve_permissions(actor, &Permission::parse("org_unit:list")?, &permissions, executor)
             .await?;
         if !access.scope.role_clauses.iter().any(|scope| scope.company)
             || access.scope.user_limit.as_ref().is_some_and(|limit| !limit.company)

@@ -7,24 +7,10 @@
 //! `permission` 目录、`data_scope`、`user_role` 绑定记录与 `audit_event` 查询
 //! （domains.md：D06 只做 data_scope 增补与 audit_log→audit_event 字段对齐）。
 
-/// 排序方向。
-pub use application_core::SortDir;
-
-/// 归一化后的分页查询 DTO（Service → Repository 共用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageParams {
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数（已 clamp 到 1–100）。
-    pub page_size: u32,
-    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。
-    pub sort_by: &'static str,
-    /// 排序方向。
-    pub sort_dir: SortDir,
-}
-
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
+/// 排序方向。
+pub use application_core::SortDir;
 /// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 ///
 /// # 参数
@@ -37,51 +23,16 @@ pub use application_core::PageView;
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+#[cfg(test)]
 pub(crate) use application_core::normalize_sort;
 
-/// 列表时间排序白名单（`created_at`/`updated_at`），三类列表复用同一语义。
-pub(crate) const TIMESTAMP_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
-
-/// 由原始分页与排序参数构造归一化分页查询（三类列表 `normalized()` 共用）。
-///
-/// 排序字段过白名单校验，页码与单页条数取默认值并 clamp 到合法区间。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `page` - 可选页码；缺省为第一页
-/// * `page_size` - 可选单页条数；缺省为默认大小
-///
-/// # 返回
-/// 返回归一化后的分页与排序参数。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) fn page_params(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    page: Option<u64>,
-    page_size: Option<u32>,
-) -> crate::error::Result<PageParams> {
-    let (sort_by, sort_dir) = normalize_sort(sort_by, sort_dir, TIMESTAMP_SORT_FIELDS)?;
-    Ok(PageParams {
-        page: application_core::page_or_default(page),
-        page_size: application_core::page_size_or_default(page_size),
-        sort_by,
-        sort_dir,
-    })
-}
+pub use crate::entity::access_control::paging::PageParams;
 
 pub mod audit_event;
-pub mod data_scope;
 pub mod permission;
 pub mod user_role;
 
 pub use audit_event::{AuditEventListParams, AuditEventView};
-pub use data_scope::{
-    CreateDataScopeRequest, DataScopeListMeta, DataScopeListParams, DataScopeListView, DataScopeView,
-    ReplaceDataScopeRequest,
-};
 pub use permission::{
     CreatePermissionRequest, PermissionListParams, PermissionView, UpdatePermissionRequest,
 };
@@ -92,11 +43,10 @@ mod tests {
     use validator::Validate;
 
     use super::{
-        AssignUserRoleRequest, AuditEventListParams, CreateDataScopeRequest, CreatePermissionRequest,
-        DataScopeListMeta, DataScopeListParams, DataScopeListView, PageView, PermissionListParams, SortDir,
+        AssignUserRoleRequest, AuditEventListParams, CreatePermissionRequest, PermissionListParams, SortDir,
         UpdatePermissionRequest, normalize_sort,
     };
-    use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
+    use crate::entity::access_control::AuditEventResult;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {
@@ -130,38 +80,21 @@ mod tests {
     #[test]
     fn tier_a_list_params_default_to_empty() {
         assert!(PermissionListParams::default().resource.is_none());
-        assert!(DataScopeListParams::default().subject_id.is_none());
         assert!(AuditEventListParams::default().actor_id.is_none());
     }
 
     #[test]
     fn tier_c_repository_filters_default_to_first_page_size_20() {
-        use crate::repository::{AuditEventFilter, DataScopeFilter, PermissionFilter};
-        assert_eq!((PermissionFilter::default().page, PermissionFilter::default().page_size), (1, 20));
-        assert_eq!((DataScopeFilter::default().page, DataScopeFilter::default().page_size), (1, 20));
-        assert_eq!((AuditEventFilter::default().page, AuditEventFilter::default().page_size), (1, 20));
-        assert!(!PermissionFilter::default().sort_ascending);
-    }
-
-    #[test]
-    fn data_scope_list_envelope_keeps_versions_off_items() {
-        let view = DataScopeListView::compose(
-            PageView { items: Vec::new(), total: 0, page: 1, page_size: 20 },
-            DataScopeListMeta {
-                policy_version: 3,
-                organization_version: 4,
-                no_scope: true,
-                ..DataScopeListMeta::new("scope-v", "2026-09-15T00:00:00Z")
-            },
+        use crate::repository::{AuditEventFilter, PermissionFilter};
+        assert_eq!(
+            (PermissionFilter::default().paging.page, PermissionFilter::default().paging.page_size),
+            (1, 20)
         );
-        let json = serde_json::to_value(&view).unwrap();
-        assert_eq!(json["empty_reason"], "no_scope");
-        assert_eq!(json["scope_version"], "scope-v");
-        assert_eq!(json["policy_version"], 3);
-        assert_eq!(json["organization_version"], 4);
-        assert_eq!(json["ownership_basis"], "data_scope_configuration");
-        assert_eq!(json["items"].as_array().unwrap().len(), 0);
-        assert!(json.get("role_clauses").is_none());
+        assert_eq!(
+            (AuditEventFilter::default().paging.page, AuditEventFilter::default().paging.page_size),
+            (1, 20)
+        );
+        assert_eq!(PermissionFilter::default().paging.sort_dir, SortDir::Desc);
     }
 
     #[test]
@@ -189,23 +122,6 @@ mod tests {
             disabled: Some(false),
         };
         assert_eq!(complete.changed_field_names(), vec!["name", "description", "disabled"]);
-    }
-
-    #[test]
-    fn data_scope_create_request_converts() {
-        let request: CreateDataScopeRequest = serde_json::from_value(json!({
-            "subject_type": "role",
-            "subject_id": "role-sales",
-            "scope_type": "team",
-            "scope_targets": ["team-1", "team-2"],
-            "schema_version": 2, "resource": "sales_order", "actions": ["list"],
-            "target_dimension": "internal_org", "target_mode": "explicit", "include_descendants": false, "enabled": true,
-        }))
-        .unwrap();
-        let data = request.into_data();
-        assert_eq!(data.subject_type, DataScopeSubjectType::Role);
-        assert_eq!(data.scope_type, DataScopeType::Team);
-        assert_eq!(data.scope_targets, vec!["team-1", "team-2"]);
     }
 
     #[test]

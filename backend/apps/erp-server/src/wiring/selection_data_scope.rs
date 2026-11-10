@@ -6,9 +6,9 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_sales::ports::{
     SelectionDataScopePort, SelectionResolvedClause, SelectionResolvedScope, SelectionScopeObject,
 };
@@ -85,7 +85,7 @@ impl SelectionDataScopePort for MongoSelectionDataScope {
     ) -> erp_sales::Result<SelectionResolvedScope> {
         ensure_selection_resource(resource)?;
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, resource, action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", resource, action))?, executor)
             .await
             .map_err(map_identity_error)?;
         map_access(access)

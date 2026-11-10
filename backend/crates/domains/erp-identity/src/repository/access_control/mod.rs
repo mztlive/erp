@@ -11,8 +11,10 @@
 //! `audit_event` 是事实型审计留痕（§4.5.4：不可编辑、不可删除），本目录
 //! **不提供**软删除/恢复方法；筛选/行类型定义在各子模块，经 `AccessControlExt`
 //! 的关联类型对外暴露。
-
+use application_core::SortDir;
 use mongodb::bson::{Document, doc};
+
+use crate::entity::access_control::paging::{PageParams, TimeSort};
 
 pub mod audit_event;
 pub mod data_scope;
@@ -21,27 +23,18 @@ pub mod person_scope;
 pub mod personal_grant;
 
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
-pub use data_scope::{DataScopeFilter, DataScopeRepositoryExt, DataScopeRow, data_scope_subjects_filter};
+pub use data_scope::{DataScopeRepositoryExt, data_scope_subjects_filter};
 pub use permission::{PermissionFilter, PermissionRepositoryExt, PermissionRow, UserRoleRepositoryExt};
 
-/// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
-///
-/// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
-    let direction = if sort_ascending { 1 } else { -1 };
-    let field = match sort_by {
-        Some("updated_at") => "updated_at",
-        _ => "created_at",
+/// 将已验证时间排序编译为稳定的数据库排序。
+fn sort_doc(paging: &PageParams) -> Document {
+    let direction = match paging.sort_dir {
+        SortDir::Asc => 1,
+        SortDir::Desc => -1,
+    };
+    let field = match paging.sort_by {
+        TimeSort::CreatedAt => "created_at",
+        TimeSort::UpdatedAt => "updated_at",
     };
     doc! { field: direction, "id": direction }
 }
@@ -65,30 +58,6 @@ pub(super) fn permission_projection() -> Document {
         "description": 1,
         "system": 1,
         "disabled": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 数据范围列表投影字段。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回投影条件文档。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn data_scope_projection() -> Document {
-    doc! {
-        "id": 1,
-        "subject_type": 1,
-        "subject_id": 1,
-        "scope_type": 1,
-        "scope_targets": 1,
-        "schema_version": 1, "resource": 1, "actions": 1, "target_dimension": 1,
-        "target_mode": 1, "include_descendants": 1, "enabled": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -127,8 +96,8 @@ mod tests {
     use mongodb::bson::{Bson, doc};
     use persistence_core::{NoTransaction, QueryFilter};
 
-    use super::{AuditEventFilter, DataScopeFilter, PermissionFilter, data_scope_subjects_filter, sort_doc};
-    use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
+    use super::{AuditEventFilter, PageParams, PermissionFilter, data_scope_subjects_filter, sort_doc};
+    use crate::entity::access_control::{AuditEventResult, DataScopeSubjectType};
     use crate::repository::owned::DataScopeRepository;
     use crate::repository::prelude::*;
 
@@ -138,10 +107,7 @@ mod tests {
             resource: Some("sales_order".to_string()),
             disabled: Some(false),
             system: Some(true),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            paging: Default::default(),
         };
 
         let document = filter.to_doc();
@@ -150,28 +116,6 @@ mod tests {
         assert_eq!(resource.get_str("$regex").unwrap(), "sales_order");
         assert!(!document.get_bool("disabled").unwrap());
         assert!(document.get_bool("system").unwrap());
-    }
-
-    #[test]
-    fn data_scope_filter_applies_subject_and_scope_type() {
-        let filter = DataScopeFilter {
-            subject_type: Some(DataScopeSubjectType::Role),
-            subject_id: Some("role-sales".to_string()),
-            scope_type: Some(DataScopeType::Team),
-            resource: Some("sales_order".to_string()),
-            action: Some("list".to_string()),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
-
-        let document = filter.to_doc();
-        assert_eq!(document.get_str("subject_type").unwrap(), "role");
-        assert_eq!(document.get_str("subject_id").unwrap(), "role-sales");
-        assert_eq!(document.get_str("scope_type").unwrap(), "team");
-        assert_eq!(document.get_str("resource").unwrap(), "sales_order");
-        assert_eq!(document.get_str("actions").unwrap(), "list");
     }
 
     /// 批量主体查询保留正常与可能缺失的 ID，由 MongoDB 只返回实际事实。
@@ -216,10 +160,7 @@ mod tests {
             object_type: Some("sales_order".to_string()),
             object_id: Some("SO-1".to_string()),
             result: Some(AuditEventResult::Denied),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            paging: Default::default(),
         };
 
         let document = filter.to_doc();
@@ -233,14 +174,10 @@ mod tests {
     }
 
     #[test]
-    fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
-        assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
-        assert_eq!(sort_doc(Some("updated_at"), true), doc! { "updated_at": 1, "id": 1 });
-        assert_eq!(
-            sort_doc(Some("actor_id"), false),
-            doc! { "created_at": -1, "id": -1 },
-            "白名单外字段回落默认排序"
-        );
+    fn sorting_compiles_validated_fields_and_stable_id_order() {
+        assert_eq!(sort_doc(&PageParams::default()), doc! { "created_at": -1, "id": -1 });
+        let paging = PageParams::parse(&Some("updated_at".into()), &Some("asc".into()), None, None).unwrap();
+        assert_eq!(sort_doc(&paging), doc! { "updated_at": 1, "id": 1 });
     }
 }
 
@@ -263,10 +200,7 @@ mod keyword_regression_tests {
             object_type: None,
             object_id: None,
             result: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            paging: Default::default(),
         };
 
         filter.q = Some("张.[1]".into());

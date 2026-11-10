@@ -7,7 +7,7 @@ use erp_identity::access_control::ScopedObject;
 #[cfg(test)]
 use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use erp_identity::{Error as IdentityError, SharedRbacService};
+use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_workflow::ports::{WorkflowDataScope, WorkflowScopeObject, WorkflowScopePredicate};
 use erp_workflow::{Error, Result};
 use mongodb::Database;
@@ -61,7 +61,7 @@ pub(super) async fn resolve(
     let (resource, action) =
         permission.split_once(':').ok_or_else(|| Error::ValidationError("工作流动作格式不合法".into()))?;
     let scope = match DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, resource, action, executor)
+        .resolve(actor, &Permission::parse(format!("{}:{}", resource, action))?, executor)
         .await
     {
         Ok(scope) => scope,

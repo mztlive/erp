@@ -161,8 +161,7 @@ impl DataScopeService {
     ///
     /// # 参数
     /// * `actor` - 当前账号。
-    /// * `resource` - 目标资源。
-    /// * `action` - 目标动作。
+    /// * `entry_permission` - 已解析的目标资源动作。
     /// * `executor` - 调用方事务执行器。
     ///
     /// # 返回
@@ -173,21 +172,18 @@ impl DataScopeService {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        entry_permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        let permission = Permission::parse(format!("{resource}:{action}"))?;
-        let source_permission = AuthorizationPolicy::scope_source(&permission)?;
-        self.resolve_boundary(actor, &permission, &source_permission, &[], executor).await
+        let source_permission = AuthorizationPolicy::scope_source(entry_permission)?;
+        self.resolve_boundary(actor, entry_permission, &source_permission, &[], executor).await
     }
 
     /// 同一角色必须满足全部权限，范围仍只绑定目标资源动作。
     ///
     /// # 参数
     /// * `actor` - 当前账号。
-    /// * `resource` - 目标资源。
-    /// * `action` - 范围所绑定的目标动作。
+    /// * `entry_permission` - 已解析的目标资源动作。
     /// * `permissions` - 同一角色必须同时具备的权限。
     /// * `executor` - 调用方事务执行器。
     ///
@@ -199,14 +195,12 @@ impl DataScopeService {
     pub async fn resolve_permissions(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        entry_permission: &Permission,
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
-        let source_permission = AuthorizationPolicy::scope_source(&entry_permission)?;
-        self.resolve_boundary(actor, &entry_permission, &source_permission, permissions, executor).await
+        let source_permission = AuthorizationPolicy::scope_source(entry_permission)?;
+        self.resolve_boundary(actor, entry_permission, &source_permission, permissions, executor).await
     }
 
     /// 证明目标动作权限后读取真实来源范围，不要求来源动作权限。

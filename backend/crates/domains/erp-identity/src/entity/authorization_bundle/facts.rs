@@ -59,7 +59,7 @@ impl PolicyUserState {
         if keys.iter().any(|key| !key.starts_with("role:")) {
             return Err(Error::ValidationError("人员绑定包含非角色分组，不能用1.0文件管理".into()));
         }
-        Ok(Self { version, role_ids: RoleIdSet::from_casbin_role_keys(keys)?.to_strings() })
+        Ok(Self { version, role_ids: RoleIdSet::from_casbin_role_keys(keys)?.into() })
     }
 }
 
@@ -103,7 +103,7 @@ mod tests {
         assert!(PolicyUserState::from_role_keys(1, vec!["user:admin:another".into()]).is_err());
         let user =
             PolicyUserState::from_role_keys(2, vec!["role:reader".into(), "role:reader".into()]).unwrap();
-        assert_eq!(user.role_ids, ["reader"]);
+        assert_eq!(user.role_ids, [RoleId::parse("reader").unwrap()]);
         assert_eq!(user.version, 2);
     }
 }

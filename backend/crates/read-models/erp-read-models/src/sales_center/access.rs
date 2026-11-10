@@ -126,7 +126,12 @@ impl SalesAccess {
         executor: &mut dyn Executor,
     ) -> Result<(AuthorizedDataScope, SalesReadScope)> {
         let mut access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, resource, action, permissions, executor)
+            .resolve_permissions(
+                actor,
+                &Permission::parse(format!("{}:{}", resource, action))?,
+                permissions,
+                executor,
+            )
             .await?;
         let customers =
             self.collaborating_customers(actor.id(), business_date(access.as_of)?, executor).await?;

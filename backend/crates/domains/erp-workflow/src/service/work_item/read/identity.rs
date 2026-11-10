@@ -2,6 +2,7 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
+use erp_identity::Permission;
 use erp_identity::access_control::ScopedObject;
 #[cfg(test)]
 use erp_identity::service::access_control::resolve::DataScopeFacts;
@@ -29,7 +30,7 @@ impl WorkItemReadService {
             return Err(Error::ValidationError("未登记的任务权限动作".into()));
         }
         let scope = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "work_item", action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", "work_item", action))?, executor)
             .await?;
         compile_task_owners(&scope)
     }

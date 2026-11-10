@@ -405,7 +405,12 @@ impl InquiryReadService {
         validate_template_ids(ids)?;
         let permission = Permission::parse("sellable_sku:list")?;
         DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "sales_inquiry", "create", &[permission], &mut NoTransaction)
+            .resolve_permissions(
+                actor,
+                &Permission::parse("sales_inquiry:create")?,
+                &[permission],
+                &mut NoTransaction,
+            )
             .await?;
         let rows = CatalogSupplyRepository::new(&self.db)
             .find_sellable_skus_by_ids(ids, BusinessDate::today(), &mut NoTransaction)

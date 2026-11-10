@@ -15,7 +15,7 @@ use super::{
     ROOT_ROLE_ID, RbacService, subject,
 };
 use crate::AccessControlExt;
-use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
+use crate::entity::rbac::{Permission, PermissionSet, RoleId, RoleIdSet};
 use crate::entity::role::Role;
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
@@ -106,7 +106,7 @@ impl RbacService {
         requested_role_ids: Option<RoleIdSet>,
     ) -> Result<AuthorizedAccountManagement> {
         let snapshot = self.actor_permission_snapshot(actor).await?;
-        let target_role_ids = role_ids_for_account(&snapshot.enforcer, target_kind, target_id);
+        let target_role_ids = role_ids_for_account(&snapshot.enforcer, target_kind, target_id)?;
         authorize_account_permissions(
             &snapshot.enforcer,
             &snapshot.actor_permissions,
@@ -150,12 +150,12 @@ impl RbacService {
     /// 批量加载目标账号当前角色和可选待分配角色。
     async fn load_management_roles(
         &self,
-        target_role_ids: &[String],
+        target_role_ids: &[RoleId],
         requested_role_ids: Option<&RoleIdSet>,
     ) -> Result<HashMap<String, Role>> {
         let mut role_ids = target_role_ids.to_vec();
         if let Some(requested_role_ids) = requested_role_ids {
-            role_ids.extend(requested_role_ids.iter().map(ToString::to_string));
+            role_ids.extend(requested_role_ids.iter().cloned());
         }
         role_ids.sort();
         role_ids.dedup();
@@ -396,12 +396,12 @@ fn authorize_account_permissions(
 /// # 错误
 /// 绑定 root 或系统角色，或角色实体缺失时返回 `Forbidden`。
 pub(super) fn ensure_target_roles_manageable(
-    target_role_ids: &[String],
+    target_role_ids: &[RoleId],
     roles: &HashMap<String, Role>,
 ) -> Result<()> {
-    let protected = target_role_ids
-        .iter()
-        .any(|role_id| role_id == ROOT_ROLE_ID || roles.get(role_id).is_none_or(|role| role.system));
+    let protected = target_role_ids.iter().any(|role_id| {
+        role_id.as_str() == ROOT_ROLE_ID || roles.get(role_id.as_str()).is_none_or(|role| role.system)
+    });
     if protected {
         return Err(Error::Forbidden("绑定系统角色的账号不能通过普通管理接口修改".to_string()));
     }

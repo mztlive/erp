@@ -214,7 +214,7 @@ impl PermissionListParams {
             resource: normalized_text(self.resource.as_deref()),
             disabled: self.disabled,
             system: self.system,
-            paging: super::page_params(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
+            paging: PageParams::parse(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
         })
     }
 }

@@ -6,9 +6,9 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use erp_supply::{
     FulfillmentExceptionHandlerPort, FulfillmentOrderAccess, FulfillmentOrderDataScopePort,
@@ -80,7 +80,11 @@ impl FulfillmentOrderDataScopePort for MongoFulfillmentOrderDataScope {
         executor: &mut dyn Executor,
     ) -> erp_supply::Result<FulfillmentOrderResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "supplier_fulfillment_order", action, executor)
+            .resolve(
+                actor,
+                &Permission::parse(format!("{}:{}", "supplier_fulfillment_order", action))?,
+                executor,
+            )
             .await
             .map_err(map_identity_error)?;
         let access = access.into_facts();

@@ -404,7 +404,7 @@ pub async fn ensure_fulfillment_owner_eligible(
     AvailableWorkItemAccount::from_account(&account_fact(&account)).map_err(|_| {
         Error::BusinessLogicError("履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string())
     })?;
-    let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
+    let granted = rbac.permissions(account.kind, owner_user_id).await?;
     let required = PermissionSet::new(
         required_permissions.iter().map(|code| Permission::parse(code).expect("固定履约操作权限必须合法")),
     );

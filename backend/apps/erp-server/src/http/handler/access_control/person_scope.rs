@@ -43,7 +43,7 @@ pub async fn save(
     Json(req): Json<SavePersonScopeRequest>,
 ) -> Result<()> {
     scope_configuration(state.application().db(), state.application().rbac())
-        .save_person_scope(&user, req, &actor)
+        .save_person_scope(&user, req.normalized()?, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(()))
 }

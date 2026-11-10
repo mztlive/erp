@@ -1,5 +1,7 @@
 //! 任务管理范围按当前具体负责人的内部组织关系编译，不改写责任组织。
 
+use std::slice;
+
 use application_core::AuditActor;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
@@ -41,7 +43,7 @@ pub(super) async fn queue_access(
 ) -> Result<WorkflowQueueAccessFact> {
     let service = DataScopeService::new(db.clone(), rbac.clone());
     let permission = Permission::parse("work_item:manage").expect("固定权限合法");
-    let mut batch = service.batch(actor, &[permission], executor);
+    let mut batch = service.batch(actor, slice::from_ref(&permission), executor);
     let version = if include_version {
         Some(batch.authorization_version().await.map_err(|error| map_service(error.into()))?)
     } else {
@@ -49,7 +51,7 @@ pub(super) async fn queue_access(
     };
     let mut facts = batch.read(|executor| Box::pin(access_inputs(db, auth, actor, executor))).await?;
     facts.identity_version = version;
-    let scope = match batch.resolve_permissions("work_item", "manage", &[]).await {
+    let scope = match batch.resolve_permissions(&permission, &[]).await {
         Ok(scope) => scope,
         Err(IdentityError::Forbidden(_)) => {
             facts.managed_owner_ids = Some(Vec::new());
@@ -114,7 +116,7 @@ pub(super) async fn managed_owners(
     executor: &mut dyn Executor,
 ) -> Result<Option<Vec<String>>> {
     let scope = match DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, "work_item", "manage", executor)
+        .resolve(actor, &Permission::parse("work_item:manage")?, executor)
         .await
     {
         Ok(scope) => scope,
@@ -142,7 +144,7 @@ pub(super) async fn task_owners(
         return Err(Error::ValidationError("未登记的任务权限动作".into()));
     }
     let scope = DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, "work_item", action, executor)
+        .resolve(actor, &Permission::parse(format!("{}:{}", "work_item", action))?, executor)
         .await
         .map_err(|error| map_service(error.into()))?;
     compile_task_owners(&scope)

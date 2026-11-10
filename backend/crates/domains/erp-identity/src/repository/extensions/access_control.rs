@@ -8,7 +8,7 @@
 
 use mongodb::Database;
 
-use crate::repository::access_control::{AuditEventFilter, DataScopeFilter, PermissionFilter};
+use crate::repository::access_control::{AuditEventFilter, PermissionFilter};
 use crate::repository::owned::{
     AccountCoreRepository, AuditEventRepository, DataScopeRepository, PermissionRepository,
     PersonDataScopeRepository, PersonQueryQualificationRepository, PersonalBusinessGrantRepository,
@@ -56,9 +56,6 @@ pub trait AccessControlExt {
 
     /// 权限定义列表筛选条件类型（定义见 `repository::access_control`）。
     type PermissionFilter;
-
-    /// 数据范围列表筛选条件类型（定义见 `repository::access_control`）。
-    type DataScopeFilter;
 
     /// 审计事件列表筛选条件类型（定义见 `repository::access_control`）。
     type AuditEventFilter;
@@ -156,7 +153,6 @@ impl AccessControlExt for Database {
         PersonalBusinessGrantRepository::new(self, Self::PERSONAL_BUSINESS_GRANTS)
     }
     type PermissionFilter = PermissionFilter;
-    type DataScopeFilter = DataScopeFilter;
     type AuditEventFilter = AuditEventFilter;
 
     /// 获取统一账号Repository，固定打开集合 `accounts`。

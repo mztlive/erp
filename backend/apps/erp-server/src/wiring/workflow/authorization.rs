@@ -303,7 +303,12 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     ) -> impl Future<Output = WorkflowResult<Vec<String>>> + Send {
         let rbac = self.rbac.clone();
         let account_id = account_id.to_string();
-        async move { rbac.role_ids(account_kind, &account_id).await.map_err(Self::map_identity) }
+        async move {
+            rbac.role_ids(account_kind, &account_id)
+                .await
+                .map(|ids| ids.into_iter().map(|id| id.to_string()).collect())
+                .map_err(Self::map_identity)
+        }
     }
 
     fn role_ids_with_executor(
@@ -353,7 +358,8 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
                 .permissions(account_kind, &account_id)
                 .await
                 .map_err(Self::map_identity)?
-                .into_iter()
+                .as_slice()
+                .iter()
                 .map(|permission| permission.to_string())
                 .collect())
         }
@@ -425,12 +431,6 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
                 .role_ids()
                 .iter()
                 .map(|role_id| {
-                    let codes = snapshot
-                        .granting_role_ids_for_all(&[])
-                        .into_iter()
-                        .filter(|_| false)
-                        .collect::<Vec<_>>();
-                    let _ = codes;
                     let granted = permissions
                         .iter()
                         .filter(|permission| {
@@ -438,11 +438,11 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
                         })
                         .map(|permission| permission.to_string())
                         .collect::<Vec<_>>();
-                    (role_id.clone(), granted)
+                    (role_id.to_string(), granted)
                 })
                 .collect();
             Ok(RolePermissionSnapshotFact::new(
-                snapshot.role_ids().to_vec(),
+                snapshot.role_ids().iter().map(ToString::to_string).collect(),
                 grants,
                 snapshot.policy_revision(),
             ))

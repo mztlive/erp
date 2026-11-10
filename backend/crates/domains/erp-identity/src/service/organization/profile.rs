@@ -51,7 +51,7 @@ impl OrganizationService {
             );
         }
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "org_unit", "manage", &required, executor)
+            .resolve_permissions(actor, &Permission::parse("org_unit:manage")?, &required, executor)
             .await?;
         if account_revision.is_some_and(|revision| revision != access.policy_version) {
             return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));

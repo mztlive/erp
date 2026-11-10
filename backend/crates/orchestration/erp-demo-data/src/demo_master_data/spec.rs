@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use erp_identity::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
-use erp_identity::dto::person_scope::{PersonBusinessOption, PersonScopeGrant, SavePersonScopeRequest};
+use erp_identity::dto::person_scope::{
+    PersonBusinessOption, PersonScopeCommand, PersonScopeGrant, SavePersonScopeRequest,
+};
 use erp_identity::entity::access_control::person_scope::{PersonDataScope, PersonScopeTerm};
 use erp_party::dto::company::SaveCompanyRequest;
 use erp_workflow::{DocumentType, FinanceResponsibilityOperation};
@@ -136,7 +138,7 @@ impl DemoPersonScope {
         business: &PersonBusinessOption,
         items: &[PersonDataScope],
         policy_version: u64,
-    ) -> Result<Option<SavePersonScopeRequest>> {
+    ) -> Result<Option<PersonScopeCommand>> {
         let actions = business
             .configurable_actions
             .iter()
@@ -159,7 +161,7 @@ impl DemoPersonScope {
             replace_legacy: false,
             expected_policy_version: policy_version,
         }
-        .normalized(&business.dimensions)?;
+        .normalized()?;
         Ok(Some(request))
     }
 

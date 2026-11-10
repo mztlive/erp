@@ -64,17 +64,31 @@ fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
     let read = Permission::parse("stock_adjustment:detail").unwrap();
     let create = Permission::parse("stock_adjustment:create").unwrap();
     let snapshot = RolePermissionSnapshot {
-        role_ids: vec!["role-a".to_string(), "role-b".to_string(), "role-c".to_string()],
+        role_ids: vec![
+            RoleId::parse("role-a").unwrap(),
+            RoleId::parse("role-b").unwrap(),
+            RoleId::parse("role-c").unwrap(),
+        ],
         grants: HashMap::from([
-            ("role-a".to_string(), HashSet::from([read.clone()])),
-            ("role-b".to_string(), HashSet::from([permission.clone(), read.clone(), create.clone()])),
-            ("role-c".to_string(), HashSet::from([create.clone()])),
+            (RoleId::parse("role-a").unwrap(), HashSet::from([read.clone()])),
+            (
+                RoleId::parse("role-b").unwrap(),
+                HashSet::from([permission.clone(), read.clone(), create.clone()]),
+            ),
+            (RoleId::parse("role-c").unwrap(), HashSet::from([create.clone()])),
         ]),
         policy_revision: 7,
     };
-    assert_eq!(snapshot.role_ids(), &["role-a", "role-b", "role-c"]);
-    assert_eq!(snapshot.granting_role_ids(&permission), vec!["role-b"]);
-    assert_eq!(snapshot.granting_role_ids_for_all(&[read, create]), vec!["role-b"]);
+    assert_eq!(
+        snapshot.role_ids(),
+        &[
+            RoleId::parse("role-a").unwrap(),
+            RoleId::parse("role-b").unwrap(),
+            RoleId::parse("role-c").unwrap()
+        ]
+    );
+    assert_eq!(snapshot.granting_role_ids(&permission), &[RoleId::parse("role-b").unwrap()]);
+    assert_eq!(snapshot.granting_role_ids_for_all(&[read, create]), &[RoleId::parse("role-b").unwrap()]);
     assert_eq!(snapshot.policy_revision(), 7);
     assert!(ensure_policy_snapshot_revision(7, 7).is_ok());
     assert!(matches!(
@@ -88,10 +102,10 @@ fn all_required_permissions_cannot_be_spliced_across_roles() {
     let detail = Permission::parse("stock_adjustment:detail").unwrap();
     let create = Permission::parse("stock_adjustment:create").unwrap();
     let snapshot = RolePermissionSnapshot {
-        role_ids: vec!["role-detail".to_string(), "role-create".to_string()],
+        role_ids: vec![RoleId::parse("role-detail").unwrap(), RoleId::parse("role-create").unwrap()],
         grants: HashMap::from([
-            ("role-detail".to_string(), HashSet::from([detail.clone()])),
-            ("role-create".to_string(), HashSet::from([create.clone()])),
+            (RoleId::parse("role-detail").unwrap(), HashSet::from([detail.clone()])),
+            (RoleId::parse("role-create").unwrap(), HashSet::from([create.clone()])),
         ]),
         policy_revision: 9,
     };
@@ -107,19 +121,23 @@ fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
     let cost = Permission::parse("cost_entry:list").unwrap();
     let required = [sales.clone(), cost.clone()];
     let mut snapshot = RolePermissionSnapshot {
-        role_ids: vec!["sales".into(), "cost".into(), "finance".into()],
+        role_ids: vec![
+            RoleId::parse("sales").unwrap(),
+            RoleId::parse("cost").unwrap(),
+            RoleId::parse("finance").unwrap(),
+        ],
         grants: HashMap::from([
-            ("sales".into(), HashSet::from([sales.clone()])),
-            ("cost".into(), HashSet::from([cost.clone()])),
-            ("finance".into(), HashSet::from([sales.clone(), cost.clone()])),
+            (RoleId::parse("sales").unwrap(), HashSet::from([sales.clone()])),
+            (RoleId::parse("cost").unwrap(), HashSet::from([cost.clone()])),
+            (RoleId::parse("finance").unwrap(), HashSet::from([sales.clone(), cost.clone()])),
         ]),
         policy_revision: 7,
     };
-    assert_eq!(snapshot.granting_role_ids_for_all(&required), vec!["finance"]);
+    assert_eq!(snapshot.granting_role_ids_for_all(&required), &[RoleId::parse("finance").unwrap()]);
     snapshot.grants.remove("finance");
     assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
     snapshot.grants.remove("cost");
-    assert_eq!(snapshot.granting_role_ids(&sales), vec!["sales"]);
+    assert_eq!(snapshot.granting_role_ids(&sales), &[RoleId::parse("sales").unwrap()]);
     assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
 }
 
@@ -192,11 +210,11 @@ fn root_and_other_system_role_targets_are_not_manageable() {
     let roles = [(system.base.id.clone(), system)].into_iter().collect();
 
     assert!(matches!(
-        ensure_target_roles_manageable(&[ROOT_ROLE_ID.to_string()], &Default::default()),
+        ensure_target_roles_manageable(&[RoleId::parse(ROOT_ROLE_ID).unwrap()], &Default::default()),
         Err(Error::Forbidden(_))
     ));
     assert!(matches!(
-        ensure_target_roles_manageable(&["role-system".to_string()], &roles),
+        ensure_target_roles_manageable(&[RoleId::parse("role-system").unwrap()], &roles),
         Err(Error::Forbidden(_))
     ));
 }
@@ -225,7 +243,7 @@ fn loaded_policy_permissions_use_the_same_deduplicated_order() {
     .unwrap();
 
     assert_eq!(
-        permissions,
+        permissions.as_slice(),
         vec![Permission::parse("customer:read").unwrap(), Permission::parse("role:write").unwrap(),]
     );
 }
@@ -313,11 +331,11 @@ async fn batch_role_ids_should_include_unbound_accounts() {
     enforcer.add_role_for_user("user:admin:1", &role_key("role-b"), None).await.unwrap();
 
     let account_ids = vec!["1".to_string(), "2".to_string()];
-    let role_ids = collect_role_ids(&enforcer, AccountKind::Admin, &account_ids);
+    let role_ids = collect_role_ids(&enforcer, AccountKind::Admin, &account_ids).unwrap();
     let mut bound_role_ids = role_ids.get("1").cloned().unwrap();
     bound_role_ids.sort();
 
-    assert_eq!(bound_role_ids, vec!["role-a".to_string(), "role-b".to_string()]);
+    assert_eq!(bound_role_ids, vec![RoleId::parse("role-a").unwrap(), RoleId::parse("role-b").unwrap()]);
     assert!(role_ids.get("2").is_some_and(Vec::is_empty));
 }
 
@@ -333,8 +351,11 @@ async fn batch_role_permissions_should_include_roles_without_permissions() {
     let role_ids = vec!["role-a".to_string(), "role-b".to_string()];
     let permissions = collect_role_permissions(&enforcer, &role_ids).unwrap();
 
-    assert_eq!(permissions.get("role-a"), Some(&vec![Permission::parse("customer:list").unwrap()]));
-    assert!(permissions.get("role-b").is_some_and(Vec::is_empty));
+    assert_eq!(
+        permissions.get("role-a"),
+        Some(&PermissionSet::new([Permission::parse("customer:list").unwrap()]))
+    );
+    assert!(permissions.get("role-b").is_some_and(PermissionSet::is_empty));
 }
 
 #[test]
@@ -342,10 +363,10 @@ fn permission_diagnostics_distinguish_missing_action_from_role_combination() {
     let create = Permission::parse("purchase_order:create").unwrap();
     let submit = Permission::parse("purchase_order:submit").unwrap();
     let snapshot = RolePermissionSnapshot {
-        role_ids: vec!["creator".into(), "submitter".into()],
+        role_ids: vec![RoleId::parse("creator").unwrap(), RoleId::parse("submitter").unwrap()],
         grants: HashMap::from([
-            ("creator".into(), HashSet::from([create.clone()])),
-            ("submitter".into(), HashSet::from([submit.clone()])),
+            (RoleId::parse("creator").unwrap(), HashSet::from([create.clone()])),
+            (RoleId::parse("submitter").unwrap(), HashSet::from([submit.clone()])),
         ]),
         policy_revision: 1,
     };

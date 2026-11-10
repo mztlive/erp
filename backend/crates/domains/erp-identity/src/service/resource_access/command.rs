@@ -127,7 +127,7 @@ impl ResourceGrantService {
     pub async fn authorize_manager(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         let permissions = [Permission::parse("data_scope:create")?];
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "org_unit", "manage", &permissions, executor)
+            .resolve_permissions(actor, &Permission::parse("org_unit:manage")?, &permissions, executor)
             .await?;
         if access.scope.user_limit.is_some() || !access.scope.role_clauses.iter().any(|c| c.company) {
             return Err(Error::Forbidden("指定记录授权管理需要全公司组织管理资格".into()));

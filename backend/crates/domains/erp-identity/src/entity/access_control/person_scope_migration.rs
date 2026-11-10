@@ -77,16 +77,29 @@ fn terms<'a>(rules: impl Iterator<Item = &'a DataScope>) -> Result<Vec<PersonSco
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
+    use crate::access_control::{
+        DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension,
+        ScopeTargetMode,
+    };
     fn rule(role: &str, scope: DataScopeType) -> DataScope {
-        PersonScopeTerm {
-            scope_type: scope,
-            target_dimension: ScopeDimension::InternalOrg,
-            target_mode: None,
-            include_descendants: None,
-            scope_targets: vec![],
-        }
-        .rule("sales_order", "detail", role, false)
+        DataScope::new(
+            DataScopeId::new("fixture"),
+            DataScopeData {
+                subject_type: DataScopeSubjectType::Role,
+                subject_id: role.into(),
+                scope_type: scope,
+                scope_targets: vec![],
+                binding: ScopeBinding {
+                    schema_version: 2,
+                    resource: "sales_order".into(),
+                    actions: vec!["detail".into()],
+                    target_dimension: ScopeDimension::InternalOrg,
+                    target_mode: None,
+                    include_descendants: None,
+                    enabled: true,
+                },
+            },
+        )
         .unwrap()
     }
     #[test]

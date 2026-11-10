@@ -9,6 +9,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::{permission_projection, sort_doc};
+use crate::entity::access_control::paging::PageParams;
 use crate::entity::access_control::{PermissionDefinition, UserRole};
 
 /// 权限定义列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -43,14 +44,8 @@ pub struct PermissionFilter {
     pub disabled: Option<bool>,
     /// 是否仅系统内建；`None` 表示不筛选。
     pub system: Option<bool>,
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数。
-    pub page_size: u32,
-    /// 排序字段（白名单：`created_at` / `updated_at`，默认 `created_at`）。
-    pub sort_by: Option<String>,
-    /// 是否升序；`false` 表示降序（默认）。
-    pub sort_ascending: bool,
+    /// 已验证的分页与排序。
+    pub paging: PageParams,
 }
 
 impl Default for PermissionFilter {
@@ -65,15 +60,7 @@ impl Default for PermissionFilter {
     /// # 错误
     /// 无。
     fn default() -> Self {
-        Self {
-            resource: None,
-            disabled: None,
-            system: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
+        Self { resource: None, disabled: None, system: None, paging: PageParams::default() }
     }
 }
 
@@ -113,7 +100,7 @@ impl Pagination for PermissionFilter {
     /// # 错误
     /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
+        (self.paging.page, u64::from(self.paging.page_size))
     }
 }
 
@@ -149,7 +136,7 @@ impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PermissionRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .sort(sort_doc(&filter.paging))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(permission_projection())
@@ -182,5 +169,28 @@ pub trait UserRoleRepositoryExt {
 impl UserRoleRepositoryExt for Repository<'_, UserRole> {
     async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>> {
         self.find_many_sorted(doc! { "user_id": user_id }, doc! { "effective_from": -1 }, executor).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::PermissionId;
+    use mongodb::bson;
+
+    use crate::entity::access_control::{PermissionData, PermissionDefinition};
+    /// BSON 往返保留既有字段，不新增嵌套权限字段。
+    #[test]
+    fn entity_roundtrips_through_bson() {
+        let permission = PermissionDefinition::new(
+            PermissionId::new("perm-1"),
+            PermissionData::new(" SalesOrder", "APPROVE", " 销售单审批 ").with_description(" 审批销售单 "),
+        )
+        .unwrap();
+        let document = bson::serialize_to_document(&permission).unwrap();
+        assert_eq!(document.get_str("resource").unwrap(), "salesorder");
+        assert_eq!(document.get_str("action").unwrap(), "approve");
+        assert!(!document.contains_key("permission"));
+        let roundtrip: PermissionDefinition = bson::deserialize_from_document(document).unwrap();
+        assert_eq!(roundtrip, permission);
     }
 }

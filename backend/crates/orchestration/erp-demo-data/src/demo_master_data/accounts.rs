@@ -95,7 +95,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
 
     async fn ensure_account_role(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<()> {
         let id = self.account_id(&spec.account).await?;
-        let mut role_ids = self.rbac.role_ids(AccountKind::Admin, &id).await?;
+        let mut role_ids = self
+            .rbac
+            .role_ids(AccountKind::Admin, &id)
+            .await?
+            .into_iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>();
         let required = DemoRole::for_account(spec::foundation_spec(), spec)?.account_role_ids(spec);
         let missing = required.into_iter().filter(|id| !role_ids.contains(id)).collect::<Vec<_>>();
         if missing.is_empty() {

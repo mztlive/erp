@@ -152,10 +152,8 @@ impl MongoWarehouseIdentity {
             .permissions(account.kind, account.base.id.as_str())
             .await
             .map_err(map_identity_error)?;
-        let inbound_eligible =
-            inbound.iter().all(|required| permissions.iter().any(|granted| granted.covers(required)));
-        let outbound_eligible =
-            outbound.iter().all(|required| permissions.iter().any(|granted| granted.covers(required)));
+        let inbound_eligible = inbound.iter().all(|required| permissions.covers_one(required));
+        let outbound_eligible = outbound.iter().all(|required| permissions.covers_one(required));
         Ok(HandlerIdentityFact {
             user_id: account.base.id.clone(),
             display_name: account.name.clone(),

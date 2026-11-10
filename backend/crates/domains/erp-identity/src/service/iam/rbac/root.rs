@@ -54,7 +54,7 @@ async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permi
         let enforcer = rbac.fresh_enforcer().await?.read().await;
         let permissions = permissions_for_role(&enforcer, ROOT_ROLE_ID)?;
         drop(enforcer);
-        if root_role_is_current(&role, &permissions, root_permission) {
+        if root_role_is_current(&role, permissions.as_slice(), root_permission) {
             return Ok(role);
         }
         return rbac.repair_root_role(role, root_permission.clone()).await;

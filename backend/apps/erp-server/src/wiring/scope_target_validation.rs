@@ -60,5 +60,5 @@ impl ScopeTargetPort for ScopeTargets {
 /// # 错误
 /// 无；目标错误由创建命令在原事务中返回。
 pub fn scope_configuration(db: Database, rbac: SharedRbacService) -> AccessControlService {
-    AccessControlService::new(db.clone()).with_rbac(rbac).with_scope_targets(Arc::new(ScopeTargets(db)))
+    AccessControlService::new(db.clone(), rbac, Arc::new(ScopeTargets(db)))
 }

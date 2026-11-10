@@ -7,7 +7,7 @@ use application_core::AuditActor;
 use erp_identity::access_control::ScopedObject;
 use erp_identity::entity::resource_access::ResourceKind;
 use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::{Error as IdentityError, SharedRbacService};
+use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_read_models::workbench::authority::WorkItemFactsReader;
@@ -182,7 +182,7 @@ pub(super) async fn binding_readable(
                     .contains(source));
             }
             let scope = match DataScopeService::new(db.clone(), rbac.clone())
-                .resolve(actor, "purchase_order", "detail", executor)
+                .resolve(actor, &Permission::parse("purchase_order:detail")?, executor)
                 .await
             {
                 Ok(scope) => scope,

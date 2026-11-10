@@ -70,7 +70,7 @@ impl SalesInquiryImportProcess {
         let permissions =
             [Permission::parse("sales_inquiry:import")?, Permission::parse("sellable_sku:list")?];
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "sales_inquiry", "create", &permissions, executor)
+            .resolve_permissions(actor, &Permission::parse("sales_inquiry:create")?, &permissions, executor)
             .await?;
         let name = self.inquiry.require_customer(actor, customer, executor).await?;
         let data = InquiryCreateData {

@@ -5,9 +5,9 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_finance::entity::supplier_deposit::{DepositAccountIdentity, SupplierDepositAccount};
 use erp_finance::repository::SupplierDepositExt;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::ScopedObject;
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
 use mongodb::Database;
@@ -73,7 +73,7 @@ pub(super) async fn identity_access(
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".into()))?;
     let access = DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, "supplier_deposit", action, executor)
+        .resolve(actor, &Permission::parse(format!("{}:{}", "supplier_deposit", action))?, executor)
         .await?;
     let object = ScopedObject {
         owned: false,

@@ -19,10 +19,10 @@ pub use ports::{AuthorizationPort, IdentityAuditPort, OrganizationScopeFact, Pre
 pub use repository::portal::{PortalBindingRepository, PortalBindingRepositoryExt, PortalIdentityExt};
 pub use repository::{
     AccessControlExt, AccountCoreRepository, AccountCoreRepositoryExt, AuditEventFilter,
-    AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES, DataScopeFilter,
-    DataScopeRepository, DataScopeRepositoryExt, DataScopeRow, MongoCasbinAdapter, PermissionFilter,
-    PermissionRepository, PermissionRepositoryExt, PermissionRow, RoleRepository, RoleRepositoryExt,
-    UserRoleRepository, UserRoleRepositoryExt,
+    AuditEventRepository, AuditEventRepositoryExt, AuditEventRow, CASBIN_RULES, DataScopeRepository,
+    DataScopeRepositoryExt, MongoCasbinAdapter, PermissionFilter, PermissionRepository,
+    PermissionRepositoryExt, PermissionRow, RoleRepository, RoleRepositoryExt, UserRoleRepository,
+    UserRoleRepositoryExt,
 };
 pub use service::access_control::AccessControlService;
 pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};

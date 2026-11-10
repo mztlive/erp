@@ -47,7 +47,7 @@ async fn migrate(
     rbac: SharedRbacService,
     user: String,
     expected_version: Option<u64>,
-    targets: Option<Arc<dyn ScopeTargetPort>>,
+    targets: Arc<dyn ScopeTargetPort>,
 ) -> Result<PersonScopeMigrationReport> {
     let Some(expected_version) = expected_version else {
         return db
@@ -137,7 +137,7 @@ async fn plan(
     db: &Database,
     rbac: &SharedRbacService,
     user: &str,
-    targets: &Option<Arc<dyn ScopeTargetPort>>,
+    targets: &Arc<dyn ScopeTargetPort>,
     executor: &mut dyn Executor,
 ) -> Result<PersonScopeMigrationReport> {
     let (snapshot, ids) = migration_identity(db, rbac, user, executor).await?;
@@ -168,7 +168,8 @@ async fn plan(
             let eligible = snapshot
                 .granting_role_ids(&Permission::parse(format!("{resource}:{action}"))?)
                 .into_iter()
-                .filter(|id| ids.contains(id))
+                .filter(|id| ids.iter().any(|value| value == id.as_str()))
+                .map(|id| id.to_string())
                 .collect::<Vec<_>>();
             if eligible.is_empty() {
                 continue;
@@ -195,7 +196,7 @@ async fn plan(
 async fn validate_migration(
     candidate: &PersonDataScope,
     state: &crate::entity::organization_change::OrganizationState,
-    targets: &Option<Arc<dyn ScopeTargetPort>>,
+    targets: &Arc<dyn ScopeTargetPort>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     for term in candidate
@@ -205,17 +206,14 @@ async fn validate_migration(
         .flatten()
         .chain(candidate.expression.condition.iter().flatten())
     {
-        let rule = term.rule(&candidate.resource, &candidate.action, &candidate.user_id, true)?;
-        validate_binding(&rule.binding)?;
+        let actions = [candidate.action.clone()];
+        let target = term.target(&candidate.resource, &actions)?;
+        validate_binding(&term.binding(&candidate.resource, &actions))?;
         validate_scope_type(&candidate.resource, term.scope_type)?;
-        if !term.scope_targets.is_empty()
+        if !target.ids().is_empty()
             && term.target_dimension != crate::access_control::ScopeDimension::InternalOrg
         {
-            targets
-                .as_ref()
-                .ok_or_else(|| Error::ValidationError("迁移缺少业务目标身份校验".into()))?
-                .validate_targets(term.target_dimension, &term.scope_targets, executor)
-                .await?;
+            targets.validate_targets(term.target_dimension, target.ids(), executor).await?;
         }
     }
     let consumer = registration(&candidate.resource, &candidate.action)?;
@@ -236,7 +234,7 @@ impl AccessControlService {
         user: String,
         expected_version: Option<u64>,
     ) -> Result<PersonScopeMigrationReport> {
-        migrate(self.db.clone(), self.scope_rbac()?, user, expected_version, self.targets.clone()).await
+        migrate(self.db.clone(), self.rbac.clone(), user, expected_version, self.targets.clone()).await
     }
 }
 
@@ -265,7 +263,7 @@ async fn candidate(
     action: (&str, &str),
     eligible: &[String],
     source: (&[DataScope], &[PersonalBusinessGrant]),
-    runtime: (&OrganizationState, &Option<Arc<dyn ScopeTargetPort>>),
+    runtime: (&OrganizationState, &Arc<dyn ScopeTargetPort>),
     executor: &mut dyn Executor,
 ) -> Result<PersonDataScope> {
     let (resource, action) = action;

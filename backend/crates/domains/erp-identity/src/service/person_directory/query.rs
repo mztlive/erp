@@ -21,7 +21,7 @@ use crate::repository::person_directory_query::{
 };
 use crate::service::access_control::resolve::DataScopeService;
 use crate::service::iam::SharedRbacService;
-use crate::{Error, Result};
+use crate::{Error, Permission, Result};
 
 /// 查询一页人员目录。
 ///
@@ -135,7 +135,7 @@ async fn authorize(
     executor: &mut dyn Executor,
 ) -> Result<AuthorizedDirectory> {
     let resolved = DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, category.resource(), "list", executor)
+        .resolve(actor, &Permission::parse(format!("{}:{}", category.resource(), "list"))?, executor)
         .await?;
     Ok(AuthorizedDirectory {
         scope: resolved.facts.scope,

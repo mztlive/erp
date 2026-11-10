@@ -133,7 +133,7 @@ impl WorkItemReadService {
     ) -> Result<ActorAccess> {
         let readable_owner_ids = self.task_scope_owners(actor, action, executor).await?;
         let permissions = self.rbac.permissions(actor.kind(), actor.id()).await?;
-        let mut access = ActorAccess::new(actor.id().to_owned()).with_permissions(permissions);
+        let mut access = ActorAccess::new(actor.id().to_owned()).with_permissions(permissions.into_vec());
         access.readable_owner_ids = readable_owner_ids;
         access.read_action = action;
         if has_permission(&access, MANAGE_PERMISSION) {

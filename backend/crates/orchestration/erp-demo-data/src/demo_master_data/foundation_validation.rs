@@ -139,7 +139,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             let enabled = self.db.roles().enabled_roles(snapshot.role_ids(), &mut NoTransaction).await?;
             for permission in required {
                 let granting = snapshot.granting_role_ids(&permission);
-                if !enabled.iter().any(|role| granting.contains(&role.base.id)) {
+                if !enabled.iter().any(|role| granting.iter().any(|id| id.as_str() == role.base.id)) {
                     return Err(Error::Forbidden(format!(
                         "演示账号 {} 缺少操作权限 {permission}，请在角色配置中核定后重新生成",
                         account.account

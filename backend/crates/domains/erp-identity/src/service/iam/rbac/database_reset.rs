@@ -24,7 +24,7 @@ impl RbacService {
         let snapshot = self
             .role_permission_snapshot(actor.kind(), actor.id(), std::slice::from_ref(&permission))
             .await?;
-        if !snapshot.granting_role_ids(&permission).iter().any(|role| role == ROOT_ROLE_ID) {
+        if !snapshot.granting_role_ids(&permission).iter().any(|role| role.as_str() == ROOT_ROLE_ID) {
             return Err(Error::Forbidden("清空数据库需要内建超级管理员权限".into()));
         }
         Ok(snapshot.policy_revision())

@@ -6,9 +6,9 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::{
     SettlementDataScopePort, SettlementResolvedClause, SettlementResolvedScope, SettlementScopeObject,
@@ -81,7 +81,11 @@ impl SettlementDataScopePort for MongoSettlementDataScope {
         executor: &mut dyn Executor,
     ) -> erp_supply::Result<SettlementResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "supplier_settlement_statement", action, executor)
+            .resolve(
+                actor,
+                &Permission::parse(format!("{}:{}", "supplier_settlement_statement", action))?,
+                executor,
+            )
             .await
             .map_err(map_identity_error)?;
         let access = access.into_facts();

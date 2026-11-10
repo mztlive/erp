@@ -7,7 +7,7 @@ use super::consumers::WIRED_CONSUMERS;
 use super::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPersonScope};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
+use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt};
 
 impl AccessControlService {
     /// 获取人员唯一范围及服务端有效操作候选。
@@ -18,7 +18,7 @@ impl AccessControlService {
     /// # 错误
     /// 配置读取越权、人员不存在或数据库失败拒绝。
     pub async fn person_scopes(&self, user: &str, actor: &AuditActor) -> Result<PersonScopeView> {
-        let service = self.scope_service();
+        let service = self.clone();
         let (user, actor) = (user.to_owned(), actor.clone());
         self.db
             .client()
@@ -35,33 +35,6 @@ impl AccessControlService {
                 })
             })
             .await
-    }
-
-    /// 克隆当前服务，供事务闭包持有独立实例。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回复制了数据库、RBAC 与目标端口的服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn scope_service(&self) -> Self {
-        Self { db: self.db.clone(), rbac: self.rbac.clone(), targets: self.targets.clone() }
-    }
-    /// 取出已装配的人员范围 RBAC。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回共享 RBAC 服务。
-    ///
-    /// # 错误
-    /// 未装配 RBAC 时返回 `Forbidden`。
-    pub(super) fn scope_rbac(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配人员范围服务".into()))
     }
 
     /// 公司组织配置边界与配置动作必须由同一有效角色提供。
@@ -84,11 +57,10 @@ impl AccessControlService {
         };
         let permissions =
             codes.into_iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
-        let access = DataScopeService::new(self.db.clone(), self.scope_rbac()?)
+        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
             .resolve_permissions(
                 actor,
-                "org_unit",
-                if write { "manage" } else { "list" },
+                &Permission::parse(format!("{}:{}", "org_unit", if write { "manage" } else { "list" }))?,
                 &permissions,
                 executor,
             )
@@ -155,7 +127,7 @@ impl AccessControlService {
             .iter()
             .flat_map(|(r, actions, _)| actions.iter().map(move |a| Permission::parse(format!("{r}:{a}"))))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        let rbac = self.scope_rbac()?;
+        let rbac = self.rbac.clone();
         let snapshot = rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
         rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
@@ -164,7 +136,7 @@ impl AccessControlService {
             let mut granted: Vec<String> = Vec::new();
             for action in *actions {
                 let ids = snapshot.granting_role_ids(&Permission::parse(format!("{resource}:{action}"))?);
-                if roles.iter().any(|r| ids.contains(&r.base.id)) {
+                if roles.iter().any(|r| ids.iter().any(|id| id.as_str() == r.base.id)) {
                     granted.push((*action).into());
                 }
             }

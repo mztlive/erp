@@ -176,7 +176,7 @@ impl AdminService {
             .into_iter()
             .map(|account| {
                 let roles = role_ids.remove(&account.base.id).unwrap_or_default();
-                AdminItem::from_account(account, roles)
+                AdminItem::from_account(account, roles.into_iter().map(|id| id.to_string()).collect())
             })
             .collect())
     }
@@ -531,7 +531,7 @@ impl AdminService {
         let state =
             ExistingSuperAdminState::from_state(current.base.is_deleted(), current.status.is_active());
         let role_ids = self.rbac.role_ids(AccountKind::Admin, current.base.id.as_str()).await?;
-        let has_root_role = role_ids.iter().any(|role_id| role_id == crate::ROOT_ROLE_ID);
+        let has_root_role = role_ids.iter().any(|role_id| role_id.as_str() == crate::ROOT_ROLE_ID);
         let current = apply_account_update(
             current,
             AccountCoreUpdate {

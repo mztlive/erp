@@ -9,7 +9,9 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::{ScopeBinding, ScopeTargetMode};
+use super::ScopeBinding;
+#[cfg(test)]
+use super::ScopeTargetMode;
 
 /// 主体 ID 最大长度。
 const SUBJECT_ID_MAX_LEN: usize = 128;
@@ -198,12 +200,8 @@ impl DataScope {
             SUBJECT_ID_MAX_LEN,
             "范围主体ID过长",
         )?;
-        data.binding.validate(data.scope_type, &data.scope_targets)?;
-        let mut scope_targets = Vec::new();
-        if data.binding.target_mode == Some(ScopeTargetMode::Explicit) || !data.scope_type.requires_targets()
-        {
-            scope_targets = normalize_scope_targets(data.scope_type, data.scope_targets)?;
-        }
+        let target = data.binding.target(data.scope_type, &data.scope_targets)?;
+        let scope_targets = target.ids().to_vec();
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             binding: data.binding,

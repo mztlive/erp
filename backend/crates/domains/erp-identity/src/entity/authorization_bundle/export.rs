@@ -32,13 +32,13 @@ impl PolicyFacts {
             });
         }
         for (id, user) in &self.users {
-            if user.role_ids.iter().any(|role| !self.roles.contains_key(role)) {
+            if user.role_ids.iter().any(|role| !self.roles.contains_key(role.as_str())) {
                 return Err(Error::ValidationError("人员绑定含失效角色，不能生成完整导出".into()));
             }
             document.bindings.push(PolicyBinding {
                 user_id: id.clone(),
                 mode: PolicyMode::Replace,
-                role_ids: user.role_ids.iter().map(RoleId::parse).collect::<std::result::Result<_, _>>()?,
+                role_ids: user.role_ids.clone(),
             });
         }
         let mut notes = vec![
@@ -57,7 +57,7 @@ impl PolicyFacts {
             let permissions = PermissionSet::new(
                 user.role_ids
                     .iter()
-                    .filter_map(|id| self.roles.get(id))
+                    .filter_map(|id| self.roles.get(id.as_str()))
                     .flat_map(|role| role.permissions.iter().cloned()),
             );
             for (resource, actions, _) in WIRED_CONSUMERS {
@@ -133,7 +133,7 @@ impl PolicyFacts {
         let permitted = user
             .role_ids
             .iter()
-            .filter_map(|id| self.roles.get(id))
+            .filter_map(|id| self.roles.get(id.as_str()))
             .flat_map(|role| &role.permissions)
             .any(|permission| permission.covers(&required));
         if !permitted {

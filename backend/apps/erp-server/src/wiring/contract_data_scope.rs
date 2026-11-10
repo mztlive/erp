@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use erp_contract::ports::ContractScopeObject;
 use erp_contract::{ContractDataScopePort, ContractResolvedClause, ContractResolvedScope};
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -81,7 +81,7 @@ impl ContractDataScopePort for MongoContractDataScope {
         executor: &mut dyn Executor,
     ) -> erp_contract::Result<ContractResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "contract", action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", "contract", action))?, executor)
             .await
             .map_err(map_identity_error)?;
         let access = access.into_facts();

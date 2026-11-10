@@ -14,7 +14,7 @@ use crate::entity::person_directory::{
 use crate::repository::OrganizationRepository;
 use crate::repository::prelude::*;
 use crate::service::access_control::resolve::DataScopeService;
-use crate::{AccessControlExt, Error, Result};
+use crate::{AccessControlExt, Error, Permission, Result};
 
 /// 资格维护请求。新建不传版本，终止或再授予必须回传读取的版本。
 #[derive(Clone, Deserialize)]
@@ -72,7 +72,8 @@ async fn manage_target(
     change: Option<QualificationChange>,
     executor: &mut dyn Executor,
 ) -> Result<Option<PersonQueryQualification>> {
-    let mut scope = access.resolve(actor, "person_query_qualification", "manage", executor).await?;
+    let mut scope =
+        access.resolve(actor, &Permission::parse("person_query_qualification:manage")?, executor).await?;
     scope.facts.organizations.memberships = OrganizationRepository::new(db)
         .directory_memberships(Some(&[account_id.to_owned()]), None, scope.as_of, executor)
         .await?;

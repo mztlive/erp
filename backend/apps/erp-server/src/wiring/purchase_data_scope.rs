@@ -86,7 +86,7 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
         executor: &mut dyn Executor,
     ) -> erp_procurement::Result<PurchaseResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "purchase_order", action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", "purchase_order", action))?, executor)
             .await
             .map_err(map_identity_error)?;
         let mut mapped = map_access(access)?;
@@ -114,7 +114,12 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
             .map(|code| Permission::parse(code).map_err(erp_procurement::Error::from))
             .collect::<erp_procurement::Result<Vec<_>>>()?;
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "purchase_order", action, &extra, executor)
+            .resolve_permissions(
+                actor,
+                &Permission::parse(format!("{}:{}", "purchase_order", action))?,
+                &extra,
+                executor,
+            )
             .await
             .map_err(map_identity_error)?;
         let mut mapped = map_access(access)?;

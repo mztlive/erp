@@ -17,7 +17,7 @@ use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
 use crate::service::access_control::consumers::scope_registration;
-use crate::{AccessControlExt, Error, Permission, Result, RolePermissionSnapshot};
+use crate::{AccessControlExt, Error, Permission, Result, RoleId, RolePermissionSnapshot};
 
 /// 一次事务读取阶段的范围解析批次；持有原执行器以阻止夹入业务写入。
 pub struct DataScopeBatch<'a> {
@@ -37,7 +37,7 @@ struct IdentityFacts {
     account_version: u64,
     snapshot: RolePermissionSnapshot,
     roles: Vec<Role>,
-    checked_roles: BTreeSet<String>,
+    checked_roles: BTreeSet<RoleId>,
     as_of: Instant,
 }
 
@@ -78,13 +78,11 @@ impl<'a> DataScopeBatch<'a> {
     /// 未声明权限、无完整角色资格、版本漂移或持久化失败时拒绝。
     pub async fn resolve_permissions(
         &mut self,
-        resource: &str,
-        action: &str,
+        entry_permission: &Permission,
         permissions: &[Permission],
     ) -> Result<AuthorizedDataScope> {
-        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
-        let source_permission = AuthorizationPolicy::scope_source(&entry_permission)?;
-        self.resolve_boundary(&entry_permission, &source_permission, permissions).await
+        let source_permission = AuthorizationPolicy::scope_source(entry_permission)?;
+        self.resolve_boundary(entry_permission, &source_permission, permissions).await
     }
 
     /// 目标资格独立证明，采用指定真实业务来源的人员范围。
@@ -116,7 +114,7 @@ impl<'a> DataScopeBatch<'a> {
         let ids = facts.snapshot.granting_role_ids(permission);
         self.load_roles(&ids).await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
-        Ok(facts.roles.iter().any(|role| ids.contains(&role.base.id)))
+        Ok(facts.roles.iter().any(|role| ids.iter().any(|id| id.as_str() == role.base.id)))
     }
 
     /// 读取本阶段的完整身份版本，不授予任何资源访问权。
@@ -266,7 +264,7 @@ impl<'a> DataScopeBatch<'a> {
     }
 
     /// 首次需要某角色时才查询；未启用及不存在的角色在原事务中也只检查一次。
-    async fn load_roles(&mut self, ids: &[String]) -> Result<()> {
+    async fn load_roles(&mut self, ids: &[RoleId]) -> Result<()> {
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let missing = ids.iter().filter(|id| !facts.checked_roles.contains(*id)).cloned().collect::<Vec<_>>();
         if missing.is_empty() {
@@ -304,8 +302,8 @@ fn ensure_declared(declared: &[Permission], required: &[Permission]) -> Result<(
 }
 
 /// 只保留本次动作由同一角色完整证明的集合，保持仓储返回顺序和角色版本。
-fn qualified_roles(roles: &[Role], granting: &[String]) -> Vec<Role> {
-    roles.iter().filter(|role| granting.contains(&role.base.id)).cloned().collect()
+fn qualified_roles(roles: &[Role], granting: &[RoleId]) -> Vec<Role> {
+    roles.iter().filter(|role| granting.iter().any(|id| id.as_str() == role.base.id)).cloned().collect()
 }
 
 /// 每个来源仍单独生成指纹；不同目标、来源、账号、角色或组织版本不得合并。
@@ -363,12 +361,12 @@ mod tests {
                 .unwrap();
         let ordinary = Role::new(RoleId::parse("role-sales").unwrap(), RoleData::new("销售")).unwrap();
         let roles = vec![root, ordinary];
-        let ordinary_scope = qualified_roles(&roles, &["role-sales".into()]);
+        let ordinary_scope = qualified_roles(&roles, &[RoleId::parse("role-sales").unwrap()]);
         assert_eq!(ordinary_scope.len(), 1);
         assert_eq!(ordinary_scope[0].base.id, "role-sales");
         assert!(root_scope(&ordinary_scope).is_none());
-        assert!(qualified_roles(&roles, &["disabled-or-missing".into()]).is_empty());
-        assert!(root_scope(&qualified_roles(&roles, &[ROOT_ROLE_ID.into()])).is_some());
+        assert!(qualified_roles(&roles, &[RoleId::parse("disabled-or-missing").unwrap()]).is_empty());
+        assert!(root_scope(&qualified_roles(&roles, &[RoleId::parse(ROOT_ROLE_ID).unwrap()])).is_some());
     }
 
     /// 共用公共事实仍须分别绑定每个来源和目标，所有授权版本变化均使游标失效。

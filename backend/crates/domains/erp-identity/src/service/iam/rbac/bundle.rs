@@ -87,7 +87,7 @@ impl RbacService {
         self.write_subject_roles(
             AccountKind::Admin,
             &planned.user_id,
-            RoleIdSet::parse(planned.role_ids)?,
+            RoleIdSet::from(planned.role_ids),
             executor,
         )
         .await?;

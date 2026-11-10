@@ -39,7 +39,7 @@ pub use root::ensure_root_role;
 use tokio::sync::{Mutex, OnceCell, RwLock};
 
 use crate::MongoCasbinAdapter;
-use crate::entity::rbac::{Permission, PermissionSet, RoleIdSet};
+use crate::entity::rbac::{Permission, PermissionSet, RoleId, RoleIdSet};
 pub use crate::entity::role::ROOT_ROLE_ID;
 use crate::ports::IdentityAuditPort;
 const ROOT_ROLE_NAME: &str = "超级管理员";
@@ -82,8 +82,8 @@ pub struct RbacService {
 /// 一次 Enforcer 读锁下冻结的账号角色与逐角色权限事实。
 #[derive(Debug, Clone)]
 pub struct RolePermissionSnapshot {
-    role_ids: Vec<String>,
-    grants: HashMap<String, HashSet<Permission>>,
+    role_ids: Vec<RoleId>,
+    grants: HashMap<RoleId, HashSet<Permission>>,
     policy_revision: u64,
 }
 
@@ -98,7 +98,7 @@ impl RolePermissionSnapshot {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn role_ids(&self) -> &[String] {
+    pub fn role_ids(&self) -> &[RoleId] {
         &self.role_ids
     }
 
@@ -112,7 +112,7 @@ impl RolePermissionSnapshot {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn granting_role_ids(&self, permission: &Permission) -> Vec<String> {
+    pub fn granting_role_ids(&self, permission: &Permission) -> Vec<RoleId> {
         self.role_ids
             .iter()
             .filter(|role_id| {
@@ -134,7 +134,7 @@ impl RolePermissionSnapshot {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn granting_role_ids_for_all(&self, permissions: &[Permission]) -> Vec<String> {
+    pub fn granting_role_ids_for_all(&self, permissions: &[Permission]) -> Vec<RoleId> {
         if permissions.is_empty() {
             return Vec::new();
         }

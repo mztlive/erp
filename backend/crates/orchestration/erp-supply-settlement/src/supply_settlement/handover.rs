@@ -392,7 +392,7 @@ async fn ensure_target_qualified(
     if !account.is_active_backoffice() {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
     }
-    let granted = PermissionSet::new(rbac.permissions(account.kind, target).await?);
+    let granted = rbac.permissions(account.kind, target).await?;
     let required = Permission::parse("supplier_settlement_statement:update")?;
     if !granted.covers(&PermissionSet::new(vec![required])) {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
@@ -412,7 +412,7 @@ async fn list_candidates(
         if account.base.id == current || !account.is_active_backoffice() {
             continue;
         }
-        let granted = PermissionSet::new(rbac.permissions(account.kind, &account.base.id).await?);
+        let granted = rbac.permissions(account.kind, &account.base.id).await?;
         let Ok(required) = Permission::parse("supplier_settlement_statement:update") else {
             continue;
         };

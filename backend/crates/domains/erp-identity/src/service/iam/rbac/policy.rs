@@ -5,7 +5,7 @@ use casbin::{Enforcer, RbacApi};
 use erp_core::AccountKind;
 
 use super::{ROLE_PREFIX, subject};
-use crate::entity::{Permission, PermissionSet, Role};
+use crate::entity::{Permission, PermissionSet, Role, RoleId, RoleIdSet};
 use crate::error::{Error, Result};
 
 /// 把角色 ID 拼成 Casbin 角色主体。
@@ -33,7 +33,7 @@ pub(super) fn role_key(role_id: &str) -> String {
 ///
 /// # 错误
 /// 策略行无法解析为权限时返回错误。
-pub(super) fn permissions_for_role(enforcer: &Enforcer, role_id: &str) -> Result<Vec<Permission>> {
+pub(super) fn permissions_for_role(enforcer: &Enforcer, role_id: &str) -> Result<PermissionSet> {
     parse_policy_permissions(enforcer.get_permissions_for_user(&role_key(role_id), None))
 }
 
@@ -50,7 +50,7 @@ pub(super) fn permissions_for_role(enforcer: &Enforcer, role_id: &str) -> Result
 /// 策略行无法解析为权限时返回错误。
 pub(super) fn implicit_permissions_for_role(enforcer: &Enforcer, role_id: &str) -> Result<PermissionSet> {
     let policies = enforcer.get_implicit_permissions_for_user(&role_key(role_id), None);
-    parse_policy_permissions(policies).map(PermissionSet::new)
+    parse_policy_permissions(policies)
 }
 
 /// 按角色收集直接权限。
@@ -67,7 +67,7 @@ pub(super) fn implicit_permissions_for_role(enforcer: &Enforcer, role_id: &str) 
 pub(super) fn collect_role_permissions(
     enforcer: &Enforcer,
     role_ids: &[String],
-) -> Result<HashMap<String, Vec<Permission>>> {
+) -> Result<HashMap<String, PermissionSet>> {
     role_ids.iter().map(|role_id| Ok((role_id.clone(), permissions_for_role(enforcer, role_id)?))).collect()
 }
 
@@ -84,7 +84,7 @@ pub(super) fn collect_role_permissions(
 /// 策略行无法解析为权限时返回错误。
 pub(super) fn permissions_for_actor(enforcer: &Enforcer, actor: &AuditActor) -> Result<PermissionSet> {
     let policies = enforcer.get_implicit_permissions_for_user(&subject(actor.kind(), actor.id()), None);
-    parse_policy_permissions(policies).map(PermissionSet::new)
+    parse_policy_permissions(policies)
 }
 
 /// 读取账号经角色继承得到的权限集。
@@ -105,7 +105,7 @@ pub(super) fn permissions_for_account(
     account_id: &str,
 ) -> Result<PermissionSet> {
     let policies = enforcer.get_implicit_permissions_for_user(&subject(account_kind, account_id), None);
-    parse_policy_permissions(policies).map(PermissionSet::new)
+    parse_policy_permissions(policies)
 }
 
 /// 合并多个角色的隐式权限。
@@ -141,17 +141,16 @@ pub(super) fn permissions_for_roles(
 /// 返回去掉 `role:` 前缀的角色 ID；非角色主体被忽略。
 ///
 /// # 错误
-/// 不返回错误。
+/// 持久化角色键非法或未规范化时返回错误。
 pub(super) fn role_ids_for_account(
     enforcer: &Enforcer,
     account_kind: AccountKind,
     account_id: &str,
-) -> Vec<String> {
-    enforcer
-        .get_roles_for_user(&subject(account_kind, account_id), None)
-        .into_iter()
-        .filter_map(|role| role.strip_prefix(ROLE_PREFIX).map(str::to_string))
-        .collect()
+) -> Result<Vec<RoleId>> {
+    Ok(RoleIdSet::from_casbin_role_keys(
+        enforcer.get_roles_for_user(&subject(account_kind, account_id), None),
+    )?
+    .into())
 }
 
 /// 批量读取同类账号的直接角色绑定。
@@ -165,15 +164,15 @@ pub(super) fn role_ids_for_account(
 /// 返回账号 ID 到角色 ID 列表的映射；未绑定的账号对应空列表。
 ///
 /// # 错误
-/// 不返回错误。
+/// 持久化角色键非法或未规范化时返回错误。
 pub(super) fn collect_role_ids(
     enforcer: &Enforcer,
     account_kind: AccountKind,
     account_ids: &[String],
-) -> HashMap<String, Vec<String>> {
+) -> Result<HashMap<String, Vec<RoleId>>> {
     account_ids
         .iter()
-        .map(|account_id| (account_id.clone(), role_ids_for_account(enforcer, account_kind, account_id)))
+        .map(|account_id| Ok((account_id.clone(), role_ids_for_account(enforcer, account_kind, account_id)?)))
         .collect()
 }
 
@@ -187,7 +186,7 @@ pub(super) fn collect_role_ids(
 ///
 /// # 错误
 /// 资源或动作无法组成合法权限时返回错误。
-pub(super) fn parse_policy_permissions(policies: Vec<Vec<String>>) -> Result<Vec<Permission>> {
+pub(super) fn parse_policy_permissions(policies: Vec<Vec<String>>) -> Result<PermissionSet> {
     let mut permissions = Vec::new();
     for policy in policies {
         let [_, resource, action] = policy.as_slice() else {
@@ -195,7 +194,7 @@ pub(super) fn parse_policy_permissions(policies: Vec<Vec<String>>) -> Result<Vec
         };
         permissions.push(Permission::parse(format!("{resource}:{action}"))?);
     }
-    Ok(PermissionSet::new(permissions).into_vec())
+    Ok(PermissionSet::new(permissions))
 }
 
 /// 把权限展开为 Casbin 的资源、动作对。

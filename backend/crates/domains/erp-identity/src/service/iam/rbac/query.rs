@@ -12,7 +12,7 @@ use super::policy::{
 use super::{RbacService, subject};
 use crate::AccessControlExt;
 use crate::dto::RoleItem;
-use crate::entity::rbac::Permission;
+use crate::entity::rbac::{PermissionSet, RoleId};
 use crate::entity::role::Role;
 use crate::error::Result;
 use crate::repository::prelude::*;
@@ -25,15 +25,12 @@ use crate::repository::prelude::*;
 ///
 /// # 返回
 /// 与输入角色一一对应的响应项；缺权限的角色携带空权限。
-fn role_items_from_map(
-    roles: Vec<Role>,
-    permissions: &mut HashMap<String, Vec<Permission>>,
-) -> Vec<RoleItem> {
+fn role_items_from_map(roles: Vec<Role>, permissions: &mut HashMap<String, PermissionSet>) -> Vec<RoleItem> {
     roles
         .into_iter()
         .map(|role| {
             let role_permissions = permissions.remove(&role.base.id).unwrap_or_default();
-            RoleItem::from_role(role, role_permissions)
+            RoleItem::from_role(role, role_permissions.into_vec())
         })
         .collect()
 }
@@ -120,9 +117,9 @@ impl RbacService {
     ///
     /// # 错误
     /// 当 Casbin policy 加载失败时返回错误。
-    pub async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<String>> {
+    pub async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<RoleId>> {
         let enforcer = self.fresh_enforcer().await?.read().await;
-        Ok(role_ids_for_account(&enforcer, account_kind, account_id))
+        role_ids_for_account(&enforcer, account_kind, account_id)
     }
 
     /// 读取直接绑定某稳定角色的后台账号 ID。
@@ -167,13 +164,13 @@ impl RbacService {
         &self,
         account_kind: AccountKind,
         account_ids: &[String],
-    ) -> Result<HashMap<String, Vec<String>>> {
+    ) -> Result<HashMap<String, Vec<RoleId>>> {
         if account_ids.is_empty() {
             return Ok(HashMap::new());
         }
 
         let enforcer = self.fresh_enforcer().await?.read().await;
-        Ok(collect_role_ids(&enforcer, account_kind, account_ids))
+        collect_role_ids(&enforcer, account_kind, account_ids)
     }
 
     /// 查询账号通过角色继承获得的权限。
@@ -187,7 +184,7 @@ impl RbacService {
     ///
     /// # 错误
     /// Casbin policy 无法加载，或策略行无法解析为权限时返回错误。
-    pub async fn permissions(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<Permission>> {
+    pub async fn permissions(&self, account_kind: AccountKind, account_id: &str) -> Result<PermissionSet> {
         let policies = self
             .fresh_enforcer()
             .await?

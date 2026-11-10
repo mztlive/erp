@@ -232,7 +232,7 @@ impl RbacService {
     /// Enforcer 无法刷新，或策略行无法解析为权限时返回错误。
     pub(super) async fn direct_role_permissions(&self, role_id: &str) -> Result<PermissionSet> {
         let enforcer = self.fresh_enforcer().await?.read().await;
-        permissions_for_role(&enforcer, role_id).map(PermissionSet::new)
+        permissions_for_role(&enforcer, role_id)
     }
 
     /// 在同一事务中更新角色实体并覆盖完整权限规则。

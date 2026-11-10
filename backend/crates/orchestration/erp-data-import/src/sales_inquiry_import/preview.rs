@@ -75,7 +75,7 @@ impl SalesInquiryImportProcess {
     ) -> Result<SalesInquiry> {
         let catalog = Permission::parse("sellable_sku:list")?;
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "sales_inquiry", "import", &[catalog], executor)
+            .resolve_permissions(actor, &Permission::parse("sales_inquiry:import")?, &[catalog], executor)
             .await?;
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
         if !SalesInquiryAccess::allows_sales(&access, &inquiry) {

@@ -187,12 +187,12 @@ async fn inventory_scope(
     code: &str,
     requires_detail: bool,
 ) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
-    let (resource, action) = code.split_once(':').expect("固定库存权限合法");
+    let permission = Permission::parse(code)?;
     let extra = requires_detail
         .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定权限合法"))
         .into_iter()
         .collect::<Vec<_>>();
-    let access = match batch.resolve_permissions(resource, action, &extra).await {
+    let access = match batch.resolve_permissions(&permission, &extra).await {
         Ok(access) => access,
         Err(IdentityError::Forbidden(_)) => {
             return Ok((WarehouseScope::empty(), InventoryScopeMeta::empty()));

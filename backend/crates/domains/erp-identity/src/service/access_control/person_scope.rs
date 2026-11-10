@@ -4,10 +4,11 @@ use application_core::AuditActor;
 use entity_core::BaseModel;
 use persistence_core::Executor;
 
-use super::{AccessControlService, consumers};
-use crate::access_control::{DataScope, ScopeDimension, ScopeTargetMode};
-use crate::dto::person_scope::SavePersonScopeRequest;
+use super::AccessControlService;
+use crate::access_control::ScopeDimension;
+use crate::dto::person_scope::PersonScopeCommand;
 use crate::entity::access_control::person_scope::PersonDataScope;
+use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
@@ -24,12 +25,9 @@ impl AccessControlService {
     pub async fn save_person_scope(
         &self,
         user: &str,
-        req: SavePersonScopeRequest,
+        req: PersonScopeCommand,
         actor: &AuditActor,
     ) -> Result<()> {
-        let action = req.actions.first().ok_or_else(|| Error::ValidationError("请选择操作".into()))?;
-        let dimensions = consumers::configurable_registration(&req.resource, action)?.required_dimensions;
-        let req = req.normalized(dimensions)?;
         let event = self
             .build_audit_event(
                 actor,
@@ -39,9 +37,10 @@ impl AccessControlService {
                 vec!["resource".into(), "actions".into(), "expression".into()],
             )
             .await?;
-        let service = self.scope_service();
+        let service = self.clone();
         let (user, actor) = (user.to_owned(), actor.clone());
-        self.scope_rbac()?
+        self.rbac
+            .clone()
             .run_authorized_policy_transaction(req.expected_policy_version, move |executor| {
                 Box::pin(async move {
                     let access = service.authorize_person_scope(&actor, true, executor).await?;
@@ -58,7 +57,7 @@ impl AccessControlService {
     async fn validate_person_scope(
         &self,
         user: &str,
-        req: &SavePersonScopeRequest,
+        req: &PersonScopeCommand,
         organizations: &OrganizationState,
         executor: &mut dyn Executor,
     ) -> Result<()> {
@@ -67,70 +66,47 @@ impl AccessControlService {
             .iter()
             .find(|o| o.resource == req.resource)
             .ok_or_else(|| Error::ValidationError("此人没有该业务操作权限".into()))?;
-        if req.actions.is_empty() || req.actions.iter().any(|a| !option.configurable_actions.contains(a)) {
+        if req.actions.iter().any(|a| !option.configurable_actions.contains(a)) {
             return Err(Error::ValidationError("请选择此人当前具备的操作".into()));
         }
-        for action in &req.actions {
-            consumers::configurable_registration(&req.resource, action)?;
-        }
-        self.validate_person_scope_targets(user, req, organizations, executor).await
+        self.validate_person_scope_targets(req, organizations, executor).await
     }
 
     /// 按输入顺序校验目标，到首个明确组织目标时才装载一次组织树。
     /// # 参数
-    /// user 为目标人员，req 为规范化范围，organizations 和 executor 来自原授权事务。
+    /// req 为规范化范围，organizations 和 executor 来自原授权事务。
     /// # 返回
     /// 所有明确目标存在且可用于指定维度时成功。
     /// # 错误
     /// 部门失效、维度不匹配、未装配外域校验或读取失败时拒绝。
     pub(super) async fn validate_person_scope_targets(
         &self,
-        user: &str,
-        req: &SavePersonScopeRequest,
+        req: &PersonScopeCommand,
         organizations: &OrganizationState,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut tree = None;
-        for grant in &req.grants {
-            for term in &grant.terms {
-                let rule = term.rule(&req.resource, &grant.actions[0], user, true)?;
-                consumers::validate_binding(&rule.binding)?;
-                consumers::validate_scope_type(&req.resource, rule.scope_type)?;
-                if rule.binding.target_mode == Some(ScopeTargetMode::Explicit)
-                    && rule.binding.target_dimension == ScopeDimension::InternalOrg
-                    && tree.is_none()
-                {
-                    tree = Some(OrgTree::new(&organizations.units)?);
-                }
-                self.validate_scope_targets(&rule, tree.as_ref(), executor).await?;
+        for target in req.targets() {
+            match target {
+                ScopeTarget::OrgExplicit { ids, .. } => {
+                    if tree.is_none() {
+                        tree = Some(OrgTree::new(&organizations.units)?);
+                    }
+                    for id in ids {
+                        if tree.as_ref().expect("首次显式组织目标已加载组织树").expand(id, false)?.is_empty()
+                        {
+                            return Err(Error::ValidationError("目标部门已停用".into()));
+                        }
+                    }
+                },
+                ScopeTarget::SettlementParties(ids) => {
+                    self.targets.validate_targets(ScopeDimension::SettlementParty, ids, executor).await?
+                },
+                ScopeTarget::Warehouses(ids) => {
+                    self.targets.validate_targets(ScopeDimension::Warehouse, ids, executor).await?
+                },
+                _ => {},
             }
-        }
-        Ok(())
-    }
-
-    /// 校验组织及外部对象身份，不能通过ID混用维度。
-    async fn validate_scope_targets(
-        &self,
-        scope: &DataScope,
-        tree: Option<&OrgTree<'_>>,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if scope.binding.target_mode != Some(ScopeTargetMode::Explicit) {
-            return Ok(());
-        }
-        if scope.binding.target_dimension == ScopeDimension::InternalOrg {
-            let tree = tree.expect("首个明确组织目标已装载同事务组织树");
-            for id in &scope.scope_targets {
-                if tree.expand(id, false)?.is_empty() {
-                    return Err(Error::ValidationError("目标部门已停用".into()));
-                }
-            }
-        } else {
-            self.targets
-                .as_ref()
-                .ok_or_else(|| Error::Forbidden("未装配对象范围校验".into()))?
-                .validate_targets(scope.binding.target_dimension, &scope.scope_targets, executor)
-                .await?;
         }
         Ok(())
     }
@@ -139,7 +115,7 @@ impl AccessControlService {
     async fn replace_person_scope(
         &self,
         user: &str,
-        req: &SavePersonScopeRequest,
+        req: &PersonScopeCommand,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut existing =

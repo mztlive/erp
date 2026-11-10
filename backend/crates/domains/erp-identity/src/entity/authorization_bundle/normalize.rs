@@ -2,10 +2,9 @@
 use std::collections::BTreeSet;
 
 use super::{PolicyDocument, PolicyMode, PolicyScope};
-use crate::dto::person_scope::{PersonScopeGrant, SavePersonScopeRequest};
+use crate::dto::person_scope::{PersonScopeCommand, PersonScopeGrant, SavePersonScopeRequest};
 use crate::entity::access_control::person_scope::PersonScopeExpression;
 use crate::entity::role::{ROOT_ROLE_ID, Role, RoleData};
-use crate::service::access_control::consumers::configurable_registration;
 use crate::{Error, Permission, Result};
 
 impl PolicyDocument {
@@ -108,7 +107,7 @@ impl PolicyDocument {
 impl PolicyScope {
     /// 使用同一规则规范化动作、条件集合及授权项顺序。
     fn normalize_grants(&mut self) -> Result<()> {
-        let request = self.request(0)?;
+        let request = self.request(0)?.into_request();
         self.actions = request.actions;
         let mut keyed = request
             .grants
@@ -159,9 +158,7 @@ impl PolicyScope {
     /// 可传入范围保存步骤的规范化命令。
     /// # 错误
     /// 非法动作、缺失维度、超限或范围准入失败时拒绝。
-    pub fn request(&self, version: u64) -> Result<SavePersonScopeRequest> {
-        let action = self.actions.first().ok_or_else(|| Error::ValidationError("请选择范围操作".into()))?;
-        let registration = configurable_registration(&self.resource, action)?;
+    pub fn request(&self, version: u64) -> Result<PersonScopeCommand> {
         SavePersonScopeRequest {
             resource: self.resource.clone(),
             actions: self.actions.clone(),
@@ -169,7 +166,7 @@ impl PolicyScope {
             replace_legacy: self.replace_legacy,
             expected_policy_version: version,
         }
-        .normalized(registration.required_dimensions)
+        .normalized()
     }
 }
 

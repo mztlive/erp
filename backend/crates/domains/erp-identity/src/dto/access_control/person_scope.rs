@@ -1,10 +1,15 @@
 //! 人员基础范围与按操作合并的附加授权接口。
+use std::ops::Deref;
+
 use serde::{Deserialize, Serialize};
 
 use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
-use crate::service::access_control::consumers::{configurable_registration, registration};
+use crate::entity::access_control::scope_target::ScopeTarget;
+use crate::service::access_control::consumers::{
+    configurable_registration, registration, validate_binding, validate_scope_type,
+};
 use crate::{Error, Result};
 
 #[derive(Debug, Deserialize)]
@@ -17,6 +22,43 @@ pub struct SavePersonScopeRequest {
     #[serde(default)]
     pub replace_legacy: bool,
     pub expected_policy_version: u64,
+}
+
+/// 已完成静态校验的人员范围保存命令；只提供不可变请求视图。
+#[derive(Debug)]
+pub struct PersonScopeCommand {
+    request: SavePersonScopeRequest,
+    targets: Vec<ScopeTarget>,
+}
+impl Deref for PersonScopeCommand {
+    type Target = SavePersonScopeRequest;
+    /// 只读访问已验证请求；不提供 DerefMut。
+    fn deref(&self) -> &Self::Target {
+        &self.request
+    }
+}
+impl PersonScopeCommand {
+    /// 消费已验证命令，输出规范化的持久化协议数据。
+    /// # 参数
+    /// 消费当前命令。
+    /// # 返回
+    /// 可用于授权文件规范化的请求数据。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn into_request(self) -> SavePersonScopeRequest {
+        self.request
+    }
+
+    /// 返回同次解析所得的目标，供事务内验证存在性。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已验证目标的只读切片。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn targets(&self) -> &[ScopeTarget] {
+        &self.targets
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -124,12 +166,12 @@ impl RetiredPersonScope {
 impl SavePersonScopeRequest {
     /// 规范化动作和附加项，并独立检查每项的全部必需维度。
     /// # 参数
-    /// * `dimensions` - 消费者要求的维度。
+    /// 原始请求；必需维度由服务端动作登记确定。
     /// # 返回
     /// 去重后的原子保存命令；空附加项集合表示仅保留基础范围。
     /// # 错误
     /// 无效动作、超限、空授权条目或任一条目缺少维度时拒绝整次保存。
-    pub fn normalized(mut self, dimensions: &[ScopeDimension]) -> Result<Self> {
+    pub fn normalized(mut self) -> Result<PersonScopeCommand> {
         self.actions.sort();
         self.actions.dedup();
         if self.actions.is_empty() || self.actions.len() > 32 || self.grants.len() > 32 {
@@ -148,15 +190,18 @@ impl SavePersonScopeRequest {
             enabled: true,
         }
         .validate(DataScopeType::Company, &[])?;
+        let dimensions = configurable_registration(&self.resource, &self.actions[0])?.required_dimensions;
         let mut grants = Vec::new();
+        let mut targets = Vec::new();
         for mut grant in self.grants {
-            grant.normalize(&self.resource, &self.actions, dimensions)?;
+            let grant_targets = grant.normalize(&self.resource, &self.actions, dimensions)?;
             if !grants.contains(&grant) {
+                targets.extend(grant_targets);
                 grants.push(grant);
             }
         }
         self.grants = grants;
-        Ok(self)
+        Ok(PersonScopeCommand { request: self, targets })
     }
 
     /// 旧完整表达式必须经明确转换确认才允许改为基础加附加授权。
@@ -203,7 +248,12 @@ impl SavePersonScopeRequest {
 
 impl PersonScopeGrant {
     /// 每个授权条目独立完成规范化，禁止在多个不完整条目之间拼出完整授权。
-    fn normalize(&mut self, resource: &str, actions: &[String], dimensions: &[ScopeDimension]) -> Result<()> {
+    fn normalize(
+        &mut self,
+        resource: &str,
+        actions: &[String],
+        dimensions: &[ScopeDimension],
+    ) -> Result<Vec<ScopeTarget>> {
         self.actions.sort();
         self.actions.dedup();
         if self.actions.is_empty()
@@ -214,6 +264,7 @@ impl PersonScopeGrant {
             return Err(Error::ValidationError("附加授权必须选择本次保存的操作和完整范围".into()));
         }
         let mut keyed = Vec::new();
+        let mut targets = Vec::new();
         for mut term in self.terms.drain(..) {
             if matches!(term.scope_type, DataScopeType::SelfOwned | DataScopeType::Collaborative)
                 && term.target_dimension != ScopeDimension::InternalOrg
@@ -222,8 +273,14 @@ impl PersonScopeGrant {
             }
             term.scope_targets.sort();
             term.scope_targets.dedup();
-            for action in &self.actions {
-                term.rule(resource, action, "validation", true)?;
+            let target = term.target(resource, &self.actions)?;
+            validate_binding(&term.binding(resource, &self.actions))?;
+            validate_scope_type(resource, term.scope_type)?;
+            term.scope_targets = target.ids().to_vec();
+            term.scope_targets.sort();
+            term.scope_targets.dedup();
+            if !targets.contains(&target) {
+                targets.push(target);
             }
             keyed.push((
                 serde_json::to_string(&term).map_err(|error| Error::Internal(error.to_string()))?,
@@ -237,7 +294,7 @@ impl PersonScopeGrant {
         if !company && dimensions.iter().any(|d| !self.terms.iter().any(|term| term.target_dimension == *d)) {
             return Err(Error::ValidationError("每项附加授权均须配置此业务全部必需维度".into()));
         }
-        Ok(())
+        Ok(targets)
     }
 }
 
@@ -306,7 +363,7 @@ mod tests {
             input.resource = resource.into();
             input.actions = actions.into_iter().map(String::from).collect();
             input.grants.clear();
-            assert!(input.normalized(&[]).is_err());
+            assert!(input.normalized().is_err());
         }
         let retired = PersonDataScope::default_for("alice", "approval_instance", "read");
         let retired = RetiredPersonScope::from_scope(&retired).unwrap();
@@ -320,38 +377,98 @@ mod tests {
 
     #[test]
     fn normalized_save_is_action_specific_and_allows_removing_all_grants() {
-        let normalized = request().normalized(&[ScopeDimension::InternalOrg]).unwrap();
+        let normalized = request().normalized().unwrap();
         assert_eq!(normalized.actions, vec!["detail", "update"]);
         assert_eq!(normalized.expression("detail").alternatives.len(), 1);
         assert!(normalized.expression("update").alternatives.is_empty());
         let mut empty = request();
         empty.grants.clear();
-        assert!(empty.normalized(&[ScopeDimension::InternalOrg]).is_ok());
+        assert!(empty.normalized().is_ok());
     }
 
     #[test]
     fn normalization_rejects_incomplete_branches_and_unselected_actions() {
-        assert!(request().normalized(&[ScopeDimension::InternalOrg, ScopeDimension::Warehouse]).is_err());
+        let mut incomplete = request();
+        incomplete.resource = "warehouse".into();
+        incomplete.actions = vec!["list".into()];
+        incomplete.grants[0].actions = vec!["list".into()];
+        assert!(incomplete.normalized().is_err());
         let mut invalid = request();
         invalid.grants[0].terms.clear();
-        assert!(invalid.normalized(&[]).is_err());
+        assert!(invalid.normalized().is_err());
         let mut invalid = request();
         invalid.grants[0].actions = vec!["delete".into()];
-        assert!(invalid.normalized(&[]).is_err());
+        assert!(invalid.normalized().is_err());
         let mut invalid = request();
         invalid.actions = vec!["*".into()];
         invalid.grants[0].actions = vec!["*".into()];
-        assert!(invalid.normalized(&[]).is_err());
+        assert!(invalid.normalized().is_err());
     }
 
     #[test]
     fn normalization_deduplicates_equivalent_grants_and_bounds_input() {
         let mut duplicate = request();
         duplicate.grants.push(duplicate.grants[0].clone());
-        assert_eq!(duplicate.normalized(&[ScopeDimension::InternalOrg]).unwrap().grants.len(), 1);
+        let command = duplicate.normalized().unwrap();
+        assert_eq!(command.grants.len(), 1);
+        assert_eq!(command.targets().len(), command.grants[0].terms.len());
         let mut over_limit = request();
         over_limit.grants = vec![over_limit.grants[0].clone(); 33];
-        assert!(over_limit.normalized(&[]).is_err());
+        assert!(over_limit.normalized().is_err());
+    }
+
+    /// 保存表达式与事务校验必须使用相同的规范化身份，协议字段保持原形状。
+    #[test]
+    fn command_preserves_normalized_targets_and_storage_shape() {
+        use crate::access_control::ScopeTargetMode;
+
+        let mut input = request();
+        input.grants[0].terms = vec![PersonScopeTerm {
+            scope_type: DataScopeType::Organization,
+            target_dimension: ScopeDimension::InternalOrg,
+            target_mode: Some(ScopeTargetMode::Explicit),
+            include_descendants: Some(false),
+            scope_targets: vec![" one ".into(), "one".into()],
+        }];
+        let command = input.normalized().unwrap();
+        assert_eq!(
+            command.targets(),
+            &[ScopeTarget::OrgExplicit { ids: vec!["one".into()], include_descendants: false }]
+        );
+        let expression = command.expression("detail");
+        assert_eq!(expression.alternatives[0][0].scope_targets, ["one"]);
+        let json = serde_json::to_value(&expression).unwrap();
+        assert_eq!(
+            json["alternatives"][0][0],
+            serde_json::json!({
+                "scope_type": "organization", "target_dimension": "internal_org",
+                "target_mode": "explicit", "include_descendants": false,
+                "scope_targets": ["one"],
+            })
+        );
+        assert_eq!(serde_json::from_value::<PersonScopeExpression>(json).unwrap(), expression);
+    }
+
+    /// 服务端登记决定必需维度，调用者不能用空维度声明绕过检查。
+    #[test]
+    fn command_rejects_wrong_dimensions_and_role_only_mode() {
+        use crate::access_control::ScopeTargetMode;
+
+        for (dimension, mode, descendants) in [
+            (ScopeDimension::Warehouse, ScopeTargetMode::OwnOrg, Some(false)),
+            (ScopeDimension::InternalOrg, ScopeTargetMode::ManagedOrgs, None),
+            (ScopeDimension::InternalOrg, ScopeTargetMode::OwnOrg, None),
+        ] {
+            let mut input = request();
+            input.grants[0].terms = vec![PersonScopeTerm {
+                scope_type: DataScopeType::Organization,
+                target_dimension: dimension,
+                target_mode: Some(mode),
+                include_descendants: descendants,
+                scope_targets: vec![],
+            }];
+            assert!(input.normalized().is_err());
+        }
     }
 
     #[test]
@@ -375,7 +492,7 @@ mod tests {
         assert!(save.ensure_legacy_conversion(&[old]).is_ok());
         save.grants.clear();
         save.actions = vec!["*".into()];
-        assert!(save.normalized(&[]).is_err());
+        assert!(save.normalized().is_err());
     }
     #[test]
     fn action_specific_grants_resolve_to_independent_unions() {
@@ -415,7 +532,7 @@ mod tests {
         let mut save = request();
         save.actions = vec!["list".into(), "update".into(), "submit".into()];
         save.grants = vec![grant("one", &["list"]), grant("two", &["list", "update"])];
-        let save = save.normalized(&[ScopeDimension::InternalOrg]).unwrap();
+        let save = save.normalized().unwrap();
         for (action, expected) in
             [("list", [true, true]), ("update", [false, true]), ("submit", [false, false])]
         {

@@ -9,6 +9,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::{audit_event_projection, sort_doc};
+use crate::entity::access_control::paging::PageParams;
 use crate::entity::access_control::{AuditEvent, AuditEventResult};
 
 /// 审计事件列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -68,14 +69,8 @@ pub struct AuditEventFilter {
     pub object_id: Option<String>,
     /// 最终结果；`None` 表示不筛选。
     pub result: Option<AuditEventResult>,
-    /// 页码（1 起）。
-    pub page: u64,
-    /// 单页条数。
-    pub page_size: u32,
-    /// 排序字段（白名单：`created_at` / `updated_at`，默认 `created_at`）。
-    pub sort_by: Option<String>,
-    /// 是否升序；`false` 表示降序（默认）。
-    pub sort_ascending: bool,
+    /// 已验证的分页与排序。
+    pub paging: PageParams,
 }
 
 impl Default for AuditEventFilter {
@@ -102,10 +97,7 @@ impl Default for AuditEventFilter {
             object_type: None,
             object_id: None,
             result: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
+            paging: PageParams::default(),
         }
     }
 }
@@ -216,7 +208,7 @@ impl Pagination for AuditEventFilter {
     /// # 错误
     /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
-        (self.page, u64::from(self.page_size))
+        (self.paging.page, u64::from(self.paging.page_size))
     }
 }
 
@@ -253,7 +245,7 @@ impl AuditEventRepositoryExt for Repository<'_, AuditEvent> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<AuditEventRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .sort(sort_doc(&filter.paging))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(audit_event_projection())

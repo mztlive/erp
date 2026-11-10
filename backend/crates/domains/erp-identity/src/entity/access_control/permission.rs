@@ -205,7 +205,6 @@ impl PermissionDefinition {
 #[cfg(test)]
 mod tests {
     use erp_core::ids::PermissionId;
-    use mongodb::bson;
 
     use super::{PermissionData, PermissionDefinition, PermissionUpdate};
 
@@ -293,18 +292,6 @@ mod tests {
         assert_eq!(data.action, "approve");
         assert_eq!(data.description.as_deref(), Some("审批销售单"));
         assert!(!data.system);
-    }
-
-    /// BSON 往返保留既有字段，不新增嵌套权限字段。
-    #[test]
-    fn entity_roundtrips_through_bson() {
-        let permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
-        let document = bson::serialize_to_document(&permission).unwrap();
-        assert_eq!(document.get_str("resource").unwrap(), "salesorder");
-        assert_eq!(document.get_str("action").unwrap(), "approve");
-        assert!(!document.contains_key("permission"));
-        let roundtrip: PermissionDefinition = bson::deserialize_from_document(document).unwrap();
-        assert_eq!(roundtrip, permission);
     }
 }
 

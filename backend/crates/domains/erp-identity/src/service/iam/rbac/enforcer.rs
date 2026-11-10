@@ -169,7 +169,7 @@ impl RbacService {
         permissions: &[Permission],
     ) -> Result<RolePermissionSnapshot> {
         let enforcer = self.fresh_enforcer().await?.read().await;
-        let role_ids = role_ids_for_account(&enforcer, account_kind, account_id);
+        let role_ids = role_ids_for_account(&enforcer, account_kind, account_id)?;
         let mut grants = HashMap::with_capacity(role_ids.len());
         for role_id in &role_ids {
             let role_subject = format!("role:{role_id}");

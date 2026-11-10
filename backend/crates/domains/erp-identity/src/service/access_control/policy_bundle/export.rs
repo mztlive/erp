@@ -50,7 +50,8 @@ impl PolicyBundleService {
         let output = facts.export(authorization.policy_version)?;
         output.document.validate_catalog(&self.catalog)?;
         self.access
-            .scope_rbac()?
+            .rbac
+            .clone()
             .ensure_policy_snapshot_with_executor(authorization.policy_version, executor)
             .await?;
         Ok(output)

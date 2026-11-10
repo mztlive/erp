@@ -179,7 +179,7 @@ impl RoleIdSet {
     /// 返回按角色 ID 排序并去重的集合；没有角色键时返回空集合。
     ///
     /// # 错误
-    /// 任一 `role:` 后缀不是合法角色 ID 时返回错误。
+    /// 任一 `role:` 后缀不是合法且已规范化的角色 ID 时返回错误。
     ///
     /// # 关键业务约束
     /// 非角色主体键必须忽略，输出顺序不得依赖 Casbin 返回顺序。
@@ -188,12 +188,19 @@ impl RoleIdSet {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut role_ids = role_keys
-            .into_iter()
-            .filter_map(|key| key.as_ref().strip_prefix("role:").map(ToOwned::to_owned))
-            .collect::<Vec<_>>();
+        let mut role_ids = Vec::new();
+        for key in role_keys {
+            let Some(raw) = key.as_ref().strip_prefix("role:") else {
+                continue;
+            };
+            let id = RoleId::parse(raw)?;
+            if id.as_str() != raw {
+                return Err(Error::from("持久化角色主体不是规范身份"));
+            }
+            role_ids.push(id);
+        }
         role_ids.sort();
-        Self::parse(role_ids)
+        Ok(Self::from(role_ids))
     }
 
     /// 返回角色 ID 切片。
@@ -576,6 +583,9 @@ mod tests {
 
         assert_eq!(role_ids.to_strings(), vec!["role-a", "role-b"]);
         assert!(RoleIdSet::from_casbin_role_keys(["role:bad/id"]).is_err());
+        assert!(RoleIdSet::from_casbin_role_keys(["role: role-a"]).is_err());
+        assert!(RoleIdSet::from_casbin_role_keys(["role:role-a "]).is_err());
+        assert!(RoleIdSet::from_casbin_role_keys(["role:"]).is_err());
     }
 
     #[test]

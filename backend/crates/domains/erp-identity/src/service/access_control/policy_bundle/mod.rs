@@ -91,8 +91,13 @@ impl PolicyBundleService {
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
         let permissions = codes.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
-        let access = DataScopeService::new(self.access.db.clone(), self.access.scope_rbac()?)
-            .resolve_permissions(actor, "org_unit", action, &permissions, executor)
+        let access = DataScopeService::new(self.access.db.clone(), self.access.rbac.clone())
+            .resolve_permissions(
+                actor,
+                &Permission::parse(format!("{}:{}", "org_unit", action))?,
+                &permissions,
+                executor,
+            )
             .await?;
         if !access.scope.role_clauses.iter().any(|clause| clause.company)
             || access.scope.user_limit.as_ref().is_some_and(|clause| !clause.company)
@@ -114,14 +119,13 @@ impl PolicyBundleService {
         for scope in &document.data_scopes {
             self.access
                 .validate_person_scope_targets(
-                    &scope.user_id,
                     &scope.request(authorization.policy_version)?,
                     &authorization.organizations,
                     executor,
                 )
                 .await?;
         }
-        let rbac = self.access.scope_rbac()?;
+        let rbac = self.access.rbac.clone();
         let actor_permissions = rbac.bundle_actor_permissions(actor, executor).await?;
         rbac.ensure_policy_snapshot_with_executor(authorization.policy_version, executor).await?;
         PolicyPlan::build(

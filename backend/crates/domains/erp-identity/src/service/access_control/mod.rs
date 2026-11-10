@@ -43,8 +43,7 @@ pub mod resolve;
 use application_core::AuditActor;
 
 pub use crate::dto::{
-    AssignUserRoleRequest, AuditEventListParams, AuditEventView, CreateDataScopeRequest,
-    CreatePermissionRequest, DataScopeListParams, DataScopeListView, DataScopeView, PageView,
+    AssignUserRoleRequest, AuditEventListParams, AuditEventView, CreatePermissionRequest, PageView,
     PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,
     UserRoleView,
 };
@@ -61,52 +60,20 @@ type AuditEventFilter = <mongodb::Database as crate::AccessControlExt>::AuditEve
 #[derive(Clone)]
 pub struct AccessControlService {
     db: Database,
-    rbac: Option<crate::SharedRbacService>,
-    targets: Option<Arc<dyn ScopeTargetPort>>,
+    rbac: crate::SharedRbacService,
+    targets: Arc<dyn ScopeTargetPort>,
 }
 
 impl AccessControlService {
-    /// 创建访问控制服务实例。
-    ///
+    /// 创建已完整装配的访问控制服务。
     /// # 参数
-    /// * `db` - 数据库实例
-    ///
+    /// db 为身份数据库，rbac 为权限服务，targets 为外域目标校验端口。
     /// # 返回
-    /// 返回服务实例。
-    ///
+    /// 可执行目录查询和范围配置的完整服务。
     /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db, rbac: None, targets: None }
-    }
-
-    /// 装配仓库与结算主体目标的所属领域校验。
-    ///
-    /// # 参数
-    /// * `targets` - 组合层提供的业务身份端口
-    /// # 返回
-    /// 返回已装配服务；未装配的外部目标配置失败关闭。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_scope_targets(mut self, targets: Arc<dyn ScopeTargetPort>) -> Self {
-        self.targets = Some(targets);
-        self
-    }
-
-    /// 装配范围配置所需的现有 RBAC。
-    ///
-    /// # 参数
-    /// * `rbac` - 现有 RBAC 服务
-    ///
-    /// # 返回
-    /// 返回可执行范围变更的服务；未装配时变更失败关闭。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(mut self, rbac: crate::SharedRbacService) -> Self {
-        self.rbac = Some(rbac);
-        self
+    /// 不执行 I/O，不返回错误。
+    pub fn new(db: Database, rbac: crate::SharedRbacService, targets: Arc<dyn ScopeTargetPort>) -> Self {
+        Self { db, rbac, targets }
     }
 
     /// 分页查询权限定义列表（权限目录）。
@@ -127,15 +94,17 @@ impl AccessControlService {
             resource: query.resource,
             disabled: query.disabled,
             system: query.system,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
+            paging: query.paging,
         };
         let page = self.db.permissions().search_permissions(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(PermissionView::from).collect();
 
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+        Ok(PageView {
+            items,
+            total: page.total,
+            page: filter.paging.page,
+            page_size: filter.paging.page_size,
+        })
     }
 
     /// 创建权限定义。
@@ -414,15 +383,17 @@ impl AccessControlService {
             object_type: query.object_type,
             object_id: query.object_id,
             result: query.result,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, crate::dto::SortDir::Asc),
+            paging: query.paging,
         };
         let page = self.db.audit_events().search_audit_events(&filter, &mut NoTransaction).await?;
         let items = page.items.into_iter().map(AuditEventView::from).collect();
 
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+        Ok(PageView {
+            items,
+            total: page.total,
+            page: filter.paging.page,
+            page_size: filter.paging.page_size,
+        })
     }
 
     /// 按 ID 加载权限定义并校验期望版本。

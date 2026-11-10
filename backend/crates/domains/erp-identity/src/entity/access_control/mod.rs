@@ -37,3 +37,7 @@ pub use user_role::{UserRole, UserRoleData, UserRoleRevokeData};
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids；
 // `role` 沿用 rbac::RoleId，见 ids.rs 映射表）。
 pub use crate::entity::rbac::RoleId;
+
+pub mod paging;
+
+pub(crate) mod scope_target;

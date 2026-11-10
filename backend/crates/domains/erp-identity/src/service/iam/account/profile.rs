@@ -78,7 +78,7 @@ impl AccountProfileService {
         let role_ids = self.rbac.role_ids(account.kind, account.base.id.as_str()).await?;
         let permissions = self.rbac.permissions(account.kind, account.base.id.as_str()).await?;
         let roles = self.db.roles().enabled_roles(&role_ids, &mut NoTransaction).await?;
-        let workbenches = RoleWorkbench::available(&roles, &permissions);
+        let workbenches = RoleWorkbench::available(&roles, permissions.as_slice());
         let avatar = Self::normalized_avatar(account.avatar.as_deref());
         if !account.is_active_backoffice() {
             return Err(crate::Error::Forbidden("账号已失效".into()));
@@ -90,7 +90,12 @@ impl AccountProfileService {
         if self.rbac.current_policy_revision().await? != policy_version {
             return Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED：权限已变化，请刷新".into()));
         }
-        let mut profile = Self::build_profile(account, role_ids, permissions, avatar);
+        let mut profile = Self::build_profile(
+            account,
+            role_ids.into_iter().map(|id| id.to_string()).collect(),
+            permissions.into_vec(),
+            avatar,
+        );
         profile.workbenches = workbenches;
         profile.policy_version = policy_version;
         profile.organization_version = organization_version;

@@ -39,7 +39,12 @@ impl SalesInquiryAccess {
     ) -> Result<AuthorizedDataScope> {
         let permission = Permission::parse("sellable_sku:list")?;
         Ok(DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "sales_inquiry", action, &[permission], executor)
+            .resolve_permissions(
+                actor,
+                &Permission::parse(format!("{}:{}", "sales_inquiry", action))?,
+                &[permission],
+                executor,
+            )
             .await?)
     }
 
@@ -91,7 +96,12 @@ impl SalesInquiryAccess {
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
         Ok(DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, "sales_inquiry", action, &[], executor)
+            .resolve_permissions(
+                actor,
+                &Permission::parse(format!("{}:{}", "sales_inquiry", action))?,
+                &[],
+                executor,
+            )
             .await?)
     }
 

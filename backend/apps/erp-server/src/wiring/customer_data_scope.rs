@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_customer::ports::CustomerScopeObject;
 use erp_customer::{CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope};
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -81,7 +81,7 @@ impl CustomerDataScopePort for MongoCustomerDataScope {
         executor: &mut dyn Executor,
     ) -> erp_customer::Result<CustomerResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "customer", action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", "customer", action))?, executor)
             .await
             .map_err(map_identity_error)?;
         let access = access.into_facts();

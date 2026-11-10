@@ -5,7 +5,7 @@ use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use super::organization_change::OrganizationOperation;
-use crate::{Error, Result, RoleIdSet};
+use crate::{Error, Result, RoleId, RoleIdSet};
 
 /// 仅供旧审计载荷反序列化的部门管理关系。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -42,7 +42,7 @@ impl PersonProfileChange {
     /// 角色集合与期望版本校验成功。
     /// # 错误
     /// 空角色集、缺失期望值或角色版本冲突时拒绝。
-    pub fn validate_roles(&self, current: &[String]) -> Result<()> {
+    pub fn validate_roles(&self, current: &[RoleId]) -> Result<()> {
         let Some(roles) = &self.role_ids else {
             return Ok(());
         };
@@ -51,9 +51,7 @@ impl PersonProfileChange {
             .expected_role_ids
             .as_ref()
             .ok_or_else(|| Error::ValidationError("修改角色必须提供原角色集合".into()))?;
-        if expected.iter().collect::<BTreeSet<_>>()
-            != RoleIdSet::parse(current)?.iter().collect::<BTreeSet<_>>()
-        {
+        if expected.iter().collect::<BTreeSet<_>>() != current.iter().collect::<BTreeSet<_>>() {
             return Err(Error::ConflictError("人员角色已变化，请刷新后重新编辑".into()));
         }
         Ok(())
@@ -108,7 +106,7 @@ mod tests {
     fn role_change_checks_original_set_and_accepts_role_only_change() {
         let mut value = change();
         value.role_ids = Some(RoleIdSet::parse(["new"]).unwrap());
-        let current = vec!["old".into()];
+        let current = vec![RoleId::parse("old").unwrap()];
         assert!(value.validate_roles(&current).is_err());
         value.expected_role_ids = Some(RoleIdSet::parse(["other"]).unwrap());
         assert!(matches!(value.validate_roles(&current), Err(Error::ConflictError(_))));
@@ -116,7 +114,9 @@ mod tests {
         assert!(value.validate_roles(&current).is_ok());
         assert!(value.operations().unwrap().is_empty());
         value.expected_role_ids = Some(RoleIdSet::parse(["second", "old"]).unwrap());
-        assert!(value.validate_roles(&["old".into(), "second".into()]).is_ok());
+        assert!(
+            value.validate_roles(&[RoleId::parse("old").unwrap(), RoleId::parse("second").unwrap()]).is_ok()
+        );
         value.expected_role_ids = Some(RoleIdSet::parse(&current).unwrap());
         value.role_ids = Some(RoleIdSet::default());
         assert!(value.validate_roles(&current).is_err());

@@ -40,7 +40,8 @@ impl PolicyBundleService {
         )?;
         let service = self.clone();
         self.access
-            .scope_rbac()?
+            .rbac
+            .clone()
             .run_optional_policy_transaction(Some(request.expected_policy_version), move |executor| {
                 Box::pin(async move { service.apply_steps(request, command, actor, executor).await })
             })
@@ -94,7 +95,7 @@ impl PolicyBundleService {
         if plan.preview.changes.is_empty() {
             return Ok(());
         }
-        let rbac = self.access.scope_rbac()?;
+        let rbac = self.access.rbac.clone();
         let event = self
             .access
             .build_audit_event(

@@ -188,7 +188,7 @@ impl AuditEventListParams {
             object_type: normalized_text(self.object_type.as_deref()),
             object_id: normalized_text(self.object_id.as_deref()),
             result: self.result,
-            paging: super::page_params(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
+            paging: PageParams::parse(&self.sort_by, &self.sort_dir, self.page, self.page_size)?,
         })
     }
 }

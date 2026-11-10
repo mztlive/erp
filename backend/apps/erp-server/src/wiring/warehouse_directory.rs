@@ -4,9 +4,9 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use application_core::directory::DirectoryScope;
 use async_trait::async_trait;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::ScopeDimension;
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_warehouse::Result;
 use erp_warehouse::ports::WarehouseDirectoryAccess;
 use erp_warehouse::service::directory::WarehouseDirectoryService;
@@ -21,8 +21,11 @@ struct Access(DataScopeService);
 #[async_trait]
 impl WarehouseDirectoryAccess for Access {
     async fn resolve(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<DirectoryScope> {
-        let access =
-            self.0.resolve(actor, "warehouse", "list", executor).await.map_err(map_identity_error)?;
+        let access = self
+            .0
+            .resolve(actor, &Permission::parse("warehouse:list")?, executor)
+            .await
+            .map_err(map_identity_error)?;
         directory_scope(access, ScopeDimension::Warehouse).map_err(map_identity_error)
     }
 }

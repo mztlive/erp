@@ -28,7 +28,7 @@ impl PolicyBundleService {
         roles.extend(document.bindings.iter().flat_map(|b| b.role_ids.iter().map(ToString::to_string)));
         for user_id in document.user_ids() {
             let user = self.user_fact(&user_id, executor).await?;
-            roles.extend(user.role_ids.iter().cloned());
+            roles.extend(user.role_ids.iter().map(ToString::to_string));
             facts.users.insert(user_id.clone(), user);
             facts.scopes.extend(
                 self.access.db.person_data_scopes().for_person(&user_id, None, None, executor).await?,

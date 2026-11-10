@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::service::access_control::resolve::DataScopeService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_supplier_catalog::supply_governance::SupplierOfferingProcess;
 use erp_supply::{
     OfferingAccess, OfferingDataScopePort, OfferingResolvedClause, OfferingResolvedScope,
@@ -86,7 +86,7 @@ impl OfferingDataScopePort for MongoOfferingDataScope {
         executor: &mut dyn Executor,
     ) -> erp_supply::Result<OfferingResolvedScope> {
         let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "supplier_offering", action, executor)
+            .resolve(actor, &Permission::parse(format!("{}:{}", "supplier_offering", action))?, executor)
             .await
             .map_err(map_identity_error)?;
         map_access(access)
