@@ -30,7 +30,6 @@ export type AccountProfile = {
     userid: string
     account: string
     name: string
-    email?: string | null
     phone?: string | null
     avatar?: string | null
     subject: string
@@ -39,7 +38,6 @@ export type AccountProfile = {
     /** `resource:action` 权限列表（可能含 `*` 通配）。 */
     permissions: string[]
     account_kind: AccountKind
-    store_id?: string | null
 }
 
 /**

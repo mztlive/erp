@@ -109,15 +109,7 @@ impl AdminService {
         let role_ids = RoleIdSet::parse_non_empty(params.role_ids)?;
         let secret = password::hash_secret(account, params.password).await?;
         let id = id_generator::next_id();
-        let data = AccountCoreData {
-            secret,
-            name: params.name,
-            kind: AccountKind::Admin,
-            status: AccountStatus::Active,
-            email: None,
-            phone: None,
-            avatar: None,
-        };
+        let data = AccountCoreData::admin(secret, params.name);
         let account = AccountCore::new(id, data)?;
         let grant = self.rbac.authorize_role_assignment(&actor, role_ids).await?;
         let audit =
@@ -234,9 +226,7 @@ impl AdminService {
             .rbac
             .authorize_target_management(actor, AccountKind::Admin, account.base.id.as_str(), role_ids)
             .await?;
-        account =
-            apply_account_update(account, AccountCoreUpdate { name, password, status, ..Default::default() })
-                .await?;
+        account = apply_account_update(account, AccountCoreUpdate { name, password, status }).await?;
         Ok(AdminUpdateContext { account, authorization })
     }
 
@@ -538,7 +528,6 @@ impl AdminService {
                 name: Some(name),
                 password: Some(password),
                 status: Some(AccountStatus::Active),
-                ..Default::default()
             },
         )
         .await?;
@@ -569,18 +558,7 @@ impl AdminService {
         name: String,
     ) -> Result<AccountCore> {
         let secret = password::hash_secret(account, password).await?;
-        let admin = AccountCore::new(
-            id_generator::next_id(),
-            AccountCoreData {
-                secret,
-                name,
-                kind: AccountKind::Admin,
-                status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
-            },
-        )?;
+        let admin = AccountCore::new(id_generator::next_id(), AccountCoreData::admin(secret, name))?;
         self.create_system_account_with_roles(admin, RoleIdSet::parse([crate::ROOT_ROLE_ID])?).await
     }
 }

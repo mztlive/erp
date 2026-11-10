@@ -112,9 +112,6 @@ mod tests {
                 name: "管理员".to_string(),
                 kind: AccountKind::Admin,
                 status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
             },
         )
         .unwrap();

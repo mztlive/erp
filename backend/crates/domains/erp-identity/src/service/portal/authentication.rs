@@ -98,9 +98,6 @@ mod tests {
                 name: "采购".into(),
                 kind: AccountKind::Admin,
                 status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
             },
         )
         .unwrap();

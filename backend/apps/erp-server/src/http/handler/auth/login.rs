@@ -122,9 +122,6 @@ mod tests {
                 name: "测试账号".to_string(),
                 kind,
                 status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
             },
         )
         .unwrap();

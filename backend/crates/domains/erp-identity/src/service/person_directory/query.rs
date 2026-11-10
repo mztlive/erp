@@ -3,13 +3,11 @@
 use std::collections::BTreeSet;
 
 use application_core::{AuditActor, PageView};
-use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde_json::to_vec;
 
 use crate::dto::PersonDirectoryPage;
-use crate::entity::access_control::ResolvedScope;
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::person_directory::{
@@ -19,7 +17,7 @@ use crate::repository::OrganizationRepository;
 use crate::repository::person_directory_query::{
     DIRECTORY_LIMIT, DirectoryRead, DirectoryResult, directory_page,
 };
-use crate::service::access_control::resolve::DataScopeService;
+use crate::service::access_control::resolve::{DataScopeFacts, DataScopeService};
 use crate::service::iam::SharedRbacService;
 use crate::{Error, Permission, Result};
 
@@ -47,8 +45,11 @@ pub async fn list_page(
     executor: &mut dyn Executor,
 ) -> Result<PersonDirectoryPage> {
     let mut authorized = authorize(db, rbac, actor, category, executor).await?;
-    let org_filter =
-        expand_org_filter(&authorized.organizations, &request.org_unit_ids, request.include_descendants)?;
+    let org_filter = expand_org_filter(
+        &authorized.facts.organizations,
+        &request.org_unit_ids,
+        request.include_descendants,
+    )?;
     load_scope_memberships(db, &mut authorized, org_filter.as_ref(), None, executor).await?;
     let ids = scope_ids(&authorized, org_filter.as_ref(), None)?;
     let result = directory_page(
@@ -118,11 +119,7 @@ pub async fn selected_page(
 }
 
 struct AuthorizedDirectory {
-    scope: ResolvedScope,
-    organizations: OrganizationState,
-    policy_version: u64,
-    scope_version: String,
-    as_of: Instant,
+    facts: DataScopeFacts,
     actor_id: String,
 }
 
@@ -137,14 +134,7 @@ async fn authorize(
     let resolved = DataScopeService::new(db.clone(), rbac.clone())
         .resolve(actor, &Permission::parse(format!("{}:{}", category.resource(), "list"))?, executor)
         .await?;
-    Ok(AuthorizedDirectory {
-        scope: resolved.facts.scope,
-        organizations: resolved.facts.organizations,
-        policy_version: resolved.facts.policy_version,
-        scope_version: resolved.facts.scope_version,
-        as_of: resolved.facts.as_of,
-        actor_id: actor.id().to_string(),
-    })
+    Ok(AuthorizedDirectory { facts: resolved.facts, actor_id: actor.id().to_string() })
 }
 
 /// 仅在明确组织或 selected 身份内装载当前关系，数据库阶段限制规模。
@@ -156,17 +146,22 @@ async fn load_scope_memberships(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let repository = OrganizationRepository::new(db);
-    let orgs = directory_org_ids(&authorized.scope, org_filter).into_iter().collect::<Vec<_>>();
+    let orgs = directory_org_ids(&authorized.facts.scope, org_filter).into_iter().collect::<Vec<_>>();
     let rows = if let Some(ids) = selected {
-        repository.directory_memberships(Some(ids), None, authorized.as_of, executor).await?
+        repository.directory_memberships(Some(ids), None, authorized.facts.as_of, executor).await?
     } else {
-        repository.directory_memberships(None, Some(&orgs), authorized.as_of, executor).await?
+        repository.directory_memberships(None, Some(&orgs), authorized.facts.as_of, executor).await?
     };
-    let mut seen =
-        authorized.organizations.memberships.iter().map(|row| row.base.id.clone()).collect::<BTreeSet<_>>();
+    let mut seen = authorized
+        .facts
+        .organizations
+        .memberships
+        .iter()
+        .map(|row| row.base.id.clone())
+        .collect::<BTreeSet<_>>();
     for row in rows {
         if seen.insert(row.base.id.clone()) {
-            authorized.organizations.memberships.push(row);
+            authorized.facts.organizations.memberships.push(row);
         }
     }
     Ok(())
@@ -188,11 +183,12 @@ async fn display_version(
                 .map_err(|_| Error::Internal("人员目录版本索引缺少身份".into()))
         })
         .collect::<Result<Vec<_>>>()?;
-    authorized.organizations.memberships = OrganizationRepository::new(db)
-        .directory_memberships(Some(&ids), None, authorized.as_of, executor)
+    authorized.facts.organizations.memberships = OrganizationRepository::new(db)
+        .directory_memberships(Some(&ids), None, authorized.facts.as_of, executor)
         .await?;
-    let content = content_version(&authorized.scope_version, result)?;
+    let content = content_version(&authorized.facts.scope_version, result)?;
     let relations = authorized
+        .facts
         .organizations
         .memberships
         .iter()
@@ -207,7 +203,7 @@ fn scope_ids(
     org_filter: Option<&BTreeSet<String>>,
     selected: Option<&[String]>,
 ) -> Result<Option<Vec<String>>> {
-    let scope = &authorized.scope;
+    let scope = &authorized.facts.scope;
     if selected.is_none()
         && org_filter.is_none()
         && scope.role_clauses.iter().any(|clause| clause.company)
@@ -218,6 +214,7 @@ fn scope_ids(
     let candidates =
         selected.map(|ids| ids.iter().map(String::as_str).collect::<BTreeSet<_>>()).unwrap_or_else(|| {
             let mut ids = authorized
+                .facts
                 .organizations
                 .memberships
                 .iter()
@@ -228,7 +225,7 @@ fn scope_ids(
         });
     let mut ids = Vec::new();
     for id in candidates {
-        let org = authorized.organizations.own_org(id, authorized.as_of)?;
+        let org = authorized.facts.organizations.own_org(id, authorized.facts.as_of)?;
         if candidate_in_directory(scope, &authorized.actor_id, id, org, org_filter) {
             ids.push(id.to_owned());
         }
@@ -298,27 +295,28 @@ fn page_from_result(
     let total = result.totals.first().map_or(0, |row| row.count);
     let mut items = result.items;
     for item in &mut items {
-        let org = authorized.organizations.own_org(&item.id, authorized.as_of)?;
-        item.org_label = org_label(&authorized.organizations, org);
+        let org = authorized.facts.organizations.own_org(&item.id, authorized.facts.as_of)?;
+        item.org_label = org_label(&authorized.facts.organizations, org);
         item.primary_org_unit_id = org.filter(|_| item.org_label.is_some()).map(ToOwned::to_owned);
     }
     Ok(PersonDirectoryPage::from_page(
         PageView { items, total, page, page_size },
         version,
-        authorized.policy_version,
-        authorized.organizations.version,
-        authorized.as_of.as_utc().to_rfc3339(),
-        (!authorized.scope.has_role_scope()).then_some("no_scope"),
+        authorized.facts.policy_version,
+        authorized.facts.organizations.version,
+        authorized.facts.as_of.as_utc().to_rfc3339(),
+        (!authorized.facts.scope.has_role_scope()).then_some("no_scope"),
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use entity_core::BaseModel;
+    use erp_core::common::time::Instant;
 
     use super::*;
     use crate::dto::PersonDirectoryItem;
-    use crate::entity::access_control::ScopeClause;
+    use crate::entity::access_control::{ResolvedScope, ScopeClause};
     use crate::entity::account_core::AccountStatus;
     use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
     use crate::repository::person_directory_query::version_fixture;
@@ -349,18 +347,22 @@ mod tests {
             let mut unit = unit.clone();
             unit.enabled = enabled;
             let authorized = AuthorizedDirectory {
-                scope: ResolvedScope {
-                    role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
-                    user_limit: None,
+                facts: DataScopeFacts {
+                    resource: "person".into(),
+                    action: "list".into(),
+                    scope: ResolvedScope {
+                        role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                        user_limit: None,
+                    },
+                    organizations: OrganizationState {
+                        units: vec![unit.clone()],
+                        memberships: vec![membership.clone()],
+                        ..Default::default()
+                    },
+                    policy_version: 1,
+                    scope_version: "scope".into(),
+                    as_of: Instant::from_unix_secs(at),
                 },
-                organizations: OrganizationState {
-                    units: vec![unit.clone()],
-                    memberships: vec![membership.clone()],
-                    ..Default::default()
-                },
-                policy_version: 1,
-                scope_version: "scope".into(),
-                as_of: Instant::from_unix_secs(at),
                 actor_id: "admin".into(),
             };
             let result = DirectoryResult {
@@ -393,23 +395,27 @@ mod tests {
     #[test]
     fn selected_resolution_is_limited_to_requested_ids_and_user_ceiling() {
         let mut authorized = AuthorizedDirectory {
-            scope: ResolvedScope {
-                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
-                user_limit: None,
+            facts: DataScopeFacts {
+                resource: "person".into(),
+                action: "list".into(),
+                scope: ResolvedScope {
+                    role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                    user_limit: None,
+                },
+                organizations: OrganizationState::default(),
+                policy_version: 1,
+                scope_version: "scope".into(),
+                as_of: Instant::from_unix_secs(1),
             },
-            organizations: OrganizationState::default(),
-            policy_version: 1,
-            scope_version: "scope".into(),
-            as_of: Instant::from_unix_secs(1),
             actor_id: "a".into(),
         };
         assert_eq!(scope_ids(&authorized, None, None).unwrap(), None);
         let selected = vec!["b".into()];
         assert_eq!(scope_ids(&authorized, None, Some(&selected)).unwrap(), Some(selected.clone()));
-        authorized.scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
+        authorized.facts.scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
         assert_eq!(scope_ids(&authorized, None, Some(&selected)).unwrap(), Some(vec![]));
         assert_eq!(scope_ids(&authorized, None, None).unwrap(), Some(vec!["a".into()]));
-        authorized.scope.role_clauses.clear();
+        authorized.facts.scope.role_clauses.clear();
         assert_eq!(scope_ids(&authorized, None, None).unwrap(), Some(vec![]));
     }
 }

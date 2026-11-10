@@ -47,9 +47,6 @@ mod tests {
                 name: "管理员".into(),
                 kind: AccountKind::Admin,
                 status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
             },
         )
         .unwrap()

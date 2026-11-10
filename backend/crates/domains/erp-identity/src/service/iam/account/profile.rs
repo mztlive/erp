@@ -22,7 +22,6 @@ pub struct AccountProfile {
     pub organization_version: u64,
     pub account: String,
     pub name: String,
-    pub email: Option<String>,
     pub phone: Option<String>,
     pub avatar: Option<String>,
     pub subject: String,
@@ -30,7 +29,6 @@ pub struct AccountProfile {
     pub workbenches: BTreeSet<RoleWorkbench>,
     pub permissions: Vec<Permission>,
     pub account_kind: AccountKind,
-    pub store_id: Option<String>,
 }
 
 /// 账号信息服务。
@@ -128,7 +126,6 @@ impl AccountProfileService {
             organization_version: 0,
             account: secret.into_account(),
             name,
-            email: None,
             phone,
             avatar,
             subject,
@@ -136,7 +133,6 @@ impl AccountProfileService {
             workbenches: BTreeSet::new(),
             permissions,
             account_kind: kind,
-            store_id: None,
         }
     }
 
@@ -161,20 +157,19 @@ mod tests {
 
     #[test]
     fn build_profile_should_keep_admin_identity_and_phone() {
-        let account = AccountCore::new(
+        let mut account = AccountCore::new(
             "account-1".to_string(),
             AccountCoreData {
                 secret: Secret::new(LoginAccount::new("admin01").unwrap(), "password01").unwrap(),
                 name: "管理员".to_string(),
                 kind: AccountKind::Admin,
                 status: AccountStatus::Active,
-                email: Some("admin@example.com".to_string()),
-                phone: Some("13500000000".to_string()),
-                avatar: None,
             },
         )
         .unwrap();
 
+        account.phone = Some("13500000000".into());
+        account.email = Some("admin@example.com".into());
         let profile = AccountProfileService::build_profile(
             account,
             vec!["role-a".to_string()],
@@ -182,7 +177,9 @@ mod tests {
             None,
         );
 
-        assert_eq!(profile.email, None);
+        let json = serde_json::to_value(&profile).unwrap();
+        assert!(json.get("email").is_none());
+        assert!(json.get("store_id").is_none());
         assert_eq!(profile.phone.as_deref(), Some("13500000000"));
         assert_eq!(profile.subject, "user:admin:account-1");
     }

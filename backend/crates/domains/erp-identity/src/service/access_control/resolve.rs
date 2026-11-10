@@ -26,7 +26,8 @@ pub(crate) struct AuthorizedDataScope {
     pub(crate) facts: DataScopeFacts,
 }
 
-/// 授权解析器产生的只读事实；构造事实本身不授予授权资格。
+/// 授权解析器产生的事实数据；构造事实本身不授予授权资格。
+/// 消费者可按查询需要补充组织关系，不将其视为不可变的原始授权快照。
 pub(crate) struct DataScopeFacts {
     pub resource: String,
     pub action: String,

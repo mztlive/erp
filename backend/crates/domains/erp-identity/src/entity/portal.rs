@@ -198,9 +198,6 @@ mod tests {
                 name: "供应商联系人".into(),
                 kind: AccountKind::Supplier,
                 status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
             },
         )
         .unwrap()

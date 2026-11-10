@@ -52,9 +52,6 @@ fn test_owner(id: &str, login: &str, name: &str) -> AccountCore {
             name: name.to_string(),
             kind: AccountKind::Admin,
             status: AccountStatus::Active,
-            email: None,
-            phone: None,
-            avatar: None,
         },
     )
     .unwrap()

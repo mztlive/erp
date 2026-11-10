@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use crate::entity::auth::validate_admin_password;
 use crate::entity::{AccountCore, AccountStatus, LoginAccount};
 use crate::error::{Error, Result};
 
@@ -8,7 +9,7 @@ use crate::error::{Error, Result};
 pub struct CreateAdminParams {
     #[validate(length(min = 3, max = 32, message = "账号长度必须在3-32个字符之间"))]
     pub account: String,
-    #[validate(length(min = 6, max = 32, message = "密码长度必须在6-32个字符之间"))]
+    #[validate(custom(function = "validate_admin_password"))]
     pub password: String,
     pub name: String,
     #[validate(length(min = 1, message = "至少选择一个角色"))]
@@ -120,11 +121,8 @@ impl ResetAdminPasswordParams {
 /// # 错误
 /// 密码字符数不在 6-32 时返回校验错误。
 fn ensure_admin_password_length(password: &str, label: &str) -> Result<()> {
-    if (6..=32).contains(&password.chars().count()) {
-        return Ok(());
-    }
-
-    Err(Error::ValidationError(format!("{label}密码长度必须在6-32个字符之间")))
+    validate_admin_password(password)
+        .map_err(|_| Error::ValidationError(format!("{label}密码长度必须在6-32个字符之间")))
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -132,7 +130,7 @@ pub struct UpdateAdminParams {
     #[serde(default, skip_deserializing)]
     pub id: String,
     pub name: Option<String>,
-    #[validate(length(min = 6, max = 32, message = "密码长度必须在6-32个字符之间"))]
+    #[validate(custom(function = "validate_admin_password"))]
     pub password: Option<String>,
     #[validate(length(min = 1, message = "至少选择一个角色"))]
     pub role_ids: Option<Vec<String>>,
@@ -345,6 +343,37 @@ mod tests {
         ] {
             assert!(params.into_validated_parts().is_err());
         }
+    }
+
+    #[test]
+    fn all_admin_password_inputs_share_the_same_rule() {
+        for (password, valid) in [
+            ("short".to_string(), false),
+            (" secret ".into(), true),
+            ("密".repeat(32), true),
+            ("密".repeat(33), false),
+        ] {
+            let create = CreateAdminParams {
+                account: "admin01".into(),
+                password: password.clone(),
+                name: "Admin".into(),
+                role_ids: vec!["role-1".into()],
+            };
+            let update =
+                UpdateAdminParams { password: Some(password.clone()), ..UpdateAdminParams::new("admin-1") };
+            assert_eq!(create.validate().is_ok(), valid);
+            assert_eq!(update.validate().is_ok(), valid);
+            let init =
+                InitializeSuperAdminParams::new("admin01", password.clone(), "Admin").into_validated_parts();
+            let reset = ResetAdminPasswordParams::new("admin01", password.clone()).into_validated_parts();
+            assert_eq!(init.is_ok(), valid);
+            assert_eq!(reset.is_ok(), valid);
+            if valid {
+                assert_eq!(init.unwrap().1, password);
+                assert_eq!(reset.unwrap().1, password);
+            }
+        }
+        assert!(UpdateAdminParams::new("admin-1").validate().is_ok());
     }
 
     #[test]

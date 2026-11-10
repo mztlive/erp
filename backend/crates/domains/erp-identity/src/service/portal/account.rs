@@ -35,18 +35,8 @@ impl PortalIdentityService {
         let supplier_id =
             normalize_required_text(supplier_id.into(), "供应商标识不能为空", 128, "供应商标识过长")?;
         let secret = password::hash_secret(LoginAccount::new(params.account)?, params.password).await?;
-        let account = AccountCore::new(
-            id_generator::next_id(),
-            AccountCoreData {
-                secret,
-                name: params.name,
-                kind: AccountKind::Supplier,
-                status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
-            },
-        )?;
+        let account =
+            AccountCore::new(id_generator::next_id(), AccountCoreData::supplier(secret, params.name))?;
         Ok(PreparedPortalAccount { account, supplier_id, role: params.role })
     }
 
