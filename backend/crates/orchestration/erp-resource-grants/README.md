@@ -2,6 +2,8 @@
 
 负责自动记录读取授权的业务编排：根据业务事件读取事实、计算授权结果，再交给 `erp-identity` 保存。公开入口为 `ResourceGrantProcess`，同时提供授权就绪查询、重算和存量回填。
 
+系统架构及与 identity、authorization-wiring 的关系见 [ERP 权限系统设计](../../../../docs/authorization-system-design.md)。
+
 ## 职责边界
 
 | 模块 | 职责 |
