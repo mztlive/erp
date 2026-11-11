@@ -57,10 +57,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         version: u64,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if features(&self.db, &self.identity)
-            .permissions(actor, &[Permission::parse("approval_instance:read")?], executor)
+        if !features(&self.db, &self.identity)
+            .has_permission(actor, &Permission::parse("approval_instance:read")?, executor)
             .await?
-            .is_none_or(|qualified| qualified.permissions().is_empty())
         {
             return Err(hidden_not_found());
         }

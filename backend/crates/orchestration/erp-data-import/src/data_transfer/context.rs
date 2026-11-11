@@ -93,9 +93,6 @@ impl BusinessTransfers {
         actor: &AuditActor,
     ) -> Result<TransferContext> {
         self.access(kind, input, actor).await?;
-        if kind == TransferKind::PortalBatch {
-            self.portal_context_access(input, actor).await?;
-        }
         let mut view = TransferContext::from_input(kind, input);
         if input["__context_expires_at"].as_i64().is_some_and(|at| at <= Instant::now().unix_secs()) {
             view.retain_classification();

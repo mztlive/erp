@@ -4,8 +4,7 @@ use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{CUSTOMER_ACCEPTANCE_SORT_FIELDS, PageParams, non_blank, normalize_paging};
-use crate::Result;
+use super::non_blank;
 use crate::entity::fulfillment::{
     AcceptanceResult, AllocationAction, CustomerAcceptanceState, FulfillmentFactType,
 };
@@ -219,43 +218,4 @@ pub struct CustomerAcceptanceListParams {
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
-}
-
-/// 归一化后的客户验收单列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CustomerAcceptanceListQuery {
-    /// 销售单筛选。
-    pub sales_order_id: Option<SalesOrderId>,
-    /// 单据状态筛选。
-    pub status: Option<CustomerAcceptanceState>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl CustomerAcceptanceListParams {
-    /// 归一化客户验收单列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<CustomerAcceptanceListQuery> {
-        Ok(CustomerAcceptanceListQuery {
-            sales_order_id: self.sales_order_id.clone(),
-            status: self.status,
-            paging: normalize_paging(
-                &self.sort_by,
-                &self.sort_dir,
-                self.page,
-                self.page_size,
-                CUSTOMER_ACCEPTANCE_SORT_FIELDS,
-            )?,
-        })
-    }
 }

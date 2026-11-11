@@ -10,7 +10,9 @@ use super::mapping::build_adjustment_line_updates;
 use crate::dto::{StockAdjustmentView, UpdateStockAdjustmentRequest};
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLineUpdate, StockAdjustmentUpdate};
 use crate::error::{Error, Result};
-use crate::ports::{AuthorizationPort, InventoryAuditPort, InventoryAuthorization, PreparedInventoryAudit};
+use crate::ports::{
+    AuthorizationPort, InventoryAction, InventoryAuditPort, InventoryAuthorization, PreparedInventoryAudit,
+};
 use crate::repository::InventoryExt;
 
 impl InventoryService {
@@ -101,7 +103,7 @@ async fn adjustment_for_update(
     version: u64,
     executor: &mut dyn Executor,
 ) -> Result<(StockAdjustment, InventoryAuthorization)> {
-    let authorization = authorization_port.authorize(actor, executor).await?;
+    let authorization = authorization_port.authorize(actor, &[InventoryAction::Update], executor).await?;
     let adjustment = db
         .inventory()
         .stock_adjustment(id.as_ref(), executor)

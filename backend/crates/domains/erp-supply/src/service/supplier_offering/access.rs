@@ -1,29 +1,30 @@
 //! 供给对象读取与写入范围；显式维护人和业务组织分别解释。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
+use erp_identity::{
+    AuthorizationRegistry, AuthorizationService, OrganizationDirectoryService, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::authorization::{self, OfferingResolvedScope};
 use crate::entity::supplier_offering::SupplierOffering;
 use crate::error::{Error, Result};
-use crate::ports::{OfferingDataScopePort, OfferingResolvedScope};
-use crate::repository::{OfferingReadScope, SupplierOfferingExt};
+use crate::repository::SupplierOfferingExt;
 
 /// 供给对象访问范围；列表、详情、候选、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct OfferingAccess {
     db: Database,
-    scope: Arc<dyn OfferingDataScopePort>,
+    rbac: Option<SharedRbacService>,
 }
 
 impl OfferingAccess {
-    /// 绑定供给集合与范围授权 Port。
+    /// 绑定供给集合与共享身份设施。
     ///
     /// # 参数
     /// * `db` - 供给集合所在数据库
-    /// * `scope` - 组合层注入的供给范围 Port
+    /// * `rbac` - 共享身份设施
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
@@ -32,9 +33,25 @@ impl OfferingAccess {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 不得在构造时补公司范围；不得直接构造身份域 Service。
-    pub fn new(db: Database, scope: Arc<dyn OfferingDataScopePort>) -> Self {
-        Self { db, scope }
+    /// 账号和功能资格由 identity 执行；业务组织只作为写入事实。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac: Some(rbac) }
+    }
+
+    /// 创建尚未接线的访问器，授权调用保持失败关闭。
+    /// # 参数
+    /// db 为业务集合所在数据库。
+    /// # 返回
+    /// 未绑定身份设施的访问器。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn unwired(db: Database) -> Self {
+        Self { db, rbac: None }
+    }
+
+    /// 取得已注入的身份设施，禁止默认扩大范围。
+    fn rbac(&self) -> Result<SharedRbacService> {
+        self.rbac.clone().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射供给责任条件。
@@ -45,7 +62,7 @@ impl OfferingAccess {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回已解析范围事实和供给授权条件。
+    /// 返回本次查询的单份授权凭证。
     ///
     /// # 错误
     /// 无动作权限返回 Forbidden；未装配时拒绝。
@@ -57,9 +74,9 @@ impl OfferingAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(OfferingResolvedScope, OfferingReadScope)> {
-        let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), access))
+    ) -> Result<OfferingResolvedScope> {
+        Ok(authorization::resolve(&self.db, self.rbac()?, actor, "supplier_offering", action, executor)
+            .await?)
     }
 
     /// 在调用方事务内重验供给对象资格。
@@ -85,7 +102,8 @@ impl OfferingAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierOffering> {
-        self.scope.require(actor, action, id, executor).await?;
+        authorization::require(&self.db, self.rbac()?, actor, "supplier_offering", action, id, executor)
+            .await?;
         self.db
             .supplier_offerings()
             .find_by_id(id, executor)
@@ -111,7 +129,8 @@ impl OfferingAccess {
         at: erp_core::common::time::Instant,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        self.scope.own_org(user_id, at, executor).await
+        self.rbac()?;
+        Ok(OrganizationDirectoryService::new(self.db.clone()).own_org(user_id, at, executor).await?)
     }
 
     /// 解析拟写入的维护人及其主属组织，缺组织阻断。
@@ -146,41 +165,30 @@ impl OfferingAccess {
         Ok((maintainer.to_string(), org))
     }
 
-    /// 校验拟创建或拟写入对象落在当前动作范围内。
+    /// 检查共享资料当前动作的功能资格；对象操作另行检查完整目标。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
     /// * `action` - 已注册写动作
-    /// * `owner` - 拟写入维护人
-    /// * `org` - 拟写入业务组织
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 范围内时成功。
+    /// 当前有效账号具备动作资格时成功。
     ///
     /// # 错误
-    /// 空范围或对象不被允许时拒绝。
+    /// 未接线、未登记动作或账号无操作资格时拒绝。
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,
         action: &str,
-        owner: &str,
-        org: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let _ = (owner, org);
-        self.scope.resolve(actor, action, executor).await?;
+        let permission = authorization::action_permission("supplier_offering", action)?;
+        let service =
+            AuthorizationService::new(self.db.clone(), self.rbac()?, AuthorizationRegistry::default());
+        if !service.has_permission(actor, &permission, executor).await? {
+            return Err(Error::Forbidden("没有该操作权限".into()));
+        }
         Ok(())
     }
-}
-
-/// 返回当前阶段的身份域查询凭证。
-/// # 参数
-/// access 为已编译凭证，user 为兼容调用参数。
-/// # 返回
-/// 相同凭证。
-/// # 错误
-/// 不执行I/O。
-pub fn offering_scope(access: &OfferingResolvedScope, _user: &str) -> OfferingReadScope {
-    access.clone()
 }

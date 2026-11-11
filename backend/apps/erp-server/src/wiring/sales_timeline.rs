@@ -15,7 +15,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::workflow::workflow_auth;
-use super::{MongoPurchaseDataScope, funds_access_with_rbac, purchase_access};
+use super::{funds_access_with_rbac, purchase_access};
 
 mod policy;
 use policy::ReadPolicy;
@@ -70,13 +70,7 @@ impl TimelineAccess {
         match policy {
             ReadPolicy::Invoice => {
                 funds_access_with_rbac(self.db.clone(), self.rbac.clone())
-                    .source_document_readable(
-                        actor,
-                        "invoice",
-                        &document.id,
-                        Some(&purchase_access(self.db.clone(), self.rbac.clone())),
-                        executor,
-                    )
+                    .source_document_readable(actor, "invoice", &document.id, executor)
                     .await
             },
             ReadPolicy::PaymentRequest => self.payment_request(actor, &document.id, executor).await,
@@ -117,11 +111,7 @@ impl TimelineAccess {
         let Some(request) = self.db.purchase_payment_requests().find_by_id(id, executor).await? else {
             return Ok(false);
         };
-        let service = PurchasePaymentRequestReadService::new(
-            self.db.clone(),
-            self.rbac.clone(),
-            MongoPurchaseDataScope::shared(self.db.clone(), self.rbac.clone()),
-        );
+        let service = PurchasePaymentRequestReadService::new(self.db.clone(), self.rbac.clone());
         service.timeline_readable(actor, &request, executor).await
     }
 

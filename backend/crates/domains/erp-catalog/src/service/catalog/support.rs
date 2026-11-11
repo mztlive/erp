@@ -28,7 +28,7 @@ impl CatalogService {
     ) -> Result<(String, String)> {
         let access = self.access();
         let (maintainer, org) = access.maintainer_org(requested, actor, &mut NoTransaction).await?;
-        access.ensure_writable(actor, "create", &maintainer, &org, &mut NoTransaction).await?;
+        access.ensure_writable(actor, "create", &mut NoTransaction).await?;
         Ok((maintainer, org))
     }
 

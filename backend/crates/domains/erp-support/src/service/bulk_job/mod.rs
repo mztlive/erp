@@ -19,12 +19,14 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::ids::FileAssetId;
+use erp_identity::SharedRbacService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::check_expected_version;
+use crate::authorization::background::BackgroundAuthorization;
 pub use crate::dto::bulk_job::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
     BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
@@ -40,6 +42,7 @@ use crate::entity::bulk_job::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort, is_business_document_type};
+use crate::repository::bulk_job::authorized_background_page;
 use crate::repository::prelude::*;
 use crate::repository::{BackgroundJobRegistration, BulkJobExt};
 
@@ -55,6 +58,7 @@ pub struct BulkJobService {
     db: Database,
     audit: Arc<dyn SupportAuditPort>,
     documents: Arc<dyn BusinessDocumentPort>,
+    authorization: BackgroundAuthorization,
 }
 
 impl BulkJobService {
@@ -64,6 +68,7 @@ impl BulkJobService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `documents` - 业务单据注册端口
+    /// * `identity` - 当前共享身份设施，用于后台任务统一授权。
     ///
     /// # 返回
     /// 返回服务实例。
@@ -74,8 +79,10 @@ impl BulkJobService {
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
         documents: Arc<dyn BusinessDocumentPort>,
+        identity: SharedRbacService,
     ) -> Self {
-        Self { db, audit, documents }
+        let authorization = BackgroundAuthorization::new(db.clone(), identity);
+        Self { db, audit, documents, authorization }
     }
 
     /// 分页查询选择快照列表。
@@ -271,13 +278,11 @@ impl BulkJobService {
 
     /// 分页查询后台任务列表（任务中心）。
     ///
-    /// 数据隔离：普通用户只能看到自己创建的任务，`requested_by` 会被强制覆盖为本人；
-    /// 管理员可查看全部，也可用 `requested_by` 筛选指定创建人。
+    /// identity 统一执行本人或启用管理员范围；requested_by 仅收窄结果。
     ///
     /// # 参数
     /// * `params` - 查询参数（`job_no`/`job_type`/`status`/`requested_by` 扁平筛选）
     /// * `actor` - 已通过鉴权的审计操作人
-    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -289,27 +294,51 @@ impl BulkJobService {
         &self,
         params: &BackgroundJobListParams,
         actor: &AuditActor,
-        is_admin: bool,
     ) -> Result<PageView<BackgroundJobView>> {
         params.validate()?;
-        let query = params.normalized()?;
-        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
-        let filter = BackgroundJobFilter {
-            job_no: query.job_no,
-            job_type: query.job_type,
-            domain_job_type: query.domain_job_type,
-            status: query.status,
-            active_only: query.active_only,
-            requested_by: if is_admin { query.requested_by } else { Some(actor.id().to_string()) },
-            page,
-            page_size,
-            sort_by,
-            sort_ascending,
-        };
-        let page = self.db.background_jobs().search_background_jobs(&filter, &mut NoTransaction).await?;
-        let items = page.items.into_iter().map(BackgroundJobView::from).collect();
+        let filter = BackgroundJobFilter::from(params.normalized()?);
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        let db = self.db.clone();
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let access = authorization.query(&actor, executor).await?;
+                    let page =
+                        authorized_background_page(&db, &filter, &authorization, &access, executor).await?;
+                    Ok(PageView {
+                        items: page.items.into_iter().map(Into::into).collect(),
+                        total: page.total,
+                        page: filter.page,
+                        page_size: filter.page_size,
+                    })
+                })
+            })
+            .await
+    }
 
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+    /// 查询认证入口的本人任务；该入口也服务供应商门户，不授予后台管理资格。
+    /// # 参数
+    /// params 为分页条件，actor 为原入口认证的当前账号。
+    /// # 返回
+    /// 固定发起人为当前账号的任务页，忽略请求中的其他发起人。
+    /// # 错误
+    /// 分页、筛选或数据库读取失败时返回错误。
+    pub async fn own_background_job_list(
+        &self,
+        params: &BackgroundJobListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<BackgroundJobView>> {
+        params.validate()?;
+        let filter = BackgroundJobFilter::for_requester(params.normalized()?, actor.id());
+        let page = self.db.background_jobs().search_background_jobs(&filter, &mut NoTransaction).await?;
+        Ok(PageView {
+            items: page.items.into_iter().map(Into::into).collect(),
+            total: page.total,
+            page: filter.page,
+            page_size: filter.page_size,
+        })
     }
 
     /// 查询后台任务详情。
@@ -319,7 +348,6 @@ impl BulkJobService {
     /// # 参数
     /// * `id` - 后台任务 ID
     /// * `actor` - 已通过鉴权的审计操作人
-    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回完整任务视图（含进度与错误摘要）。
@@ -327,20 +355,25 @@ impl BulkJobService {
     /// # 错误
     /// * `NotFound` - 任务不存在
     /// * `Forbidden` - 非管理员查看他人创建的任务
-    pub async fn background_job_detail(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        is_admin: bool,
-    ) -> Result<BackgroundJobView> {
-        let job = self
-            .db
-            .background_jobs()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
-        ensure_job_visible(&job, actor, is_admin)?;
-        Ok(job.into())
+    pub async fn background_job_detail(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJobView> {
+        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let job = db
+                        .background_jobs()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
+                    authorization.require("background_job:detail", &id, &actor, executor).await?;
+                    Ok(job.into())
+                })
+            })
+            .await
     }
 
     /// 创建后台任务并登记逐项结果表（跨集合事务写入，按 `request_id` 幂等）。
@@ -424,7 +457,6 @@ impl BulkJobService {
     /// * `id` - 后台任务 ID
     /// * `req` - 取消请求（含期望版本）
     /// * `actor` - 已通过鉴权的审计操作人
-    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回取消后的任务视图。
@@ -438,32 +470,33 @@ impl BulkJobService {
         id: &str,
         req: CancelBackgroundJobRequest,
         actor: &AuditActor,
-        is_admin: bool,
     ) -> Result<BackgroundJobView> {
         req.validate()?;
-        let mut job = self.load_job_with_version(id, req.version).await?;
-        ensure_job_visible(&job, actor, is_admin)?;
-        job.cancel(erp_core::common::time::Instant::now())?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "background_job.cancel",
-            "background_job",
-            job.base.id.clone(),
-        )?;
         let db = self.db.clone();
-        let client = db.client().clone();
+        let authorization = self.authorization.clone();
         let audit_port = self.audit.clone();
-        let updated = client
+        let id = id.to_owned();
+        let actor = actor.clone();
+        db.client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let mut job = db
+                        .background_jobs()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
+                    authorization.require("background_job:cancel", &id, &actor, executor).await?;
+                    check_expected_version(job.base.version, req.version)?;
+                    job.cancel(erp_core::common::time::Instant::now())?;
+                    let audit =
+                        audit_port.resource_log(actor, "background_job.cancel", "background_job", id)?;
                     db.background_jobs().update(&mut job, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<BackgroundJob, crate::error::Error>(job)
+                    Ok(job.into())
                 })
             })
-            .await?;
-
-        Ok(updated.into())
+            .await
     }
 
     /// 分页查询任务逐项结果。
@@ -476,7 +509,6 @@ impl BulkJobService {
     /// * `page` - 页码（1 起）
     /// * `page_size` - 单页条数
     /// * `actor` - 已通过鉴权的审计操作人
-    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回当前页逐项结果行与总数。
@@ -490,27 +522,43 @@ impl BulkJobService {
         page: u64,
         page_size: u32,
         actor: &AuditActor,
-        is_admin: bool,
     ) -> Result<PageView<BackgroundJobItemView>> {
         if page == 0 {
-            return Err(Error::ValidationError("页码必须大于0".to_string()));
+            return Err(Error::ValidationError("页码必须大于0".into()));
         }
-        let owner = self
-            .db
-            .background_jobs()
-            .find_by_id(job_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
-        ensure_job_visible(&owner, actor, is_admin)?;
-        let job_id = BackgroundJobId::new(job_id);
-        let result = self
-            .db
-            .background_job_items()
-            .search_job_items(&job_id, status, page, page_size, &mut NoTransaction)
-            .await?;
-        let items = result.items.into_iter().map(BackgroundJobItemView::from).collect();
-
-        Ok(PageView { items, total: result.total, page, page_size })
+        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let job_id = job_id.to_owned();
+        let actor = actor.clone();
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    db.background_jobs()
+                        .find_by_id(&job_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
+                    authorization.require("background_job_item:list", &job_id, &actor, executor).await?;
+                    let result = db
+                        .background_job_items()
+                        .search_job_items(
+                            &BackgroundJobId::new(job_id.clone()),
+                            status,
+                            page,
+                            page_size,
+                            executor,
+                        )
+                        .await?;
+                    authorization.require("background_job_item:list", &job_id, &actor, executor).await?;
+                    Ok(PageView {
+                        items: result.items.into_iter().map(Into::into).collect(),
+                        total: result.total,
+                        page,
+                        page_size,
+                    })
+                })
+            })
+            .await
     }
 
     /// 校验批量冻结目标中业务单据类对象已注册（跨域 D02 仓储读取）。
@@ -607,49 +655,6 @@ impl BulkJobService {
 
         Ok(updated.into())
     }
-
-    /// 按 ID 加载后台任务并校验期望版本。
-    ///
-    /// # 参数
-    /// * `id` - 后台任务 ID
-    /// * `expected_version` - 请求携带的期望版本
-    ///
-    /// # 返回
-    /// 返回加载的任务实体。
-    ///
-    /// # 错误
-    /// 任务不存在返回 `NotFound`；版本不一致返回 `ConflictError`。
-    async fn load_job_with_version(&self, id: &str, expected_version: u64) -> Result<BackgroundJob> {
-        let job = self
-            .db
-            .background_jobs()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
-        check_expected_version(job.base.version, expected_version)?;
-        Ok(job)
-    }
-}
-
-/// 校验操作人可见指定后台任务。
-///
-/// 管理员可见全部；普通用户仅可见自己创建的任务。
-///
-/// # 参数
-/// * `job` - 后台任务实体
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
-///
-/// # 返回
-/// 可见时返回 `Ok(())`。
-///
-/// # 错误
-/// 非管理员访问他人任务时返回 `Forbidden`。
-fn ensure_job_visible(job: &BackgroundJob, actor: &AuditActor, is_admin: bool) -> Result<()> {
-    if is_admin || job.requested_by == actor.id() {
-        return Ok(());
-    }
-    Err(Error::Forbidden("只能查看自己创建的后台任务".to_string()))
 }
 
 /// 把支撑领域错误还原为持久化错误，供幂等创建任务识别唯一键冲突。

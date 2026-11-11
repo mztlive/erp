@@ -1,6 +1,6 @@
 //! 库存授权、审计与外部事实 adapter。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -16,9 +16,10 @@ use erp_fulfillment_execution::inventory_adjustment::InventoryAdjustmentProcess;
 use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_inventory::{
-    AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAuditPort, InventoryAuthorization,
-    InventoryReadProof, InventoryScopeMeta, InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact,
-    SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope,
+    AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAction, InventoryAuditPort,
+    InventoryAuthorization, InventoryReadProof, InventoryScopeMeta, InventoryScopeSet, InventoryService,
+    PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort,
+    WarehouseRevisionFact, WarehouseScope,
 };
 use erp_warehouse::WarehouseExt;
 use erp_warehouse::authorization::{WarehouseAuthorization, WarehouseRead};
@@ -35,25 +36,6 @@ mod people;
 pub use people::MongoInventoryPeopleFacts;
 
 const DETAIL_PERMISSION: &str = "stock_adjustment:detail";
-const ADJUSTMENT_LIST_PERMISSION: &str = "stock_adjustment:list";
-const CREATE_PERMISSION: &str = "stock_adjustment:create";
-const UPDATE_PERMISSION: &str = "stock_adjustment:update";
-const BALANCE_LIST_PERMISSION: &str = "stock_balance:list";
-const BALANCE_DETAIL_PERMISSION: &str = "stock_balance:detail";
-const MOVEMENT_LIST_PERMISSION: &str = "stock_movement:list";
-const RESERVATION_LIST_PERMISSION: &str = "stock_reservation:list";
-/// 按原授权次序保留八个库存资源动作槽与同角色详情资格要求。
-const INVENTORY_OPERATIONS: [(&str, bool); 8] = [
-    (BALANCE_LIST_PERMISSION, false),
-    (BALANCE_DETAIL_PERMISSION, false),
-    (MOVEMENT_LIST_PERMISSION, false),
-    (RESERVATION_LIST_PERMISSION, false),
-    (ADJUSTMENT_LIST_PERMISSION, true),
-    (DETAIL_PERMISSION, false),
-    (CREATE_PERMISSION, true),
-    (UPDATE_PERMISSION, true),
-];
-
 /// 从身份事实计算库存仓库范围的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoInventoryAuthorization {
@@ -98,42 +80,36 @@ impl AuthorizationPort for MongoInventoryAuthorization {
     async fn authorize(
         &self,
         actor: &AuditActor,
+        actions: &[InventoryAction],
         executor: &mut dyn Executor,
     ) -> erp_inventory::Result<InventoryAuthorization> {
-        authorize_inventory(&self.db, &self.rbac, actor, executor).await
+        authorize_inventory(&self.db, &self.rbac, actor, actions, executor).await
     }
 }
 
-/// 在调用方执行器快照上计算八项库存仓库范围。
-///
-/// 账号不能登录时返回未激活授权，不继续解析范围。
-///
+/// 在调用方执行器上仅计算当前用例需要的动作范围。
 /// # 参数
-/// * `db` - 身份与库存集合所在数据库。
-/// * `rbac` - 现有 RBAC 快照服务。
-/// * `actor` - 已认证操作人。
-/// * `executor` - 调用方选择的执行器。
-///
+/// db、rbac 为共享身份设施；actor 为操作人；actions 为所需动作；executor 为原执行器。
 /// # 返回
-/// 返回八项操作的仓库范围及结存、流水、调整列表元数据。无单项权限时该项为空范围。
-///
+/// 仅包含本次所需动作的授权快照；未请求动作保持空范围。
 /// # 错误
-/// 登录资格、策略或数据范围查询失败时返回映射后的库存错误。不截断已授权仓库集合。
-///
-/// # Panics
-/// 固定库存权限码无法解析，或八项范围没有按顺序取完时 panic。
+/// 空动作集合、身份取证或范围解析失败时返回错误。
 pub async fn authorize_inventory(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
+    actions: &[InventoryAction],
     executor: &mut dyn Executor,
 ) -> erp_inventory::Result<InventoryAuthorization> {
-    let permissions = INVENTORY_OPERATIONS
+    let actions = actions.iter().copied().collect::<BTreeSet<_>>();
+    if actions.is_empty() {
+        return Err(erp_inventory::Error::ValidationError("库存授权动作不能为空".into()));
+    }
+    let permissions = actions
         .iter()
-        .map(|(code, _)| Permission::parse(*code))
+        .map(|action| Permission::parse(action.permission()))
         .collect::<erp_core::Result<Vec<_>>>()?;
-    let function = super::authorization::authorization_service(db.clone(), rbac.clone());
-    if function
+    if super::authorization::authorization_service(db.clone(), rbac.clone())
         .permissions(actor, &permissions, executor)
         .await
         .map_err(|error| map_svc(error.into()))?
@@ -141,36 +117,29 @@ pub async fn authorize_inventory(
     {
         return Ok(InventoryAuthorization::inactive());
     }
-    let mut scopes = Vec::with_capacity(INVENTORY_OPERATIONS.len());
-    let mut metas = Vec::with_capacity(INVENTORY_OPERATIONS.len());
-    for (code, requires_detail) in INVENTORY_OPERATIONS {
-        let (scope, meta) = inventory_scope(db, rbac, actor, code, requires_detail, executor).await?;
-        scopes.push(scope);
-        metas.push(meta);
+    let mut scopes = BTreeMap::new();
+    for action in actions {
+        scopes.insert(action, inventory_scope(db, rbac, actor, action, executor).await?);
     }
-    Ok(inventory_snapshot(scopes, metas))
+    Ok(inventory_snapshot(scopes))
 }
 
-/// 对固定入口执行 identity 查询；无该项权限只影响该项结果。
+/// 对单个固定入口执行 identity 查询；无该项权限只清空该项范围。
 async fn inventory_scope(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
-    code: &str,
-    requires_detail: bool,
+    action: InventoryAction,
     executor: &mut dyn Executor,
 ) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
-    let extra = requires_detail
+    let extra = action
+        .requires_adjustment_detail()
         .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定库存权限"))
         .into_iter()
         .collect();
-    let service = WarehouseAuthorization::new(
-        db.clone(),
-        rbac.clone(),
-        Permission::parse(code).expect("固定库存权限"),
-        extra,
-    )
-    .map_err(|error| map_svc(error.into()))?;
+    let service =
+        WarehouseAuthorization::new(db.clone(), rbac.clone(), Permission::parse(action.permission())?, extra)
+            .map_err(|error| map_svc(error.into()))?;
     match service.ids(actor, executor).await {
         Ok(read) => Ok((
             WarehouseScope::from_authorized(
@@ -184,27 +153,41 @@ async fn inventory_scope(
     }
 }
 
+/// 按动作填入已取证的范围；未请求的动作不持有身份或复验证明。
+fn inventory_snapshot(
+    mut scopes: BTreeMap<InventoryAction, (WarehouseScope, InventoryScopeMeta)>,
+) -> InventoryAuthorization {
+    let mut take = |action| {
+        scopes.remove(&action).unwrap_or_else(|| (WarehouseScope::empty(), InventoryScopeMeta::empty()))
+    };
+    let (balance_list_scope, balance) = take(InventoryAction::BalanceList);
+    let (balance_detail_scope, _) = take(InventoryAction::BalanceDetail);
+    let (movement_list_scope, movement) = take(InventoryAction::MovementList);
+    let (reservation_list_scope, _) = take(InventoryAction::ReservationList);
+    let (adjustment_list_scope, adjustment) = take(InventoryAction::AdjustmentList);
+    let (read_scope, _) = take(InventoryAction::AdjustmentDetail);
+    let (create_scope, _) = take(InventoryAction::Create);
+    let (update_scope, _) = take(InventoryAction::Update);
+    InventoryAuthorization::from_scope_set(InventoryScopeSet {
+        actor_active: true,
+        balance_list_scope,
+        balance_detail_scope,
+        movement_list_scope,
+        reservation_list_scope,
+        adjustment_list_scope,
+        read_scope,
+        create_scope,
+        update_scope,
+    })
+    .with_list_meta(balance, movement, adjustment)
+}
+
 struct InventoryWarehouseProof(WarehouseRead);
 #[async_trait]
 impl InventoryReadProof for InventoryWarehouseProof {
     async fn validate(&self, executor: &mut dyn Executor) -> erp_inventory::Result<()> {
         self.0.validate(executor).await.map_err(|error| map_svc(error.into()))
     }
-}
-
-/// 将已经授权的固定顺序查询结果写入展示快照。
-fn inventory_snapshot(scopes: Vec<WarehouseScope>, metas: Vec<InventoryScopeMeta>) -> InventoryAuthorization {
-    let mut scopes = scopes.into_iter();
-    let mut metas = metas.into_iter();
-    let mut next = || scopes.next().expect("八项已解析范围");
-    let mut next_meta = || metas.next().expect("八项已解析范围");
-    let balance_meta = next_meta();
-    let _ = next_meta();
-    let movement_meta = next_meta();
-    let _ = next_meta();
-    let adjustment_meta = next_meta();
-    InventoryAuthorization::from_scopes(true, next(), next(), next(), next(), next(), next(), next(), next())
-        .with_list_meta(balance_meta, movement_meta, adjustment_meta)
 }
 
 /// 把库存审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -567,7 +550,7 @@ pub fn inventory_adjustment_process(db: Database, rbac: SharedRbacService) -> In
         approval_runtime(db.clone(), rbac.clone()),
     ));
     let inventory = Arc::new(inventory_service(db.clone(), rbac.clone()));
-    InventoryAdjustmentProcess::new(db, rbac, workflow, inventory)
+    InventoryAdjustmentProcess::new(db, workflow, inventory)
 }
 
 fn map_audit_to_inventory(error: erp_audit::Error) -> erp_inventory::Error {

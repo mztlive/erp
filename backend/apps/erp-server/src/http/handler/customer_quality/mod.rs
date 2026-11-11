@@ -16,6 +16,7 @@ use crate::http::extractor::{Json, Query};
 use crate::http::handler::customer::has_permission;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
+use crate::wiring::customer_access;
 
 /// 双口径共用的读取门槛：客户查询与销售单查询动作缺一不可。
 async fn ensure_list_access(state: &HttpState, actor: &AuditActor) -> std::result::Result<(), Error> {
@@ -28,12 +29,12 @@ async fn ensure_list_access(state: &HttpState, actor: &AuditActor) -> std::resul
     Ok(())
 }
 
-/// 当前负责口径需要客户读模型 Port；未注入组合层 adapter 时失败关闭。
+/// 当前负责口径使用同一客户授权服务完成查询和复验。
 fn read_model(state: &HttpState) -> CustomerQualityReadModel {
     CustomerQualityReadModel::new(
         state.application().db(),
         state.application().rbac(),
-        crate::wiring::MongoCustomerDataScope::shared(state.application().db(), state.application().rbac()),
+        customer_access(state.application().db(), state.application().rbac()),
     )
 }
 

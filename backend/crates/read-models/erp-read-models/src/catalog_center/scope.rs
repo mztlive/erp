@@ -7,9 +7,7 @@ use std::sync::Arc;
 use application_core::{AuditActor, OwnershipPage};
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::service::catalog::{prepare_product_list, product_page_view};
-use erp_catalog::{
-    CatalogAccess, CatalogDataScopePort, ProductFilter, ProductListParams, ProductListView, ProductView,
-};
+use erp_catalog::{CatalogAccess, ProductFilter, ProductListParams, ProductListView, ProductView};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use persistence_core::Transactional;
@@ -47,7 +45,7 @@ impl CatalogCenterReadService {
             policy_version: snapshot.policy_version,
             organization_version: snapshot.organization_version,
             as_of: snapshot.as_of,
-            empty_reason: snapshot.no_scope.then_some("no_scope"),
+            empty_reason: None,
             scope_summary: "商品按岗位权限共享；维护人及采购负责人筛选为额外收窄",
         })
     }
@@ -64,8 +62,7 @@ impl CatalogCenterReadService {
     /// # 错误
     /// 不存在或不在范围内返回 NotFound。
     pub async fn product_detail(&self, id: &str, actor: &AuditActor) -> Result<ProductView> {
-        let db = self.db.clone().ok_or_else(|| Error::Internal("商品中心未装配数据库".into()))?;
-        let access = CatalogAccess::new(db, self.data_scope.clone());
+        let access = self.access.clone().ok_or_else(|| Error::Internal("商品中心未装配授权服务".into()))?;
         let product =
             access.require_product(actor, "detail", id, &mut persistence_core::NoTransaction).await?;
         let mut filter = prepare_product_list(&ProductListParams {
@@ -83,7 +80,7 @@ impl CatalogCenterReadService {
     async fn list_snapshot(&self, params: &ProductListParams, actor: &AuditActor) -> Result<ProductSnapshot> {
         let db = self.db.clone().ok_or_else(|| Error::Internal("商品中心未装配数据库".into()))?;
         let query = self.query.clone();
-        let data_scope = self.data_scope.clone();
+        let access = self.access.clone().ok_or_else(|| Error::Internal("商品中心未装配授权服务".into()))?;
         let procurement = self.procurement.clone();
         let params = params.clone();
         let actor = actor.clone();
@@ -91,7 +88,7 @@ impl CatalogCenterReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    build_snapshot(db, query, data_scope, procurement, params, actor, executor).await
+                    build_snapshot(db, query, access, procurement, params, actor, executor).await
                 })
             })
             .await
@@ -105,26 +102,23 @@ struct ProductSnapshot {
     policy_version: u64,
     organization_version: u64,
     as_of: String,
-    no_scope: bool,
 }
 
 /// 在同一授权快照中查询商品，并按已授权行批量补齐维护人姓名。
 async fn build_snapshot(
     db: mongodb::Database,
     query: Arc<dyn CatalogSupplyQueryPort>,
-    data_scope: Arc<dyn CatalogDataScopePort>,
+    access: CatalogAccess,
     procurement: Arc<dyn ProductProcurementOwners>,
     params: ProductListParams,
     actor: AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ProductSnapshot> {
-    let access = CatalogAccess::new(db.clone(), data_scope.clone());
-    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-    let no_scope = !context.has_scope_rules();
+    let mut context = access.resolve(&actor, "list", executor).await?;
     context.validate(executor).await?;
     let mut filter = prepare_product_list(&params)?;
-    filter.scope = Some(scope.clone());
-    apply_org_filter(&mut filter, data_scope.as_ref(), &params, executor).await?;
+    filter.scope = Some(context.clone());
+    apply_org_filter(&mut filter, &access, &params, executor).await?;
     apply_procurement_filter(query.as_ref(), &mut filter, procurement.as_ref(), &params, executor).await?;
     let page = query.product_page(&filter, executor).await?;
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
@@ -136,7 +130,6 @@ async fn build_snapshot(
     apply_maintainer_names(&mut view.items, &names);
     context.validate(executor).await?;
     Ok(ProductSnapshot {
-        no_scope,
         page: view,
 
         scope_version: context.scope_version,
@@ -166,7 +159,7 @@ pub(super) fn apply_maintainer_names(rows: &mut [ProductView], names: &HashMap<S
 /// 包含下级却没有组织时返回 `ValidationError`，不得展开成全部组织。
 async fn apply_org_filter(
     filter: &mut ProductFilter,
-    data_scope: &dyn CatalogDataScopePort,
+    access: &CatalogAccess,
     params: &ProductListParams,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
@@ -179,7 +172,7 @@ async fn apply_org_filter(
     if params.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
-    let expanded = data_scope
+    let expanded = access
         .expand_org_units(org_ids.as_slice(), params.include_descendants.unwrap_or(false), executor)
         .await?;
     filter.business_org_unit_ids = Some(expanded.into_iter().collect());

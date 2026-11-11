@@ -115,16 +115,14 @@ impl PayableProcess {
         let db = self.db.clone();
         let id = id.to_owned();
         let actor = actor.clone();
-        let purchase = self.authorization_rbac.purchase.clone();
         let funds = self.authorization_rbac.funds.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let qualification = funds
-                        .supplier_payment_full_read_qualification(&id, &actor, &purchase, executor)
-                        .await?;
+                    let qualification =
+                        funds.supplier_payment_full_read_qualification(&id, &actor, executor).await?;
                     let payment = db
                         .supplier_payments()
                         .find_by_id(&id, executor)

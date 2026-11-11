@@ -7,10 +7,10 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_contract::authorization::ContractAuthorization;
 use erp_contract::{
-    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractScopePorts,
-    ContractService, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
-    Error as ContractError, FailClosedContractDataScopePort, FailClosedContractParticipantPort,
+    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractService,
+    CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort, Error as ContractError,
     PreparedContractAudit,
 };
 use erp_core::common::time::BusinessDate;
@@ -26,7 +26,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::audit_conversion::{PreparedAudit, map_audit_error};
-use super::contract_data_scope::MongoContractDataScope;
+use super::contract_data_scope::contract_authorization;
 use super::contract_template::MongoSigningCompanies;
 
 /// 把合同审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -385,7 +385,7 @@ impl AccountNamePort for MongoContractAccounts {
     }
 }
 
-/// 构造只装载合同事实的服务；范围 Port 失败关闭。
+/// 构造只装载合同事实的服务；授权能力 失败关闭。
 ///
 /// # 参数
 /// * `db` - 合同集合所在数据库
@@ -406,10 +406,7 @@ pub fn contract_service(db: Database) -> ContractService {
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
-        ContractScopePorts {
-            data_scope: FailClosedContractDataScopePort::shared(),
-            participants: FailClosedContractParticipantPort::shared(),
-        },
+        ContractAuthorization::unwired(db),
     )
 }
 
@@ -435,10 +432,7 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
-        ContractScopePorts {
-            data_scope: MongoContractDataScope::shared(db.clone(), rbac),
-            participants: MongoContractParticipants::shared(db),
-        },
+        contract_authorization(db, rbac),
     )
 }
 
@@ -455,15 +449,9 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
 /// 无。
 ///
 /// # 关键业务约束
-/// HTTP 与命名 Process 必须经此入口，不得把 RBAC 直接交给合同域。
+/// HTTP 与命名 Process 复用固定模型和完整事实适配。
 pub fn contract_access(db: Database, rbac: SharedRbacService) -> erp_contract::ContractAccess {
-    erp_contract::ContractAccess::new(
-        db.clone(),
-        MongoContractDataScope::shared(db.clone(), rbac),
-        MongoContractAssignments::shared(db.clone()),
-        MongoContractParticipants::shared(db.clone()),
-        MongoContractCustomers::shared(db),
-    )
+    erp_contract::ContractAccess::new(db.clone(), contract_authorization(db, rbac))
 }
 
 fn customer_account_fact(account: erp_customer::CustomerAccount) -> CustomerAccountFact {

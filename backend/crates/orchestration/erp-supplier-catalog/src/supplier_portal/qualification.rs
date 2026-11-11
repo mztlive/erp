@@ -38,16 +38,8 @@ impl SupplierPortalProcess {
         if let Some((id, _, _)) = app.snapshot.target() {
             access.require_offering(actor, "update", id, executor).await?;
         } else {
-            let supplier = self.active_supplier(&app.supplier_id, executor).await?;
-            access
-                .ensure_writable(
-                    actor,
-                    "create",
-                    &supplier.maintainer_user_id,
-                    &supplier.business_org_unit_id,
-                    executor,
-                )
-                .await?;
+            self.active_supplier(&app.supplier_id, executor).await?;
+            access.ensure_writable(actor, "create", executor).await?;
         }
         Ok(())
     }
@@ -70,11 +62,9 @@ impl SupplierPortalProcess {
         draft: &NewProductDraft,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let supplier = self.internal_supplier(actor, "detail", &draft.supplier_id, executor).await?;
-        let owner = &supplier.maintainer_user_id;
-        let org = &supplier.business_org_unit_id;
-        self.services.catalog_access.ensure_writable(actor, "create", owner, org, executor).await?;
-        self.services.offering_access.ensure_writable(actor, "create", owner, org, executor).await?;
+        self.internal_supplier(actor, "detail", &draft.supplier_id, executor).await?;
+        self.services.catalog_access.ensure_writable(actor, "create", executor).await?;
+        self.services.offering_access.ensure_writable(actor, "create", executor).await?;
         Ok(())
     }
 
@@ -147,7 +137,7 @@ impl SupplierPortalProcess {
         let (owner, org) = self.offering_maintainer(owner, actor, executor).await?;
         let maintainer = self.reviewer_actor(&owner, executor).await?;
         let catalog = &self.services.catalog_access;
-        catalog.ensure_writable(&maintainer, "update", &owner, &org, executor).await?;
+        catalog.ensure_writable(&maintainer, "update", executor).await?;
         Ok((owner, org))
     }
 
@@ -172,7 +162,7 @@ impl SupplierPortalProcess {
         let maintainer = self.reviewer_actor(owner, executor).await?;
         let access = &self.services.offering_access;
         let (owner, org) = access.maintainer_org(Some(owner), actor, executor).await?;
-        access.ensure_writable(&maintainer, "update", &owner, &org, executor).await?;
+        access.ensure_writable(&maintainer, "update", executor).await?;
         Ok((owner, org))
     }
 }

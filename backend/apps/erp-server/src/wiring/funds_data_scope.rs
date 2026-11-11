@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use erp_core::common::time::Instant;
 use erp_finance::ports::funds_scope::FundsDataScopePort;
 use erp_identity::SharedRbacService;
 use erp_read_models::Result as ReadResult;
@@ -69,22 +68,6 @@ impl FundsDataScopePort for MongoFundsDataScope {
             executor,
             erp_finance::Error::RepositoryError,
             map_identity_error,
-        )
-        .await
-    }
-
-    async fn org_member_ids(
-        &self,
-        org_unit_ids: &BTreeSet<String>,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> erp_finance::Result<Vec<String>> {
-        scope_support::org_member_ids(
-            &self.db,
-            org_unit_ids,
-            at,
-            executor,
-            erp_finance::Error::RepositoryError,
         )
         .await
     }

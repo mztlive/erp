@@ -9,8 +9,8 @@ mod warehouse;
 
 pub use audit::{FailClosedAuditPort, InventoryAuditPort, PreparedInventoryAudit};
 pub use authorization::{
-    AuthorizationPort, FailClosedAuthorizationPort, InventoryAuthorization, InventoryReadProof,
-    InventoryScopeMeta, WarehouseScope,
+    AuthorizationPort, FailClosedAuthorizationPort, InventoryAction, InventoryAuthorization,
+    InventoryReadProof, InventoryScopeMeta, InventoryScopeSet, WarehouseScope,
 };
 pub use catalog::{CatalogFactsPort, FailClosedCatalogFacts, SkuFact, SkuRevisionFact};
 pub use fulfillment::{FailClosedFulfillmentFacts, FulfillmentFactsPort, ReceiptNoFact};

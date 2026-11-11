@@ -23,23 +23,23 @@ pub struct SettlementReviewerOption {
     pub account: String,
 }
 
-/// 完整复核功能资格必须来自同一启用角色；岗位分离由业务检查。
+/// 返回同一启用角色具备完整复核资格时读取的账号摘要；岗位分离由业务检查。
 async fn qualified_reviewer(
     db: &Database,
     identity: &SharedRbacService,
-    account: &AccountSummary,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<bool> {
+) -> Result<Option<AccountSummary>> {
     let required =
         ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"]
             .into_iter()
             .map(Permission::parse)
             .collect::<StdResult<Vec<_>, _>>()?;
-    let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
     Ok(crate::authorization::features(db.clone(), identity.clone())
-        .permissions(&actor, &required, executor)
+        .permissions(actor, &required, executor)
         .await?
-        .is_some_and(|qualified| qualified.same_role(&required)))
+        .filter(|qualified| qualified.same_role(&required))
+        .map(|qualified| qualified.account().clone()))
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
@@ -73,7 +73,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             if account.id == actor.id() || !account.is_active_backoffice() {
                 continue;
             }
-            if qualified_reviewer(&self.db, &self.work_items.identity, &account, &mut NoTransaction).await? {
+            let candidate = AuditActor::new(account.id, account.login_account, account.kind);
+            if let Some(account) =
+                qualified_reviewer(&self.db, &self.work_items.identity, &candidate, &mut NoTransaction)
+                    .await?
+            {
                 options.push(SettlementReviewerOption {
                     user_id: account.id,
                     display_name: account.display_name,
@@ -133,13 +137,21 @@ pub(super) async fn ensure_reviewer(
     _org: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let account = identity_service
-        .directory()
-        .account(reviewer_id, executor)
-        .await?
-        .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
-    if reviewer_id == preparer_id || !qualified_reviewer(db, identity_service, &account, executor).await? {
+    if reviewer_id == preparer_id {
+        identity_service
+            .directory()
+            .account(reviewer_id, executor)
+            .await?
+            .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
     }
-    Ok(())
+    let actor = AuditActor::new(reviewer_id.into(), reviewer_id.into(), AccountKind::Admin);
+    let qualified = qualified_reviewer(db, identity_service, &actor, executor).await?;
+    if qualified.is_some() {
+        return Ok(());
+    }
+    if qualified.is_none() && identity_service.directory().account(reviewer_id, executor).await?.is_none() {
+        return Err(Error::ValidationError("复核人不存在，请重新选择".into()));
+    }
+    Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()))
 }

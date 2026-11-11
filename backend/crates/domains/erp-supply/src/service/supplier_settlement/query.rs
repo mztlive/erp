@@ -3,6 +3,7 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::{SupplierSettlementService, dto, zero_amount};
+use crate::authorization::SettlementResolvedScope;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement::{
     StatementListQuery, SupplierSettlementItemView, SupplierSettlementStatementListParams,
@@ -11,7 +12,6 @@ use crate::dto::supplier_settlement::{
 use crate::entity::supplier_settlement::{
     SettlementStatus, SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
-use crate::ports::SettlementResolvedScope;
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
 use crate::repository::supplier_settlement::SupplierSettlementStatementRow;
@@ -69,7 +69,7 @@ impl SupplierSettlementService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let (context, scope) = self.access().resolve(actor, "list", executor).await?;
+        let context = self.access().resolve(actor, "list", executor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
         context.validate(executor).await?;
         if !context.has_scope_rules() {
@@ -84,7 +84,7 @@ impl SupplierSettlementService {
         .await?;
         let mut filter = statement_filter(&query);
         filter.keyword_supplier_ids = keyword_supplier_ids;
-        filter.authorized_scope = Some(scope);
+        filter.authorized_scope = Some(context.clone());
         filter.handler_open_statement_ids = handler_open_statement_ids;
         filter.business_org_unit_ids = org_ids.map(|ids| ids.into_iter().collect());
         let mut view = self.load_statement_page(&filter, Some(&context), executor).await?;

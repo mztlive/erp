@@ -22,7 +22,9 @@ use erp_supply::dto::supplier_offering::{
     ReviseSupplierOfferingResult, UpdateSupplierOfferingAvailabilityRequest,
     UpdateSupplierOfferingAvailabilityResult,
 };
-use erp_supply::{HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
+use erp_supply::{
+    HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView, OfferingAccess,
+};
 use persistence_core::NoTransaction;
 
 use crate::http::errors::{Error, Result};
@@ -47,7 +49,7 @@ pub async fn list(
 ) -> Result<SupplierOfferingListView> {
     let mut page = SupplierOfferingReadService::new(
         state.application().db(),
-        crate::wiring::MongoOfferingDataScope::shared(state.application().db(), state.application().rbac()),
+        OfferingAccess::new(state.application().db(), state.application().rbac()),
         MongoOfferingProcurementOwners::shared(state.application().db()),
     )
     .list(&params, &actor)

@@ -94,56 +94,6 @@ impl PurchaseAccess {
         Ok((order, version))
     }
 
-    /// 在调用方事务内证明范围并读取当前可操作单据。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `action` - 已注册的采购动作
-    /// * `id` - 采购单主键
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 对象在范围内时返回采购单。
-    ///
-    /// # 错误
-    /// 读取动作对不可见对象返回 NotFound；写动作同样不泄露存在性。
-    ///
-    /// # 关键业务约束
-    /// 写命令必须在原领域事务内调用；历史参与不授予修改。
-    pub async fn require_object(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<PurchaseOrder> {
-        self.inner.require_object(actor, action, id, &[], executor).await.map_err(crate::Error::from)
-    }
-
-    /// 新单使用即将持久化的显式责任解释创建与提交范围。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人，通常写入为采购负责人
-    /// * `order` - 拟持久化的采购单
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 创建与提交范围同时覆盖责任事实时成功。
-    ///
-    /// # 错误
-    /// 无创建或提交动作、范围为空或责任不在范围内时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 创建并提交必须由同一角色同时提供两个动作；不得由创建人审计字段兜底。
-    pub async fn ensure_create_and_submit(
-        &self,
-        actor: &AuditActor,
-        order: &PurchaseOrder,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.inner.ensure_create_and_submit(actor, order, executor).await.map_err(crate::Error::from)
-    }
-
     /// 按资源动作证明范围，读取动作附加合法历史参与。
     ///
     /// # 参数

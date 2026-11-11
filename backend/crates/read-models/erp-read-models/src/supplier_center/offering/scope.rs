@@ -10,7 +10,7 @@ use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_supply::repository::supplier_offering::SupplierOfferingFilter;
 use erp_supply::repository::supplier_offering::procurement::ProcurementOfferingRepositoryExt;
-use erp_supply::{OfferingAccess, OfferingDataScopePort, SupplierOfferingExt};
+use erp_supply::{OfferingAccess, SupplierOfferingExt};
 use persistence_core::Transactional;
 
 use super::procurement::{OfferingProcurementOwners, ensure_authorized_count};
@@ -46,7 +46,7 @@ impl SupplierOfferingReadService {
             policy_version: snapshot.policy_version,
             organization_version: snapshot.organization_version,
             as_of: snapshot.as_of,
-            empty_reason: snapshot.no_scope.then_some("no_scope"),
+            empty_reason: None,
             scope_summary: "供给按岗位权限共享；维护人及采购负责人筛选为额外收窄",
         })
     }
@@ -57,7 +57,7 @@ impl SupplierOfferingReadService {
         actor: &AuditActor,
     ) -> Result<OfferingSnapshot> {
         let db = self.db.clone();
-        let data_scope = self.data_scope.clone();
+        let access = self.access.clone();
         let procurement = self.procurement.clone();
         let params = params.clone();
         let actor = actor.clone();
@@ -65,7 +65,7 @@ impl SupplierOfferingReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(
-                    async move { build_snapshot(db, data_scope, procurement, params, actor, executor).await },
+                    async move { build_snapshot(db, access, procurement, params, actor, executor).await },
                 )
             })
             .await
@@ -79,23 +79,20 @@ struct OfferingSnapshot {
     policy_version: u64,
     organization_version: u64,
     as_of: String,
-    no_scope: bool,
 }
 
 async fn build_snapshot(
     db: mongodb::Database,
-    data_scope: Arc<dyn OfferingDataScopePort>,
+    access: OfferingAccess,
     procurement: Arc<dyn OfferingProcurementOwners>,
     params: SupplierOfferingListParams,
     actor: AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<OfferingSnapshot> {
-    let access = OfferingAccess::new(db.clone(), data_scope);
-    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-    let no_scope = !context.has_scope_rules();
+    let mut context = access.resolve(&actor, "list", executor).await?;
     context.validate(executor).await?;
     let mut query = super::prepare_list_query(&params)?;
-    query.scope = Some(scope.clone());
+    query.scope = Some(context.clone());
     let filter = apply_procurement_filter(&db, &query, procurement.as_ref(), &params, executor).await?;
     let bundle = match filter {
         Some(filter) => {
@@ -116,7 +113,6 @@ async fn build_snapshot(
     }
     context.validate(executor).await?;
     Ok(OfferingSnapshot {
-        no_scope,
         page: view,
 
         scope_version: context.scope_version,

@@ -58,6 +58,7 @@ impl AccessMapping for WarehouseMapping {
 }
 
 /// 当前事务中由统一权限服务产生的仓库身份查询。
+#[derive(Clone)]
 pub struct WarehouseAuthorization {
     db: Database,
     service: AuthorizationService,

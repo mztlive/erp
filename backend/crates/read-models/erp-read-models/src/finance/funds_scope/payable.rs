@@ -8,7 +8,6 @@ use erp_finance::dto::payable::PayableEntryView;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableAccountRow, PayableExt};
-use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -28,7 +27,6 @@ impl FundsAccess {
     /// # 参数
     /// * `params` - 应付子账列表请求。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器；本链路解析时不读取它。
     ///
     /// # 返回
     /// 最终授权应付子账页及同口径汇总。
@@ -39,14 +37,12 @@ impl FundsAccess {
         &self,
         params: &erp_finance::dto::payable::PayableAccountListParams,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self
-            .checked_payable_accounts(params, &query, actor, purchase_access, params.scope_version.as_deref())
-            .await?;
+        let snapshot =
+            self.checked_payable_accounts(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
     }
 
@@ -55,7 +51,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 应付往来子账主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 当前详情动作允许的应付子账行。
@@ -66,19 +61,15 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.load_payable_account_detail(&id, &actor, &purchase_access, executor).await
-                })
+                Box::pin(async move { this.load_payable_account_detail(&id, &actor, executor).await })
             })
             .await
     }
@@ -89,7 +80,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
     ///
     /// # 返回
@@ -102,13 +92,12 @@ impl FundsAccess {
         params: &erp_finance::dto::payable::PayableAccountListParams,
         query: &erp_finance::dto::payable::PayableAccountListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         checked_revalidated(
             expected,
-            || self.snapshot_payable_accounts(params, query, actor, purchase_access),
-            || self.revalidate_payable_accounts(query, actor, purchase_access),
+            || self.snapshot_payable_accounts(params, query, actor),
+            || self.revalidate_payable_accounts(query, actor),
         )
         .await
     }
@@ -119,7 +108,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 同一事务内形成的授权应付子账页。
@@ -131,20 +119,16 @@ impl FundsAccess {
         params: &erp_finance::dto::payable::PayableAccountListParams,
         query: &erp_finance::dto::payable::PayableAccountListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         let this = self.clone();
         let params = params.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.load_payable_accounts(&params, &query, &actor, &purchase_access, executor).await
-                })
+                Box::pin(async move { this.load_payable_accounts(&params, &query, &actor, executor).await })
             })
             .await
     }
@@ -155,7 +139,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求，用于比对范围版本。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -168,11 +151,10 @@ impl FundsAccess {
         params: &erp_finance::dto::payable::PayableAccountListParams,
         query: &erp_finance::dto::payable::PayableAccountListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         let (_access, authorization) =
-            self.resolve_with_purchase(actor, "payable_account", "list", purchase_access, executor).await?;
+            self.resolve_with_purchase(actor, "payable_account", "list", executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "应付子账无可见范围"));
         }
@@ -202,20 +184,17 @@ impl FundsAccess {
         &self,
         query: &erp_finance::dto::payable::PayableAccountListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<String> {
         let this = self.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (_, authorization) = this
-                        .resolve_with_purchase(&actor, "payable_account", "list", &purchase_access, executor)
-                        .await?;
+                    let (_, authorization) =
+                        this.resolve_with_purchase(&actor, "payable_account", "list", executor).await?;
                     if authorization.empty() {
                         return Ok(authorization.context.scope_version.clone());
                     }
@@ -291,7 +270,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 应付往来子账主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -303,11 +281,10 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
         let (_access, authorization) =
-            self.resolve_with_purchase(actor, "payable_account", "detail", purchase_access, executor).await?;
+            self.resolve_with_purchase(actor, "payable_account", "detail", executor).await?;
         let accounts = self
             .db
             .payable_accounts()
@@ -318,7 +295,7 @@ impl FundsAccess {
         let key = source_key(account.source_type, &account.source_document_id);
         let mut facts = self.purchase_fact_map(std::slice::from_ref(&key), executor).await?;
         let allowed = self.payable_targets(&authorization, &facts, executor).await?;
-        if !allowed.as_ref().is_some_and(|ids| ids.contains(&key)) {
+        if !allowed.contains(&key) {
             return Err(Error::NotFound("应付往来子账不存在".into()));
         }
         let fact = facts.remove(&key).ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;

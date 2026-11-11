@@ -12,7 +12,6 @@ use erp_finance::ports::payment_restoration::PaymentRequestRestorationPort;
 use erp_finance::service::payable::payment_reversal::{
     PaymentReversalFact, PaymentReversalWrite, load_posted_payment_for_reversal, prepare_payment_reversal,
 };
-use erp_identity::SharedRbacService;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::PaymentReversalView;
 use erp_returns::entity::returns::PaymentReversal;
@@ -33,7 +32,6 @@ impl PaymentReversalProcess {
     ///
     /// # 参数
     /// * `db` - 组合根数据库。
-    /// * `_rbac` - 与组合根装配签名一致；本流程不读取该参数。
     /// * `restoration` - 应用装配的原付款申请恢复端口。
     ///
     /// # 返回
@@ -41,11 +39,7 @@ impl PaymentReversalProcess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(
-        db: Database,
-        _rbac: SharedRbacService,
-        restoration: Arc<dyn PaymentRequestRestorationPort<Error = Error>>,
-    ) -> Self {
+    pub fn new(db: Database, restoration: Arc<dyn PaymentRequestRestorationPort<Error = Error>>) -> Self {
         Self { db, restoration }
     }
 

@@ -65,22 +65,22 @@ pub(super) fn receipt_tuples(
     })
 }
 
-/// 授权集合内的归属订单；`None` 表示公司范围不限制关联单。
+/// 授权集合内的归属订单；空集合不允许任何关联单。
 ///
 /// # 参数
 /// * `tuples` - 关联责任元组。
-/// * `allowed` - 允许的来源主键；`None` 表示不限制。
+/// * `allowed` - 允许的来源主键。
 ///
 /// # 返回
-/// 去重后的来源主键。`allowed` 为 `Some` 时只保留其中的来源。
+/// 去重后的来源主键，只保留授权集合中的来源。
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn matched_orders(tuples: &[OrderTuple], allowed: &Option<BTreeSet<String>>) -> Vec<String> {
+pub(super) fn matched_orders(tuples: &[OrderTuple], allowed: &BTreeSet<String>) -> Vec<String> {
     tuples
         .iter()
         .filter_map(|(order, _, _, _, _)| order.clone())
-        .filter(|order| allowed.as_ref().is_none_or(|set| set.contains(order)))
+        .filter(|order| allowed.contains(order))
         .collect::<Vec<_>>()
         .into_iter()
         .collect::<BTreeSet<_>>()
@@ -410,9 +410,8 @@ impl FundsAccess {
                 executor,
             )
             .await?;
-        let allowed = Some(
-            versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect(),
-        );
+        let allowed =
+            versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect();
         let expected = rows.len();
         let decided = decide_receipt_rows(
             rows,
@@ -509,7 +508,7 @@ fn decide_receipt_rows(
     rows: Vec<CustomerReceiptRow>,
     links: &HashMap<String, Vec<ReceiptLink>>,
     facts: &HashMap<String, LinkedSalesFact>,
-    allowed: &Option<BTreeSet<String>>,
+    allowed: &BTreeSet<String>,
     operators: &HashMap<String, Vec<String>>,
     condition: &FundsLinkedCondition,
     whole_ids: &BTreeSet<String>,
@@ -627,7 +626,7 @@ impl FundsAccess {
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.sales_fact_map(&order_ids, executor).await?;
         let authorized = self.authorized_sales_targets(&authorization, &order_ids, executor).await?;
-        let allowed = authorized.map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let allowed = authorized.into_iter().collect::<BTreeSet<_>>();
         let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
             return Err(Error::NotFound("客户回款单不存在".into()));
@@ -927,7 +926,7 @@ mod tests {
             vec![receipt("second"), receipt("first")],
             &links,
             &facts,
-            &Some(BTreeSet::from(["so-a".into()])),
+            &BTreeSet::from(["so-a".into()]),
             &HashMap::new(),
             &empty_condition(),
             &BTreeSet::new(),
@@ -951,7 +950,7 @@ mod tests {
             rows.clone(),
             &links,
             &HashMap::new(),
-            &None,
+            &BTreeSet::new(),
             &HashMap::new(),
             &empty_condition(),
             &BTreeSet::from(["empty".into()]),
@@ -964,10 +963,10 @@ mod tests {
                 rows,
                 &links,
                 &HashMap::new(),
-                &None,
+                &BTreeSet::new(),
                 &HashMap::new(),
                 &empty_condition(),
-                &BTreeSet::new(),
+                &BTreeSet::new()
             )
             .is_empty()
         );
@@ -992,7 +991,7 @@ mod tests {
                 vec![receipt("r")],
                 &links,
                 &facts,
-                &None,
+                &facts.keys().cloned().collect(),
                 &operators,
                 &condition,
                 &BTreeSet::new()
@@ -1004,7 +1003,7 @@ mod tests {
             vec![receipt("r")],
             &links,
             &facts,
-            &None,
+            &facts.keys().cloned().collect(),
             &operators,
             &condition,
             &BTreeSet::new(),
@@ -1016,7 +1015,7 @@ mod tests {
                 vec![receipt("r")],
                 &links,
                 &facts,
-                &None,
+                &facts.keys().cloned().collect(),
                 &operators,
                 &condition,
                 &BTreeSet::new()
@@ -1041,7 +1040,7 @@ mod tests {
         for (people, orgs) in [(Some(vec!["a".into()]), None), (None, Some(vec!["org-a".into()]))] {
             let matched = filter_matched_orders(
                 &tuples,
-                matched_orders(&tuples, &None),
+                matched_orders(&tuples, &tuples.iter().filter_map(|tuple| tuple.0.clone()).collect()),
                 people.as_deref(),
                 orgs.as_deref(),
             );
@@ -1065,7 +1064,7 @@ mod tests {
         assert!(
             filter_matched_orders(
                 &tuples,
-                matched_orders(&tuples, &None),
+                matched_orders(&tuples, &tuples.iter().filter_map(|tuple| tuple.0.clone()).collect()),
                 Some(&["a".into()]),
                 Some(&["org-b".into()])
             )

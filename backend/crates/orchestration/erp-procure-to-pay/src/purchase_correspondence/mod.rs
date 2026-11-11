@@ -29,14 +29,13 @@ pub struct PurchaseEmailResult {
 
 /// 下载当前持久化采购内容，沿用采购详情授权。
 /// # 参数
-/// `db`、`rbac` 为应用能力，`id` 为采购单，`actor` 为当前操作人。
+/// `db`、`scope` 为应用能力，`id` 为采购单，`actor` 为当前操作人。
 /// # 返回
 /// 独立可打印采购文件。
 /// # 错误
 /// 不可见、无详情资格或读取失败时拒绝。
 pub async fn download(
     db: Database,
-    _rbac: SharedRbacService,
     scope: Arc<dyn PurchaseDataScopePort>,
     id: &str,
     actor: &AuditActor,
@@ -145,14 +144,13 @@ pub struct PurchaseEmailHistory {
 }
 /// 读取本采购单最近 20 次邮件发送结果。
 /// # 参数
-/// `db`、`rbac` 为应用能力，`id` 为采购单，`actor` 为认证人。
+/// `db`、`scope` 为应用能力，`id` 为采购单，`actor` 为认证人。
 /// # 返回
 /// 已授权的最近发送记录。
 /// # 错误
 /// 不可见、无详情权限或读取失败时拒绝。
 pub async fn history(
     db: Database,
-    _rbac: SharedRbacService,
     scope: Arc<dyn PurchaseDataScopePort>,
     id: &str,
     actor: &AuditActor,

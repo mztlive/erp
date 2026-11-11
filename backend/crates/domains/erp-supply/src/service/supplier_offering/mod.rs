@@ -26,7 +26,6 @@ use crate::entity::supplier_offering::{
     SupplierOfferingCommand, SupplierOfferingRevision,
 };
 use crate::ports::offering_qualification::QualificationPort;
-use crate::ports::{FailClosedOfferingDataScopePort, OfferingDataScopePort};
 use crate::repository::prelude::*;
 use crate::repository::{SupplierApiExt, SupplierOfferingExt};
 use crate::{Error, Result};
@@ -38,7 +37,7 @@ mod recovery;
 mod source_observation;
 mod write;
 
-pub use access::{OfferingAccess, offering_scope};
+pub use access::OfferingAccess;
 
 /// 单域命令准备结果；回放不继续读取当前事实。
 pub enum CommandPreparation<P, R> {
@@ -75,7 +74,7 @@ pub struct PreparedAvailability {
 /// 只持有本域Database；外部资格由消费方Port提供。
 pub struct SupplierOfferingService {
     db: Database,
-    data_scope: std::sync::Arc<dyn OfferingDataScopePort>,
+    data_scope: OfferingAccess,
 }
 impl SupplierOfferingService {
     /// 创建供应商供给服务。
@@ -84,28 +83,28 @@ impl SupplierOfferingService {
     /// * `db` - 数据库
     ///
     /// # 返回
-    /// 返回服务实例；范围 Port 缺省失败关闭。
+    /// 返回服务实例；授权访问器 缺省失败关闭。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
-        Self { db, data_scope: FailClosedOfferingDataScopePort::shared() }
+        Self { db: db.clone(), data_scope: OfferingAccess::unwired(db.clone()) }
     }
 
-    /// 注入供给范围 Port。
+    /// 注入供给授权访问器。
     ///
     /// # 参数
-    /// * `data_scope` - 组合层装配的公共解析 adapter
+    /// * `data_scope` - 组合层装配的本域授权访问器
     ///
     /// # 返回
-    /// 返回绑定范围 Port 的服务。
+    /// 返回绑定授权访问器 的服务。
     ///
     /// # 错误
     /// 无。
     ///
     /// # 关键业务约束
-    /// HTTP 与写命令必须注入生产 adapter，不得保留失败关闭端口。
-    pub fn with_data_scope(mut self, data_scope: std::sync::Arc<dyn OfferingDataScopePort>) -> Self {
+    /// HTTP 与写命令必须注入生产授权设施，不得保留未接线访问器。
+    pub fn with_data_scope(mut self, data_scope: OfferingAccess) -> Self {
         self.data_scope = data_scope;
         self
     }
@@ -116,12 +115,12 @@ impl SupplierOfferingService {
     /// 无。
     ///
     /// # 返回
-    /// 返回绑定当前数据库与范围 Port 的访问器。
+    /// 返回绑定当前数据库与授权访问器 的访问器。
     ///
     /// # 错误
     /// 无。
     pub(crate) fn access(&self) -> OfferingAccess {
-        OfferingAccess::new(self.db.clone(), self.data_scope.clone())
+        self.data_scope.clone()
     }
     /// 按原validate/replay/identity/source/terms/qualification顺序准备创建。
     /// 回放返回原结果；任何错误停止后续读取，执行器由调用方决定。

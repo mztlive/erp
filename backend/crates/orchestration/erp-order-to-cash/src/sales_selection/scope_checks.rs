@@ -74,8 +74,8 @@ pub(crate) async fn booklet_list_snapshot(
 ) -> Result<SelectionBookletListView> {
     ensure_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
     params.validate()?;
-    let (resolved, scope) = access.resolve(actor, "sales_selection_booklet", "list", executor).await?;
-    ensure_version(params.scope_version.as_deref(), &resolved.scope_version)?;
+    let scope = access.resolve(actor, "sales_selection_booklet", "list", executor).await?;
+    ensure_version(params.scope_version.as_deref(), &scope.version())?;
     let orgs =
         expanded_orgs(access, params.org_unit_ids.as_deref(), params.include_descendants, executor).await?;
     let mut effective = params.clone();
@@ -90,8 +90,8 @@ pub(crate) async fn booklet_list_snapshot(
         executor,
     )
     .await?;
-    resolved.validate(executor).await?;
-    Ok(SelectionBookletListView { page, scope_version: resolved.scope_version, no_scope: scope.is_empty() })
+    scope.validate(executor).await?;
+    Ok(SelectionBookletListView { page, scope_version: scope.version(), no_scope: scope.is_empty() })
 }
 
 /// 方案列表授权快照；方案沿所属册责任解释。
@@ -117,8 +117,8 @@ pub(crate) async fn proposal_list_snapshot(
 ) -> Result<SelectionProposalListView> {
     ensure_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
     params.validate()?;
-    let (resolved, scope) = access.resolve(actor, "sales_selection_proposal", "list", executor).await?;
-    ensure_version(params.scope_version.as_deref(), &resolved.scope_version)?;
+    let scope = access.resolve(actor, "sales_selection_proposal", "list", executor).await?;
+    ensure_version(params.scope_version.as_deref(), &scope.version())?;
     let orgs =
         expanded_orgs(access, params.org_unit_ids.as_deref(), params.include_descendants, executor).await?;
     let mut effective = params.clone();
@@ -133,8 +133,8 @@ pub(crate) async fn proposal_list_snapshot(
         executor,
     )
     .await?;
-    resolved.validate(executor).await?;
-    Ok(SelectionProposalListView { page, scope_version: resolved.scope_version, no_scope: scope.is_empty() })
+    scope.validate(executor).await?;
+    Ok(SelectionProposalListView { page, scope_version: scope.version(), no_scope: scope.is_empty() })
 }
 
 /// 按 ID 批量读取负责人显示名；缺失账号省略。

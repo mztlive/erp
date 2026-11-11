@@ -6,11 +6,12 @@ use erp_fulfillment_execution::supply_execution::{
     SupplierFulfillmentIdentity, SupplierFulfillmentIdentityFactory,
 };
 use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
+use erp_supply::FulfillmentOrderAccess;
 use mongodb::Database;
 
+use super::approval_runtime;
 use super::identity::shared_rbac_service;
 use super::workflow::work_item_service;
-use super::{MongoFulfillmentOrderDataScope, approval_runtime};
 
 /// 为每次任务资格、调查阶段或交接命令创建独立的身份能力。
 ///
@@ -28,7 +29,7 @@ pub fn supplier_fulfillment_identity_factory(db: Database) -> SupplierFulfillmen
                 work_item_service(db.clone(), rbac.clone()),
                 approval_runtime(db.clone(), rbac.clone()),
             )),
-            data_scope: MongoFulfillmentOrderDataScope::shared(db.clone(), rbac.clone()),
+            data_scope: FulfillmentOrderAccess::new(db.clone(), rbac.clone()),
             rbac,
         }
     })
@@ -52,6 +53,5 @@ mod tests {
         assert!(!Arc::ptr_eq(&caller, &second.rbac));
         assert!(!Arc::ptr_eq(&first.rbac, &second.rbac));
         assert!(!Arc::ptr_eq(&first.workflow, &second.workflow));
-        assert!(!Arc::ptr_eq(&first.data_scope, &second.data_scope));
     }
 }

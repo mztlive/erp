@@ -86,6 +86,27 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     }
 }
 
+impl From<erp_identity::Error> for Error {
+    /// 保留身份授权的错误类别与原始载荷。
+    fn from(error: erp_identity::Error) -> Self {
+        match error {
+            erp_identity::Error::Internal(v) | erp_identity::Error::Rbac(v) => Self::Internal(v),
+            erp_identity::Error::NotFound(v) => Self::NotFound(v),
+            erp_identity::Error::ValidationError(v) => Self::ValidationError(v),
+            erp_identity::Error::InvalidInput(v) => Self::InvalidInput(v),
+            erp_identity::Error::BusinessLogicError(v) => Self::BusinessLogicError(v),
+            erp_identity::Error::ConflictError(v) => Self::ConflictError(v),
+            erp_identity::Error::Forbidden(v) => Self::Forbidden(v),
+            erp_identity::Error::Unauthenticated(v) => Self::Unauthenticated(v),
+            erp_identity::Error::Logic(v) => Self::Logic(v),
+            erp_identity::Error::ReceiptDuplicate(v) => Self::ReceiptDuplicate(v),
+            erp_identity::Error::TransientTransaction(v) => Self::TransientTransaction(v),
+            erp_identity::Error::OutcomeUnknown(v) => Self::OutcomeUnknown(v),
+            erp_identity::Error::RepositoryError(v) => Self::RepositoryError(v),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;
@@ -93,6 +114,19 @@ mod tests {
     use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
 
     use super::Error;
+
+    #[test]
+    fn identity_errors_preserve_denial_conflict_and_facility_failures() {
+        assert!(
+            matches!(Error::from(erp_identity::Error::Forbidden("denied".into())), Error::Forbidden(message) if message == "denied")
+        );
+        assert!(
+            matches!(Error::from(erp_identity::Error::ConflictError("DATA_SCOPE_CHANGED".into())), Error::ConflictError(message) if message == "DATA_SCOPE_CHANGED")
+        );
+        assert!(
+            matches!(Error::from(erp_identity::Error::Rbac("policy".into())), Error::Internal(message) if message == "policy")
+        );
+    }
 
     #[test]
     fn duplicate_key_error_maps_to_conflict() {

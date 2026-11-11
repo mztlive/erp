@@ -8,7 +8,6 @@ use erp_finance::dto::payable::SupplierPaymentListQuery;
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, SupplierPaymentFilter, SupplierPaymentRow};
-use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -26,7 +25,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 供应商付款主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方执行器，不另开事务。
     ///
     /// # 返回
@@ -41,12 +39,10 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<(u64, String)> {
-        let (_, authorization) = self
-            .resolve_with_purchase(actor, "supplier_payment", "detail", purchase_access, executor)
-            .await?;
+        let (_, authorization) =
+            self.resolve_with_purchase(actor, "supplier_payment", "detail", executor).await?;
         payment_repository::full_read_qualification(&self.db, id, &authorization, executor).await
     }
 
@@ -55,7 +51,6 @@ impl FundsAccess {
     /// # 参数
     /// * `params` - 供应商付款列表请求。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 最终授权付款页及同口径汇总。
@@ -66,20 +61,12 @@ impl FundsAccess {
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self
-            .checked_supplier_payments(
-                params,
-                &query,
-                actor,
-                purchase_access,
-                params.scope_version.as_deref(),
-            )
-            .await?;
+        let snapshot =
+            self.checked_supplier_payments(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
     }
 
@@ -88,7 +75,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 供应商付款主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 当前详情动作允许的付款行。
@@ -99,19 +85,15 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.load_supplier_payment_detail(&id, &actor, &purchase_access, executor).await
-                })
+                Box::pin(async move { this.load_supplier_payment_detail(&id, &actor, executor).await })
             })
             .await
     }
@@ -122,7 +104,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
     ///
     /// # 返回
@@ -135,13 +116,12 @@ impl FundsAccess {
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
         query: &erp_finance::dto::payable::SupplierPaymentListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         checked_revalidated(
             expected,
-            || self.snapshot_supplier_payments(params, query, actor, purchase_access),
-            || self.revalidate_supplier_payments(query, actor, purchase_access),
+            || self.snapshot_supplier_payments(params, query, actor),
+            || self.revalidate_supplier_payments(query, actor),
         )
         .await
     }
@@ -152,7 +132,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 同一事务内形成的授权付款页。
@@ -164,20 +143,16 @@ impl FundsAccess {
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
         query: &erp_finance::dto::payable::SupplierPaymentListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         let this = self.clone();
         let params = params.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.load_supplier_payments(&params, &query, &actor, &purchase_access, executor).await
-                })
+                Box::pin(async move { this.load_supplier_payments(&params, &query, &actor, executor).await })
             })
             .await
     }
@@ -188,7 +163,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求，用于比对范围版本。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -201,11 +175,10 @@ impl FundsAccess {
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
         query: &SupplierPaymentListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         let (_, authorization) =
-            self.resolve_with_purchase(actor, "supplier_payment", "list", purchase_access, executor).await?;
+            self.resolve_with_purchase(actor, "supplier_payment", "list", executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "供应商付款无可见范围"));
         }
@@ -255,20 +228,17 @@ impl FundsAccess {
         &self,
         query: &SupplierPaymentListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<String> {
         let this = self.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (_, authorization) = this
-                        .resolve_with_purchase(&actor, "supplier_payment", "list", &purchase_access, executor)
-                        .await?;
+                    let (_, authorization) =
+                        this.resolve_with_purchase(&actor, "supplier_payment", "list", executor).await?;
                     if authorization.empty() {
                         return Ok(authorization.context.scope_version.clone());
                     }
@@ -306,9 +276,8 @@ impl FundsAccess {
         let links = self.payment_matched_links(&ids, executor).await?;
         let source_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.purchase_fact_map(&source_ids, executor).await?;
-        let allowed = Some(
-            versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect(),
-        );
+        let allowed =
+            versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect();
         let expected = rows.len();
         let decided = decide_payment_rows(rows, &links, &facts, &allowed, whole_ids);
         if decided.len() != expected {
@@ -353,7 +322,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 供应商付款主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -365,12 +333,10 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
-        let (_access, authorization) = self
-            .resolve_with_purchase(actor, "supplier_payment", "detail", purchase_access, executor)
-            .await?;
+        let (_access, authorization) =
+            self.resolve_with_purchase(actor, "supplier_payment", "detail", executor).await?;
         let filter = SupplierPaymentFilter {
             keyword_ids: Some(vec![id.to_string()]),
             page_size: 1,
@@ -422,7 +388,7 @@ fn decide_payment_rows(
     rows: Vec<SupplierPaymentRow>,
     links: &HashMap<String, Vec<PaymentLink>>,
     facts: &HashMap<String, LinkedPurchaseFact>,
-    allowed: &Option<BTreeSet<String>>,
+    allowed: &BTreeSet<String>,
     whole_ids: &BTreeSet<String>,
 ) -> Vec<(SupplierPaymentRow, Vec<String>)> {
     rows.into_iter()
@@ -629,7 +595,7 @@ mod tests {
 
     #[test]
     fn page_decision_distinguishes_dangling_sources_from_true_zero_allocations() {
-        let allowed = Some(BTreeSet::new());
+        let allowed = BTreeSet::new();
         assert!(
             decide_payment_rows(
                 vec![row("empty", "10")],
@@ -701,7 +667,7 @@ mod tests {
                 )
             })
             .collect();
-        let allowed = Some(BTreeSet::from(["po-a".into()]));
+        let allowed = BTreeSet::from(["po-a".into()]);
         let decided = decide_payment_rows(vec![row("p", max)], &links, &facts, &allowed, &BTreeSet::new());
         assert_eq!(decided[0].1, ["po-a"]);
         let items = payment_page_items(&decided, &links, &BTreeSet::new());

@@ -5,11 +5,11 @@ use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
 use erp_core::ids::{StockAdjustmentId, StockAdjustmentLineId};
-use erp_identity::SharedRbacService;
 use erp_inventory::{
-    AdjustmentReasonType, CreateStockAdjustmentRequest, DocumentApprovalHistoryPageView, InventoryExt,
-    InventoryService, StockAdjustment, StockAdjustmentData, StockAdjustmentDetailView, StockAdjustmentLine,
-    StockAdjustmentLineData, StockAdjustmentLineInput, SubmitStockAdjustmentApprovalTokenView,
+    AdjustmentReasonType, CreateStockAdjustmentRequest, DocumentApprovalHistoryPageView, InventoryAction,
+    InventoryExt, InventoryService, StockAdjustment, StockAdjustmentData, StockAdjustmentDetailView,
+    StockAdjustmentLine, StockAdjustmentLineData, StockAdjustmentLineInput,
+    SubmitStockAdjustmentApprovalTokenView,
 };
 use erp_read_models::inventory_center::document_approval_view_with_history;
 use erp_warehouse::WarehouseExt;
@@ -23,7 +23,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::{InventoryAdjustmentProcess, approval_prepare as start_approval};
+use super::InventoryAdjustmentProcess;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
@@ -87,7 +87,6 @@ impl InventoryAdjustmentProcess {
         };
         persist_created_adjustment(
             &self.db,
-            &self.rbac,
             CreatedAdjustmentPersist {
                 inventory: self.inventory_service.clone(),
                 workflow: self.workflow.clone(),
@@ -151,7 +150,6 @@ struct CreatedAdjustmentPersist {
 ///
 /// # 参数
 /// * `db` - 数据库。
-/// * `rbac` - 共享 RBAC 服务。
 /// * `persist` - 调整单、单据绑定与审计。
 ///
 /// # 返回
@@ -164,15 +162,13 @@ struct CreatedAdjustmentPersist {
 /// 绑定失败必须整体回滚。
 async fn persist_created_adjustment(
     db: &Database,
-    rbac: &SharedRbacService,
     persist: CreatedAdjustmentPersist,
 ) -> Result<StockAdjustmentDetailView> {
     let db = db.clone();
-    let rbac = rbac.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
-            Box::pin(async move { apply_created_adjustment(&db, &rbac, persist, executor).await })
+            Box::pin(async move { apply_created_adjustment(&db, persist, executor).await })
         })
         .await
 }
@@ -180,11 +176,11 @@ async fn persist_created_adjustment(
 /// 在原创建事务内重验来源余额；授权失败先于仓库和余额读取返回。
 async fn validate_creation_source(
     db: &Database,
-    _rbac: &SharedRbacService,
     persist: &CreatedAdjustmentPersist,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let authorization = persist.inventory.authorize(&persist.actor, executor).await?;
+    let authorization =
+        persist.inventory.authorize(&persist.actor, &[InventoryAction::Create], executor).await?;
     if !authorization.actor_is_active() || !authorization.can_create(persist.adjustment.warehouse_id.as_ref())
     {
         return Err(Error::Forbidden("无权在该仓库创建库存调整单".to_string()));
@@ -214,11 +210,10 @@ async fn validate_creation_source(
 /// 单据、绑定和审计沿同一执行器顺序写入，响应使用本事务内的已知事实。
 async fn apply_created_adjustment(
     db: &Database,
-    rbac: &SharedRbacService,
     persist: CreatedAdjustmentPersist,
     executor: &mut dyn Executor,
 ) -> Result<StockAdjustmentDetailView> {
-    validate_creation_source(db, rbac, &persist, executor).await?;
+    validate_creation_source(db, &persist, executor).await?;
     let CreatedAdjustmentPersist {
         adjustment,
         lines,
@@ -232,9 +227,7 @@ async fn apply_created_adjustment(
     // 提交资格沿已持久化的来源对象检查仓库范围，须先在同一事务内写入新单据。
     db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
     let can_submit =
-        match start_approval::ensure_submit_authorized(db, workflow.as_ref(), &adjustment, &actor, executor)
-            .await
-        {
+        match workflow.as_ref().authorize_stock_adjustment_submit(&adjustment, &actor, executor).await {
             Ok(()) => true,
             Err(Error::Forbidden(_)) => false,
             Err(error) => return Err(error),

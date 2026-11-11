@@ -1,7 +1,7 @@
 //! 商品中心聚合读取；查询规则和响应形状由商品领域提供。
 use std::sync::Arc;
 
-use erp_catalog::CatalogDataScopePort;
+use erp_catalog::CatalogAccess;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use mongodb::Database;
 
@@ -19,7 +19,7 @@ pub use procurement::{MapProductProcurementOwners, MongoProductProcurementOwners
 pub struct CatalogCenterReadService {
     db: Option<Database>,
     query: Arc<dyn CatalogSupplyQueryPort>,
-    data_scope: Arc<dyn CatalogDataScopePort>,
+    access: Option<CatalogAccess>,
     procurement: Arc<dyn ProductProcurementOwners>,
 }
 
@@ -29,7 +29,7 @@ impl CatalogCenterReadService {
     /// # 参数
     /// * `db` - 商品与身份集合
     /// * `query` - 商品聚合查询
-    /// * `data_scope` - 商品范围 Port
+    /// * `access` - 已装配的商品授权服务
     /// * `procurement` - 采购负责人规则解析
     ///
     /// # 返回
@@ -40,21 +40,16 @@ impl CatalogCenterReadService {
     pub fn new(
         db: Database,
         query: Arc<dyn CatalogSupplyQueryPort>,
-        data_scope: Arc<dyn CatalogDataScopePort>,
+        access: CatalogAccess,
         procurement: Arc<dyn ProductProcurementOwners>,
     ) -> Self {
-        Self { db: Some(db), query, data_scope, procurement }
+        Self { db: Some(db), query, access: Some(access), procurement }
     }
 
     /// 仅装配查询端口，供不解析范围的可售列表测试使用。
     #[cfg(test)]
     pub fn for_query(query: Arc<dyn CatalogSupplyQueryPort>) -> Self {
-        Self {
-            db: None,
-            query,
-            data_scope: erp_catalog::FailClosedCatalogDataScopePort::shared(),
-            procurement: Arc::new(MapProductProcurementOwners::default()),
-        }
+        Self { db: None, query, access: None, procurement: Arc::new(MapProductProcurementOwners::default()) }
     }
 
     /// 查询可售 SKU；资格日期由原商品领域逻辑确定。

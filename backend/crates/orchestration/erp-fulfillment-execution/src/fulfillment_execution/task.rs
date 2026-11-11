@@ -10,8 +10,7 @@ use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
-use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{Permission, SharedRbacService};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
@@ -398,10 +397,10 @@ pub async fn ensure_fulfillment_owner_eligible(
     let required_permissions = WorkItemType::FulfillmentOperation
         .fulfillment_execution_permissions(business_object_type)
         .ok_or_else(|| Error::Internal("履约对象未登记完整执行权限，请联系管理员修复后重试".to_string()))?;
-    let account = db.accounts().find_work_item_account(owner_user_id, executor).await?.ok_or_else(|| {
+    let account = rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
         Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
     })?;
-    if !account.can_login() {
+    if !account.can_login {
         return Err(Error::BusinessLogicError(
             "履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string(),
         ));
@@ -410,7 +409,7 @@ pub async fn ensure_fulfillment_owner_eligible(
         .iter()
         .map(|code| Permission::parse(code).expect("固定履约操作权限必须合法"))
         .collect();
-    let actor = AuditActor::new(owner_user_id.into(), account.secret.account().into(), account.kind);
+    let actor = AuditActor::new(owner_user_id.into(), account.login_account.clone(), account.kind);
     let qualified = crate::authorization::features(db.clone(), rbac.clone())
         .permissions(&actor, &required, executor)
         .await?;

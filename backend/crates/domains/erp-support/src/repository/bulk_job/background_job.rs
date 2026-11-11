@@ -2,6 +2,8 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::BackgroundJobId;
+use erp_identity::CompiledAccess;
+use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter};
@@ -9,7 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use super::super::page::search_projected_page;
 use super::sort_doc;
+use crate::authorization::background::BackgroundAuthorization;
+use crate::dto::bulk_job::BackgroundJobListQuery;
 use crate::entity::bulk_job::{BackgroundJob, JobStatus, JobType};
+use crate::repository::BulkJobExt;
 
 /// 后台任务列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -85,6 +90,75 @@ pub struct BackgroundJobFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+impl BackgroundJobFilter {
+    /// 将本人任务入口固定到认证发起人，保留其余业务筛选。
+    /// # 参数
+    /// query 为归一化查询，requester 为入口已认证的账号。
+    /// # 返回
+    /// 发起人固定为认证账号的列表筛选。
+    /// # 错误
+    /// 无。
+    pub(crate) fn for_requester(query: BackgroundJobListQuery, requester: &str) -> Self {
+        Self { requested_by: Some(requester.to_owned()), ..Self::from(query) }
+    }
+}
+
+impl From<BackgroundJobListQuery> for BackgroundJobFilter {
+    fn from(query: BackgroundJobListQuery) -> Self {
+        let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
+        Self {
+            job_no: query.job_no,
+            job_type: query.job_type,
+            domain_job_type: query.domain_job_type,
+            status: query.status,
+            active_only: query.active_only,
+            requested_by: query.requested_by,
+            page,
+            page_size,
+            sort_by,
+            sort_ascending,
+        }
+    }
+}
+
+/// 在完整授权条件内完成任务分页、计数及前后复验。
+/// # 参数
+/// db、filter 为任务仓储与业务筛选；authorization、access 为本阶段凭证；executor 为原事务。
+/// # 返回
+/// 同一授权条件内的任务页与总数。
+/// # 错误
+/// 授权失效、数量越界或数据库失败时拒绝。
+pub(crate) async fn authorized_background_page(
+    db: &Database,
+    filter: &BackgroundJobFilter,
+    authorization: &BackgroundAuthorization,
+    access: &CompiledAccess,
+    executor: &mut dyn Executor,
+) -> crate::Result<PageResult<BackgroundJobRow>> {
+    authorization.validate(access, executor).await?;
+    let collection = db.background_jobs().collection().clone_with_type::<BackgroundJobRow>();
+    let options = FindOptions::builder()
+        .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+        .skip(filter.skip())
+        .limit(filter.limit())
+        .projection(background_job_projection())
+        .build();
+    let items = persistence_core::aggregate::find(
+        &collection,
+        filter.to_doc(),
+        options,
+        access.stages().to_vec(),
+        executor,
+    )
+    .await?;
+    let total =
+        persistence_core::aggregate::count(&collection, filter.to_doc(), access.stages().to_vec(), executor)
+            .await?;
+    authorization.validate(access, executor).await?;
+    let total = i64::try_from(total).map_err(|_| crate::Error::ValidationError("后台任务总数超限".into()))?;
+    Ok(PageResult { items, total })
 }
 
 impl Default for BackgroundJobFilter {
@@ -391,5 +465,17 @@ mod tests {
         assert_eq!(no.get_str("$regex").unwrap(), r"job\-001");
         assert_eq!(document.get_str("job_type").unwrap(), "import");
         assert_eq!(document.get_str("status").unwrap(), "running");
+    }
+    #[test]
+    fn own_entry_ignores_requested_owner_and_keeps_domain_filter() {
+        let params = crate::BackgroundJobListParams {
+            requested_by: Some("another-user".into()),
+            domain_job_type: Some("DATA_TRANSFER".into()),
+            ..Default::default()
+        };
+        let filter = BackgroundJobFilter::for_requester(params.normalized().unwrap(), "authenticated");
+        let document = filter.to_doc();
+        assert_eq!(document.get_str("requested_by").unwrap(), "authenticated");
+        assert_eq!(document.get_str("domain_job_type").unwrap(), "DATA_TRANSFER");
     }
 }

@@ -82,13 +82,7 @@ impl PurchasePaymentRequestReadService {
     ) -> Result<PurchaseReadScope> {
         let (_, authorization) = self
             .funds_access()
-            .resolve_with_purchase(
-                actor,
-                "purchase_payment_request",
-                action,
-                &self.purchase_access(),
-                executor,
-            )
+            .resolve_with_purchase(actor, "purchase_payment_request", action, executor)
             .await?;
         authorization.purchase_scope.ok_or_else(|| Error::Forbidden("付款申请采购来源范围不可用".into()))
     }

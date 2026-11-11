@@ -27,6 +27,17 @@ impl SelectionReadScope {
     pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
         Self { access: Some(access), authorization: Some(authorization) }
     }
+    /// 返回绑定身份和业务映射的跨页版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前凭证版本；缺少凭证时为空字符串。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn version(&self) -> String {
+        self.access.as_ref().map(|access| access.version()).unwrap_or_default()
+    }
+
     /// 返回完整授权阶段。
     /// # 参数
     /// 无。
@@ -62,30 +73,6 @@ impl SelectionReadScope {
     pub fn is_empty(&self) -> bool {
         self.access.is_none()
     }
-    /// 不再以公司规则跳过完整数据库授权。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 始终为 false。
-    /// # 错误
-    /// 无。
-    pub fn is_company(&self) -> bool {
-        false
-    }
-    /// 业务匹配不重复解释已经执行的授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 有凭证为空条件，缺凭证恒假。
-    /// # 错误
-    /// 无。
-    pub fn document(&self) -> Document {
-        if self.access.is_some() {
-            doc! {}
-        } else {
-            doc! {"$expr": false}
-        }
-    }
     /// 在原执行器复验 identity 凭证。
     /// # 参数
     /// executor 为生成凭证时的执行器。
@@ -98,5 +85,21 @@ impl SelectionReadScope {
             (Some(access), Some(service)) => service.validate(access, executor).await,
             _ => Err(erp_identity::Error::Forbidden("缺少选品授权凭证".into())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use persistence_core::NoTransaction;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn missing_proof_never_becomes_an_unrestricted_selection_query() {
+        let access = SelectionReadScope::default();
+        assert!(access.is_empty());
+        assert!(access.version().is_empty());
+        assert_eq!(access.stages(), vec![doc! {"$match": {"$expr": false}}]);
+        assert!(matches!(access.validate(&mut NoTransaction).await, Err(erp_identity::Error::Forbidden(_))));
     }
 }

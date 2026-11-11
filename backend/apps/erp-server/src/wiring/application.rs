@@ -9,6 +9,7 @@ use erp_data_import::contract_import::{ContractImportProcess, ContractImportServ
 use erp_data_import::product_import::ProductImportServices;
 use erp_data_import::sales_inquiry_import::SalesInquiryImportProcess;
 use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_integration::IntegrationAccess;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_notification::NotificationService;
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
@@ -289,12 +290,19 @@ impl Application {
         )
     }
 
-    /// Support-domain bulk job service with audit and document-registry adapters.
+    /// 装配带统一后台任务授权、审计和业务单据事实的批量任务服务。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 使用应用共享身份设施的任务服务。
+    /// # 错误
+    /// 不执行 I/O；固定授权目录非法时启动失败。
     pub fn bulk_job_service(&self) -> BulkJobService {
         BulkJobService::new(
             self.db(),
             crate::wiring::support_audit::MongoSupportAudit::shared(self.db()),
             crate::wiring::support_documents::MongoBusinessDocument::shared(self.db()),
+            self.rbac(),
         )
     }
 
@@ -324,24 +332,36 @@ impl Application {
         Arc::clone(&self.approval_outbox)
     }
 
-    /// 返回使用统一权威证据提供方的集成治理命令入口。
+    /// 装配共享权威证据与本域统一授权的集成治理命令。
+    /// # 参数
+    /// 无；使用应用共享设施。
+    /// # 返回
+    /// 保留独立任务身份工厂的集成治理流程。
+    /// # 错误
+    /// 构造不执行 I/O。
     pub fn integration_resolution(&self) -> IntegrationResolutionProcess {
         let work_items = integration_work_items(self.db());
         IntegrationResolutionProcess::new(
             self.db(),
             Arc::clone(&self.integration_evidence),
-            crate::wiring::MongoIntegrationDataScope::shared(self.db(), self.rbac()),
+            IntegrationAccess::new(self.db(), self.rbac()),
             Arc::new(integration_identity(self.db())),
             Arc::new(move || -> Arc<dyn CatalogWorkItems> { Arc::new(work_items()) }),
         )
     }
 
-    /// 返回注入权威证据与范围 Port 的集成详情读取入口。
+    /// 装配共享权威证据与本域统一授权的集成详情读取。
+    /// # 参数
+    /// 无；使用应用共享设施。
+    /// # 返回
+    /// 在原读取阶段执行授权与复验的集成读取服务。
+    /// # 错误
+    /// 构造不执行 I/O。
     pub fn integration_center(&self) -> IntegrationCenterReadService {
         IntegrationCenterReadService::new(
             self.db(),
             Arc::clone(&self.integration_evidence),
-            crate::wiring::MongoIntegrationDataScope::shared(self.db(), self.rbac()),
+            IntegrationAccess::new(self.db(), self.rbac()),
         )
     }
 
@@ -384,12 +404,18 @@ impl Application {
         )
     }
 
-    /// 商品列表和销售资格共用同一查询提供方实现。
+    /// 商品列表和销售资格复用查询提供方与本域授权能力。
+    /// # 参数
+    /// 无；使用应用共享设施。
+    /// # 返回
+    /// 已装配商品统一授权的读取服务。
+    /// # 错误
+    /// 构造不执行 I/O。
     pub fn catalog_center(&self) -> erp_read_models::catalog_center::CatalogCenterReadService {
         erp_read_models::catalog_center::CatalogCenterReadService::new(
             self.db(),
             Arc::clone(&self.catalog_supply_query),
-            crate::wiring::MongoCatalogDataScope::shared(self.db(), self.rbac()),
+            crate::wiring::catalog_access(self.db(), self.rbac()),
             erp_read_models::catalog_center::MongoProductProcurementOwners::shared(self.db()),
         )
     }
@@ -503,14 +529,20 @@ impl Application {
             .with_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
     }
 
-    /// 返回已注入原网关的供应商履约跨域执行入口。
+    /// 装配原网关、统一授权与异常处理事实的供应商履约流程。
+    /// # 参数
+    /// 无；使用应用共享设施。
+    /// # 返回
+    /// 保留任务事实端口和身份工厂的跨域执行入口。
+    /// # 错误
+    /// 构造不执行 I/O。
     pub fn supplier_fulfillment_process(
         &self,
     ) -> erp_fulfillment_execution::supply_execution::SupplierFulfillmentProcess {
         erp_fulfillment_execution::supply_execution::SupplierFulfillmentProcess::new(
             self.db(),
             Arc::clone(&self.external_connectors.supplier_fulfillment),
-            crate::wiring::MongoFulfillmentOrderDataScope::shared(self.db(), self.rbac()),
+            crate::wiring::fulfillment_order_access(self.db(), self.rbac()),
             crate::wiring::MongoFulfillmentExceptionHandlers::shared(self.db()),
             crate::wiring::supplier_fulfillment_identity_factory(self.db()),
         )

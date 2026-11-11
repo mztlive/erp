@@ -13,7 +13,6 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::InventoryAdjustmentProcess;
-use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
 /// 普通撤回的授权身份，用于审计应急代办路径。
@@ -60,44 +59,13 @@ impl CancelAuthority {
 /// 返回原提交人或运行管理员的授权事实。
 ///
 /// # 错误
-/// 与 `ensure_cancel_authorized_with_executor` 相同；本函数使用非事务快照。
+/// 账号、动作、冻结来源或撤回身份不符合合同，以及取证失败时返回错误。
 pub(crate) async fn ensure_cancel_authorized(
     service: &InventoryAdjustmentProcess,
     instance: &ApprovalProcessInstance,
     actor: &AuditActor,
 ) -> Result<CancelAuthorization> {
-    ensure_cancel_authorized_with_executor(
-        &service.db,
-        service.workflow.as_ref(),
-        instance,
-        actor,
-        &mut NoTransaction,
-    )
-    .await
-}
-
-/// 在调用方事务快照内重新校验普通撤回授权。
-///
-/// # 参数
-/// * `db` - 快照与授权所在数据库。
-/// * `rbac` - 动作权限与对象读取使用的 RBAC。
-/// * `instance` - 待撤回的审批实例。
-/// * `actor` - 当前认证操作人。
-/// * `executor` - 调用方数据库快照。
-///
-/// # 返回
-/// 原提交人返回 `Submitter`；具备运行管理员可见性且对象可读时返回 `RuntimeAdmin`。
-///
-/// # 错误
-/// 账号未激活、缺少撤回或读取权限、不是原提交人且不是运行管理员或对象不可读时返回 `Forbidden`。缺少或对不上冻结快照时返回 `ConflictError`。授权或快照读取失败时返回对应错误。
-pub(crate) async fn ensure_cancel_authorized_with_executor(
-    _db: &Database,
-    workflow: &dyn FulfillmentWorkflow,
-    instance: &ApprovalProcessInstance,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<CancelAuthorization> {
-    workflow.authorize_stock_adjustment_cancel(instance, actor, executor).await
+    service.workflow.as_ref().authorize_stock_adjustment_cancel(instance, actor, &mut NoTransaction).await
 }
 
 /// 原撤回授权顺序使用应用已装配的工作流 Port，禁止重建授权源。

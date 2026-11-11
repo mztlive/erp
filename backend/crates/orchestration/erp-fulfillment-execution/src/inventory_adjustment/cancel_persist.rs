@@ -33,9 +33,8 @@ use super::adapter::{execute_stock_adjustment_domain_action, require_frozen_bind
 use super::cancel_facts::{cancellation_identity, historical_task_facts};
 use super::cancel_runtime::{
     CancelAuthority, CancelAuthorization, STOCK_ADJUSTMENT_AUDIT_RESOURCE,
-    STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION, ensure_cancel_authorized_with_executor,
-    ensure_cancel_execution_identity, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
-    ensure_stock_adjustment_open_task_identity,
+    STOCK_ADJUSTMENT_CANCEL_AUDIT_ACTION, ensure_cancel_execution_identity, ensure_cancel_instance_binding,
+    ensure_cancel_instance_subject, ensure_stock_adjustment_open_task_identity,
 };
 use crate::{Error, Result};
 
@@ -136,8 +135,7 @@ async fn revalidate_cancel_source(
     if binding != &input.binding || instance != input.authorization_instance {
         return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".into()));
     }
-    ensure_cancel_authorized_with_executor(db, input.workflow.as_ref(), &instance, &input.actor, executor)
-        .await
+    input.workflow.as_ref().authorize_stock_adjustment_cancel(&instance, &input.actor, executor).await
 }
 
 /// 从原命令和全部历史任务形成库存领域拥有的事实。

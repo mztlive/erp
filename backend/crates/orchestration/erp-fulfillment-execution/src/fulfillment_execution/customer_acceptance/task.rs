@@ -6,8 +6,7 @@
 
 use application_core::AuditActor;
 use erp_core::ids::SalesOrderId;
-use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{AccountSummary, Permission, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
@@ -256,27 +255,27 @@ async fn ensure_customer_acceptance_owner_eligible(
     rbac: &SharedRbacService,
     owner_user_id: &str,
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<AccountSummary> {
     let required_permissions = WorkItemType::CustomerAcceptanceRegistration
         .customer_acceptance_execution_permissions(OBJECT_TYPE)
         .expect("客户验收登记对象权限合同必须存在");
     let account =
-        db.accounts().find_work_item_account(owner_user_id, executor).await?.ok_or_else(|| {
+        rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
             Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string())
         })?;
-    if !account.can_login() {
+    if !account.can_login {
         return Err(Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()));
     }
     let required: Vec<_> = required_permissions
         .iter()
         .map(|code| Permission::parse(code).expect("固定客户验收操作权限必须合法"))
         .collect();
-    let actor = AuditActor::new(owner_user_id.into(), account.secret.account().into(), account.kind);
+    let actor = AuditActor::new(owner_user_id.into(), account.login_account.clone(), account.kind);
     let qualified = crate::authorization::features(db.clone(), rbac.clone())
         .permissions(&actor, &required, executor)
         .await?;
-    if qualified.is_some_and(|value| value.same_role(&required)) {
-        return Ok(());
+    if let Some(qualified) = qualified.filter(|value| value.same_role(&required)) {
+        return Ok(qualified.account().clone());
     }
     Err(Error::BusinessLogicError("销售责任人缺少客户验收完整操作权限，请先调整角色或责任配置".to_string()))
 }
@@ -290,17 +289,8 @@ async fn ensure_current_owner_execution_access(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let rbac = identity_factory();
-    ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
-    let account = db
-        .accounts()
-        .find_by_id(actor_id, executor)
-        .await?
-        .ok_or_else(|| Error::Forbidden("验收操作人已失效".into()))?;
-    let actor = application_core::AuditActor::new(
-        account.base.id.clone(),
-        account.secret.account().to_string(),
-        account.kind,
-    );
+    let account = ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
+    let actor = AuditActor::new(account.id, account.login_account, account.kind);
     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
         .require_object(&actor, "detail", &task.business_object_id, &[], executor)
         .await?;

@@ -299,8 +299,6 @@ impl SupplierPortalProcess {
             .ensure_writable(
                 actor,
                 if app.snapshot.target().is_some() { "update" } else { "create" },
-                &owner,
-                &org,
                 executor,
             )
             .await?;

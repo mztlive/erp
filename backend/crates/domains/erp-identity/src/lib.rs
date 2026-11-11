@@ -37,4 +37,5 @@ pub use service::iam::{
     ResetAdminPasswordResult, RoleItem, RolePermissionSnapshot, SharedRbacService, UpdateAdminParams,
     UpdateAdminRoleParams, UpdateRoleParams, ensure_root_role, shared_rbac_service, subject,
 };
+pub use service::organization_directory::OrganizationDirectoryService;
 pub use service::portal::{PortalIdentityService, PreparedPortalAccount, PreparedPortalPassword};

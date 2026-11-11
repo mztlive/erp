@@ -16,10 +16,7 @@ use mongodb::Database;
 
 use crate::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use crate::ports::supplier_reference_registry::{SupplierReferenceRegistry, SupplierReferenceTarget};
-use crate::ports::{
-    FailClosedFulfillmentExceptionHandlerPort, FailClosedFulfillmentOrderDataScopePort,
-    FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort,
-};
+use crate::ports::{FailClosedFulfillmentExceptionHandlerPort, FulfillmentExceptionHandlerPort};
 use crate::{Error, Result};
 /// W26 正式待办绑定的供应商履约订单业务对象类型。
 pub const W26_BUSINESS_OBJECT_TYPE: &str = "SUPPLIER_FULFILLMENT_ORDER";
@@ -27,25 +24,25 @@ pub const W26_BUSINESS_OBJECT_TYPE: &str = "SUPPLIER_FULFILLMENT_ORDER";
 pub struct SupplierFulfillmentService {
     pub(crate) db: Database,
     registry: Option<Arc<dyn SupplierReferenceRegistry>>,
-    data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+    data_scope: FulfillmentOrderAccess,
     handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
 }
 impl SupplierFulfillmentService {
-    /// 绑定本域数据访问；范围 Port 缺省失败关闭。
+    /// 绑定本域数据访问；授权访问器 缺省失败关闭。
     ///
     /// # 参数
     /// * `db` - 履约集合所在数据库。
     ///
     /// # 返回
-    /// 返回范围 Port 与处理人 Port 均为失败关闭的服务。
+    /// 返回授权访问器 与处理人 Port 均为失败关闭的服务。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self {
-            db,
+            db: db.clone(),
             registry: None,
-            data_scope: FailClosedFulfillmentOrderDataScopePort::shared(),
+            data_scope: FulfillmentOrderAccess::unwired(db.clone()),
             handlers: FailClosedFulfillmentExceptionHandlerPort::shared(),
         }
     }
@@ -80,17 +77,17 @@ impl SupplierFulfillmentService {
     /// 注入履约订单范围与 W26 处理人 Port。
     ///
     /// # 参数
-    /// * `data_scope` - 组合层装配的公共解析 adapter
+    /// * `data_scope` - 组合层装配的本域授权访问器
     /// * `handlers` - 当前开放 W26 处理人事实
     ///
     /// # 返回
-    /// 返回绑定范围 Port 的服务。
+    /// 返回绑定授权访问器 的服务。
     ///
     /// # 错误
     /// 无。
     pub fn with_scope(
         mut self,
-        data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+        data_scope: FulfillmentOrderAccess,
         handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
     ) -> Self {
         self.data_scope = data_scope;
@@ -104,12 +101,12 @@ impl SupplierFulfillmentService {
     /// 无。
     ///
     /// # 返回
-    /// 返回绑定当前数据库和范围 Port 的 `FulfillmentOrderAccess`。
+    /// 返回绑定当前数据库和授权访问器 的 `FulfillmentOrderAccess`。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn access(&self) -> FulfillmentOrderAccess {
-        FulfillmentOrderAccess::new(self.db.clone(), self.data_scope.clone())
+        self.data_scope.clone()
     }
 
     /// 当前开放 W26 处理人端口。
@@ -127,7 +124,7 @@ impl SupplierFulfillmentService {
     }
 }
 
-pub use access::{FulfillmentOrderAccess, fulfillment_order_scope};
+pub use access::FulfillmentOrderAccess;
 
 #[cfg(test)]
 mod boundary_tests;

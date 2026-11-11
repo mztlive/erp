@@ -107,20 +107,14 @@ pub struct WorkItemFilter {
     pub work_item_types: Vec<WorkItemType>,
     /// 允许的状态集合；为空时不筛选。
     pub statuses: Vec<WorkItemStatus>,
-    /// 允许的责任组织集合；为空时不筛选。
-    pub owner_organization_ids: Vec<String>,
     /// 允许的注册任务类型与权威业务对象类型组合。
     pub object_access_shapes: Option<Vec<(WorkItemType, String)>>,
     /// 服务端已解析的管理负责人条件；Some(空) 必须查询空集。
     pub managed_owner_ids: Option<Vec<String>>,
-    /// 历史管理范围：外层 None 无管理授权，内层 None 是显式 Company。
-    pub history_managed_owner_ids: Option<Option<Vec<String>>>,
     /// 当前个人责任人；为空时不筛选。
     pub owner_user_id: Option<String>,
     /// 历史参与人；匹配曾负责、完成人或关闭人之一。
     pub history_actor_id: Option<String>,
-    /// 具备组织级历史查看权的组织集合；`Some(空)` 表示公司级。
-    pub history_managed_organization_ids: Option<Vec<String>>,
     /// 到期时间下界（包含）。
     pub due_from: Option<Instant>,
     /// 到期时间上界（不包含）。
@@ -176,7 +170,6 @@ impl QueryFilter for WorkItemFilter {
         insert_enum_filter(&mut filter, "status", &self.statuses, WorkItemStatus::as_str);
         insert_active_type_filter(&mut filter, &self.work_item_types);
         insert_enum_filter(&mut filter, "priority", &self.priorities, WorkItemPriority::as_str);
-        insert_string_filter(&mut filter, "owner_organization_id", &self.owner_organization_ids);
         if let Some(owner_user_id) = &self.owner_user_id {
             filter.insert("owner_user_id", owner_user_id);
         }
@@ -185,30 +178,11 @@ impl QueryFilter for WorkItemFilter {
         if let Some(ids) = &self.managed_owner_ids {
             conjunctions.push(doc! { "owner_user_id": { "$in": ids } });
         }
-        if let Some(owners) = &self.history_managed_owner_ids {
-            let mut alternatives = match owners {
-                None => vec![Document::new()],
-                Some(ids) => vec![doc! { "owner_user_id": { "$in": ids } }],
-            };
-            if let Some(actor) = &self.history_actor_id {
-                alternatives.extend([
-                    doc! { "responsibility_actor_ids": actor },
-                    doc! { "completed_by": actor },
-                    doc! { "closed_by": actor },
-                ]);
-            }
-            conjunctions.push(doc! { "$or": alternatives });
-        }
         if let Some(shapes) = &self.object_access_shapes {
             conjunctions.push(object_access_shape_filter(shapes));
         }
-        if self.history_managed_owner_ids.is_none()
-            && (self.history_actor_id.is_some() || self.history_managed_organization_ids.is_some())
-        {
-            conjunctions.push(history_scope_filter(
-                self.history_actor_id.as_deref(),
-                self.history_managed_organization_ids.as_deref(),
-            ));
+        if let Some(actor) = self.history_actor_id.as_deref() {
+            conjunctions.push(history_scope_filter(actor));
         }
         if let Some(query) = self.query.as_deref() {
             conjunctions.push(literal_query_filter(query));
@@ -285,19 +259,6 @@ fn insert_enum_filter<T: Copy>(
     }
 }
 
-/// 将非空字符串筛选写入等值或集合条件。
-fn insert_string_filter(filter: &mut Document, field: &str, values: &[String]) {
-    match values {
-        [] => {},
-        [value] => {
-            filter.insert(field, value);
-        },
-        values => {
-            filter.insert(field, doc! { "$in": values });
-        },
-    }
-}
-
 fn insert_due_range(filter: &mut Document, due_from: Option<Instant>, due_before: Option<Instant>) {
     let mut range = Document::new();
     if let Some(due_from) = due_from {
@@ -342,24 +303,13 @@ fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
     doc! { "$or": alternatives }
 }
 
-/// 组合本人参与和组织范围的历史任务查询条件。
-fn history_scope_filter(actor_id: Option<&str>, managed_organization_ids: Option<&[String]>) -> Document {
-    let mut alternatives = Vec::new();
-    if let Some(actor_id) = actor_id {
-        alternatives.extend([
-            doc! { "responsibility_actor_ids": actor_id },
-            doc! { "completed_by": actor_id },
-            doc! { "closed_by": actor_id },
-        ]);
-    }
-    if let Some(organization_ids) = managed_organization_ids {
-        if organization_ids.is_empty() {
-            alternatives.push(Document::new());
-        } else {
-            alternatives.push(doc! { "owner_organization_id": { "$in": organization_ids } });
-        }
-    }
-    doc! { "$or": alternatives }
+/// 按本人曾负责、完成或关闭的事实收窄历史任务。
+fn history_scope_filter(actor_id: &str) -> Document {
+    doc! { "$or": [
+        { "responsibility_actor_ids": actor_id },
+        { "completed_by": actor_id },
+        { "closed_by": actor_id },
+    ] }
 }
 
 #[cfg(test)]
@@ -396,14 +346,9 @@ mod tests {
         let before = managed.to_doc();
         managed.narrow_current_handlers(&[]);
         assert_eq!(managed.to_doc(), before);
-        let mut history = WorkItemFilter {
-            history_actor_id: Some("actor".into()),
-            history_managed_owner_ids: Some(Some(vec!["managed".into()])),
-            ..Default::default()
-        };
+        let mut history = WorkItemFilter { history_actor_id: Some("actor".into()), ..Default::default() };
         history.narrow_current_handlers(&handlers);
         assert_eq!(history.history_actor_id.as_deref(), Some("actor"));
-        assert_eq!(history.history_managed_owner_ids, Some(Some(vec!["managed".into()])));
         assert_eq!(history.managed_owner_ids, Some(handlers));
     }
 
@@ -423,15 +368,11 @@ mod tests {
         assert!(!managed.contains_key("owner_organization_id"));
         let company = WorkItemFilter::default().to_doc();
         assert!(!company.contains_key("$and"));
-        let history = WorkItemFilter {
-            history_managed_owner_ids: Some(Some(vec![])),
-            history_actor_id: Some("actor".into()),
-            ..Default::default()
-        }
-        .to_doc();
+        let history =
+            WorkItemFilter { history_actor_id: Some("actor".into()), ..Default::default() }.to_doc();
         let alternatives =
             history.get_array("$and").unwrap()[0].as_document().unwrap().get_array("$or").unwrap();
-        assert_eq!(alternatives[0], Bson::Document(doc! { "owner_user_id": { "$in": [] } }));
+        assert_eq!(alternatives.len(), 3);
         assert!(alternatives.contains(&Bson::Document(doc! { "completed_by": "actor" })));
     }
 
@@ -441,7 +382,6 @@ mod tests {
             statuses: vec![WorkItemStatus::Open],
             work_item_types: vec![WorkItemType::ImportBusinessConfirmation, WorkItemType::BusinessException],
             owner_user_id: Some("alice".to_string()),
-            owner_organization_ids: vec!["org-1".to_string()],
             priorities: vec![WorkItemPriority::High, WorkItemPriority::Urgent],
             due_from: Some(Instant::from_unix_secs(100)),
             due_before: Some(Instant::from_unix_secs(200)),
@@ -502,22 +442,6 @@ mod tests {
             .get_str("$regex")
             .unwrap();
         assert_eq!(regex, r"SO\.\[1\]");
-    }
-
-    #[test]
-    fn history_scope_unions_actor_and_managed_organizations() {
-        let filter = WorkItemFilter {
-            history_actor_id: Some("alice".to_string()),
-            history_managed_organization_ids: Some(vec!["org-a".to_string()]),
-            page: 1,
-            page_size: 20,
-            ..WorkItemFilter::default()
-        }
-        .to_doc();
-
-        let history = filter.get_array("$and").unwrap()[0].as_document().unwrap().get_array("$or").unwrap();
-        assert_eq!(history.len(), 4);
-        assert_eq!(history[3], Bson::Document(doc! { "owner_organization_id": { "$in": ["org-a"] } }));
     }
 
     #[test]

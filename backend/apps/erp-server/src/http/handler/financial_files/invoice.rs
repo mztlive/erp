@@ -9,7 +9,7 @@ use crate::http::errors::{Error, Result};
 use crate::http::handler::file_asset::{asset_download_response, read_asset, revalidate_asset};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{funds_access_with_rbac, purchase_access};
+use crate::wiring::funds_access_with_rbac;
 
 /// 复用财务详情授权，文件清单与资格由读取事务同时核验。
 async fn files(
@@ -18,11 +18,7 @@ async fn files(
     id: &str,
 ) -> std::result::Result<Vec<FinancialFileView>, Error> {
     Ok(funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .invoice_files_scoped(
-            id,
-            actor,
-            &purchase_access(state.application().db(), state.application().rbac()),
-        )
+        .invoice_files_scoped(id, actor)
         .await?)
 }
 

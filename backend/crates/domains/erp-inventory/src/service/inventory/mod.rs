@@ -9,8 +9,8 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::ports::{
-    AdjustmentPeopleFactsPort, AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAuditPort,
-    WarehouseFactsPort,
+    AdjustmentPeopleFactsPort, AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAction,
+    InventoryAuditPort, WarehouseFactsPort,
 };
 use crate::{InventoryAuthorization, Result};
 
@@ -42,7 +42,7 @@ impl InventoryService {
     /// 在调用方执行器内解析本服务已经装配的库存动作资格。
     ///
     /// # 参数
-    /// `actor` 为当前操作人，`executor` 为当前业务命令的执行器。
+    /// `actor` 为当前操作人，`actions` 为所需动作，`executor` 为当前业务命令的执行器。
     /// # 返回
     /// 返回本服务的权威库存授权事实。
     /// # 错误
@@ -50,9 +50,10 @@ impl InventoryService {
     pub async fn authorize(
         &self,
         actor: &AuditActor,
+        actions: &[InventoryAction],
         executor: &mut dyn Executor,
     ) -> Result<InventoryAuthorization> {
-        self.authorization.authorize(actor, executor).await
+        self.authorization.authorize(actor, actions, executor).await
     }
 
     /// 创建库存服务实例。

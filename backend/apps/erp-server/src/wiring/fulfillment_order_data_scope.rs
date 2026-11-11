@@ -1,123 +1,17 @@
 //! 组合根只装配业务事实；权限检查及查询编译统一交给身份域。
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
+use erp_supply::FulfillmentOrderAccess;
 use erp_supply::ports::FulfillmentExceptionHandlerPort;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use erp_supply::{FulfillmentOrderAccess, FulfillmentOrderDataScopePort, FulfillmentOrderResolvedScope};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemFilter, WorkItemRow, WorkItemStatus, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::identity_error::map_identity_error;
-use super::scope_support;
-map_identity_error!(erp_supply);
-
-#[derive(Clone)]
-pub struct MongoFulfillmentOrderDataScope {
-    db: Database,
-    rbac: SharedRbacService,
-}
-impl MongoFulfillmentOrderDataScope {
-    /// 绑定身份设施。
-    /// # 参数
-    /// db、rbac 为应用共享设施。
-    /// # 返回
-    /// 不执行I/O的adapter。
-    /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
-    }
-    /// 包装为领域授权端口。
-    /// # 参数
-    /// db、rbac 为共享身份设施。
-    /// # 返回
-    /// 已装配端口。
-    /// # 错误
-    /// 不执行I/O。
-    pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn FulfillmentOrderDataScopePort> {
-        Arc::new(Self::new(db, rbac))
-    }
-}
-#[async_trait]
-impl FulfillmentOrderDataScopePort for MongoFulfillmentOrderDataScope {
-    async fn resolve(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> erp_supply::Result<FulfillmentOrderResolvedScope> {
-        erp_supply::authorization::resolve(
-            &self.db,
-            self.rbac.clone(),
-            actor,
-            "supplier_fulfillment_order",
-            action,
-            executor,
-        )
-        .await
-        .map_err(map_identity_error)
-    }
-    async fn require(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> erp_supply::Result<()> {
-        erp_supply::authorization::require(
-            &self.db,
-            self.rbac.clone(),
-            actor,
-            "supplier_fulfillment_order",
-            action,
-            id,
-            executor,
-        )
-        .await
-        .map_err(map_identity_error)
-    }
-    async fn expand_org_units(
-        &self,
-        org_unit_ids: &[String],
-        include_descendants: bool,
-        executor: &mut dyn Executor,
-    ) -> erp_supply::Result<BTreeSet<String>> {
-        scope_support::expand_org_units(
-            &self.db,
-            org_unit_ids,
-            include_descendants,
-            executor,
-            Into::into,
-            map_identity_error,
-        )
-        .await
-    }
-
-    async fn org_member_ids(
-        &self,
-        org_unit_ids: &BTreeSet<String>,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> erp_supply::Result<Vec<String>> {
-        scope_support::org_member_ids(&self.db, org_unit_ids, at, executor, Into::into).await
-    }
-
-    async fn own_org(
-        &self,
-        user_id: &str,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> erp_supply::Result<Option<String>> {
-        scope_support::own_org(&self.db, user_id, at, executor, Into::into, map_identity_error).await
-    }
-}
 /// 当前开放 W26 异常处理人 adapter。
 #[derive(Clone)]
 pub struct MongoFulfillmentExceptionHandlers {
@@ -264,7 +158,7 @@ fn w26_row_order_id(row: WorkItemRow) -> Option<String> {
 /// # 错误
 /// 不返回错误。
 pub fn fulfillment_order_access(db: Database, rbac: SharedRbacService) -> FulfillmentOrderAccess {
-    FulfillmentOrderAccess::new(db.clone(), MongoFulfillmentOrderDataScope::shared(db, rbac))
+    FulfillmentOrderAccess::new(db, rbac)
 }
 
 /// 构造已接入身份域公共解析器与 W26 处理人 Port 的履约服务。
@@ -280,7 +174,7 @@ pub fn fulfillment_order_access(db: Database, rbac: SharedRbacService) -> Fulfil
 /// 不返回错误。
 pub fn scoped_fulfillment_service(db: Database, rbac: SharedRbacService) -> SupplierFulfillmentService {
     SupplierFulfillmentService::new(db.clone()).with_scope(
-        MongoFulfillmentOrderDataScope::shared(db.clone(), rbac),
+        FulfillmentOrderAccess::new(db.clone(), rbac),
         MongoFulfillmentExceptionHandlers::shared(db),
     )
 }

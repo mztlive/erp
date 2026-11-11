@@ -9,5 +9,4 @@ pub mod repository;
 pub mod service;
 
 pub use error::{Error, Result, optimistic_lock_conflict};
-pub use ports::{FailClosedIntegrationDataScopePort, IntegrationDataScopePort};
 pub use service::{IntegrationAccess, IntegrationOpsService, ScopedIntegrationList};

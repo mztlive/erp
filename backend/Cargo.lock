@@ -2866,6 +2866,7 @@ dependencies = [
  "entity-core",
  "entity-macros",
  "erp-core",
+ "erp-identity",
  "hmac 0.13.0",
  "id-generator",
  "mongodb",

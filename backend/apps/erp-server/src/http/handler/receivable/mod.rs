@@ -276,10 +276,8 @@ pub async fn invoice_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<InvoiceListParams>,
 ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
-    let purchase_access =
-        crate::wiring::purchase_access(state.application().db(), state.application().rbac());
     let page = crate::wiring::funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .invoice_list_scoped(&params, &actor, &purchase_access)
+        .invoice_list_scoped(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -299,10 +297,8 @@ pub async fn invoice_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
-    let purchase_access =
-        crate::wiring::purchase_access(state.application().db(), state.application().rbac());
     let view = crate::wiring::funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .invoice_detail_scoped(&id, &actor, &purchase_access)
+        .invoice_detail_scoped(&id, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

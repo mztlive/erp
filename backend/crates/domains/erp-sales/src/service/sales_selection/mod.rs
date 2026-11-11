@@ -1,4 +1,5 @@
 //! 销售选品用例编排。
+mod authorization;
 
 pub mod access;
 mod copy;

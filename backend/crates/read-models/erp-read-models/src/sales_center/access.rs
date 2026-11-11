@@ -118,23 +118,6 @@ impl SalesAccess {
     ) -> Result<(SalesReadContext, SalesReadScope)> {
         self.query(actor, "sales_order", action, permissions, false, executor).await
     }
-    /// 按固定消费资源登记在销售事实模型上证明范围。
-    /// # 参数
-    /// actor、resource、action 为固定入口；permissions 为附加同角色功能权限；executor 为原执行器。
-    /// # 返回
-    /// 完整授权的销售行读取约束。
-    /// # 错误
-    /// 未登记入口及身份错误拒绝。
-    pub async fn resolve_resource(
-        &self,
-        actor: &AuditActor,
-        resource: &str,
-        action: &str,
-        permissions: &[Permission],
-        executor: &mut dyn Executor,
-    ) -> Result<(SalesReadContext, SalesReadScope)> {
-        self.query(actor, resource, action, permissions, false, executor).await
-    }
     /// 为固定业务入口读取实际销售来源；不额外要求来源详情功能权限。
     /// # 参数
     /// actor 为当前账号，entry 为服务端固定入口，executor 为原执行器。
@@ -283,16 +266,7 @@ impl SalesAccess {
             .await?;
         Ok(())
     }
-    /// 在原读取阶段复验已编译的销售凭证。
-    /// # 参数
-    /// context 为原凭证，executor 为原执行器。
-    /// # 返回
-    /// 有效时成功。
-    /// # 错误
-    /// 版本或授权失效拒绝。
-    pub async fn validate(&self, context: &SalesReadContext, executor: &mut dyn Executor) -> Result<()> {
-        context.validate(executor).await
-    }
+
     /// 展开请求中的内部组织及其可选有效下级。
     ///
     /// # 参数

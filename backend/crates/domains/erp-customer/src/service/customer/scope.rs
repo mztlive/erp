@@ -10,12 +10,13 @@ use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::CustomerService;
-use super::access::{ensure_limit, intersect_ids};
+use super::access::ensure_limit;
 use crate::dto::customer::{CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
+use crate::ports::{AccountFactPort, PartyFactPort};
 use crate::repository::scope::{CustomerReadScope, CustomerVersion, authorized_page, authorized_versions};
 use crate::repository::{CustomerAccountFilter, CustomerAssignmentRepositoryExt, CustomerExt};
+use crate::{CustomerAccess, CustomerResolvedScope};
 
 /// 列表响应保持分页、归属口径与授权时点，不传输负责销售候选。
 #[derive(Serialize)]
@@ -58,7 +59,6 @@ pub(super) struct CustomerSnapshot {
 struct ListTxDeps {
     db: Database,
     access: super::access::CustomerAccess,
-    data_scope: Arc<dyn CustomerDataScopePort>,
     party: Arc<dyn PartyFactPort>,
     accounts: Arc<dyn AccountFactPort>,
     actor: AuditActor,
@@ -134,8 +134,7 @@ impl CustomerService {
     fn list_deps(&self, query: CustomerListQuery, actor: &AuditActor) -> ListTxDeps {
         ListTxDeps {
             db: self.db.clone(),
-            access: self.access(),
-            data_scope: self.data_scope.clone(),
+            access: self.access.clone(),
             party: self.party.clone(),
             accounts: self.accounts.clone(),
             actor: actor.clone(),
@@ -165,8 +164,7 @@ async fn run_list_snapshot(
 ) -> Result<CustomerSnapshot> {
     let (mut context, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
     let filter = build_account_filter(&deps, authorized).await?;
-    let versions =
-        authorized_versions(&deps.db, &filter, &context, deps.data_scope.as_ref(), executor).await?;
+    let versions = authorized_versions(&deps.db, &filter, &context, &deps.access, executor).await?;
     ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
     apply_version_fingerprint(&mut context, &versions);
     if !hydrate {
@@ -179,7 +177,7 @@ async fn run_list_snapshot(
             no_scope,
         });
     }
-    let page = authorized_page(&deps.db, &filter, &context, deps.data_scope.as_ref(), executor).await?;
+    let page = authorized_page(&deps.db, &filter, &context, &deps.access, executor).await?;
     let items = hydrate_rows(
         &deps.db,
         (&*deps.party, &*deps.accounts),
@@ -190,7 +188,7 @@ async fn run_list_snapshot(
         executor,
     )
     .await?;
-    deps.data_scope.validate(&context, executor).await?;
+    deps.access.validate(&context, executor).await?;
     Ok(CustomerSnapshot {
         no_scope,
         items,
@@ -219,8 +217,7 @@ async fn resolve_list_authorized(
     let (context, scope) = deps.access.query(&deps.actor, "list", executor).await?;
     let no_scope = false;
     let authorized =
-        apply_list_filters(&deps.db, deps.data_scope.as_ref(), &context, &scope, &deps.query, executor)
-            .await?;
+        apply_list_filters(&deps.db, &deps.access, &context, &scope, &deps.query, executor).await?;
     let as_of = super::access::business_date(context.as_of)?;
     Ok((context, authorized, as_of, no_scope))
 }
@@ -416,7 +413,7 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `data_scope` - 组织展开与成员事实 Port
+/// * `data_scope` - 组织目录访问器
 /// * `context` - 已解析的客户范围事实
 /// * `scope` - 已映射的客户范围
 /// * `query` - 归一化查询
@@ -432,15 +429,14 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 /// Mine/协作只是收窄条件；AllAuthorized 不得绕过 DataScope。
 async fn apply_list_filters(
     db: &mongodb::Database,
-    data_scope: &dyn CustomerDataScopePort,
+    data_scope: &CustomerAccess,
     context: &CustomerResolvedScope,
     scope: &CustomerReadScope,
     query: &CustomerListQuery,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<Vec<String>>> {
     let as_of = super::access::business_date(context.as_of)?;
-    let mut ids = scope.authorized_customer_ids.clone();
-    ids = intersect_ids(ids, assignment_filter(scope, query.scope));
+    let mut ids = assignment_filter(scope, query.scope);
     if let Some(owners) = &query.owner_user_ids {
         ids = Some(current_owner_customer_ids(db, ids.as_deref(), owners.as_slice(), as_of, executor).await?);
     }
@@ -451,7 +447,7 @@ async fn apply_list_filters(
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `data_scope` - 组织展开与成员事实 Port
+/// * `data_scope` - 组织目录访问器
 /// * `context` - 已解析的客户范围事实
 /// * `ids` - 当前授权客户集合
 /// * `query` - 归一化查询
@@ -468,7 +464,7 @@ async fn apply_list_filters(
 /// 组织筛选只看当前主负责人所属组织，不得用协作人员组织代替。
 async fn apply_org_unit_filter(
     db: &mongodb::Database,
-    data_scope: &dyn CustomerDataScopePort,
+    data_scope: &CustomerAccess,
     context: &CustomerResolvedScope,
     ids: Option<Vec<String>>,
     query: &CustomerListQuery,
@@ -485,9 +481,10 @@ async fn apply_org_unit_filter(
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
     let expanded = data_scope
+        .organization()
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
-    let members = data_scope.org_member_ids(&expanded, context.as_of, executor).await?;
+    let members = data_scope.organization().org_member_ids(&expanded, context.as_of, executor).await?;
     ensure_limit(members.len(), "组织成员超过查询上限，请收窄组织筛选")?;
     Ok(Some(current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?))
 }
@@ -655,11 +652,7 @@ mod tests {
 
     #[test]
     fn directory_scope_does_not_grant_company_access() {
-        let scope = CustomerReadScope {
-            owned_customer_ids: vec!["c-own".into()],
-            collaborative_customer_ids: vec!["c-collab".into()],
-            authorized_customer_ids: Some(vec!["c-1".into()]),
-        };
+        let scope = CustomerReadScope { owned_customer_ids: vec!["c-own".into()] };
         assert!(assignment_filter(&scope, CustomerScope::AllAuthorized).is_none());
         assert_eq!(assignment_filter(&scope, CustomerScope::Mine), Some(vec!["c-own".into()]));
         assert_eq!(assignment_filter(&scope, CustomerScope::Collaborating), Some(vec!["c-own".into()]));

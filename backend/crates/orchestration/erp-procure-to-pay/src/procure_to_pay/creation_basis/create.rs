@@ -333,7 +333,7 @@ pub async fn persist_basis_draft(
     reserve_selected_quotes(db, &order, &lines, executor).await?;
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: command.actor };
-    let document = write_prepared_draft(db, ports, rbac, &write, executor).await?;
+    let document = write_prepared_draft(db, ports, &write, executor).await?;
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
         order,
@@ -475,7 +475,7 @@ async fn prepare_basis_submission(
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `rbac` - 审批绑定授权源
+/// * `ports` - 审批绑定与业务写入能力
 /// * `write` - 采购聚合与审计操作人
 /// * `executor` - 数据访问执行器
 ///
@@ -490,7 +490,6 @@ async fn prepare_basis_submission(
 pub(in crate::procure_to_pay) async fn write_prepared_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
-    _rbac: &SharedRbacService,
     write: &PreparedDraftWrite<'_>,
     executor: &mut dyn Executor,
 ) -> Result<BusinessDocument> {

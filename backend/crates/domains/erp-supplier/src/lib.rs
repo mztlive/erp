@@ -44,10 +44,10 @@ pub use entity::supplier::{
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
     AccountFactPort, AddressTypeFact, EffectiveRecordStatusFact, EmptyFileAssetFacts, EmptyPartyFacts,
-    EmptySensitiveTokens, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, FileAssetFact,
-    FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyFactsPort,
-    PartyListFact, PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact, SensitiveFieldKindFact,
-    SensitiveTokenPort, SupplierDataScopePort, SupplierResolvedScope, select_current_default,
+    EmptySensitiveTokens, FailClosedAccountFactPort, FileAssetFact, FileAssetFactsPort, PartyAddressFact,
+    PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact, PartyRevisionFact,
+    PartyStatusFact, PartyTaxProfileFact, SensitiveFieldKindFact, SensitiveTokenPort, SupplierResolvedScope,
+    select_current_default,
 };
 pub use repository::{
     SupplierAccountFilter, SupplierAccountRepository, SupplierAccountRow, SupplierCapabilityFilter,
@@ -60,7 +60,7 @@ pub use repository::{
 pub use service::supplier::eligibility::ensure_capability_qualified;
 pub use service::supplier::{
     SupplierAccess, SupplierListView, SupplierService, capability_handover_fingerprint, command_view,
-    supplier_handover_fingerprint, supplier_scope,
+    supplier_handover_fingerprint,
 };
 
 pub mod authorization;

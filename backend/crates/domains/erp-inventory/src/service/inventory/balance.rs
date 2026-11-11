@@ -16,8 +16,8 @@ use crate::dto::{
 use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
 use crate::ports::{
-    CatalogFactsPort, FulfillmentFactsPort, InventoryAuthorization, SkuFact, SkuRevisionFact, WarehouseFact,
-    WarehouseFactsPort, WarehouseRevisionFact,
+    CatalogFactsPort, FulfillmentFactsPort, InventoryAction, InventoryAuthorization, SkuFact,
+    SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact,
 };
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockBalanceFilter, StockBalanceRow, StockMovementFilter};
@@ -93,7 +93,9 @@ impl InventoryService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
+                    let authorization = authorization_port
+                        .authorize(&actor, &[InventoryAction::BalanceList, InventoryAction::Create], executor)
+                        .await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存读取权限".into()));
                     }
@@ -132,34 +134,7 @@ impl InventoryService {
         fields(layer = "service", domain = "inventory", operation = "stock_balance_detail")
     )]
     pub async fn stock_balance_detail(&self, id: &str, actor: &AuditActor) -> Result<StockBalanceDetailView> {
-        let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let fulfillment = self.fulfillment_facts.clone();
-        let actor = actor.clone();
-        let id = id.to_string();
-        let client = db.client().clone();
-        let (balance, authorization, details) = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
-                    let balance = db
-                        .inventory()
-                        .stock_balance(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
-                    if !authorization.actor_is_active()
-                        || !authorization.can_read_balance_detail(balance.warehouse_id.as_ref())
-                    {
-                        return Err(Error::NotFound("库存余额不存在".to_string()));
-                    }
-                    let details =
-                        balance_details(&db, fulfillment.as_ref(), &balance, &authorization, executor)
-                            .await?;
-                    authorization.validate(executor).await?;
-                    Ok::<_, Error>((balance, authorization, details))
-                })
-            })
-            .await?;
+        let (balance, authorization, details) = self.balance_detail_snapshot(id, actor).await?;
         let enrichments = load_balance_enrichments(
             &self.db,
             self.warehouse_facts.as_ref(),
@@ -182,6 +157,52 @@ impl InventoryService {
             active_reservations: details.reservations,
             pending_adjustments: details.adjustments,
         })
+    }
+
+    /// 在同一事务内取证余额、关联事实及所需动作，并完成读取后复验。
+    async fn balance_detail_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<(StockBalance, InventoryAuthorization, BalanceDetails)> {
+        let db = self.db.clone();
+        let authorization_port = std::sync::Arc::clone(&self.authorization);
+        let fulfillment = self.fulfillment_facts.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let authorization = authorization_port
+                        .authorize(
+                            &actor,
+                            &[
+                                InventoryAction::BalanceDetail,
+                                InventoryAction::AdjustmentDetail,
+                                InventoryAction::Create,
+                            ],
+                            executor,
+                        )
+                        .await?;
+                    let balance = db
+                        .inventory()
+                        .stock_balance(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+                    if !authorization.actor_is_active()
+                        || !authorization.can_read_balance_detail(balance.warehouse_id.as_ref())
+                    {
+                        return Err(Error::NotFound("库存余额不存在".to_string()));
+                    }
+                    let details =
+                        balance_details(&db, fulfillment.as_ref(), &balance, &authorization, executor)
+                            .await?;
+                    authorization.validate(executor).await?;
+                    Ok::<_, Error>((balance, authorization, details))
+                })
+            })
+            .await
     }
 }
 

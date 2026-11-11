@@ -24,7 +24,6 @@ pub use candidate_list::{PaymentCandidateQuery, PaymentCandidateSort};
 pub use dto::*;
 use erp_finance::ports::funds_scope::FailClosedFundsDataScopePort;
 use erp_identity::SharedRbacService;
-use erp_procurement::{PurchaseAccess, PurchaseDataScopePort};
 pub use materials::PaymentRequestMaterialReference;
 use mongodb::Database;
 pub use review_dto::*;
@@ -37,31 +36,22 @@ use crate::finance::funds_scope::FundsAccess;
 pub struct PurchasePaymentRequestReadService {
     db: Database,
     rbac: SharedRbacService,
-    purchase_scope: Arc<dyn PurchaseDataScopePort>,
 }
 
 impl PurchasePaymentRequestReadService {
-    /// 绑定数据库、当前权限服务与采购来源范围。
+    /// 绑定数据库与当前权限服务。
     ///
     /// # 参数
-    /// * `db` / `rbac` / `purchase_scope` - 组合根注入的事实与范围服务。
+    /// * `db` / `rbac` - 组合根注入的数据库与身份服务。
     /// # 返回
     /// 返回不缓存资格的读取服务。
     /// # 错误
     /// 不执行 I/O，不返回错误。
-    pub fn new(
-        db: Database,
-        rbac: SharedRbacService,
-        purchase_scope: Arc<dyn PurchaseDataScopePort>,
-    ) -> Self {
-        Self { db, rbac, purchase_scope }
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac }
     }
 
     fn funds_access(&self) -> FundsAccess {
         FundsAccess::new(self.db.clone(), self.rbac.clone(), Arc::new(FailClosedFundsDataScopePort))
-    }
-
-    fn purchase_access(&self) -> PurchaseAccess {
-        PurchaseAccess::new(self.db.clone(), Arc::clone(&self.purchase_scope))
     }
 }

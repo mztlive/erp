@@ -14,6 +14,7 @@ use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::customer_receipt_commit::convert_allocations;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
@@ -159,7 +160,15 @@ impl ReceivableProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<CustomerReceipt> {
-        if self.rbac.runtime.action_roles(actor, "customer_receipt:create", executor).await?.is_empty() {
+        let authorization = AuthorizationService::new(
+            self.db.clone(),
+            self.rbac.identity.clone(),
+            AuthorizationRegistry::default(),
+        );
+        if !authorization
+            .has_permission(actor, &Permission::parse("customer_receipt:create")?, executor)
+            .await?
+        {
             return Err(Error::Forbidden("当前账号缺少回款登记权限".into()));
         }
         let receipt = CustomerReceipt::new(

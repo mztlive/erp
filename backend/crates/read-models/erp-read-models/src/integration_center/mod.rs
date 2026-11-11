@@ -9,8 +9,8 @@ mod repository;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_integration::IntegrationAccess;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
-use erp_integration::{IntegrationAccess, IntegrationDataScopePort};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
@@ -20,15 +20,15 @@ use crate::Result;
 pub struct IntegrationCenterReadService {
     db: Database,
     evidence: Arc<dyn IntegrationEvidenceAuthority>,
-    data_scope: Arc<dyn IntegrationDataScopePort>,
+    access: IntegrationAccess,
 }
 impl IntegrationCenterReadService {
-    /// 绑定数据库、权威证据和范围 Port。
+    /// 绑定数据库、权威证据和授权服务。
     ///
     /// # 参数
     /// * `db` - 集成集合所在数据库
     /// * `evidence` - 权威证据端口
-    /// * `data_scope` - 组合层注入的集成范围 Port
+    /// * `access` - 组合层注入的集成授权服务
     ///
     /// # 返回
     /// 返回未执行 I/O 的详情读取服务。
@@ -37,17 +37,17 @@ impl IntegrationCenterReadService {
     /// 无。
     ///
     /// # 关键业务约束
-    /// HTTP 详情必须注入生产 adapter，不得保留失败关闭端口。
+    /// HTTP 详情使用组合根装配的授权服务。
     pub fn new(
         db: Database,
         evidence: Arc<dyn IntegrationEvidenceAuthority>,
-        data_scope: Arc<dyn IntegrationDataScopePort>,
+        access: IntegrationAccess,
     ) -> Self {
-        Self { db, evidence, data_scope }
+        Self { db, evidence, access }
     }
 
     fn access(&self) -> IntegrationAccess {
-        IntegrationAccess::new(self.data_scope.clone())
+        self.access.clone()
     }
 
     async fn require_visible(&self, actor: &AuditActor, resource: &str, id: &str) -> Result<()> {

@@ -801,10 +801,7 @@ mod tests {
     #[test]
     fn scoped_row_revalidates_snapshot_and_view_authorization() {
         let actor = AuditActor::new("starter".to_string(), "starter".to_string(), AccountKind::Admin);
-        let type_scopes = [ApprovalRuntimeReadTypeScope {
-            organization_ids: None,
-            process_kind: ProcessKind::StockAdjustment,
-        }];
+        let type_scopes = [ApprovalRuntimeReadTypeScope { process_kind: ProcessKind::StockAdjustment }];
         let item = item_from_runtime_read_row(
             ApprovalRuntimeReadRow { instance: summary(), snapshot: Some(snapshot()) },
             &actor,
@@ -835,10 +832,7 @@ mod tests {
 
     #[test]
     fn runtime_rows_follow_started_and_management_view_boundaries() {
-        let scopes = [ApprovalRuntimeReadTypeScope {
-            organization_ids: None,
-            process_kind: ProcessKind::StockAdjustment,
-        }];
+        let scopes = [ApprovalRuntimeReadTypeScope { process_kind: ProcessKind::StockAdjustment }];
         let other = AuditActor::new("other".into(), "other".into(), AccountKind::Admin);
         for view in [RuntimeInstanceListView::Managed, RuntimeInstanceListView::Blocked] {
             assert!(

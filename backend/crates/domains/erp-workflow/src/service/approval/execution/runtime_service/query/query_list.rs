@@ -424,11 +424,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let mut scopes = Vec::new();
         for document_type in allowed {
             adapter_spec_of(document_type)?;
-            let organization_ids = None;
-            scopes.push(ApprovalRuntimeReadTypeScope {
-                process_kind: process_kind_of(document_type),
-                organization_ids,
-            });
+            scopes.push(ApprovalRuntimeReadTypeScope { process_kind: process_kind_of(document_type) });
         }
         Ok(scopes)
     }

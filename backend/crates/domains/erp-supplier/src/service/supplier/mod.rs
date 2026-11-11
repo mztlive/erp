@@ -23,10 +23,9 @@ use crate::entity::supplier::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountFactPort, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, PartyAddressFact,
-    PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact, PartyRevisionFact,
-    PartyTaxProfileFact, SensitiveFieldKindFact, SensitiveTokenPort, SupplierDataScopePort,
-    select_current_default,
+    AccountFactPort, FailClosedAccountFactPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact,
+    PartyFactsPort, PartyListFact, PartyRevisionFact, PartyTaxProfileFact, SensitiveFieldKindFact,
+    SensitiveTokenPort, select_current_default,
 };
 use crate::repository::{SupplierAccountRow, SupplierDetailBundle, SupplierExt};
 
@@ -38,7 +37,7 @@ mod list_view;
 mod profile;
 mod scope;
 
-pub use access::{SupplierAccess, supplier_scope};
+pub use access::SupplierAccess;
 pub use handover_identity::{capability_handover_fingerprint, supplier_handover_fingerprint};
 pub use profile::command_view;
 pub use scope::SupplierListView;
@@ -50,7 +49,7 @@ pub struct SupplierService {
     db: Database,
     party: Arc<dyn PartyFactsPort>,
     sensitive_data: Option<Arc<dyn SensitiveTokenPort>>,
-    data_scope: Arc<dyn SupplierDataScopePort>,
+    data_scope: SupplierAccess,
     accounts: Arc<dyn AccountFactPort>,
 }
 
@@ -68,10 +67,10 @@ impl SupplierService {
     /// 无；未注入的账号与范围能力默认拒绝访问。
     pub fn new(db: Database, party: Arc<dyn PartyFactsPort>) -> Self {
         Self {
-            db,
+            db: db.clone(),
             party,
             sensitive_data: None,
-            data_scope: FailClosedSupplierDataScopePort::shared(),
+            data_scope: SupplierAccess::unwired(db.clone()),
             accounts: Arc::new(FailClosedAccountFactPort),
         }
     }
@@ -94,18 +93,18 @@ impl SupplierService {
         sensitive_data: Arc<dyn SensitiveTokenPort>,
     ) -> Self {
         Self {
-            db,
+            db: db.clone(),
             party,
             sensitive_data: Some(sensitive_data),
-            data_scope: FailClosedSupplierDataScopePort::shared(),
+            data_scope: SupplierAccess::unwired(db.clone()),
             accounts: Arc::new(FailClosedAccountFactPort),
         }
     }
 
-    /// 注入范围 Port 与账号事实。
+    /// 注入授权能力 与账号事实。
     ///
     /// # 参数
-    /// * `data_scope` - 已接线供应商范围 Port
+    /// * `data_scope` - 已接线供应商授权能力
     /// * `accounts` - 账号显示名与登录资格
     ///
     /// # 返回
@@ -113,11 +112,7 @@ impl SupplierService {
     ///
     /// # 错误
     /// 无。
-    pub fn with_scope(
-        mut self,
-        data_scope: Arc<dyn SupplierDataScopePort>,
-        accounts: Arc<dyn AccountFactPort>,
-    ) -> Self {
+    pub fn with_scope(mut self, data_scope: SupplierAccess, accounts: Arc<dyn AccountFactPort>) -> Self {
         self.data_scope = data_scope;
         self.accounts = accounts;
         self
@@ -126,7 +121,7 @@ impl SupplierService {
     /// 构造供应商对象访问器。
     ///
     /// # 参数
-    /// 无额外参数；复用服务已注入的数据库与范围端口。
+    /// 无额外参数；复用服务已注入的数据库与授权能力。
     ///
     /// # 返回
     /// 返回执行供应商对象权限与责任范围校验的访问器。
@@ -134,7 +129,7 @@ impl SupplierService {
     /// # 错误
     /// 无；权限校验在访问器执行查询时进行。
     pub fn access(&self) -> SupplierAccess {
-        SupplierAccess::new(self.db.clone(), self.data_scope.clone())
+        self.data_scope.clone()
     }
 
     /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。

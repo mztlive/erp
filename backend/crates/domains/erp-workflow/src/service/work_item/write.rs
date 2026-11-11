@@ -255,9 +255,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .find_work_item(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-        let access = self.task_eligibility(actor, &item, executor).await?;
+        let access = self.task_actions(actor, &item, executor).await?;
         let scope = WorkItemScope::for_task(&item, actor.id());
-        self.ensure_item_access_with_executor(&item, &access, executor).await?;
+        self.ensure_task_facts(&item, actor, executor).await?;
         let view_access = ViewAccess::from_fields(&item.clone().into(), scope, &access.task);
         self.authorization.require(actor, "detail", id, executor).await?;
         Ok(AuthorizedWorkItem {

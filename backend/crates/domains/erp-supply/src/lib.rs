@@ -16,25 +16,21 @@ pub mod ports;
 pub mod repository;
 pub mod service;
 
+pub use authorization::{FulfillmentOrderResolvedScope, OfferingResolvedScope, SettlementResolvedScope};
 pub use dto::supplier_fulfillment_scope::{
     FulfillmentHandoverCandidateView, HandoverFulfillmentOrderRequest, HandoverFulfillmentOrderView,
     SupplierFulfillmentOrderListView,
 };
 pub use dto::{HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
 pub use error::{Error, Result, known_duplicate_index_message};
-pub use ports::{
-    FailClosedFulfillmentExceptionHandlerPort, FailClosedFulfillmentOrderDataScopePort,
-    FailClosedOfferingDataScopePort, FailClosedSettlementDataScopePort, FulfillmentExceptionHandlerPort,
-    FulfillmentOrderDataScopePort, FulfillmentOrderResolvedScope, OfferingDataScopePort,
-    OfferingResolvedScope, SettlementDataScopePort, SettlementResolvedScope,
-};
+pub use ports::{FailClosedFulfillmentExceptionHandlerPort, FulfillmentExceptionHandlerPort};
 pub use repository::supplier_settlement::SettlementReadScope;
 pub use repository::{
     FulfillmentOrderReadScope, OfferingReadScope, SupplierOfferingExt, SupplierOfferingFilter,
 };
-pub use service::supplier_fulfillment::{FulfillmentOrderAccess, fulfillment_order_scope};
-pub use service::supplier_offering::{OfferingAccess, SupplierOfferingService, offering_scope};
-pub use service::supplier_settlement::{SettlementAccess, settlement_scope};
+pub use service::supplier_fulfillment::FulfillmentOrderAccess;
+pub use service::supplier_offering::{OfferingAccess, SupplierOfferingService};
+pub use service::supplier_settlement::SettlementAccess;
 
 pub mod connector_registry;
 

@@ -1,5 +1,7 @@
 //! 交接命令的规范化、目标组织检查和安全中文事件事实。
 
+use std::slice;
+
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{
     AuditAction, AuditCode, AuditFact, AuditField, AuditFieldKind, AuditValue, BusinessEventContent,
@@ -118,10 +120,8 @@ pub(crate) async fn target_qualified(
     permission: &Permission,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Ok(false);
-    };
-    let actor = AuditActor::new(account.base.id, account.name, account.kind);
+    // 交接目标只允许内部账号；统一资格检查负责重读账号并核验真实类型和状态。
+    let actor = AuditActor::new(target.to_owned(), target.to_owned(), AccountKind::Admin);
     let authorization =
         AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
     Ok(authorization.has_permission(&actor, permission, executor).await?)
@@ -148,8 +148,15 @@ pub(crate) async fn qualified_candidates(
             continue;
         }
         let actor = AuditActor::new(account.base.id.clone(), account.name.clone(), account.kind);
-        if service.has_permission(&actor, permission, executor).await? {
-            candidates.push(AccountPermissionCandidate::from_account(&account));
+        if let Some(qualified) = service.permissions(&actor, slice::from_ref(permission), executor).await?
+            && qualified.permissions().covers_one(permission)
+        {
+            let current = qualified.account();
+            candidates.push(AccountPermissionCandidate {
+                user_id: current.id.clone(),
+                display_name: current.display_name.clone(),
+                account: current.login_account.clone(),
+            });
         }
     }
     candidates.sort();

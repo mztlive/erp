@@ -5,9 +5,8 @@ use async_trait::async_trait;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
 use erp_audit::{AuditAction, BusinessEventContent};
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
-use erp_identity::repository::prelude::*;
+use erp_identity::Permission;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, Permission};
 use erp_supplier::entity::handover_receipt::{
     CAPABILITY_HANDOVER_ACTION, SUPPLIER_HANDOVER_ACTION, SupplierHandoverReceipt, SupplierHandoverResult,
 };
@@ -22,7 +21,8 @@ use validator::Validate;
 
 use super::{SupplierProfileAuthorization, SupplierProfileProcess};
 use crate::handover_common::{
-    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, target_qualified,
+    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, qualified_candidates,
+    target_qualified,
 };
 use crate::{Error, Result};
 
@@ -511,23 +511,13 @@ async fn list_candidates(
     current: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
-    let mut candidates = Vec::new();
-    for account in accounts {
-        if account.base.id == current {
-            continue;
-        }
-        if !account_can_maintain(db, rbac, &account.base.id, executor).await? {
-            continue;
-        }
-        candidates.push(HandoverCandidateView {
-            user_id: account.base.id.clone(),
-            display_name: account.name.clone(),
-            account: account.secret.account().to_string(),
-        });
-    }
-    candidates.sort_by(|left, right| {
-        left.display_name.cmp(&right.display_name).then_with(|| left.account.cmp(&right.account))
-    });
-    Ok(candidates)
+    Ok(qualified_candidates(db, rbac, current, &Permission::parse("supplier:update")?, executor)
+        .await?
+        .into_iter()
+        .map(|account| HandoverCandidateView {
+            user_id: account.user_id,
+            display_name: account.display_name,
+            account: account.account,
+        })
+        .collect())
 }

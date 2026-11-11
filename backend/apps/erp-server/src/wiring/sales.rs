@@ -12,7 +12,7 @@ use super::catalog_supply_query::MongoCatalogSupplyQuery;
 use super::identity::shared_rbac_service;
 use super::support_audit::MongoSupportAudit;
 use super::support_documents::MongoBusinessDocument;
-use super::{contract_access, customer_access, customer_service, selection_access, supplier_access};
+use super::{contract_access, customer_access, scoped_customer_service, selection_access, supplier_access};
 
 /// 使用原共享身份政策装配销售业务实际消费的服务与 Port。
 /// # 参数
@@ -25,7 +25,7 @@ pub fn sales_services(db: Database, rbac: SharedRbacService) -> Arc<SalesService
     let handover_db = db.clone();
     Arc::new(SalesServices {
         handover_identity: Arc::new(move || shared_rbac_service(handover_db.clone())),
-        customers: Arc::new(customer_service(db.clone())),
+        customers: Arc::new(scoped_customer_service(db.clone(), rbac.clone())),
         customer_access: customer_access(db.clone(), rbac.clone()),
         contracts: contract_access(db.clone(), rbac.clone()),
         suppliers: supplier_access(db.clone(), rbac.clone()),

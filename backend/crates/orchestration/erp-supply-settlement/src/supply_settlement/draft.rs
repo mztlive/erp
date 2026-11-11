@@ -1,10 +1,10 @@
 //! W27 供应商结算草稿的服务端来源快照创建与刷新。
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
+use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{RefreshReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
@@ -14,7 +14,6 @@ use erp_supply::entity::supplier_settlement::{
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::draft::{PreparedStatement, StatementPreparation};
-use erp_supply::{SettlementAccess, SettlementDataScopePort};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -247,9 +246,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let current = erp_supply::SettlementAccess::new(db.clone(), scope)
-                        .require_statement(&actor, "update", &id, executor)
-                        .await?;
+                    let current = scope.require_statement(&actor, "update", &id, executor).await?;
                     ensure_refresh_replay(&current, &receipt)?;
                     persist_supply_receipt(
                         &db,
@@ -394,9 +391,7 @@ impl CreateWrite {
     /// 沿入口执行器按范围、草稿明细、审计的原顺序写入。
     async fn persist(self, executor: &mut dyn Executor) -> Result<SupplierSettlementStatement> {
         let context = self.context;
-        SettlementAccess::new(context.db.clone(), context.data_scope)
-            .require_create(&context.actor, context.actor.id(), executor)
-            .await?;
+        context.data_scope.require_create(&context.actor, context.actor.id(), executor).await?;
         SupplierSettlementService::new(context.db.clone())
             .persist_statement_with_items(&self.statement, &self.items, &self.differences, executor)
             .await?;
@@ -449,7 +444,7 @@ impl RefreshPersistence {
 /// 已准备的来源快照与原请求沿调用方执行器提交。
 struct RefreshWrite<'a> {
     db: &'a Database,
-    data_scope: Arc<dyn SettlementDataScopePort>,
+    data_scope: SettlementAccess,
     actor: &'a AuditActor,
     id: &'a str,
     statement: &'a mut SupplierSettlementStatement,
@@ -463,9 +458,7 @@ struct RefreshWrite<'a> {
 
 /// 保持权限重验、正式快照替换、回执与事件的原执行顺序。
 async fn persist_refreshed_result(input: RefreshWrite<'_>, executor: &mut dyn Executor) -> Result<()> {
-    SettlementAccess::new(input.db.clone(), input.data_scope)
-        .require_statement(input.actor, "update", input.id, executor)
-        .await?;
+    input.data_scope.require_statement(input.actor, "update", input.id, executor).await?;
     SupplierSettlementService::new(input.db.clone())
         .persist_refreshed_statement(input.statement, input.snapshot, input.old_ids, input.request, executor)
         .await?;

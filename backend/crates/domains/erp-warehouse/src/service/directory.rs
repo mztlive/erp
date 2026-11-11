@@ -1,6 +1,4 @@
 //! Warehouse 独立目录：资格、授权、搜索与回显采用同一事务路径。
-use std::sync::Arc;
-
 use application_core::directory::{DirectoryPage, DirectoryQuery, DirectoryScope, ScopedPage};
 use application_core::{AuditActor, PageView};
 use erp_core::common::time::Instant;
@@ -8,15 +6,14 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::authorization::{WarehouseQuery, map_identity_error};
-use crate::ports::WarehouseDirectoryAccess;
+use crate::authorization::{WarehouseAuthorization, WarehouseQuery, map_identity_error};
 use crate::repository::directory::{snapshot, warehouses};
 use crate::{Error, Result, WarehouseListParams, WarehouseView};
 
 /// 本域对象目录用例。
 pub struct WarehouseDirectoryService {
     db: Database,
-    access: Arc<dyn WarehouseDirectoryAccess>,
+    access: WarehouseAuthorization,
 }
 impl WarehouseDirectoryService {
     /// 装配数据库与目录授权。
@@ -26,7 +23,7 @@ impl WarehouseDirectoryService {
     /// 不执行I/O的服务。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, access: Arc<dyn WarehouseDirectoryAccess>) -> Self {
+    pub fn new(db: Database, access: WarehouseAuthorization) -> Self {
         Self { db, access }
     }
 
@@ -45,7 +42,7 @@ impl WarehouseDirectoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let read = access.resolve(&actor, executor).await?;
+                    let read = access.query(&actor, executor).await.map_err(map_identity_error)?;
                     let rows = snapshot(&db, &read, &query, executor).await?;
                     let scope = directory_scope(&read, rows.iter().map(|row| row.id.clone()).collect());
                     read.validate(executor).await.map_err(map_identity_error)?;
@@ -86,7 +83,7 @@ impl WarehouseDirectoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let read = access.resolve(&actor, executor).await?;
+                    let read = access.query(&actor, executor).await.map_err(map_identity_error)?;
                     if params.scope_version.as_ref().is_some_and(|v| v != &read.version()) {
                         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：仓库范围已变化".into()));
                     }

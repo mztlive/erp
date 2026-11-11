@@ -1,5 +1,4 @@
 mod replace_identity;
-use std::slice;
 use std::time::Duration;
 
 use application_core::AuditActor;
@@ -805,10 +804,8 @@ pub(super) async fn ensure_definition_admin_permission(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let permission = Permission::parse(&policy.definition_admin_permission)?;
-    let qualified =
-        features(db, identity_service).permissions(actor, slice::from_ref(&permission), executor).await?;
     ensure_definition_admin_allowed(
-        qualified.is_some_and(|value| value.permissions().covers_one(&permission)),
+        features(db, identity_service).has_permission(actor, &permission, executor).await?,
     )
 }
 

@@ -485,7 +485,7 @@ impl SupplierPortalProcess {
                 existing.business_org_unit_id,
             ));
         }
-        access.ensure_writable(context.actor, "create", context.owner, context.org, executor).await?;
+        access.ensure_writable(context.actor, "create", executor).await?;
         Ok((
             OfferingApplicationSnapshot::ExistingQuote {
                 sku_id: sku_id.to_string(),

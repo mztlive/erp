@@ -27,8 +27,6 @@ type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSu
 /// 整组上/下架在事务外完成校验后形成的待写集合。
 struct ProductListingChange {
     product_id: ProductId,
-    maintainer_user_id: String,
-    business_org_unit_id: String,
     changed: Vec<Sku>,
     view: ProductListingView,
 }
@@ -81,12 +79,12 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<SkuView> {
         req.validate()?;
-        let (sku, changed, product) =
+        let (sku, changed) =
             self.prepare_sku_listing_change(sku_id, req.version, req.listing_status, actor).await?;
         if !changed {
             return Ok(sku.into());
         }
-        let sku = self.write_sku_listing_change(sku, &product, req.listing_status, actor).await?;
+        let sku = self.write_sku_listing_change(sku, req.listing_status, actor).await?;
         Ok(sku.into())
     }
 
@@ -102,8 +100,6 @@ impl CatalogService {
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用的商品不能上架".to_string()));
         }
-        let maintainer_user_id = product.maintainer_user_id.clone();
-        let business_org_unit_id = product.business_org_unit_id.clone();
         let product_id = ProductId::new(product.base.id);
         let skus =
             self.db.skus().find_by_product_ids(std::slice::from_ref(&product_id), &mut NoTransaction).await?;
@@ -113,7 +109,7 @@ impl CatalogService {
         }
         let changed = changed_skus(skus, target, actor.id())?;
         let view = product_listing_view(product_id.as_ref(), active_count, target);
-        Ok(ProductListingChange { product_id, maintainer_user_id, business_org_unit_id, changed, view })
+        Ok(ProductListingChange { product_id, changed, view })
     }
 
     /// 在一个事务内写入整组 SKU 状态与审计日志。
@@ -123,8 +119,7 @@ impl CatalogService {
         target: ListingStatus,
         actor: &AuditActor,
     ) -> Result<ProductListingView> {
-        let ProductListingChange { product_id, maintainer_user_id, business_org_unit_id, mut changed, view } =
-            change;
+        let ProductListingChange { product_id, mut changed, view } = change;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.listing.update",
@@ -140,15 +135,7 @@ impl CatalogService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access
-                        .ensure_writable(
-                            &actor,
-                            "update",
-                            &maintainer_user_id,
-                            &business_org_unit_id,
-                            executor,
-                        )
-                        .await?;
+                    access.ensure_writable(&actor, "update", executor).await?;
                     for sku in &mut changed {
                         db.skus().update(sku, executor).await?;
                     }
@@ -167,7 +154,7 @@ impl CatalogService {
         version: u64,
         target: ListingStatus,
         actor: &AuditActor,
-    ) -> Result<(Sku, bool, Product)> {
+    ) -> Result<(Sku, bool)> {
         let Some(mut sku) = self.db.skus().find_by_id(sku_id, &mut NoTransaction).await? else {
             return Err(Error::NotFound("SKU 不存在".to_string()));
         };
@@ -181,14 +168,13 @@ impl CatalogService {
             return Err(Error::BusinessLogicError("停用商品下的 SKU 不能上架".to_string()));
         }
         let changed = sku.set_listing_status(target, actor.id())?;
-        Ok((sku, changed, product))
+        Ok((sku, changed))
     }
 
     /// 在一个事务内写入单 SKU 状态与审计日志。
     async fn write_sku_listing_change(
         &self,
         mut sku: Sku,
-        product: &Product,
         target: ListingStatus,
         actor: &AuditActor,
     ) -> Result<Sku> {
@@ -204,12 +190,10 @@ impl CatalogService {
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor = actor.clone();
-        let owner = product.maintainer_user_id.clone();
-        let org = product.business_org_unit_id.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.ensure_writable(&actor, "update", &owner, &org, executor).await?;
+                    access.ensure_writable(&actor, "update", executor).await?;
                     db.skus().update(&mut sku, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<Sku, crate::error::Error>(sku)

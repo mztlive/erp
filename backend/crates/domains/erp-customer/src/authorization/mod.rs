@@ -1,7 +1,9 @@
 //! 客户事实映射；角色、范围、读取补充由 identity 统一编译。
+mod context;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+pub use context::CustomerResolvedScope;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{

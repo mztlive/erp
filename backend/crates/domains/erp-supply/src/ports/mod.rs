@@ -2,21 +2,14 @@
 
 pub mod catalog_sync;
 pub mod connector;
-pub mod data_scope;
 pub mod fulfillment_order_data_scope;
 pub mod offering_qualification;
-pub mod settlement_data_scope;
 pub mod supplier_api_gateway;
 pub mod supplier_gateway;
 pub mod supplier_reference_registry;
 
-pub use data_scope::{FailClosedOfferingDataScopePort, OfferingDataScopePort, OfferingResolvedScope};
 pub use fulfillment_order_data_scope::{
-    FailClosedFulfillmentExceptionHandlerPort, FailClosedFulfillmentOrderDataScopePort,
-    FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort, FulfillmentOrderResolvedScope,
-};
-pub use settlement_data_scope::{
-    FailClosedSettlementDataScopePort, SettlementDataScopePort, SettlementResolvedScope,
+    FailClosedFulfillmentExceptionHandlerPort, FulfillmentExceptionHandlerPort,
 };
 
 pub mod jd_vop;

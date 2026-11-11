@@ -280,7 +280,7 @@ impl CatalogPortalService {
         if q.trim().is_empty() {
             return Err(Error::ValidationError("重复匹配搜索不能为空".into()));
         }
-        self.catalog.access().resolve(actor, "update", executor).await?;
+        self.catalog.access().ensure_writable(actor, "update", executor).await?;
         let mut result = Vec::new();
         for product_id in self.duplicate_product_ids(q, executor).await? {
             let product =

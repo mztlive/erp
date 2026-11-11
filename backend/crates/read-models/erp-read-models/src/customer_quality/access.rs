@@ -1,12 +1,10 @@
-//! 双口径授权解析：现任口径走客户 Port，历史口径走销售读取范围。
+//! 双口径授权解析：现任口径走客户授权服务，历史口径走销售读取范围。
 //!
 //! 两个口径各自调用身份域公共解析入口；冻结归属快照永不提供访问资格，
 //! 现任负责人回填历史贡献在此处即被阻断。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
-use erp_customer::{CustomerAccess, CustomerDataScopePort, CustomerResolvedScope};
+use erp_customer::{CustomerAccess, CustomerResolvedScope};
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -19,27 +17,23 @@ use crate::sales_center::access::{SalesAccess, SalesReadContext};
 pub struct QualityAccess {
     db: Database,
     rbac: erp_identity::SharedRbacService,
-    customer_scope: Arc<dyn CustomerDataScopePort>,
+    customer_scope: CustomerAccess,
 }
 
 impl QualityAccess {
-    /// 绑定身份事实来源与组合层注入的客户范围 Port。
+    /// 绑定身份事实来源与组合层注入的客户授权服务。
     ///
     /// # 参数
     /// * `db` - 应用数据库
     /// * `rbac` - 当前 RBAC 快照服务
-    /// * `customer_scope` - 客户域 Port，生产环境由组合层 adapter 实现
+    /// * `customer_scope` - 已装配的客户授权服务
     ///
     /// # 返回
     /// 返回无授权缓存的解析器，构造不执行 I/O。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(
-        db: Database,
-        rbac: erp_identity::SharedRbacService,
-        customer_scope: Arc<dyn CustomerDataScopePort>,
-    ) -> Self {
+    pub fn new(db: Database, rbac: erp_identity::SharedRbacService, customer_scope: CustomerAccess) -> Self {
         Self { db, rbac, customer_scope }
     }
 
@@ -62,7 +56,7 @@ impl QualityAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(CustomerResolvedScope, SalesReadContext, SalesReadScope)> {
-        let customer = CustomerAccess::new(self.db.clone(), Arc::clone(&self.customer_scope));
+        let customer = &self.customer_scope;
         let (customer_context, _) = customer.query(actor, "list", executor).await?;
         let sales = SalesAccess::new(self.db.clone(), self.rbac.clone());
         let (sales_context, sales_scope) = sales.resolve(actor, "list", &[], executor).await?;

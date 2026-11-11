@@ -1,81 +1,19 @@
-//! 客户验收单域列表、详情和视图映射。
+//! 客户验收单域详情和视图映射。
 use erp_core::ids::CustomerAcceptanceLineId;
 use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
 
 use super::FulfillmentService;
 use crate::Result;
 use crate::dto::{
     AcceptanceAllocationView, CustomerAcceptanceDetailView, CustomerAcceptanceLineView,
-    CustomerAcceptanceListParams, CustomerAcceptanceView,
+    CustomerAcceptanceView,
 };
 use crate::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine,
 };
 use crate::repository::FulfillmentExt;
-use crate::repository::prelude::*;
-
-/// 客户验收单列表筛选条件类型。
-type CustomerAcceptanceFilter = <mongodb::Database as FulfillmentExt>::CustomerAcceptanceFilter;
 
 impl FulfillmentService {
-    // ---------------------------------------------------------- customer_acceptance
-
-    /// 分页查询客户验收单列表（W06 验收历史视图）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`sales_order_id`/`status` 扁平筛选）
-    /// * `authorized_sales_order_ids` - 已授权销售单主键；`None` 不收窄，`Some` 时只保留这些销售单，空集合不匹配任何记录
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
-    #[tracing::instrument(
-        name = "fulfillment.customer_acceptance_list",
-        skip_all,
-        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_list")
-    )]
-    pub async fn customer_acceptance_list(
-        &self,
-        params: &CustomerAcceptanceListParams,
-        authorized_sales_order_ids: Option<Vec<String>>,
-        executor: &mut dyn Executor,
-    ) -> Result<crate::dto::PageView<CustomerAcceptanceView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let filter = CustomerAcceptanceFilter {
-            authorized_sales_order_ids,
-            sales_order_id: query.sales_order_id,
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: super::sort_ascending(query.paging.sort_dir),
-        };
-        super::map_search_page(
-            self.db.customer_acceptances().search_customer_acceptances(&filter, executor),
-            |row| CustomerAcceptanceView {
-                id: row.id,
-                acceptance_no: row.acceptance_no,
-                sales_order_id: row.sales_order_id.to_string(),
-                accepted_at: row.accepted_at.unix_secs(),
-                result: row.result,
-                evidence_attachment_id: row.evidence_attachment_id.map(|id| id.to_string()),
-                status: row.status,
-                reversal_of_acceptance_id: row.reversal_of_acceptance_id.map(|id| id.to_string()),
-                version: row.version,
-                created_at: row.created_at,
-            },
-            filter.page,
-            filter.page_size,
-        )
-        .await
-    }
-
     /// 查询客户验收单详情（表头 + 行 + 分配）。
     ///
     /// # 参数

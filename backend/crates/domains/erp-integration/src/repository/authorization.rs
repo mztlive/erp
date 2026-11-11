@@ -240,6 +240,27 @@ impl AccessMapping for IntegrationMapping {
 
 #[cfg(test)]
 mod tests {
+    use mongodb::Client;
+    use mongodb::options::ClientOptions;
+    use persistence_core::NoTransaction;
+
+    use crate::Error;
+    use crate::service::IntegrationAccess;
+
+    /// 未接线对象授权必须在任何数据库读取前拒绝。
+    #[tokio::test]
+    async fn unwired_record_authorization_fails_closed() {
+        let db = Client::with_options(ClientOptions::default()).unwrap().database("test");
+        let access = IntegrationAccess::unwired(db);
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        assert!(matches!(
+            access
+                .require_handler(&actor, "integration_error_task", "detail", "record", &mut NoTransaction)
+                .await,
+            Err(Error::Internal(_))
+        ));
+    }
+
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
 

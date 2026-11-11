@@ -359,7 +359,6 @@ async fn dispatch_reverse(
             require_transaction(executor)?;
             reverse_flow::PaymentReversalProcess::new(
                 registry.db.clone(),
-                registry.rbac.clone(),
                 Arc::new(PaymentRequestRestoration::new(registry.db.clone(), registry.rbac.clone())),
             )
             .post_payment_reversal_apply(context.business_object_id(), actor, executor)

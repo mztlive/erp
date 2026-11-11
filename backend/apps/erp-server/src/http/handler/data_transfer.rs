@@ -192,7 +192,7 @@ pub async fn list(
     query.domain_job_type = Some("DATA_TRANSFER".into());
     Ok(private(
         ApiResponse::ok_with_data(
-            state.application().bulk_job_service().background_job_list(&query, &actor, false).await?,
+            state.application().bulk_job_service().own_background_job_list(&query, &actor).await?,
         )
         .into_response(),
     ))

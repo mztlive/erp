@@ -10,7 +10,6 @@ use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsDataScopePort;
 use erp_identity::SharedRbacService;
-use erp_procurement::PurchaseAccess;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
@@ -186,7 +185,6 @@ impl FundsAccess {
     /// * `actor` - 已认证操作人。
     /// * `resource` - 本次解析的资金资源。
     /// * `action` - 该资源已注册动作。
-    /// * `_purchase_access` - 调用方传入的采购访问器；本方法不读取它。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -199,7 +197,6 @@ impl FundsAccess {
         actor: &AuditActor,
         resource: &str,
         action: &str,
-        _purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<(FundsReadContext, FundsAuthorization)> {
         self.resolve_sources(actor, resource, action, true, false, executor).await
@@ -209,7 +206,7 @@ impl FundsAccess {
     /// # 参数
     /// authorization 为当前入口授权；ids 为本次来源；executor 为原事务。
     /// # 返回
-    /// Some 中仅包含本次可读来源，空集合表示全部不可读。
+    /// 仅包含本次可读来源，空集合表示全部不可读。
     /// # 错误
     /// 授权查询或数据库失败时拒绝，不截断必要来源。
     pub async fn authorized_sales_targets(
@@ -217,7 +214,7 @@ impl FundsAccess {
         authorization: &FundsAuthorization,
         ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Option<Vec<String>>> {
+    ) -> Result<Vec<String>> {
         let mut allowed = Vec::new();
         for batch in ids.chunks(500) {
             let rows = self
@@ -227,7 +224,7 @@ impl FundsAccess {
                 .await?;
             allowed.extend(rows.into_iter().map(|row| row.id));
         }
-        Ok(Some(allowed))
+        Ok(allowed)
     }
 
     /// 展开请求中的内部组织及其可选有效下级。

@@ -5,10 +5,10 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_contract::authorization::scope;
+use erp_contract::ContractParticipantPort;
+use erp_contract::authorization::{ContractAuthorization, ContractModels, scope};
+use erp_contract::ports::ContractCreationPort;
 use erp_contract::repository::ContractExt;
-use erp_contract::{ContractDataScopePort, ContractParticipantPort, ContractResolvedScope};
-use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
     QueryOutput, ReadAccess, RelationKey, RelationMatch,
@@ -18,9 +18,9 @@ use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, Relatio
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::repository::organization::primary_membership_query;
 use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget, AuthorizationRegistry,
-    AuthorizationService, DataAccess, Error as IdentityError, Permission, ResourceTargets,
-    Result as IdentityResult, SharedRbacService,
+    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry, AuthorizationService,
+    DataAccess, Error as IdentityError, Permission, ResourceTargets, Result as IdentityResult,
+    SharedRbacService,
 };
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
@@ -30,15 +30,14 @@ use persistence_core::{Executor, mongo_ops};
 
 use super::contract::MongoContractParticipants;
 use super::identity_error::map_identity_error;
-use super::scope_support;
 map_identity_error!(erp_contract);
 
 #[derive(Clone)]
-pub struct MongoContractDataScope {
+struct ContractModelsBuilder {
     db: Database,
     rbac: SharedRbacService,
 }
-impl MongoContractDataScope {
+impl ContractModelsBuilder {
     /// 绑定身份设施。
     /// # 参数
     /// db和rbac为共享设施。
@@ -48,16 +47,6 @@ impl MongoContractDataScope {
     /// 无。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
-    }
-    /// 包装为合同端口。
-    /// # 参数
-    /// db和rbac为共享设施。
-    /// # 返回
-    /// 共享端口。
-    /// # 错误
-    /// 无。
-    pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn ContractDataScopePort> {
-        Arc::new(Self::new(db, rbac))
     }
     fn mapping(&self) -> erp_identity::Result<ContractMapping> {
         Ok(ContractMapping {
@@ -117,55 +106,9 @@ impl MongoContractDataScope {
         ))
     }
 }
-#[async_trait]
-impl ContractDataScopePort for MongoContractDataScope {
-    async fn resolve(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<ContractResolvedScope> {
-        let (service, mapping) = self.service(action).map_err(map_identity_error)?;
-        let query = service
-            .query(actor, &Permission::parse(format!("contract:{action}"))?, AccessSubject::Direct, executor)
-            .await
-            .map_err(map_identity_error)?;
-        let compiled = query.compile(mapping.as_ref(), executor).await.map_err(map_identity_error)?;
-        service.validate(&compiled, executor).await.map_err(map_identity_error)?;
-        Ok(scope(
-            compiled,
-            service,
-            self.rbac.policy_revision_with_executor(executor).await.map_err(map_identity_error)?,
-            OrganizationRepository::new(&self.db).state(executor).await?.version,
-        ))
-    }
-    async fn require(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<()> {
-        let (service, _) = self.service(action).map_err(map_identity_error)?;
-        service
-            .require(
-                actor,
-                &Permission::parse(format!("contract:{action}"))?,
-                AccessTarget::Records {
-                    subject: AccessSubject::Direct,
-                    ids: ResourceTargets::new(&[id]).map_err(map_identity_error)?,
-                },
-                executor,
-            )
-            .await
-            .map_err(map_identity_error)
-    }
-    async fn require_create(
-        &self,
-        actor: &AuditActor,
-        customer_id: &str,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<ContractResolvedScope> {
+impl ContractModelsBuilder {
+    /// 装配实际客户来源的固定创建模型。
+    fn creation(&self) -> erp_contract::Result<(AuthorizationService, Arc<dyn AccessMapping>)> {
         let mapping = creation_mapping(self.db.clone()).map_err(map_identity_error)?;
         let permission = Permission::parse("contract:create")?;
         let registry = AuthorizationRegistry::new(vec![AccessRegistration {
@@ -191,6 +134,47 @@ impl ContractDataScopePort for MongoContractDataScope {
         }])
         .map_err(map_identity_error)?;
         let service = AuthorizationService::new(self.db.clone(), self.rbac.clone(), registry);
+        Ok((service, mapping))
+    }
+}
+
+/// 装配合同固定模型，保留跨域责任事实与历史参与事实。
+/// # 参数
+/// db、rbac 为应用共享身份设施。
+/// # 返回
+/// 领域可直接消费的统一授权能力。
+/// # 错误
+/// 固定目录非法时启动失败。
+pub fn contract_authorization(db: Database, rbac: SharedRbacService) -> ContractAuthorization {
+    let builder = ContractModelsBuilder::new(db.clone(), rbac.clone());
+    let models = ContractModels {
+        read: builder.service("detail").expect("固定合同读取目录有效"),
+        write: builder.service("update").expect("固定合同写入目录有效"),
+        creation: Arc::new(CreationAccess {
+            db: db.clone(),
+            rbac: rbac.clone(),
+            model: builder.creation().expect("固定合同客户来源目录有效"),
+        }),
+    };
+    ContractAuthorization::new(db, rbac, models)
+}
+
+struct CreationAccess {
+    db: Database,
+    rbac: SharedRbacService,
+    model: (AuthorizationService, Arc<dyn AccessMapping>),
+}
+
+#[async_trait]
+impl ContractCreationPort for CreationAccess {
+    async fn require_create(
+        &self,
+        actor: &AuditActor,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_contract::Result<erp_contract::ContractResolvedScope> {
+        let (service, mapping) = &self.model;
+        let permission = Permission::parse("contract:create")?;
         let query = service
             .query(actor, &permission, AccessSubject::Direct, executor)
             .await
@@ -212,34 +196,10 @@ impl ContractDataScopePort for MongoContractDataScope {
         }
         Ok(scope(
             compiled,
-            service,
+            service.clone(),
             self.rbac.policy_revision_with_executor(executor).await.map_err(map_identity_error)?,
             OrganizationRepository::new(&self.db).state(executor).await?.version,
         ))
-    }
-    async fn expand_org_units(
-        &self,
-        ids: &[String],
-        desc: bool,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<BTreeSet<String>> {
-        scope_support::expand_org_units(&self.db, ids, desc, executor, Into::into, map_identity_error).await
-    }
-    async fn org_member_ids(
-        &self,
-        ids: &BTreeSet<String>,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<Vec<String>> {
-        scope_support::org_member_ids(&self.db, ids, at, executor, Into::into).await
-    }
-    async fn own_org(
-        &self,
-        user: &str,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<Option<String>> {
-        scope_support::own_org(&self.db, user, at, executor, Into::into, map_identity_error).await
     }
 }
 
@@ -531,6 +491,7 @@ mod tests {
 
     use erp_contract::FailClosedContractParticipantPort;
     use erp_core::AccountKind;
+    use erp_core::common::time::Instant;
     use persistence_core::NoTransaction;
 
     use super::*;

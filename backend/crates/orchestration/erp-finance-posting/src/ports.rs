@@ -64,8 +64,7 @@ impl<A: WorkflowAuthorizationPort> FinanceTaskPort for WorkItemService<A> {
         task: &WorkItem,
         executor: &mut dyn Executor,
     ) -> erp_workflow::Result<()> {
-        let access = self.task_eligibility(actor, task, executor).await?;
-        self.ensure_item_access_with_executor(task, &access, executor).await
+        self.ensure_item_access_with_executor(task, actor, executor).await
     }
 }
 

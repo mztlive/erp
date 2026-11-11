@@ -82,16 +82,6 @@ impl CompiledScope {
             .ok_or_else(|| erp_identity::Error::Forbidden("授权凭证未接线".into()))?;
         service.validate(self.compiled.as_ref().expect("服务和编译凭证同时构造"), executor).await
     }
-    /// 判断是否已取得身份域查询凭证。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前阶段已经授权时为真。
-    /// # 错误
-    /// 不执行 I/O。
-    pub fn has_scope_rules(&self) -> bool {
-        self.compiled.is_some()
-    }
     /// 判断是否缺少身份域查询凭证。
     /// # 参数
     /// 无。

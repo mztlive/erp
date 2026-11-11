@@ -138,8 +138,7 @@ pub async fn background_job_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<BackgroundJobListParams>,
 ) -> Result<PageView<BackgroundJobView>> {
-    let is_admin = is_background_job_admin(&state, &actor).await;
-    let page = state.application().bulk_job_service().background_job_list(&params, &actor, is_admin).await?;
+    let page = state.application().bulk_job_service().background_job_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -160,8 +159,7 @@ pub async fn background_job_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<BackgroundJobView> {
-    let is_admin = is_background_job_admin(&state, &actor).await;
-    let view = state.application().bulk_job_service().background_job_detail(&id, &actor, is_admin).await?;
+    let view = state.application().bulk_job_service().background_job_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -203,9 +201,7 @@ pub async fn background_job_cancel(
     Path(id): Path<String>,
     Json(req): Json<CancelBackgroundJobRequest>,
 ) -> Result<BackgroundJobView> {
-    let is_admin = is_background_job_admin(&state, &actor).await;
-    let view =
-        state.application().bulk_job_service().cancel_background_job(&id, req, &actor, is_admin).await?;
+    let view = state.application().bulk_job_service().cancel_background_job(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -226,9 +222,7 @@ pub async fn background_job_cancel_all(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CancelAllBackgroundJobsRequest>,
 ) -> Result<CancelAllBackgroundJobsResponse> {
-    let is_admin = is_background_job_admin(&state, &actor).await;
-    let view =
-        state.application().bulk_job_service().cancel_all_background_jobs(req, &actor, is_admin).await?;
+    let view = state.application().bulk_job_service().cancel_all_background_jobs(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -251,37 +245,13 @@ pub async fn background_job_item_list(
     Path(id): Path<String>,
     Query(query): Query<BackgroundJobItemListQuery>,
 ) -> Result<PageView<BackgroundJobItemView>> {
-    let is_admin = is_background_job_admin(&state, &actor).await;
     let page = state
         .application()
         .bulk_job_service()
-        .background_job_item_list(&id, query.status, query.page, query.page_size, &actor, is_admin)
+        .background_job_item_list(&id, query.status, query.page, query.page_size, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
-}
-
-/// 可查看全部后台任务的管理员角色。
-const BACKGROUND_JOB_ADMIN_ROLES: [&str; 2] = ["role-root", "role-sysadmin"];
-
-/// 判断操作人是否为后台任务管理员。
-///
-/// 角色查询失败时失败关闭为普通用户，仅可见自己创建的任务，避免越权泄露。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-///
-/// # 返回
-/// 超级管理员或系统管理员返回 `true`，其余返回 `false`。
-async fn is_background_job_admin(state: &HttpState, actor: &AuditActor) -> bool {
-    match state.application().rbac().role_ids(actor.kind(), actor.id()).await {
-        Ok(role_ids) => role_ids.iter().any(|role_id| BACKGROUND_JOB_ADMIN_ROLES.contains(&role_id.as_str())),
-        Err(error) => {
-            tracing::warn!(error = %error, "后台任务管理员判定失败，已按普通用户隔离");
-            false
-        },
-    }
 }
 
 /// 选择快照逐项列表查询参数。

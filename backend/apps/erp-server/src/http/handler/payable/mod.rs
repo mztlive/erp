@@ -36,7 +36,7 @@ use crate::http::handler::file_asset::{
 };
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{funds_access_with_rbac, purchase_access};
+use crate::wiring::funds_access_with_rbac;
 
 /// 查询应付往来子账列表。
 ///
@@ -55,9 +55,8 @@ pub async fn payable_account_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PayableAccountListParams>,
 ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
-    let purchase_access = purchase_access(state.application().db(), state.application().rbac());
     let page = funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .payable_account_list_scoped(&params, &actor, &purchase_access)
+        .payable_account_list_scoped(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -77,9 +76,8 @@ pub async fn payable_account_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
-    let purchase_access = purchase_access(state.application().db(), state.application().rbac());
     let view = funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .payable_account_detail_scoped(&id, &actor, &purchase_access)
+        .payable_account_detail_scoped(&id, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -153,9 +151,8 @@ pub async fn supplier_payment_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierPaymentListParams>,
 ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
-    let purchase_access = purchase_access(state.application().db(), state.application().rbac());
     let page = funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .supplier_payment_list_scoped(&params, &actor, &purchase_access)
+        .supplier_payment_list_scoped(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -175,9 +172,8 @@ pub async fn supplier_payment_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
-    let purchase_access = purchase_access(state.application().db(), state.application().rbac());
     let view = funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .supplier_payment_detail_scoped(&id, &actor, &purchase_access)
+        .supplier_payment_detail_scoped(&id, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -351,9 +347,8 @@ pub async fn purchase_invoice_allocation_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseInvoiceAllocationListParams>,
 ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-    let purchase_access = purchase_access(state.application().db(), state.application().rbac());
     let page = funds_access_with_rbac(state.application().db(), state.application().rbac())
-        .purchase_invoice_allocation_list_scoped(&params, &actor, &purchase_access)
+        .purchase_invoice_allocation_list_scoped(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))

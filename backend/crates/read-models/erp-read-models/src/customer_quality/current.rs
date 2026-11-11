@@ -4,10 +4,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use erp_customer::CustomerResolvedScope;
-use erp_customer::ports::CustomerDataScopePort;
 use erp_customer::repository::CustomerAccountFilter;
 use erp_customer::repository::scope::authorized_versions;
+use erp_customer::{CustomerAccess, CustomerResolvedScope};
 use persistence_core::{Executor, Transactional};
 use rust_decimal::Decimal;
 
@@ -52,14 +51,14 @@ impl super::CustomerQualityReadModel {
     ) -> Result<(CurrentSnapshotOutput, String)> {
         let access = QualityAccess::new(self.db.clone(), self.rbac.clone(), self.customer_scope.clone());
         let (customer_context, sales_context, sales_scope) = access.resolve_current(actor, executor).await?;
-        let expanded = expand_requested_orgs(self.customer_scope.as_ref(), query, executor).await?;
+        let expanded = expand_requested_orgs(&self.customer_scope, query, executor).await?;
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
         let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
         let raw_orders = super::source::CurrentSources::load_current_orders(
             &self.db,
             order_filter,
             &customer_context,
-            self.customer_scope.as_ref(),
+            &self.customer_scope,
             executor,
         )
         .await?;
@@ -91,12 +90,11 @@ impl super::CustomerQualityReadModel {
             customer_ids: Some(candidates.into_iter().collect()),
             ..Default::default()
         };
-        let authorized =
-            authorized_versions(&self.db, &filter, customer, self.customer_scope.as_ref(), executor)
-                .await?
-                .into_iter()
-                .map(|customer| customer.id)
-                .collect();
+        let authorized = authorized_versions(&self.db, &filter, customer, &self.customer_scope, executor)
+            .await?
+            .into_iter()
+            .map(|customer| customer.id)
+            .collect();
         super::source::CurrentSources::load_customers(&self.db, authorized, orders, executor).await
     }
 
@@ -142,7 +140,7 @@ impl super::CustomerQualityReadModel {
 
 /// 请求组织展开为启用节点；未知组织拒绝，不得忽略后查询全部。
 async fn expand_requested_orgs(
-    port: &dyn CustomerDataScopePort,
+    port: &CustomerAccess,
     query: &CurrentQualityQuery,
     executor: &mut dyn Executor,
 ) -> Result<Option<BTreeSet<String>>> {
@@ -156,6 +154,7 @@ async fn expand_requested_orgs(
         return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
     let expanded = port
+        .organization()
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await
         .map_err(crate::Error::from)?;

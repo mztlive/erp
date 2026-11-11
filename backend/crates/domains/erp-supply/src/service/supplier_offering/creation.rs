@@ -51,7 +51,7 @@ impl SupplierOfferingService {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOffering> {
         let (maintainer, org) = self.access().maintainer_org(None, actor, executor).await?;
-        self.access().ensure_writable(actor, "create", &maintainer, &org, executor).await?;
+        self.access().ensure_writable(actor, "create", executor).await?;
         let mut offering = SupplierOffering::new(
             SupplierOfferingId::new(next_id()),
             request.try_into_offering_data(maintainer, org)?,

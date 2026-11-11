@@ -186,7 +186,7 @@ impl FundsAccess {
         let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
         let (facts, order_nos) = self.request_sales_context(&order_ids, executor).await?;
         let authorized = self.authorized_sales_targets(authorization, &order_ids, executor).await?;
-        let allowed = authorized.map(|list| list.into_iter().collect::<BTreeSet<_>>());
+        let allowed = authorized.into_iter().collect::<BTreeSet<_>>();
         let work_ids = rows.iter().filter_map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
         let handlers = self.work_item_handlers(&work_ids, executor).await?;
         let condition = self.request_condition(query, executor).await?;
@@ -350,9 +350,7 @@ impl FundsAccess {
             .get(&row.sales_order_id.to_string())
             .ok_or_else(|| Error::NotFound("开票申请不存在".into()))?;
         let authorized = self.authorized_sales_targets(&authorization, &order_ids, executor).await?;
-        if let Some(allowed) = &authorized
-            && !allowed.contains(&row.sales_order_id.to_string())
-        {
+        if !authorized.contains(&row.sales_order_id.to_string()) {
             return Err(Error::NotFound("开票申请不存在".into()));
         }
         let handlers = self
@@ -392,7 +390,7 @@ pub(super) fn bounded_request_candidates(rows: Vec<SalesInvoiceRequest>) -> Resu
 fn decide_requests(
     rows: Vec<SalesInvoiceRequest>,
     facts: &HashMap<String, LinkedSalesFact>,
-    allowed: &Option<BTreeSet<String>>,
+    allowed: &BTreeSet<String>,
     handlers: &HashMap<String, String>,
     _access: &FundsReadContext,
     condition: &FundsLinkedCondition,
@@ -402,7 +400,7 @@ fn decide_requests(
         let Some(fact) = facts.get(row.sales_order_id.as_ref()) else {
             continue;
         };
-        if allowed.as_ref().is_some_and(|ids| !ids.contains(row.sales_order_id.as_ref())) {
+        if !allowed.contains(row.sales_order_id.as_ref()) {
             continue;
         }
         let handler = row.work_item_id.as_ref().and_then(|id| handlers.get(id).cloned());
@@ -470,7 +468,7 @@ impl FundsAccess {
     ) -> Result<()> {
         let allowed =
             self.authorized_sales_targets(authorization, &[row.sales_order_id.to_string()], executor).await?;
-        if allowed.as_ref().is_some_and(|ids| ids.is_empty())
+        if allowed.is_empty()
             && let Some(readiness) = &self.grant_readiness
             && readiness.pending(&row.base.id, actor.id(), executor).await?
         {
@@ -566,7 +564,15 @@ mod tests {
         ]);
         let numbers = HashMap::from([("so-a".into(), "SO-A".into()), ("so-b".into(), "SO-B".into())]);
         let handlers = HashMap::from([("work".into(), "handler".into())]);
-        let decided = decide_requests(rows, &facts, &None, &handlers, &access(), &condition()).unwrap();
+        let decided = decide_requests(
+            rows,
+            &facts,
+            &facts.keys().cloned().collect(),
+            &handlers,
+            &access(),
+            &condition(),
+        )
+        .unwrap();
         assert_eq!(
             decided.iter().map(|(row, _)| row.base.id.as_str()).collect::<Vec<_>>(),
             ["second", "first"]
@@ -646,7 +652,7 @@ mod tests {
         filters.operator_user_ids = Some(vec!["applicant".into()]);
         filters.secondary_operator_user_ids = Some(vec!["handler".into()]);
         filters.org_unit_ids = Some(vec!["org-a".into()]);
-        let allowed = Some(BTreeSet::from(["so-a".into()]));
+        let allowed = BTreeSet::from(["so-a".into()]);
         let decided =
             decide_requests(rows.clone(), &facts, &allowed, &handlers, &access(), &filters).unwrap();
         assert_eq!(decided.len(), 1);
@@ -658,12 +664,12 @@ mod tests {
                 .is_empty()
         );
         assert!(
-            decide_requests(rows.clone(), &facts, &Some(BTreeSet::new()), &handlers, &access(), &condition())
+            decide_requests(rows.clone(), &facts, &BTreeSet::new(), &handlers, &access(), &condition())
                 .unwrap()
                 .is_empty()
         );
         assert!(
-            decide_requests(rows, &facts, &Some(BTreeSet::new()), &handlers, &access(), &condition())
+            decide_requests(rows, &facts, &BTreeSet::new(), &handlers, &access(), &condition())
                 .unwrap()
                 .is_empty()
         );

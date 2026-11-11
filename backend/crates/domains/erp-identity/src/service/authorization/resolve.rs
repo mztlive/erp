@@ -1,3 +1,4 @@
+use std::slice;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -5,6 +6,7 @@ use erp_core::common::time::Instant;
 use futures_util::future::BoxFuture;
 use persistence_core::Executor;
 
+use super::validate::revalidation_error;
 use super::{AccessMode, AccessPolicy, AccessRegistration, AuthorizationService};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::authorization::{AccessContext, AccessFact, AccessRule, AccessSubject, ReadAccess};
@@ -20,6 +22,32 @@ struct Resolution {
 }
 
 impl AuthorizationService {
+    /// 无对象动作检查入口资格及固定身份政策，并复验启用角色版本。
+    pub(super) async fn require_operation(
+        &self,
+        actor: &AuditActor,
+        entry: &AccessRegistration,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let version = self.identity(actor, entry, executor).await?;
+        if let AccessMode::QualifiedOperation { policy } = &entry.access {
+            let context = AccessContext {
+                actor: actor.clone(),
+                permission: entry.permission.clone(),
+                resource: entry.permission.resource().into(),
+                model: None,
+                as_of: Instant::now(),
+            };
+            let mut resolution = Resolution { versions: vec![], valid_until: None };
+            if self.policy(policy, entry, &context, &mut resolution, executor).await? != AccessRule::Allow {
+                return Err(Error::Forbidden("账号不具备本操作的管理资格".into()));
+            }
+            if self.identity(actor, entry, executor).await.map_err(revalidation_error)? != version {
+                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：身份资格已变化".into()));
+            }
+        }
+        Ok(())
+    }
     /// 冻结身份与登记模型，范围节点共享解释时点。
     pub(super) async fn resolve(
         &self,
@@ -73,7 +101,17 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<String> {
         let mut permissions = entry.required_permissions.clone();
-        permissions.push(entry.permission.clone());
+        if !matches!(entry.access.data().map(|data| &data.policy), Ok(AccessPolicy::Account { .. })) {
+            permissions.push(entry.permission.clone());
+        }
+        if permissions.is_empty() {
+            return self
+                .rbac
+                .qualified_permissions(actor, &[], executor)
+                .await?
+                .map(|qualified| qualified.version().to_owned())
+                .ok_or_else(|| Error::Forbidden("授权账号已失效".into()));
+        }
         self.qualification(actor, &permissions, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("账号或有效角色不具备本操作的完整权限".into()))
@@ -105,6 +143,13 @@ impl AuthorizationService {
     ) -> BoxFuture<'a, Result<AccessRule>> {
         Box::pin(async move {
             match policy {
+                AccessPolicy::Account { policy } => {
+                    self.policy(policy, entry, context, resolution, executor).await
+                },
+                AccessPolicy::Owned => Ok(AccessRule::Fact(AccessFact::Owned)),
+                AccessPolicy::Permission(_) | AccessPolicy::Roles(_) => {
+                    self.identity_policy(policy, context, resolution, executor).await
+                },
                 AccessPolicy::Assigned => Ok(AccessRule::Fact(AccessFact::AssignedTo)),
                 AccessPolicy::Participant => Ok(AccessRule::Fact(AccessFact::Participant)),
                 AccessPolicy::Scope { permission, read } => {
@@ -136,6 +181,27 @@ impl AuthorizationService {
                 },
             }
         })
+    }
+
+    /// 固定功能或角色分支只使用启用角色，并绑定同次身份版本。
+    async fn identity_policy(
+        &self,
+        policy: &AccessPolicy,
+        context: &AccessContext,
+        resolution: &mut Resolution,
+        executor: &mut dyn Executor,
+    ) -> Result<AccessRule> {
+        let permissions = match policy {
+            AccessPolicy::Permission(permission) => slice::from_ref(permission),
+            _ => &[],
+        };
+        let qualified = self
+            .rbac
+            .qualified_permissions(&context.actor, permissions, executor)
+            .await?
+            .ok_or_else(|| Error::Forbidden("授权账号已失效".into()))?;
+        resolution.versions.push(qualified.version().to_owned());
+        policy.qualified_rule(&qualified)
     }
 
     /// 范围配置与对象资源分别取证；读取授权只加入获准读取的资源。

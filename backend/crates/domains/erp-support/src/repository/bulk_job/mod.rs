@@ -19,6 +19,7 @@ use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result, mongo_ops};
 
+pub(crate) use self::background_job::authorized_background_page;
 pub use self::background_job::{BackgroundJobFilter, BackgroundJobRepositoryExt, BackgroundJobRow};
 pub use self::background_job_item::{BackgroundJobItemRepositoryExt, BackgroundJobItemRow};
 pub use self::input::{BACKGROUND_JOB_INPUT_LIMIT, BackgroundJobInput};

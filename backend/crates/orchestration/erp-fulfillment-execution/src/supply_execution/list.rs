@@ -83,10 +83,10 @@ async fn build_snapshot(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ListSnapshot> {
     let access = domain.access();
-    let (mut context, scope) = access.resolve(actor, "list", executor).await?;
+    let mut context = access.resolve(actor, "list", executor).await?;
     let no_scope = !context.has_scope_rules();
     let mut filter = fulfillment_order_filter(query);
-    filter.scope = Some(scope);
+    filter.scope = Some(context.clone());
     apply_org_filter(&access, query, &mut filter, executor).await?;
     apply_handler_filter(domain, query, &mut filter, executor).await?;
     let mut page = domain.search_fulfillment_orders(filter, executor).await?;

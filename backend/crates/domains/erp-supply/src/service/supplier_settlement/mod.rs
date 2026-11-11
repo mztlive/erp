@@ -9,9 +9,7 @@ pub mod review;
 pub mod shared;
 pub mod source;
 mod void;
-use std::sync::Arc;
-
-pub use access::{SettlementAccess, settlement_scope};
+pub use access::SettlementAccess;
 use mongodb::Database;
 use persistence_core::Executor;
 use shared::*;
@@ -21,17 +19,16 @@ use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementItem, SupplierSettlementStatement,
 };
-use crate::ports::{FailClosedSettlementDataScopePort, SettlementDataScopePort};
 use crate::repository::SupplierSettlementExt;
 use crate::{Error, Result};
 
 /// 供应商结算本域服务，调用者提供原事务执行器。
 pub struct SupplierSettlementService {
     db: Database,
-    data_scope: Arc<dyn SettlementDataScopePort>,
+    data_scope: SettlementAccess,
 }
 impl SupplierSettlementService {
-    /// 创建供应商结算服务实例；范围 Port 缺省失败关闭。
+    /// 创建供应商结算服务实例；授权访问器 缺省失败关闭。
     ///
     /// # 参数
     /// * `db` - 数据库实例
@@ -42,20 +39,20 @@ impl SupplierSettlementService {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
-        Self { db, data_scope: FailClosedSettlementDataScopePort::shared() }
+        Self { db: db.clone(), data_scope: SettlementAccess::unwired(db.clone()) }
     }
 
-    /// 注入结算范围 Port。
+    /// 注入结算授权访问器。
     ///
     /// # 参数
-    /// * `data_scope` - 组合层装配的公共解析 adapter
+    /// * `data_scope` - 组合层装配的本域授权访问器
     ///
     /// # 返回
-    /// 返回绑定范围 Port 的服务。
+    /// 返回绑定授权访问器 的服务。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn with_data_scope(mut self, data_scope: Arc<dyn SettlementDataScopePort>) -> Self {
+    pub fn with_data_scope(mut self, data_scope: SettlementAccess) -> Self {
         self.data_scope = data_scope;
         self
     }
@@ -66,12 +63,12 @@ impl SupplierSettlementService {
     /// 无。
     ///
     /// # 返回
-    /// 返回绑定当前数据库和范围 Port 的 `SettlementAccess`。
+    /// 返回绑定当前数据库和授权访问器 的 `SettlementAccess`。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn access(&self) -> SettlementAccess {
-        SettlementAccess::new(self.db.clone(), self.data_scope.clone())
+        self.data_scope.clone()
     }
     /// 按 ID 加载未删除结算单。
     ///

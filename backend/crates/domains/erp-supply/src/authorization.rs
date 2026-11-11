@@ -104,6 +104,13 @@ impl CompiledScope {
     }
 }
 
+/// 供给查询当前阶段凭证。
+pub type OfferingResolvedScope = CompiledScope;
+/// 履约订单查询当前阶段凭证。
+pub type FulfillmentOrderResolvedScope = CompiledScope;
+/// 结算查询当前阶段凭证。
+pub type SettlementResolvedScope = CompiledScope;
+
 struct Mapping {
     model: QueryModel,
 }
@@ -232,7 +239,7 @@ pub async fn resolve(
 ) -> erp_identity::Result<CompiledScope> {
     let policy_version = rbac.policy_revision_with_executor(executor).await?;
     let (service, mapping) = setup(db, rbac, resource)?;
-    let permission = Permission::parse(format!("{resource}:{action}"))?;
+    let permission = action_permission(resource, action)?;
     let query = service.query(actor, &permission, AccessSubject::Direct, executor).await?;
     let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
     service.validate(&compiled, executor).await?;
@@ -280,11 +287,26 @@ pub async fn require(
     service
         .require(
             actor,
-            &Permission::parse(format!("{resource}:{action}"))?,
+            &action_permission(resource, action)?,
             AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
             executor,
         )
         .await
+}
+
+/// 验证本域固定资源动作，拒绝已退出或尚未登记的入口。
+/// # 参数
+/// resource、action 为服务端调用的固定入口。
+/// # 返回
+/// 已登记的具体权限。
+/// # 错误
+/// 未知资源或动作返回接入校验错误。
+pub(crate) fn action_permission(resource: &str, action: &str) -> erp_identity::Result<Permission> {
+    let (_, actions) = resource_spec(resource)?;
+    if !actions.contains(&action) {
+        return Err(erp_identity::Error::ValidationError("操作尚未接入统一权限".into()));
+    }
+    Ok(Permission::parse(format!("{resource}:{action}"))?)
 }
 
 /// 固定资源目录；不从HTTP参数创建权限政策。
@@ -315,6 +337,29 @@ fn resource_spec(resource: &str) -> erp_identity::Result<(&'static str, &'static
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// 供给完整对象读取使用现有 list 入口；detail 已不属于供给目录。
+    #[test]
+    fn offering_read_uses_registered_list_action() {
+        let permission = action_permission("supplier_offering", "list").unwrap();
+        assert_eq!(permission, Permission::parse("supplier_offering:list").unwrap());
+        assert!(matches!(
+            action_permission("supplier_offering", "detail"),
+            Err(erp_identity::Error::ValidationError(_))
+        ));
+        assert!(action_permission("supplier_offering", "create").is_ok());
+        assert!(action_permission("supplier_offering", "update").is_ok());
+    }
+
+    /// 未登记资源和动作不能降级为单纯功能资格检查。
+    #[test]
+    fn unknown_supplier_resource_or_action_is_rejected() {
+        assert!(matches!(action_permission("unknown", "list"), Err(erp_identity::Error::ValidationError(_))));
+        assert!(matches!(
+            action_permission("supplier_fulfillment_order", "create"),
+            Err(erp_identity::Error::ValidationError(_))
+        ));
+    }
+
     #[tokio::test]
     async fn missing_identity_proof_rejects_execution() {
         let scope = CompiledScope::default();

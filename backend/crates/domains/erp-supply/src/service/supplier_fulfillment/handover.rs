@@ -52,9 +52,7 @@ async fn persist_handover(
         return Err(Error::ConflictError("供应商履约订单责任或版本已变化，请刷新后重试".into()));
     }
     order.handover(req.target_user_id.clone(), req.target_org_unit_id.clone()).map_err(Error::from)?;
-    access
-        .ensure_writable(actor, "handover", &order.follow_up_user_id, &order.business_org_unit_id, executor)
-        .await?;
+    access.ensure_writable(actor, "handover", executor).await?;
     db.supplier_fulfillment_orders().update(&mut order, executor).await?;
     Ok(handover_view(&order, Vec::new()))
 }

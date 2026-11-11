@@ -13,14 +13,12 @@ mod query;
 mod repository;
 mod source;
 
-use std::sync::Arc;
-
 pub use access::QualityAccess;
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 pub use dto::{
     CurrentQualityQuery, CurrentQualityView, HistoryQualityQuery, HistoryQualityView, QualityExport,
 };
-use erp_customer::CustomerDataScopePort;
+use erp_customer::CustomerAccess;
 use mongodb::Database;
 use persistence_core::Transactional;
 
@@ -31,27 +29,23 @@ use crate::Result;
 pub struct CustomerQualityReadModel {
     db: Database,
     rbac: erp_identity::SharedRbacService,
-    customer_scope: Arc<dyn CustomerDataScopePort>,
+    customer_scope: CustomerAccess,
 }
 
 impl CustomerQualityReadModel {
-    /// 复用应用数据库、RBAC 与组合层注入的客户范围 Port。
+    /// 复用应用数据库、RBAC 与组合层注入的客户授权服务。
     ///
     /// # 参数
     /// * `db` - 应用数据库
     /// * `rbac` - 当前 RBAC 快照服务
-    /// * `customer_scope` - 客户域 Port，生产环境由组合层 adapter 实现
+    /// * `customer_scope` - 已装配的客户授权服务
     ///
     /// # 返回
     /// 返回执行双口径一致快照查询的读模型。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(
-        db: Database,
-        rbac: erp_identity::SharedRbacService,
-        customer_scope: Arc<dyn CustomerDataScopePort>,
-    ) -> Self {
+    pub fn new(db: Database, rbac: erp_identity::SharedRbacService, customer_scope: CustomerAccess) -> Self {
         Self { db, rbac, customer_scope }
     }
 

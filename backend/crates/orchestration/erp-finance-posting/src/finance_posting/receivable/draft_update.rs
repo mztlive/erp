@@ -6,6 +6,7 @@ use erp_audit::execution::run_audited;
 use erp_finance::dto::receivable::UpdateCustomerReceiptRequest;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -66,16 +67,18 @@ impl ReceivableProcess {
 /// # 错误
 /// 账号不可用、缺少提交权限、无权读取完整资金来源，或授权读取失败时返回错误。
 pub(super) async fn ensure_receipt_edit_authorized(
-    _db: &Database,
+    db: &Database,
     rbac: &FinancePostingPorts,
     actor: &AuditActor,
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !rbac.runtime.actor_active(actor, executor).await? {
+    if !rbac.identity.directory().actor_is_active(actor, executor).await? {
         return Err(Error::Forbidden("当前账号不可编辑客户回款单".into()));
     }
-    if rbac.runtime.action_roles(actor, "customer_receipt:submit", executor).await?.is_empty() {
+    let authorization =
+        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
+    if !authorization.has_permission(actor, &Permission::parse("customer_receipt:submit")?, executor).await? {
         return Err(Error::Forbidden("当前账号缺少回款提交权限".into()));
     }
     if !rbac.runtime.source_readable(actor, DocumentType::CustomerReceipt, id, executor).await? {

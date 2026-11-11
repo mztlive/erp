@@ -41,8 +41,6 @@ pub struct CustomerAcceptanceRow {
 /// 客户验收单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct CustomerAcceptanceFilter {
-    /// 已授权来源销售单；空集合不匹配任何记录。
-    pub authorized_sales_order_ids: Option<Vec<String>>,
     /// 销售单；`None` 表示不筛选。
     pub sales_order_id: Option<SalesOrderId>,
     /// 单据状态；`None` 表示不筛选。
@@ -60,8 +58,7 @@ pub struct CustomerAcceptanceFilter {
 impl QueryFilter for CustomerAcceptanceFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// 有值时写入 `sales_order_id`、授权销售单 `$in` 与 `status`。授权集合即使为空也会写入，
-    /// 从而不匹配任何记录；三者皆空时只保留未删除条件。
+    /// 有值时写入 `sales_order_id` 与 `status`；两者皆空时只保留未删除条件。
     ///
     /// # 参数
     /// 无。
@@ -75,9 +72,6 @@ impl QueryFilter for CustomerAcceptanceFilter {
         let mut filter = super::active_filter();
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
-        }
-        if let Some(ids) = &self.authorized_sales_order_ids {
-            filter.insert("$and", vec![doc! { "sales_order_id": { "$in": ids } }]);
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());

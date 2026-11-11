@@ -84,11 +84,18 @@ authorization.validate(&compiled, executor).await?;
 | `AccessMode` | 必需内容 | 可用入口 |
 | --- | --- | --- |
 | `Operation` | 无数据政策和端口，主体固定为 `Direct` | 无对象操作检查 |
+| `QualifiedOperation` | 固定的角色或功能资格政策，无业务事实端口 | 带管理员等身份约束的无对象操作检查 |
 | `Query` | `DataAccess`、Mapping | 查询 |
 | `Object` | `DataAccess`、`AccessFactsPort` | 完整对象检查 |
 | `QueryAndObject` | 同一份 `DataAccess`、Mapping、`AccessFactsPort` | 查询及完整对象检查 |
 
 `DataAccess` 固定 `AccessSubject`、根对象必需事实和 `AccessPolicy`。数据政策支持范围、任务分配、参与、与或组合、来源关系；无对象操作不得嵌入数据政策。各范围节点通过 `ReadAccess` 声明读取补充开关。
+
+`Owned` 读取真实所有者事实。`Roles` 仅接受服务端固定的角色集合，角色必须启用；`Permission` 检查固定功能资格。上述身份分支绑定同次账号、策略及启用角色版本。
+
+文件材料转授保留有效上传者或通用预览资格。该入口使用根 `Account` 政策先检查账号有效性，再由内部完整对象政策判断资格，不要求额外的转授权限。`Account` 不得嵌套，也不得用于已有业务资源以免除入口权限。文件所有者事实必须完整读取，预览分支不能掩盖事实缺失。
+
+后台任务中心按本人发起或启用管理员角色授权。全部取消采用 `QualifiedOperation`，在每个写事务内复验入口权限与管理员角色；角色停用、设施读取失败不得降级为普通账号后继续处理。
 
 只做对象检查时使用 `Object`，不执行查询准备和编译。`View` 的标识须与模型一致，`Source` 必须对应政策中的实际关系。任一来源命中的政策只允许用于受限只读视图；`QueryAndObject` 必须使用完整对象模型。
 

@@ -11,7 +11,6 @@ use erp_finance::entity::receivable::{InvoiceDirection, InvoiceKind, SalesInvoic
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{InvoiceFilter, InvoiceRow, ReceivableExt};
-use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -53,7 +52,6 @@ impl FundsAccess {
     /// # 参数
     /// * `params` - 发票列表请求。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 最终授权份额的分页响应与汇总。
@@ -64,14 +62,11 @@ impl FundsAccess {
         &self,
         params: &InvoiceListParams,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self
-            .checked_invoices(params, &query, actor, purchase_access, params.scope_version.as_deref())
-            .await?;
+        let snapshot = self.checked_invoices(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
     }
 
@@ -80,7 +75,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 发票主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 当前授权资格裁剪的发票详情。
@@ -91,19 +85,15 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { this.load_invoice_detail(&id, &actor, &purchase_access, executor).await },
-                )
+                Box::pin(async move { this.load_invoice_detail(&id, &actor, executor).await })
             })
             .await
     }
@@ -114,7 +104,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
     ///
     /// # 返回
@@ -127,13 +116,12 @@ impl FundsAccess {
         params: &InvoiceListParams,
         query: &InvoiceListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
         checked_revalidated(
             expected,
-            || self.snapshot_invoices(params, query, actor, purchase_access),
-            || self.invoice_fingerprint_snapshot(query, actor, purchase_access),
+            || self.snapshot_invoices(params, query, actor),
+            || self.invoice_fingerprint_snapshot(query, actor),
         )
         .await
     }
@@ -144,7 +132,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 同事务内形成的最终授权发票页面。
@@ -156,20 +143,16 @@ impl FundsAccess {
         params: &InvoiceListParams,
         query: &InvoiceListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
         let this = self.clone();
         let params = params.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.load_invoices(&params, &query, &actor, &purchase_access, executor).await
-                })
+                Box::pin(async move { this.load_invoices(&params, &query, &actor, executor).await })
             })
             .await
     }
@@ -182,7 +165,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求，用于比对范围版本。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -195,11 +177,9 @@ impl FundsAccess {
         params: &InvoiceListParams,
         query: &InvoiceListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
-        let (authorization, snapshot) =
-            self.invoice_projection(query, actor, purchase_access, true, executor).await?;
+        let (authorization, snapshot) = self.invoice_projection(query, actor, true, executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "发票无可见范围"));
         }
@@ -240,12 +220,10 @@ impl FundsAccess {
         &self,
         query: &InvoiceListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         materialize: bool,
         executor: &mut dyn Executor,
     ) -> Result<(FundsAuthorization, InvoiceSnapshot)> {
-        let (_, authorization) =
-            self.resolve_dual(actor, "invoice", "list", purchase_access, executor).await?;
+        let (_, authorization) = self.resolve_dual(actor, "invoice", "list", executor).await?;
         if authorization.empty() {
             return Ok((authorization, InvoiceSnapshot::default()));
         }
@@ -275,19 +253,17 @@ impl FundsAccess {
         &self,
         query: &InvoiceListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<String> {
         let this = self.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (authorization, snapshot) =
-                        this.invoice_projection(&query, &actor, &purchase_access, false, executor).await?;
+                        this.invoice_projection(&query, &actor, false, executor).await?;
                     if authorization.empty() {
                         return Ok(authorization.context.scope_version.clone());
                     }
@@ -435,7 +411,6 @@ impl FundsAccess {
     /// # 参数
     /// * `id` - 发票主键。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -447,11 +422,9 @@ impl FundsAccess {
         &self,
         id: &str,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
-        let (_access, authorization) =
-            self.resolve_dual(actor, "invoice", "detail", purchase_access, executor).await?;
+        let (_access, authorization) = self.resolve_dual(actor, "invoice", "detail", executor).await?;
         let filter =
             InvoiceFilter { invoice_ids: Some(vec![id.to_string()]), page_size: 1, ..Default::default() };
         let page = self.db.invoices().search_invoices(&filter, executor).await?;
@@ -477,7 +450,8 @@ impl FundsAccess {
                 executor,
             )
             .await?
-            .map(|list| list.into_iter().collect::<BTreeSet<_>>());
+            .into_iter()
+            .collect::<BTreeSet<_>>();
         let purchase_allowed = self.payable_targets(&authorization, &purchase_facts, executor).await?;
         let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
         let purchase_matched = matched_orders(&purchase_tuples, &purchase_allowed);

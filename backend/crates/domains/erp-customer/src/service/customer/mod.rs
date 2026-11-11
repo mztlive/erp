@@ -30,9 +30,7 @@ use crate::entity::customer::{
     CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
 };
 use crate::error::{Error, Result};
-use crate::ports::{
-    AccountFactPort, CustomerAuditPort, CustomerDataScopePort, PartyFactPort, PartyIdentityFact,
-};
+use crate::ports::{AccountFactPort, CustomerAuditPort, PartyFactPort, PartyIdentityFact};
 use crate::repository::prelude::*;
 use crate::repository::{CustomerAccountRow, CustomerExt};
 
@@ -55,7 +53,7 @@ pub struct CustomerService {
     audit: Arc<dyn CustomerAuditPort>,
     party: Arc<dyn PartyFactPort>,
     accounts: Arc<dyn AccountFactPort>,
-    data_scope: Arc<dyn CustomerDataScopePort>,
+    access: CustomerAccess,
 }
 
 impl CustomerService {
@@ -66,7 +64,7 @@ impl CustomerService {
     /// * `audit` - 审计写入端口
     /// * `party` - 主体事实端口
     /// * `accounts` - 账号事实端口
-    /// * `data_scope` - 客户范围授权端口
+    /// * `access` - 客户统一授权访问器
     ///
     /// # 返回
     /// 返回服务实例。
@@ -75,32 +73,15 @@ impl CustomerService {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 范围解析必须走注入的 Port；未接线端口失败关闭，不得补公司范围。
+    /// 范围解析必须由 identity 完整授权，不得补公司范围。
     pub fn new(
         db: Database,
         audit: Arc<dyn CustomerAuditPort>,
         party: Arc<dyn PartyFactPort>,
         accounts: Arc<dyn AccountFactPort>,
-        data_scope: Arc<dyn CustomerDataScopePort>,
+        access: CustomerAccess,
     ) -> Self {
-        Self { db, audit, party, accounts, data_scope }
-    }
-
-    /// 构造复用本服务授权 Port 的客户访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库与范围 Port 的访问器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在此回退构造身份域 Service。
-    fn access(&self) -> access::CustomerAccess {
-        access::CustomerAccess::new(self.db.clone(), Arc::clone(&self.data_scope))
+        Self { db, audit, party, accounts, access }
     }
 
     /// 创建客户（跨集合事务：customer_account + 首条 OWNER 归属 + 审计原子写入）。
@@ -141,7 +122,7 @@ impl CustomerService {
         let audit_port = self.audit.clone();
         let account_for_tx = account;
         let assignment_for_tx = assignment;
-        let access = self.access();
+        let access = self.access.clone();
         let actor_for_tx = actor.clone();
         let created = client
             .with_transaction(move |executor| {
@@ -257,7 +238,7 @@ impl CustomerService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let mut account_for_tx = account;
-        let access = self.access();
+        let access = self.access.clone();
         let actor_for_tx = actor.clone();
         let customer_id = id.to_string();
         let updated = client

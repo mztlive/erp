@@ -50,7 +50,6 @@ fn acceptance_filter(params: &CustomerAcceptanceListParams) -> Result<CustomerAc
         &["accepted_at", "created_at"],
     )?;
     Ok(CustomerAcceptanceFilter {
-        authorized_sales_order_ids: None,
         sales_order_id: params.sales_order_id.clone(),
         status: params.status,
         page: paging.page,
@@ -141,7 +140,6 @@ mod tests {
     fn acceptance_filter_keeps_requested_order_and_rejects_invalid_paging() {
         let filter = acceptance_filter(&params()).unwrap();
         assert_eq!(filter.sales_order_id, Some(SalesOrderId::new("sales-one")));
-        assert!(filter.authorized_sales_order_ids.is_none());
         let mut invalid = params();
         invalid.page_size = Some(101);
         assert!(acceptance_filter(&invalid).is_err());

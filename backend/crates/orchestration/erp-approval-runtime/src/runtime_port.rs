@@ -5,7 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use bpm::engine::DefinitionGraph;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::SharedRbacService;
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_support::FileAsset;
 use erp_workflow::WorkflowAuthorizationPort;
@@ -95,29 +95,6 @@ pub trait ApprovalRuntimePort: Send + Sync {
         files: &[FileAsset],
         executor: &mut dyn Executor,
     ) -> Result<()>;
-    /// 在原事务内核验当前操作身份仍有效。
-    /// # 参数
-    /// `actor` 和 `executor` 为原操作身份及执行器。
-    /// # 返回
-    /// 账号与身份相符且有效时返回 `true`。
-    /// # 错误
-    /// 授权来源读取失败时返回原错误。
-    async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool>;
-
-    /// 在原事务内返回授予指定审批动作的当前有效角色。
-    /// # 参数
-    /// `actor`、`permission` 和 `executor` 为身份、动作与执行器。
-    /// # 返回
-    /// 返回实际授权角色，不跨角色拼接资格。
-    /// # 错误
-    /// 授权读取或策略版本重验失败时返回原错误。
-    async fn action_roles(
-        &self,
-        actor: &AuditActor,
-        permission: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
-
     /// 在原事务内证明操作人能够读取指定审批来源。
     /// # 参数
     /// `actor`、`document_type`、`id` 与 `executor` 为原来源读取上下文。
@@ -225,29 +202,6 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
     ) -> Result<()> {
         Ok(authorize_material_transfer(&self.identity, &self.db, actor, files, executor).await?)
     }
-    async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self.identity.directory().actor_is_active(actor, executor).await?)
-    }
-
-    async fn action_roles(
-        &self,
-        actor: &AuditActor,
-        permission: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let permission = Permission::parse(permission)?;
-        let qualified = AuthorizationService::new(
-            self.db.clone(),
-            self.identity.clone(),
-            AuthorizationRegistry::new(vec![])?,
-        )
-        .permissions(actor, std::slice::from_ref(&permission), executor)
-        .await?;
-        Ok(qualified
-            .map(|value| value.roles(&permission).into_iter().map(|role| role.to_string()).collect())
-            .unwrap_or_default())
-    }
-
     async fn source_readable(
         &self,
         actor: &AuditActor,

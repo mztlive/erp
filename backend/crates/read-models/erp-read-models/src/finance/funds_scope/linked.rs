@@ -81,7 +81,6 @@ mod tests {
     use std::sync::Mutex;
 
     use async_trait::async_trait;
-    use erp_core::common::time::Instant;
     use erp_finance::{Error as FinanceError, Result as FinanceResult};
     use persistence_core::NoTransaction;
 
@@ -108,15 +107,6 @@ mod tests {
                 return Err(FinanceError::ValidationError("组织不存在".into()));
             }
             Ok(self.expanded.clone())
-        }
-
-        async fn org_member_ids(
-            &self,
-            _ids: &BTreeSet<String>,
-            _at: Instant,
-            _executor: &mut dyn Executor,
-        ) -> FinanceResult<Vec<String>> {
-            Err(FinanceError::Internal("未使用的成员读取".into()))
         }
     }
 

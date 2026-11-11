@@ -1,7 +1,6 @@
 //! 整张发票的附件只向具有整票读取范围的账号开放。
 use application_core::AuditActor;
 use erp_core::ids::BusinessDocumentId;
-use erp_procurement::PurchaseAccess;
 use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
 use persistence_core::Transactional;
@@ -13,28 +12,21 @@ use crate::{Error, Result};
 impl FundsAccess {
     /// 在同一读取事务中验证整票资格并列出附件。
     /// # 参数
-    /// 发票身份、当前账号及采购来源授权器。
+    /// 发票身份与当前账号。
     /// # 返回
     /// 文件名称、类型和下载所需身份，不返回存储地址。
     /// # 错误
     /// 不可见发票、部分份额授权或文件读取失败时拒绝。
-    pub async fn invoice_files_scoped(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
-    ) -> Result<Vec<FinancialFileView>> {
+    pub async fn invoice_files_scoped(&self, id: &str, actor: &AuditActor) -> Result<Vec<FinancialFileView>> {
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let invoice =
-                        this.load_invoice_detail(&id, &actor, &purchase_access, executor).await?.data;
+                    let invoice = this.load_invoice_detail(&id, &actor, executor).await?.data;
                     ensure_whole_invoice(invoice.permission_limited)?;
                     let attachments = this
                         .db

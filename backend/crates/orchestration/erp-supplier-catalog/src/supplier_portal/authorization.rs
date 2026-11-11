@@ -42,7 +42,7 @@ impl PortalReadAuthorizationPort for PortalReadAuthorization {
         offering_id: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        match self.services.offering_access.require_offering(actor, "detail", offering_id, executor).await {
+        match self.services.offering_access.require_offering(actor, "list", offering_id, executor).await {
             Ok(_) => Ok(true),
             Err(SupplyError::NotFound(_) | SupplyError::Forbidden(_)) => Ok(false),
             Err(error) => Err(map_read_error(error.into())),
@@ -118,7 +118,7 @@ pub async fn request_readable(
     let result: Result<()> = async {
         services.suppliers.require_with(actor, "detail", &supplier_id, executor).await?;
         if let Some(id) = offering_id {
-            services.offering_access.require_offering(actor, "detail", &id, executor).await?;
+            services.offering_access.require_offering(actor, "list", &id, executor).await?;
         }
         Ok(())
     }

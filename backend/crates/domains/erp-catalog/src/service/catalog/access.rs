@@ -1,29 +1,30 @@
 //! 商品对象读取与写入范围；显式维护人和业务组织分别解释。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
+use erp_identity::{
+    AuthorizationRegistry, AuthorizationService, OrganizationDirectoryService, Permission, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::authorization::{self, CompiledScope};
 use crate::entity::catalog::Product;
 use crate::error::{Error, Result};
-use crate::ports::{CatalogDataScopePort, CatalogResolvedScope};
-use crate::repository::{CatalogExt, CatalogReadScope};
+use crate::repository::CatalogExt;
 
 /// 商品对象访问范围；列表、详情、候选、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct CatalogAccess {
     db: Database,
-    scope: Arc<dyn CatalogDataScopePort>,
+    rbac: Option<SharedRbacService>,
 }
 
 impl CatalogAccess {
-    /// 绑定商品集合与范围授权 Port。
+    /// 绑定商品集合与共享身份设施。
     ///
     /// # 参数
     /// * `db` - 商品集合所在数据库
-    /// * `scope` - 组合层注入的商品范围 Port
+    /// * `rbac` - 组合层注入的共享身份设施
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
@@ -32,9 +33,25 @@ impl CatalogAccess {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 不得在构造时补公司范围；不得直接构造身份域 Service。
-    pub fn new(db: Database, scope: Arc<dyn CatalogDataScopePort>) -> Self {
-        Self { db, scope }
+    /// 目录由本域固定登记，不能由业务请求替换。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac: Some(rbac) }
+    }
+
+    /// 构造未装配身份设施的访问器。
+    /// # 参数
+    /// db 为业务数据库。
+    /// # 返回
+    /// 所有授权入口保持失败关闭的访问器。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn unwired(db: Database) -> Self {
+        Self { db, rbac: None }
+    }
+
+    /// 读取已装配身份设施，缺失时拒绝授权。
+    fn identity(&self) -> Result<SharedRbacService> {
+        self.rbac.clone().ok_or_else(|| Error::Internal("商品身份设施未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射商品责任条件。
@@ -57,9 +74,8 @@ impl CatalogAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(CatalogResolvedScope, CatalogReadScope)> {
-        let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), access))
+    ) -> Result<CompiledScope> {
+        Ok(authorization::resolve(&self.db, self.identity()?, actor, "product", action, executor).await?)
     }
 
     /// 在调用方事务内重验商品对象资格。
@@ -85,7 +101,7 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Product> {
-        self.scope.require(actor, action, id, executor).await?;
+        authorization::require(&self.db, self.identity()?, actor, "product", action, id, executor).await?;
         self.db
             .products()
             .find_by_id(id, executor)
@@ -111,7 +127,9 @@ impl CatalogAccess {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> Result<std::collections::BTreeSet<String>> {
-        self.scope.expand_org_units(org_unit_ids, include_descendants, executor).await
+        Ok(OrganizationDirectoryService::new(self.db.clone())
+            .expand_org_units(org_unit_ids, include_descendants, executor)
+            .await?)
     }
 
     /// 查询账号在解析时点的唯一主属组织。
@@ -132,7 +150,7 @@ impl CatalogAccess {
         at: erp_core::common::time::Instant,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        self.scope.own_org(user_id, at, executor).await
+        Ok(OrganizationDirectoryService::new(self.db.clone()).own_org(user_id, at, executor).await?)
     }
 
     /// 解析拟写入的维护人及其主属组织，缺组织阻断。
@@ -167,41 +185,57 @@ impl CatalogAccess {
         Ok((maintainer.to_string(), org))
     }
 
-    /// 校验拟创建或拟写入对象落在当前动作范围内。
-    ///
+    /// 检查共享商品写动作的功能资格。
     /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `action` - 已注册写动作
-    /// * `owner` - 拟写入维护人
-    /// * `org` - 拟写入业务组织
-    /// * `executor` - 调用方执行器
-    ///
+    /// actor 为操作人，action 为写动作，executor 为原业务执行器。
     /// # 返回
-    /// 范围内时成功。
-    ///
+    /// 有效账号具备该动作时成功。
     /// # 错误
-    /// 空范围或对象不被允许时拒绝。
+    /// 缺少功能资格或身份取证失败时拒绝。
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,
         action: &str,
-        owner: &str,
-        org: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let _ = (owner, org);
-        self.scope.resolve(actor, action, executor).await?;
+        if !matches!(action, "create" | "update") {
+            return Err(Error::ValidationError("未登记商品写动作".into()));
+        }
+        let service =
+            AuthorizationService::new(self.db.clone(), self.identity()?, AuthorizationRegistry::default());
+        let permission = Permission::parse(format!("product:{action}"))?;
+        if !service.has_permission(actor, &permission, executor).await? {
+            return Err(Error::Forbidden("没有商品写入权限".into()));
+        }
         Ok(())
     }
 }
 
-/// 返回当前阶段的身份域查询凭证。
-/// # 参数
-/// access 为已编译凭证，user 为兼容调用参数。
-/// # 返回
-/// 相同凭证。
-/// # 错误
-/// 不执行I/O。
-pub fn catalog_scope(access: &CatalogResolvedScope, _user: &str) -> CatalogReadScope {
-    access.clone()
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn unwired_access_rejects_reads_and_writes_before_database_commands() {
+        let db = mongodb::Client::with_options(Default::default()).unwrap().database("unused");
+        let access = CatalogAccess::unwired(db);
+        let actor = AuditActor::new("actor".into(), "Actor".into(), AccountKind::Admin);
+        let mut executor = NoTransaction;
+        assert!(matches!(access.resolve(&actor, "list", &mut executor).await, Err(Error::Internal(_))));
+        assert!(matches!(
+            access.require_product(&actor, "detail", "product-a", &mut executor).await,
+            Err(Error::Internal(_))
+        ));
+        assert!(matches!(
+            access.ensure_writable(&actor, "create", &mut executor).await,
+            Err(Error::Internal(_))
+        ));
+        assert!(matches!(
+            access.ensure_writable(&actor, "delete", &mut executor).await,
+            Err(Error::ValidationError(_))
+        ));
+    }
 }

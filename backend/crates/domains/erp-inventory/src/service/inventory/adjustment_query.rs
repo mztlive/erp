@@ -13,7 +13,7 @@ use crate::dto::{
 };
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
 use crate::error::{Error, Result};
-use crate::ports::{AdjustmentPeopleFact, InventoryAuthorization, intersect_object_ids};
+use crate::ports::{AdjustmentPeopleFact, InventoryAction, InventoryAuthorization, intersect_object_ids};
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockAdjustmentFilter, StockAdjustmentRow};
 
@@ -80,7 +80,9 @@ impl InventoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
+                    let authorization = authorization_port
+                        .authorize(&actor, &[InventoryAction::AdjustmentList], executor)
+                        .await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
                     }
@@ -145,7 +147,8 @@ impl InventoryService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustment> {
-        let authorization = self.authorization.authorize(actor, executor).await?;
+        let authorization =
+            self.authorization.authorize(actor, &[InventoryAction::AdjustmentDetail], executor).await?;
         let adjustment = self
             .db
             .inventory()

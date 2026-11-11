@@ -1,5 +1,6 @@
 //! 支撑领域：来源注册、批量任务与文件资产。
 
+pub mod authorization;
 pub mod dto;
 pub mod entity;
 mod error;

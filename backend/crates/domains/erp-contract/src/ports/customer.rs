@@ -2,12 +2,31 @@
 
 use std::collections::HashMap;
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CustomerAccountId, PartyId};
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
+
+/// 合同创建所需的真实客户来源资格；在组合层完成跨域查询。
+#[async_trait]
+pub trait ContractCreationPort: Send + Sync {
+    /// 在原事务内检查指定客户是否允许归档合同。
+    /// # 参数
+    /// actor 为真实操作人，customer_id 为完整客户来源，executor 为原执行器。
+    /// # 返回
+    /// 绑定实际客户查询和复验服务的授权阶段凭证。
+    /// # 错误
+    /// 来源不存在、无权限、版本变化或事实读取失败时拒绝。
+    async fn require_create(
+        &self,
+        actor: &AuditActor,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<crate::authorization::CompiledScope>;
+}
 
 /// 合同域所需的客户归属事实；主责与协作分开，不含身份域类型。
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -119,8 +119,7 @@ impl CustomerCenterReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     this.customers.require_with(actor.clone(), "detail", &customer_id, executor).await?;
-                    let (contract_context, contracts) =
-                        this.contracts.resolve(&actor, "list", executor).await?;
+                    let contracts = this.contracts.resolve(&actor, "list", executor).await?;
                     let (sales_context, sales) = SalesAccess::new(this.db.clone(), this.rbac.clone())
                         .resolve(&actor, "list", &[], executor)
                         .await?;
@@ -135,7 +134,7 @@ impl CustomerCenterReadService {
                         .await?
                         .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
                     sales_context.validate(executor).await?;
-                    contract_context.validate(executor).await?;
+                    contracts.validate(executor).await?;
                     Ok::<_, Error>(result)
                 })
             })

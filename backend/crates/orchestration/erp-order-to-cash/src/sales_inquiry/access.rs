@@ -126,21 +126,8 @@ impl SalesInquiryAccess {
         task_version: Option<u64>,
         executor: &mut dyn Executor,
     ) -> Result<(SalesInquiry, WorkItem)> {
-        self.ensure_procurement_permission(actor, action, executor).await?;
-        let item = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
-        authorization::require_task_owner(self.db.clone(), self.rbac.clone(), actor, action, &item, executor)
-            .await?;
-        let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
-        let ids = inquiry
-            .current_procurement_requirement()?
-            .data
-            .lines
-            .iter()
-            .map(|line| line.line_id.clone())
-            .collect::<Vec<_>>();
-        if !item.owns_inquiry_task(actor.id(), id, inquiry.requirement_version, &ids) {
-            return Err(task_missing());
-        }
+        let item = self.authorized_task(actor, action, task_id, executor).await?;
+        let inquiry = self.current_task_inquiry(actor, id, &item, executor).await?;
         if task_version.is_some_and(|version| version != item.base.version) {
             return Err(Error::ConflictError("询价任务责任或版本已变化，请刷新".into()));
         }
@@ -165,12 +152,10 @@ impl SalesInquiryAccess {
         if !matches!(action, "list" | "detail") {
             return Err(task_missing());
         }
-        self.ensure_procurement_permission(actor, action, executor).await?;
-        let task = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
-        authorization::require_task_owner(self.db.clone(), self.rbac.clone(), actor, action, &task, executor)
-            .await?;
+        let task = self.authorized_task(actor, action, task_id, executor).await?;
         if task.status == WorkItemStatus::Open {
-            return self.require_task(actor, action, id, task_id, None, executor).await;
+            let inquiry = self.current_task_inquiry(actor, id, &task, executor).await?;
+            return Ok((inquiry, task));
         }
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
         let requirement = inquiry
@@ -183,6 +168,42 @@ impl SalesInquiryAccess {
             return Err(task_missing());
         }
         Ok((inquiry, task))
+    }
+
+    /// 在原执行器装载任务并由 identity 一次证明动作与当前分配资格。
+    async fn authorized_task(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItem> {
+        let item = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
+        authorization::require_task_owner(self.db.clone(), self.rbac.clone(), actor, action, &item, executor)
+            .await?;
+        Ok(item)
+    }
+
+    /// 按已授权任务核对当前询价需求版本与完整责任行。
+    async fn current_task_inquiry(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        item: &WorkItem,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesInquiry> {
+        let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
+        let ids = inquiry
+            .current_procurement_requirement()?
+            .data
+            .lines
+            .iter()
+            .map(|line| line.line_id.clone())
+            .collect::<Vec<_>>();
+        if !item.owns_inquiry_task(actor.id(), id, inquiry.requirement_version, &ids) {
+            return Err(task_missing());
+        }
+        Ok(inquiry)
     }
 
     /// 重新证明目标采购账号、组织与全部询价处理权限。

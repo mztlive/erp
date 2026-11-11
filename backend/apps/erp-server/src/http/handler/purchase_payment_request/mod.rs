@@ -24,14 +24,9 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::MongoPurchaseDataScope;
 
 fn reads(state: &HttpState) -> PurchasePaymentRequestReadService {
-    PurchasePaymentRequestReadService::new(
-        state.application().db(),
-        state.application().rbac(),
-        MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
-    )
+    PurchasePaymentRequestReadService::new(state.application().db(), state.application().rbac())
 }
 
 fn process(state: &HttpState) -> PurchasePaymentRequestProcess {

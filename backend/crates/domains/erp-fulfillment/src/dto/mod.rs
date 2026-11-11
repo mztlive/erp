@@ -17,8 +17,6 @@ pub(crate) const DELIVERY_SORT_FIELDS: &[&str] = &["created_at", "shipped_at"];
 pub(crate) const ELECTRONIC_DELIVERY_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
 /// 服务履约列表允许的排序字段白名单。
 pub(crate) const SERVICE_FULFILLMENT_SORT_FIELDS: &[&str] = &["occurred_at", "recorded_at", "created_at"];
-/// 客户验收单列表允许的排序字段白名单。
-pub(crate) const CUSTOMER_ACCEPTANCE_SORT_FIELDS: &[&str] = &["accepted_at", "created_at"];
 
 /// 共享的分页与排序参数，领域保留排序白名单。
 pub use application_core::PageParams;

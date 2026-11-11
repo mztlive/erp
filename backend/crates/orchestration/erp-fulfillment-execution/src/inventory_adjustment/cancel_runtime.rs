@@ -39,7 +39,7 @@ use super::InventoryAdjustmentProcess;
 use super::adapter::stock_adjustment_adapter;
 use super::approval_prepare::load_bound_definition_graph;
 pub(crate) use super::cancel_authorization::{
-    CancelAuthority, CancelAuthorization, ensure_cancel_authorized, ensure_cancel_authorized_with_executor,
+    CancelAuthority, CancelAuthorization, ensure_cancel_authorized,
 };
 use super::cancel_facts::{cancellation_fact, ensure_receipt};
 use crate::{Error, Result};
@@ -206,7 +206,7 @@ async fn replay_cancel_step(
         .await?
         .ok_or_else(|| Error::NotFound("审批实例不存在".into()))?;
     ensure_cancel_instance_subject(&instance, &input.id, input.request.expected_subject_version)?;
-    ensure_cancel_authorized_with_executor(db, workflow, &instance, &input.actor, executor).await?;
+    workflow.authorize_stock_adjustment_cancel(&instance, &input.actor, executor).await?;
     ensure_replay_terminal(db, &instance, receipt.as_ref(), &input, executor).await?;
     let Some(receipt) = receipt else {
         return Ok(None);

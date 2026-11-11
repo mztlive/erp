@@ -11,6 +11,59 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
+/// 本次库存用例需要取证的动作；未请求的动作不加载仓库范围。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InventoryAction {
+    /// 库存余额列表。
+    BalanceList,
+    /// 库存余额详情。
+    BalanceDetail,
+    /// 库存流水列表。
+    MovementList,
+    /// 库存预占列表。
+    ReservationList,
+    /// 库存调整列表及其详情资格。
+    AdjustmentList,
+    /// 库存调整详情。
+    AdjustmentDetail,
+    /// 库存调整创建及其详情资格。
+    Create,
+    /// 库存调整更新及其详情资格。
+    Update,
+}
+impl InventoryAction {
+    /// 返回固定登记的入口权限。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前动作的具体权限码。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn permission(self) -> &'static str {
+        match self {
+            Self::BalanceList => "stock_balance:list",
+            Self::BalanceDetail => "stock_balance:detail",
+            Self::MovementList => "stock_movement:list",
+            Self::ReservationList => "stock_reservation:list",
+            Self::AdjustmentList => "stock_adjustment:list",
+            Self::AdjustmentDetail => "stock_adjustment:detail",
+            Self::Create => "stock_adjustment:create",
+            Self::Update => "stock_adjustment:update",
+        }
+    }
+
+    /// 声明该动作是否同时要求同角色具备调整详情资格。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 列表、创建和更新调整单时为 true。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn requires_adjustment_detail(self) -> bool {
+        matches!(self, Self::AdjustmentList | Self::Create | Self::Update)
+    }
+}
+
 /// 库存用来从身份事实计算仓库范围授权的端口。
 #[async_trait]
 pub trait AuthorizationPort: Send + Sync {
@@ -18,6 +71,7 @@ pub trait AuthorizationPort: Send + Sync {
     ///
     /// # 参数
     /// * `actor` - 已认证的审计操作者。
+    /// * `actions` - 当前用例实际使用的动作。
     /// * `executor` - 调用方选择的数据访问执行器。
     ///
     /// # 返回
@@ -28,6 +82,7 @@ pub trait AuthorizationPort: Send + Sync {
     async fn authorize(
         &self,
         actor: &AuditActor,
+        actions: &[InventoryAction],
         executor: &mut dyn Executor,
     ) -> Result<InventoryAuthorization>;
 }
@@ -41,6 +96,7 @@ impl AuthorizationPort for FailClosedAuthorizationPort {
     async fn authorize(
         &self,
         _actor: &AuditActor,
+        _actions: &[InventoryAction],
         _executor: &mut dyn Executor,
     ) -> Result<InventoryAuthorization> {
         Err(Error::Internal("库存授权端口未接线".to_string()))
@@ -48,7 +104,7 @@ impl AuthorizationPort for FailClosedAuthorizationPort {
 }
 
 /// identity 查询返回的完整仓库身份结果；不保存或解释角色条款。
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WarehouseScope(Vec<String>, Option<Arc<dyn InventoryReadProof>>);
 
 /// 由统一权限入口生成的原阶段复验能力。
@@ -278,7 +334,10 @@ impl WarehouseScope {
     pub fn empty() -> Self {
         Self(Vec::new(), None)
     }
+}
 
+#[cfg(test)]
+impl WarehouseScope {
     /// 由仓库标识目标构造范围；空输入失败关闭。
     ///
     /// 输入必须是 identity 查询返回的真实仓库 ID；空集合保持空。
@@ -291,7 +350,7 @@ impl WarehouseScope {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn from_targets(targets: Vec<String>) -> Self {
+    fn from_targets(targets: Vec<String>) -> Self {
         Self(targets.into_iter().collect::<BTreeSet<_>>().into_iter().collect(), None)
     }
 }
@@ -314,7 +373,7 @@ pub struct InventoryAuthorization {
 }
 
 /// 库存各动作的仓库范围集合（具名字段，避免同类型位置参数传错顺序）。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InventoryScopeSet {
     /// 认证身份是否仍对应可登录账号。
     pub actor_active: bool,
@@ -414,51 +473,6 @@ impl InventoryAuthorization {
             movement_list_meta: InventoryScopeMeta::empty(),
             adjustment_list_meta: InventoryScopeMeta::empty(),
         }
-    }
-
-    /// 由组合层计算出的各动作仓库范围构造授权快照。
-    ///
-    /// 历史位置参数入口，委托 [`Self::from_scope_set`]；外部组合层未迁移前保留。
-    ///
-    /// # 参数
-    /// * `actor_active` - 认证身份是否仍对应可登录账号。
-    /// * `balance_list_scope` - 余额列表范围。
-    /// * `balance_detail_scope` - 余额详情范围。
-    /// * `movement_list_scope` - 流水列表范围。
-    /// * `reservation_list_scope` - 预占列表范围。
-    /// * `adjustment_list_scope` - 调整列表范围。
-    /// * `read_scope` - 对象读取范围。
-    /// * `create_scope` - 调整创建范围。
-    /// * `update_scope` - 调整更新范围。
-    ///
-    /// # 返回
-    /// 返回带空列表元信息的授权快照。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_scopes(
-        actor_active: bool,
-        balance_list_scope: WarehouseScope,
-        balance_detail_scope: WarehouseScope,
-        movement_list_scope: WarehouseScope,
-        reservation_list_scope: WarehouseScope,
-        adjustment_list_scope: WarehouseScope,
-        read_scope: WarehouseScope,
-        create_scope: WarehouseScope,
-        update_scope: WarehouseScope,
-    ) -> Self {
-        Self::from_scope_set(InventoryScopeSet {
-            actor_active,
-            balance_list_scope,
-            balance_detail_scope,
-            movement_list_scope,
-            reservation_list_scope,
-            adjustment_list_scope,
-            read_scope,
-            create_scope,
-            update_scope,
-        })
     }
 
     /// 绑定列表动作的授权指纹；人员筛选不改变仓库维。
@@ -669,17 +683,17 @@ mod tests {
 
     #[test]
     fn balance_read_scope_is_independent_from_adjustment_read_and_create_scopes() {
-        let authorization = InventoryAuthorization::from_scopes(
-            true,
-            WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
-            WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-        );
+        let authorization = InventoryAuthorization::from_scope_set(super::InventoryScopeSet {
+            actor_active: true,
+            balance_list_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
+            balance_detail_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
+            movement_list_scope: WarehouseScope::empty(),
+            reservation_list_scope: WarehouseScope::empty(),
+            adjustment_list_scope: WarehouseScope::empty(),
+            read_scope: WarehouseScope::empty(),
+            create_scope: WarehouseScope::empty(),
+            update_scope: WarehouseScope::empty(),
+        });
         assert!(authorization.can_read_balance_detail("warehouse-1"));
         assert!(!authorization.read_scope().covers("warehouse-1"));
         assert!(!authorization.can_create("warehouse-1"));
@@ -687,17 +701,17 @@ mod tests {
 
     #[test]
     fn adjustment_detail_scope_does_not_imply_list_scope() {
-        let authorization = InventoryAuthorization::from_scopes(
-            true,
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-        );
+        let authorization = InventoryAuthorization::from_scope_set(super::InventoryScopeSet {
+            actor_active: true,
+            balance_list_scope: WarehouseScope::empty(),
+            balance_detail_scope: WarehouseScope::empty(),
+            movement_list_scope: WarehouseScope::empty(),
+            reservation_list_scope: WarehouseScope::empty(),
+            adjustment_list_scope: WarehouseScope::empty(),
+            read_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
+            create_scope: WarehouseScope::empty(),
+            update_scope: WarehouseScope::empty(),
+        });
 
         assert!(authorization.read_scope().covers("warehouse-1"));
         assert_eq!(authorization.adjustment_list_scope().repository_warehouse_ids(None), Some(Vec::new()));
@@ -705,17 +719,17 @@ mod tests {
 
     #[test]
     fn movement_and_reservation_list_scopes_are_independent() {
-        let authorization = InventoryAuthorization::from_scopes(
-            true,
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
-            WarehouseScope::from_targets(vec!["warehouse-2".to_string()]),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-            WarehouseScope::empty(),
-        );
+        let authorization = InventoryAuthorization::from_scope_set(super::InventoryScopeSet {
+            actor_active: true,
+            balance_list_scope: WarehouseScope::empty(),
+            balance_detail_scope: WarehouseScope::empty(),
+            movement_list_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
+            reservation_list_scope: WarehouseScope::from_targets(vec!["warehouse-2".to_string()]),
+            adjustment_list_scope: WarehouseScope::empty(),
+            read_scope: WarehouseScope::empty(),
+            create_scope: WarehouseScope::empty(),
+            update_scope: WarehouseScope::empty(),
+        });
 
         assert!(authorization.movement_list_scope().covers("warehouse-1"));
         assert!(!authorization.movement_list_scope().covers("warehouse-2"));
@@ -741,6 +755,38 @@ mod exact_result_tests {
         let result = WarehouseScope::from_targets(vec!["*".into()]);
         assert!(!result.covers("another-warehouse"));
     }
+    struct CountingProof(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    #[async_trait::async_trait]
+    impl super::InventoryReadProof for CountingProof {
+        async fn validate(&self, _: &mut dyn persistence_core::Executor) -> crate::Result<()> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn partial_snapshot_keeps_unrequested_actions_empty_and_revalidates_loaded_scope() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let reads = Arc::new(AtomicUsize::new(0));
+        let snapshot = super::InventoryAuthorization::from_scope_set(super::InventoryScopeSet {
+            actor_active: true,
+            create_scope: WarehouseScope::from_authorized(
+                vec!["wh".into()],
+                Arc::new(CountingProof(reads.clone())),
+            ),
+            ..Default::default()
+        });
+        assert!(snapshot.can_create("wh"));
+        assert!(!snapshot.can_update("wh"));
+        assert!(!snapshot.can_read_balance_detail("wh"));
+        assert!(snapshot.balance_list_scope().is_empty());
+        assert!(snapshot.read_scope().is_empty());
+        snapshot.validate(&mut persistence_core::NoTransaction).await.unwrap();
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+    }
+
     struct Proof(bool);
     #[async_trait::async_trait]
     impl super::InventoryReadProof for Proof {

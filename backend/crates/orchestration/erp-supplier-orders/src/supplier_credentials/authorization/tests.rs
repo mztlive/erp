@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
 use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
 use erp_identity::shared_rbac_service;
-use erp_supplier::FailClosedSupplierDataScopePort;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
 };
@@ -98,7 +97,7 @@ async fn process(
     let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
     let db = client.database("jd-authorization-binding-unit-test");
     let rbac = shared_rbac_service(db.clone(), Arc::new(NoAudit));
-    let supplier_access = SupplierAccess::new(db.clone(), FailClosedSupplierDataScopePort::shared());
+    let supplier_access = SupplierAccess::unwired(db.clone());
     JdVopAuthorizationProcess::new(
         db,
         settings,

@@ -64,7 +64,7 @@ mod tests {
     use erp_core::AccountKind;
     use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
     use erp_party::SensitiveDataCodec;
-    use erp_supplier::{FailClosedSupplierDataScopePort, SupplierAccess};
+    use erp_supplier::SupplierAccess;
     use erp_support::{RegisterFileAssetRequest, RetentionClass, SensitivityClass};
     use mongodb::Client;
     use persistence_core::Executor;
@@ -97,7 +97,7 @@ mod tests {
             Arc::new(SensitiveDataCodec::from_secret(b"supplier-assets-unit-test")),
         );
         if with_rbac {
-            let access = SupplierAccess::new(db.clone(), FailClosedSupplierDataScopePort::shared());
+            let access = SupplierAccess::unwired(db.clone());
             let rbac = erp_identity::shared_rbac_service(db, Arc::new(UnusedIdentityAudit));
             service.with_authorization(rbac, access)
         } else {

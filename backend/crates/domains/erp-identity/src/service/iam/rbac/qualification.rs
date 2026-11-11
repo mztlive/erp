@@ -16,6 +16,10 @@ pub struct QualifiedPermissions {
 }
 
 impl QualifiedPermissions {
+    /// 判断本次取证的启用角色是否命中固定角色集合。
+    pub(crate) fn has_any_role(&self, roles: &[RoleId]) -> bool {
+        self.snapshot.role_ids().iter().any(|id| roles.contains(id))
+    }
     /// 返回本次资格检查读取的无凭证账号摘要。
     /// # 参数
     /// 无。
@@ -209,6 +213,28 @@ mod tests {
         assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 1, account()).version());
         let empty = qualified(snapshot, &[], &actor, 1, account());
         assert!(empty.permissions().into_vec().is_empty());
+    }
+
+    #[test]
+    fn fixed_role_and_permission_policies_only_accept_enabled_role_evidence() {
+        use crate::entity::authorization::AccessRule;
+        use crate::service::authorization::AccessPolicy;
+
+        let preview = Permission::parse("file_asset:preview").unwrap();
+        let id = RoleId::parse("role-sysadmin").unwrap();
+        let snapshot = RolePermissionSnapshot {
+            role_ids: vec![id.clone()],
+            grants: HashMap::from([(id.clone(), HashSet::from([preview.clone()]))]),
+            policy_revision: 7,
+        };
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let enabled = qualified(snapshot.clone(), &[role(id.as_str())], &actor, 1, account());
+        let disabled = qualified(snapshot, &[], &actor, 1, account());
+        for policy in [AccessPolicy::Roles(vec![id]), AccessPolicy::Permission(preview)] {
+            assert_eq!(policy.qualified_rule(&enabled).unwrap(), AccessRule::Allow);
+            assert_eq!(policy.qualified_rule(&disabled).unwrap(), AccessRule::Deny);
+        }
+        assert_ne!(enabled.version(), disabled.version());
     }
 
     fn account() -> AccountSummary {

@@ -40,9 +40,8 @@ pub use entity::catalog::{
 };
 pub use error::{Error, Result};
 pub use ports::{
-    CatalogAuditPort, CatalogDataScopePort, CatalogResolvedScope, EmptyFileAssetFacts,
-    EmptyPendingAttachments, FailClosedAuditPort, FailClosedCatalogDataScopePort, FileAssetFact,
-    FileAssetFactsPort, PendingAttachmentBatch, PreparedCatalogAudit,
+    CatalogAuditPort, CatalogResolvedScope, EmptyFileAssetFacts, EmptyPendingAttachments,
+    FailClosedAuditPort, FileAssetFact, FileAssetFactsPort, PendingAttachmentBatch, PreparedCatalogAudit,
 };
 pub use repository::{
     CatalogExt, CatalogReadScope, CatalogRepository, ProductBrandRepository, ProductCategoryRepository,
@@ -50,7 +49,7 @@ pub use repository::{
 };
 pub use service::{
     CatalogAccess, CatalogService, SellableSkuListParams, SellableSkuSpecificationAttributeView,
-    SellableSkuView, catalog_scope, sellable_sku_invalid_error,
+    SellableSkuView, sellable_sku_invalid_error,
 };
 
 pub mod authorization;

@@ -86,6 +86,26 @@ fn duplicate_key_conflict_message(index: Option<&str>) -> String {
     "数据已存在，请勿重复提交".to_string()
 }
 
+impl From<erp_identity::Error> for Error {
+    fn from(error: erp_identity::Error) -> Self {
+        match error {
+            erp_identity::Error::Internal(value) | erp_identity::Error::Rbac(value) => Self::Internal(value),
+            erp_identity::Error::NotFound(value) => Self::NotFound(value),
+            erp_identity::Error::ValidationError(value) => Self::ValidationError(value),
+            erp_identity::Error::InvalidInput(value) => Self::InvalidInput(value),
+            erp_identity::Error::BusinessLogicError(value) => Self::BusinessLogicError(value),
+            erp_identity::Error::ConflictError(value) => Self::ConflictError(value),
+            erp_identity::Error::ReceiptDuplicate(value) => Self::ReceiptDuplicate(value),
+            erp_identity::Error::TransientTransaction(value) => Self::TransientTransaction(value),
+            erp_identity::Error::Forbidden(value) => Self::Forbidden(value),
+            erp_identity::Error::Unauthenticated(value) => Self::Unauthenticated(value),
+            erp_identity::Error::Logic(value) => Self::Logic(value),
+            erp_identity::Error::OutcomeUnknown(value) => Self::OutcomeUnknown(value),
+            erp_identity::Error::RepositoryError(value) => Self::from(value),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;

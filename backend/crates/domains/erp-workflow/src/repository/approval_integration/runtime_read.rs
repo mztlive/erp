@@ -28,16 +28,12 @@ const SNAPSHOTS: &str = <Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_S
 pub struct ApprovalRuntimeReadTypeScope {
     /// 已证明可进入当前视图的流程种类。
     pub process_kind: ProcessKind,
-    /// 管理视图中由对象读取权限对应角色得出的组织范围；`None` 表示不需要
-    /// 具体组织证明（本人发起或公司级范围）。
-    pub organization_ids: Option<Vec<String>>,
 }
 
 /// Service 已证明的运行实例读取范围。
 ///
-/// Repository 只接收发起人事实，或逐流程种类绑定的组织范围，不读取或解释
-/// RBAC、角色和 DataScopeFact。枚举形态禁止把 Started 错接到管理 DataScopeFact，也
-/// 禁止把管理视图伪装成发起人旁路。
+/// Repository 只接收发起人事实或已证明的流程种类；完整业务来源授权由 Service 执行。
+/// 管理视图不得使用发起人读取旁路。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalRuntimeReadScope {
     /// 本人发起的普通读取；无需从展示快照证明组织。
@@ -47,9 +43,9 @@ pub enum ApprovalRuntimeReadScope {
         /// 必须与实例 `started_by` 过滤完全一致的当前账号。
         submitted_by: String,
     },
-    /// Managed/Blocked 管理读取；每类流程绑定自己的对象权限 DataScopeFact。
+    /// Managed/Blocked 管理读取；业务来源在 Service 中逐项授权。
     Managed {
-        /// 已证明类型级运行管理、对象读取权限及其组织范围的流程种类。
+        /// 已证明类型级运行管理资格的流程种类。
         type_scopes: Vec<ApprovalRuntimeReadTypeScope>,
     },
 }
@@ -129,7 +125,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
     ///
     /// # 参数
     /// * `filter` - 视图、状态、字面量检索、游标与页大小
-    /// * `scope` - Service 已证明的流程种类、责任组织和可选提交人
+    /// * `scope` - Service 已证明的流程种类和可选提交人
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
@@ -139,7 +135,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
     /// MongoDB 聚合、反序列化或计数越界时返回错误。
     ///
     /// # 关键业务约束
-    /// 空类型、显式空组织和无发起人的 Started 范围必须在访问数据库前返回空页；
+    /// 空类型和无发起人的 Started 范围必须在访问数据库前返回空页；
     /// Repository 不得解释 RBAC，且不得在分页后过滤授权事实。
     pub async fn search(
         &self,
@@ -258,7 +254,7 @@ fn runtime_read_pipeline(
         doc! { "$match": runtime_instance_match(&base_filter, scope) },
         doc! { "$sort": instance_list_sort(filter) },
     ];
-    pipeline.extend(runtime_snapshot_stages(filter, scope));
+    pipeline.extend(runtime_snapshot_stages(filter));
     pipeline.push(doc! { "$facet": runtime_read_facets(filter) });
     pipeline
 }
@@ -268,7 +264,7 @@ fn runtime_scan_pipeline(
     filter: &ApprovalInstanceListFilter,
     scope: &ApprovalRuntimeReadScope,
 ) -> Vec<Document> {
-    let mut items = runtime_snapshot_stages(filter, scope);
+    let mut items = runtime_snapshot_stages(filter);
     items.push(doc! { "$project": runtime_read_projection() });
     let mut cursor_projection = instance_summary_projection();
     cursor_projection.insert("_id", 0);
@@ -308,10 +304,7 @@ fn runtime_instance_match(filter: &ApprovalInstanceListFilter, scope: &ApprovalR
 }
 
 /// 仅保留列表和检索所需冻结事实，排除提交材料及展示明细。
-fn runtime_snapshot_stages(
-    filter: &ApprovalInstanceListFilter,
-    scope: &ApprovalRuntimeReadScope,
-) -> Vec<Document> {
+fn runtime_snapshot_stages(filter: &ApprovalInstanceListFilter) -> Vec<Document> {
     let mut pipeline = vec![
         doc! {
             "$lookup": {
@@ -346,9 +339,6 @@ fn runtime_snapshot_stages(
         doc! { "$set": { "_runtime_snapshot_exact": runtime_snapshot_exact_expr() } },
         doc! { "$match": { "_runtime_snapshot_exact": true } },
     ];
-    if let Some(scope_match) = runtime_snapshot_scope_match(scope) {
-        pipeline.push(doc! { "$match": scope_match });
-    }
     if let Some(text_query) = &filter.text_query {
         pipeline.push(doc! { "$match": runtime_text_match(&text_query.query) });
     }
@@ -370,46 +360,13 @@ fn runtime_snapshot_exact_expr() -> Document {
     }
 }
 
-/// 组织范围不是公司级时，必须由精确快照证明责任组织。
-///
-/// 缺失或漂移快照不得被用于组织授权；本人发起或公司级范围不额外按组织筛选。
-fn runtime_snapshot_scope_match(scope: &ApprovalRuntimeReadScope) -> Option<Document> {
-    let ApprovalRuntimeReadScope::Managed { type_scopes } = scope else {
-        return None;
-    };
-    let branches = type_scopes
-        .iter()
-        .filter(|type_scope| !type_scope.organization_ids.as_ref().is_some_and(Vec::is_empty))
-        .map(|type_scope| match &type_scope.organization_ids {
-            None => doc! { "process_kind": type_scope.process_kind.as_str() },
-            Some(organization_ids) => doc! {
-                "process_kind": type_scope.process_kind.as_str(),
-                "$expr": {
-                    "$and": [
-                        "$_runtime_snapshot_exact",
-                        {
-                            "$in": [
-                                "$_runtime_snapshot.payload.responsible_org_id",
-                                organization_ids.as_slice(),
-                            ]
-                        },
-                    ]
-                },
-            },
-        })
-        .collect::<Vec<_>>();
-    (!branches.is_empty()).then(|| doc! { "$or": branches })
-}
-
 /// 返回去重并稳定排序的已证明流程种类。
 fn runtime_read_process_kinds(scope: &ApprovalRuntimeReadScope) -> Vec<ProcessKind> {
     let mut process_kinds = match scope {
         ApprovalRuntimeReadScope::Started { process_kinds, .. } => process_kinds.clone(),
-        ApprovalRuntimeReadScope::Managed { type_scopes } => type_scopes
-            .iter()
-            .filter(|type_scope| !type_scope.organization_ids.as_ref().is_some_and(Vec::is_empty))
-            .map(|type_scope| type_scope.process_kind)
-            .collect::<Vec<_>>(),
+        ApprovalRuntimeReadScope::Managed { type_scopes } => {
+            type_scopes.iter().map(|type_scope| type_scope.process_kind).collect::<Vec<_>>()
+        },
     };
     process_kinds.sort_by_key(|process_kind| process_kind.as_str());
     process_kinds.dedup();
@@ -475,7 +432,7 @@ mod tests {
 
     use super::{
         ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope, runtime_read_page, runtime_read_pipeline,
-        runtime_read_scope_empty, runtime_scan_pipeline, runtime_snapshot_scope_match,
+        runtime_read_scope_empty, runtime_scan_pipeline,
     };
     use crate::repository::bpm::{
         ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListView,
@@ -499,14 +456,8 @@ mod tests {
 
     fn runtime_type_scopes() -> Vec<ApprovalRuntimeReadTypeScope> {
         vec![
-            ApprovalRuntimeReadTypeScope {
-                process_kind: ProcessKind::StockAdjustment,
-                organization_ids: Some(vec!["org-1".to_string()]),
-            },
-            ApprovalRuntimeReadTypeScope {
-                process_kind: ProcessKind::SalesOrder,
-                organization_ids: Some(vec!["org-1".to_string()]),
-            },
+            ApprovalRuntimeReadTypeScope { process_kind: ProcessKind::StockAdjustment },
+            ApprovalRuntimeReadTypeScope { process_kind: ProcessKind::SalesOrder },
         ]
     }
 
@@ -576,16 +527,11 @@ mod tests {
             assert!(exact.contains(field));
         }
         assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
-        let scope_match = pipeline[7].get_document("$match").unwrap().to_string();
-        assert!(scope_match.contains("_runtime_snapshot_exact"));
-        assert!(scope_match.contains("responsible_org_id"));
-        assert!(scope_match.contains("org-1"));
-
-        let text = pipeline[8].get_document("$match").unwrap().to_string();
+        let text = pipeline[7].get_document("$match").unwrap().to_string();
         assert!(text.contains("_runtime_snapshot.payload.document_no"));
         assert!(text.contains("_runtime_snapshot_exact"));
         assert!(text.contains(r"ADJ\.\[1\]"));
-        let facet = pipeline[10].get_document("$facet").unwrap();
+        let facet = pipeline[9].get_document("$facet").unwrap();
         let items = facet.get_array("items").unwrap();
         assert!(items[0].as_document().unwrap().contains_key("$match"));
         assert!(
@@ -598,13 +544,8 @@ mod tests {
     }
 
     #[test]
-    fn runtime_company_scope_requires_exact_snapshot_without_organization_filter() {
-        let scope = ApprovalRuntimeReadScope::Managed {
-            type_scopes: runtime_type_scopes()
-                .into_iter()
-                .map(|type_scope| ApprovalRuntimeReadTypeScope { organization_ids: None, ..type_scope })
-                .collect(),
-        };
+    fn runtime_managed_scope_requires_exact_snapshot() {
+        let scope = runtime_scope();
         let pipeline = runtime_read_pipeline(&runtime_filter(), &scope);
         assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
         assert!(pipeline.iter().all(|stage| {
@@ -660,16 +601,6 @@ mod tests {
         let filter = runtime_filter();
         let empty = ApprovalRuntimeReadScope::Managed { type_scopes: Vec::new() };
         assert!(runtime_read_scope_empty(&filter, &empty));
-        let empty_org = ApprovalRuntimeReadScope::Managed {
-            type_scopes: runtime_type_scopes()
-                .into_iter()
-                .map(|type_scope| ApprovalRuntimeReadTypeScope {
-                    organization_ids: Some(Vec::new()),
-                    ..type_scope
-                })
-                .collect(),
-        };
-        assert!(runtime_read_scope_empty(&filter, &empty_org));
 
         let requested =
             ApprovalInstanceListFilter { process_kind: Some(ProcessKind::PurchaseOrder), ..filter };
@@ -686,7 +617,6 @@ mod tests {
             submitted_by: "starter".to_string(),
         };
         assert!(!runtime_read_scope_empty(&filter, &matching));
-        assert!(runtime_snapshot_scope_match(&matching).is_none());
         let pipeline = runtime_read_pipeline(&filter, &matching);
         assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
         assert!(runtime_read_scope_empty(

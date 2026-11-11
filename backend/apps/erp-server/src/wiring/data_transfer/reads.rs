@@ -3,12 +3,10 @@ use async_trait::async_trait;
 use erp_contract::Error as ContractError;
 use erp_data_import::data_transfer::{TransferKind, TransferReader};
 use erp_identity::Permission;
+use erp_supply::OfferingAccess;
 use persistence_core::NoTransaction;
 
-use crate::wiring::{
-    MongoCustomerDataScope, MongoOfferingDataScope, MongoPurchaseDataScope, funds_access_with_rbac,
-    purchase_access,
-};
+use crate::wiring::{MongoPurchaseDataScope, customer_access, funds_access_with_rbac};
 mod error;
 use erp_read_models::customer_quality::CustomerQualityReadModel;
 use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
@@ -128,11 +126,7 @@ impl Reads {
     }
 }
 fn quality(state: &Application) -> CustomerQualityReadModel {
-    CustomerQualityReadModel::new(
-        state.db(),
-        state.rbac(),
-        MongoCustomerDataScope::shared(state.db(), state.rbac()),
-    )
+    CustomerQualityReadModel::new(state.db(), state.rbac(), customer_access(state.db(), state.rbac()))
 }
 async fn master(state: &Application, query: &Value, actor: &AuditActor) -> Result<Value> {
     match query["resource"].as_str() {
@@ -144,7 +138,6 @@ async fn master(state: &Application, query: &Value, actor: &AuditActor) -> Resul
 }
 async fn funds(state: &Application, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
     let service = funds_access_with_rbac(state.db(), state.rbac());
-    let purchase = purchase_access(state.db(), state.rbac());
     let view = query["view"].as_str();
     let mut filtered = query.clone();
     if let Some(map) = filtered.as_object_mut() {
@@ -159,16 +152,16 @@ async fn funds(state: &Application, kind: TransferKind, query: &Value, actor: &A
             output(service.customer_receipt_list_scoped(&input(query)?, actor).await?)
         },
         (TransferKind::Receivables, Some("sales_invoice")) => {
-            output(service.invoice_list_scoped(&input(query)?, actor, &purchase).await?)
+            output(service.invoice_list_scoped(&input(query)?, actor).await?)
         },
         (TransferKind::SupplierPayables, Some("payable")) => {
-            output(service.payable_account_list_scoped(&input(query)?, actor, &purchase).await?)
+            output(service.payable_account_list_scoped(&input(query)?, actor).await?)
         },
         (TransferKind::SupplierPayables, Some("payment")) => {
-            output(service.supplier_payment_list_scoped(&input(query)?, actor, &purchase).await?)
+            output(service.supplier_payment_list_scoped(&input(query)?, actor).await?)
         },
         (TransferKind::SupplierPayables, Some("allocation")) => {
-            output(service.purchase_invoice_allocation_list_scoped(&input(query)?, actor, &purchase).await?)
+            output(service.purchase_invoice_allocation_list_scoped(&input(query)?, actor).await?)
         },
         _ => Err(Error::ValidationError("未知的往来视图".into())),
     }
@@ -180,7 +173,7 @@ async fn quotes(state: &Application, query: &Value, actor: &AuditActor) -> Resul
     } else {
         let mut page = SupplierOfferingReadService::new(
             state.db(),
-            MongoOfferingDataScope::shared(state.db(), state.rbac()),
+            OfferingAccess::new(state.db(), state.rbac()),
             MongoOfferingProcurementOwners::shared(state.db()),
         )
         .list(&input(query)?, actor)

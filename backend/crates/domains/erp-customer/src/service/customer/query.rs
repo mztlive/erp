@@ -72,7 +72,7 @@ impl CustomerService {
     /// # 关键业务约束
     /// 详情必须独立重验当前权限；历史参与只补充读取。
     pub async fn customer_detail(&self, id: &str, actor: &AuditActor) -> Result<CustomerDetailView> {
-        let access = self.access();
+        let access = self.access.clone();
         let expected = access.require(actor, "detail", id).await?;
         let view = self.load_customer_detail(id).await?;
         let current = access.require(actor, "detail", id).await?;
@@ -191,9 +191,9 @@ mod tests {
 
         use super::super::scope::CustomerSnapshot;
         use super::to_list_view;
+        use crate::CustomerResolvedScope;
         use crate::dto::customer::{CustomerScope, CustomerView};
         use crate::entity::customer::CustomerAccountStatus;
-        use crate::ports::CustomerResolvedScope;
 
         let view = to_list_view(CustomerSnapshot {
             items: vec![CustomerView {

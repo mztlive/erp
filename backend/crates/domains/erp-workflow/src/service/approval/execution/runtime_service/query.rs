@@ -367,9 +367,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
     pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
         if features(&self.db, &self.identity)
-            .permissions(actor, &[Permission::parse("approval_instance:read")?], &mut NoTransaction)
+            .has_permission(actor, &Permission::parse("approval_instance:read")?, &mut NoTransaction)
             .await?
-            .is_some_and(|qualified| !qualified.permissions().is_empty())
         {
             return Ok(());
         }

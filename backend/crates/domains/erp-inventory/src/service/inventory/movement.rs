@@ -14,7 +14,7 @@ use crate::dto::{
 };
 use crate::entity::inventory::{MovementType, StockMovement};
 use crate::error::{Error, Result};
-use crate::ports::InventoryAuthorization;
+use crate::ports::{InventoryAction, InventoryAuthorization};
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockMovementFilter, StockMovementRow};
 
@@ -83,7 +83,9 @@ impl InventoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
+                    let authorization = authorization_port
+                        .authorize(&actor, &[InventoryAction::MovementList], executor)
+                        .await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
                     }

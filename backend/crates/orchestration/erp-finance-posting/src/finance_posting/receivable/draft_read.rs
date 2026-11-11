@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::finance::document_files::{FinancialFileView, financial_document_files};
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_read_models::finance::receivable::ReceivableReadService;
@@ -104,8 +105,12 @@ pub(super) async fn receipt_view_with_actions(
 ) -> Result<CustomerReceiptView> {
     let mut view =
         ReceivableReadService::new(db.clone()).customer_receipt_view_with_executor(id, executor).await?;
+    let authorization =
+        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
     if view.approval.allowed_actions.iter().any(|action| action == "CANCEL")
-        && rbac.runtime.action_roles(actor, "customer_receipt:cancel_approval", executor).await?.is_empty()
+        && !authorization
+            .has_permission(actor, &Permission::parse("customer_receipt:cancel_approval")?, executor)
+            .await?
     {
         view.approval.allowed_actions.retain(|action| action != "CANCEL");
     }

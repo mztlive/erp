@@ -17,6 +17,7 @@ use crate::entity::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
 };
 use crate::ports::{SkuFact, SkuRevisionFact};
+use crate::repository::StockReservationRow;
 
 /// 库存余额列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub const STOCK_BALANCE_SORT_FIELDS: &[&str] = &["sku_id", "created_at"];
@@ -593,6 +594,29 @@ pub struct CancelStockAdjustmentApprovalRequest {
     /// 业务请求幂等键。
     #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
     pub idempotency_key: String,
+}
+
+impl From<StockReservationRow> for StockReservationView {
+    /// 从库存预占查询投影构造列表视图。
+    /// # 参数
+    /// row 为已授权仓储查询返回的预占投影。
+    /// # 返回
+    /// 保留数量、状态和版本的列表视图。
+    /// # 错误
+    /// 不执行 I/O。
+    fn from(row: StockReservationRow) -> Self {
+        Self {
+            id: row.id,
+            warehouse_id: row.warehouse_id.to_string(),
+            sku_id: row.sku_id.to_string(),
+            sales_order_line_id: row.sales_order_line_id.to_string(),
+            reserved_quantity: row.reserved_quantity,
+            consumed_quantity: row.consumed_quantity,
+            released_quantity: row.released_quantity,
+            status: row.status,
+            version: row.version,
+        }
+    }
 }
 
 #[cfg(test)]

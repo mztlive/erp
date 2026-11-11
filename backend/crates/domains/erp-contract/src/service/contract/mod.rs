@@ -18,6 +18,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::authorization::ContractAuthorization;
 use crate::dto::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractRevisionView, ContractView,
     CreateContractRequest, TerminateContractRequest, UploadContractRequest,
@@ -25,8 +26,8 @@ use crate::dto::contract::{
 use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountNamePort, ContractAuditPort, ContractDataScopePort, ContractParticipantPort, CustomerAccountFact,
-    CustomerAssignmentFactsPort, CustomerFactsPort, PreparedContractAudit, SigningCompanyPort,
+    AccountNamePort, ContractAuditPort, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
+    PreparedContractAudit, SigningCompanyPort,
 };
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
@@ -43,14 +44,6 @@ pub use archive::{PlannedContractArchive, plan_first_archive, plan_upload_archiv
 pub(crate) use archive::{conflict_if_stale_version, customer_eligibility, plan_next_revision};
 use company::{require_signing_company, required_settlement};
 
-/// 合同范围解析及合法参与事实必须成组装配；缺少任一项均不能形成完整授权。
-pub struct ContractScopePorts {
-    /// 公共范围解析及单对象判定端口。
-    pub data_scope: Arc<dyn ContractDataScopePort>,
-    /// 本域合法单据参与事实端口。
-    pub participants: Arc<dyn ContractParticipantPort>,
-}
-
 /// 合同服务。
 ///
 /// 提供合同归档、版本追加、终止与查询编排。
@@ -61,8 +54,7 @@ pub struct ContractService {
     assignments: Arc<dyn CustomerAssignmentFactsPort>,
     accounts: Arc<dyn AccountNamePort>,
     companies: Arc<dyn SigningCompanyPort>,
-    data_scope: Arc<dyn ContractDataScopePort>,
-    participants: Arc<dyn ContractParticipantPort>,
+    data_scope: ContractAuthorization,
 }
 
 impl ContractService {
@@ -75,7 +67,7 @@ impl ContractService {
     /// * `assignments` - 客户归属可见范围
     /// * `accounts` - 负责人显示名
     /// * `companies` - 我方公司身份及启停事实
-    /// * `scope_ports` - 成组装配的公共范围与合法参与端口
+    /// * `authorization` - 组合层装配固定责任模型和真实客户来源的授权能力
     ///
     /// # 返回
     /// 返回服务实例。
@@ -84,7 +76,7 @@ impl ContractService {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 范围解析必须走注入的 Port；未接线端口失败关闭，不得补公司范围。
+    /// 授权使用组合根的固定责任模型；未接线时拒绝访问。
     pub fn new(
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
@@ -92,27 +84,18 @@ impl ContractService {
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         accounts: Arc<dyn AccountNamePort>,
         companies: Arc<dyn SigningCompanyPort>,
-        scope_ports: ContractScopePorts,
+        authorization: ContractAuthorization,
     ) -> Self {
-        Self {
-            db,
-            audit,
-            customers,
-            assignments,
-            accounts,
-            companies,
-            data_scope: scope_ports.data_scope,
-            participants: scope_ports.participants,
-        }
+        Self { db, audit, customers, assignments, accounts, companies, data_scope: authorization }
     }
 
-    /// 构造复用本服务授权 Port 的合同访问器。
+    /// 构造复用本服务授权能力 的合同访问器。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 返回绑定当前数据库与范围 Port 的访问器。
+    /// 返回绑定当前数据库与授权能力 的访问器。
     ///
     /// # 错误
     /// 无。
@@ -120,13 +103,7 @@ impl ContractService {
     /// # 关键业务约束
     /// 不得在此回退构造身份域 Service。
     fn access(&self) -> access::ContractAccess {
-        access::ContractAccess::new(
-            self.db.clone(),
-            Arc::clone(&self.data_scope),
-            Arc::clone(&self.assignments),
-            Arc::clone(&self.participants),
-            Arc::clone(&self.customers),
-        )
+        access::ContractAccess::new(self.db.clone(), self.data_scope.clone())
     }
 
     /// 首次归档合同（合同身份 + 首个不可变版本 + PDF 关联原子形成，数据模型 §6.4）。

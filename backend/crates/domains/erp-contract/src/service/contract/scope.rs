@@ -5,11 +5,12 @@ use persistence_core::Transactional;
 use serde_json::to_vec;
 
 use super::ContractService;
+use crate::authorization::ContractAuthorization;
 use crate::dto::contract::{ContractListQuery, ContractListScope, ContractListView, PageView};
 use crate::error::{Error, Result};
-use crate::ports::{ContractDataScopePort, ContractResolvedScope};
+use crate::ports::ContractResolvedScope;
 use crate::repository::list_search::ContractSearch;
-use crate::repository::scope::{ContractReadScope, ContractVersion};
+use crate::repository::scope::ContractVersion;
 use crate::repository::{ContractExt, ContractFilter};
 
 /// 同一事务内的列表快照，供跨页版本复核。
@@ -18,8 +19,6 @@ pub(super) struct ContractSnapshot {
     pub view: ContractListView,
     /// 身份授权上下文。
     pub context: ContractResolvedScope,
-    /// 授权集合本身为空。
-    pub no_scope: bool,
 }
 
 impl ContractService {
@@ -54,16 +53,14 @@ impl ContractService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (context, scope, no_scope, as_of) =
-                        resolve_list_scope(&access, &actor, executor).await?;
+                    let (context, as_of) = resolve_list_scope(&access, &actor, executor).await?;
                     let (filter, search, versions) = load_list_filter_and_search(
                         &db,
-                        data_scope.as_ref(),
+                        &data_scope,
                         assignments.as_ref(),
                         customers.as_ref(),
                         accounts.as_ref(),
                         &context,
-                        &scope,
                         &query,
                         as_of,
                         executor,
@@ -72,7 +69,7 @@ impl ContractService {
                     context.validate(executor).await?;
                     finish_list_snapshot(&db, filter, search, versions, context, executor)
                         .await
-                        .map(|(view, context)| ContractSnapshot { view, context, no_scope })
+                        .map(|(view, context)| ContractSnapshot { view, context })
                 })
             })
             .await
@@ -87,7 +84,7 @@ impl ContractService {
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回已解析事实、读取范围、空范围标记与归属自然日。
+/// 返回授权凭证与归属自然日。
 ///
 /// # 错误
 /// 无动作权限或组织关系非法时拒绝。
@@ -95,11 +92,10 @@ async fn resolve_list_scope(
     access: &super::access::ContractAccess,
     actor: &AuditActor,
     executor: &mut dyn persistence_core::Executor,
-) -> Result<(ContractResolvedScope, ContractReadScope, bool, erp_core::common::time::BusinessDate)> {
-    let (context, scope) = access.resolve(actor, "list", executor).await?;
-    let no_scope = !context.has_scope_rules();
+) -> Result<(ContractResolvedScope, erp_core::common::time::BusinessDate)> {
+    let context = access.resolve(actor, "list", executor).await?;
     let as_of = super::access::business_date(context.as_of)?;
-    Ok((context, scope, no_scope, as_of))
+    Ok((context, as_of))
 }
 
 /// 求交授权与基础条件并装配列表搜索事实（`list_snapshot` 第二步）。
@@ -111,7 +107,6 @@ async fn resolve_list_scope(
 /// * `customers` - 客户编号事实
 /// * `accounts` - 账号显示名 Port
 /// * `context` - 已解析的合同范围事实
-/// * `scope` - 已映射的合同范围
 /// * `query` - 归一化查询
 /// * `as_of` - 客户归属自然日
 /// * `executor` - 调用方执行器
@@ -124,20 +119,18 @@ async fn resolve_list_scope(
 #[allow(clippy::too_many_arguments)]
 async fn load_list_filter_and_search(
     db: &mongodb::Database,
-    data_scope: &dyn ContractDataScopePort,
+    data_scope: &ContractAuthorization,
     assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
     customers: &dyn crate::ports::CustomerFactsPort,
     accounts: &dyn crate::ports::AccountNamePort,
     context: &ContractResolvedScope,
-    scope: &ContractReadScope,
     query: &ContractListQuery,
     as_of: erp_core::common::time::BusinessDate,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(ContractFilter, ContractSearch, Vec<ContractVersion>)> {
-    let (customer_ids, historical_contract_ids) =
-        apply_list_filters(db, data_scope, assignments, context, scope, query, executor).await?;
-    let mut filter = list_filter(query, customer_ids, historical_contract_ids);
-    filter.access = Some(scope.clone());
+    let customer_ids = query.customer_id.clone().map(|id| vec![id]);
+    let mut filter = list_filter(query, customer_ids);
+    filter.access = Some(context.clone());
     filter.assigned_user_id = (query.scope == ContractListScope::Assigned).then(|| context.user_id.clone());
     filter.owner_user_ids = requested_contract_owners(data_scope, context, query, executor).await?;
     let versions = db.contract().query_versions(&filter, executor).await?;
@@ -236,7 +229,6 @@ pub(super) fn to_list_view(snapshot: ContractSnapshot) -> ContractListView {
     view.policy_version = snapshot.context.policy_version;
     view.organization_version = snapshot.context.organization_version;
     view.as_of = snapshot.context.as_of.as_utc().to_rfc3339();
-    view.empty_reason = snapshot.no_scope.then_some("no_scope");
     view
 }
 
@@ -321,8 +313,7 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 ///
 /// # 参数
 /// * `query` - 归一化查询
-/// * `customer_ids` - 已与筛选求交的授权客户
-/// * `historical_contract_ids` - 仍受筛选约束的历史参与合同
+/// * `customer_ids` - 请求中的客户筛选
 ///
 /// # 返回
 /// 返回仓储筛选。
@@ -331,12 +322,8 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 /// 无。
 ///
 /// # 关键业务约束
-/// 不得把 `None` 解释为未授权全量。
-fn list_filter(
-    query: &ContractListQuery,
-    customer_ids: Option<Vec<String>>,
-    _historical_contract_ids: Vec<String>,
-) -> ContractFilter {
+/// 授权凭证由调用方单独绑定，业务筛选不得替代授权。
+fn list_filter(query: &ContractListQuery, customer_ids: Option<Vec<String>>) -> ContractFilter {
     ContractFilter {
         access: None,
         contract_no: query.contract_no.clone(),
@@ -351,43 +338,9 @@ fn list_filter(
         sort_ascending: matches!(query.paging.sort_dir, crate::dto::contract::SortDir::Asc),
     }
 }
-
-/// 将客户、组织和归属范围条件与授权集合求交，形成列表及指标共用的基础范围。
-///
-/// # 参数
-/// * `data_scope` - 组织展开与成员事实 Port
-/// * `assignments` - 当前主责事实
-/// * `context` - 已解析的合同范围事实
-/// * `scope` - 已映射的合同范围
-/// * `query` - 归一化查询
-/// * `as_of` - 客户归属自然日
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 授权客户集合与仍可见的历史参与合同。
-///
-/// # 错误
-/// 组织展开失败、成员超限或归属查询失败时拒绝。
-///
-/// # 关键业务约束
-/// Assigned 只是收窄条件；All 不得绕过 DataScope。
-/// 负责人条件交给 ContractSearch 在结果分支匹配，不得提前缩小范围指标。
-async fn apply_list_filters(
-    db: &mongodb::Database,
-    data_scope: &dyn ContractDataScopePort,
-    assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
-    context: &ContractResolvedScope,
-    scope: &ContractReadScope,
-    query: &ContractListQuery,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<(Option<Vec<String>>, Vec<String>)> {
-    let _ = (db, data_scope, assignments, context, scope, executor);
-    Ok((query.customer_id.clone().map(|id| vec![id]), Vec::new()))
-}
-
 /// 请求组织只按合同独立负责销售收窄，不按客户负责名单解释。
 async fn requested_contract_owners(
-    data_scope: &dyn ContractDataScopePort,
+    data_scope: &ContractAuthorization,
     context: &ContractResolvedScope,
     query: &ContractListQuery,
     executor: &mut dyn persistence_core::Executor,

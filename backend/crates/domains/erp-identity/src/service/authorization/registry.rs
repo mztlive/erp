@@ -1,18 +1,26 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::slice;
 use std::sync::Arc;
 
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::consumer_spec::ConsumerSpec;
 use crate::entity::authorization::{
-    AccessSubject, FactKind, QueryModel, QueryOutput, ReadAccess, RelationKey, RelationMatch,
+    AccessRule, AccessSubject, FactKind, QueryModel, QueryOutput, ReadAccess, RelationKey, RelationMatch,
 };
 use crate::ports::{AccessFactsPort, AccessMapping};
 use crate::service::access_control::consumers::registration;
-use crate::{Error, Permission, Result};
+use crate::{Error, Permission, QualifiedPermissions, Result, RoleId};
 
 /// 组合根登记的数据政策；无对象操作由 AccessMode 单独表达。
 #[derive(Debug, Clone)]
 pub enum AccessPolicy {
+    /// 仅根政策可声明账号资格；具体操作资格由内部政策分支证明。
+    Account {
+        policy: Box<Self>,
+    },
+    Owned,
+    Permission(Permission),
+    Roles(Vec<RoleId>),
     Scope {
         permission: Permission,
         read: ReadAccess,
@@ -31,12 +39,30 @@ pub enum AccessPolicy {
 }
 
 impl AccessPolicy {
+    /// 将同次身份取证转成固定资格分支；业务不得自行组合角色和功能资格。
+    pub(crate) fn qualified_rule(&self, qualified: &QualifiedPermissions) -> Result<AccessRule> {
+        let allowed = match self {
+            Self::Permission(permission) => qualified.same_role(slice::from_ref(permission)),
+            Self::Roles(roles) => qualified.has_any_role(roles),
+            _ => return Err(Error::ValidationError("此政策不是身份资格分支".into())),
+        };
+        Ok(if allowed { AccessRule::Allow } else { AccessRule::Deny })
+    }
+    /// 无对象政策只能包含固定身份资格，不得引用业务事实。
+    fn identity_only(&self) -> bool {
+        match self {
+            Self::Permission(_) | Self::Roles(_) => true,
+            Self::All(items) | Self::Any(items) => items.iter().all(Self::identity_only),
+            _ => false,
+        }
+    }
     /// 任一来源只证明受限查询，不能证明整个对象可操作。
     pub(super) fn has_partial_relation(&self) -> bool {
         match self {
             Self::Related { mode, policy, .. } => {
                 *mode == RelationMatch::Any || policy.has_partial_relation()
             },
+            Self::Account { policy } => policy.has_partial_relation(),
             Self::All(items) | Self::Any(items) => items.iter().any(Self::has_partial_relation),
             _ => false,
         }
@@ -46,6 +72,7 @@ impl AccessPolicy {
     fn has_relation(&self, key: &RelationKey) -> bool {
         match self {
             Self::Related { relation, .. } => relation == key,
+            Self::Account { policy } => policy.has_relation(key),
             Self::All(items) | Self::Any(items) => items.iter().any(|item| item.has_relation(key)),
             _ => false,
         }
@@ -65,6 +92,7 @@ impl AccessPolicy {
                 Ok(())
             },
             Self::Related { policy, .. } => policy.validate_entry(entry),
+            Self::Account { policy } => policy.validate_entry(entry),
             _ => Ok(()),
         }
     }
@@ -74,6 +102,21 @@ impl AccessPolicy {
             return Err(Error::ValidationError("授权政策嵌套超限".into()));
         }
         match self {
+            Self::Account { policy } => {
+                if depth != 0 {
+                    return Err(Error::ValidationError("账号资格只能声明在根政策".into()));
+                }
+                policy.validate(depth + 1)
+            },
+            Self::Permission(permission) => {
+                if permission.resource().contains('*') || permission.action().contains('*') {
+                    return Err(Error::ValidationError("政策功能资格必须指定具体权限".into()));
+                }
+                Ok(())
+            },
+            Self::Roles(roles) if roles.is_empty() || roles.len() > 32 => {
+                Err(Error::ValidationError("政策角色集合必须包含 1 至 32 个角色".into()))
+            },
             Self::Scope { permission, read } => {
                 let consumer = registration(permission.resource(), permission.action())?;
                 read.validate(permission, consumer.allows_history())
@@ -100,9 +143,10 @@ pub struct AccessRegistration {
     pub access: AccessMode,
 }
 
-/// 四种接入形态分别携带必需能力；无对象操作不能携带数据政策或端口。
+/// 各接入形态携带必需能力；无对象操作不能携带业务事实或数据范围端口。
 pub enum AccessMode {
     Operation,
+    QualifiedOperation { policy: AccessPolicy },
     Query { data: DataAccess, mapping: Arc<dyn AccessMapping> },
     Object { data: DataAccess, facts: Arc<dyn AccessFactsPort> },
     QueryAndObject { data: DataAccess, mapping: Arc<dyn AccessMapping>, facts: Arc<dyn AccessFactsPort> },
@@ -120,7 +164,7 @@ impl AccessMode {
     /// 无对象登记固定使用直接主体，数据登记使用已声明主体。
     pub(super) fn subject(&self) -> &AccessSubject {
         match self {
-            Self::Operation => &AccessSubject::Direct,
+            Self::Operation | Self::QualifiedOperation { .. } => &AccessSubject::Direct,
             Self::Query { data, .. } | Self::Object { data, .. } | Self::QueryAndObject { data, .. } => {
                 &data.subject
             },
@@ -130,7 +174,9 @@ impl AccessMode {
     /// 只有数据登记可进入范围解析。
     pub(super) fn data(&self) -> Result<&DataAccess> {
         match self {
-            Self::Operation => Err(Error::ValidationError("无对象登记不能生成数据范围".into())),
+            Self::Operation | Self::QualifiedOperation { .. } => {
+                Err(Error::ValidationError("无对象登记不能生成数据范围".into()))
+            },
             Self::Query { data, .. } | Self::Object { data, .. } | Self::QueryAndObject { data, .. } => {
                 Ok(data)
             },
@@ -141,7 +187,7 @@ impl AccessMode {
     pub(super) fn mapping(&self) -> Result<&Arc<dyn AccessMapping>> {
         match self {
             Self::Query { mapping, .. } | Self::QueryAndObject { mapping, .. } => Ok(mapping),
-            Self::Operation | Self::Object { .. } => {
+            Self::Operation | Self::QualifiedOperation { .. } | Self::Object { .. } => {
                 Err(Error::ValidationError("本操作未接入查询 Mapping".into()))
             },
         }
@@ -151,7 +197,7 @@ impl AccessMode {
     pub(super) fn facts(&self) -> Result<&Arc<dyn AccessFactsPort>> {
         match self {
             Self::Object { facts, .. } | Self::QueryAndObject { facts, .. } => Ok(facts),
-            Self::Operation | Self::Query { .. } => {
+            Self::Operation | Self::QualifiedOperation { .. } | Self::Query { .. } => {
                 Err(Error::ValidationError("操作缺少对象事实端口".into()))
             },
         }
@@ -164,13 +210,24 @@ impl AccessRegistration {
         if self.permission.resource().contains('*') || self.permission.action().contains('*') {
             return Err(Error::ValidationError("业务入口必须登记具体权限".into()));
         }
+        if self.access.data().is_ok_and(|data| matches!(data.policy, AccessPolicy::Account { .. }))
+            && ConsumerSpec::find(self.permission.resource()).is_some()
+        {
+            return Err(Error::ValidationError("已有业务资源不能免除入口权限".into()));
+        }
         match &self.access {
-            AccessMode::Operation => {
+            AccessMode::Operation | AccessMode::QualifiedOperation { .. } => {
                 if ConsumerSpec::find(self.permission.resource()).is_some()
                     && AuthorizationPolicy::for_action(self.permission.resource(), self.permission.action())?
                         != AuthorizationPolicy::Role
                 {
                     return Err(Error::ValidationError("已有对象范围的操作不能登记为无对象政策".into()));
+                }
+                if let AccessMode::QualifiedOperation { policy } = &self.access {
+                    if !policy.identity_only() {
+                        return Err(Error::ValidationError("无对象政策只能使用身份资格".into()));
+                    }
+                    policy.validate(0)?;
                 }
                 Ok(())
             },
@@ -427,6 +484,40 @@ mod tests {
             entry.permission = Permission::parse(permission).unwrap();
             rejects(AuthorizationRegistry::new(vec![entry]), "业务入口必须登记具体权限");
         }
+    }
+
+    #[test]
+    fn account_qualification_is_explicit_and_identity_operations_reject_business_facts() {
+        let roles = AccessPolicy::Roles(vec![RoleId::parse("role-sysadmin").unwrap()]);
+        let mut operation = operation();
+        operation.access = AccessMode::QualifiedOperation { policy: roles };
+        assert!(AuthorizationRegistry::new(vec![operation]).is_ok());
+        let mut invalid = self::operation();
+        invalid.access = AccessMode::QualifiedOperation { policy: AccessPolicy::Owned };
+        rejects(AuthorizationRegistry::new(vec![invalid]), "无对象政策只能使用身份资格");
+        let mut account_data = data();
+        account_data.policy = AccessPolicy::Account {
+            policy: Box::new(AccessPolicy::Any(vec![
+                AccessPolicy::Owned,
+                AccessPolicy::Permission(Permission::parse("file_asset:preview").unwrap()),
+            ])),
+        };
+        let mut account_entry =
+            entry(AccessMode::Object { data: account_data.clone(), facts: Arc::new(Facts) });
+        rejects(AuthorizationRegistry::new(vec![account_entry]), "已有业务资源不能免除入口权限");
+        account_entry = entry(AccessMode::Object { data: account_data.clone(), facts: Arc::new(Facts) });
+        account_entry.permission = Permission::parse("file_asset:transfer").unwrap();
+        assert!(AuthorizationRegistry::new(vec![account_entry]).is_ok());
+        account_data.policy = AccessPolicy::Any(vec![account_data.policy]);
+        rejects(
+            AuthorizationRegistry::new(vec![entry(AccessMode::Object {
+                data: account_data,
+                facts: Arc::new(Facts),
+            })]),
+            "账号资格只能声明在根政策",
+        );
+        assert!(AccessPolicy::Roles(vec![]).validate(0).is_err());
+        assert!(AccessPolicy::Permission(Permission::parse("file_asset:*").unwrap()).validate(0).is_err());
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
-use erp_supply::FulfillmentOrderDataScopePort;
+use erp_supply::FulfillmentOrderAccess;
 
 use crate::workflow::FulfillmentWorkflow;
 
@@ -14,7 +14,7 @@ pub struct SupplierFulfillmentIdentity {
     /// 使用本次身份的任务资格能力。
     pub workflow: Arc<dyn FulfillmentWorkflow>,
     /// 使用本次身份的交接订单范围能力。
-    pub data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+    pub data_scope: FulfillmentOrderAccess,
 }
 
 /// 在原命令资格核验位置创建全新身份；构造能力不得执行 I/O。

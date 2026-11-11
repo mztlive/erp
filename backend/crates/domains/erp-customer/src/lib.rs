@@ -10,6 +10,7 @@ pub mod repository;
 pub mod service;
 
 pub use application_core::PageView;
+pub use authorization::CustomerResolvedScope;
 pub use dto::{
     AddressType, AssignmentAction, CreateCustomerRequest, CustomerActionBlockerView,
     CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView, CustomerDetailView,
@@ -30,9 +31,8 @@ pub use entity::{
 };
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
-    AccountFactPort, CustomerAuditPort, CustomerDataScopePort, CustomerResolvedScope,
-    FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort, FailClosedPartyFactPort,
-    PartyFactPort, PartyIdentityFact, PreparedCustomerAudit, ValidatedAuditSnapshot,
+    AccountFactPort, CustomerAuditPort, FailClosedAccountFactPort, FailClosedAuditPort,
+    FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit, ValidatedAuditSnapshot,
 };
 pub use repository::{
     CustomerAccountFilter, CustomerAccountRepository, CustomerAccountRow, CustomerAssignmentFilter,

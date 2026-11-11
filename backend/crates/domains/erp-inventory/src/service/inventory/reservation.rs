@@ -6,6 +6,7 @@ use super::InventoryService;
 use crate::dto::{PageView, StockReservationListParams, StockReservationView};
 use crate::entity::inventory::StockReservation;
 use crate::error::{Error, Result};
+use crate::ports::InventoryAction;
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockReservationFilter};
 
@@ -45,7 +46,9 @@ impl InventoryService {
         let page = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
+                    let authorization = authorization_port
+                        .authorize(&actor, &[InventoryAction::ReservationList], executor)
+                        .await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存预占读取权限".to_string()));
                     }
@@ -76,21 +79,7 @@ impl InventoryService {
                 })
             })
             .await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| StockReservationView {
-                id: row.id,
-                warehouse_id: row.warehouse_id.to_string(),
-                sku_id: row.sku_id.to_string(),
-                sales_order_line_id: row.sales_order_line_id.to_string(),
-                reserved_quantity: row.reserved_quantity,
-                consumed_quantity: row.consumed_quantity,
-                released_quantity: row.released_quantity,
-                status: row.status,
-                version: row.version,
-            })
-            .collect();
+        let items = page.items.into_iter().map(StockReservationView::from).collect();
         Ok(PageView { items, total: page.total, page: page_no, page_size })
     }
 }

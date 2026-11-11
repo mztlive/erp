@@ -4,39 +4,44 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_identity::{
+    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, OrganizationDirectoryService,
+    Permission, ResourceTargets, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::authorization;
 use crate::entity::sales_selection::{SalesSelectionBooklet, SalesSelectionProposal};
 use crate::error::{Error, Result};
-use crate::ports::{SelectionDataScopePort, SelectionResolvedScope};
 use crate::repository::SalesSelectionExt;
+use crate::repository::sales_selection::authorization::SelectionFacts;
 use crate::repository::sales_selection::scope::SelectionReadScope;
+use crate::service::authorization_error::identity_error;
 
 /// 选品对象访问范围；列表、详情、候选、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct SelectionAccess {
     db: Database,
-    scope: Arc<dyn SelectionDataScopePort>,
+    rbac: SharedRbacService,
+    authorization: AuthorizationService,
+    booklet: Arc<dyn AccessMapping>,
+    proposal: Arc<dyn AccessMapping>,
 }
 
 impl SelectionAccess {
-    /// 绑定选品集合与范围授权 Port。
-    ///
+    /// 绑定选品集合、共享身份设施与固定登记。
     /// # 参数
-    /// * `db` - 选品集合所在数据库
-    /// * `scope` - 组合层注入的选品范围 Port
-    ///
+    /// db 为选品数据库，rbac 为共享身份服务。
     /// # 返回
-    /// 返回无授权缓存的访问服务，构造不执行 I/O。
-    ///
+    /// 不缓存跨请求授权的访问器。
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在构造时补公司范围；不得直接构造身份域 Service。
-    pub fn new(db: Database, scope: Arc<dyn SelectionDataScopePort>) -> Self {
-        Self { db, scope }
+    /// 固定登记非法时启动失败；不执行 I/O。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        let (authorization, booklet, proposal) =
+            authorization::service(db.clone(), rbac.clone(), Arc::new(SelectionFacts::new(db.clone())))
+                .expect("固定选品授权目录完整");
+        Self { db, rbac, authorization, booklet, proposal }
     }
 
     /// 在调用方事务内证明资源动作并映射选品责任条件。
@@ -48,10 +53,10 @@ impl SelectionAccess {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回已解析范围事实和选品授权条件。
+    /// 返回本阶段唯一的选品授权凭证。
     ///
     /// # 错误
-    /// 无动作权限返回 Forbidden；未装配时拒绝。
+    /// 无动作权限返回 Forbidden；身份设施失败时拒绝。
     ///
     /// # 关键业务约束
     /// 责任按显式销售负责人和业务组织解释；提交人不成为负责人。
@@ -61,10 +66,21 @@ impl SelectionAccess {
         resource: &str,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(SelectionResolvedScope, SelectionReadScope)> {
-        let access = self.scope.resolve(actor, resource, action, executor).await?;
-        let scope = SelectionReadScope::from_compiled(access.access.clone(), access.authorization.clone());
-        Ok((access, scope))
+    ) -> Result<SelectionReadScope> {
+        let mapping = match resource {
+            "sales_selection_booklet" => &self.booklet,
+            "sales_selection_proposal" => &self.proposal,
+            _ => return Err(Error::ValidationError("非选品资源".into())),
+        };
+        let permission = Permission::parse(format!("{resource}:{action}"))?;
+        let query = self
+            .authorization
+            .query(actor, &permission, AccessSubject::Direct, executor)
+            .await
+            .map_err(identity_error)?;
+        let compiled = query.compile(mapping.as_ref(), executor).await.map_err(identity_error)?;
+        self.authorization.validate(&compiled, executor).await.map_err(identity_error)?;
+        Ok(SelectionReadScope::from_compiled(Arc::new(compiled), self.authorization.clone()))
     }
 
     /// 在调用方事务内重验册对象资格。
@@ -90,7 +106,18 @@ impl SelectionAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBooklet> {
-        self.scope.require(actor, "sales_selection_booklet", action, id, executor).await?;
+        self.authorization
+            .require(
+                actor,
+                &Permission::parse(format!("sales_selection_booklet:{action}"))?,
+                AccessTarget::Records {
+                    subject: AccessSubject::Direct,
+                    ids: ResourceTargets::new(&[id]).map_err(identity_error)?,
+                },
+                executor,
+            )
+            .await
+            .map_err(identity_error)?;
         self.db
             .sales_selection_booklets()
             .find_by_id(id, executor)
@@ -121,7 +148,18 @@ impl SelectionAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionProposal> {
-        self.scope.require(actor, "sales_selection_proposal", action, id, executor).await?;
+        self.authorization
+            .require(
+                actor,
+                &Permission::parse(format!("sales_selection_proposal:{action}"))?,
+                AccessTarget::Records {
+                    subject: AccessSubject::Direct,
+                    ids: ResourceTargets::new(&[id]).map_err(identity_error)?,
+                },
+                executor,
+            )
+            .await
+            .map_err(identity_error)?;
         self.db
             .sales_selection_proposals()
             .find_by_id(id, executor)
@@ -140,14 +178,17 @@ impl SelectionAccess {
     /// 返回启用节点的组织 ID 集合。
     ///
     /// # 错误
-    /// 未知组织或未装配时拒绝。
+    /// 未知组织或身份设施失败时拒绝。
     pub async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>> {
-        self.scope.expand_org_units(org_unit_ids, include_descendants, executor).await
+        OrganizationDirectoryService::new(self.db.clone())
+            .expand_org_units(org_unit_ids, include_descendants, executor)
+            .await
+            .map_err(identity_error)
     }
 
     /// 检查拟创建选品册的责任资格。
@@ -164,6 +205,24 @@ impl SelectionAccess {
         org: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.scope.require_new(actor, owner, org, executor).await
+        let (authorization, _, _) = authorization::service(
+            self.db.clone(),
+            self.rbac.clone(),
+            Arc::new(SelectionFacts::proposed(self.db.clone(), owner, org)),
+        )
+        .map_err(identity_error)?;
+        let permission = Permission::parse("sales_selection_booklet:create")?;
+        authorization
+            .require(
+                actor,
+                &permission,
+                AccessTarget::Records {
+                    subject: AccessSubject::Direct,
+                    ids: ResourceTargets::new(&["selection_new"]).map_err(identity_error)?,
+                },
+                executor,
+            )
+            .await
+            .map_err(identity_error)
     }
 }

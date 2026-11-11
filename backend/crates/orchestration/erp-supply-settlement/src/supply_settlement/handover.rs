@@ -5,9 +5,8 @@ use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::AccountKind;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
-use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{Permission, SharedRbacService};
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_settlement::{
@@ -125,7 +124,7 @@ impl SettlementDependencies {
     fn from_process<A: WorkflowAuthorizationPort>(process: &SupplierSettlementProcess<A>) -> Result<Self> {
         Ok(Self {
             db: process.db.clone(),
-            access: SettlementAccess::new(process.db.clone(), process.data_scope.clone()),
+            access: process.data_scope.clone(),
             rbac: process.require_rbac()?.clone(),
         })
     }
@@ -386,18 +385,12 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
-    };
-    if !account.is_active_backoffice() {
-        return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
-    }
-    let required = [Permission::parse("supplier_settlement_statement:update")?];
-    let actor = AuditActor::new(target.into(), account.secret.account().into(), account.kind);
-    let qualified = crate::authorization::features(db.clone(), rbac.clone())
-        .permissions(&actor, &required, executor)
-        .await?;
-    if qualified.is_none_or(|value| !value.same_role(&required)) {
+    let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
+    let permission = Permission::parse("supplier_settlement_statement:update")?;
+    if !crate::authorization::features(db.clone(), rbac.clone())
+        .has_permission(&actor, &permission, executor)
+        .await?
+    {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
     }
     Ok(())
@@ -409,24 +402,23 @@ async fn list_candidates(
     current: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let accounts = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
+    let accounts = rbac.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
     let mut candidates = Vec::new();
     for account in accounts {
-        if account.base.id == current || !account.is_active_backoffice() {
+        if account.id == current || !account.is_active_backoffice() {
             continue;
         }
         let required = [Permission::parse("supplier_settlement_statement:update")?];
-        let actor = AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind);
+        let actor = AuditActor::new(account.id, account.login_account, account.kind);
         let qualified = crate::authorization::features(db.clone(), rbac.clone())
             .permissions(&actor, &required, executor)
             .await?;
-        if qualified.is_none_or(|value| !value.same_role(&required)) {
-            continue;
-        }
+        let Some(qualified) = qualified.filter(|value| value.same_role(&required)) else { continue };
+        let account = qualified.account();
         candidates.push(HandoverCandidateView {
-            user_id: account.base.id.clone(),
-            display_name: account.name.clone(),
-            account: account.secret.account().to_string(),
+            user_id: account.id.clone(),
+            display_name: account.display_name.clone(),
+            account: account.login_account.clone(),
         });
     }
     candidates.sort_by(|left, right| left.display_name.cmp(&right.display_name));

@@ -143,7 +143,7 @@ async fn apply_expense_create(
     }
     let sales_order = load_expense_source(db, rbac, command, executor).await?;
     let (order, submission, lines) =
-        prepare_expense_draft(db, ports, rbac, &sales_order, command, executor).await?;
+        prepare_expense_draft(db, ports, &sales_order, command, executor).await?;
     if lines.iter().any(|line| line.expense.as_ref().is_some_and(|fee| fee.inquiry_source.is_some())) {
         ProcurementInquiryEligibility::new(db.clone(), rbac.clone())
             .ensure_permission(&command.actor, "convert_expenses", executor)
@@ -152,7 +152,7 @@ async fn apply_expense_create(
     reserve_purchase(db, &order, &lines, &command.actor, executor).await?;
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: &command.actor };
-    let document = write_prepared_draft(db, ports, rbac, &write, executor).await?;
+    let document = write_prepared_draft(db, ports, &write, executor).await?;
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
         order,
@@ -201,7 +201,6 @@ async fn load_expense_source(
 async fn prepare_expense_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
-    _rbac: &SharedRbacService,
     sales_order: &SalesOrder,
     command: &ExpenseCommand,
     executor: &mut dyn Executor,

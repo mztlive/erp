@@ -10,19 +10,16 @@ use erp_read_models::inventory_center::InventoryAdjustmentApprovalPolicyPort;
 use erp_read_models::{Error as ReadError, Result as ReadResult};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
-use mongodb::Database;
 use persistence_core::Executor;
 
-use super::approval_prepare::ensure_submit_authorized;
 use super::cancel_runtime::{
-    ensure_cancel_authorized_with_executor, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
+    ensure_cancel_instance_binding, ensure_cancel_instance_subject,
     ensure_stock_adjustment_open_task_identity,
 };
 use crate::Error;
 use crate::workflow::FulfillmentWorkflow;
 
 pub(super) struct StockAdjustmentReadPolicy {
-    pub(super) db: Database,
     pub(super) workflow: Arc<dyn FulfillmentWorkflow>,
 }
 
@@ -35,7 +32,7 @@ impl InventoryAdjustmentApprovalPolicyPort for StockAdjustmentReadPolicy {
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
         eligibility(
-            ensure_submit_authorized(&self.db, self.workflow.as_ref(), adjustment, actor, executor).await,
+            self.workflow.as_ref().authorize_stock_adjustment_submit(adjustment, actor, executor).await,
         )
     }
 
@@ -46,15 +43,11 @@ impl InventoryAdjustmentApprovalPolicyPort for StockAdjustmentReadPolicy {
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
         eligibility(
-            ensure_cancel_authorized_with_executor(
-                &self.db,
-                self.workflow.as_ref(),
-                instance,
-                actor,
-                executor,
-            )
-            .await
-            .map(|_| ()),
+            self.workflow
+                .as_ref()
+                .authorize_stock_adjustment_cancel(instance, actor, executor)
+                .await
+                .map(|_| ()),
         )
     }
 

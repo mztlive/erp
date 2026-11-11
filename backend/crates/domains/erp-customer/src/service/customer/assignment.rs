@@ -25,7 +25,7 @@ use crate::entity::customer::{
     EndCustomerAssignment,
 };
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, CustomerAuditPort, CustomerDataScopePort};
+use crate::ports::{AccountFactPort, CustomerAuditPort};
 use crate::repository::CustomerExt;
 use crate::repository::prelude::*;
 
@@ -37,7 +37,7 @@ pub struct CustomerAssignmentService {
     db: Database,
     audit: Arc<dyn CustomerAuditPort>,
     accounts: Arc<dyn AccountFactPort>,
-    data_scope: Arc<dyn CustomerDataScopePort>,
+    access: CustomerAccess,
 }
 
 impl CustomerAssignmentService {
@@ -47,7 +47,7 @@ impl CustomerAssignmentService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `accounts` - 账号事实端口
-    /// * `data_scope` - 客户范围授权端口
+    /// * `access` - 客户统一授权访问器
     ///
     /// # 返回
     /// 返回服务实例。
@@ -56,31 +56,14 @@ impl CustomerAssignmentService {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 归属变更必须通过注入的 Port 证明 customer:update 范围。
+    /// 归属变更必须通过注入的访问器 证明 customer:update 范围。
     pub fn new(
         db: Database,
         audit: Arc<dyn CustomerAuditPort>,
         accounts: Arc<dyn AccountFactPort>,
-        data_scope: Arc<dyn CustomerDataScopePort>,
+        access: CustomerAccess,
     ) -> Self {
-        Self { db, audit, accounts, data_scope }
-    }
-
-    /// 构造复用本服务授权 Port 的客户访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库与范围 Port 的访问器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在此回退构造身份域 Service。
-    fn access(&self) -> CustomerAccess {
-        CustomerAccess::new(self.db.clone(), Arc::clone(&self.data_scope))
+        Self { db, audit, accounts, access }
     }
 
     /// 分页查询客户归属列表。
@@ -220,7 +203,7 @@ impl CustomerAssignmentService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let customer_id_for_tx = customer_id.to_string();
-        let access = self.access();
+        let access = self.access.clone();
         let actor_for_tx = actor.clone();
         let created = client
             .with_transaction(move |executor| {
@@ -253,7 +236,7 @@ impl CustomerAssignmentService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let access = self.access();
+        let access = self.access.clone();
         let actor_for_tx = actor.clone();
         let customer_id_for_tx = customer_id.to_string();
         let ended = client

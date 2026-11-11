@@ -1,6 +1,6 @@
 //! 现任经营质量的销售、客户双重授权查询；交集先于订单上限。
 
-use erp_customer::{CustomerDataScopePort, CustomerExt, CustomerResolvedScope};
+use erp_customer::{CustomerAccess, CustomerExt, CustomerResolvedScope};
 use erp_identity::CompiledAccess;
 use erp_identity::entity::authorization::QueryOutput;
 use erp_sales::entity::sales_order::SalesOrder;
@@ -23,7 +23,7 @@ pub(super) async fn current_orders(
     db: &Database,
     filter: &QualityOrderFilter,
     customer: &CustomerResolvedScope,
-    port: &dyn CustomerDataScopePort,
+    port: &CustomerAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<SalesOrder>> {
     let compiled = customer_access(customer)?;

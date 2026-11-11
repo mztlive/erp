@@ -154,14 +154,10 @@ impl InventoryAdjustmentProcess {
         actor: &AuditActor,
     ) -> Result<(StockAdjustment, ApprovalDefinitionBinding, Vec<StockAdjustmentLine>)> {
         let mut adjustment = self.inventory().load_stock_adjustment(id).await?;
-        start_approval::ensure_submit_authorized(
-            &self.db,
-            self.workflow.as_ref(),
-            &adjustment,
-            actor,
-            &mut NoTransaction,
-        )
-        .await?;
+        self.workflow
+            .as_ref()
+            .authorize_stock_adjustment_submit(&adjustment, actor, &mut NoTransaction)
+            .await?;
         if !adjustment.matches_version(req.expected_version) {
             return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }

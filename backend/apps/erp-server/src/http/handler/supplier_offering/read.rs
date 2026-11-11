@@ -5,15 +5,14 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_read_models::supplier_center::offering::SupplierOfferingView;
 use erp_read_models::supplier_center::{MongoOfferingProcurementOwners, SupplierOfferingReadService};
-use erp_supply::SupplierOfferingService;
 use erp_supply::dto::offering_history::{OfferingHistoryPage, OfferingHistoryParams};
+use erp_supply::{OfferingAccess, SupplierOfferingService};
 
 use super::can_view_costs;
 use crate::http::errors::Result;
 use crate::http::extractor::Query;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::MongoOfferingDataScope;
 
 /// 查询供给资料，复用列表动作和供给自身的数据范围。
 ///
@@ -35,7 +34,7 @@ pub async fn detail(
 ) -> Result<SupplierOfferingView> {
     let mut view = SupplierOfferingReadService::new(
         state.application().db(),
-        MongoOfferingDataScope::shared(state.application().db(), state.application().rbac()),
+        OfferingAccess::new(state.application().db(), state.application().rbac()),
         MongoOfferingProcurementOwners::shared(state.application().db()),
     )
     .detail(&id, &actor)
@@ -67,7 +66,7 @@ pub async fn history(
     Query(params): Query<OfferingHistoryParams>,
 ) -> Result<OfferingHistoryPage> {
     let mut page = SupplierOfferingService::new(state.application().db())
-        .with_data_scope(MongoOfferingDataScope::shared(state.application().db(), state.application().rbac()))
+        .with_data_scope(OfferingAccess::new(state.application().db(), state.application().rbac()))
         .history(&id, params, &actor)
         .await?;
     if !can_view_costs(&state, &actor).await? {

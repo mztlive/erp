@@ -48,7 +48,7 @@ fn changed() -> Error {
 }
 
 /// 已经授权后的资格失效统一按范围变化处理；取证故障保留原错误。
-fn revalidation_error(error: Error) -> Error {
+pub(super) fn revalidation_error(error: Error) -> Error {
     match error {
         Error::Forbidden(_) | Error::Unauthenticated(_) | Error::ConflictError(_) => changed(),
         other => other,

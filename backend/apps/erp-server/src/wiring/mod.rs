@@ -35,11 +35,11 @@ use std::sync::Arc;
 
 pub use catalog::{MongoCatalogAudit, MongoCatalogFileAssets, catalog_service};
 pub use contract::{contract_access, contract_service, scoped_contract_service};
-pub use contract_data_scope::MongoContractDataScope;
+pub use contract_data_scope::contract_authorization;
 pub use contract_template::contract_template_service;
 pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
-pub use customer_data_scope::{MongoCustomerDataScope, customer_access};
-use erp_customer::{CustomerAssignmentService, CustomerService, FailClosedCustomerDataScopePort};
+pub use customer_data_scope::customer_access;
+use erp_customer::{CustomerAssignmentService, CustomerService};
 use erp_identity::SharedRbacService;
 use erp_party::{
     PartyAddressService, PartyBankAccountService, PartyContactService, PartyService, PartyTaxProfileService,
@@ -48,16 +48,16 @@ use erp_party::{
 use erp_supplier::SupplierService;
 pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
 pub use import::{MongoImportBulkJobs, legacy_import_service};
-pub use integration_data_scope::{MongoIntegrationDataScope, scoped_integration_ops_service};
+pub use integration_data_scope::scoped_integration_ops_service;
 pub use inventory::{authorize_inventory, inventory_adjustment_process, inventory_service};
 use mongodb::Database;
 pub use organization::organization_service;
 pub use party::{MongoPartyAudit, MongoSupplierRole};
 pub use purchase_data_scope::{MongoPurchaseDataScope, purchase_access};
-pub use selection_data_scope::{MongoSelectionDataScope, selection_access};
+pub use selection_data_scope::selection_access;
 pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
 pub use supplier_data_scope::{
-    MongoSupplierDataScope, scoped_supplier_service, scoped_supplier_service_with_sensitive, supplier_access,
+    scoped_supplier_service, scoped_supplier_service_with_sensitive, supplier_access,
 };
 pub use warehouse::{MongoWarehouseIdentity, warehouse_service};
 
@@ -156,29 +156,6 @@ pub fn party_tax_profile_service(db: Database) -> PartyTaxProfileService {
     )
 }
 
-/// 构造只装载客户事实的服务；范围 Port 失败关闭。
-///
-/// # 参数
-/// * `db` - 客户集合所在数据库
-///
-/// # 返回
-/// 返回未接线范围解析的客户服务。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得用于列表、详情或写命令；解析范围必须调用 [`scoped_customer_service`]。
-pub fn customer_service(db: Database) -> CustomerService {
-    CustomerService::new(
-        db.clone(),
-        MongoCustomerAudit::shared(db.clone()),
-        MongoCustomerPartyFacts::shared(db.clone()),
-        MongoCustomerAccountFacts::shared(db),
-        FailClosedCustomerDataScopePort::shared(),
-    )
-}
-
 /// 构造已接入身份域公共解析器的客户服务。
 ///
 /// # 参数
@@ -192,36 +169,14 @@ pub fn customer_service(db: Database) -> CustomerService {
 /// 无。
 ///
 /// # 关键业务约束
-/// adapter 必须调用 identity 统一授权服务，不解释范围条款。
+/// 本域访问器直接调用 identity 统一授权服务，不解释范围条款。
 pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> CustomerService {
     CustomerService::new(
         db.clone(),
         MongoCustomerAudit::shared(db.clone()),
         MongoCustomerPartyFacts::shared(db.clone()),
         MongoCustomerAccountFacts::shared(db.clone()),
-        MongoCustomerDataScope::shared(db, rbac),
-    )
-}
-
-/// 构造只装载归属事实的服务；范围 Port 失败关闭。
-///
-/// # 参数
-/// * `db` - 客户集合所在数据库
-///
-/// # 返回
-/// 返回未接线范围解析的归属服务。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 归属变更必须调用 [`scoped_customer_assignment_service`]。
-pub fn customer_assignment_service(db: Database) -> CustomerAssignmentService {
-    CustomerAssignmentService::new(
-        db.clone(),
-        MongoCustomerAudit::shared(db.clone()),
-        MongoCustomerAccountFacts::shared(db),
-        FailClosedCustomerDataScopePort::shared(),
+        customer_access(db, rbac),
     )
 }
 
@@ -247,7 +202,7 @@ pub fn scoped_customer_assignment_service(
         db.clone(),
         MongoCustomerAudit::shared(db.clone()),
         MongoCustomerAccountFacts::shared(db.clone()),
-        MongoCustomerDataScope::shared(db, rbac),
+        customer_access(db, rbac),
     )
 }
 
@@ -276,14 +231,11 @@ pub mod identity_audit;
 pub mod support_audit;
 pub mod support_documents;
 
-pub use catalog_data_scope::{MongoCatalogDataScope, catalog_access, scoped_catalog_service};
+pub use catalog_data_scope::{catalog_access, scoped_catalog_service};
 pub use fulfillment_order_data_scope::{
-    MongoFulfillmentExceptionHandlers, MongoFulfillmentOrderDataScope, fulfillment_order_access,
-    scoped_fulfillment_service,
+    MongoFulfillmentExceptionHandlers, fulfillment_order_access, scoped_fulfillment_service,
 };
-pub use offering_data_scope::{
-    MongoOfferingDataScope, offering_access, scoped_offering_process, scoped_offering_service,
-};
+pub use offering_data_scope::{offering_access, scoped_offering_process, scoped_offering_service};
 pub use supplier_fulfillment_identity::supplier_fulfillment_identity_factory;
 
 #[cfg(test)]
@@ -291,9 +243,7 @@ mod supplier_composition_tests;
 
 mod scope_target_validation;
 pub use scope_target_validation::scope_configuration;
-pub use settlement_data_scope::{
-    MongoSettlementDataScope, scoped_settlement_process, scoped_settlement_service, settlement_access,
-};
+pub use settlement_data_scope::{scoped_settlement_process, scoped_settlement_service, settlement_access};
 
 mod warehouse_directory;
 pub use warehouse_directory::warehouse_directory;

@@ -16,8 +16,8 @@ use persistence_core::Executor;
 
 use super::order_access;
 use crate::wiring::errors::{Error, Result};
+use crate::wiring::funds_access_with_rbac;
 use crate::wiring::inventory::inventory_service;
-use crate::wiring::{funds_access_with_rbac, purchase_access};
 
 /// 管理访问必须覆盖完整来源对象；缺失来源和未接入类型一律拒绝。
 ///
@@ -51,9 +51,8 @@ pub(super) async fn readable(
     let Some((resource, source_id)) = finance_source(db, kind, id, executor).await? else {
         return Ok(false);
     };
-    let purchase = purchase_access(db.clone(), rbac.clone());
     match funds_access_with_rbac(db.clone(), rbac.clone())
-        .source_document_readable(actor, resource, &source_id, Some(&purchase), executor)
+        .source_document_readable(actor, resource, &source_id, executor)
         .await
         .map_err(Error::from)
     {

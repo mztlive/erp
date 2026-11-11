@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::ids::ReceiptReversalId;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -42,7 +43,7 @@ struct MongoReplayAuthorization<'a> {
 #[async_trait]
 impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
     async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self.rbac.runtime.actor_active(actor, executor).await?)
+        Ok(self.rbac.identity.directory().actor_is_active(actor, executor).await?)
     }
     async fn action_allowed(
         &self,
@@ -50,7 +51,12 @@ impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
         permission: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(!self.rbac.runtime.action_roles(actor, permission, executor).await?.is_empty())
+        let authorization = AuthorizationService::new(
+            self.db.clone(),
+            self.rbac.identity.clone(),
+            AuthorizationRegistry::default(),
+        );
+        Ok(authorization.has_permission(actor, &Permission::parse(permission)?, executor).await?)
     }
     async fn source_readable(
         &self,

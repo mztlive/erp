@@ -44,7 +44,6 @@ struct SupplierSnapshot {
     page_size: u32,
 
     context: SupplierResolvedScope,
-    no_scope: bool,
 }
 
 impl SupplierService {
@@ -112,10 +111,9 @@ impl SupplierService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-                    let no_scope = !context.has_scope_rules();
+                    let mut context = access.resolve(&actor, "list", executor).await?;
                     context.validate(executor).await?;
-                    let input = build_list_input(&query, &scope, party.as_ref(), executor).await?;
+                    let input = build_list_input(&query, &context, party.as_ref(), executor).await?;
                     fingerprint_scope(&db, &mut context, &input, executor).await?;
                     if !hydrate {
                         context.validate(executor).await?;
@@ -126,7 +124,6 @@ impl SupplierService {
                             page_size: input.page_size,
 
                             context,
-                            no_scope,
                         });
                     }
                     let bundle = db.supplier().load_supplier_list_bundle(&input, executor).await?;
@@ -135,7 +132,6 @@ impl SupplierService {
                         party: party.as_ref(),
                         accounts: accounts.as_ref(),
                         context,
-                        no_scope,
                         page: input.page,
                         page_size: input.page_size,
                         executor,
@@ -218,7 +214,7 @@ fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
         policy_version: snapshot.context.policy_version,
         organization_version: snapshot.context.organization_version,
         as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
-        empty_reason: snapshot.no_scope.then_some("no_scope"),
+        empty_reason: None,
         scope_summary: "供应商按岗位权限共享；维护人及能力负责人筛选为额外收窄",
 
         data: OwnershipPage {
@@ -316,7 +312,6 @@ struct HydrateArgs<'a> {
     party: &'a dyn crate::ports::PartyFactsPort,
     accounts: &'a dyn crate::ports::AccountFactPort,
     context: SupplierResolvedScope,
-    no_scope: bool,
     page: u64,
     page_size: u32,
     executor: &'a mut dyn persistence_core::Executor,
@@ -324,7 +319,7 @@ struct HydrateArgs<'a> {
 
 /// 在同一执行器内水合主体、维护人名称与能力资质，再装配当前页。
 async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
-    let HydrateArgs { bundle, party, accounts, context, no_scope, page, page_size, executor } = args;
+    let HydrateArgs { bundle, party, accounts, context, page, page_size, executor } = args;
     let total = bundle.page.total;
     let (parties, revisions) = party.list_with_current_revisions(&bundle.party_ids, executor).await?;
     let entity_names = load_entity_names(party, &bundle.profiles, executor).await?;
@@ -342,7 +337,7 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
         as_of: erp_core::common::time::BusinessDate::today(),
     });
     context.validate(executor).await?;
-    Ok(SupplierSnapshot { no_scope, items, total, page, page_size, context })
+    Ok(SupplierSnapshot { items, total, page, page_size, context })
 }
 
 fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {

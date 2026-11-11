@@ -22,20 +22,19 @@ pub use entity::contract::{
 };
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
-    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractDataScopePort,
-    ContractParticipantPort, ContractResolvedScope, CustomerAccountFact, CustomerAssignmentFactsPort,
-    CustomerFactsPort, EmptyAccountNames, EmptyAssignments, EmptyContractParticipants, EmptyCustomers,
-    EmptyFileAssetFacts, FailClosedAccountNamePort, FailClosedAssignmentFactsPort, FailClosedAuditPort,
-    FailClosedContractDataScopePort, FailClosedContractParticipantPort, FailClosedCustomerFactsPort,
-    FailClosedFileAssetFacts, FileAssetFact, FileAssetFactsPort, PreparedContractAudit,
+    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort,
+    ContractResolvedScope, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
+    EmptyAccountNames, EmptyAssignments, EmptyContractParticipants, EmptyCustomers, EmptyFileAssetFacts,
+    FailClosedAccountNamePort, FailClosedAssignmentFactsPort, FailClosedAuditPort,
+    FailClosedContractParticipantPort, FailClosedCustomerFactsPort, FailClosedFileAssetFacts, FileAssetFact,
+    FileAssetFactsPort, PreparedContractAudit,
 };
 pub use repository::{
     ContractDomainRepository, ContractExt, ContractFilter, ContractRepository, ContractRevisionRepository,
     ContractRow,
 };
 pub use service::contract::{
-    ContractAccess, ContractScopePorts, ContractService, PlannedContractArchive, plan_first_archive,
-    plan_upload_archive,
+    ContractAccess, ContractService, PlannedContractArchive, plan_first_archive, plan_upload_archive,
 };
 pub use service::template::ContractTemplateService;
 

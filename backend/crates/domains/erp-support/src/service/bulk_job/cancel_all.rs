@@ -18,7 +18,6 @@ impl BulkJobService {
     /// # 参数
     /// * `req` - 批量取消请求（可选 `job_type` 缩小范围）
     /// * `actor` - 已通过鉴权的审计操作人
-    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回已取消、跳过与失败的任务数及失败明细。
@@ -30,11 +29,8 @@ impl BulkJobService {
         &self,
         req: CancelAllBackgroundJobsRequest,
         actor: &AuditActor,
-        is_admin: bool,
     ) -> Result<CancelAllBackgroundJobsResponse> {
-        if !is_admin {
-            return Err(Error::Forbidden("只有管理员可以停止全部后台任务".to_string()));
-        }
+        self.authorization.require_cancel_all(actor, &mut NoTransaction).await?;
         req.validate()?;
         let candidates =
             self.db.background_jobs().cancellation_candidates(req.job_type, &mut NoTransaction).await?;
@@ -62,28 +58,32 @@ impl BulkJobService {
     /// 单个候选任务取消与审计同事务写入；终态或不允许取消时返回跳过。
     ///
     /// 审计构造、版本竞争或事务失败返回错误，由批量入口累计失败并继续处理其他任务。
-    async fn cancel_candidate(&self, mut job: BackgroundJob, actor: &AuditActor) -> Result<bool> {
-        if job.is_terminal() || job.cancel(Instant::now()).is_err() {
-            return Ok(false);
-        }
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "background_job.cancel_all",
-            "background_job",
-            job.base.id.clone(),
-        )?;
+    async fn cancel_candidate(&self, job: BackgroundJob, actor: &AuditActor) -> Result<bool> {
+        let id = job.base.id;
         let db = self.db.clone();
         let audit_port = self.audit.clone();
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization.require_cancel_all(&actor, executor).await?;
+                    let mut job = db
+                        .background_jobs()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
+                    if job.is_terminal() || job.cancel(Instant::now()).is_err() {
+                        return Ok(false);
+                    }
+                    let audit =
+                        audit_port.resource_log(actor, "background_job.cancel_all", "background_job", id)?;
                     db.background_jobs().update(&mut job, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<(), Error>(())
+                    Ok(true)
                 })
             })
-            .await?;
-        Ok(true)
+            .await
     }
 }

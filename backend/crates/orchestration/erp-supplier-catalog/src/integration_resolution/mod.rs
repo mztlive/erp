@@ -24,7 +24,7 @@ mod work_item_factory;
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
-use erp_integration::ports::IntegrationDataScopePort;
+use erp_integration::IntegrationAccess;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_integration::service::IntegrationOpsService;
 use mongodb::Database;
@@ -34,7 +34,7 @@ pub struct IntegrationResolutionProcess {
     pub(super) identity_factory: Arc<dyn Fn() -> SharedRbacService + Send + Sync>,
     pub(super) db: Database,
     pub(super) evidence: Arc<dyn IntegrationEvidenceAuthority>,
-    pub(super) data_scope: Arc<dyn IntegrationDataScopePort>,
+    pub(super) data_scope: IntegrationAccess,
 }
 impl IntegrationResolutionProcess {
     /// 绑定同一权威证据实例与范围 Port；不在构造时执行授权或读取。
@@ -54,7 +54,7 @@ impl IntegrationResolutionProcess {
     pub fn new(
         db: Database,
         evidence: Arc<dyn IntegrationEvidenceAuthority>,
-        data_scope: Arc<dyn IntegrationDataScopePort>,
+        data_scope: IntegrationAccess,
         identity_factory: Arc<dyn Fn() -> SharedRbacService + Send + Sync>,
         work_items_factory: Arc<dyn Fn() -> Arc<dyn CatalogWorkItems> + Send + Sync>,
     ) -> Self {

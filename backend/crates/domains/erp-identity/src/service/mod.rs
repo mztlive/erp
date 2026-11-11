@@ -8,6 +8,7 @@ pub mod authorization;
 pub mod business_ownership;
 pub mod iam;
 pub mod organization;
+pub mod organization_directory;
 pub mod person_directory;
 pub mod portal;
 

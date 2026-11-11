@@ -108,7 +108,7 @@ impl From<erp_identity::Error> for Error {
             erp_identity::Error::ReceiptDuplicate(v) => Self::ReceiptDuplicate(v),
             erp_identity::Error::TransientTransaction(v) => Self::TransientTransaction(v),
             erp_identity::Error::OutcomeUnknown(v) => Self::OutcomeUnknown(v),
-            erp_identity::Error::RepositoryError(v) => Self::from(v),
+            erp_identity::Error::RepositoryError(v) => Self::RepositoryError(v),
         }
     }
 }

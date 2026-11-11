@@ -27,10 +27,10 @@ impl AuthorizationService {
         match target {
             AccessTarget::Operation => {
                 let entry = self.registry.entry(permission, &AccessSubject::Direct)?;
-                if !matches!(entry.access, AccessMode::Operation) {
+                if !matches!(entry.access, AccessMode::Operation | AccessMode::QualifiedOperation { .. }) {
                     return Err(Error::ValidationError("本操作必须提供对象".into()));
                 }
-                self.identity(actor, &entry, executor).await.map(|_| ())
+                self.require_operation(actor, &entry, executor).await
             },
             AccessTarget::Records { subject, ids } => {
                 self.records(actor, permission, subject, ids, executor).await

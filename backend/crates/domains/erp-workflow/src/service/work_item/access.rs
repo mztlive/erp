@@ -37,20 +37,19 @@ impl TaskEligibility {
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 在原执行器证明任务详情及展示动作资格。
+    /// 任务详情已在本阶段授权后，计算展示动作资格。
     /// # 参数
-    /// actor、item 为真实账号及任务，executor 为原读取或写事务。
+    /// actor、item 为已授权账号及任务，executor 沿用原事务。
     /// # 返回
-    /// 返回 identity 判定的精确任务动作，不组合角色权限。
+    /// 返回同角色执行、审批决定和任务管理的展示资格。
     /// # 错误
-    /// 身份、任务范围或授权设施错误透传。
-    pub async fn task_eligibility(
+    /// 身份失效、功能取证或管理授权设施失败时返回错误。
+    pub(super) async fn task_actions(
         &self,
         actor: &AuditActor,
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<TaskEligibility> {
-        self.authorization.require(actor, "detail", &item.base.id, executor).await?;
         let mut required = item.qualification_permissions()?;
         required.extend(
             ["approval_instance:read", "approval_instance:decide"]
@@ -83,7 +82,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
 
     /// 证明精确任务及实际来源的读取资格，随后只检查业务事实。
     /// # 参数
-    /// item、access 为当前任务及已认证账号，executor 沿用原事务。
+    /// item、actor 为当前任务及真实账号，executor 沿用原事务。
     /// # 返回
     /// identity 授权及冻结业务事实均成立时成功。
     /// # 错误
@@ -91,16 +90,32 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     pub async fn ensure_item_access_with_executor(
         &self,
         item: &WorkItem,
-        access: &TaskEligibility,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.authorization.require(&access.actor, "detail", &item.base.id, executor).await?;
+        self.authorization.require(actor, "detail", &item.base.id, executor).await?;
+        self.ensure_task_facts(item, actor, executor).await
+    }
+
+    /// 详情已通过统一授权后，核验真实来源、冻结版本和责任事实。
+    /// # 参数
+    /// item、actor 为本阶段授权的任务及账号，executor 沿用原事务。
+    /// # 返回
+    /// 真实来源和冻结业务事实一致时成功。
+    /// # 错误
+    /// 来源不可读、事实缺失、版本或责任不匹配时拒绝。
+    pub(super) async fn ensure_task_facts(
+        &self,
+        item: &WorkItem,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         if item.work_item_type.is_document_approval() {
             return if approval_task_readable_with_executor(
                 &self.identity,
                 &self.db,
                 &self.auth,
-                &access.actor,
+                actor,
                 item,
                 executor,
             )
@@ -122,7 +137,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .ok_or_else(|| Error::Forbidden("任务业务对象不存在".into()))?;
         require_supplier_portal_task_read(
             &self.auth,
-            &access.actor,
+            actor,
             policy.object_kind,
             &item.business_object_id,
             executor,
@@ -130,14 +145,14 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         .await?;
         require_order_task_read(
             &self.auth,
-            &access.actor,
+            actor,
             policy.object_kind,
             fact,
             TaskReadAction::Detail,
             executor,
         )
         .await?;
-        if !task_facts_current(item, &access.task.actor_id, &facts) {
+        if !task_facts_current(item, actor.id(), &facts) {
             return Err(Error::Forbidden("任务业务版本或冻结责任不匹配".into()));
         }
         Ok(())
@@ -168,9 +183,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if !qualified.same_role(&required) {
             return Err(Error::Forbidden("当前账号不具备同角色完整执行资格".into()));
         }
-        self.ensure_item_access_with_executor(item, &TaskEligibility::new(actor.clone()), executor)
-            .await
-            .map_err(task_read_error)?;
+        self.ensure_item_access_with_executor(item, actor, executor).await.map_err(task_read_error)?;
         require_supplier_portal_task_review(
             &self.auth,
             actor,

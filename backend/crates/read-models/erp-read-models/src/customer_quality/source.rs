@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{TimeZone, Utc};
 use erp_core::ids::{CustomerAccountId, PartyId};
 use erp_customer::repository::prelude::*;
-use erp_customer::{AssignmentRole, CustomerDataScopePort, CustomerExt, CustomerResolvedScope};
+use erp_customer::{AssignmentRole, CustomerAccess, CustomerExt, CustomerResolvedScope};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::repository::prelude::*;
@@ -75,7 +75,7 @@ impl CurrentSources {
         db: &Database,
         filter: QualityOrderFilter,
         customer: &CustomerResolvedScope,
-        port: &dyn CustomerDataScopePort,
+        port: &CustomerAccess,
         executor: &mut dyn Executor,
     ) -> Result<Vec<QualityOrder>> {
         let rows = super::repository::current_orders(db, &filter, customer, port, executor).await?;

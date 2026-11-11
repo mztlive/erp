@@ -4,7 +4,6 @@ use application_core::AuditActor;
 use erp_core::ids::SupplierOfferingId;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
-use erp_supply::OfferingAccess;
 use persistence_core::Transactional;
 
 use super::{SupplierOfferingReadService, SupplierOfferingView, page_view, repository_page};
@@ -25,7 +24,7 @@ impl SupplierOfferingReadService {
     /// 不存在或越权统一返回 NotFound；仓储失败原样传播。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<SupplierOfferingView> {
         let db = self.db.clone();
-        let access = OfferingAccess::new(db.clone(), self.data_scope.clone());
+        let access = self.access.clone();
         let id = id.to_owned();
         let actor = actor.clone();
         db.client()

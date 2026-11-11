@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
 use erp_inventory::InventoryService;
 use erp_read_models::inventory_center::InventoryAdjustmentReadService;
 use mongodb::Database;
@@ -35,7 +34,6 @@ pub struct InventoryAdjustmentProcess {
     inventory_service: Arc<InventoryService>,
     workflow: Arc<dyn FulfillmentWorkflow>,
     db: Database,
-    rbac: SharedRbacService,
 }
 
 impl InventoryAdjustmentProcess {
@@ -43,7 +41,6 @@ impl InventoryAdjustmentProcess {
     ///
     /// # 参数
     /// * `db` - 各领域仓储共用的 MongoDB 数据库。
-    /// * `rbac` - 审批绑定与授权使用的共享 RBAC。
     /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
     /// * `inventory_service` - 已注入权威库存授权与事实 Port 的领域服务。
     ///
@@ -54,11 +51,10 @@ impl InventoryAdjustmentProcess {
     /// 不返回错误。
     pub fn new(
         db: Database,
-        rbac: SharedRbacService,
         workflow: Arc<dyn FulfillmentWorkflow>,
         inventory_service: Arc<InventoryService>,
     ) -> Self {
-        Self { workflow, inventory_service, db, rbac }
+        Self { workflow, inventory_service, db }
     }
 
     /// 装配库存调整跨域读取与正式命令共用的动作政策。
@@ -75,10 +71,7 @@ impl InventoryAdjustmentProcess {
         InventoryAdjustmentReadService::new(
             self.db.clone(),
             self.inventory_service.clone(),
-            Arc::new(read_policy::StockAdjustmentReadPolicy {
-                db: self.db.clone(),
-                workflow: self.workflow.clone(),
-            }),
+            Arc::new(read_policy::StockAdjustmentReadPolicy { workflow: self.workflow.clone() }),
         )
     }
 
@@ -88,7 +81,7 @@ impl InventoryAdjustmentProcess {
     /// 无。
     ///
     /// # 返回
-    /// 返回绑定当前数据库与 RBAC 的库存领域服务。
+    /// 返回绑定当前数据库及权威授权能力的库存领域服务。
     ///
     /// # 错误
     /// 不返回错误。

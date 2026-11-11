@@ -5,7 +5,6 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
 use erp_identity::SharedRbacService;
-use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
@@ -359,7 +358,8 @@ impl SubmissionCommit {
     /// 主题、复核人、结算单、任务与收据按原顺序使用入口授权事务的执行器。
     async fn persist(self, executor: &mut dyn Executor) -> Result<(SupplierSettlementStatement, WorkItem)> {
         let context = self.context;
-        let mut current = SettlementAccess::new(context.db.clone(), context.data_scope)
+        let mut current = context
+            .data_scope
             .require_statement(&context.actor, "submit", &self.prepared.statement.base.id, executor)
             .await?;
         if current.base.version != self.prepared.statement.base.version

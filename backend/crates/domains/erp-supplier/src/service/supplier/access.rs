@@ -1,36 +1,50 @@
 //! 供应商对象读取与写入范围；维护人与业务组织分别解释。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
+use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use crate::authorization::{self, CompiledScope};
 use crate::error::{Error, Result};
-use crate::ports::{SupplierDataScopePort, SupplierResolvedScope};
-use crate::repository::scope::SupplierReadScope;
 
 /// 供应商对象访问范围；列表、详情、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct SupplierAccess {
     db: Database,
-    scope: Arc<dyn SupplierDataScopePort>,
+    rbac: Option<SharedRbacService>,
 }
 
 impl SupplierAccess {
-    /// 绑定供应商事实来源与范围授权 Port。
+    /// 绑定供应商事实与共享身份设施。
     ///
     /// # 参数
     /// * `db` - 供应商集合所在数据库
-    /// * `scope` - 组合层注入的供应商范围 Port
+    /// * `rbac` - 组合层注入的共享身份设施
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: Database, scope: Arc<dyn SupplierDataScopePort>) -> Self {
-        Self { db, scope }
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac: Some(rbac) }
+    }
+
+    /// 构造未装配身份设施的访问器。
+    /// # 参数
+    /// db 为供应商数据库。
+    /// # 返回
+    /// 所有授权入口保持失败关闭的访问器。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn unwired(db: Database) -> Self {
+        Self { db, rbac: None }
+    }
+
+    /// 读取已装配身份设施，缺失时拒绝授权。
+    fn identity(&self) -> Result<SharedRbacService> {
+        self.rbac.clone().ok_or_else(|| Error::Internal("供应商身份设施未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射供应商责任条件。
@@ -53,9 +67,8 @@ impl SupplierAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(SupplierResolvedScope, SupplierReadScope)> {
-        let access = self.scope.resolve(actor, action, executor).await?;
-        Ok((access.clone(), access))
+    ) -> Result<CompiledScope> {
+        Ok(authorization::resolve(&self.db, self.identity()?, actor, "supplier", action, executor).await?)
     }
 
     /// 在独立事务中重验对象资格。
@@ -75,7 +88,7 @@ impl SupplierAccess {
         actor: &AuditActor,
         action: &str,
         supplier_id: &str,
-    ) -> Result<SupplierResolvedScope> {
+    ) -> Result<CompiledScope> {
         let this = self.clone();
         let actor = actor.clone();
         let action = action.to_string();
@@ -84,7 +97,10 @@ impl SupplierAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.require_with(&actor, &action, &supplier_id, executor).await })
+                Box::pin(async move {
+                    this.require_with(&actor, &action, &supplier_id, executor).await?;
+                    this.resolve(&actor, &action, executor).await
+                })
             })
             .await
     }
@@ -98,7 +114,7 @@ impl SupplierAccess {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 对象在范围内时返回授权上下文。
+    /// 完整对象授权通过时成功。
     ///
     /// # 错误
     /// 账号、动作或对象资格失效时拒绝。
@@ -108,9 +124,17 @@ impl SupplierAccess {
         action: &str,
         supplier_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<SupplierResolvedScope> {
-        self.scope.require(actor, action, supplier_id, executor).await?;
-        self.scope.resolve(actor, action, executor).await
+    ) -> Result<()> {
+        Ok(authorization::require(
+            &self.db,
+            self.identity()?,
+            actor,
+            "supplier",
+            action,
+            supplier_id,
+            executor,
+        )
+        .await?)
     }
 
     /// 在调用方事务内证明创建资格。
@@ -133,10 +157,9 @@ impl SupplierAccess {
         actor: &AuditActor,
         maintainer_user_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(SupplierResolvedScope, String)> {
-        let access = self.scope.resolve(actor, "create", executor).await?;
-        let owner_org = self
-            .scope
+    ) -> Result<(CompiledScope, String)> {
+        let access = self.resolve(actor, "create", executor).await?;
+        let owner_org = OrganizationDirectoryService::new(self.db.clone())
             .own_org(maintainer_user_id, access.as_of, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
@@ -144,13 +167,23 @@ impl SupplierAccess {
     }
 }
 
-/// 返回当前阶段的身份域查询凭证。
-/// # 参数
-/// access 为已编译凭证，user 为兼容调用参数。
-/// # 返回
-/// 相同凭证。
-/// # 错误
-/// 不执行I/O。
-pub fn supplier_scope(access: &SupplierResolvedScope, _user: &str) -> SupplierReadScope {
-    access.clone()
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn unwired_access_rejects_reads_and_writes_before_database_commands() {
+        let db = mongodb::Client::with_options(Default::default()).unwrap().database("unused");
+        let access = SupplierAccess::unwired(db);
+        let actor = AuditActor::new("actor".into(), "Actor".into(), AccountKind::Admin);
+        let mut executor = NoTransaction;
+        assert!(matches!(access.resolve(&actor, "list", &mut executor).await, Err(Error::Internal(_))));
+        assert!(matches!(
+            access.require_with(&actor, "update", "supplier-a", &mut executor).await,
+            Err(Error::Internal(_))
+        ));
+    }
 }

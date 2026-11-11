@@ -86,7 +86,7 @@ impl FundsAccess {
         authorization: &FundsAuthorization,
         facts: &HashMap<String, LinkedPurchaseFact>,
         executor: &mut dyn Executor,
-    ) -> Result<Option<BTreeSet<String>>> {
+    ) -> Result<BTreeSet<String>> {
         let mut allowed = BTreeSet::new();
         for id in facts.keys() {
             if id.starts_with(SETTLEMENT_PREFIX) {
@@ -101,7 +101,7 @@ impl FundsAccess {
                 allowed.insert(id.clone());
             }
         }
-        Ok(Some(allowed))
+        Ok(allowed)
     }
 }
 

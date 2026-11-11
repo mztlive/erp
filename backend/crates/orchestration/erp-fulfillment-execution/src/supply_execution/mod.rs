@@ -41,7 +41,7 @@ use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use erp_supply::{FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort};
+use erp_supply::{FulfillmentExceptionHandlerPort, FulfillmentOrderAccess};
 pub use identity::{SupplierFulfillmentIdentity, SupplierFulfillmentIdentityFactory};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -56,7 +56,7 @@ pub struct SupplierFulfillmentProcess {
     db: Database,
     registry: Option<Arc<dyn SupplierReferenceRegistry>>,
     gateway: Arc<dyn SupplierGateway>,
-    data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+    data_scope: FulfillmentOrderAccess,
     handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
 }
 impl SupplierFulfillmentProcess {
@@ -77,7 +77,7 @@ impl SupplierFulfillmentProcess {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `gateway` - 供应商动作派发网关（真实 Connector 接入点，只在事务外调用）
-    /// * `data_scope` - 履约订单范围 Port
+    /// * `data_scope` - 履约订单授权能力
     /// * `handlers` - 当前开放 W26 处理人 Port
     /// * `identity` - 每次核验创建独立身份及同源任务、范围能力的工厂。
     ///
@@ -90,7 +90,7 @@ impl SupplierFulfillmentProcess {
     pub fn new(
         db: Database,
         gateway: Arc<dyn SupplierGateway>,
-        data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
+        data_scope: FulfillmentOrderAccess,
         handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
         identity: SupplierFulfillmentIdentityFactory,
     ) -> Self {
@@ -111,10 +111,7 @@ impl SupplierFulfillmentProcess {
         self.domain_with_scope(self.data_scope.clone())
     }
 
-    fn domain_with_scope(
-        &self,
-        data_scope: Arc<dyn FulfillmentOrderDataScopePort>,
-    ) -> SupplierFulfillmentService {
+    fn domain_with_scope(&self, data_scope: FulfillmentOrderAccess) -> SupplierFulfillmentService {
         let service =
             SupplierFulfillmentService::new(self.db.clone()).with_scope(data_scope, self.handlers.clone());
         match &self.registry {

@@ -7,7 +7,7 @@ use entity_core::HasBaseModel;
 use erp_catalog::{Product, Sku, SkuRevision};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
-use erp_supply::OfferingDataScopePort;
+use erp_supply::OfferingAccess;
 use erp_supply::dto::delivery_template::OfferingDeliveryView;
 use erp_supply::entity::supplier_offering::{
     SupplierOfferingAvailability, SupplierOfferingRevision, resolve_delivery,
@@ -34,7 +34,7 @@ pub use procurement::{
 /// 供给列表只读服务。
 pub struct SupplierOfferingReadService {
     db: Database,
-    data_scope: Arc<dyn OfferingDataScopePort>,
+    access: OfferingAccess,
     procurement: Arc<dyn OfferingProcurementOwners>,
 }
 #[derive(Default)]
@@ -52,7 +52,7 @@ impl SupplierOfferingReadService {
     ///
     /// # 参数
     /// * `db` - 数据库
-    /// * `data_scope` - 供给范围 Port
+    /// * `access` - 已装配的供给授权服务
     /// * `procurement` - 采购负责人规则解析
     ///
     /// # 返回
@@ -62,10 +62,10 @@ impl SupplierOfferingReadService {
     /// 不返回错误。
     pub fn new(
         db: Database,
-        data_scope: Arc<dyn OfferingDataScopePort>,
+        access: OfferingAccess,
         procurement: Arc<dyn OfferingProcurementOwners>,
     ) -> Self {
-        Self { db, data_scope, procurement }
+        Self { db, access, procurement }
     }
 }
 

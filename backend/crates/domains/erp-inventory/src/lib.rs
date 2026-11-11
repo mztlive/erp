@@ -25,9 +25,9 @@ pub use ports::{
     AdjustmentPeopleFact, AdjustmentPeopleFactsPort, AuthorizationPort, CatalogFactsPort,
     FailClosedAdjustmentPeopleFactsPort, FailClosedAuditPort, FailClosedAuthorizationPort,
     FailClosedCatalogFacts, FailClosedFulfillmentFacts, FailClosedWarehouseFacts, FulfillmentFactsPort,
-    InventoryAuditPort, InventoryAuthorization, InventoryReadProof, InventoryScopeMeta,
-    PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort,
-    WarehouseRevisionFact, WarehouseScope, applicant_object_ids, intersect_object_ids,
+    InventoryAction, InventoryAuditPort, InventoryAuthorization, InventoryReadProof, InventoryScopeMeta,
+    InventoryScopeSet, PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact,
+    WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope, applicant_object_ids, intersect_object_ids,
     latest_snapshot_submitters, merge_adjustment_people,
 };
 pub use repository::{

@@ -191,7 +191,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     {
         return Err(payload_conflict_error().into());
     }
-    ensure_submit_authorized(db, rbac, &adjustment, actor, executor).await?;
+    rbac.authorize_stock_adjustment_submit(&adjustment, actor, executor).await?;
     Ok(Some(instance.base.id))
 }
 
@@ -330,7 +330,7 @@ pub async fn find_stock_adjustment_start_result(
     if adjustment.approval_subject_version < expected_subject_version {
         return Err(Error::ConflictError("库存调整提交结果早于当前业务事实".to_string()));
     }
-    ensure_submit_authorized(db, rbac, &adjustment, actor, executor).await?;
+    rbac.authorize_stock_adjustment_submit(&adjustment, actor, executor).await?;
     Ok(Some(instance.base.id))
 }
 
@@ -436,30 +436,6 @@ async fn legacy_balance_versions_match(
     let expected =
         expected.iter().map(|item| (item.balance_id.as_str(), item.expected_version)).collect::<Vec<_>>();
     Ok(StockAdjustmentBalanceVersions::new(&balances).matches_legacy_result(adjustment, lines, &expected))
-}
-
-/// 在给定数据库快照内重验库存调整提交人的账号、动作权限、对象读取与范围。
-///
-/// # 参数
-/// * `db` - 授权与调整单所在数据库。
-/// * `rbac` - 动作权限与对象读取使用的 RBAC。
-/// * `adjustment` - 待提交的库存调整单。
-/// * `actor` - 当前认证操作人。
-/// * `executor` - 调用方数据库快照。
-///
-/// # 返回
-/// 授权通过时无返回值。
-///
-/// # 错误
-/// 账号未激活、不是制单人、没有 `stock_adjustment:submit`，或对象不可读时返回 `Forbidden`。授权读取失败时返回对应错误。
-pub(crate) async fn ensure_submit_authorized(
-    _db: &Database,
-    rbac: &dyn FulfillmentWorkflow,
-    adjustment: &StockAdjustment,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    rbac.authorize_stock_adjustment_submit(adjustment, actor, executor).await
 }
 
 pub(crate) async fn authorize_submit_with(

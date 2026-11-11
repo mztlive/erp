@@ -1,28 +1,21 @@
-//! 已由 identity 查询得到的客户主键与业务筛选。
+//! 客户业务归属筛选与 identity 授权查询执行。
 #![allow(async_fn_in_trait)]
 use erp_identity::CompiledAccess;
 use mongodb::Database;
-use mongodb::bson::{Document, doc};
+use mongodb::bson::doc;
 use mongodb::options::FindOptions;
-use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Repository, Result as RepositoryResult, aggregate,
-    mongo_ops,
-};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, aggregate};
 use serde::Deserialize;
 
 use super::CustomerExt;
 use super::customer::{CustomerAccountFilter, CustomerAccountRow};
 use super::customer_shared::{customer_account_projection, sort_doc};
-use crate::entity::customer::{CustomerAccount, CustomerAssignment};
-use crate::ports::{CustomerDataScopePort, CustomerResolvedScope};
-use crate::{Error, Result};
+use crate::{CustomerAccess, CustomerResolvedScope, Error, Result};
 
-/// 完整授权查询结果；不含角色、范围条款或个人上限。
+/// 当前主责客户业务筛选；授权条件由 identity 凭证提供。
 #[derive(Debug, Clone, Default)]
 pub struct CustomerReadScope {
-    pub authorized_customer_ids: Option<Vec<String>>,
     pub owned_customer_ids: Vec<String>,
-    pub collaborative_customer_ids: Vec<String>,
 }
 /// 跨页校验使用的客户身份和版本，不包含展示字段。
 #[derive(Debug, Deserialize)]
@@ -31,141 +24,6 @@ pub struct CustomerVersion {
     pub id: String,
     /// 客户乐观锁版本。
     pub version: u64,
-}
-
-impl CustomerReadScope {
-    /// 将已执行 identity 查询得到的客户集合用于业务筛选。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回完整查询结果的主键条件。
-    /// # 错误
-    /// 无。
-    pub fn document(&self) -> Document {
-        match &self.authorized_customer_ids {
-            Some(ids) => doc! { "id": { "$in": ids } },
-            None => doc! { "$expr": false },
-        }
-    }
-    /// 判断已经查询的授权结果是否为空。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 空结果为 true。
-    /// # 错误
-    /// 无。
-    pub fn is_empty(&self) -> bool {
-        self.authorized_customer_ids.as_ref().is_none_or(Vec::is_empty)
-    }
-}
-
-/// 客户账户集合上的授权范围查询。
-#[allow(async_fn_in_trait)]
-pub trait CustomerAccountRepositoryScopeExt {
-    /// 按明确授权条件读取单个客户。
-    ///
-    /// # 参数
-    /// * `id` - 客户稳定主键
-    /// * `scope` - 已证明的授权条件
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 不存在或不在范围内均返回 `None`。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// ID 条件不能替换范围交集；空授权不得返回文档。
-    async fn find_authorized(
-        &self,
-        id: &str,
-        scope: &CustomerReadScope,
-        executor: &mut dyn Executor,
-    ) -> RepositoryResult<Option<CustomerAccount>>;
-
-    /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
-    ///
-    /// # 参数
-    /// * `filter` - 已与授权条件求交的列表筛选
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 行；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 不得截断版本集合后继续拼接跨页结果。
-    async fn query_versions(
-        &self,
-        filter: &CustomerAccountFilter,
-        executor: &mut dyn Executor,
-    ) -> RepositoryResult<Vec<CustomerVersion>>;
-}
-
-impl CustomerAccountRepositoryScopeExt for Repository<'_, CustomerAccount> {
-    async fn find_authorized(
-        &self,
-        id: &str,
-        scope: &CustomerReadScope,
-        executor: &mut dyn Executor,
-    ) -> RepositoryResult<Option<CustomerAccount>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
-    }
-
-    async fn query_versions(
-        &self,
-        filter: &CustomerAccountFilter,
-        executor: &mut dyn Executor,
-    ) -> RepositoryResult<Vec<CustomerVersion>> {
-        mongo_ops::find_many(
-            &self.collection().clone_with_type::<CustomerVersion>(),
-            filter.to_doc(),
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "version": 1 })
-                .sort(doc! { "id": 1 })
-                .limit(10001)
-                .build(),
-            executor,
-        )
-        .await
-    }
-}
-
-/// 客户归属集合上的授权范围查询。
-#[allow(async_fn_in_trait)]
-pub trait CustomerAssignmentRepositoryScopeExt {
-    /// 读取某账号全部未删除归属，供读取动作补充历史参与。
-    ///
-    /// # 参数
-    /// * `user_id` - 销售人员
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回该人员全部归属行，含已结束窗口。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 历史参与只用于读取；调用方不得把本结果当作修改资格。
-    async fn list_for_user(
-        &self,
-        user_id: &str,
-        executor: &mut dyn Executor,
-    ) -> RepositoryResult<Vec<CustomerAssignment>>;
-}
-
-impl CustomerAssignmentRepositoryScopeExt for Repository<'_, CustomerAssignment> {
-    async fn list_for_user(
-        &self,
-        user_id: &str,
-        executor: &mut dyn Executor,
-    ) -> RepositoryResult<Vec<CustomerAssignment>> {
-        self.find_many(doc! { "user_id": user_id }, executor).await
-    }
 }
 
 /// 执行 identity 的完整查询阶段，返回有界客户主键。
@@ -206,7 +64,7 @@ pub async fn authorized_page(
     db: &Database,
     filter: &CustomerAccountFilter,
     context: &CustomerResolvedScope,
-    port: &dyn CustomerDataScopePort,
+    port: &CustomerAccess,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<CustomerAccountRow>> {
     let compiled = compiled(context)?;
@@ -245,7 +103,7 @@ pub async fn authorized_versions(
     db: &Database,
     filter: &CustomerAccountFilter,
     context: &CustomerResolvedScope,
-    port: &dyn CustomerDataScopePort,
+    port: &CustomerAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CustomerVersion>> {
     let compiled = compiled(context)?;
@@ -272,19 +130,6 @@ mod tests {
     use erp_core::common::time::Instant;
 
     use super::*;
-
-    #[test]
-    fn unmaterialized_or_empty_customer_results_never_become_an_unrestricted_filter() {
-        let mut scope = CustomerReadScope::default();
-        assert!(scope.is_empty());
-        assert_eq!(scope.document(), doc! {"$expr": false});
-        scope.authorized_customer_ids = Some(Vec::new());
-        assert!(scope.is_empty());
-        assert_eq!(scope.document(), doc! {"id": {"$in": Vec::<String>::new()}});
-        scope.authorized_customer_ids = Some(vec!["customer".into()]);
-        assert!(!scope.is_empty());
-        assert_eq!(scope.document(), doc! {"id": {"$in": ["customer"]}});
-    }
 
     #[test]
     fn missing_compiled_access_is_an_explicit_error() {

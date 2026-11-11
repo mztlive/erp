@@ -2,7 +2,6 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
-use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{DifferenceDecisionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
@@ -178,7 +177,8 @@ impl DifferenceCommit {
         executor: &mut dyn Executor,
     ) -> Result<(SupplierSettlementStatement, SupplierSettlementDifference)> {
         let context = self.context;
-        SettlementAccess::new(context.db.clone(), context.data_scope)
+        context
+            .data_scope
             .require_statement(&context.actor, "update", &self.request.statement_id, executor)
             .await?;
         SupplierSettlementService::new(context.db.clone())

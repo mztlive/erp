@@ -13,7 +13,4 @@ pub use customer::{
 };
 pub use extensions::CustomerExt;
 pub use owned::{CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository};
-pub use scope::{
-    CustomerAccountRepositoryScopeExt, CustomerAssignmentRepositoryScopeExt, CustomerReadScope,
-    CustomerVersion,
-};
+pub use scope::{CustomerReadScope, CustomerVersion};

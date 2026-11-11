@@ -12,7 +12,6 @@ use erp_finance::dto::payable::{
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
-use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -42,7 +41,6 @@ impl FundsAccess {
     /// * `actor` - 已认证操作人。
     /// * `resource` - 目标资金资源。
     /// * `action` - 目标动作。
-    /// * `purchase_access` - 采购访问器；本方法不读取它。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -55,10 +53,8 @@ impl FundsAccess {
         actor: &AuditActor,
         resource: &str,
         action: &str,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<(FundsReadContext, FundsAuthorization)> {
-        let _ = purchase_access;
         self.resolve_sources(actor, resource, action, true, true, executor).await
     }
 
@@ -124,7 +120,6 @@ impl FundsAccess {
     /// # 参数
     /// * `params` - 进项分配列表请求。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 最终授权进项分配页面与同口径汇总。
@@ -135,19 +130,12 @@ impl FundsAccess {
         &self,
         params: &PurchaseInvoiceAllocationListParams,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let snapshot = self
-            .checked_purchase_invoice_allocations(
-                params,
-                &query,
-                actor,
-                purchase_access,
-                params.scope_version.as_deref(),
-            )
+            .checked_purchase_invoice_allocations(params, &query, actor, params.scope_version.as_deref())
             .await?;
         Ok(snapshot)
     }
@@ -158,7 +146,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
     ///
     /// # 返回
@@ -171,13 +158,12 @@ impl FundsAccess {
         params: &PurchaseInvoiceAllocationListParams,
         query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
         checked_revalidated(
             expected,
-            || self.snapshot_purchase_invoice_allocations(params, query, actor, purchase_access),
-            || self.allocation_fingerprint_snapshot(query, actor, purchase_access),
+            || self.snapshot_purchase_invoice_allocations(params, query, actor),
+            || self.allocation_fingerprint_snapshot(query, actor),
         )
         .await
     }
@@ -188,7 +174,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     ///
     /// # 返回
     /// 同事务形成的最终授权进项分配页面。
@@ -200,26 +185,17 @@ impl FundsAccess {
         params: &PurchaseInvoiceAllocationListParams,
         query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
         let this = self.clone();
         let params = params.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.load_purchase_invoice_allocations(
-                        &params,
-                        &query,
-                        &actor,
-                        &purchase_access,
-                        executor,
-                    )
-                    .await
+                    this.load_purchase_invoice_allocations(&params, &query, &actor, executor).await
                 })
             })
             .await
@@ -231,7 +207,6 @@ impl FundsAccess {
     /// * `params` - 原始列表请求，用于比对范围版本。
     /// * `query` - 已规范化的列表查询。
     /// * `actor` - 已认证操作人。
-    /// * `purchase_access` - 采购访问器。
     /// * `executor` - 调用方事务。
     ///
     /// # 返回
@@ -244,11 +219,9 @@ impl FundsAccess {
         params: &PurchaseInvoiceAllocationListParams,
         query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
-        let (authorization, snapshot) =
-            self.allocation_projection(query, actor, purchase_access, true, executor).await?;
+        let (authorization, snapshot) = self.allocation_projection(query, actor, true, executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "进项发票分配无可见范围"));
         }
@@ -275,13 +248,11 @@ impl FundsAccess {
         &self,
         query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
         materialize: bool,
         executor: &mut dyn Executor,
     ) -> Result<(FundsAuthorization, AllocationSnapshot)> {
-        let (_, authorization) = self
-            .resolve_with_purchase(actor, "purchase_invoice_allocation", "list", purchase_access, executor)
-            .await?;
+        let (_, authorization) =
+            self.resolve_with_purchase(actor, "purchase_invoice_allocation", "list", executor).await?;
         if authorization.empty() {
             return Ok((authorization, AllocationSnapshot::default()));
         }
@@ -296,19 +267,17 @@ impl FundsAccess {
         &self,
         query: &PurchaseInvoiceAllocationListQuery,
         actor: &AuditActor,
-        purchase_access: &PurchaseAccess,
     ) -> Result<String> {
         let this = self.clone();
         let query = query.clone();
         let actor = actor.clone();
-        let purchase_access = purchase_access.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (authorization, snapshot) =
-                        this.allocation_projection(&query, &actor, &purchase_access, false, executor).await?;
+                        this.allocation_projection(&query, &actor, false, executor).await?;
                     if authorization.empty() {
                         return Ok(authorization.context.scope_version.clone());
                     }

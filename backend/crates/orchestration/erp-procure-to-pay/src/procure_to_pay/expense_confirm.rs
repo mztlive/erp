@@ -78,13 +78,13 @@ impl PurchaseOrderProcess {
             actor: actor.clone(),
         };
         let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
+        self.require_rbac()?;
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    apply_confirm(&db, ports.as_ref(), &rbac, &command, pending.as_ref(), executor).await
+                    apply_confirm(&db, ports.as_ref(), &command, pending.as_ref(), executor).await
                 })
             })
             .await
@@ -95,7 +95,6 @@ impl PurchaseOrderProcess {
 async fn apply_confirm(
     db: &Database,
     ports: &PurchaseOrderPorts,
-    _rbac: &erp_identity::SharedRbacService,
     command: &ConfirmCommand,
     pending: &dyn PendingAttachmentBatch,
     executor: &mut dyn Executor,

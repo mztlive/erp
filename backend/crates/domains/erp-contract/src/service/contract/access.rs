@@ -1,35 +1,26 @@
 //! 合同对象按独立负责销售、明确共享及负责销售组织授权；客户关系只用于建档资格。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use crate::authorization::{CompiledScope, ContractAuthorization};
 use crate::error::Result;
-use crate::ports::{
-    ContractDataScopePort, ContractParticipantPort, ContractResolvedScope, CustomerAssignmentFactsPort,
-    CustomerFactsPort,
-};
-use crate::repository::scope::ContractReadScope;
 
 /// 合同对象访问范围；列表、详情、附件、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct ContractAccess {
     db: Database,
-    scope: Arc<dyn ContractDataScopePort>,
+    scope: ContractAuthorization,
 }
 
 impl ContractAccess {
-    /// 绑定合同范围授权、客户归属与合法参与 Port。
+    /// 绑定合同集合与已装配完整事实模型的授权能力。
     ///
     /// # 参数
     /// * `db` - 合同集合所在数据库
-    /// * `scope` - 组合层注入的合同范围 Port
-    /// * `assignments` - 当前客户主责与协作事实
-    /// * `participants` - 合法单据参与事实
-    /// * `customers` - 在相同执行器中重验客户来源存在性
+    /// * `scope` - 组合层装配的固定授权能力
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
@@ -39,14 +30,7 @@ impl ContractAccess {
     ///
     /// # 关键业务约束
     /// 不得在构造时补公司范围；不得用签约经办充当当前负责人。
-    pub fn new(
-        db: Database,
-        scope: Arc<dyn ContractDataScopePort>,
-        assignments: Arc<dyn CustomerAssignmentFactsPort>,
-        participants: Arc<dyn ContractParticipantPort>,
-        customers: Arc<dyn CustomerFactsPort>,
-    ) -> Self {
-        let _ = (assignments, participants, customers);
+    pub fn new(db: Database, scope: ContractAuthorization) -> Self {
         Self { db, scope }
     }
 
@@ -62,9 +46,8 @@ impl ContractAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(ContractResolvedScope, ContractReadScope)> {
-        let scope = self.scope.resolve(actor, action, executor).await?;
-        Ok((scope.clone(), scope))
+    ) -> Result<CompiledScope> {
+        self.scope.resolve(actor, action, executor).await
     }
     /// 在独立事务检查完整合同对象。
     /// # 参数
@@ -78,7 +61,7 @@ impl ContractAccess {
         actor: &AuditActor,
         action: &str,
         contract_id: &str,
-    ) -> Result<ContractResolvedScope> {
+    ) -> Result<CompiledScope> {
         let this = self.clone();
         let actor = actor.clone();
         let action = action.to_owned();
@@ -87,7 +70,10 @@ impl ContractAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.require_with(actor, &action, &id, executor).await })
+                Box::pin(async move {
+                    this.require_with(actor.clone(), &action, &id, executor).await?;
+                    this.resolve(&actor, &action, executor).await
+                })
             })
             .await
     }
@@ -95,7 +81,7 @@ impl ContractAccess {
     /// # 参数
     /// actor、action、contract_id为可信入口及目标，executor为业务执行器。
     /// # 返回
-    /// 当前阶段元数据。
+    /// 完整对象授权通过时成功。
     /// # 错误
     /// 身份域拒绝时返回错误。
     pub async fn require_with(
@@ -104,9 +90,8 @@ impl ContractAccess {
         action: &str,
         contract_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<ContractResolvedScope> {
-        self.scope.require(&actor, action, contract_id, executor).await?;
-        self.scope.resolve(&actor, action, executor).await
+    ) -> Result<()> {
+        self.scope.require(&actor, action, contract_id, executor).await
     }
     /// 按实际客户来源检查创建资格。
     /// # 参数
@@ -120,7 +105,7 @@ impl ContractAccess {
         actor: &AuditActor,
         customer_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<ContractResolvedScope> {
+    ) -> Result<CompiledScope> {
         self.scope.require_create(actor, customer_id, executor).await
     }
 }
