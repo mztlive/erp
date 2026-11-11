@@ -6,7 +6,7 @@ use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJobId, BulkJobExt, ItemStatus};
 use persistence_core::NoTransaction;
 
-use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
+use super::SupplierImportProcess;
 use crate::{Error, Result};
 
 impl SupplierImportProcess {
@@ -22,15 +22,13 @@ impl SupplierImportProcess {
     /// # 错误
     /// 任务不存在、不是原提交人或不是供应商导入、任务尚未结束、源数据不可读或不完整，或仓储失败时返回错误。
     pub async fn failures(&self, id: &str, actor: &AuditActor) -> Result<SupplierImportFailures> {
+        self.job_access.require(id, actor, &mut NoTransaction).await?;
         let job = self
             .db
             .background_jobs()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
-        if job.requested_by != actor.id() || job.domain_job_type.as_deref() != Some(SUPPLIER_IMPORT_DOMAIN) {
-            return Err(Error::Forbidden("仅原提交人可以下载供应商待处理行".into()));
-        }
         if job.finished_at.is_none() {
             return Err(Error::ConflictError("请等待任务结束后下载待处理行".into()));
         }

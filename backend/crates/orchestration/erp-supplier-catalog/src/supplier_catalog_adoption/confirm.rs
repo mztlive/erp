@@ -41,6 +41,8 @@ pub struct AdoptionBatchResult {
 }
 
 pub(super) struct AdoptionExecution {
+    /// 持久化旧式预览须复验创建人；批次生成的内部视图由批次入口授权。
+    pub preview_id: Option<String>,
     pub preview: CatalogAdoptionPreview,
     pub source: SupplierCatalogItem,
     pub row: AdoptionRow,
@@ -78,13 +80,14 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
     ) -> Result<AdoptionBatchResult> {
         self.ensure_adoption_permissions(actor).await?;
+        self.require_preview_owner(actor, preview_id, &mut NoTransaction).await?;
         let preview = self
             .db
             .catalog_adoption_previews()
             .find_by_id(preview_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("选品预览不存在".into()))?;
-        preview.ensure_request(connection, actor.id(), &request)?;
+        preview.ensure_request(connection, &request)?;
         self.batch_access(connection, actor, &mut NoTransaction).await?;
         let command_id = self.freeze_command(connection, preview_id, &request, actor).await?;
         if preview.expires_at <= Instant::now() {
@@ -175,6 +178,7 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<AdoptionResult> {
         self.confirm_execution(
             AdoptionExecution {
+                preview_id: Some(preview.base.id.clone()),
                 preview: preview.clone(),
                 source: frozen.clone(),
                 row: row.clone(),
@@ -191,8 +195,8 @@ impl SupplierCatalogAdoptionProcess {
         execution: AdoptionExecution,
         actor: &AuditActor,
     ) -> Result<AdoptionResult> {
-        let AdoptionExecution { preview, source: frozen, row, command, group_anchor } = &execution;
-        self.batch_access(&preview.connection_id, actor, &mut NoTransaction).await?;
+        let AdoptionExecution { preview, source: frozen, row, command, group_anchor, .. } = &execution;
+        self.require_execution_access(&execution, actor, &mut NoTransaction).await?;
         if let Some(result) = self.replay(&frozen.base.id, row, actor, &mut NoTransaction).await? {
             return Ok(result);
         }
@@ -223,6 +227,20 @@ impl SupplierCatalogAdoptionProcess {
         }
     }
 
+    /// 预执行和逐项写事务使用相同的预览归属与来源供应商授权。
+    async fn require_execution_access(
+        &self,
+        execution: &AdoptionExecution,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if let Some(id) = &execution.preview_id {
+            self.require_preview_owner(actor, id, executor).await?;
+        }
+        self.batch_access(&execution.preview.connection_id, actor, executor).await?;
+        Ok(())
+    }
+
     async fn commit_row(
         &self,
         execution: AdoptionExecution,
@@ -231,7 +249,7 @@ impl SupplierCatalogAdoptionProcess {
         executor: &mut dyn Executor,
     ) -> Result<(AdoptionResult, bool)> {
         let AdoptionExecution { preview, row, command, group_anchor, .. } = &execution;
-        self.batch_access(&preview.connection_id, actor, executor).await?;
+        self.require_execution_access(&execution, actor, executor).await?;
         if let Some(result) = self.replay(&row.item_id, row, actor, executor).await? {
             return Ok((result, false));
         }

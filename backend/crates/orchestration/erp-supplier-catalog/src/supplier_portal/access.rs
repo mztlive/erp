@@ -1,11 +1,12 @@
 //! 决定写入的身份、供应商启用与内部对象范围重验。
 
+use std::slice;
+
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::repository::prelude::*;
 use erp_identity::{
-    AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission, PortalActor,
-    PortalIdentityService,
+    AccountDirectoryService, AuthorizationRegistry, AuthorizationService, Permission, PermissionSet,
+    PortalActor, PortalIdentityService,
 };
 use erp_supplier::{Error as SupplierError, SupplierAccount, SupplierExt};
 use persistence_core::Executor;
@@ -88,9 +89,6 @@ impl SupplierPortalProcess {
         supplier_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierAccount> {
-        if actor.kind() != AccountKind::Admin {
-            return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
-        }
         if let Err(error) = self.services.suppliers.require_with(actor, action, supplier_id, executor).await {
             if matches!(&error, SupplierError::Forbidden(_)) {
                 self.internal_actor(actor, executor).await?;
@@ -115,13 +113,11 @@ impl SupplierPortalProcess {
         if actor.kind() != AccountKind::Admin {
             return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
         }
-        let current = self
-            .db
-            .accounts()
-            .find_account(actor.id(), executor)
+        let current = AccountDirectoryService::new(self.db.clone())
+            .account(actor.id(), executor)
             .await?
             .ok_or_else(|| Error::Unauthenticated("内部账号不存在".into()))?;
-        if current.kind != actor.kind() || !current.can_login() {
+        if !current.matches_actor(actor) {
             return Err(Error::Unauthenticated("内部账号已失效".into()));
         }
         Ok(())
@@ -181,35 +177,15 @@ impl SupplierPortalProcess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.internal_permissions(actor, &[action], executor).await
-    }
-
-    /// 在同次身份快照中检查独立功能资格，各权限允许由不同启用角色提供。
-    /// # 参数
-    /// actor 为内部操作人，actions 为固定门户动作，executor 为原执行器。
-    /// # 返回
-    /// 当前账号有效且逐项功能资格成立时成功。
-    /// # 错误
-    /// 账号不存在或失效时保留身份错误，缺少权限时返回 Forbidden。
-    pub(super) async fn internal_permissions(
-        &self,
-        actor: &AuditActor,
-        actions: &[&str],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if actor.kind() != AccountKind::Admin {
-            return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
-        }
-        let permissions =
-            actions.iter().map(|action| portal_permission(action)).collect::<Result<Vec<_>>>()?;
+        let permission = portal_permission(action)?;
         let service =
             AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
-        let Some(qualified) = service.permissions(actor, &permissions, executor).await? else {
+        let Some(qualified) = service.permissions(actor, slice::from_ref(&permission), executor).await?
+        else {
             self.internal_actor(actor, executor).await?;
             return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
         };
-        let granted = qualified.permissions();
-        if !permissions.iter().all(|permission| granted.covers_one(permission)) {
+        if !qualified.same_role(slice::from_ref(&permission)) {
             return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
         }
         Ok(())
@@ -242,8 +218,7 @@ impl SupplierPortalProcess {
             .permissions(&actor, &permissions, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("请先配置当前启用且具确认资格的内部处理人".into()))?;
-        let granted = qualified.permissions();
-        if !permissions.iter().all(|permission| granted.covers_one(permission)) {
+        if !qualified.permissions().covers(&PermissionSet::new(permissions)) {
             return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
         }
         let account = qualified.account();

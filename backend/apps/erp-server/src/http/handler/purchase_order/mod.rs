@@ -53,8 +53,9 @@ use crate::wiring::{MongoPurchaseDataScope, purchase_ports};
 /// # 关键业务约束
 /// HTTP 列表、详情、候选、导出和变更单必须经此入口，不得回退失败关闭 Port。
 fn purchase_reads(state: &HttpState) -> PurchaseOrderReadService {
-    PurchaseOrderReadService::with_scope(
+    PurchaseOrderReadService::new(
         state.application().db(),
+        state.application().rbac(),
         MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
     )
 }

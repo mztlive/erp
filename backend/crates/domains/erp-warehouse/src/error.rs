@@ -1,6 +1,7 @@
 //! 仓库领域应用错误，并保留原有唯一索引冲突文案。
 
 use application_core::{ValidationIssues, impl_application_error_conversions, impl_domain_error_class};
+use erp_identity::Error as IdentityError;
 use persistence_core::impl_repository_error;
 
 /// Warehouse-domain result alias.
@@ -73,12 +74,33 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     }
 }
 
+/// 保留身份域错误分类，业务调用直接传播原始拒绝与设施失败。
+impl From<IdentityError> for Error {
+    fn from(error: IdentityError) -> Self {
+        match error {
+            IdentityError::Internal(value) | IdentityError::Rbac(value) => Self::Internal(value),
+            IdentityError::NotFound(value) => Self::NotFound(value),
+            IdentityError::ValidationError(value) => Self::ValidationError(value),
+            IdentityError::InvalidInput(value) => Self::InvalidInput(value),
+            IdentityError::BusinessLogicError(value) => Self::BusinessLogicError(value),
+            IdentityError::ConflictError(value) => Self::ConflictError(value),
+            IdentityError::ReceiptDuplicate(value) => Self::ReceiptDuplicate(value),
+            IdentityError::TransientTransaction(value) => Self::TransientTransaction(value),
+            IdentityError::Forbidden(value) => Self::Forbidden(value),
+            IdentityError::Unauthenticated(value) => Self::Unauthenticated(value),
+            IdentityError::Logic(value) => Self::Logic(value),
+            IdentityError::OutcomeUnknown(value) => Self::OutcomeUnknown(value),
+            IdentityError::RepositoryError(value) => Self::RepositoryError(value),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;
     use mongodb::error::Error as MongoError;
 
-    use super::Error;
+    use super::{Error, IdentityError};
 
     #[test]
     fn warehouse_unique_conflicts_keep_original_messages() {
@@ -102,6 +124,16 @@ mod tests {
             "数据已存在，请勿重复提交"
         );
         assert_eq!(super::duplicate_index_conflict_message(None), "数据已存在，请勿重复提交");
+    }
+
+    #[test]
+    fn identity_denials_and_facility_failures_keep_their_error_class() {
+        let denial = Error::from(IdentityError::Forbidden("对象无权访问".into()));
+        assert_eq!(denial.class(), ErrorClass::Forbidden);
+        assert!(matches!(denial, Error::Forbidden(message) if message == "对象无权访问"));
+        let facility = Error::from(IdentityError::Rbac("策略读取失败".into()));
+        assert_eq!(facility.class(), ErrorClass::Internal);
+        assert!(matches!(facility, Error::Internal(message) if message == "策略读取失败"));
     }
 
     #[test]

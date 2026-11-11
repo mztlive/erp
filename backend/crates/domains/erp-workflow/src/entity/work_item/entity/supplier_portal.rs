@@ -98,7 +98,7 @@ impl WorkItem {
     /// # 返回
     /// 完成后返回 `Ok(())`，保留全部责任历史。
     /// # 错误
-    /// 类型错误、任务非开放或操作人不是当前责任人时返回错误。
+    /// 类型错误、任务非开放或执行人无效时返回错误；分配资格由调用方通过 identity 核验。
     pub fn complete_supplier_portal_review(&mut self, actor_id: &str, at: Instant) -> Result<()> {
         self.ensure_supplier_portal_review()?;
         self.complete_open(actor_id.to_string(), at)?;
@@ -188,12 +188,10 @@ mod tests {
     }
 
     #[test]
-    fn only_current_internal_reviewer_can_complete_after_reassignment() {
+    fn authorized_reviewer_completion_preserves_reassigned_responsibility() {
         let mut item = task();
         assert!(item.complete_by_domain_command("reviewer", Instant::from_unix_secs(100)).is_err());
-        assert!(item.complete_supplier_portal_review("other", Instant::from_unix_secs(100)).is_err());
         item.reassign("replacement", Instant::from_unix_secs(110)).unwrap();
-        assert!(item.complete_supplier_portal_review("reviewer", Instant::from_unix_secs(120)).is_err());
         item.complete_supplier_portal_review("replacement", Instant::from_unix_secs(120)).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert_eq!(item.completed_by.as_deref(), Some("replacement"));

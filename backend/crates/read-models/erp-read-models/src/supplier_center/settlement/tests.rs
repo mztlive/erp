@@ -1,6 +1,8 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use application_core::AuditActor;
+use async_trait::async_trait;
 use erp_core::AccountKind;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
@@ -8,6 +10,10 @@ use erp_core::ids::{
     SupplierSettlementItemId, SupplierSettlementStatementId, WorkItemId,
 };
 use erp_core::money::{Amount, Quantity};
+use erp_identity::{
+    Error as IdentityError, IdentityAuditPort, PreparedResourceAudit, RbacService, Result as IdentityResult,
+    SharedRbacService,
+};
 use erp_supply::entity::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
     SupplierSettlementDifferenceData, SupplierSettlementDifferenceEvidence,
@@ -24,11 +30,34 @@ use erp_supply::service::supplier_settlement::shared::{
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use test_support::{TestDb, require_mongo};
 
 use super::*;
 use crate::Error;
+
+struct ReadOnlyAudit;
+
+#[async_trait]
+impl IdentityAuditPort for ReadOnlyAudit {
+    fn resource_log(
+        &self,
+        _: AuditActor,
+        _: &str,
+        _: &str,
+        _: String,
+    ) -> IdentityResult<PreparedResourceAudit> {
+        Err(IdentityError::Internal("只读夹具不执行审计写入".into()))
+    }
+
+    async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> IdentityResult<()> {
+        Err(IdentityError::Internal("只读夹具不执行审计写入".into()))
+    }
+}
+
+fn read_identity(db: &Database) -> SharedRbacService {
+    Arc::new(RbacService::new(db.clone(), Arc::new(ReadOnlyAudit)))
+}
 
 fn sample_statement() -> SupplierSettlementStatement {
     let mut statement = SupplierSettlementStatement::new(
@@ -154,7 +183,7 @@ fn detail_difference(
 async fn detail_missing_statement_maps_to_not_found() {
     require_mongo!(async {
         let fixture = TestDb::new("ful_r07_service_detail_missing").await.expect("测试数据库创建失败");
-        let service = SupplierSettlementReadService::new(fixture.db().clone());
+        let service = SupplierSettlementReadService::new(fixture.db().clone(), read_identity(fixture.db()));
         let actor = AuditActor::new("viewer-1".to_string(), "viewer".to_string(), AccountKind::Admin);
         let error = service
             .supplier_settlement_statement_detail("statement-missing", &actor)
@@ -200,7 +229,7 @@ async fn detail_attaches_evidence_and_reports_counts() {
             .create(&evidence, &mut NoTransaction)
             .await
             .expect("补证插入失败");
-        let service = SupplierSettlementReadService::new(db.clone());
+        let service = SupplierSettlementReadService::new(db.clone(), read_identity(db));
         let actor = AuditActor::new("viewer-1".to_string(), "viewer".to_string(), AccountKind::Admin);
         let view =
             service.supplier_settlement_statement_detail("statement-1", &actor).await.expect("详情查询失败");

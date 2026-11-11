@@ -618,23 +618,16 @@ impl InquiryImportReceipt {
 impl InquiryImportPreview {
     /// 核对未创建询价的客户专用预览。
     /// # 参数
-    /// `actor`、`customer`、`fingerprint` 为请求绑定，`merge` 为合并确认，`now` 为当前秒。
+    /// `customer`、`fingerprint` 为请求绑定，`merge` 为合并确认，`now` 为当前秒。
     /// # 返回
     /// 返回可一次性创建的已校验需求。
     /// # 错误
     /// 客户或用途不符、已处理、过期、文件错误及未确认合并时拒绝。
-    pub fn ensure_creatable(
-        &self,
-        actor: &str,
-        customer: &str,
-        fingerprint: &str,
-        merge: bool,
-        now: i64,
-    ) -> Result<()> {
+    pub fn ensure_creatable(&self, customer: &str, fingerprint: &str, merge: bool, now: i64) -> Result<()> {
         if self.creation_customer_id.as_deref() != Some(customer) || !self.inquiry_id.is_empty() {
             return Err(Error::NotFound("客户导入预览不存在或不可用".into()));
         }
-        self.ensure_confirmable(actor, "", 0, fingerprint, merge, now)?;
+        self.ensure_confirmable("", 0, fingerprint, merge, now)?;
         if self.result.is_some() {
             return Err(Error::ConflictError("该文件预览已创建询价，请打开原询价".into()));
         }
@@ -643,7 +636,7 @@ impl InquiryImportPreview {
 
     /// 核对预览绑定及确认前置条件。
     /// # 参数
-    /// `actor_id`、`inquiry_id`、`version` 和 `fingerprint` 为当前请求上下文，
+    /// `inquiry_id`、`version` 和 `fingerprint` 为当前请求上下文，
     /// `confirm_merge` 为销售明确确认，`now` 为服务端 Unix 秒。
     /// # 返回
     /// 全部匹配且预览没有错误时返回空结果。
@@ -651,14 +644,13 @@ impl InquiryImportPreview {
     /// 绑定不符、过期、错误未修正或重复行未经确认时拒绝导入。
     pub fn ensure_confirmable(
         &self,
-        actor_id: &str,
         inquiry_id: &str,
         version: u64,
         fingerprint: &str,
         confirm_merge: bool,
         now: i64,
     ) -> Result<()> {
-        if self.actor_id != actor_id || self.inquiry_id != inquiry_id || self.base.is_deleted() {
+        if self.inquiry_id != inquiry_id || self.base.is_deleted() {
             return Err(Error::NotFound("导入预览不存在或不可用".into()));
         }
         if self.expected_version != version || self.input_fingerprint != fingerprint {
@@ -940,15 +932,14 @@ mod tests {
     #[test]
     fn confirmation_rejects_other_actor_version_input_errors_and_unconfirmed_merges() {
         let mut preview = preview();
-        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &"a".repeat(64), true, 100).is_ok());
-        assert!(preview.ensure_confirmable("other", "inquiry", 1, &"a".repeat(64), true, 100).is_err());
-        assert!(preview.ensure_confirmable("actor", "other", 1, &"a".repeat(64), true, 100).is_err());
-        assert!(preview.ensure_confirmable("actor", "inquiry", 2, &"a".repeat(64), true, 100).is_err());
-        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &"b".repeat(64), true, 100).is_err());
-        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &"a".repeat(64), false, 100).is_err());
-        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &"a".repeat(64), true, 200).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 1, &"a".repeat(64), true, 100).is_ok());
+        assert!(preview.ensure_confirmable("other", 1, &"a".repeat(64), true, 100).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 2, &"a".repeat(64), true, 100).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 1, &"b".repeat(64), true, 100).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 1, &"a".repeat(64), false, 100).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 1, &"a".repeat(64), true, 200).is_err());
         push_issue(&mut preview.errors, "配送需求", 2, "配送数量", "数量非法");
-        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &"a".repeat(64), true, 100).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 1, &"a".repeat(64), true, 100).is_err());
     }
 
     #[test]
@@ -986,17 +977,16 @@ mod tests {
     fn creation_preview_binds_customer_actor_input_and_single_use() {
         let mut preview = preview();
         let fingerprint = "a".repeat(64);
-        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_err());
         preview.creation_customer_id = Some("customer".into());
         preview.inquiry_id.clear();
         preview.expected_version = 0;
-        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_ok());
-        assert!(preview.ensure_creatable("actor", "other", &fingerprint, true, 100).is_err());
-        assert!(preview.ensure_creatable("other", "customer", &fingerprint, true, 100).is_err());
-        assert!(preview.ensure_creatable("actor", "customer", &"b".repeat(64), true, 100).is_err());
-        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, false, 100).is_err());
-        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 200).is_err());
-        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_ok());
+        assert!(preview.ensure_creatable("other", &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &"b".repeat(64), true, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &fingerprint, false, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &fingerprint, true, 200).is_err());
+        assert!(preview.ensure_confirmable("inquiry", 1, &fingerprint, true, 100).is_err());
         preview.result = Some(InquiryImportResult {
             inquiry_id: "created".into(),
             preview_id: preview.base.id.clone(),
@@ -1004,10 +994,10 @@ mod tests {
             line_count: 1,
             allocation_count: 1,
         });
-        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_err());
         preview.result = None;
         push_issue(&mut preview.errors, "配送需求", 2, "配送数量", "数量非法");
-        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_err());
     }
 
     #[test]
@@ -1016,7 +1006,7 @@ mod tests {
         assert!(value.get("creation_customer_id").is_none());
         let loaded: InquiryImportPreview = serde_json::from_value(value).unwrap();
         assert!(loaded.creation_customer_id.is_none());
-        assert!(loaded.ensure_confirmable("actor", "inquiry", 1, &"a".repeat(64), true, 100).is_ok());
-        assert!(loaded.ensure_creatable("actor", "customer", &"a".repeat(64), true, 100).is_err());
+        assert!(loaded.ensure_confirmable("inquiry", 1, &"a".repeat(64), true, 100).is_ok());
+        assert!(loaded.ensure_creatable("customer", &"a".repeat(64), true, 100).is_err());
     }
 }

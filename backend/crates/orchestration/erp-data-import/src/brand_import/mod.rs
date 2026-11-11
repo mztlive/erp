@@ -22,6 +22,7 @@ use persistence_core::Executor;
 use storage::S3Storage;
 
 use crate::background::import_source::ImportSourceCache;
+use crate::repository::import_job_access::ImportJobAccess;
 use crate::{Error, Result};
 
 /// 持久化的品牌导入任务类型。
@@ -33,6 +34,7 @@ pub struct BrandImportProcess {
     db: Database,
     catalog: CatalogService,
     authorization: AuthorizationService,
+    job_access: ImportJobAccess,
     storage: S3Storage,
     codec: Arc<SensitiveDataCodec>,
     sources: Arc<ImportSourceCache<BrandImportJobRequest>>,
@@ -57,6 +59,8 @@ impl BrandImportProcess {
         storage: S3Storage,
         codec: Arc<SensitiveDataCodec>,
     ) -> Self {
+        let job_access =
+            ImportJobAccess::new(db.clone(), rbac.clone(), BRAND_IMPORT_DOMAIN, Some("product_brand:create"));
         let registration = AccessRegistration {
             permission: Permission::parse("product_brand:create").expect("固定品牌创建权限"),
             required_permissions: vec![],
@@ -71,6 +75,7 @@ impl BrandImportProcess {
             db,
             catalog,
             authorization,
+            job_access,
             storage,
             codec,
             sources: Arc::new(ImportSourceCache::new(20 * 1024 * 1024)),

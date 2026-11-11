@@ -2,6 +2,7 @@
 use std::collections::BTreeMap;
 
 use application_core::AuditActor;
+use erp_supply::SettlementAccess;
 use erp_supply::dto::supplier_settlement as dto;
 use erp_supply::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementStatement,
@@ -16,13 +17,13 @@ use erp_supply::service::supplier_settlement::review::{
 };
 use erp_supply::service::supplier_settlement::shared::zero_amount;
 use erp_workflow::WorkItemExt;
-use erp_workflow::entity::work_item::WorkItemType;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 use view_dto::SupplierSettlementStatementDetailView;
 
 use super::display_dto::SettlementStatementDisplayDetail;
-use super::{SupplierSettlementReadService, dto as view_dto};
+use super::{SupplierSettlementReadService, dto as view_dto, require_reviewer};
 use crate::{Error, Result};
 impl SupplierSettlementReadService {
     /// 查询供应商结算单详情（结算单 + 全部明细 + 全部差异）。
@@ -54,8 +55,11 @@ impl SupplierSettlementReadService {
         let statement = snapshot.statement;
         let items = snapshot.items;
         let differences = snapshot.differences;
+        let access = SettlementAccess::new(self.db.clone(), self.identity.clone())
+            .actions(actor, id, &mut NoTransaction)
+            .await?;
         let (mut allowed_actions, mut action_blockers, processing_state) =
-            settlement_object_actions(&statement, &differences, actor.id());
+            settlement_object_actions(&statement, &differences, &access);
         let cost_delta = statement.accepted_cost_delta(&items, &differences)?;
         let cost_adjustment_ready = cost_delta.is_zero();
         let (review_work_item, review_action_blockers, review_domain_actions) =
@@ -132,10 +136,7 @@ impl SupplierSettlementReadService {
                 "复核任务与当前结算主题不一致，已禁止决定",
             ));
         }
-        let eligible = true;
-        let separation_satisfied = !statement.is_prepared_by(actor.id());
-        let (domain_actions, action_blockers) =
-            settlement_review_access(item.is_owned_by(actor.id()), eligible, separation_satisfied);
+        let (domain_actions, action_blockers) = self.review_actions(statement, actor, &item).await?;
         Ok((
             Some(view_dto::SettlementReviewWorkItemView {
                 work_item_id: item.base.id,
@@ -153,6 +154,35 @@ impl SupplierSettlementReadService {
             Vec::new(),
             domain_actions,
         ))
+    }
+
+    /// 复核资格由 identity 检查；岗位分离沿用结算领域规则。
+    async fn review_actions(
+        &self,
+        statement: &SupplierSettlementStatement,
+        actor: &AuditActor,
+        item: &WorkItem,
+    ) -> Result<(Vec<String>, Vec<dto::SettlementReviewActionBlockerView>)> {
+        let authorized =
+            match require_reviewer(&self.db, &self.identity, actor, item, &mut NoTransaction).await {
+                Ok(()) => true,
+                Err(Error::Forbidden(_) | Error::NotFound(_)) => false,
+                Err(error) => return Err(error),
+            };
+        let separation_satisfied = !statement.is_prepared_by(actor.id());
+        let (domain_actions, action_blockers) = if authorized {
+            settlement_review_access(true, true, separation_satisfied)
+        } else {
+            (
+                Vec::new(),
+                vec![review_blocker(
+                    "REVIEW_DECISION",
+                    "REVIEW_ACCESS_DENIED",
+                    "当前账号不具备该复核任务的完整操作资格",
+                )],
+            )
+        };
+        Ok((domain_actions, action_blockers))
     }
 }
 

@@ -41,6 +41,20 @@ pub trait ImportWorkItems: Send + Sync {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()>;
+
+    /// 在原写事务证明正式任务仍分配给当前账号，业务状态由调用方核对。
+    /// # 参数
+    /// actor 为当前操作人，id 为精确任务 ID，executor 为调用方事务。
+    /// # 返回
+    /// 当前任务分配及详情范围均满足时成功。
+    /// # 错误
+    /// 账号、任务分配、范围或身份设施失效时拒绝。
+    async fn require_assigned(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()>;
 }
 
 #[async_trait]
@@ -59,5 +73,14 @@ where
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
         self.ensure_domain_decision_access(actor, item, executor).await
+    }
+
+    async fn require_assigned(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()> {
+        self.authorization.require_assigned(actor, id, executor).await
     }
 }

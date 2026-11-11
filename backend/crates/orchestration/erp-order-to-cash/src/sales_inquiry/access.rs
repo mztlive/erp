@@ -108,13 +108,13 @@ impl SalesInquiryAccess {
         Ok(inquiry)
     }
 
-    /// 只按当前开放责任任务读取对应询价必要事实。
+    /// 按当前开放责任任务读取对应询价的可信事实。
     ///
     /// # 参数
     /// `actor`、`action` 为采购当前动作，`id`、`task_id` 为精确对象身份，
     /// `task_version` 为写命令预期任务版本（仅读可为空），`executor` 为原事务。
     /// # 返回
-    /// 当前询价和包含责任行白名单的任务；调用方只能投影责任行。
+    /// 当前询价和包含办理责任行的任务；写命令仍按责任行校验。
     /// # 错误
     /// 任务终态、改派、版本或范围损坏、账号或权限失效时拒绝。
     pub async fn require_task(
@@ -127,7 +127,7 @@ impl SalesInquiryAccess {
         executor: &mut dyn Executor,
     ) -> Result<(SalesInquiry, WorkItem)> {
         let item = self.authorized_task(actor, action, task_id, executor).await?;
-        let inquiry = self.current_task_inquiry(actor, id, &item, executor).await?;
+        let inquiry = self.current_task_inquiry(id, &item, executor).await?;
         if task_version.is_some_and(|version| version != item.base.version) {
             return Err(Error::ConflictError("询价任务责任或版本已变化，请刷新".into()));
         }
@@ -154,7 +154,7 @@ impl SalesInquiryAccess {
         }
         let task = self.authorized_task(actor, action, task_id, executor).await?;
         if task.status == WorkItemStatus::Open {
-            let inquiry = self.current_task_inquiry(actor, id, &task, executor).await?;
+            let inquiry = self.current_task_inquiry(id, &task, executor).await?;
             return Ok((inquiry, task));
         }
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
@@ -164,7 +164,7 @@ impl SalesInquiryAccess {
             .find(|row| task.subject_version == inquiry_subject_version(row.version))
             .ok_or_else(task_missing)?;
         let lines = requirement.data.lines.iter().map(|line| line.line_id.clone()).collect::<Vec<_>>();
-        if !task.owns_completed_inquiry(actor.id(), id, requirement.version, &lines) {
+        if !task.completed_inquiry_current(id, requirement.version, &lines) {
             return Err(task_missing());
         }
         Ok((inquiry, task))
@@ -187,7 +187,6 @@ impl SalesInquiryAccess {
     /// 按已授权任务核对当前询价需求版本与完整责任行。
     async fn current_task_inquiry(
         &self,
-        actor: &AuditActor,
         id: &str,
         item: &WorkItem,
         executor: &mut dyn Executor,
@@ -200,7 +199,7 @@ impl SalesInquiryAccess {
             .iter()
             .map(|line| line.line_id.clone())
             .collect::<Vec<_>>();
-        if !item.owns_inquiry_task(actor.id(), id, inquiry.requirement_version, &ids) {
+        if !item.inquiry_task_current(id, inquiry.requirement_version, &ids) {
             return Err(task_missing());
         }
         Ok(inquiry)

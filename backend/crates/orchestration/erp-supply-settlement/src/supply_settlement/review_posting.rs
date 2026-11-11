@@ -9,6 +9,7 @@ use erp_finance::entity::payable::{PayableAccount, PayableEntry};
 use erp_finance::service::cost::supplier_settlement::persist_settlement_costs;
 use erp_finance::service::payable::supplier_settlement::persist_settlement_payable;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
+use erp_read_models::supplier_center::settlement::require_reviewer;
 use erp_supply::command_receipt::{ReviewDecisionReceipt, SupplyCommandResult};
 use erp_supply::dto::supplier_settlement::SettlementReviewDecisionStatus;
 use erp_supply::entity::supplier_settlement::{
@@ -127,6 +128,7 @@ async fn authorize_posting<A: WorkflowAuthorizationPort>(
     input: &Posting<'_, A>,
     ex: &mut dyn Executor,
 ) -> Result<()> {
+    require_reviewer(input.db, &input.work_items.identity, input.actor, input.work_item, ex).await?;
     input.work_items.ensure_domain_decision_access(input.actor, input.work_item, ex).await?;
     super::reviewers::ensure_reviewer(
         input.db,

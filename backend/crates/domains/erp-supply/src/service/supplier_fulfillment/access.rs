@@ -118,7 +118,6 @@ impl FulfillmentOrderAccess {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> Result<std::collections::BTreeSet<String>> {
-        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)
@@ -143,7 +142,7 @@ impl FulfillmentOrderAccess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let permission = authorization::action_permission("supplier_fulfillment_order", action)?;
-        if !self.authorization()?.has_permission(actor, &permission, executor).await? {
+        if !self.authorization()?.service.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有该操作权限".into()));
         }
         Ok(())

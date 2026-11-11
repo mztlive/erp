@@ -1,7 +1,6 @@
 //! 当前供应商申请与已授权内部审核的跨域读取入口。
 
 use application_core::{AuditActor, PageView};
-use erp_core::AccountKind;
 use erp_identity::PortalActor;
 use persistence_core::NoTransaction;
 use serde_json::Value;
@@ -67,7 +66,7 @@ impl SupplierPortalReadService {
         actor: &AuditActor,
         params: &PortalAdminListParams,
     ) -> Result<PageView<Value>> {
-        let authorization = self.internal_authorization(actor)?;
+        let authorization = self.internal_authorization()?;
         if params.supplier_id.trim().is_empty()
             || !authorization.supplier_readable(actor, &params.supplier_id, &mut NoTransaction).await?
         {
@@ -105,29 +104,23 @@ impl SupplierPortalReadService {
     /// 未知或越权统一返回 `NotFound`。非内部身份或未注入授权时返回 `Forbidden`。
     /// 查询或序列化失败时返回对应错误。
     pub async fn admin_application(&self, actor: &AuditActor, id: &str) -> Result<Value> {
-        if !self.internal_authorization(actor)?.request_readable(actor, id, &mut NoTransaction).await? {
+        if !self.internal_authorization()?.request_readable(actor, id, &mut NoTransaction).await? {
             return Err(hidden_target());
         }
         PortalApplicationRepository::new(&self.db).any_application(id, &mut NoTransaction).await?.internal()
     }
 
-    /// 默认拒绝内部读取，也拒绝供应商伪装内部调用。
+    /// 取得组合层装配的正式对象授权端口。
     ///
     /// # 参数
-    /// * `actor` - 调用方身份。
+    /// 无；调用对象授权时传入真实身份和原执行器。
     ///
     /// # 返回
-    /// 内部账号且已注入授权端口时返回该端口。
+    /// 已装配的授权端口；账号资格及数据范围由 identity 检查。
     ///
     /// # 错误
-    /// 非 `AccountKind::Admin` 或未注入授权时返回 `Forbidden`。
-    pub(super) fn internal_authorization(
-        &self,
-        actor: &AuditActor,
-    ) -> Result<&dyn PortalReadAuthorizationPort> {
-        if actor.kind() != AccountKind::Admin {
-            return Err(Error::Forbidden("仅内部人员可以读取审核资料".into()));
-        }
+    /// 未装配授权时返回 `Forbidden`。
+    pub(super) fn internal_authorization(&self) -> Result<&dyn PortalReadAuthorizationPort> {
         self.authorization.as_deref().ok_or_else(|| Error::Forbidden("申请读取授权未装配".into()))
     }
 }

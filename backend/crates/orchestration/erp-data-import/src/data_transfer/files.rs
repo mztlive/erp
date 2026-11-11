@@ -33,9 +33,10 @@ impl DataTransferProcess {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-        if job.requested_by != actor.id() || job.domain_job_type.as_deref() != Some(DOMAIN) {
-            return Err(Error::Forbidden("只能查询本人任务".into()));
+        if job.domain_job_type.as_deref() != Some(DOMAIN) {
+            return Err(Error::Forbidden("该任务不是文件处理任务".into()));
         }
+        self.require_owner(&job, actor).await?;
         Ok(job.into())
     }
 
@@ -124,7 +125,7 @@ impl DataTransferProcess {
             return Err(Error::BusinessLogicError("任务尚未完成或结果已过期，请查询原任务".into()));
         }
         let source = self.source(&job).await?;
-        source.kind.authorize_reader(&job.requested_by, actor)?;
+        let owned = self.require_reader(&job, source.kind, actor).await?;
         let asset =
             job.result_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务结果不存在".into()))?;
 
@@ -145,7 +146,7 @@ impl DataTransferProcess {
         };
         let compact = self.context_input(&job).await?;
         let mut context = self.handler.context(compact.kind, &compact.input, decoded.as_ref(), actor).await?;
-        if job.requested_by != actor.id() {
+        if !owned {
             context.retain_classification();
         }
         result.metadata["kind"] = json!(source.kind);

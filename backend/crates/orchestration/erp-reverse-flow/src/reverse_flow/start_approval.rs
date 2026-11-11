@@ -3,6 +3,7 @@
 mod authorization;
 mod common;
 mod customer_refund;
+mod financial_access;
 mod payment_reversal;
 mod prepare;
 mod receipt_reversal;

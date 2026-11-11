@@ -9,7 +9,6 @@ use super::{BOOKLETS, PROPOSALS, SelectionProposalFilter, SelectionReadScope};
 use crate::Result;
 use crate::entity::sales_selection::SalesSelectionProposal;
 use crate::repository::filter::push_undeleted;
-use crate::service::authorization_error::identity_error;
 
 /// 聚合分页结果；同一管道内先授权，再计数和分页。
 #[derive(Debug, Default, Deserialize)]
@@ -39,11 +38,11 @@ pub(super) async fn search(
     authorized_scope: &SelectionReadScope,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<SalesSelectionProposal>> {
-    authorized_scope.validate(executor).await.map_err(identity_error)?;
+    authorized_scope.validate(executor).await?;
     let collection = db.collection::<ProposalPage>(PROPOSALS);
     let mut pages =
         aggregate::rows(&collection, pipeline(filter, authorized_scope.stages()), executor).await?;
-    authorized_scope.validate(executor).await.map_err(identity_error)?;
+    authorized_scope.validate(executor).await?;
     let page = pages.pop().unwrap_or_default();
     Ok(PageResult { items: page.items, total: page.total.first().map_or(0, |row| row.count) })
 }

@@ -6,7 +6,6 @@ use erp_audit::execution::run_audited;
 use erp_finance::dto::receivable::UpdateCustomerReceiptRequest;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -44,7 +43,7 @@ impl ReceivableProcess {
         run_audited(&self.db, audit, move |db, executor| {
             Box::pin(async move {
                 ensure_receipt_edit_authorized(db, &rbac, &actor, &receipt_id, executor).await?;
-                persist_receipt_draft(db, &receipt_id, req, &actor, executor).await
+                persist_receipt_draft(db, &receipt_id, req, executor).await
             })
         })
         .await?;
@@ -73,16 +72,7 @@ pub(super) async fn ensure_receipt_edit_authorized(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let authorization =
-        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
-    let required = [Permission::parse("customer_receipt:submit")?];
-    let qualified = authorization
-        .permissions(actor, &required, executor)
-        .await?
-        .ok_or_else(|| Error::Forbidden("当前账号不可编辑客户回款单".into()))?;
-    if !qualified.same_role(&required) {
-        return Err(Error::Forbidden("当前账号缺少回款提交权限".into()));
-    }
+    super::receipt_access::require_receipt_owner(db, &rbac.identity, actor, id, executor).await?;
     if !rbac.runtime.source_readable(actor, DocumentType::CustomerReceipt, id, executor).await? {
         return Err(Error::Forbidden("无权读取该回款的完整资金来源".into()));
     }
@@ -94,7 +84,6 @@ async fn persist_receipt_draft(
     db: &Database,
     id: &str,
     req: UpdateCustomerReceiptRequest,
-    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut receipt = db
@@ -102,7 +91,7 @@ async fn persist_receipt_draft(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
-    receipt.ensure_draft_editor(actor.id())?;
+    receipt.ensure_draft_editable()?;
     ensure_expected_version(receipt.base.version, req.version)?;
     receipt.update(req.into()).map_err(|error| Error::ValidationError(error.to_string()))?;
     db.customer_receipts().update(&mut receipt, executor).await?;

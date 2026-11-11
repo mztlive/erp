@@ -20,5 +20,11 @@ pub(crate) fn process(state: &Application) -> DataTransferProcess {
     };
     let handler =
         Arc::new(BusinessTransfers::new(state.db(), state.rbac(), reader, state.storage().clone(), services));
-    DataTransferProcess::new(state.db(), state.storage().clone(), state.sensitive_data(), handler)
+    DataTransferProcess::new(
+        state.db(),
+        state.rbac(),
+        state.storage().clone(),
+        state.sensitive_data(),
+        handler,
+    )
 }

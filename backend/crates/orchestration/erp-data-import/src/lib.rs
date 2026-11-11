@@ -7,6 +7,7 @@ pub mod data_transfer;
 mod errors;
 pub mod import_apply;
 pub mod product_import;
+mod repository;
 pub mod sales_inquiry_import;
 pub mod supplier_import;
 mod xlsx;

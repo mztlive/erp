@@ -5,6 +5,8 @@ use std::collections::HashSet;
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 use erp_finance::dto::receivable::CommitInvoiceRequest;
+use erp_identity::SharedRbacService;
+use erp_support::authorization::files::require_owned;
 use erp_support::{
     AttachmentUsage, DocumentAttachment, DocumentAttachmentData, FileAssetExt, PendingAttachmentBatch,
 };
@@ -57,6 +59,7 @@ pub(crate) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBa
 /// 文件登记失败、附件不存在、不是发票证据、不是本人上传或附件关系写入失败时返回错误。
 pub(crate) async fn persist(
     db: &Database,
+    identity: &SharedRbacService,
     invoice_id: &str,
     ids: &[FileAssetId],
     pending: &dyn PendingAttachmentBatch,
@@ -64,6 +67,8 @@ pub(crate) async fn persist(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     pending.persist(db, executor).await?;
+    let file_ids = ids.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
+    require_owned(db, identity, actor, &file_ids, executor).await?;
     for id in ids {
         let asset = db
             .file_assets()
@@ -71,9 +76,6 @@ pub(crate) async fn persist(
             .await?
             .ok_or_else(|| Error::NotFound("发票附件不存在".into()))?;
         asset.ensure_invoice_evidence()?;
-        if asset.created_by != actor.id() {
-            return Err(Error::Forbidden("请上传本人登记的有效发票图片或 PDF".into()));
-        }
         let attachment = DocumentAttachment::new(
             DocumentAttachmentId::new(id_generator::next_id()),
             DocumentAttachmentData {

@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
@@ -8,8 +9,8 @@ use id_generator::next_id;
 use persistence_core::Executor;
 use validator::Validate;
 
-use super::SupplierSettlementService;
 use super::shared::*;
+use super::{SettlementAction, SupplierSettlementService};
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::repository::SupplierSettlementExt;
@@ -117,7 +118,7 @@ impl SupplierSettlementService {
     /// # 参数
     /// * `id` - 结算单主键。
     /// * `req` - 刷新请求，含期望版本和来源摘要。
-    /// * `actor_id` - 操作人，必须是当前经办人。
+    /// * `actor` - 当前真实经办账号。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -129,36 +130,18 @@ impl SupplierSettlementService {
         &self,
         id: &str,
         req: &RefreshSettlementStatementRequest,
-        actor_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PreparedRefresh> {
         let mut statement = self.load_statement(id, executor).await?;
-        if statement.prepared_by != actor_id {
-            return Err(Error::Forbidden("只有当前结算经办人可以刷新试算".to_string()));
-        }
+        self.access().require_action(actor, SettlementAction::Refresh, id, executor).await?;
         statement
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         if statement.source_snapshot_hash != req.expected_source_snapshot_hash {
             return Err(Error::ConflictError("结算依据已变化，请刷新详情并重新核对结算明细".to_string()));
         }
-        let source = self
-            .db
-            .supplier_settlement_source_evidence()
-            .latest_for_period(
-                &statement.supplier_id,
-                statement.period_start,
-                statement.period_end,
-                &statement.period_policy_id,
-                &statement.period_policy_version,
-                executor,
-            )
-            .await?
-            .ok_or_else(|| {
-                Error::BusinessLogicError(
-                    "SOURCE_EVIDENCE_MISSING: 冻结策略版本缺少完整来源证据批次".to_string(),
-                )
-            })?;
+        let source = self.refresh_source(&statement, executor).await?;
         let old_items = self.load_statement_items(id, executor).await?;
         let old_differences = self.load_statement_differences(&old_items, executor).await?;
         if source.source_hash == statement.source_snapshot_hash {
@@ -200,6 +183,30 @@ impl SupplierSettlementService {
             old_difference_ids,
         })
     }
+    /// 读取结算单冻结期间和策略对应的完整最新来源证据。
+    async fn refresh_source(
+        &self,
+        statement: &SupplierSettlementStatement,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierSettlementSourceEvidence> {
+        self.db
+            .supplier_settlement_source_evidence()
+            .latest_for_period(
+                &statement.supplier_id,
+                statement.period_start,
+                statement.period_end,
+                &statement.period_policy_id,
+                &statement.period_policy_version,
+                executor,
+            )
+            .await?
+            .ok_or_else(|| {
+                Error::BusinessLogicError(
+                    "SOURCE_EVIDENCE_MISSING: 冻结策略版本缺少完整来源证据批次".to_string(),
+                )
+            })
+    }
+
     /// 按原结算单号查重并只核对供应商和期间，随后重读当前行数。
     ///
     /// # 参数

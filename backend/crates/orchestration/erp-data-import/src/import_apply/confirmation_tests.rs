@@ -134,21 +134,20 @@ fn same_batch_confirmation_scopes_use_distinct_server_responsibility_keys() {
 }
 
 #[test]
-fn completion_requires_exact_task_subject_batch_and_current_owner() {
+fn completion_requires_exact_task_subject_batch() {
     let command = completion_command();
     let item = work_item();
     let confirmation = confirmation();
     let batch = batch();
 
-    validate_confirmation_completion(&command, &item, &confirmation, &batch, "user-1").unwrap();
-    assert!(validate_confirmation_completion(&command, &item, &confirmation, &batch, "other-user").is_err());
+    validate_confirmation_completion(&command, &item, &confirmation, &batch).unwrap();
     let mut stale = command;
     stale.expected_trial_version = 3;
-    assert!(validate_confirmation_completion(&stale, &item, &confirmation, &batch, "user-1").is_err());
+    assert!(validate_confirmation_completion(&stale, &item, &confirmation, &batch).is_err());
 }
 
 #[test]
-fn completion_preserves_version_snapshot_scope_identity_matrix_and_owner_error_order() {
+fn completion_preserves_version_snapshot_scope_identity_matrix_and_status_error_order() {
     use crate::Error;
 
     let mut command = completion_command();
@@ -159,38 +158,36 @@ fn completion_preserves_version_snapshot_scope_identity_matrix_and_owner_error_o
     command.expected_subject_version = "stale-subject".into();
     command.confirmation_scope = "UNKNOWN".into();
     assert!(matches!(
-        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::ConflictError(message))
             if message == "导入确认任务或批次版本已变化，请刷新后重试"
     ));
     command.expected_task_version = task.base.version;
     assert!(matches!(
-        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::ConflictError(message)) if message == "导入确认的批次或试算快照已变化"
     ));
     command.expected_subject_version = task.subject_version.clone();
     task.owner_role = "foreign".into();
-    assert!(matches!(
-        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
-        Err(Error::Logic(_))
-    ));
+    assert!(matches!(validate_confirmation_completion(&command, &task, &fact, &batch), Err(Error::Logic(_))));
     command.confirmation_scope = "SALES".into();
     batch.source_object_set = "SUPPLIER".into();
     assert!(matches!(
-        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::BusinessLogicError(message)) if message == "导入确认任务、责任范围或批次不匹配"
     ));
     task.owner_role = "role-sales".into();
     assert!(matches!(
-        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
+        validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::BusinessLogicError(message)) if message == "当前确认范围已不属于批次必要矩阵"
     ));
     batch.source_object_set = "CUSTOMER".into();
+    validate_confirmation_completion(&command, &task, &fact, &batch).unwrap();
+    task.status = WorkItemStatus::Completed;
     assert!(matches!(
-        validate_confirmation_completion(&command, &task, &fact, &batch, "other"),
-        Err(Error::Forbidden(message)) if message == "当前账号不是该导入确认的当前责任人"
+        validate_confirmation_completion(&command, &task, &fact, &batch),
+        Err(Error::ConflictError(message)) if message == "导入确认任务已不再开放"
     ));
-    validate_confirmation_completion(&command, &task, &fact, &batch, "user-1").unwrap();
 }
 
 #[test]

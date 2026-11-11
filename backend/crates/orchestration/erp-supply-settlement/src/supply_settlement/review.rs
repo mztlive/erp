@@ -5,17 +5,18 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
 use erp_identity::SharedRbacService;
+use erp_read_models::supplier_center::settlement::require_reviewer;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
     SettlementReviewRejectReason, SettlementReviewResult, SettlementStatus, SupplierSettlementStatement,
 };
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::review::{
     ensure_current_subject_and_resolved_differences, ensure_review_submission_ready,
     review_owner_organization_id, review_task_identity_matches, validate_review_submission_snapshot,
 };
+use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
@@ -71,7 +72,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req.validate()?;
         let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.statement_id, "结算单")?;
-        self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
+        self.domain()
+            .access()
+            .require_action(actor, SettlementAction::Submit, id, &mut NoTransaction)
+            .await?;
         let fingerprint = submit_review_fingerprint(&req);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.submit_review", id, &req.idempotency_key);
@@ -80,9 +84,8 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         {
             return Ok(result);
         }
-        let statement =
-            self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
-        validate_submission_command(&statement, &req, actor)?;
+        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        validate_submission_command(&statement, &req)?;
         self.authorize_reviewer(&req.reviewer_user_id, actor.id()).await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
@@ -231,8 +234,8 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             &statement,
             expected_task_version,
             &req.expected_subject_version,
-            actor,
         )?;
+        require_reviewer(&self.db, &self.work_items.identity, actor, &work_item, &mut NoTransaction).await?;
         Ok((statement, work_item))
     }
 
@@ -311,17 +314,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .find_by_id(work_item_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Internal("复核决定收据引用的任务不存在".to_string()))?;
-        if work_item.owner_user_id.as_deref() != Some(actor.id()) {
-            return Err(Error::Forbidden("仅原复核人可重放决定".into()));
+        if statement.is_prepared_by(actor.id()) {
+            return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
         }
-        reviewers::ensure_reviewer(
-            &self.db,
-            &self.work_items.identity,
-            actor.id(),
-            &statement.prepared_by,
-            &mut NoTransaction,
-        )
-        .await?;
+        require_reviewer(&self.db, &self.work_items.identity, actor, &work_item, &mut NoTransaction).await?;
         ensure_decision_replay(&statement, &work_item, &receipt)?;
         Ok(Some(review_decision_result(statement, work_item, receipt.operation_id.clone(), receipt)))
     }
@@ -357,16 +353,24 @@ impl SubmissionCommit {
     /// 主题、复核人、结算单、任务与收据按原顺序使用入口授权事务的执行器。
     async fn persist(self, executor: &mut dyn Executor) -> Result<(SupplierSettlementStatement, WorkItem)> {
         let context = self.context;
-        let mut current = context
+        context
             .data_scope
-            .require_statement(&context.actor, "submit", &self.prepared.statement.base.id, executor)
+            .require_action(
+                &context.actor,
+                SettlementAction::Submit,
+                &self.prepared.statement.base.id,
+                executor,
+            )
+            .await?;
+        let mut current = SupplierSettlementService::new(context.db.clone())
+            .load_statement(&self.prepared.statement.base.id, executor)
             .await?;
         if current.base.version != self.prepared.statement.base.version
             || current.subject_hash != self.prepared.statement.subject_hash
         {
             return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
         }
-        ensure_review_submission_ready(&context.db, &current, context.actor.id(), executor).await?;
+        ensure_review_submission_ready(&context.db, &current, executor).await?;
         reviewers::ensure_reviewer(
             &context.db,
             &self.identity,
@@ -511,7 +515,6 @@ pub fn validate_settlement_review_work_item(
     statement: &SupplierSettlementStatement,
     expected_task_version: u64,
     expected_subject_version: &str,
-    actor: &AuditActor,
 ) -> Result<()> {
     if item.base.version != expected_task_version {
         return Err(Error::ConflictError("复核任务责任或版本已变化，请刷新后重试".to_string()));
@@ -522,8 +525,8 @@ pub fn validate_settlement_review_work_item(
     if !statement.is_pending_review() || !review_work_item_binds_statement(item, statement) {
         return Err(Error::BusinessLogicError("待办与当前供应商结算复核不匹配".to_string()));
     }
-    if !item.is_owned_by(actor.id()) {
-        return Err(Error::Forbidden("当前账号不是该复核任务责任人，或处理权已变化".to_string()));
+    if item.status != WorkItemStatus::Open {
+        return Err(Error::ConflictError("复核任务已结束，请刷新后重试".into()));
     }
     Ok(())
 }
@@ -710,11 +713,7 @@ async fn persist_review_submission(
 fn validate_submission_command(
     statement: &SupplierSettlementStatement,
     req: &SubmitSettlementReviewRequest,
-    actor: &AuditActor,
 ) -> Result<()> {
-    if !statement.is_prepared_by(actor.id()) {
-        return Err(Error::Forbidden("只有当前对账负责人可以提交财务复核".to_string()));
-    }
     statement
         .ensure_version(req.expected_lock_version)
         .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;

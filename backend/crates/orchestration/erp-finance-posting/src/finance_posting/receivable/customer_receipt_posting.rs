@@ -534,7 +534,9 @@ pub(super) async fn load_commit_receipt(
             let version =
                 expected_version.ok_or_else(|| Error::ValidationError("已有回款缺少期望版本".to_string()))?;
             let (receipt, binding) = load_existing_commit_records(db, receipt_id, version, executor).await?;
-            receipt.ensure_draft_editor(actor.id())?;
+            super::receipt_access::require_receipt_owner(db, &rbac.identity, actor, receipt_id, executor)
+                .await?;
+            receipt.ensure_draft_editable()?;
             Ok((receipt, binding))
         },
     }

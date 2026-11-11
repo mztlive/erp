@@ -6,7 +6,7 @@ use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::AccountKind;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_settlement::{
@@ -371,7 +371,7 @@ async fn ensure_target_qualified(
 ) -> Result<()> {
     let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
     let permission = Permission::parse("supplier_settlement_statement:update")?;
-    if !crate::authorization::features(db.clone(), rbac.clone())
+    if !AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
         .has_permission(&actor, &permission, executor)
         .await?
     {
@@ -389,12 +389,12 @@ async fn list_candidates(
     let accounts = rbac.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
     let mut candidates = Vec::new();
     for account in accounts {
-        if account.id == current || !account.is_active_backoffice() {
+        if account.id == current {
             continue;
         }
         let required = [Permission::parse("supplier_settlement_statement:update")?];
         let actor = AuditActor::new(account.id, account.login_account, account.kind);
-        let qualified = crate::authorization::features(db.clone(), rbac.clone())
+        let qualified = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
             .permissions(&actor, &required, executor)
             .await?;
         let Some(qualified) = qualified.filter(|value| value.same_role(&required)) else { continue };

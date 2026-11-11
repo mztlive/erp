@@ -18,7 +18,6 @@ use crate::ports::sales_selection::SelectionCustomerAccessPort;
 use crate::repository::SalesSelectionExt;
 use crate::repository::sales_selection::authorization::SelectionFacts;
 use crate::repository::sales_selection::scope::SelectionReadScope;
-use crate::service::authorization_error::identity_error;
 
 /// 选品对象访问范围；列表、详情、候选、导出和写命令复用同一解析。
 #[derive(Clone)]
@@ -85,13 +84,9 @@ impl SelectionAccess {
             _ => return Err(Error::ValidationError("非选品资源".into())),
         };
         let permission = Permission::parse(format!("{resource}:{action}"))?;
-        let query = self
-            .authorization
-            .query(actor, &permission, AccessSubject::Direct, executor)
-            .await
-            .map_err(identity_error)?;
-        let compiled = query.compile(mapping.as_ref(), executor).await.map_err(identity_error)?;
-        self.authorization.validate(&compiled, executor).await.map_err(identity_error)?;
+        let query = self.authorization.query(actor, &permission, AccessSubject::Direct, executor).await?;
+        let compiled = query.compile(mapping.as_ref(), executor).await?;
+        self.authorization.validate(&compiled, executor).await?;
         Ok(SelectionReadScope::from_compiled(Arc::new(compiled), self.authorization.clone()))
     }
 
@@ -176,14 +171,11 @@ impl SelectionAccess {
             .require(
                 actor,
                 &Permission::parse(format!("{resource}:{action}"))?,
-                AccessTarget::Records {
-                    subject: AccessSubject::Direct,
-                    ids: ResourceTargets::new(&[id]).map_err(identity_error)?,
-                },
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
                 executor,
             )
             .await
-            .map_err(identity_error)
+            .map_err(Error::from)
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。
@@ -207,7 +199,7 @@ impl SelectionAccess {
         OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await
-            .map_err(identity_error)
+            .map_err(Error::from)
     }
 
     /// 检查拟创建选品册的责任资格。
@@ -231,8 +223,7 @@ impl SelectionAccess {
             self.rbac.clone(),
             Arc::new(SelectionFacts::proposed(self.db.clone(), owner, org)),
             self.customer_mapping.clone(),
-        )
-        .map_err(identity_error)?;
+        )?;
         let permission = Permission::parse("sales_selection_booklet:create")?;
         authorization
             .require(
@@ -240,11 +231,11 @@ impl SelectionAccess {
                 &permission,
                 AccessTarget::Records {
                     subject: AccessSubject::Direct,
-                    ids: ResourceTargets::new(&["selection_new"]).map_err(identity_error)?,
+                    ids: ResourceTargets::new(&["selection_new"])?,
                 },
                 executor,
             )
             .await
-            .map_err(identity_error)
+            .map_err(Error::from)
     }
 }

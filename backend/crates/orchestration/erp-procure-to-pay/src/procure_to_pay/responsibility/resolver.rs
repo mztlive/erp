@@ -7,10 +7,8 @@ use erp_core::AccountKind;
 use erp_identity::Permission;
 use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::entity::procurement_responsibility::{
-    EligibleProcurementOwner, ProcurementResponsibilityResolutionIdentity,
-    ProcurementResponsibilityResolutionLine,
+    ProcurementResponsibilityResolutionIdentity, ProcurementResponsibilityResolutionLine,
 };
-use erp_procurement::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use erp_procurement::service::procurement_responsibility::{
     CandidateResolution, ProcurementResponsibilityService,
 };
@@ -285,30 +283,6 @@ pub(super) fn plan_identities(
             .map_err(Error::Logic)
         })
         .collect()
-}
-
-/// 加载并校验单个采购负责人账号仍可登录.
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `owner_user_id` - 采购负责人账号 ID
-/// * `executor` - 数据库执行器，可为规则写事务会话
-///
-/// # 返回
-/// 返回存在、为后台管理员且可登录的负责人账号。
-///
-/// # 错误
-/// 账号不存在、类型或状态不合格，以及仓储查询失败时返回错误。
-pub(super) async fn load_owner_account(
-    db: &mongodb::Database,
-    owner_user_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<EligibleProcurementOwner> {
-    let account = ResponsibilityFactsAdapter { db: db.clone() }
-        .load_owner(owner_user_id, executor)
-        .await?
-        .ok_or_else(|| Error::ValidationError("采购负责人账号不存在".to_string()))?;
-    Ok(erp_procurement::service::procurement_responsibility::eligible_owner(&account)?)
 }
 
 /// 构造采购建单权限值对象。

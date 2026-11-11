@@ -84,13 +84,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let receipt = close_command_receipt(&id, &actor, &idempotency_key, expected_task_version, &decision)?;
         if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
             ensure_generic_work_item_mutation(&replayed)?;
-            self.ensure_task_manage(&actor, &replayed, &mut NoTransaction).await?;
+            self.authorization.require(&actor, "manage", &replayed.base.id, &mut NoTransaction).await?;
             return self.applied_outcome(replayed, &actor).await;
         }
         if item.base.version != expected_task_version {
             return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
         }
-        self.ensure_task_manage(&actor, &item, &mut NoTransaction).await?;
+        self.authorization.require(&actor, "manage", &item.base.id, &mut NoTransaction).await?;
         if !item.is_w29_closable() {
             return Err(Error::BusinessLogicError("只有 W29 登记的异常任务允许受控关闭".to_string()));
         }
@@ -122,7 +122,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if !replacement.is_w29_replacement_for(current) {
             return Err(Error::ConflictError("替代任务必须是同一 W29 对象类别的开放正式任务".to_string()));
         }
-        self.ensure_task_manage(actor, &replacement, &mut NoTransaction).await
+        self.authorization.require(actor, "manage", &replacement.base.id, &mut NoTransaction).await
     }
 
     /// 关闭目标及替代目标都必须在原写事务中重新证明管理资格。
@@ -133,7 +133,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         decision: &W29CloseFact,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.ensure_task_manage(actor, item, executor).await?;
+        self.authorization.require(actor, "manage", &item.base.id, executor).await?;
         if let Some(id) = decision.replacement_work_item_id.as_deref() {
             self.authorization.require(actor, "manage", id, executor).await?;
         }

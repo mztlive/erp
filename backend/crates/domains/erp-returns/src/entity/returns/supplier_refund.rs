@@ -216,38 +216,39 @@ pub enum SupplierSettlementMethod {
 }
 
 impl SupplierRefund {
-    /// 校验原经办人修改原单草稿的资格。
+    /// 校验原单的经办复核分离与可编辑状态。
     ///
     /// # 参数
-    /// * `actor_id` - 当前编辑人的账号
+    /// 无。
     ///
     /// # 返回
-    /// 原经办人与复核岗位分离且单据为草稿或已驳回时返回成功。
+    /// 经办人与复核岗位分离且单据为草稿或已驳回时返回成功。
     ///
     /// # 错误
-    /// 非原经办人返回权限错误，不可编辑状态返回状态冲突。
-    pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
+    /// 岗位未分离返回权限错误，不可编辑状态返回状态冲突。
+    pub fn ensure_draft_editable(&self) -> DraftEditResult<()> {
         FinancialDraftEditPolicy::ensure(
             &self.handled_by,
             &self.reviewed_by,
-            actor_id,
             matches!(self.status, SupplierRefundStatus::Draft | SupplierRefundStatus::Rejected),
         )
     }
 
-    /// 退款发起职责属于登记的经办人，复核人不得代为提交。
+    /// 校验退款经办人与复核人分离。
     ///
     /// # 参数
-    /// * `actor_id` - 当前提交人的账号。
+    /// 无。
+    ///
     /// # 返回
-    /// 经办人与复核岗位分离且本人发起时返回成功。
+    /// 经办人与复核人不同时返回成功。
+    ///
     /// # 错误
-    /// 非经办人或岗位未分离时返回 `LogicError`。
-    pub fn ensure_submitter(&self, actor_id: &str) -> Result<()> {
-        if self.handled_by == actor_id && self.reviewed_by != actor_id {
+    /// 岗位未分离时返回 `LogicError`。
+    pub fn ensure_separation(&self) -> Result<()> {
+        if self.handled_by != self.reviewed_by {
             return Ok(());
         }
-        Err(Error::from("仅退款经办人可以发起退款，且不得兼任复核人"))
+        Err(Error::from("退款经办人不得兼任复核人"))
     }
 
     /// 创建供应商退款（初始状态为草稿）。
@@ -524,14 +525,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn submitter_must_be_handler_and_separated_from_reviewer() {
+    fn handler_and_reviewer_must_be_separated() {
         let mut refund =
             SupplierRefund::new(SupplierRefundId::new("refund-test"), data(), "creator").unwrap();
-        assert!(refund.ensure_submitter("handler-1").is_ok());
-        assert!(refund.ensure_submitter("other").is_err());
-        assert!(refund.ensure_submitter("reviewer-1").is_err());
+        assert!(refund.ensure_separation().is_ok());
         refund.reviewed_by = refund.handled_by.clone();
-        assert!(refund.ensure_submitter("handler-1").is_err());
+        assert!(refund.ensure_separation().is_err());
     }
 
     #[test]
@@ -675,20 +674,18 @@ pub(crate) mod tests {
         assert!(refund.mark_posted().is_err());
     }
 
-    /// 经办人撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
+    /// 撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
     #[test]
-    fn original_handler_can_edit_cancelled_draft_and_resubmit() {
+    fn cancelled_draft_can_be_edited_and_resubmitted() {
         let mut record =
             SupplierRefund::new(SupplierRefundId::new("edit-original"), data(), "creator-1").unwrap();
         let identity = serde_json::to_value(&record).unwrap();
-        assert!(matches!(record.ensure_draft_editor("other"), Err(DraftEditError::Forbidden(_))));
-        assert!(matches!(record.ensure_draft_editor("reviewer-1"), Err(DraftEditError::Forbidden(_))));
-        record.ensure_draft_editor("handler-1").unwrap();
+        record.ensure_draft_editable().unwrap();
         assert!(!record.matches_version(0));
         record.start_approval().unwrap();
-        assert!(matches!(record.ensure_draft_editor("handler-1"), Err(DraftEditError::ConflictError(_))));
+        assert!(matches!(record.ensure_draft_editable(), Err(DraftEditError::ConflictError(_))));
         record.cancel_approval().unwrap();
-        record.ensure_draft_editor("handler-1").unwrap();
+        record.ensure_draft_editable().unwrap();
         record
             .update(SupplierRefundUpdate {
                 amount: Some(Amount::from_str("120.00").unwrap()),
@@ -737,8 +734,7 @@ pub(crate) mod tests {
         assert!(record.reject_approval(1).is_err());
         assert!(record.mark_posted().is_err());
         assert_eq!(record, before);
-        assert!(record.ensure_draft_editor("other").is_err());
-        assert!(record.ensure_draft_editor("handler-1").is_ok());
+        assert!(record.ensure_draft_editable().is_ok());
         record.update(SupplierRefundUpdate::default()).unwrap();
         assert_eq!(record.status, SupplierRefundStatus::Rejected);
         assert_eq!(record.start_approval().unwrap(), 2);

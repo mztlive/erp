@@ -82,6 +82,7 @@ impl SalesInquiryImportProcess {
             return Ok(result);
         }
         let mut data = self.creation_header(actor, &command.customer_id, executor).await?;
+        self.require_preview(actor, &command.preview_id, executor).await?;
         let mut preview = self
             .db
             .inquiry_import_previews()
@@ -89,7 +90,6 @@ impl SalesInquiryImportProcess {
             .await?
             .ok_or_else(|| Error::NotFound("导入预览不存在或不可用".into()))?;
         preview.ensure_creatable(
-            actor.id(),
             &command.customer_id,
             &command.input_fingerprint,
             command.confirm_merge_duplicates,

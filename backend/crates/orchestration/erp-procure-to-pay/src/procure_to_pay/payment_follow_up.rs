@@ -3,7 +3,7 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_identity::Permission;
+use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::purchase_center::payment_arrangement::arrangement_facts;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use super::PurchaseOrderProcess;
 use crate::{Error, Result};
+
+mod access;
 
 /// 跟进日为上海业务日期，不代表供应商付款到期日或对账完成。
 #[derive(Clone, Serialize, Deserialize)]
@@ -39,6 +41,7 @@ impl PurchaseOrderProcess {
     ) -> Result<()> {
         let entry = Permission::parse("purchase_payment_request:submit")?;
         let access = self.ports.access(self.db.clone());
+        let rbac = self.require_rbac()?.clone();
         let command = CommandReceipt::from_resource_parts(
             "payment-follow-up-",
             actor.id(),
@@ -56,7 +59,7 @@ impl PurchaseOrderProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require_source(&actor, &entry, std::slice::from_ref(&id), executor).await?;
-                    schedule(&db, &id, &req, &actor, &command, executor).await
+                    schedule(&db, &rbac, &id, &req, &actor, &command, executor).await
                 })
             })
             .await
@@ -65,6 +68,7 @@ impl PurchaseOrderProcess {
 /// 写入任务、审计与独立命令结果；不启动新事务。
 async fn schedule(
     db: &Database,
+    rbac: &SharedRbacService,
     id: &str,
     req: &SchedulePaymentFollowUp,
     actor: &AuditActor,
@@ -76,9 +80,10 @@ async fn schedule(
         .find_by_id(&req.task_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("付款安排任务不存在".into()))?;
-    if task.business_object_id != id || task.owner_user_id.as_deref() != Some(actor.id()) {
+    if task.business_object_id != id {
         return Err(Error::Forbidden("只能安排本人负责的采购付款跟进".into()));
     }
+    access::require_assigned(db, rbac, actor, &task, executor).await?;
     if let Some(receipt) = db.work_item_command_receipts().find_command(command.id(), executor).await? {
         receipt.committed_task(command)?;
         return Ok(());
@@ -92,7 +97,7 @@ async fn schedule(
     if task.base.version != req.expected_version {
         return Err(Error::ConflictError("付款安排已更新，请刷新后重新安排".into()));
     }
-    task.schedule_payment_follow_up(actor.id(), req.follow_up_date, BusinessDate::today(), Instant::now())?;
+    task.schedule_payment_follow_up(req.follow_up_date, BusinessDate::today(), Instant::now())?;
     db.work_items().update(&mut task, executor).await?;
     let audit =
         actor.clone().resource_log("work_item.payment_follow_up", "work_item", task.base.id.clone())?;

@@ -14,7 +14,6 @@ use crate::entity::work_item::{TaskAccess, WorkItem, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
-use crate::service::authorization::features;
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 任务详情已在本阶段授权后，计算展示动作资格。
@@ -35,7 +34,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
         let mut required = execution.clone();
         required.extend(decide.iter().cloned());
-        let qualified = features(&self.db, &self.identity)
+        let qualified = self
+            .authorization
+            .service
             .permissions(actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?;
@@ -128,7 +129,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             executor,
         )
         .await?;
-        if !task_facts_current(item, actor.id(), &facts) {
+        if !task_facts_current(item, &facts) {
             return Err(Error::Forbidden("任务业务版本或冻结责任不匹配".into()));
         }
         Ok(())
@@ -169,7 +170,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .brief_relation(&item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
         let required = item.qualification_permissions()?;
-        let qualified = features(&self.db, &self.identity)
+        let qualified = self
+            .authorization
+            .service
             .permissions(actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".into()))?;
@@ -188,32 +191,16 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         .await?;
         Ok(self.identity.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?)
     }
-
-    /// 在原事务证明任务管理权限及对象范围。
-    /// # 参数
-    /// actor、item 为真实账号和当前任务，executor 为原事务。
-    /// # 返回
-    /// identity 对当前任务管理判定成立时成功。
-    /// # 错误
-    /// 身份、功能资格或数据范围拒绝时失败。
-    pub async fn ensure_task_manage(
-        &self,
-        actor: &AuditActor,
-        item: &WorkItem,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.authorization.require(actor, "manage", &item.base.id, executor).await
-    }
 }
 
 /// 验证已授权任务的业务版本与冻结询价责任，不执行访问授权。
 /// # 参数
-/// item 为任务、actor_id 为实际办理人、facts 为当前业务事实。
+/// item 为已授权任务，facts 为当前业务事实。
 /// # 返回
 /// 根事实存在且冻结版本和责任仍一致时为 true。
 /// # 错误
 /// 无；缺事实或版本损坏返回 false。
-pub fn task_facts_current(item: &WorkItem, actor_id: &str, facts: &ObjectFactMap) -> bool {
+pub fn task_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
     let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else { return false };
     let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else { return false };
     if item.work_item_type == WorkItemType::SalesInquiryProcessing {
@@ -223,7 +210,7 @@ pub fn task_facts_current(item: &WorkItem, actor_id: &str, facts: &ObjectFactMap
         else {
             return false;
         };
-        if !item.owns_inquiry_task(actor_id, &item.business_object_id, version, ids) {
+        if !item.inquiry_task_current(&item.business_object_id, version, ids) {
             return false;
         }
     }

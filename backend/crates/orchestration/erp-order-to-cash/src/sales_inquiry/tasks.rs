@@ -83,10 +83,26 @@ impl SalesInquiryProcess {
         Ok(())
     }
 
-    pub(super) async fn complete_tasks(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
-        for mut item in self.active_tasks(id, executor).await? {
-            let owner = item.owner_user_id.clone().expect("开放询价责任任务必有当前负责人");
-            self.access().assignment_owner(&owner, executor).await?;
+    pub(super) async fn complete_tasks(
+        &self,
+        inquiry: &SalesInquiry,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let lines = inquiry
+            .current_requirement()?
+            .data
+            .lines
+            .iter()
+            .map(|line| line.line_id.clone())
+            .collect::<Vec<_>>();
+        for mut item in self.active_tasks(&inquiry.base.id, executor).await? {
+            if !item.inquiry_task_current(&inquiry.base.id, inquiry.requirement_version, &lines) {
+                return Err(Error::ConflictError("询价任务与当前需求或冻结责任范围不一致".into()));
+            }
+            let owner = item
+                .owner_user_id
+                .clone()
+                .ok_or_else(|| Error::ConflictError("询价任务缺少当前责任人".into()))?;
             item.complete_by_domain_command(owner, Instant::now())?;
             self.db.work_items().update(&mut item, executor).await?;
         }

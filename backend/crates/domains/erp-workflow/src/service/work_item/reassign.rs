@@ -18,15 +18,11 @@ use super::{
     ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
     WorkItemService,
 };
-use crate::entity::work_item::{
-    FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemType,
-};
+use crate::entity::work_item::{FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy};
 use crate::error::{Error, Result};
 use crate::ports::{TaskReadAction, WorkflowAuthorizationPort};
-use crate::service::authorization::features;
 
 pub(super) struct AssignmentAuthorizationSnapshot {
-    pub(super) actor_kind: erp_core::AccountKind,
     pub(super) assignee_kind: erp_core::AccountKind,
 }
 
@@ -97,7 +93,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await?;
         let mut candidates = Vec::new();
         for account in accounts {
-            if item.owner_user_id.as_deref() == Some(account.id.as_str()) || !account.can_login {
+            if item.owner_user_id.as_deref() == Some(account.id.as_str()) {
                 continue;
             }
             match self.assignment_authorization_snapshot(&actor, &account.id, &item).await {
@@ -183,13 +179,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             )?;
             if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
                 ensure_generic_work_item_mutation(&replayed)?;
-                self.ensure_task_manage(&actor, &replayed, &mut NoTransaction).await?;
+                self.authorization.require(&actor, "manage", &replayed.base.id, &mut NoTransaction).await?;
                 return self.applied_outcome(replayed, &actor).await;
             }
             if item.base.version != expected_task_version {
                 return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
             }
-            self.ensure_task_manage(&actor, &item, &mut NoTransaction).await?;
+            self.authorization.require(&actor, "manage", &item.base.id, &mut NoTransaction).await?;
             let authorization =
                 self.assignment_authorization_snapshot(&actor, &target_user_id, &item).await?;
             let updated = self
@@ -225,9 +221,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .account(assignee_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-        let snapshot =
-            AssignmentAuthorizationSnapshot { actor_kind: actor.kind(), assignee_kind: assignee.kind };
-        self.ensure_task_manage(actor, item, &mut NoTransaction).await?;
+        let snapshot = AssignmentAuthorizationSnapshot { assignee_kind: assignee.kind };
+        self.authorization.require(actor, "manage", &item.base.id, &mut NoTransaction).await?;
         self.ensure_assignment_candidate(
             assignee_id,
             assignee.kind,
@@ -263,14 +258,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<()> {
         let actor = AuditActor::new(user_id.into(), user_id.into(), expected_kind);
         let required = item.qualification_permissions()?;
-        let qualified = features(&self.db, &self.identity)
+        let qualified = self
+            .authorization
+            .service
             .permissions(&actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
         let account = qualified.account();
-        if item.work_item_type == WorkItemType::SupplierPortalReview && !account.is_active_backoffice() {
-            return Err(Error::Forbidden("供应商申请确认人必须为启用的内部账号".into()));
-        }
         let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
         if !qualified.same_role(&required) {
             return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
@@ -441,7 +435,9 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
     let qualifications =
         tasks.iter().map(WorkItem::qualification_permissions).collect::<CoreResult<Vec<_>>>()?;
     let required = qualifications.iter().flatten().cloned().collect::<Vec<_>>();
-    let qualified = features(&service.db, &service.identity)
+    let qualified = service
+        .authorization
+        .service
         .permissions(&actor, &required, executor)
         .await?
         .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;

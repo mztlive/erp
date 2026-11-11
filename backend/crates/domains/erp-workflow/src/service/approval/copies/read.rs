@@ -3,10 +3,11 @@ use application_core::AuditActor;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::ApprovalProcessInstance;
 use chrono::Utc;
+use erp_identity::{AccessSubject, AccessTarget, Permission, ResourceTargets};
 use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 
-use super::require_reader;
+use super::authorization::authorization;
 use crate::entity::approval_copy::ApprovalCopyReceipt;
 use crate::entity::approval_integration::{ApprovalMaterialFile, ApprovalSubjectSnapshot};
 use crate::error::{Error, Result};
@@ -76,10 +77,30 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             return Err(Error::ValidationError("抄送查询条件无效".into()));
         }
         query.query = query.query.map(|q| q.trim().to_owned()).filter(|q| !q.is_empty());
-        require_reader(&self.identity, actor, &mut NoTransaction).await?;
-        let page = self.db.approval_copies().page(actor.id(), &query, &mut NoTransaction).await?;
-        require_reader(&self.identity, actor, &mut NoTransaction).await?;
-        Ok(page)
+        let db = self.db.clone();
+        let identity = self.identity.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (authorization, mapping) = authorization(&db, &identity)?;
+                    let access = authorization
+                        .query(
+                            &actor,
+                            &Permission::parse("approval_copy:list")?,
+                            AccessSubject::Direct,
+                            executor,
+                        )
+                        .await?;
+                    let compiled = access.compile(mapping.as_ref(), executor).await?;
+                    authorization.validate(&compiled, executor).await?;
+                    let page = db.approval_copies().page(&compiled, &query, executor).await?;
+                    authorization.validate(&compiled, executor).await?;
+                    Ok(page)
+                })
+            })
+            .await
     }
 
     /// 返回精确抄送的提交资料及有界历史。
@@ -181,15 +202,24 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .clone()
             .with_transaction(move |ex| {
                 Box::pin(async move {
-                    require_reader(&service.identity, &actor, ex).await?;
+                    let (authorization, _) = authorization(&service.db, &service.identity)?;
+                    authorization
+                        .require(
+                            &actor,
+                            &Permission::parse("approval_copy:read")?,
+                            AccessTarget::Records {
+                                subject: AccessSubject::Direct,
+                                ids: ResourceTargets::new(
+                                    &ids.iter().map(String::as_str).collect::<Vec<_>>(),
+                                )?,
+                            },
+                            ex,
+                        )
+                        .await?;
                     for id in &ids {
-                        service.copy_subject(&actor, id, ex).await?;
+                        service.copy_subject_facts(id, ex).await?;
                     }
-                    Ok(service
-                        .db
-                        .approval_copies()
-                        .mark_read(&ids, actor.id(), Utc::now().timestamp(), ex)
-                        .await?)
+                    Ok(service.db.approval_copies().mark_read(&ids, Utc::now().timestamp(), ex).await?)
                 })
             })
             .await
@@ -201,9 +231,29 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         id: &str,
         ex: &mut dyn Executor,
     ) -> Result<(ApprovalCopyReceipt, ApprovalSubjectSnapshot, ApprovalProcessInstance)> {
-        require_reader(&self.identity, actor, ex).await?;
-        let receipt =
-            self.db.approval_copies().receipt(id, actor.id(), ex).await?.ok_or_else(copy_not_found)?;
+        let (authorization, _) = authorization(&self.db, &self.identity)?;
+        authorization
+            .require(
+                actor,
+                &Permission::parse("approval_copy:detail")?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                ex,
+            )
+            .await
+            .map_err(|error| match Error::from(error) {
+                Error::Forbidden(_) | Error::NotFound(_) => copy_not_found(),
+                error => error,
+            })?;
+        self.copy_subject_facts(id, ex).await
+    }
+
+    /// 在同一授权阶段读取冻结资料、实例和收件记录，核对业务关联。
+    async fn copy_subject_facts(
+        &self,
+        id: &str,
+        ex: &mut dyn Executor,
+    ) -> Result<(ApprovalCopyReceipt, ApprovalSubjectSnapshot, ApprovalProcessInstance)> {
+        let receipt = self.db.approval_copies().receipt(id, ex).await?.ok_or_else(copy_not_found)?;
         let snapshot = self
             .db
             .approval_subject_snapshots()
@@ -216,7 +266,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.instance_id), ex)
             .await?
             .ok_or_else(copy_not_found)?;
-        if !receipt.matches_subject(actor.id(), &snapshot, &instance) {
+        if !receipt.matches_subject(&snapshot, &instance) {
             return Err(copy_not_found());
         }
         Ok((receipt, snapshot, instance))

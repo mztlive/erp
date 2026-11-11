@@ -11,7 +11,7 @@ use erp_procurement::entity::procurement_responsibility::{
 use persistence_core::{Executor, NoTransaction};
 
 use super::ProcurementResponsibilityProcess;
-use super::resolver::{ResolutionInput, load_owner_account};
+use super::resolver::ResolutionInput;
 use crate::procure_to_pay::responsibility::eligibility::ProcurementInquiryEligibility;
 use crate::{Error, Result};
 
@@ -38,11 +38,11 @@ impl ProcurementResponsibilityProcess {
                 let permission = Permission::parse("purchase_order:create")?;
                 let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
                     .permissions(&actor, std::slice::from_ref(&permission), executor)
-                    .await?;
-                if qualified.is_none() {
-                    load_owner_account(&self.db, owner, executor).await?;
-                }
-                if !qualified.is_some_and(|value| value.same_role(std::slice::from_ref(&permission))) {
+                    .await?
+                    .ok_or_else(|| {
+                        Error::ValidationError(format!("采购负责人 {owner} 必须为可登录后台账号"))
+                    })?;
+                if !qualified.same_role(std::slice::from_ref(&permission)) {
                     return Err(Error::BusinessLogicError(format!(
                         "采购负责人 {owner} 缺少 purchase_order:create 权限"
                     )));

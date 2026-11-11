@@ -26,13 +26,13 @@ impl DataTransferProcess {
     pub async fn context(&self, id: &str, actor: &AuditActor) -> Result<TransferContext> {
         let job = self.transfer_job(id).await?;
         let mut source = self.context_input(&job).await?;
-        source.kind.authorize_reader(&job.requested_by, actor)?;
+        let owned = self.require_reader(&job, source.kind, actor).await?;
         let expired = source.expires_at <= Instant::now().unix_secs();
         source.input["__context_expires_at"] = json!(source.expires_at);
         let result =
             if source.kind.is_export() || expired { None } else { self.context_result(&job).await? };
         let mut view = self.handler.context(source.kind, &source.input, result.as_ref(), actor).await?;
-        if job.requested_by != actor.id() {
+        if !owned {
             view.retain_classification();
         }
         view.can_cancel = job.cancellation_allowed();
@@ -47,9 +47,7 @@ impl DataTransferProcess {
 
     pub(super) async fn owned_job(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
         let job = self.transfer_job(id).await?;
-        if job.requested_by != actor.id() {
-            return Err(Error::Forbidden("只能读取本人提交任务的业务结果".into()));
-        }
+        self.require_owner(&job, actor).await?;
         Ok(job)
     }
 
@@ -142,9 +140,7 @@ impl BusinessTransfers {
             view.state(TransferResumeState::Expired, "业务预览已过期，请重新上传文件");
             return Ok(());
         };
-        if preview.actor_id != actor.id() {
-            return Err(Error::Forbidden("无权读取此业务预览".into()));
-        }
+        service.require_preview(actor, &preview.base.id, &mut NoTransaction).await?;
         view.preview_expires_at = Some(preview.expires_at);
         if let Some(confirmed) = preview.result {
             let inquiry = service.require_import(actor, &confirmed.inquiry_id, &mut NoTransaction).await?;

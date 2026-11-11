@@ -13,6 +13,7 @@ use erp_workflow::WorkItemExt;
 
 use super::*;
 use crate::FinancePostingPorts;
+use crate::finance_posting::task_access::{TaskPurpose, require_task};
 
 impl PurchasePaymentRequestProcess {
     /// 查询当前付款任务可选择的供应商留抵。
@@ -208,9 +209,10 @@ async fn authorize_replay(
         .find_by_id(&req.work_item_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原任务不存在".into()))?;
-    if task.owner_user_id.as_deref() != Some(actor.id()) || task.business_object_id != id {
+    if task.business_object_id != id {
         return Err(Error::Forbidden("不能读取其他任务的抵扣结果".into()));
     }
+    require_task(db, rbac, actor, &task, TaskPurpose::Payment, executor).await?;
     rbac.tasks.ensure_domain_decision_access(actor, &task, executor).await?;
     Ok(())
 }

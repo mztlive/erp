@@ -23,7 +23,6 @@ use crate::ports::{PreparedWorkflowAudit, WorkflowAuthorizationPort};
 use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
 use crate::repository::work_item::finance_rotation;
-use crate::service::authorization::features;
 
 /// 创建财务责任规则请求。
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -372,13 +371,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let requested = payment.union(&invoice).into_vec();
         let mut options = Vec::new();
         for account in accounts {
-            if !account.is_active_backoffice() {
-                continue;
-            }
             let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-            let Some(qualified) = features(&self.db, &self.identity)
-                .permissions(&actor, &requested, &mut NoTransaction)
-                .await?
+            let Some(qualified) =
+                self.authorization.service.permissions(&actor, &requested, &mut NoTransaction).await?
             else {
                 continue;
             };
@@ -472,7 +467,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             AccountKind::Admin,
         );
         let requested = required.iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?;
-        let qualified = features(&self.db, &self.identity).permissions(&actor, &requested, executor).await?;
+        let qualified = self.authorization.service.permissions(&actor, &requested, executor).await?;
         if qualified.is_none_or(|qualified| !qualified.same_role(&requested)) {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少退货处理权限，请调整财务责任配置",
@@ -538,9 +533,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<()> {
         let required = required_finance_permissions(operation)?;
         let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-        let qualified = features(&self.db, &self.identity)
-            .permissions(&actor, &required.clone().into_vec(), executor)
-            .await?;
+        let qualified =
+            self.authorization.service.permissions(&actor, &required.clone().into_vec(), executor).await?;
         let Some(qualified) = qualified else {
             // 仅拒绝路径读取目录以保留缺失与停用的既有提示，不重复读取成功账号。
             let exists = self.identity.directory().account(owner_user_id, executor).await?.is_some();

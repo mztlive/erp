@@ -6,7 +6,9 @@ use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled as ensure_identity_org_enabled;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{
+    AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
+};
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::{
@@ -112,7 +114,7 @@ impl SupplierFulfillmentProcess {
             self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
         let mut candidates = Vec::new();
         for account in accounts {
-            if account.base.id == order.follow_up_user_id || !account.is_active_backoffice() {
+            if account.base.id == order.follow_up_user_id {
                 continue;
             }
             if !account_can_follow(&self.db, &rbac, &account.base.id, &mut NoTransaction).await? {
@@ -310,7 +312,7 @@ async fn account_can_follow(
     let permission = Permission::parse("supplier_fulfillment_order:handover").map_err(Error::from)?;
     let actor =
         application_core::AuditActor::new(user_id.into(), user_id.into(), erp_core::AccountKind::Admin);
-    Ok(crate::authorization::features(db.clone(), rbac.clone())
+    Ok(AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
         .has_permission(&actor, &permission, executor)
         .await?)
 }

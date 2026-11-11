@@ -3,24 +3,15 @@
 use async_trait::async_trait;
 use erp_catalog::CatalogExt;
 use erp_catalog::repository::prelude::*;
-use erp_core::AccountKind;
 use erp_core::ids::{ProductCategoryId, SkuId};
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AccountCore};
-use erp_procurement::entity::facts::IdentityOwnerFact;
+use erp_identity::{AccessControlExt, AccountSummary};
 use erp_procurement::entity::procurement_responsibility::ProcurementCatalogBundle;
 use erp_procurement::ports::procurement_responsibility::ProcurementResponsibilityFactsPort;
 use persistence_core::Executor;
 
 pub(super) struct ResponsibilityFactsAdapter {
     pub(super) db: mongodb::Database,
-}
-
-/// 保留提供方真实账号资格判断；姓名仅作为展示值透传。
-fn owner_fact(account: AccountCore) -> IdentityOwnerFact {
-    let can_login = account.can_login();
-    let is_admin = account.is_kind(AccountKind::Admin);
-    IdentityOwnerFact { id: account.base.id, name: account.name, can_login, is_admin }
 }
 
 #[async_trait]
@@ -39,27 +30,27 @@ impl ProcurementResponsibilityFactsPort for ResponsibilityFactsAdapter {
         &self,
         owner_ids: &[String],
         executor: &mut dyn Executor,
-    ) -> persistence_core::Result<Vec<IdentityOwnerFact>> {
+    ) -> persistence_core::Result<Vec<AccountSummary>> {
         Ok(self
             .db
             .accounts()
             .list_procurement_responsibility_owners(owner_ids, executor)
             .await?
             .into_iter()
-            .map(owner_fact)
+            .map(|account| AccountSummary::from(&account))
             .collect())
     }
     async fn load_owner(
         &self,
         owner_id: &str,
         executor: &mut dyn Executor,
-    ) -> persistence_core::Result<Option<IdentityOwnerFact>> {
+    ) -> persistence_core::Result<Option<AccountSummary>> {
         Ok(self
             .db
             .accounts()
             .find_procurement_responsibility_owner(owner_id, executor)
             .await?
-            .map(owner_fact))
+            .map(|account| AccountSummary::from(&account)))
     }
     async fn sku_exists(&self, id: &SkuId, executor: &mut dyn Executor) -> persistence_core::Result<bool> {
         Ok(self.db.skus().has_procurement_responsibility_sku(id, executor).await?)

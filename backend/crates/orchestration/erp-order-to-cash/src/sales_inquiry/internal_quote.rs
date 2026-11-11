@@ -13,6 +13,7 @@ use erp_supply::inquiry::{
     InquiryFeeBasis, InquiryFeeBasisData, InquiryQuote, InquiryQuoteData, InquiryQuoteScope,
     InquirySupplyService, QuoteAddressLimit, QuoteTerms,
 };
+use erp_support::authorization::files::require_owned;
 use erp_support::entity::file_asset::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
 use erp_support::repository::{DocumentAttachmentRepositoryExt, FileAssetExt};
 use erp_workflow::entity::work_item::WorkItem;
@@ -329,6 +330,12 @@ impl SalesInquiryProcess {
             .document_attachments()
             .list_by_document(&BusinessDocumentId::new(owner_id), executor)
             .await?;
+        let new_files = ids
+            .iter()
+            .filter(|id| !links.iter().any(|link| link.file_asset_id.as_ref() == id.as_str()))
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        require_owned(&self.db, &self.rbac, actor, &new_files, executor).await?;
         for id in ids {
             let linked = links.iter().any(|link| link.file_asset_id.as_ref() == id);
             let asset = self
@@ -337,11 +344,9 @@ impl SalesInquiryProcess {
                 .find_by_id(id, executor)
                 .await?
                 .filter(|asset| {
-                    (asset.created_by == actor.id() || linked)
-                        && asset.destroyed_at.is_none()
-                        && asset.expires_at.is_none_or(|at| at > Instant::now())
+                    asset.destroyed_at.is_none() && asset.expires_at.is_none_or(|at| at > Instant::now())
                 })
-                .ok_or_else(|| Error::Forbidden("内部附件不存在或不属于当前上传人".into()))?;
+                .ok_or_else(|| Error::Forbidden("内部附件不存在或不可使用".into()))?;
             if linked {
                 continue;
             }

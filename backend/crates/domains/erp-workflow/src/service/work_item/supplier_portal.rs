@@ -1,7 +1,6 @@
 //! 供应商申请提交、决定及撤回事务使用的工作项步骤。
 
 use application_core::AuditActor;
-use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use persistence_core::Executor;
@@ -58,9 +57,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         executor: &mut dyn Executor,
     ) -> Result<WorkItem> {
         let task = self.load_supplier_portal_review(identity, executor).await?;
-        if actor.kind() != AccountKind::Admin || !task.is_owned_by(actor.id()) {
-            return Err(Error::Forbidden("只有当前内部采购确认人可以处理供应商申请".into()));
-        }
+        self.authorization.require_assigned(actor, &task.base.id, executor).await?;
         self.ensure_domain_decision_access(actor, &task, executor).await?;
         Ok(task)
     }

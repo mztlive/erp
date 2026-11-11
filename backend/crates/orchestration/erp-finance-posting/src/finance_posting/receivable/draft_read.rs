@@ -1,7 +1,6 @@
 //! 原回款完整编辑视图与未知提交确认；读取不改变单据状态。
 
 use application_core::AuditActor;
-use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::finance::document_files::{FinancialFileView, financial_document_files};
@@ -41,7 +40,6 @@ impl ReceivableProcess {
                         .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
-                    ensure_receipt_owner(&receipt, actor.id())?;
                     Ok(financial_document_files(&db, &id, &receipt.receipt_no, executor).await?)
                 })
             })
@@ -69,12 +67,6 @@ impl ReceivableProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     ensure_receipt_edit_authorized(&db, &rbac, &actor, &id, executor).await?;
-                    let receipt = db
-                        .customer_receipts()
-                        .find_by_id(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
-                    ensure_receipt_owner(&receipt, actor.id())?;
                     receipt_view_with_actions(&db, &rbac, &actor, &id, executor).await
                 })
             })
@@ -115,68 +107,4 @@ pub(super) async fn receipt_view_with_actions(
         view.approval.allowed_actions.retain(|action| action != "CANCEL");
     }
     Ok(view)
-}
-
-/// 完整原单读取和提交回放仅允许非空的原登记人身份。
-///
-/// # 参数
-/// * `receipt` - 已读取的回款单。
-/// * `actor_id` - 当前操作人 ID。
-///
-/// # 返回
-/// 身份与 `created_by` 一致时无返回值。
-///
-/// # 错误
-/// 操作人身份为空或不是原登记人时返回 `Forbidden`。
-pub(super) fn ensure_receipt_owner(receipt: &CustomerReceipt, actor_id: &str) -> Result<()> {
-    if actor_id.is_empty() || receipt.created_by != actor_id {
-        return Err(Error::Forbidden("仅原回款登记人可以读取或重提本单".into()));
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use erp_core::common::time::Instant;
-    use erp_core::ids::{CustomerReceiptId, PartyId};
-    use erp_core::money::Amount;
-    use erp_finance::entity::receivable::{CustomerReceiptData, CustomerReceiptStatus};
-
-    use super::*;
-
-    /// 读取允许原人确认非草稿结果；编辑仍沿实体草稿门禁，历史空登记人拒绝。
-    #[test]
-    fn owner_read_and_draft_edit_have_distinct_state_requirements() {
-        let mut receipt = CustomerReceipt::new(
-            CustomerReceiptId::new("receipt"),
-            CustomerReceiptData {
-                receipt_no: "RC-1".into(),
-                counterparty_party_id: PartyId::new("party"),
-                customer_id: None,
-                received_at: Instant::from_unix_secs(10),
-                amount: "100.00".parse::<Amount>().unwrap(),
-                bank_reference: None,
-            },
-            "creator",
-        )
-        .unwrap();
-        assert!(ensure_receipt_owner(&receipt, "other").is_err());
-        assert!(ensure_receipt_owner(&receipt, "").is_err());
-        for status in [
-            CustomerReceiptStatus::Draft,
-            CustomerReceiptStatus::Rejected,
-            CustomerReceiptStatus::InApproval,
-            CustomerReceiptStatus::Posted,
-            CustomerReceiptStatus::Reversed,
-        ] {
-            receipt.status = status;
-            ensure_receipt_owner(&receipt, "creator").unwrap();
-            assert_eq!(
-                receipt.ensure_draft_editor("creator").is_ok(),
-                matches!(status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected)
-            );
-        }
-        receipt.created_by.clear();
-        assert!(ensure_receipt_owner(&receipt, "creator").is_err());
-    }
 }

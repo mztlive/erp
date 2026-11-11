@@ -86,7 +86,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         ensure_rework_owner(&item, actor.id())?;
-        self.ensure_task_manage(actor, &item, executor).await?;
+        self.authorization.require(actor, "manage", &item.base.id, executor).await?;
         if let Some(committed) =
             self.db.work_item_command_receipts().find_command(receipt.id(), executor).await?
         {
@@ -207,15 +207,15 @@ mod tests {
         let mut fact = ObjectFact::new("request", "付款申请", "submitter");
         fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["2".into()]).unwrap();
         let key = (ObjectKind::PurchasePaymentRequest, "request".into());
-        assert!(!task_facts_current(&item, "submitter", &ObjectFactMap::from([(key.clone(), fact.clone())])));
+        assert!(!task_facts_current(&item, &ObjectFactMap::from([(key.clone(), fact.clone())])));
         fact.subject_versions.register_rework_history(&ApprovalProcessInstanceId::new("instance-v1"), 1);
         let facts = ObjectFactMap::from([(key, fact)]);
-        assert!(task_facts_current(&item, "submitter", &facts));
+        assert!(task_facts_current(&item, &facts));
         verify_abandon_replay(&item, &receipt, &command("不再办理"), "submitter").unwrap();
         assert!(verify_abandon_replay(&item, &receipt, &command("另一说明"), "submitter").is_err());
         assert!(verify_abandon_replay(&item, &receipt, &command("不再办理"), "other").is_err());
         item.status = WorkItemStatus::Open;
-        assert!(!task_facts_current(&item, "submitter", &facts));
+        assert!(!task_facts_current(&item, &facts));
         assert!(verify_abandon_replay(&item, &receipt, &command("不再办理"), "submitter").is_err());
     }
 }

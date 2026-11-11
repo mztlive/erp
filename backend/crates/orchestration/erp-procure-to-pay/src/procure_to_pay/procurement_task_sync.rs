@@ -2,9 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_core::money::Quantity;
+use erp_identity::SharedRbacService;
+use erp_read_models::Error as ReadModelError;
+use erp_read_models::purchase_center::require_creation_task;
 use erp_read_models::purchase_center::source_impact::load_purchase_source_state;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
@@ -25,7 +29,8 @@ use crate::{Error, Result};
 /// * `db` - MongoDB 数据库
 /// * `work_item_id` - 客户端从采购创建依据取得的任务 ID
 /// * `sales_order_id` - 本次采购依据所属销售单
-/// * `actor_id` - 当前已认证账号
+/// * `rbac` - 当前身份授权源
+/// * `actor` - 当前已认证账号
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
@@ -38,41 +43,40 @@ use crate::{Error, Result};
 /// 采购创建权限不能只依赖页面筛选；事务内必须重新读取任务事实并校验具体责任行。
 pub(super) async fn load_owned_open_procurement_task(
     db: &mongodb::Database,
+    rbac: &SharedRbacService,
     work_item_id: &str,
     sales_order_id: &SalesOrderId,
-    actor_id: &str,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let item =
         db.work_items().find_by_id(work_item_id, executor).await?.ok_or_else(procurement_task_not_found)?;
-    validate_procurement_task_access(&item, sales_order_id, actor_id)?;
+    require_creation_task(db, rbac, actor, &item, executor).await.map_err(|error| match error {
+        ReadModelError::Forbidden(_) => procurement_task_not_found(),
+        other => other.into(),
+    })?;
+    validate_procurement_task_access(&item, sales_order_id)?;
     Ok(item)
 }
 
-/// 校验供给分配任务的业务对象、当前责任人、开放状态与冻结范围。
+/// 在 identity 已证明当前分配后校验任务来源、开放状态与冻结范围。
 ///
 /// # 参数
 /// * `item` - 已按客户端任务 ID 读取的持久化任务
 /// * `sales_order_id` - 本次采购依据所属销售单
-/// * `actor_id` - 当前已认证账号
 ///
 /// # 返回
-/// 任务属于当前账号且仍可处理时返回 `Ok(())`。
+/// 任务属于目标销售单且仍可处理时返回 `Ok(())`。
 ///
 /// # 错误
-/// 伪造、错单、他人或已关闭任务返回隐藏式未找到；当前责任人的任务已由并发请求完成时返回冲突；冻结范围损坏时返回冲突。
+/// 错单或已关闭任务返回未找到；已完成任务及冻结范围损坏时返回冲突。
 ///
 /// # 关键业务约束
-/// 只有保留为终态任务当前责任人的账号可以获知并发完成事实，历史责任人和其他账号不得据此探测任务存在性。
-fn validate_procurement_task_access(
-    item: &WorkItem,
-    sales_order_id: &SalesOrderId,
-    actor_id: &str,
-) -> Result<()> {
+/// 调用前必须由 identity 证明分配资格，不得将本函数作为权限入口。
+fn validate_procurement_task_access(item: &WorkItem, sales_order_id: &SalesOrderId) -> Result<()> {
     if item.work_item_type != WorkItemType::ProcurementOrderCreation
         || item.business_object_type != "sales_order"
         || item.business_object_id != sales_order_id.to_string()
-        || item.owner_user_id.as_deref() != Some(actor_id)
     {
         return Err(procurement_task_not_found());
     }
@@ -82,7 +86,7 @@ fn validate_procurement_task_access(
     if item.status != WorkItemStatus::Open {
         return Err(procurement_task_not_found());
     }
-    if !item.owns_procurement_task(actor_id) {
+    if !item.is_open_procurement_task() {
         return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
     }
     Ok(())
@@ -383,8 +387,7 @@ mod tests {
         let mut item = procurement_task("user-1");
         item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
 
-        let error =
-            validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-1").unwrap_err();
+        let error = validate_procurement_task_access(&item, &SalesOrderId::new("sales-1")).unwrap_err();
 
         assert!(matches!(
             error,
@@ -393,28 +396,12 @@ mod tests {
     }
 
     #[test]
-    fn another_actor_cannot_probe_open_or_completed_task() {
+    fn authorized_open_task_requires_expected_business_object() {
         let mut item = procurement_task("user-1");
+        validate_procurement_task_access(&item, &SalesOrderId::new("sales-1")).unwrap();
+        item.business_object_type = "purchase_order".into();
         assert!(matches!(
-            validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-2"),
-            Err(Error::NotFound(_))
-        ));
-
-        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
-        assert!(matches!(
-            validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-2"),
-            Err(Error::NotFound(_))
-        ));
-    }
-
-    #[test]
-    fn previous_owner_cannot_probe_task_after_reassignment_and_completion() {
-        let mut item = procurement_task("user-1");
-        item.reassign("user-2", Instant::from_unix_secs(5)).unwrap();
-        item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
-
-        assert!(matches!(
-            validate_procurement_task_access(&item, &SalesOrderId::new("sales-1"), "user-1"),
+            validate_procurement_task_access(&item, &SalesOrderId::new("sales-1")),
             Err(Error::NotFound(_))
         ));
     }
@@ -424,7 +411,7 @@ mod tests {
         let item = procurement_task("user-1");
 
         assert!(matches!(
-            validate_procurement_task_access(&item, &SalesOrderId::new("sales-2"), "user-1"),
+            validate_procurement_task_access(&item, &SalesOrderId::new("sales-2")),
             Err(Error::NotFound(_))
         ));
     }

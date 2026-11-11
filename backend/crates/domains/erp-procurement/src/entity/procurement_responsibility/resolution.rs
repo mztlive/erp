@@ -5,9 +5,10 @@ use std::collections::HashSet;
 use erp_core::ids::{ProductCategoryId, SkuId};
 use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
+use erp_identity::AccountSummary;
 
 use super::rule::{ProcurementResponsibilityRule, ProcurementResponsibilityRuleType};
-use crate::entity::facts::{IdentityOwnerFact, ProductKind};
+use crate::entity::facts::ProductKind;
 
 const LINE_KEY_MAX_LEN: usize = 128;
 const RESOLUTION_BATCH_MAX_LINES: usize = 200;
@@ -114,15 +115,15 @@ impl EligibleProcurementOwner {
     /// * `account` - 当前账号主数据
     ///
     /// # 返回
-    /// `can_login` 与 `is_admin` 均为真时返回负责人身份与姓名。
+    /// 身份域确认账号为启用后台账号时返回负责人身份与姓名。
     ///
     /// # 错误
     /// 账号不可登录或不是后台管理员时返回 `LogicError`。
-    pub fn from_account(account: &IdentityOwnerFact) -> Result<Self> {
-        if !account.can_login || !account.is_admin {
+    pub fn from_account(account: &AccountSummary) -> Result<Self> {
+        if !account.is_active_backoffice() {
             return Err(Error::from("采购负责人必须为可登录后台账号"));
         }
-        Ok(Self { user_id: account.id.clone(), name: account.name.clone() })
+        Ok(Self { user_id: account.id.clone(), name: account.display_name.clone() })
     }
 
     /// 返回负责人账号 ID。
@@ -388,10 +389,11 @@ fn ensure_category_chain(category_chain: &[ProductCategoryId]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
     use erp_core::ids::ProcurementResponsibilityRuleId;
 
     use super::*;
-    use crate::entity::facts::{IdentityOwnerFact, ProductKind};
+    use crate::entity::facts::ProductKind;
     use crate::entity::procurement_responsibility::{EnableStatus, ProcurementResponsibilityRuleData};
 
     fn rule(
@@ -427,10 +429,8 @@ mod tests {
         .unwrap()
     }
 
-    fn owner_account(can_login: bool) -> IdentityOwnerFact {
-        IdentityOwnerFact {
-            id: "owner-1".to_string(), name: "采购员".to_string(), can_login, is_admin: true
-        }
+    fn owner_account(can_login: bool) -> AccountSummary {
+        AccountSummary::new("owner-1", AccountKind::Admin, can_login).with_display_name("采购员")
     }
 
     #[test]

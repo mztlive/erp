@@ -97,7 +97,7 @@ impl SalesInquiryService {
         Ok(InquirySalesView::from_inquiry(&self.require(id, executor).await?))
     }
 
-    /// 取得不含销售参考价的采购投影；任务入口应使用 from_scoped。
+    /// 取得已授权询价的完整采购投影，不包含销售参考价。
     /// # 参数
     /// `id` 为已授权询价；`executor` 为执行器。
     /// # 返回

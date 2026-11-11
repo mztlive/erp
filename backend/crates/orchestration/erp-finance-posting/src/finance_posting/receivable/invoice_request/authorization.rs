@@ -74,7 +74,7 @@ impl RequestAccess for MongoAccess<'_> {
         let service = AuthorizationService::new(
             self.db.clone(),
             self.rbac.identity.clone(),
-            AuthorizationRegistry::new(vec![])?,
+            AuthorizationRegistry::default(),
         );
         Ok(service.has_permission(actor, &Permission::parse(action.permission())?, executor).await?)
     }

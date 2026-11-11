@@ -326,10 +326,7 @@ async fn ensure_assignment_policy<A: WorkflowAuthorizationPort>(
     check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if check.actor.kind() != check.authorization.actor_kind {
-        return Err(Error::Forbidden("操作账号身份已变化".to_string()));
-    }
-    service.ensure_task_manage(check.actor, check.item, executor).await?;
+    service.authorization.require(check.actor, "manage", &check.item.base.id, executor).await?;
     service
         .ensure_assignment_candidate(
             check.assignee_id,

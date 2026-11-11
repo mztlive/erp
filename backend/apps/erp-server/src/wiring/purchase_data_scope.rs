@@ -210,9 +210,9 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
         required: &[String],
         executor: &mut dyn Executor,
     ) -> erp_procurement::Result<()> {
-        let (service, _, permission) = self.authorization(action, required, None)?;
+        let service = super::authorization::authorization_service(self.db.clone(), self.rbac.clone());
         let mut permissions = required.iter().map(Permission::parse).collect::<erp_core::Result<Vec<_>>>()?;
-        permissions.push(permission);
+        permissions.push(Permission::parse(format!("purchase_order:{action}"))?);
         if !service
             .permissions(actor, &permissions, executor)
             .await?

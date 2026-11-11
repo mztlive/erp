@@ -214,20 +214,17 @@ pub struct CustomerReceiptApprovalFacts {
 }
 
 impl CustomerReceipt {
-    /// 校验原回款登记人修改本单草稿的资格。
+    /// 校验回款单处于允许编辑的业务状态。
     ///
     /// # 参数
-    /// * `actor_id` - 当前已认证编辑人的账号
+    /// 无；调用方先通过 identity 核验原登记人的对象权限。
     ///
     /// # 返回
-    /// 原登记人修改草稿时返回成功。
+    /// 草稿或已驳回时成功。
     ///
     /// # 错误
-    /// 非原登记人返回权限错误，非草稿返回状态冲突；历史缺失登记人时失败关闭。
-    pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
-        if actor_id.is_empty() || self.created_by != actor_id {
-            return Err(DraftEditError::Forbidden("仅原回款登记人可以修改本单草稿".into()));
-        }
+    /// 其他状态返回状态冲突。
+    pub fn ensure_draft_editable(&self) -> DraftEditResult<()> {
         if !matches!(self.status, CustomerReceiptStatus::Draft | CustomerReceiptStatus::Rejected) {
             return Err(DraftEditError::ConflictError("只有草稿或已驳回回款可以修改".into()));
         }
@@ -762,12 +759,11 @@ mod tests {
         assert!(receipt.approval_facts().is_err());
     }
 
-    /// 原登记人撤回回款审批后编辑同一单据并重提，原单号和资金来源不变。
+    /// 撤回回款审批后编辑同一单据并重提，原单号和资金来源不变。
     #[test]
-    fn original_creator_can_edit_cancelled_receipt_and_resubmit() {
+    fn cancelled_receipt_can_be_edited_and_resubmitted() {
         let mut receipt =
             CustomerReceipt::new(CustomerReceiptId::new("edit-receipt"), data(), "creator-1").unwrap();
-        assert!(matches!(receipt.ensure_draft_editor("other"), Err(DraftEditError::Forbidden(_))));
         let identity = (
             receipt.base.id.clone(),
             receipt.receipt_no.clone(),
@@ -785,9 +781,9 @@ mod tests {
             ]
         };
         receipt.start_approval(allocations()).unwrap();
-        assert!(matches!(receipt.ensure_draft_editor("creator-1"), Err(DraftEditError::ConflictError(_))));
+        assert!(matches!(receipt.ensure_draft_editable(), Err(DraftEditError::ConflictError(_))));
         receipt.cancel_approval().unwrap();
-        receipt.ensure_draft_editor("creator-1").unwrap();
+        receipt.ensure_draft_editable().unwrap();
         receipt
             .update(CustomerReceiptUpdate {
                 amount: Some(Amount::from_str("150").unwrap()),
@@ -809,8 +805,6 @@ mod tests {
         assert_eq!(receipt.received_at.unix_secs(), 1700000100);
         assert_eq!(receipt.bank_reference.as_deref(), Some("BANK-EDIT"));
         assert_eq!(receipt.start_approval(allocations()).unwrap(), 2);
-        receipt.created_by.clear();
-        assert!(matches!(receipt.ensure_draft_editor("creator-1"), Err(DraftEditError::Forbidden(_))));
     }
 
     /// 撤回原单保留拟核销来源，改金额可重提，换来源失败且不迁移状态或主题版本。
@@ -849,7 +843,7 @@ mod tests {
         assert!(receipt.save_allocations(vec![line("two", "10")]).is_err());
         receipt.save_allocations(vec![line("three", "10")]).unwrap();
     }
-    /// 驳回后原人可直接编辑并重提，保存不清除驳回状态且旧决定不可再执行。
+    /// 驳回后可直接编辑并重提，保存不清除驳回状态且旧决定不可再执行。
     #[test]
     fn rejected_receipt_preserves_identity_and_can_be_edited_and_resubmitted() {
         let mut receipt =
@@ -869,8 +863,7 @@ mod tests {
         assert_eq!(receipt.pending_allocations, allocations);
         assert!(receipt.reject_approval().is_err());
         assert!(receipt.cancel_approval().is_err());
-        assert!(receipt.ensure_draft_editor("other").is_err());
-        receipt.ensure_draft_editor("creator-1").unwrap();
+        receipt.ensure_draft_editable().unwrap();
         receipt
             .update(CustomerReceiptUpdate {
                 amount: Some(Amount::from_str("150").unwrap()),

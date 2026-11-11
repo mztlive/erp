@@ -1,6 +1,7 @@
 //! 连接商品目录、真实后台任务与检查点的组合查询。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::Permission;
 use erp_supply::dto::supplier_catalog::{CatalogFilter, CatalogItemView, CatalogSyncMode};
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::connector::offer::IncrementalSupport;
@@ -77,9 +78,8 @@ impl SupplierApiReadService {
             return Err(Error::ValidationError("商品分页参数无效".into()));
         }
         query.filter.validate()?;
-        let can_read_cost = self.has_permission(actor, "supplier_offering_cost:detail").await?;
+        let (connection, can_read_cost) = self.catalog_connection(id, actor).await?;
         query.filter.ensure_cost_access(can_read_cost)?;
-        let connection = self.catalog_connection(id, actor).await?;
         let (mut items, total) = supplier_catalog::filtered_page(
             &self.db,
             id,
@@ -132,15 +132,27 @@ impl SupplierApiReadService {
         })
     }
 
-    async fn catalog_connection(&self, id: &str, actor: &AuditActor) -> Result<SupplierApiConnection> {
-        if !self.has_permission(actor, "supplier_api_connection:detail").await? {
+    async fn catalog_connection(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<(SupplierApiConnection, bool)> {
+        let detail = Permission::parse("supplier_api_connection:detail")?;
+        let cost = Permission::parse("supplier_offering_cost:detail")?;
+        let permissions = self
+            .authorization
+            .permissions(actor, &[detail.clone(), cost.clone()], &mut NoTransaction)
+            .await?
+            .map(|qualified| qualified.permissions())
+            .unwrap_or_default();
+        if !permissions.covers_one(&detail) {
             return Err(Error::Forbidden("当前账号无权查看供应商商品库".into()));
         }
         let access =
             self.supplier_access.as_ref().ok_or_else(|| Error::Internal("供应商范围服务未接线".into()))?;
         let connection = self.domain().load_connection(id, &mut NoTransaction).await?;
         access.require_with(actor, "detail", &connection.supplier_id, &mut NoTransaction).await?;
-        Ok(connection)
+        Ok((connection, permissions.covers_one(&cost)))
     }
     async fn catalog_jobs(&self, id: &str) -> Result<Vec<CatalogJobView>> {
         let records = self.db.background_jobs().recent_catalog_jobs(id, &mut NoTransaction).await?;

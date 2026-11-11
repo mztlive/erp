@@ -170,6 +170,8 @@ impl WorkItem {
         at: Instant,
     ) -> Result<()> {
         self.ensure_document_approval()?;
+        let completed_by = completed_by.into();
+        self.ensure_current_owner(&completed_by)?;
         self.complete_open(completed_by, at)
     }
 

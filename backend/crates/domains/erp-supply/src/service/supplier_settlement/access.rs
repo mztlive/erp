@@ -1,10 +1,13 @@
 //! 结算对象读取与写入范围；对账负责人与业务组织分别解释。
 
 use application_core::AuditActor;
-use erp_identity::{OrganizationDirectoryService, SharedRbacService};
+use erp_identity::{
+    AccessSubject, AccessTarget, OrganizationDirectoryService, ResourceTargets, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::authorization::{self, SettlementAction, SettlementActionAccess};
 use crate::authorization::{Authorization, CompiledScope};
 use crate::entity::supplier_settlement::SupplierSettlementStatement;
 use crate::error::{Error, Result};
@@ -15,6 +18,7 @@ use crate::repository::SupplierSettlementExt;
 pub struct SettlementAccess {
     db: Database,
     authorization: Option<Authorization>,
+    identity: Option<SharedRbacService>,
 }
 
 impl SettlementAccess {
@@ -30,9 +34,9 @@ impl SettlementAccess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let authorization =
-            Authorization::new(&db, rbac, "supplier_settlement_statement").expect("固定资源授权目录有效");
-        Self { db, authorization: Some(authorization) }
+        let authorization = Authorization::new(&db, rbac.clone(), "supplier_settlement_statement")
+            .expect("固定资源授权目录有效");
+        Self { db, authorization: Some(authorization), identity: Some(rbac) }
     }
 
     /// 创建尚未接线的访问器，授权调用保持失败关闭。
@@ -43,7 +47,7 @@ impl SettlementAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, authorization: None }
+        Self { db, authorization: None, identity: None }
     }
 
     /// 取得已注入的身份设施，禁止默认扩大范围。
@@ -103,6 +107,61 @@ impl SettlementAccess {
             .ok_or_else(|| Error::NotFound("结算单不存在或无权访问".into()))
     }
 
+    /// 在原执行器核验具体结算命令的功能权限及实际责任人。
+    /// # 参数
+    /// actor 为真实账号，action 为固定命令用途，id 为实际结算单，executor 为原执行器。
+    /// # 返回
+    /// identity 证明既有入口范围与制单人或差异处理人资格时成功。
+    /// # 错误
+    /// 无权限、责任人不符、对象缺失或设施读取失败时拒绝。
+    pub async fn require_action(
+        &self,
+        actor: &AuditActor,
+        action: SettlementAction,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let identity = self.identity.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))?;
+        Ok(authorization::service(&self.db, identity.clone(), action)?
+            .require(
+                actor,
+                &action.permission()?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await?)
+    }
+
+    /// 为详情动作读取同一对象的完整 identity 资格。
+    /// # 参数
+    /// actor、id 为详情账号与实际结算单，executor 为读取执行器。
+    /// # 返回
+    /// 各具体命令的对象授权结果，不包含业务状态限制。
+    /// # 错误
+    /// 设施错误透传；功能或对象资格拒绝转换为对应动作不可用。
+    pub async fn actions(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementActionAccess> {
+        let mut result = SettlementActionAccess::default();
+        for (action, allowed) in [
+            (SettlementAction::AppendEvidence, &mut result.append_evidence),
+            (SettlementAction::Refresh, &mut result.refresh),
+            (SettlementAction::Void, &mut result.void),
+            (SettlementAction::ResolveDifference, &mut result.resolve_difference),
+            (SettlementAction::Submit, &mut result.submit),
+        ] {
+            match self.require_action(actor, action, id, executor).await {
+                Ok(()) => *allowed = true,
+                Err(Error::Forbidden(_) | Error::NotFound(_)) => {},
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(result)
+    }
+
     /// 在调用方事务内证明创建资格并解析对账负责人主属组织。
     ///
     /// # 参数
@@ -153,7 +212,6 @@ impl SettlementAccess {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> Result<std::collections::BTreeSet<String>> {
-        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)

@@ -1,4 +1,3 @@
-pub(crate) mod authorization_error;
 pub mod sales_order;
 pub mod sales_review;
 pub mod sales_selection;

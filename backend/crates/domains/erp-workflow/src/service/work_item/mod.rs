@@ -617,13 +617,13 @@ mod tests {
         let fact = facts.values_mut().next().unwrap();
         fact.created_by = "unrelated-creator".into();
         fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["submission-1".into()]).unwrap();
-        assert!(task_facts_current(&item, "buyer-1", &facts));
+        assert!(task_facts_current(&item, &facts));
         assert!(candidate_facts_current(&item, &facts));
         facts.values_mut().next().unwrap().subject_versions =
             WorkItemSubjectVersions::constrained(vec!["submission-2".into()]).unwrap();
-        assert!(!task_facts_current(&item, "buyer-1", &facts));
+        assert!(!task_facts_current(&item, &facts));
         assert!(!candidate_facts_current(&item, &facts));
-        assert!(!task_facts_current(&item, "buyer-1", &ObjectFactMap::new()));
+        assert!(!task_facts_current(&item, &ObjectFactMap::new()));
     }
     #[test]
     fn closed_procurement_task_cannot_accept_a_new_candidate() {

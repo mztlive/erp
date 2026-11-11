@@ -7,10 +7,9 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_procurement::authorization::PurchaseMapping;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
-use mongodb::Database;
 use persistence_core::Executor;
 
 use super::authorization::FundsReadContext;
@@ -56,7 +55,10 @@ impl FundsAccess {
         if let Some(scope) = &settlement {
             versions.push(scope.access.version());
         }
-        let ledger_read = ledger_readable(&self.db, &self.rbac, actor, executor).await?;
+        let ledger_read =
+            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+                .has_permission(actor, &Permission::parse(FINANCE_LEDGER_READ)?, executor)
+                .await?;
         let mut hash = DefaultHasher::new();
         versions.hash(&mut hash);
         ledger_read.hash(&mut hash);
@@ -155,23 +157,6 @@ impl FundsAuthorization {
         }
         Ok(())
     }
-}
-
-/// 读取整账功能资格；功能资格不替代任何来源对象授权。
-/// # 参数
-/// db/rbac 为身份设施，actor 为账号，executor 为当前执行器。
-/// # 返回
-/// identity 判断的单个功能资格。
-/// # 错误
-/// 账号、策略或数据库读取失败保留原错误。
-pub(crate) async fn ledger_readable(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
-    Ok(service.has_permission(actor, &Permission::parse(FINANCE_LEDGER_READ)?, executor).await?)
 }
 
 fn whole_collection(resource: &str) -> Option<&'static str> {

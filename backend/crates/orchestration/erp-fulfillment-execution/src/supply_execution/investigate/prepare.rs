@@ -124,13 +124,21 @@ impl SupplierFulfillmentProcess {
     ) -> Result<PreparedInvestigation> {
         let (order, target_action) = load_investigation_facts(&self.db, context, &mut NoTransaction).await?;
         if let Some(task_context) = &context.task {
-            load_investigation_task(
+            let work_item = load_investigation_task(
                 &self.db,
                 task_context,
                 &order.base.id,
                 order.base.version,
                 actor,
                 None,
+                &mut NoTransaction,
+            )
+            .await?;
+            super::super::task_authorization::require_assignee(
+                &self.db,
+                &(self.identity)().rbac,
+                actor,
+                &work_item,
                 &mut NoTransaction,
             )
             .await?;
@@ -291,13 +299,7 @@ pub(super) async fn load_investigation_task(
         .find_by_id(&task.work_item_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-    validate_w26_task(
-        &work_item,
-        order_id,
-        task.expected_task_version,
-        &task.expected_subject_version,
-        actor.id(),
-    )?;
+    validate_w26_task(&work_item, order_id, task.expected_task_version, &task.expected_subject_version)?;
     ensure_task_subject_matches_order(&work_item, &task.expected_subject_version, order_version)?;
     if let Some(workflow) = workflow {
         workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;

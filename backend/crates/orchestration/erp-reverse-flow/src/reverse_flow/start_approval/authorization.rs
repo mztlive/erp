@@ -2,7 +2,8 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::ids::ReceiptReversalId;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_returns::repository::ReturnsExt;
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -10,6 +11,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::super::ReturnsProcess;
+use super::financial_access::require_owner;
 use crate::{Error, Result, ReverseFlowPorts};
 
 #[async_trait]
@@ -84,7 +86,7 @@ impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        ensure_financial_initiator(self.db, actor, kind, id, executor).await
+        ensure_financial_initiator(self.db, &self.rbac.identity, actor, kind, id, executor).await
     }
 }
 /// 账号和提交资格必须先于具体来源读取被拒绝。
@@ -132,31 +134,60 @@ async fn authorize_source<P: ReplayAuthorizationPort>(
 /// 回放重读原经办职责，资格不依赖已提交单据当前是否仍为草稿。
 async fn ensure_financial_initiator(
     db: &Database,
+    rbac: &SharedRbacService,
     actor: &AuditActor,
     kind: DocumentType,
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let service = ReturnsService::new(db.clone());
-    match kind {
-        DocumentType::CustomerRefund => {
-            service.load_customer_refund(id, executor).await?.ensure_submitter(actor.id())?
-        },
-        DocumentType::SupplierRefund => {
-            service.load_supplier_refund(id, executor).await?.ensure_submitter(actor.id())?
-        },
-        DocumentType::ReceiptReversal => db
-            .receipt_reversals()
-            .find_by_id(&ReceiptReversalId::new(id), executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?
-            .ensure_submitter(actor.id())?,
-        DocumentType::PaymentReversal => {
-            service.load_payment_reversal(id, executor).await?.ensure_submitter(actor.id())?
-        },
-        _ => {},
+    if let Some(facts) = financial_owner_facts(db, kind, id, executor).await? {
+        require_owner(db.clone(), rbac.clone(), actor, facts, executor).await?;
     }
     Ok(())
+}
+
+/// 原事务读取的经办人事实及岗位分离约束。
+async fn financial_owner_facts(
+    db: &Database,
+    kind: DocumentType,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<ObjectFacts>> {
+    let service = ReturnsService::new(db.clone());
+    let (id, version, owner) = match kind {
+        DocumentType::CustomerRefund => {
+            let record = service.load_customer_refund(id, executor).await?;
+            record.ensure_separation()?;
+            (record.base.id, record.base.version, record.handled_by)
+        },
+        DocumentType::SupplierRefund => {
+            let record = service.load_supplier_refund(id, executor).await?;
+            record.ensure_separation()?;
+            (record.base.id, record.base.version, record.handled_by)
+        },
+        DocumentType::ReceiptReversal => {
+            let record = db
+                .receipt_reversals()
+                .find_by_id(&ReceiptReversalId::new(id), executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
+            record.ensure_separation()?;
+            (record.base.id, record.base.version, record.handled_by)
+        },
+        DocumentType::PaymentReversal => {
+            let record = service.load_payment_reversal(id, executor).await?;
+            record.ensure_separation()?;
+            (record.base.id, record.base.version, record.handled_by)
+        },
+        _ => return Ok(None),
+    };
+    Ok(Some(ObjectFacts {
+        resource: kind.as_str().into(),
+        id,
+        version: version.to_string(),
+        owner_id: FactValue::Known(Some(owner)),
+        ..Default::default()
+    }))
 }
 
 /// 在读取具体退款或冲正来源前一次确认账号及提交资格。

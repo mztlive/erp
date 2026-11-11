@@ -10,6 +10,7 @@ use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
 use super::super::IntegrationResolutionProcess;
+use crate::wiring::CatalogWorkItems;
 use crate::{Error, Result};
 
 impl IntegrationResolutionProcess {
@@ -38,11 +39,13 @@ impl IntegrationResolutionProcess {
             .find_by_id(work_item_id, &mut executor)
             .await?
             .ok_or_else(|| Error::Internal("W29 命令回执对应任务缺失".into()))?;
-        if !item.is_owned_by(actor.id()) {
+        if item.status != WorkItemStatus::Open {
             return Err(Error::Forbidden("当前账号不是任务的当前责任人".into()));
         }
+        let work_items = (self.work_items_factory)();
+        work_items.require_assigned(actor, &item.base.id, &mut executor).await?;
         ensure_work_item_association(&self.db, &item, action, &mut executor).await?;
-        (self.work_items_factory)().ensure_domain_decision_access(actor, &item, &mut executor).await?;
+        work_items.ensure_domain_decision_access(actor, &item, &mut executor).await?;
         Ok(())
     }
 
@@ -116,9 +119,10 @@ pub(super) fn command_identity<T: Serialize>(
 ///
 /// # 参数
 /// * `db` - 数据库。
+/// * `work_items` - 已装配的正式任务授权能力。
 /// * `target` - 已解析的任务与主题版本。
 /// * `action` - 非终态动作，用于核对对象关联。
-/// * `actor_id` - 当前操作人。
+/// * `actor` - 当前账号。
 /// * `executor` - 读取所用执行器。
 ///
 /// # 返回
@@ -128,9 +132,10 @@ pub(super) fn command_identity<T: Serialize>(
 /// 任务不存在返回 `NotFound`；版本变化或任务不再开放返回 `ConflictError`；不是当前责任人返回 `Forbidden`；关联或仓储读取失败返回对应错误。
 pub(super) async fn load_bound_work_item(
     db: &Database,
+    work_items: &dyn CatalogWorkItems,
     target: &PreparedWorkItemTarget,
     action: &IntegrationNonTerminalTaskAction,
-    actor_id: &str,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let item = db
@@ -139,7 +144,8 @@ pub(super) async fn load_bound_work_item(
         .await?
         .ok_or_else(|| Error::NotFound("正式任务不存在".to_string()))?;
     ensure_work_item_version(&item, target.task_version, &target.subject_version)?;
-    ensure_work_item_responsibility(&item, actor_id)?;
+    ensure_work_item_open(&item)?;
+    work_items.require_assigned(actor, &item.base.id, executor).await?;
     ensure_work_item_association(db, &item, action, executor).await?;
     Ok(item)
 }
@@ -152,12 +158,9 @@ fn ensure_work_item_version(item: &WorkItem, task_version: u64, subject_version:
     Ok(())
 }
 
-fn ensure_work_item_responsibility(item: &WorkItem, actor_id: &str) -> Result<()> {
+fn ensure_work_item_open(item: &WorkItem) -> Result<()> {
     if item.status != WorkItemStatus::Open {
         return Err(Error::ConflictError("任务已不再开放".to_string()));
-    }
-    if !item.is_owned_by(actor_id) {
-        return Err(Error::Forbidden("当前账号不是任务的当前责任人".to_string()));
     }
     Ok(())
 }

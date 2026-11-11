@@ -42,6 +42,7 @@ impl Application {
         erp_data_import::ProductImportProcess::new(
             self.db(),
             services,
+            self.rbac(),
             self.storage().clone(),
             self.config_snapshot().app.secret.as_bytes(),
         )
@@ -61,6 +62,7 @@ impl Application {
         erp_data_import::SupplierImportProcess::new(
             self.db(),
             Arc::new(self.supplier_profile_process()),
+            self.rbac(),
             self.storage().clone(),
             self.sensitive_data(),
         )

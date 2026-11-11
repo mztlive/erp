@@ -64,7 +64,7 @@ impl SupplierPortalReadService {
     async fn require_management_supplier(&self, actor: &AuditActor, supplier_id: &str) -> Result<()> {
         if supplier_id.trim().is_empty()
             || !self
-                .internal_authorization(actor)?
+                .internal_authorization()?
                 .supplier_readable(actor, supplier_id, &mut NoTransaction)
                 .await?
         {

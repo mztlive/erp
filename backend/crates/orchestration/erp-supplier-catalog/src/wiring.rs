@@ -32,6 +32,16 @@ pub struct CatalogServices {
 /// 目录、门户和集成治理实际消费的工作项操作。
 #[async_trait]
 pub trait CatalogWorkItems: Send + Sync {
+    /// 由 identity 校验既有任务详情范围和当前分配。
+    /// # 参数
+    /// actor 为当前账号，id 为正式任务，executor 为原业务执行器。
+    /// # 返回
+    /// 任务范围和当前分配均成立时成功。
+    /// # 错误
+    /// 账号、范围、分配或身份设施失效时返回工作流原错误。
+    async fn require_assigned(&self, actor: &AuditActor, id: &str, executor: &mut dyn Executor)
+    -> Result<()>;
+
     /// 校验当前账号、执行权限、对象范围和正式任务责任。
     /// # 参数
     /// 当前操作人、正式任务和业务事务执行器。
@@ -102,6 +112,15 @@ pub trait CatalogWorkItems: Send + Sync {
 
 #[async_trait]
 impl<A: WorkflowAuthorizationPort> CatalogWorkItems for WorkItemService<A> {
+    async fn require_assigned(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.authorization.require_assigned(actor, id, executor).await
+    }
+
     async fn ensure_domain_decision_access(
         &self,
         actor: &AuditActor,

@@ -122,8 +122,7 @@ pub(crate) async fn target_qualified(
 ) -> Result<bool> {
     // 交接目标只允许内部账号；统一资格检查负责重读账号并核验真实类型和状态。
     let actor = AuditActor::new(target.to_owned(), target.to_owned(), AccountKind::Admin);
-    let authorization =
-        AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
+    let authorization = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
     Ok(authorization.has_permission(&actor, permission, executor).await?)
 }
 
@@ -141,7 +140,7 @@ pub(crate) async fn qualified_candidates(
     permission: &Permission,
     executor: &mut dyn Executor,
 ) -> Result<Vec<AccountPermissionCandidate>> {
-    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
+    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
     let mut candidates = Vec::new();
     for account in db.accounts().list_by_kind(AccountKind::Admin, executor).await? {
         if account.base.id == excluded {

@@ -48,26 +48,24 @@ pub fn review_task_identity_matches(
         && review_owner_organization_id(statement).is_ok_and(|org| owner_organization_id == org)
 }
 
-/// 校验经办人仍可编辑结算单，且冻结明细存在、差异已纳入当前主题。
+/// 在 identity 完成提交授权后校验状态、冻结明细及当前主题。
 ///
 /// # 参数
 /// * `db` - 结算集合所在数据库。
 /// * `statement` - 待提交复核的结算单。
-/// * `actor_id` - 操作人。
 /// * `executor` - 调用方执行器。
 ///
 /// # 返回
 /// 可以提交时无返回值。
 ///
 /// # 错误
-/// 操作人不是经办人或结算单不可编辑时返回 `ConflictError`。没有冻结明细时返回 `BusinessLogicError`。主题与差异结论不一致时返回 `BusinessLogicError` 或 `ConflictError`。仓储读取失败时返回对应错误。
+/// 结算单不可编辑时返回 `ConflictError`。没有冻结明细时返回 `BusinessLogicError`。主题与差异结论不一致时返回 `BusinessLogicError` 或 `ConflictError`。仓储读取失败时返回对应错误。
 pub async fn ensure_review_submission_ready(
     db: &Database,
     statement: &SupplierSettlementStatement,
-    actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !statement.is_prepared_by(actor_id) || !statement.is_editable() {
+    if !statement.is_editable() {
         return Err(Error::ConflictError("结算单责任或状态已变化，请刷新后重试".to_string()));
     }
     let items = load_statement_items(db, &statement.base.id, executor).await?;

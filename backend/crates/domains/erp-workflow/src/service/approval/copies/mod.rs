@@ -1,7 +1,7 @@
 //! 审批抄送：配置资格、事件收件和独立只读授权。
+mod authorization;
 mod read;
 mod runtime;
-use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use entity_core::BaseModel;
 use erp_identity::SharedRbacService;
@@ -11,29 +11,8 @@ pub use read::{CopyDetail, CopyHistoryPage, CopyReadRequest};
 pub use runtime::{persist_copies, persist_started_copy};
 
 use crate::entity::approval_copy::{ApprovalCopyConfig, ApprovalCopyRule};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::repository::approval_copy::ApprovalCopyExt;
-
-/// 重验当前账号为有效内部账号；抄送读取不依赖角色权限。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-///
-/// 认证主体、身份服务、原执行器。
-/// # 返回
-/// 有效内部账号时成功，具体资料另按本人收件记录授权。
-/// # 错误
-/// 账号停用、身份不匹配或基础设施失败时拒绝。
-pub async fn require_reader(
-    identity_service: &SharedRbacService,
-    actor: &AuditActor,
-    ex: &mut dyn Executor,
-) -> Result<()> {
-    let account = identity_service.directory().account(actor.id(), ex).await?;
-    if !account.is_some_and(|a| a.kind == actor.kind() && a.is_active_backoffice()) {
-        return Err(Error::Forbidden("当前账号不可读取抄送".into()));
-    }
-    Ok(())
-}
 
 /// 发布及保存时验证所有接收人均为有效内部账号。
 /// # 参数

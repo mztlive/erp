@@ -81,51 +81,47 @@ pub fn inquiry_subject_version(requirement_version: u32) -> String {
 }
 
 impl WorkItem {
-    /// 校验询价任务当前责任、需求版本及责任行仍有效。
+    /// 校验已授权询价任务的开放状态、需求版本及责任行。
     ///
     /// # 参数
-    /// `actor_id` 为当前账号，`inquiry_id` 与 `requirement_version` 为当前需求，
-    /// `line_ids` 为当前需求有效行。
+    /// `inquiry_id` 与 `requirement_version` 为当前需求，`line_ids` 为需求有效行。
     /// # 返回
-    /// 身份、状态、版本与责任范围均匹配时返回 `true`。
+    /// 任务开放且版本、责任行完整匹配时返回 `true`。
     /// # 错误
-    /// 不返回错误；缺失、改派、终态、过时或损坏的范围均失败关闭。
-    pub fn owns_inquiry_task(
+    /// 不返回错误；终态、过时或损坏的业务事实返回 `false`。
+    pub fn inquiry_task_current(
         &self,
-        actor_id: &str,
         inquiry_id: &str,
         requirement_version: u32,
         line_ids: &[String],
     ) -> bool {
         self.status == WorkItemStatus::Open
-            && self.inquiry_responsibility_matches(actor_id, inquiry_id, requirement_version, line_ids)
+            && self.inquiry_responsibility_matches(inquiry_id, requirement_version, line_ids)
     }
 
-    /// 校验本人完成的询价任务及其冻结需求范围，只授予历史只读资格。
+    /// 校验已授权历史询价任务的完成事实及冻结需求范围。
     /// # 参数
-    /// `actor_id` 为当前账号，其余为任务对应的历史需求身份与有效行。
+    /// `inquiry_id` 与 `requirement_version` 为历史需求，`line_ids` 为该需求有效行。
     /// # 返回
-    /// 本人完成且责任范围完整匹配时为真。
+    /// 任务完成且完成证据和冻结责任行完整匹配时为真。
     /// # 错误
-    /// 不返回错误；关闭、改派、删除及缺失完成证据均拒绝。
-    pub fn owns_completed_inquiry(
+    /// 不返回错误；关闭、删除或缺失完成证据返回 `false`。
+    pub fn completed_inquiry_current(
         &self,
-        actor_id: &str,
         inquiry_id: &str,
         requirement_version: u32,
         line_ids: &[String],
     ) -> bool {
         self.status == WorkItemStatus::Completed
-            && self.completed_by.as_deref() == Some(actor_id)
+            && self.completed_by.is_some()
             && self
                 .completed_at
                 .is_some_and(|at| u64::try_from(at.unix_secs()).is_ok_and(|at| at >= self.base.created_at))
-            && self.inquiry_responsibility_matches(actor_id, inquiry_id, requirement_version, line_ids)
+            && self.inquiry_responsibility_matches(inquiry_id, requirement_version, line_ids)
     }
 
     fn inquiry_responsibility_matches(
         &self,
-        actor_id: &str,
         inquiry_id: &str,
         requirement_version: u32,
         line_ids: &[String],
@@ -135,7 +131,6 @@ impl WorkItem {
             && self.business_object_type == "sales_inquiry"
             && self.business_object_id == inquiry_id
             && self.subject_version == inquiry_subject_version(requirement_version)
-            && self.owner_user_id.as_deref() == Some(actor_id)
             && self.responsibility_key().is_some_and(|key| !key.trim().is_empty())
             && !self.responsibility_scope_ids().is_empty()
             && self.responsibility_scope_ids().iter().all(|id| line_ids.contains(id))
@@ -171,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn inquiry_grant_expires_with_owner_version_state_or_scope() {
+    fn inquiry_facts_require_current_version_state_and_scope() {
         let mut item = WorkItem::new_with_responsibility_scope(
             WorkItemId::new("task"),
             WorkItemData {
@@ -193,27 +188,25 @@ mod tests {
         )
         .unwrap();
         let lines = vec!["a".into(), "b".into()];
-        assert!(item.owns_inquiry_task("buyer", "inquiry", 2, &lines));
+        assert!(item.inquiry_task_current("inquiry", 2, &lines));
         assert!(ensure_generic_work_item_mutation(&item).is_err());
-        assert!(!item.owns_inquiry_task("other", "inquiry", 2, &lines));
-        assert!(!item.owns_inquiry_task("buyer", "inquiry", 3, &lines));
-        assert!(!item.owns_inquiry_task("buyer", "inquiry", 2, &["b".into()]));
+        assert!(!item.inquiry_task_current("inquiry", 3, &lines));
+        assert!(!item.inquiry_task_current("inquiry", 2, &["b".into()]));
         item.reassign("next", Instant::now()).unwrap();
-        assert!(!item.owns_inquiry_task("buyer", "inquiry", 2, &lines));
+        assert!(item.inquiry_task_current("inquiry", 2, &lines));
         item.complete_by_domain_command("next", Instant::now()).unwrap();
-        assert!(!item.owns_inquiry_task("next", "inquiry", 2, &lines));
-        assert!(item.owns_completed_inquiry("next", "inquiry", 2, &lines));
-        assert!(!item.owns_completed_inquiry("buyer", "inquiry", 2, &lines));
-        assert!(!item.owns_completed_inquiry("next", "other", 2, &lines));
-        assert!(!item.owns_completed_inquiry("next", "inquiry", 3, &lines));
-        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &["b".into()]));
+        assert!(!item.inquiry_task_current("inquiry", 2, &lines));
+        assert!(item.completed_inquiry_current("inquiry", 2, &lines));
+        assert!(!item.completed_inquiry_current("other", 2, &lines));
+        assert!(!item.completed_inquiry_current("inquiry", 3, &lines));
+        assert!(!item.completed_inquiry_current("inquiry", 2, &["b".into()]));
         item.status = WorkItemStatus::Closed;
-        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &lines));
+        assert!(!item.completed_inquiry_current("inquiry", 2, &lines));
         item.status = WorkItemStatus::Completed;
-        item.completed_by = Some("other".into());
-        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &lines));
+        item.completed_by = None;
+        assert!(!item.completed_inquiry_current("inquiry", 2, &lines));
         item.completed_by = Some("next".into());
         item.completed_at = None;
-        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &lines));
+        assert!(!item.completed_inquiry_current("inquiry", 2, &lines));
     }
 }

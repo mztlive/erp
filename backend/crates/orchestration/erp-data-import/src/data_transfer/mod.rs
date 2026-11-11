@@ -25,6 +25,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 pub use context_view::{TransferContext, TransferResumeState};
+use erp_identity::SharedRbacService;
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
 use serde_json::Value;
@@ -32,6 +33,7 @@ use storage::S3Storage;
 pub use types::{TransferKind, TransferRequest, TransferResult};
 
 use crate::Result;
+use crate::repository::import_job_access::ImportJobAccess;
 
 /// 业务适配器只接受固定任务类型；授权与业务规则沿用原用例。
 #[async_trait]
@@ -97,21 +99,24 @@ pub struct DataTransferProcess {
     storage: S3Storage,
     codec: Arc<SensitiveDataCodec>,
     handler: Arc<dyn TransferHandler>,
+    job_access: ImportJobAccess,
 }
 impl DataTransferProcess {
     /// 装配存储、密文编解码与业务执行适配器。
     /// # 参数
-    /// 数据库、对象存储、敏感数据密钥与已装配业务适配器。
+    /// 数据库、实时身份服务、对象存储、敏感数据密钥与已装配业务适配器。
     /// # 返回
     /// 不执行 I/O 的流程实例。
     /// # 错误
     /// 无。
     pub fn new(
         db: Database,
+        rbac: SharedRbacService,
         storage: S3Storage,
         codec: Arc<SensitiveDataCodec>,
         handler: Arc<dyn TransferHandler>,
     ) -> Self {
-        Self { db, storage, codec, handler }
+        let job_access = ImportJobAccess::new(db.clone(), rbac, submit::DOMAIN, None);
+        Self { db, storage, codec, handler, job_access }
     }
 }

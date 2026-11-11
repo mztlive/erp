@@ -2,13 +2,11 @@
 
 use application_core::AuditActor;
 use bpm::model::ApprovalProcessInstance;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::SharedRbacService;
 use erp_workflow::ApprovalIntegrationExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
-use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::service::approval::definition_management_visibility_with_executor;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -69,46 +67,22 @@ pub(crate) async fn ensure_cancel_authorized(
 }
 
 /// 原撤回授权顺序使用应用已装配的工作流 Port，禁止重建授权源。
-pub(crate) async fn authorize_with<A: WorkflowAuthorizationPort>(
+pub(crate) async fn authorize_with(
     identity_service: &SharedRbacService,
     db: &Database,
-    auth: &A,
     instance: &ApprovalProcessInstance,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<CancelAuthorization> {
     let snapshot = cancel_authorization_snapshot(db, instance, executor).await?;
-    let required =
-        [Permission::parse("approval_instance:cancel")?, Permission::parse("approval_instance:read")?];
-    let qualified = crate::authorization::features(db.clone(), identity_service.clone())
-        .permissions(actor, &required, executor)
-        .await?;
-    if qualified.is_none_or(|value| !value.same_role(&required)) {
-        return Err(Error::Forbidden("当前账号缺少撤回审批或读取权限".to_string()));
-    }
-    if snapshot.payload.submitted_by == actor.id() {
-        return Ok(CancelAuthorization {
-            authority: CancelAuthority::Submitter,
-            submitted_by: snapshot.payload.submitted_by,
-            responsible_org_id: snapshot.payload.responsible_org_id,
-        });
-    }
-    let visibility =
-        definition_management_visibility_with_executor(db, identity_service, actor, executor).await?;
-    if !visibility.runtime_admin_types().contains(&DocumentType::StockAdjustment)
-        || !auth
-            .approval_source_readable(
-                actor,
-                DocumentType::StockAdjustment,
-                &snapshot.business_object_id,
-                executor,
-            )
-            .await?
-    {
-        return Err(Error::Forbidden("只有原提交人或库存调整审批运行管理员可以撤回".to_string()));
-    }
+    super::cancel_access::require_cancel(db, identity_service, actor, &snapshot, executor).await?;
+    let authority = if snapshot.payload.submitted_by == actor.id() {
+        CancelAuthority::Submitter
+    } else {
+        CancelAuthority::RuntimeAdmin
+    };
     Ok(CancelAuthorization {
-        authority: CancelAuthority::RuntimeAdmin,
+        authority,
         submitted_by: snapshot.payload.submitted_by,
         responsible_org_id: snapshot.payload.responsible_org_id,
     })

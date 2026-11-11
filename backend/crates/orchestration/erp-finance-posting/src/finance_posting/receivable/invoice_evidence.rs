@@ -124,6 +124,7 @@ impl EvidenceCommand {
         .await?;
         invoice_attachments::persist(
             db,
+            &self.rbac.identity,
             &invoice.base.id,
             &self.req.attachment_asset_ids,
             self.pending.as_ref(),

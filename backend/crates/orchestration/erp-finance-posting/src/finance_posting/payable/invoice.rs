@@ -15,6 +15,7 @@ use erp_finance::entity::payable::{PayableAccount, PurchaseInvoiceAllocationPlan
 use erp_finance::entity::receivable::Invoice;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::{self, PayableService as FinancePayableService};
+use erp_identity::SharedRbacService;
 use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
@@ -87,7 +88,10 @@ impl PayableProcess {
     ) -> Result<PurchaseInvoiceWithAssetsResult> {
         req.validate()?;
         let receipt = purchase_invoice_receipt_with_assets(&req, actor, pending.as_ref())?;
-        let port = MongoPurchaseInvoiceCommand { db: self.db.clone() };
+        let port = MongoPurchaseInvoiceCommand {
+            db: self.db.clone(),
+            identity: self.authorization_rbac.identity.clone(),
+        };
         if let Some(invoice_id) = port.receipt_invoice_id(&receipt, &mut NoTransaction).await? {
             return Ok(PurchaseInvoiceWithAssetsResult {
                 view: port.registered_view(&invoice_id).await,
@@ -113,7 +117,10 @@ impl PayableProcess {
             pending,
         };
         let client = self.db.client().clone();
-        let transaction_port = MongoPurchaseInvoiceCommand { db: self.db.clone() };
+        let transaction_port = MongoPurchaseInvoiceCommand {
+            db: self.db.clone(),
+            identity: self.authorization_rbac.identity.clone(),
+        };
         let result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -301,6 +308,7 @@ fn registered_event_content(invoice: &Invoice) -> Result<BusinessEventContent> {
 
 struct MongoPurchaseInvoiceCommand {
     db: Database,
+    identity: SharedRbacService,
 }
 
 #[async_trait]
@@ -359,6 +367,7 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
     ) -> Result<()> {
         invoice_attachments::persist(
             &self.db,
+            &self.identity,
             &invoice.base.id,
             &registration.req.attachment_asset_ids,
             registration.pending.as_ref(),

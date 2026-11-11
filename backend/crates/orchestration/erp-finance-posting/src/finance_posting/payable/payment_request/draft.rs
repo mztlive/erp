@@ -65,8 +65,16 @@ impl PurchasePaymentRequestProcess {
                     ensure_version(&request, version)?;
                     request.update(req.data)?;
                     let sources = require_sources(&db, &rbac, &request, &actor, "update", executor).await?;
-                    let basis =
-                        source::prepare_submission(&db, &sources, &request, &actor, false, executor).await?;
+                    let basis = source::prepare_submission(
+                        &db,
+                        &rbac.identity,
+                        &sources,
+                        &request,
+                        &actor,
+                        false,
+                        executor,
+                    )
+                    .await?;
                     request.set_draft_basis(basis)?;
                     db.purchase_payment_requests().update(&mut request, executor).await?;
                     let audit = actor.resource_log(
@@ -90,7 +98,8 @@ pub(super) async fn create_draft(
     executor: &mut dyn Executor,
 ) -> Result<PurchasePaymentRequest> {
     let sources = require_sources(db, rbac, &request, actor, "create", executor).await?;
-    let basis = source::prepare_submission(db, &sources, &request, actor, false, executor).await?;
+    let basis =
+        source::prepare_submission(db, &rbac.identity, &sources, &request, actor, false, executor).await?;
     request.set_draft_basis(basis)?;
     for line in &request.lines {
         if line.requested_amount > line.open_total.checked_sub(line.other_reserved_total) {

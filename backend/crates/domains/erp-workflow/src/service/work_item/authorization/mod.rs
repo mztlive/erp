@@ -14,15 +14,16 @@ use facts::WorkItemFacts;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::Result;
 use crate::entity::work_item::WorkItem;
 use crate::repository::work_item::authorization::WorkItemMapping;
-use crate::{Error, Result};
 
 /// 任务读取与管理共享的完整对象授权；不决定办理人业务资格。
 #[derive(Clone)]
 pub struct WorkItemAuthorization {
     pub(crate) service: AuthorizationService,
     mapping: Arc<dyn AccessMapping>,
+    assigned: AuthorizationService,
 }
 
 impl WorkItemAuthorization {
@@ -36,8 +37,9 @@ impl WorkItemAuthorization {
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         let mapping = WorkItemMapping::shared();
         let facts = Arc::new(WorkItemFacts { db: db.clone(), proposed: None });
+        let assigned = assigned_authorization(db.clone(), rbac.clone(), facts.clone());
         let service = authorization(db, rbac, mapping.clone(), facts);
-        Self { service, mapping }
+        Self { service, mapping, assigned }
     }
 
     /// 用拟保存事实执行同一任务范围政策，不要求任务已存在于数据库。
@@ -50,8 +52,9 @@ impl WorkItemAuthorization {
     pub(super) fn proposed(db: Database, rbac: SharedRbacService, item: &WorkItem) -> Self {
         let mapping = WorkItemMapping::shared();
         let facts = Arc::new(WorkItemFacts { db: db.clone(), proposed: Some(item.clone()) });
+        let assigned = assigned_authorization(db.clone(), rbac.clone(), facts.clone());
         let service = authorization(db, rbac, mapping.clone(), facts);
-        Self { service, mapping }
+        Self { service, mapping, assigned }
     }
 }
 
@@ -65,7 +68,7 @@ fn authorization(
     let entries = ["list", "detail", "manage"]
         .into_iter()
         .map(|action| {
-            let permission = permission(action).expect("固定任务动作合法");
+            let permission = Permission::parse(format!("work_item:{action}")).expect("固定任务动作合法");
             AccessRegistration {
                 permission: permission.clone(),
                 required_permissions: vec![],
@@ -84,15 +87,57 @@ fn authorization(
     AuthorizationService::new(db, rbac, AuthorizationRegistry::new(entries).expect("固定任务登记完整"))
 }
 
-/// 仅服务端支持的任务动作可以解析为授权入口。
-fn permission(action: &str) -> Result<Permission> {
-    if !matches!(action, "list" | "detail" | "manage") {
-        return Err(Error::ValidationError("未登记的任务权限动作".into()));
-    }
-    Ok(Permission::parse(format!("work_item:{action}"))?)
+/// 指定人检查保留 detail 原范围，不能凭当前分配绕过既有读取资格。
+fn assigned_authorization(
+    db: Database,
+    rbac: SharedRbacService,
+    facts: Arc<WorkItemFacts>,
+) -> AuthorizationService {
+    let permission = Permission::parse("work_item:detail").expect("固定任务详情权限合法");
+    let registry = AuthorizationRegistry::new(vec![AccessRegistration {
+        permission: permission.clone(),
+        required_permissions: vec![],
+        access: AccessMode::Object {
+            data: DataAccess {
+                subject: AccessSubject::Direct,
+                required_facts: [FactKind::Owner, FactKind::Organization, FactKind::Assignee].into(),
+                policy: AccessPolicy::All(vec![
+                    AccessPolicy::Scope { permission, read: ReadAccess::default() },
+                    AccessPolicy::Assigned,
+                ]),
+            },
+            facts,
+        },
+    }])
+    .expect("固定任务指定人登记完整");
+    AuthorizationService::new(db, rbac, registry)
 }
 
 impl WorkItemAuthorization {
+    /// 在原执行器中证明真实任务的详情范围及当前指定人。
+    /// # 参数
+    /// actor 为当前办理人，id 为实际任务 ID，executor 为原业务执行器。
+    /// # 返回
+    /// 既有详情入口、范围及真实当前负责人均符合时成功；不限制任务业务状态。
+    /// # 错误
+    /// 身份、功能权限、任务范围或分配不符合时拒绝；事实与设施错误透传。
+    pub async fn require_assigned(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.assigned
+            .require(
+                actor,
+                &Permission::parse("work_item:detail")?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// 生成绑定当前事务的完整任务查询约束。
     /// # 参数
     /// actor 为真实账号，action 为登记动作，executor 沿用当前事务。
@@ -106,7 +151,10 @@ impl WorkItemAuthorization {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<Arc<CompiledAccess>> {
-        let query = self.service.query(actor, &permission(action)?, AccessSubject::Direct, executor).await?;
+        let query = self
+            .service
+            .query(actor, &Permission::parse(format!("work_item:{action}"))?, AccessSubject::Direct, executor)
+            .await?;
         let compiled = query.compile(self.mapping.as_ref(), executor).await?;
         self.service.validate(&compiled, executor).await?;
         Ok(Arc::new(compiled))
@@ -129,7 +177,7 @@ impl WorkItemAuthorization {
         self.service
             .require(
                 actor,
-                &permission(action)?,
+                &Permission::parse(format!("work_item:{action}"))?,
                 AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
                 executor,
             )

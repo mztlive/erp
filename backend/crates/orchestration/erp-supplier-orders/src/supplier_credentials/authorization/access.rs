@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use config::JdVopConfig;
-use erp_identity::{
-    AccessSubject, AccessTarget, AuthorizationRegistry, AuthorizationService, Permission, ResourceTargets,
-    SharedRbacService,
-};
+use erp_identity::{AccessSubject, AccessTarget, Permission, ResourceTargets, SharedRbacService};
 use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
 use erp_supply::service::supplier_api::SupplierApiService;
@@ -24,18 +21,6 @@ pub(super) struct ConnectionAccess {
 }
 
 impl ConnectionAccess {
-    pub(super) async fn permission(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> ProcessResult<bool> {
-        let permission = Permission::parse(format!("supplier_api_connection:{action}"))?;
-        Ok(AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
-            .has_permission(actor, &permission, executor)
-            .await?)
-    }
-
     pub(super) async fn require(
         &self,
         id: &str,
@@ -58,7 +43,7 @@ impl ConnectionAccess {
             .await
             .map_err(ProcessError::from)
             .map_err(conceal_missing)?;
-        if connection.connector_type != Some(SupplierConnectorType::JdVop) || connection.base.is_deleted() {
+        if connection.connector_type != Some(SupplierConnectorType::JdVop) {
             return Err(ProcessError::Forbidden("当前账号不能操作此供应商连接".into()));
         }
         Ok(connection)

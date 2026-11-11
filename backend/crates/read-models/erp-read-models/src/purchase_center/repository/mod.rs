@@ -5,6 +5,7 @@ mod coverage;
 mod coverage_history;
 mod coverage_service;
 mod creation_basis;
+pub(in crate::purchase_center) mod creation_tasks;
 mod inquiry_basis;
 mod inquiry_quotes;
 pub(super) use inquiry_basis::InquiryBasis;

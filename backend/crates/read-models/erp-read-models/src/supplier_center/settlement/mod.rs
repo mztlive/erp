@@ -7,24 +7,29 @@ pub mod dto;
 mod statement_result;
 pub use statement_result::SettlementStatementResult;
 mod query;
+mod review_access;
+use erp_identity::SharedRbacService;
 use mongodb::Database;
+pub use review_access::require_reviewer;
 /// 供应链快照与正式财务复核任务的读取入口。
 pub struct SupplierSettlementReadService {
     db: Database,
+    identity: SharedRbacService,
 }
 impl SupplierSettlementReadService {
     /// 使用原数据库构造结算读模型。
     ///
     /// # 参数
     /// * `db` - 数据库。
+    /// * `identity` - 共享身份设施。
     ///
     /// # 返回
     /// 返回结算读模型。构造不执行查询。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(db: Database, identity: SharedRbacService) -> Self {
+        Self { db, identity }
     }
 }
 

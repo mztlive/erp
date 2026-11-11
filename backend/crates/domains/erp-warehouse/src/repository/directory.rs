@@ -9,7 +9,7 @@ use persistence_core::{
     insert_literal_regex_filter,
 };
 
-use crate::authorization::{WarehouseQuery, map_identity_error};
+use crate::authorization::WarehouseQuery;
 use crate::dto::warehouse::WAREHOUSE_SORT_FIELDS;
 use crate::repository::warehouse_projection::warehouse_projection;
 use crate::repository::{WarehouseExt, WarehouseFilter, WarehouseRow};
@@ -34,10 +34,10 @@ pub(crate) async fn snapshot(
     query: &DirectoryQuery,
     executor: &mut dyn Executor,
 ) -> Result<Vec<DirectoryItem>> {
-    scope.validate(executor).await.map_err(map_identity_error)?;
+    scope.validate(executor).await?;
     let collection = db.collection::<DirectoryItem>(<Database as WarehouseExt>::WAREHOUSES);
     let items = aggregate::rows(&collection, pipeline(scope.stages(), query), executor).await?;
-    scope.validate(executor).await.map_err(map_identity_error)?;
+    scope.validate(executor).await?;
     Ok(items)
 }
 
@@ -87,13 +87,13 @@ pub(crate) async fn warehouses(
     filter: &WarehouseFilter,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<WarehouseRow>> {
-    scope.validate(executor).await.map_err(map_identity_error)?;
+    scope.validate(executor).await?;
     let collection = db.collection::<WarehouseRow>(<Database as WarehouseExt>::WAREHOUSES);
     let prefix = warehouse_prefix(scope.stages(), filter);
     let items =
         aggregate::find(&collection, doc! {}, warehouse_options(filter), prefix.clone(), executor).await?;
     let total = aggregate::count(&collection, doc! {}, prefix, executor).await?;
-    scope.validate(executor).await.map_err(map_identity_error)?;
+    scope.validate(executor).await?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("仓库总数超过上限".into()))?;
     Ok(PageResult { items, total })
 }

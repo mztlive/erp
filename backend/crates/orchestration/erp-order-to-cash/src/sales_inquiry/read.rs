@@ -103,7 +103,7 @@ pub struct InquiryListView<T> {
     pub as_of: i64,
 }
 
-/// 采购详情只开放当前责任行及必要客户和配送信息。
+/// 采购详情返回已授权询价的完整需求、反馈和当前任务。
 #[derive(Debug, Serialize)]
 pub struct ProcurementInquiryDetail {
     #[serde(flatten)]
@@ -112,14 +112,9 @@ pub struct ProcurementInquiryDetail {
 }
 
 impl ProcurementInquiryDetail {
-    fn from_task(inquiry: &SalesInquiry, task: &WorkItem, actor: &str) -> Result<Self> {
+    fn from_task(inquiry: &SalesInquiry, task: &WorkItem) -> Result<Self> {
         let view = if task.status == WorkItemStatus::Open {
-            InquiryProcurementView::from_responsibility(
-                inquiry,
-                task.responsibility_scope_ids(),
-                actor,
-                Instant::now(),
-            )
+            InquiryProcurementView::from_inquiry_at(inquiry, Instant::now())
         } else {
             let requirement = inquiry
                 .requirements
@@ -128,8 +123,6 @@ impl ProcurementInquiryDetail {
                 .ok_or_else(scope_changed)?;
             InquiryProcurementView::from_completed_task(
                 inquiry,
-                task.responsibility_scope_ids(),
-                actor,
                 requirement.version,
                 Instant::try_from_unix_secs(
                     i64::try_from(task.base.created_at).map_err(|_| scope_changed())?,
@@ -283,17 +276,17 @@ impl InquiryReadService {
                 .access
                 .require_read_task(actor, "list", &inquiry.base.id, &task.base.id, executor)
                 .await?;
-            items.push(ProcurementInquiryDetail::from_task(&current, &task, actor.id())?);
+            items.push(ProcurementInquiryDetail::from_task(&current, &task)?);
         }
         authorization.validate(&access, executor).await?;
         Ok(list_view(items, page.total, params, version, false))
     }
 
-    /// 按精确责任任务读取当前资料或本人完成的历史结果。
+    /// 按精确责任任务读取完整当前资料或本人完成时的历史结果。
     /// # 参数
     /// `actor` 为当前采购，`id` 为询价，`task_id` 为当前责任任务。
     /// # 返回
-    /// 返回责任行白名单与当前任务版本，不返回销售参考价。
+    /// 返回完整采购视图与当前任务版本，不返回销售参考价。
     /// # 错误
     /// 关闭、改派、历史证据缺失、账号或权限失效时拒绝。
     pub async fn procurement_detail(
@@ -304,14 +297,14 @@ impl InquiryReadService {
     ) -> Result<ProcurementInquiryDetail> {
         let (inquiry, task) =
             self.access.require_read_task(actor, "detail", id, task_id, &mut NoTransaction).await?;
-        ProcurementInquiryDetail::from_task(&inquiry, &task, actor.id())
+        ProcurementInquiryDetail::from_task(&inquiry, &task)
     }
 
-    /// 内部报价只按当前责任行和独立采购权限返回。
+    /// 通过当前任务和独立采购权限读取本询价的内部报价。
     /// # 参数
     /// `actor` 为当前采购，`id` 与 `task_id` 为精确询价任务。
     /// # 返回
-    /// 返回本版本责任行的不可变内部报价历史。
+    /// 返回本需求版本全部商品行的不可变内部报价历史。
     /// # 错误
     /// 当前任务或内部报价权限失效时拒绝。
     pub async fn internal_quotes(
@@ -328,17 +321,14 @@ impl InquiryReadService {
         self.access
             .require_task(actor, "internal_quote", id, task_id, Some(task.base.version), &mut NoTransaction)
             .await?;
-        Ok(quotes
-            .into_iter()
-            .filter(|quote| task.responsibility_scope_ids().contains(&quote.data.scope.line_id))
-            .collect())
+        Ok(quotes)
     }
 
-    /// 按当前责任行及明确反馈轮次读取内部费用依据。
+    /// 通过当前任务授权并按明确反馈轮次读取内部费用依据。
     /// # 参数
     /// `actor` 为当前采购，`id` 为询价，`params` 为任务和反馈轮次。
     /// # 返回
-    /// 仅返回任务可见费用对应的内部收款及付款依据。
+    /// 返回本询价对应轮次费用的内部收款及付款依据。
     /// # 错误
     /// 当前任务或独立内部资料权限失效、轮次非法时拒绝。
     pub async fn fee_bases(
@@ -354,12 +344,7 @@ impl InquiryReadService {
         if params.feedback_round == 0 || params.feedback_round > inquiry.feedback_round.saturating_add(1) {
             return Err(Error::ValidationError("费用反馈轮次无效".into()));
         }
-        let view = InquiryProcurementView::from_responsibility(
-            &inquiry,
-            task.responsibility_scope_ids(),
-            actor.id(),
-            Instant::now(),
-        );
+        let view = InquiryProcurementView::from_inquiry_at(&inquiry, Instant::now());
         let fee_ids = view
             .feedbacks
             .iter()

@@ -165,12 +165,9 @@ impl AccessFactsPort for LoadedSales {
     async fn load(
         &self,
         context: &AccessContext,
-        ids: &ResourceTargets,
+        _: &ResourceTargets,
         _: &mut dyn Executor,
     ) -> Result<Vec<ObjectFacts>> {
-        if !ids.ids().contains(&self.0.base.id) {
-            return Ok(vec![]);
-        }
         Ok(vec![ObjectFacts {
             resource: context.resource.clone(),
             id: self.0.base.id.clone(),

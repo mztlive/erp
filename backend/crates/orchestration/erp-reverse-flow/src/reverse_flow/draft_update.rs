@@ -127,7 +127,7 @@ impl ReturnsProcess {
             Box::pin(async move {
                 ensure_return_start_replay_authorized(db, &rbac, &actor, kind, &permission, &id, executor)
                     .await?;
-                persist_financial_draft(db, kind, &id, req, &actor, executor).await
+                persist_financial_draft(db, kind, &id, req, executor).await
             })
         })
         .await
@@ -140,14 +140,13 @@ async fn persist_financial_draft(
     kind: DocumentType,
     id: &str,
     req: UpdateFinancialReturnRequest,
-    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     match kind {
-        DocumentType::CustomerRefund => persist_customer_refund_draft(db, id, req, actor, executor).await,
-        DocumentType::SupplierRefund => persist_supplier_refund_draft(db, id, req, actor, executor).await,
-        DocumentType::ReceiptReversal => persist_receipt_reversal_draft(db, id, req, actor, executor).await,
-        DocumentType::PaymentReversal => persist_payment_reversal_draft(db, id, req, actor, executor).await,
+        DocumentType::CustomerRefund => persist_customer_refund_draft(db, id, req, executor).await,
+        DocumentType::SupplierRefund => persist_supplier_refund_draft(db, id, req, executor).await,
+        DocumentType::ReceiptReversal => persist_receipt_reversal_draft(db, id, req, executor).await,
+        DocumentType::PaymentReversal => persist_payment_reversal_draft(db, id, req, executor).await,
         _ => Err(Error::ValidationError("该单据不支持财务草稿编辑".into())),
     }
 }
@@ -157,7 +156,6 @@ async fn persist_customer_refund_draft(
     db: &Database,
     id: &str,
     req: UpdateFinancialReturnRequest,
-    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut record = db
@@ -165,7 +163,7 @@ async fn persist_customer_refund_draft(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原财务单据不存在".into()))?;
-    record.ensure_draft_editor(actor.id())?;
+    record.ensure_draft_editable()?;
     conflict_if_stale_version(record.matches_version(req.version))?;
     record.update(req.into()).map_err(|error| Error::ValidationError(error.to_string()))?;
     ReturnsService::new(db.clone()).persist_customer_refund(&mut record, executor).await?;
@@ -177,7 +175,6 @@ async fn persist_supplier_refund_draft(
     db: &Database,
     id: &str,
     req: UpdateFinancialReturnRequest,
-    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut record = db
@@ -185,7 +182,7 @@ async fn persist_supplier_refund_draft(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原财务单据不存在".into()))?;
-    record.ensure_draft_editor(actor.id())?;
+    record.ensure_draft_editable()?;
     conflict_if_stale_version(record.matches_version(req.version))?;
     record.update(req.into()).map_err(|error| Error::ValidationError(error.to_string()))?;
     ReturnsService::persist_supplier_refund(db, &mut record, executor).await?;
@@ -197,7 +194,6 @@ async fn persist_receipt_reversal_draft(
     db: &Database,
     id: &str,
     req: UpdateFinancialReturnRequest,
-    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut record = db
@@ -205,7 +201,7 @@ async fn persist_receipt_reversal_draft(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原财务单据不存在".into()))?;
-    record.ensure_draft_editor(actor.id())?;
+    record.ensure_draft_editable()?;
     conflict_if_stale_version(record.matches_version(req.version))?;
     record.update(req.into()).map_err(|error| Error::ValidationError(error.to_string()))?;
     ReturnsService::persist_receipt_reversal(db, &mut record, executor).await?;
@@ -217,7 +213,6 @@ async fn persist_payment_reversal_draft(
     db: &Database,
     id: &str,
     req: UpdateFinancialReturnRequest,
-    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut record = db
@@ -225,7 +220,7 @@ async fn persist_payment_reversal_draft(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原财务单据不存在".into()))?;
-    record.ensure_draft_editor(actor.id())?;
+    record.ensure_draft_editable()?;
     conflict_if_stale_version(record.matches_version(req.version))?;
     record.update(req.into()).map_err(|error| Error::ValidationError(error.to_string()))?;
     ReturnsService::persist_payment_reversal(db, &mut record, executor).await?;

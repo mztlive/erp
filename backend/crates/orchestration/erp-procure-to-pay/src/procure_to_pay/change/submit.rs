@@ -22,6 +22,7 @@ use erp_procurement::service::purchase_order::change::state::{
     apply_change_reason, start_purchase_change_approval,
 };
 use erp_procurement::service::purchase_order::line_input::build_change_submission_lines;
+use erp_read_models::purchase_center::PurchaseOrderReadService;
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::DocumentRegistryExt;
@@ -184,13 +185,10 @@ impl PurchaseOrderProcess {
         change_id: &str,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeOrderView> {
-        erp_read_models::purchase_center::PurchaseOrderReadService::with_scope(
-            self.db.clone(),
-            self.ports.scope.clone(),
-        )
-        .change_order_detail(change_id, actor)
-        .await
-        .map_err(crate::Error::from)
+        PurchaseOrderReadService::new(self.db.clone(), self.require_rbac()?.clone(), self.ports.scope.clone())
+            .change_order_detail(change_id, actor)
+            .await
+            .map_err(crate::Error::from)
     }
 
     /// 撤回审批中的采购变更单，回到可修正草稿且 `subject_version` 不回退。

@@ -1,11 +1,12 @@
 use std::slice::from_ref;
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use super::SupplierSettlementService;
 use super::shared::*;
+use super::{SettlementAction, SupplierSettlementService};
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement as dto;
 use crate::dto::supplier_settlement::*;
@@ -73,7 +74,7 @@ impl SupplierSettlementService {
     /// * `id` - 结算差异主键。
     /// * `req` - 差异决定请求，含结算单、期望版本和操作身份。
     /// * `conclusion` - 已规范化的正式结论。
-    /// * `actor_id` - 操作人，必须是当前差异处理人。
+    /// * `actor` - 当前真实差异处理账号。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -86,7 +87,7 @@ impl SupplierSettlementService {
         id: &str,
         req: &SettlementDifferenceDecisionRequest,
         conclusion: &SettlementDifferenceConclusion,
-        actor_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(SupplierSettlementStatement, SupplierSettlementDifference)> {
         let mut difference = self
@@ -110,12 +111,37 @@ impl SupplierSettlementService {
         statement
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        if !statement.is_difference_handler(actor_id) {
-            return Err(Error::Forbidden("只有当前差异处理人可以登记正式差异结论".to_string()));
-        }
+        self.access()
+            .require_action(actor, SettlementAction::ResolveDifference, &req.statement_id, executor)
+            .await?;
         if !statement.is_editable() {
             return Err(Error::BusinessLogicError("当前结算状态禁止处理差异".to_string()));
         }
+        self.ensure_conclusion_evidence(&difference, conclusion, executor).await?;
+        let now = Instant::now();
+        difference.record_conclusion(conclusion, actor.id(), now)?;
+        let items = self.load_statement_items(&statement.base.id, executor).await?;
+        let mut differences = self.load_statement_differences(&items, executor).await?;
+        let stored = differences
+            .iter_mut()
+            .find(|stored| stored.base.id == difference.base.id)
+            .ok_or_else(|| Error::ConflictError("结算差异已不属于当前结算单".to_string()))?;
+        *stored = difference.clone();
+        statement.update(SupplierSettlementStatementUpdate {
+            status: Some(SettlementStatus::HasDifference),
+            ..Default::default()
+        })?;
+        statement.update_subject_hash(statement.review_subject_hash(&differences))?;
+
+        Ok((statement, difference))
+    }
+    /// 确保正式差异结论仅引用该差异已登记的证据。
+    async fn ensure_conclusion_evidence(
+        &self,
+        difference: &SupplierSettlementDifference,
+        conclusion: &SettlementDifferenceConclusion,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         if !conclusion.evidence_reference_ids().is_empty() {
             let stored_evidence = self
                 .db
@@ -137,23 +163,9 @@ impl SupplierSettlementService {
                 ));
             }
         }
-        let now = Instant::now();
-        difference.record_conclusion(conclusion, actor_id, now)?;
-        let items = self.load_statement_items(&statement.base.id, executor).await?;
-        let mut differences = self.load_statement_differences(&items, executor).await?;
-        let stored = differences
-            .iter_mut()
-            .find(|stored| stored.base.id == difference.base.id)
-            .ok_or_else(|| Error::ConflictError("结算差异已不属于当前结算单".to_string()))?;
-        *stored = difference.clone();
-        statement.update(SupplierSettlementStatementUpdate {
-            status: Some(SettlementStatus::HasDifference),
-            ..Default::default()
-        })?;
-        statement.update_subject_hash(statement.review_subject_hash(&differences))?;
-
-        Ok((statement, difference))
+        Ok(())
     }
+
     /// 同一执行器依次 CAS 结算单和差异，审计仅在两步成功后写入。
     ///
     /// # 参数

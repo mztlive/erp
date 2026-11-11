@@ -54,7 +54,9 @@ pub async fn supplier_settlement_statement_list(
     Query(params): Query<SupplierSettlementStatementListParams>,
 ) -> Result<SettlementStatementDisplayList> {
     let page = settlement_process(&state).statement_list(&params, &actor).await?;
-    let page = SupplierSettlementReadService::new(state.application().db()).statement_list_view(page).await?;
+    let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .statement_list_view(page)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -72,7 +74,7 @@ pub async fn supplier_settlement_statement_detail(
     Path(id): Path<String>,
 ) -> Result<SettlementStatementDisplayDetail> {
     settlement_process(&state).require_detail(&actor, &id).await?;
-    let view = SupplierSettlementReadService::new(state.application().db())
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
         .supplier_settlement_statement_detail(&id, &actor)
         .await?;
 
@@ -95,7 +97,9 @@ pub async fn supplier_settlement_statement_create(
 ) -> Result<SettlementDraftCommandResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).create_statement(req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db()).statement_result(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .statement_result(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -107,7 +111,9 @@ pub async fn supplier_settlement_statement_refresh(
     Json(req): Json<RefreshSettlementStatementRequest>,
 ) -> Result<SettlementDraftCommandResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).refresh_statement(&id, req, &actor).await?;
-    let view = SupplierSettlementReadService::new(state.application().db()).statement_result(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .statement_result(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -149,7 +155,9 @@ pub async fn supplier_settlement_statement_submit_review(
 ) -> Result<SubmitSettlementReviewResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).submit_review(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db()).statement_result(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .statement_result(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -171,7 +179,9 @@ pub async fn supplier_settlement_statement_review_decide(
 ) -> Result<SettlementReviewDecisionResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).decide_review(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db()).statement_result(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .statement_result(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -193,7 +203,9 @@ pub async fn supplier_settlement_statement_void(
 ) -> Result<SettlementStatementDisplayView> {
     let view = settlement_process(&state).void_statement(&id, req, &actor).await?;
 
-    let view = SupplierSettlementReadService::new(state.application().db()).statement_result(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .statement_result(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -213,7 +225,9 @@ pub async fn supplier_settlement_item_list(
         .supplier_settlement_item_list(&params)
         .await?;
 
-    let page = SupplierSettlementReadService::new(state.application().db()).item_page_view(page).await?;
+    let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .item_page_view(page)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -233,8 +247,9 @@ pub async fn supplier_settlement_difference_list(
         .supplier_settlement_difference_list(&params)
         .await?;
 
-    let page =
-        SupplierSettlementReadService::new(state.application().db()).difference_page_view(page).await?;
+    let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .difference_page_view(page)
+        .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -257,8 +272,9 @@ pub async fn supplier_settlement_difference_decide(
 {
     let view = settlement_process(&state).decide_difference(&id, req, &actor).await?;
 
-    let view =
-        SupplierSettlementReadService::new(state.application().db()).difference_result_view(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .difference_result_view(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -270,8 +286,9 @@ pub async fn supplier_settlement_difference_evidence_append(
     Json(req): Json<SettlementDifferenceEvidenceRequest>,
 ) -> Result<SettlementDifferenceEvidenceResult<SettlementEvidenceDisplayView>> {
     let view = settlement_process(&state).append_difference_evidence(&id, req, &actor).await?;
-    let view =
-        SupplierSettlementReadService::new(state.application().db()).evidence_result_view(view).await?;
+    let view = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
+        .evidence_result_view(view)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

@@ -159,7 +159,6 @@ async fn apply_commit(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    input.refund.ensure_submitter(actor.id())?;
     if let Some(id) = replay_supplier_commit(
         db,
         rbac,

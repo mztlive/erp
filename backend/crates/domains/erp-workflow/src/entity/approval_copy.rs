@@ -174,22 +174,19 @@ pub struct ApprovalCopyReceipt {
 }
 
 impl ApprovalCopyReceipt {
-    /// 本人收件必须与同一实例和精确提交快照闭合。
+    /// 已授权的收件记录必须与同一实例和精确提交快照闭合。
     /// # 参数
-    /// 认证账号、仓储读取的快照及实例。
+    /// 仓储读取的快照及实例；收件人资格由 identity 预先核验。
     /// # 返回
-    /// 全部身份和版本匹配且已送达时为 true。
+    /// 全部业务身份和版本匹配时为 true。
     /// # 错误
     /// 无；非法运行类型失败关闭。
     pub fn matches_subject(
         &self,
-        actor: &str,
         snapshot: &ApprovalSubjectSnapshot,
         instance: &ApprovalProcessInstance,
     ) -> bool {
-        self.delivered
-            && self.recipient_user_id == actor
-            && self.instance_id == instance.base.id
+        self.instance_id == instance.base.id
             && self.snapshot_id == snapshot.base.id
             && self.instance_id == snapshot.approval_process_instance_id.as_ref()
             && self.document_type == snapshot.document_type
@@ -261,7 +258,7 @@ mod tests {
         }
     }
     #[test]
-    fn copy_read_rejects_other_users_instances_versions_and_undelivered() {
+    fn authorized_copy_requires_matching_instance_and_frozen_version() {
         use bpm::ids::ApprovalProcessDefinitionId;
         use bpm::model::{NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp};
         use erp_core::common::time::Instant;
@@ -300,17 +297,13 @@ mod tests {
             material_files: vec![],
         };
         snapshot.base.id = "snapshot".into();
-        let mut record = receipt();
-        assert!(record.matches_subject("reader", &snapshot, &instance));
-        assert!(!record.matches_subject("other", &snapshot, &instance));
-        record.delivered = false;
-        assert!(!record.matches_subject("reader", &snapshot, &instance));
-        record.delivered = true;
+        let record = receipt();
+        assert!(record.matches_subject(&snapshot, &instance));
         snapshot.subject_version = 2;
-        assert!(!record.matches_subject("reader", &snapshot, &instance));
+        assert!(!record.matches_subject(&snapshot, &instance));
         snapshot.subject_version = 1;
         snapshot.approval_process_instance_id = ApprovalProcessInstanceId::new("new-instance");
-        assert!(!record.matches_subject("reader", &snapshot, &instance));
+        assert!(!record.matches_subject(&snapshot, &instance));
     }
     #[test]
     fn empty_oversized_and_invalid_trigger_rules_are_rejected() {

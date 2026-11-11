@@ -1,55 +1,51 @@
-//! 结果归属与业务授权分别校验：导出可共享读取，业务写入仍限定原提交人。
+//! 内部文件任务由 identity 执行本人政策；门户任务保留原入口，等待门户重做。
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_support::BackgroundJob;
+use persistence_core::NoTransaction;
 
-use super::TransferKind;
+use super::{DataTransferProcess, TransferKind};
 use crate::{Error, Result};
 
-impl TransferKind {
-    /// 校验结果类型与归属，不替代当前业务权限和产物范围校验。
-    /// # 参数
-    /// `owner` 为原提交人，`actor` 为当前读取人。
-    /// # 返回
-    /// 本人结果或管理端读取导出时允许继续进入业务授权。
-    /// # 错误
-    /// 非本人读取导入，或门户账号读取他人结果时拒绝。
-    pub(super) fn authorize_reader(self, owner: &str, actor: &AuditActor) -> Result<()> {
-        if owner == actor.id() || (actor.kind() == AccountKind::Admin && self.is_export()) {
-            return Ok(());
+impl DataTransferProcess {
+    /// 内部导入要求本人，导出由原业务授权继续证明当前访问范围。
+    pub(super) async fn require_reader(
+        &self,
+        job: &BackgroundJob,
+        kind: TransferKind,
+        actor: &AuditActor,
+    ) -> Result<bool> {
+        if kind == TransferKind::PortalBatch {
+            return portal_owner(job, actor).map(|()| true);
         }
-        Err(Error::Forbidden("导入预览和批量处理结果仅供原提交人使用".into()))
+        if !kind.is_export() {
+            return self.job_access.require(&job.base.id, actor, &mut NoTransaction).await.map(|()| true);
+        }
+        self.job_access
+            .service
+            .permissions(actor, &[], &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::Forbidden("当前账号不能读取导出任务".into()))?;
+        match self.job_access.require(&job.base.id, actor, &mut NoTransaction).await {
+            Ok(()) => Ok(true),
+            Err(Error::Forbidden(_)) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 原入口查询进度或恢复结果时重验本人，不新增后台任务管理权限。
+    pub(super) async fn require_owner(&self, job: &BackgroundJob, actor: &AuditActor) -> Result<()> {
+        if actor.kind() == AccountKind::Supplier {
+            return portal_owner(job, actor);
+        }
+        self.job_access.require(&job.base.id, actor, &mut NoTransaction).await
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn another_admin_account_passes_export_ownership_but_not_import_ownership() {
-        let reader = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
-        for kind in
-            [TransferKind::ProductPoolExcel, TransferKind::SupplierQuoteArchive, TransferKind::SalesOrders]
-        {
-            assert!(kind.authorize_reader("owner", &reader).is_ok());
-        }
-        for kind in [
-            TransferKind::InquiryPreview,
-            TransferKind::InquiryCreationPreview,
-            TransferKind::SupplierQuotePreview,
-            TransferKind::SupplyBatch,
-            TransferKind::PortalBatch,
-        ] {
-            assert!(kind.authorize_reader("owner", &reader).is_err());
-            assert!(kind.authorize_reader("reader", &reader).is_ok());
-        }
+/// 门户本人任务规则维持现状，重做范围统一标记在 supplier_portal 入口。
+fn portal_owner(job: &BackgroundJob, actor: &AuditActor) -> Result<()> {
+    if job.requested_by != actor.id() {
+        return Err(Error::Forbidden("导入预览和批量处理结果仅供原提交人使用".into()));
     }
-
-    #[test]
-    fn portal_identity_cannot_read_another_accounts_export_or_import() {
-        let reader = AuditActor::new("supplier".into(), "supplier".into(), AccountKind::Supplier);
-        assert!(TransferKind::SalesOrders.authorize_reader("owner", &reader).is_err());
-        assert!(TransferKind::PortalBatch.authorize_reader("owner", &reader).is_err());
-        assert!(TransferKind::PortalBatch.authorize_reader("supplier", &reader).is_ok());
-    }
+    Ok(())
 }

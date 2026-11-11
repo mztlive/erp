@@ -306,7 +306,8 @@ impl BulkJobService {
                 Box::pin(async move {
                     let access = authorization.query(&actor, executor).await?;
                     let page =
-                        authorized_background_page(&db, &filter, &authorization, &access, executor).await?;
+                        authorized_background_page(&db, &filter, &authorization.service, &access, executor)
+                            .await?;
                     Ok(PageView {
                         items: page.items.into_iter().map(Into::into).collect(),
                         total: page.total,

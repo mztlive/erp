@@ -184,6 +184,7 @@ async fn apply_exception_completion(
         &target.request.expected_subject_version,
     )?;
     target.work_items.ensure_domain_decision_access(&target.actor, &work_item, executor).await?;
+    target.work_items.require_assigned(&target.actor, &work_item.base.id, executor).await?;
 
     let completed_at = Instant::now();
     work_item.complete_by_domain_command(target.actor.id(), completed_at)?;

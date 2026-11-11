@@ -11,6 +11,7 @@ use validator::Validate;
 
 use super::*;
 use crate::FinancePostingPorts;
+use crate::finance_posting::task_access::{TaskPurpose, require_task};
 
 impl PurchasePaymentRequestProcess {
     /// 在当前任务和敏感权限验证后主动揭示冻结收款账号。
@@ -130,10 +131,10 @@ async fn authorize_reveal_task(
         || task.business_object_id != request.base.id
         || task.subject_version != request.submission_version.to_string()
         || task.status != WorkItemStatus::Open
-        || !task.is_owned_by(actor.id())
     {
         return Err(Error::Forbidden("只有当前付款申请任务责任人可以查看收款账号".into()));
     }
+    require_task(db, rbac, actor, &task, TaskPurpose::Reveal, executor).await?;
     match task.work_item_type {
         WorkItemType::SupplierPaymentExecution => {
             execution::authorize_loaded_task(

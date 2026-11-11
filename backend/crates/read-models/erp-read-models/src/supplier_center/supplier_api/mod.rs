@@ -1,7 +1,7 @@
 //! 供应连接详情、动作权限和后台任务只读投影。
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, SharedRbacService};
 use erp_supplier::SupplierAccess;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
@@ -17,7 +17,7 @@ mod references;
 /// 供应连接跨域只读入口。
 pub struct SupplierApiReadService {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: AuthorizationService,
     reference_registry: Option<Arc<dyn SupplierReferenceRegistry>>,
     supplier_access: Option<SupplierAccess>,
     gateway: Option<Arc<dyn SupplierApiGateway>>,
@@ -35,7 +35,8 @@ impl SupplierApiReadService {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac, reference_registry: None, supplier_access: None, gateway: None }
+        let authorization = AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::default());
+        Self { db, authorization, reference_registry: None, supplier_access: None, gateway: None }
     }
 
     /// 注入供应商对象范围，目录读取不得因具有连接角色而扩大数据范围。

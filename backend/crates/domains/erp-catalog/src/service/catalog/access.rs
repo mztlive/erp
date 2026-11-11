@@ -1,11 +1,16 @@
 //! 商品对象读取与写入范围；显式维护人和业务组织分别解释。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{OrganizationDirectoryService, Permission, SharedRbacService};
+use erp_identity::{
+    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, OrganizationDirectoryService,
+    Permission, ResourceTargets, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{Authorization, CompiledScope};
+use crate::authorization::{self, CompiledScope};
 use crate::entity::catalog::Product;
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
@@ -14,7 +19,9 @@ use crate::repository::CatalogExt;
 #[derive(Clone)]
 pub struct CatalogAccess {
     db: Database,
-    authorization: Authorization,
+    rbac: SharedRbacService,
+    authorization: AuthorizationService,
+    mapping: Arc<dyn AccessMapping>,
 }
 
 impl CatalogAccess {
@@ -33,8 +40,9 @@ impl CatalogAccess {
     /// # 关键业务约束
     /// 目录由本域固定登记，不能由业务请求替换。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let authorization = Authorization::new(&db, rbac, "product").expect("固定资源授权目录有效");
-        Self { db, authorization }
+        let (authorization, mapping) =
+            authorization::service(&db, rbac.clone()).expect("固定商品授权目录有效");
+        Self { db, rbac, authorization, mapping }
     }
 
     /// 在调用方事务内证明资源动作并映射商品责任条件。
@@ -58,7 +66,15 @@ impl CatalogAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(self.authorization.resolve(actor, action, executor).await?)
+        let permission = Permission::parse(format!("product:{action}"))?;
+        let query = self.authorization.query(actor, &permission, AccessSubject::Direct, executor).await?;
+        let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
+        self.authorization.validate(&compiled, executor).await?;
+        Ok(CompiledScope {
+            scope_version: compiled.version(),
+            compiled,
+            authorization: self.authorization.clone(),
+        })
     }
 
     /// 在调用方事务内重验商品对象资格。
@@ -106,7 +122,15 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self.authorization.require(actor, action, id, executor).await?)
+        Ok(self
+            .authorization
+            .require(
+                actor,
+                &Permission::parse(format!("product:{action}"))?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await?)
     }
 
     /// 在创建事务内检查拟写入商品的完整授权。
@@ -122,7 +146,15 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self.authorization.require_create(actor, id, executor).await?)
+        let registry = authorization::creation_registry(id)?;
+        Ok(AuthorizationService::new(self.db.clone(), self.rbac.clone(), registry)
+            .require(
+                actor,
+                &Permission::parse("product:create")?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await?)
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。

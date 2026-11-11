@@ -30,6 +30,7 @@ mod draft_save;
 mod receipt_files;
 pub use draft_save::ReceiptDraftWithAssets;
 mod draft_update;
+mod receipt_access;
 
 mod dto;
 mod invoice;

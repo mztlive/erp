@@ -67,6 +67,27 @@ pub enum Error {
     RepositoryError(persistence_core::Error),
 }
 
+impl From<erp_identity::Error> for Error {
+    /// 保留身份域的拒绝、冲突和设施错误类别。
+    fn from(error: erp_identity::Error) -> Self {
+        match error {
+            erp_identity::Error::Internal(v) | erp_identity::Error::Rbac(v) => Self::Internal(v),
+            erp_identity::Error::NotFound(v) => Self::NotFound(v),
+            erp_identity::Error::ValidationError(v) => Self::ValidationError(v),
+            erp_identity::Error::InvalidInput(v) => Self::InvalidInput(v),
+            erp_identity::Error::BusinessLogicError(v) => Self::BusinessLogicError(v),
+            erp_identity::Error::ConflictError(v) => Self::ConflictError(v),
+            erp_identity::Error::Forbidden(v) => Self::Forbidden(v),
+            erp_identity::Error::Unauthenticated(v) => Self::Unauthenticated(v),
+            erp_identity::Error::Logic(v) => Self::Logic(v),
+            erp_identity::Error::ReceiptDuplicate(v) => Self::ReceiptDuplicate(v),
+            erp_identity::Error::TransientTransaction(v) => Self::TransientTransaction(v),
+            erp_identity::Error::OutcomeUnknown(v) => Self::OutcomeUnknown(v),
+            erp_identity::Error::RepositoryError(v) => Self::RepositoryError(v),
+        }
+    }
+}
+
 impl Error {
     /// 返回 HTTP 映射使用的稳定错误分类；不得解析 Display 文本。
     ///
@@ -288,6 +309,26 @@ mod tests {
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_sales_selection_idempotency_key")),
             "相同幂等键的请求载荷不一致"
+        );
+    }
+
+    #[test]
+    fn authorization_rejection_and_version_changes_keep_their_classes() {
+        assert!(
+            matches!(Error::from(erp_identity::Error::Forbidden("denied".into())), Error::Forbidden(message) if message == "denied")
+        );
+        assert!(
+            matches!(Error::from(erp_identity::Error::ConflictError("DATA_SCOPE_CHANGED".into())), Error::ConflictError(message) if message == "DATA_SCOPE_CHANGED")
+        );
+    }
+
+    #[test]
+    fn identity_facility_errors_are_not_hidden_as_permission_rejections() {
+        assert!(
+            matches!(Error::from(erp_identity::Error::Rbac("policy unavailable".into())), Error::Internal(message) if message == "policy unavailable")
+        );
+        assert!(
+            matches!(Error::from(erp_identity::Error::ValidationError("mapping missing".into())), Error::ValidationError(message) if message == "mapping missing")
         );
     }
 }

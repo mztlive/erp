@@ -8,10 +8,12 @@ use erp_finance::entity::supplier_deposit::{
 };
 use erp_finance::repository::SupplierDepositExt;
 use erp_finance::service::supplier_deposit::{SupplierDepositService, VerifiedDepositRelease};
+use erp_identity::SharedRbacService;
 use erp_supply::api_order::{ApiOrderExt, ApiOrderStage, ExecutionFundsFinality};
 use erp_supply::order_tracking::repository::OrderTrackingExt;
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_support::FileAssetExt;
+use erp_support::authorization::files::require_owned;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
@@ -94,7 +96,7 @@ async fn apply_resolution(
         .ok_or_else(|| Error::NotFound("原资金核对记录不存在".into()))?;
     let replay = previous.resolution.is_some();
     if !replay {
-        resolution_asset(&db, &command.evidence_asset_id, &actor, executor).await?;
+        resolution_asset(&db, &rbac, &command.evidence_asset_id, &actor, executor).await?;
     }
     let resolution = DepositReconciliationResolution {
         operation_key: command.operation_key.clone(),
@@ -137,7 +139,7 @@ async fn apply_release(
     if funds.reconciliation_required {
         return Err(Error::BusinessLogicError("账户仍待对账，请先完成差异结案".into()));
     }
-    resolution_asset(&db, &verification.evidence_asset_id, &actor, executor).await?;
+    resolution_asset(&db, &rbac, &verification.evidence_asset_id, &actor, executor).await?;
     let last_external_fact_at = release_finality(&db, &account, id, command.reason, executor).await?;
     let result = service
         .release_verified_reservation(
@@ -207,6 +209,7 @@ async fn release_finality(
 
 async fn resolution_asset(
     db: &Database,
+    rbac: &SharedRbacService,
     id: &str,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -216,9 +219,10 @@ async fn resolution_asset(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("资金核验附件不存在，请重新上传".into()))?;
-    if asset.created_by != actor.id() || !asset.is_usable_at(Instant::now()) {
-        return Err(Error::Forbidden("资金核验附件须由当前操作人上传且通过安全检查".into()));
+    if !asset.is_usable_at(Instant::now()) {
+        return Err(Error::Forbidden("资金核验附件不可用，请通过安全检查后重试".into()));
     }
+    require_owned(db, rbac, actor, &[id], executor).await?;
     db.file_assets().update(&mut asset, executor).await?;
     Ok(())
 }

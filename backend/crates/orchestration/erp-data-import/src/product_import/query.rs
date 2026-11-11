@@ -7,12 +7,14 @@ use erp_catalog::{
     ProductImportItemListParams, ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
 };
 use erp_core::ids::{BackgroundJobId, FileAssetId};
+use erp_identity::{AccessSubject, Permission};
+use erp_support::repository::bulk_job::authorized_background_page;
 use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobFilter, BulkJobExt, FileAsset, FileAssetExt, JobType,
     PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
 };
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ProductImportProcess;
@@ -44,18 +46,42 @@ impl ProductImportProcess {
             domain_job_type: Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE.to_string()),
             status: None,
             active_only: false,
-            requested_by: Some(actor.id().to_string()),
+            requested_by: None,
             page: paging.page,
             page_size: paging.page_size,
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: false,
         };
-        let page = self.db.background_jobs().search_background_jobs(&filter, &mut NoTransaction).await?;
+        let this = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.job_page(&filter, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一读取事务内交付本人授权任务页及来源文件名称。
+    async fn job_page(
+        &self,
+        filter: &BackgroundJobFilter,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<ProductImportJobView>> {
+        let service = &self.job_access.service;
+        let query = service
+            .query(actor, &Permission::parse("background_job:list")?, AccessSubject::Direct, executor)
+            .await?;
+        let access = query.compile(self.job_access.mapping.as_ref(), executor).await?;
+        let page = authorized_background_page(&self.db, filter, service, &access, executor).await?;
         let ids = page.items.iter().map(|row| BackgroundJobId::new(row.id.clone())).collect::<Vec<_>>();
-        let jobs = self.db.background_jobs().find_by_ids(&ids, &mut NoTransaction).await?;
-        let files = self.db.file_assets().find_by_ids(&source_file_ids(&jobs), &mut NoTransaction).await?;
+        let jobs = self.db.background_jobs().find_by_ids(&ids, executor).await?;
+        let files = self.db.file_assets().find_by_ids(&source_file_ids(&jobs), executor).await?;
         let items = page_job_views(&ids, &jobs, &files)?;
-        Ok(PageView { items, total: page.total, page: paging.page, page_size: paging.page_size })
+        service.validate(&access, executor).await?;
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
     /// 查询单个导入任务详情。
@@ -114,18 +140,13 @@ impl ProductImportProcess {
 
     /// 读取单任务并保留领域类型与发起人校验。
     async fn load_owned_job(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
+        self.job_access.require(id, actor, &mut NoTransaction).await?;
         let job = self
             .db
             .background_jobs()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
-        if job.domain_job_type.as_deref() != Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE) {
-            return Err(Error::NotFound("导入任务不存在".into()));
-        }
-        if job.requested_by != actor.id() {
-            return Err(Error::Forbidden("只能查看自己提交的导入任务".into()));
-        }
         Ok(job)
     }
 }

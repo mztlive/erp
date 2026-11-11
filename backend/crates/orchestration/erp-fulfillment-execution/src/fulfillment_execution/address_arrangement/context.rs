@@ -336,15 +336,16 @@ pub(super) async fn authorize_delivery(
     }
     let mut task = task::load_single_open_task(&process.db, "delivery", id, executor).await?;
     task::ensure_task_matches_frozen_identity(&task, &task::FulfillmentTaskObject::Delivery(&delivery))?;
-    task.record_activity(actor.id(), Instant::now())?;
-    task::ensure_fulfillment_owner_eligible(
+    super::super::task_access::require_assignee(
         &process.db,
         &(process.task_identity)(),
-        actor.id(),
-        "delivery",
+        actor,
+        &task,
+        super::super::task_access::TaskPurpose::Fulfillment,
         executor,
     )
     .await?;
+    task.record_activity(Instant::now())?;
     Ok(delivery)
 }
 

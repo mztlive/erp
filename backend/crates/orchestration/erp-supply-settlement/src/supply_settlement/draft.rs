@@ -12,8 +12,8 @@ use erp_supply::entity::supplier_settlement::{
     SupplierSettlementStatement,
 };
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::draft::{PreparedStatement, StatementPreparation};
+use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -134,7 +134,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             return Ok(result);
         }
         self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
-        let prepared = self.domain().prepare_refresh(id, &req, actor.id(), &mut NoTransaction).await?;
+        let prepared = self.domain().prepare_refresh(id, &req, actor, &mut NoTransaction).await?;
         let statement = prepared.statement;
         let Some(snapshot) = prepared.snapshot else {
             return self
@@ -246,7 +246,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let current = scope.require_statement(&actor, "update", &id, executor).await?;
+                    scope.require_action(&actor, SettlementAction::Refresh, &id, executor).await?;
+                    let current =
+                        SupplierSettlementService::new(db.clone()).load_statement(&id, executor).await?;
                     ensure_refresh_replay(&current, &receipt)?;
                     persist_supply_receipt(
                         &db,
@@ -458,7 +460,7 @@ struct RefreshWrite<'a> {
 
 /// 保持权限重验、正式快照替换、回执与事件的原执行顺序。
 async fn persist_refreshed_result(input: RefreshWrite<'_>, executor: &mut dyn Executor) -> Result<()> {
-    input.data_scope.require_statement(input.actor, "update", input.id, executor).await?;
+    input.data_scope.require_action(input.actor, SettlementAction::Refresh, input.id, executor).await?;
     SupplierSettlementService::new(input.db.clone())
         .persist_refreshed_statement(input.statement, input.snapshot, input.old_ids, input.request, executor)
         .await?;

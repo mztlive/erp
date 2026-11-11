@@ -362,16 +362,14 @@ impl SalesAccess {
         } else {
             None
         };
-        let Some(object_id) = attached_sales_object_id(
-            sales_order.as_ref().map(|_| document_id),
-            change_source.as_ref().map(|id| id.as_ref()),
-        ) else {
+        let Some(object_id) = sales_order
+            .as_ref()
+            .map(|_| document_id)
+            .or_else(|| change_source.as_ref().map(|id| id.as_ref()))
+        else {
             return Ok(());
         };
         self.require_object(actor, action, object_id, &[], executor).await?;
         Ok(())
     }
-}
-fn attached_sales_object_id<'a>(sales: Option<&'a str>, change: Option<&'a str>) -> Option<&'a str> {
-    sales.or(change)
 }

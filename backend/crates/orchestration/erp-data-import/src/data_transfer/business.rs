@@ -5,7 +5,9 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::{
+    AuthorizationRegistry, AuthorizationService, Permission, PermissionSet, SharedRbacService,
+};
 use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use erp_supplier_catalog::supply_governance::SupplierOfferingProcess;
 use mongodb::Database;
@@ -91,10 +93,8 @@ impl BusinessTransfers {
             .permissions(actor, &permissions, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Forbidden("操作账号已停用或身份变化".into()))?;
-        for permission in permissions {
-            if qualification.roles(&permission).is_empty() {
-                return Err(Error::Forbidden("当前账号无权执行此任务".into()));
-            }
+        if !qualification.permissions().covers(&PermissionSet::new(permissions)) {
+            return Err(Error::Forbidden("当前账号无权执行此任务".into()));
         }
         Ok(())
     }

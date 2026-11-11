@@ -29,18 +29,19 @@ pub struct PurchaseEmailResult {
 
 /// 下载当前持久化采购内容，沿用采购详情授权。
 /// # 参数
-/// `db`、`scope` 为应用能力，`id` 为采购单，`actor` 为当前操作人。
+/// `db`、`rbac`、`scope` 为应用能力，`id` 为采购单，`actor` 为当前操作人。
 /// # 返回
 /// 独立可打印采购文件。
 /// # 错误
 /// 不可见、无详情资格或读取失败时拒绝。
 pub async fn download(
     db: Database,
+    rbac: SharedRbacService,
     scope: Arc<dyn PurchaseDataScopePort>,
     id: &str,
     actor: &AuditActor,
 ) -> Result<PurchasePaper> {
-    Ok(paper::render(&read_order(&db, scope, id, actor).await?))
+    Ok(paper::render(&read_order(&db, rbac, scope, id, actor).await?))
 }
 
 /// 发出已生效采购版本邮件；同键永久去重，结果未知时只返回原状态。
@@ -62,14 +63,14 @@ pub async fn send(
     let config =
         config.ok_or_else(|| Error::ValidationError("尚未配置采购邮件服务，请联系系统管理员".into()))?;
     let permission = Permission::parse("purchase_order:send_email")?;
-    if !crate::authorization::features(db.clone(), rbac)
+    if !crate::authorization::features(db.clone(), rbac.clone())
         .has_permission(actor, &permission, &mut NoTransaction)
         .await?
     {
         return Err(Error::Forbidden("当前账号没有发送采购邮件的权限".into()));
     }
     let recipient = req.recipient()?;
-    let order = read_order(&db, scope, id, actor).await?;
+    let order = read_order(&db, rbac, scope, id, actor).await?;
     let key = digest(&(actor.id(), id, &req.idempotency_key))?;
     let fingerprint = digest(&(id, req.expected_version, &recipient))?;
     let repo = purchase_emails(&db);
@@ -118,11 +119,12 @@ fn prepare_record(
 }
 async fn read_order(
     db: &Database,
+    rbac: SharedRbacService,
     scope: Arc<dyn PurchaseDataScopePort>,
     id: &str,
     actor: &AuditActor,
 ) -> Result<PurchaseOrderCenterView> {
-    Ok(PurchaseOrderReadService::with_scope(db.clone(), scope).purchase_order_detail(id, Some(actor)).await?)
+    Ok(PurchaseOrderReadService::new(db.clone(), rbac, scope).purchase_order_detail(id, Some(actor)).await?)
 }
 fn digest(value: &impl Serialize) -> Result<String> {
     Ok(hex::encode(Sha256::digest(
@@ -144,18 +146,19 @@ pub struct PurchaseEmailHistory {
 }
 /// 读取本采购单最近 20 次邮件发送结果。
 /// # 参数
-/// `db`、`scope` 为应用能力，`id` 为采购单，`actor` 为认证人。
+/// `db`、`rbac`、`scope` 为应用能力，`id` 为采购单，`actor` 为认证人。
 /// # 返回
 /// 已授权的最近发送记录。
 /// # 错误
 /// 不可见、无详情权限或读取失败时拒绝。
 pub async fn history(
     db: Database,
+    rbac: SharedRbacService,
     scope: Arc<dyn PurchaseDataScopePort>,
     id: &str,
     actor: &AuditActor,
 ) -> Result<Vec<PurchaseEmailHistory>> {
-    read_order(&db, scope, id, actor).await?;
+    read_order(&db, rbac, scope, id, actor).await?;
     Ok(recent(&db, id, &mut NoTransaction)
         .await?
         .into_iter()

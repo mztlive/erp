@@ -31,7 +31,7 @@ mod refund;
 mod refund_result;
 mod refund_writes;
 mod reject;
-mod task_authorization;
+pub(crate) mod task_authorization;
 mod work_item;
 
 use std::sync::Arc;

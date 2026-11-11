@@ -1,4 +1,4 @@
-//! 文件材料转授的完整对象授权；上传者与功能资格的组合由 identity 执行。
+//! 文件材料的上传者与转授授权；完整对象规则统一由 identity 执行。
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -30,6 +30,45 @@ pub async fn require_transfer(
     ids: &[&str],
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    require_files(
+        db,
+        identity,
+        actor,
+        ids,
+        AccessPolicy::Any(vec![
+            AccessPolicy::Owned,
+            AccessPolicy::Permission(Permission::parse("file_asset:preview")?),
+        ]),
+        executor,
+    )
+    .await
+}
+
+/// 核验全部文件确由当前有效账号上传。
+/// # 参数
+/// db、identity 为共享身份设施，actor 为真实提交人，ids 为待关联的完整文件集合，executor 为原执行器。
+/// # 返回
+/// 全部文件的原上传者为当前账号时成功；空集合仍核验账号有效性。
+/// # 错误
+/// 账号失效、任一文件缺失或非本人上传、身份或事实读取失败时返回错误。
+pub async fn require_owned(
+    db: &Database,
+    identity: &SharedRbacService,
+    actor: &AuditActor,
+    ids: &[&str],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    require_files(db, identity, actor, ids, AccessPolicy::Owned, executor).await
+}
+
+async fn require_files(
+    db: &Database,
+    identity: &SharedRbacService,
+    actor: &AuditActor,
+    ids: &[&str],
+    policy: AccessPolicy,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     if ids.len() > 1000 && executor.session().is_none() {
         return Err(Error::ValidationError("分批文件授权必须使用业务事务".into()));
     }
@@ -41,12 +80,7 @@ pub async fn require_transfer(
             data: DataAccess {
                 subject: AccessSubject::Direct,
                 required_facts: [FactKind::Owner].into(),
-                policy: AccessPolicy::Account {
-                    policy: Box::new(AccessPolicy::Any(vec![
-                        AccessPolicy::Owned,
-                        AccessPolicy::Permission(Permission::parse("file_asset:preview")?),
-                    ])),
-                },
+                policy: AccessPolicy::Account { policy: Box::new(policy) },
             },
             facts: Arc::new(FileFacts(db.clone())),
         },

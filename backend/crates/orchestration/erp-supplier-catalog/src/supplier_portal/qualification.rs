@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_catalog::portal::NewProductDraft;
-use erp_core::AccountKind;
 use erp_identity::{PortalActor, SharedRbacService};
 use erp_supply::portal::OfferingApplication;
 use mongodb::Database;
@@ -23,9 +22,6 @@ impl SupplierPortalProcess {
         target: RequestTarget,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if actor.kind() != AccountKind::Admin {
-            return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
-        }
         let result =
             require_request(&self.db, &self.rbac, actor, target, RequestAction::Review, executor).await;
         if matches!(&result, Err(Error::Forbidden(_))) {

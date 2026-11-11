@@ -9,11 +9,13 @@ use erp_finance::entity::supplier_deposit::{
 };
 use erp_finance::repository::{PayableExt, SupplierDepositExt};
 use erp_finance::service::supplier_deposit::{DepositRechargePaymentTarget, SupplierDepositService};
+use erp_identity::SharedRbacService;
 use erp_party::PartyExt;
 use erp_party::repository::prelude::PartyBankAccountRepositoryExt;
 use erp_read_models::finance::supplier_deposits::account_row;
 use erp_supplier::SupplierExt;
 use erp_support::FileAssetExt;
+use erp_support::authorization::files::require_owned;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -128,6 +130,7 @@ impl SupplierDepositManagementProcess {
 
 async fn validate_bank_evidence(
     db: &Database,
+    rbac: &SharedRbacService,
     supplier: &str,
     command: &PayDepositRecharge,
     actor: &AuditActor,
@@ -156,9 +159,10 @@ async fn validate_bank_evidence(
         .find_by_id(&command.bank_receipt_asset_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("银行回单不存在".into()))?;
-    if asset.created_by != actor.id() || !asset.is_usable_at(Instant::now()) {
-        return Err(Error::Forbidden("银行回单不属于当前付款人或已不可用".into()));
+    if !asset.is_usable_at(Instant::now()) {
+        return Err(Error::Forbidden("银行回单已不可用".into()));
     }
+    require_owned(db, rbac, actor, &[&command.bank_receipt_asset_id], executor).await?;
     Ok(())
 }
 
@@ -223,7 +227,7 @@ async fn apply_pay_recharge(
         .await?
         .filter(|request| request.account_id == account)
         .ok_or_else(|| Error::NotFound("充值申请不存在".into()))?;
-    validate_bank_evidence(&db, &source.identity.supplier_id, &command, &actor, executor).await?;
+    validate_bank_evidence(&db, &rbac, &source.identity.supplier_id, &command, &actor, executor).await?;
     let data = SupplierPaymentData {
         payment_no: format!("CZFK-{}", recharge.request_no),
         supplier_id: SupplierAccountId::new(source.identity.supplier_id),

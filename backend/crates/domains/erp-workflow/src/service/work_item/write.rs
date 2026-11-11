@@ -167,7 +167,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             return Err(Error::Internal("幂等回执任务版本与事实不一致".to_string()));
         }
         ensure_generic_work_item_mutation(&item)?;
-        self.ensure_task_manage(actor, &item, &mut NoTransaction).await?;
+        self.authorization.require(actor, "manage", &item.base.id, &mut NoTransaction).await?;
         Ok(Some(item))
     }
 

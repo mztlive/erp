@@ -8,7 +8,7 @@ use erp_supply::entity::supplier_api::{
 use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
-use erp_supply::service::supplier_api::context::map_command_shape_rejection;
+use erp_supply::service::supplier_api::context::{action_permission, map_command_shape_rejection};
 use erp_support::BulkJobExt;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -39,7 +39,7 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
         command.validate()?;
-        self.ensure_action_permission(actor, command.action).await?;
+        self.ensure_permission(actor, action_permission(command.action)).await?;
         let identity = CommandIdentity::new(id, actor.id(), &command)?;
         if let Some(result) = self.replay_command(&identity).await? {
             return Ok(result);

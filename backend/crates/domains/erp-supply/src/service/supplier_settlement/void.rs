@@ -1,7 +1,8 @@
+use application_core::AuditActor;
 use persistence_core::Executor;
 use validator::Validate;
 
-use super::SupplierSettlementService;
+use super::{SettlementAction, SupplierSettlementService};
 use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::{Error, Result};
@@ -11,7 +12,7 @@ impl SupplierSettlementService {
     /// # 参数
     /// * `id` - 结算单主键。
     /// * `req` - 作废请求，含期望版本。
-    /// * `actor_id` - 操作人。
+    /// * `actor` - 当前真实账号。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -23,7 +24,7 @@ impl SupplierSettlementService {
         &self,
         id: &str,
         req: &VoidSettlementRequest,
-        actor_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(SupplierSettlementStatement, bool)> {
         req.validate()?;
@@ -31,7 +32,8 @@ impl SupplierSettlementService {
         if statement.is_voided() {
             return Ok((statement, true));
         }
-        if !statement.is_prepared_by(actor_id) || !statement.is_editable() {
+        self.access().require_action(actor, SettlementAction::Void, id, executor).await?;
+        if !statement.is_editable() {
             return Err(Error::BusinessLogicError("只有经办人可以作废尚未提交复核的结算草稿".to_string()));
         }
         statement

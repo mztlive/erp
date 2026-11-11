@@ -27,6 +27,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::{PurchasePaymentRequestProcess, ensure_version, execution, load, source};
+use crate::finance_posting::task_access::{TaskPurpose, require_task};
 use crate::{Error, Result};
 
 fn execution_budget(
@@ -181,7 +182,7 @@ impl DepositExecutionWrite<'_> {
                 "本申请没有已补齐履约资料并绑定该账户的供应商执行组".into(),
             ));
         }
-        task.record_activity(self.actor.id(), Instant::now())?;
+        task.record_activity(Instant::now())?;
         self.db.work_items().update(&mut task, executor).await?;
         let audit = self.actor.clone().resource_log(
             ACTION,
@@ -205,16 +206,16 @@ impl DepositExecutionWrite<'_> {
         if id != self.request_id {
             return Err(Error::ConflictError("原余额执行回执不属于本付款申请".into()));
         }
-        execution::require_result_permissions(self.db, &self.process.rbac, self.actor, executor).await?;
         let task = self
             .db
             .work_items()
             .find_by_id(self.input.work_item_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::NotFound("原余额执行任务不存在".into()))?;
-        if !execution::can_read_payment_result_task(&task, self.request_id, self.actor.id()) {
+        if !execution::matches_payment_result_task(&task, self.request_id) {
             return Err(Error::Forbidden("原余额执行任务不属于当前出纳".into()));
         }
+        require_task(self.db, &self.process.rbac, self.actor, &task, TaskPurpose::Payment, executor).await?;
         let request = load(self.db, self.request_id, executor).await?;
         let PaymentRequestExecutionMethod::SupplierDeposit { account_id } = &request.data.execution_method
         else {

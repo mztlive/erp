@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, PermissionSet};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::policy::{
@@ -138,14 +138,16 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 .map(Permission::parse)
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             let actor = AuditActor::new(user.clone(), account.account.clone(), AccountKind::Admin);
-            let qualified = service.permissions(&actor, &required, &mut NoTransaction).await?;
-            for permission in required {
-                if qualified.as_ref().is_none_or(|value| value.roles(&permission).is_empty()) {
-                    return Err(Error::Forbidden(format!(
-                        "演示账号 {} 缺少操作权限 {permission}，请在角色配置中核定后重新生成",
-                        account.account
-                    )));
-                }
+            let granted = service
+                .permissions(&actor, &required, &mut NoTransaction)
+                .await?
+                .map(|qualified| qualified.permissions())
+                .unwrap_or_default();
+            if let Some(permission) = granted.missing_from(&PermissionSet::new(required)).into_vec().first() {
+                return Err(Error::Forbidden(format!(
+                    "演示账号 {} 缺少操作权限 {permission}，请在角色配置中核定后重新生成",
+                    account.account
+                )));
             }
         }
         Ok(())

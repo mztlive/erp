@@ -22,13 +22,16 @@ mod views;
 use std::sync::Arc;
 
 use erp_catalog::{CatalogAccess, CatalogService};
+use erp_identity::SharedRbacService;
 use erp_supply::OfferingAccess;
 use erp_supply::service::supplier_offering::SupplierOfferingService;
+use erp_support::PRODUCT_IMPORT_DOMAIN_JOB_TYPE;
 use mongodb::Database;
 use storage::S3Storage;
 
 use self::execute::JobRowSource;
 use crate::background::import_source::ImportSourceCache;
+use crate::repository::import_job_access::ImportJobAccess;
 
 /// 导入消费的领域服务与附件转换合同，由应用注入实际 Port 提供者。
 #[derive(Clone)]
@@ -45,6 +48,7 @@ pub struct ProductImportServices {
 pub struct ProductImportProcess {
     db: Database,
     services: ProductImportServices,
+    job_access: ImportJobAccess,
     storage: S3Storage,
     secret: Vec<u8>,
     sources: Arc<ImportSourceCache<JobRowSource>>,
@@ -56,6 +60,7 @@ impl ProductImportProcess {
     /// # 参数
     /// * `db` - MongoDB 数据库。
     /// * `services` - 应用装配的目录、供给与数据范围服务。
+    /// * `rbac` - 实时身份与权限服务。
     /// * `storage` - 对象存储。
     /// * `secret` - 文件内容指纹密钥。
     ///
@@ -67,10 +72,17 @@ impl ProductImportProcess {
     pub fn new(
         db: Database,
         services: ProductImportServices,
+        rbac: SharedRbacService,
         storage: S3Storage,
         secret: impl Into<Vec<u8>>,
     ) -> Self {
         Self {
+            job_access: ImportJobAccess::new(
+                db.clone(),
+                rbac,
+                PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
+                Some("product:list"),
+            ),
             db,
             services,
             storage,

@@ -8,10 +8,11 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
 use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::repository::ReceivableExt;
-use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, matches_sales_invoice_identity};
+use erp_workflow::{WorkItemExt, WorkItemStatus};
 use persistence_core::Executor;
 
+use crate::finance_posting::task_access::{TaskPurpose, require_task};
 use crate::{Error, FinancePostingPorts, Result};
 
 /// 触发应收可开票额度变化的正式业务事实。
@@ -99,9 +100,10 @@ pub(crate) async fn record_invoice_execution(
         .await?
         .ok_or_else(|| Error::NotFound("开票任务关联的应收往来子账不存在".to_string()))?;
     ensure_task_identity(&task, &account)?;
-    if !task.is_owned_by(actor.id()) {
+    if task.status != WorkItemStatus::Open {
         return Err(Error::Forbidden("当前账号不是开放开票任务的当前责任人".to_string()));
     }
+    require_task(db, rbac, actor, &task, TaskPurpose::Invoice, executor).await?;
     rbac.fresh_tasks()?.ensure_domain_decision_access(actor, &task, executor).await?;
     rbac.funds
         .require_sales_sources(actor, "invoice:post", &[account.sales_order_id.to_string()], executor)
@@ -121,7 +123,7 @@ pub(crate) async fn record_invoice_execution(
         executor,
     )
     .await?;
-    task.record_activity(actor.id(), Instant::now()).map_err(Error::Logic)?;
+    task.record_activity(Instant::now()).map_err(Error::Logic)?;
     db.work_items().update(&mut task, executor).await?;
     Ok(request_id)
 }

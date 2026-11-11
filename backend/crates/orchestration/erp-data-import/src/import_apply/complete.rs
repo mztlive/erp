@@ -15,7 +15,7 @@ use erp_import::{
     PreparedConfirmationCompletion,
 };
 use erp_workflow::entity::document_registry::WorkflowActionId;
-use erp_workflow::entity::work_item::{ImportConfirmationTaskIdentity, WorkItem};
+use erp_workflow::entity::work_item::{ImportConfirmationTaskIdentity, WorkItem, WorkItemStatus};
 use erp_workflow::{DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use persistence_core::{Executor, Transactional};
@@ -189,13 +189,8 @@ async fn load_confirmation_source(
         .find_by_id(confirmation.batch_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("导入批次不存在".into()))?;
-    validate_confirmation_completion(
-        command.prepared,
-        &work_item,
-        &confirmation,
-        &batch,
-        command.actor.id(),
-    )?;
+    validate_confirmation_completion(command.prepared, &work_item, &confirmation, &batch)?;
+    command.work_items.require_assigned(command.actor, &work_item.base.id, executor).await?;
     command.work_items.ensure_domain_decision_access(command.actor, &work_item, executor).await?;
     Ok(ConfirmationSource { confirmation, work_item, batch })
 }
@@ -219,7 +214,7 @@ async fn apply_confirmation_completion(
         prepared.reason_code.clone(),
         prepared.comment.clone(),
     )?;
-    source.work_item.record_activity(command.actor.id(), command.at)?;
+    source.work_item.record_activity(command.at)?;
     source.work_item.complete_by_domain_command(command.actor.id().to_string(), command.at)?;
     replace_confirmation_in_matrix(&mut matrix, &source.confirmation);
     let current = LegacyImportConfirmation::current_matrix(
@@ -390,19 +385,17 @@ struct ConfirmationCompletionTransactionResult {
 /// * `work_item` - 当前确认任务。
 /// * `confirmation` - 当前确认事实。
 /// * `batch` - 确认所属批次。
-/// * `actor_id` - 当前操作人。
 ///
 /// # 返回
-/// 任务、事实、批次版本与当前责任一致时无返回值。
+/// 任务、事实、批次版本与冻结责任身份一致时无返回值。
 ///
 /// # 错误
-/// 任务、批次版本或试算快照变化时返回 `ConflictError`。任务、责任范围或批次不匹配，或范围已不在必要矩阵时返回 `BusinessLogicError`。当前账号不是责任人时返回 `Forbidden`。确认范围未注册时返回 `Logic`；必要范围无法解析时返回对应错误。
+/// 任务、批次版本或试算快照变化、任务不再开放时返回 `ConflictError`。任务、责任范围或批次不匹配，或范围已不在必要矩阵时返回 `BusinessLogicError`。确认范围未注册时返回 `Logic`；必要范围无法解析时返回对应错误。
 pub(super) fn validate_confirmation_completion(
     command: &PreparedConfirmationCompletion,
     work_item: &WorkItem,
     confirmation: &LegacyImportConfirmation,
     batch: &LegacyImportBatch,
-    actor_id: &str,
 ) -> Result<()> {
     if work_item.base.version != command.expected_task_version
         || !batch.has_version(command.expected_batch_version)
@@ -438,8 +431,8 @@ pub(super) fn validate_confirmation_completion(
     if !batch.required_confirmation_scopes()?.contains(&command_scope) {
         return Err(Error::BusinessLogicError("当前确认范围已不属于批次必要矩阵".to_string()));
     }
-    if !work_item.is_owned_by(actor_id) {
-        return Err(Error::Forbidden("当前账号不是该导入确认的当前责任人".to_string()));
+    if work_item.status != WorkItemStatus::Open {
+        return Err(Error::ConflictError("导入确认任务已不再开放".to_string()));
     }
     Ok(())
 }

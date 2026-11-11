@@ -295,26 +295,6 @@ fn registration(
     Ok((registry, mapping))
 }
 
-/// 机械保留身份错误的分类和载荷。
-pub(crate) fn map_identity_error(error: erp_identity::Error) -> crate::Error {
-    match error {
-        erp_identity::Error::Internal(value) => crate::Error::Internal(value),
-        erp_identity::Error::NotFound(value) => crate::Error::NotFound(value),
-        erp_identity::Error::ValidationError(value) => crate::Error::ValidationError(value),
-        erp_identity::Error::InvalidInput(value) => crate::Error::InvalidInput(value),
-        erp_identity::Error::BusinessLogicError(value) => crate::Error::BusinessLogicError(value),
-        erp_identity::Error::ConflictError(value) => crate::Error::ConflictError(value),
-        erp_identity::Error::ReceiptDuplicate(value) => crate::Error::ReceiptDuplicate(value),
-        erp_identity::Error::TransientTransaction(value) => crate::Error::TransientTransaction(value),
-        erp_identity::Error::Forbidden(value) => crate::Error::Forbidden(value),
-        erp_identity::Error::Unauthenticated(value) => crate::Error::Unauthenticated(value),
-        erp_identity::Error::Logic(value) => crate::Error::Logic(value),
-        erp_identity::Error::OutcomeUnknown(value) => crate::Error::OutcomeUnknown(value),
-        erp_identity::Error::RepositoryError(value) => crate::Error::RepositoryError(value),
-        erp_identity::Error::Rbac(value) => crate::Error::Internal(value),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;

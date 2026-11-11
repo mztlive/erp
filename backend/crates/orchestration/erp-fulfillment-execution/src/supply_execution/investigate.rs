@@ -328,7 +328,6 @@ pub(super) fn validate_w26_task(
     order_id: &str,
     expected_task_version: u64,
     expected_subject_version: &str,
-    actor_id: &str,
 ) -> Result<()> {
     ensure_version(item.base.version, expected_task_version, "供应商履约任务")?;
     if item.status != WorkItemStatus::Open {
@@ -339,15 +338,11 @@ pub(super) fn validate_w26_task(
         WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
     ) || item.business_object_type != W26_BUSINESS_OBJECT_TYPE
         || item.business_object_id != order_id
-        || false
     {
         return Err(Error::BusinessLogicError("正式任务未注册到当前供应商履约订单".to_string()));
     }
     if item.subject_version != expected_subject_version {
         return Err(Error::ConflictError("任务主体版本已变化，请刷新后重试".to_string()));
-    }
-    if !item.is_owned_by(actor_id) {
-        return Err(Error::Forbidden("当前用户不是该供应商履约任务的当前责任人".to_string()));
     }
     Ok(())
 }

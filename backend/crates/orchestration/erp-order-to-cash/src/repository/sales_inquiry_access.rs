@@ -146,6 +146,7 @@ impl AccessFactsPort for TaskFacts {
             id: self.0.base.id.clone(),
             version: self.0.base.version.to_string(),
             assignee_id: FactValue::Known(self.0.owner_user_id.clone()),
+            participants: FactValue::Known(self.0.completed_by.clone().into_iter().collect()),
             ..Default::default()
         }])
     }

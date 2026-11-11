@@ -62,16 +62,22 @@ impl AccessFactsPort for WorkItemFacts {
                 },
                 None => None,
             };
-            facts.push(ObjectFacts {
-                resource: "work_item".into(),
-                id: item.base.id,
-                version: item.base.version.to_string(),
-                owner_id: FactValue::Known(item.owner_user_id),
-                org_unit_id: FactValue::Known(org),
-                ..Default::default()
-            });
+            facts.push(item_facts(item, org));
         }
         Ok(facts)
+    }
+}
+
+/// 同一个真实任务负责人同时提供范围归属和办理分配事实。
+fn item_facts(item: WorkItem, org: Option<String>) -> ObjectFacts {
+    ObjectFacts {
+        resource: "work_item".into(),
+        id: item.base.id,
+        version: item.base.version.to_string(),
+        owner_id: FactValue::Known(item.owner_user_id.clone()),
+        assignee_id: FactValue::Known(item.owner_user_id),
+        org_unit_id: FactValue::Known(org),
+        ..Default::default()
     }
 }
 
@@ -109,6 +115,12 @@ mod tests {
         assert_eq!(loaded[0].owner_user_id.as_deref(), Some("reviewer"));
         assert_eq!(loaded[0].owner_organization_id, "procurement");
         assert_eq!(loaded[0].subject_version, "submission-1");
+        let facts = item_facts(loaded[0].clone(), Some("current-org".into()));
+        assert_eq!(facts.resource, "work_item");
+        assert_eq!(facts.id, "review-task");
+        assert_eq!(facts.owner_id, FactValue::Known(Some("reviewer".into())));
+        assert_eq!(facts.assignee_id, facts.owner_id);
+        assert_eq!(facts.org_unit_id, FactValue::Known(Some("current-org".into())));
         assert!(proposed_targets(&item, &ResourceTargets::new(&["other-task"]).unwrap()).is_empty());
         let incomplete = ResourceTargets::new(&["review-task", "other-task"]).unwrap();
         let loaded = proposed_targets(&item, &incomplete);

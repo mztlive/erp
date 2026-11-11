@@ -23,12 +23,10 @@ trait HttpAuthorization: Send + Sync {
     async fn allows(&self, actor: &AuditActor, permission: &Permission) -> erp_identity::Result<bool>;
 }
 
-struct RbacAuthorizationPort(AuthorizationService);
-
 #[async_trait]
-impl HttpAuthorization for RbacAuthorizationPort {
+impl HttpAuthorization for AuthorizationService {
     async fn allows(&self, actor: &AuditActor, permission: &Permission) -> erp_identity::Result<bool> {
-        self.0.has_permission(actor, permission, &mut NoTransaction).await
+        self.has_permission(actor, permission, &mut NoTransaction).await
     }
 }
 
@@ -47,7 +45,7 @@ pub fn with_permission(
     permission: impl Into<PermissionBinding>,
 ) -> MethodRouter<HttpState> {
     route.route_layer(RbacAuthorizeLayer::new(
-        std::sync::Arc::new(RbacAuthorizationPort(authorization.clone())),
+        std::sync::Arc::new(authorization.clone()),
         permission.into().required.permission(),
     ))
 }

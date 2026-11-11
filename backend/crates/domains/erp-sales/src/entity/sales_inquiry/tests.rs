@@ -476,14 +476,10 @@ fn independent_sales_and_procurement_projections_enforce_field_whitelists() {
     let sales = serde_json::to_value(InquirySalesView::from_inquiry(&inquiry)).unwrap();
     assert!(sales.get("feedback_work").is_none());
     assert!(!sales.to_string().contains("unpublished-private-draft"));
-    let procurement =
-        serde_json::to_value(InquiryProcurementView::from_scoped(&inquiry, &["line".into()])).unwrap();
+    let procurement = serde_json::to_value(InquiryProcurementView::from_inquiry(&inquiry)).unwrap();
     assert!(procurement["draft"]["lines"][0].get("sales_reference_price_gross").is_none());
     assert!(procurement["requirements"][0]["data"]["lines"][0].get("sales_reference_price_gross").is_none());
-    let empty = InquiryProcurementView::from_scoped(&inquiry, &[]);
-    assert!(empty.draft.lines.is_empty());
-    assert!(empty.feedbacks[0].data.lines.is_empty());
-    assert!(empty.feedbacks[0].data.fees.is_empty());
+    assert_eq!(procurement["feedback_work"].as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -505,25 +501,25 @@ fn procurement_reinquiry_exposes_reason_without_full_sales_requirement() {
             now(),
         )
         .unwrap();
-    let view = InquiryProcurementView::from_scoped_at(&inquiry, &["line".into()], now());
+    let view = InquiryProcurementView::from_inquiry_at(&inquiry, now());
     let request = view.reinquiry.as_ref().unwrap();
     assert_eq!(request.reason, "请重新核实价格");
     assert_eq!(request.concerns, "优先确认交期");
     assert_eq!(request.previous_feedback_round, 1);
-    assert_eq!(request.line_ids, ["line"]);
-    assert_eq!(request.fee_ids, ["fee"]);
+    assert_eq!(request.line_ids, ["line", "line-b"]);
+    assert_eq!(request.fee_ids, ["fee", "fee-b"]);
     assert!(!request.all_items);
     let json = serde_json::to_value(view).unwrap();
     assert!(json["reinquiry"].get("requirement").is_none());
     assert!(json["reinquiry"].get("data").is_none());
     assert!(json["draft"]["lines"][0].get("sales_reference_price_gross").is_none());
-    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &[], now()).reinquiry.is_none());
+    assert!(InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.is_some());
 }
 
 #[test]
-fn procurement_reinquiry_filters_fee_only_and_unrelated_tasks() {
+fn procurement_reinquiry_keeps_every_fee_scope() {
     let (mut inquiry, _) = two_line_accepted_inquiry();
-    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &["line".into()], now()).reinquiry.is_none());
+    assert!(InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.is_none());
     inquiry
         .reinquire(
             1,
@@ -538,17 +534,16 @@ fn procurement_reinquiry_filters_fee_only_and_unrelated_tasks() {
             now(),
         )
         .unwrap();
-    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &["line".into()], now()).reinquiry.is_none());
-    let request =
-        InquiryProcurementView::from_scoped_at(&inquiry, &["line-b".into()], now()).reinquiry.unwrap();
+    assert!(InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.is_some());
+    let request = InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.unwrap();
     assert_eq!(request.reason, "运费偏高");
     assert!(request.line_ids.is_empty());
     assert_eq!(request.fee_ids, ["fee-b"]);
     assert!(!request.all_items);
     inquiry.feedbacks[0].data.fees[1].line_ids.clear();
-    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &["line-b".into()], now()).reinquiry.is_none());
+    assert!(InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.is_some());
     inquiry.shared_fee_owner_user_id = Some("buyer".into());
-    let owner = InquiryProcurementView::from_responsibility(&inquiry, &["line-b".into()], "buyer", now());
+    let owner = InquiryProcurementView::from_inquiry_at(&inquiry, now());
     assert_eq!(owner.reinquiry.unwrap().fee_ids, ["fee-b"]);
 }
 
@@ -563,22 +558,20 @@ fn procurement_reinquiry_keeps_completed_round_and_rejects_later_reasons() {
         requirement: None,
     };
     inquiry.reinquire(1, "sales", request.clone(), now()).unwrap();
-    let lines = vec!["line".into()];
-    let current = InquiryProcurementView::from_scoped_at(&inquiry, &lines, now()).reinquiry.unwrap();
+    let current = InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.unwrap();
     assert!(current.all_items);
     inquiry.publish(1, "buyer", feedback("10", InquirySupplyConclusion::Available), now()).unwrap();
     inquiry
         .reinquire(1, "sales", InquiryReinquiryData { reason: "下一轮原因".into(), ..request }, later())
         .unwrap();
-    let current = InquiryProcurementView::from_scoped_at(&inquiry, &lines, later()).reinquiry.unwrap();
+    let current = InquiryProcurementView::from_inquiry_at(&inquiry, later()).reinquiry.unwrap();
     assert_eq!(current.reason, "下一轮原因");
-    let completed =
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    let completed = InquiryProcurementView::from_completed_task(&inquiry, 1, now(), now()).unwrap();
     assert_eq!(completed.feedback_round, 2);
     assert_eq!(completed.reinquiry.unwrap().reason, "第一次重询原因");
-    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &lines, now()).reinquiry.is_none());
+    assert!(InquiryProcurementView::from_inquiry_at(&inquiry, now()).reinquiry.is_none());
     inquiry.requirement_version += 1;
-    assert!(InquiryProcurementView::from_scoped_at(&inquiry, &lines, later()).reinquiry.is_none());
+    assert!(InquiryProcurementView::from_inquiry_at(&inquiry, later()).reinquiry.is_none());
 }
 
 #[test]
@@ -993,10 +986,10 @@ fn unaccepted_new_feedback_preserves_old_accepted_unaffected_goods_and_fees() {
             .unavailable_reason
             .is_none()
     );
-    let procurement = InquiryProcurementView::from_scoped_at(&inquiry, &["line-b".into()], now());
-    assert_eq!(procurement.fee_statuses.len(), 1);
-    assert_eq!(procurement.fee_statuses[0].feedback_round, 1);
-    assert_eq!(procurement.fee_statuses[0].fee_id, "fee-b");
+    let procurement = InquiryProcurementView::from_inquiry_at(&inquiry, now());
+    assert_eq!(procurement.fee_statuses.len(), 2);
+    assert!(procurement.fee_statuses.iter().all(|status| status.feedback_round == 1));
+    assert!(procurement.fee_statuses.iter().any(|status| status.fee_id == "fee-b"));
     inquiry.accept(1, "sales", 2, now()).unwrap();
     assert!(inquiry.accepted_feedback(1, now()).is_err());
     assert!(inquiry.reserve_quantities("old-b", "order-old", 1, selected_b("1"), now()).is_err());
@@ -1322,9 +1315,7 @@ fn completed_procurement_view_keeps_task_snapshot_and_excludes_later_rounds() {
     later_feedback.data.lines[0].public_note = "后续报价".into();
     inquiry.feedbacks.push(later_feedback);
     inquiry.draft.lines[0].product_name = "后续需求".into();
-    let lines = vec!["line".into()];
-    let view =
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    let view = InquiryProcurementView::from_completed_task(&inquiry, 1, now(), now()).unwrap();
     assert_eq!(view.draft.lines[0].product_name, "测试商品");
     assert_eq!(view.feedbacks.len(), 1);
     assert_eq!(view.feedback_round, 1);
@@ -1335,20 +1326,12 @@ fn completed_procurement_view_keeps_task_snapshot_and_excludes_later_rounds() {
     assert!(view.fee_statuses.is_empty());
     let json = serde_json::to_value(view).unwrap();
     assert!(json["draft"]["lines"][0].get("sales_reference_price_gross").is_none());
-    assert!(
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 2, now(), now()).is_none()
-    );
-    assert!(
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, later(), now()).is_none()
-    );
-    let empty = InquiryProcurementView::from_completed_task(&inquiry, &[], "buyer", 1, now(), now()).unwrap();
-    assert!(empty.draft.lines.is_empty());
-    assert!(empty.feedbacks[0].data.lines.is_empty());
-    assert!(empty.feedbacks[0].data.fees.is_empty());
+    assert!(InquiryProcurementView::from_completed_task(&inquiry, 2, now(), now()).is_none());
+    assert!(InquiryProcurementView::from_completed_task(&inquiry, 1, later(), now()).is_none());
 }
 
 #[test]
-fn completed_procurement_shared_fees_require_own_frozen_work() {
+fn completed_procurement_keeps_all_frozen_requirement_lines_and_shared_fees() {
     let mut inquiry = accepted();
     let mut other_line = inquiry.requirements[0].data.lines[0].clone();
     other_line.line_id = "other".into();
@@ -1362,18 +1345,12 @@ fn completed_procurement_shared_fees_require_own_frozen_work() {
         saved_at: now(),
         frozen: true,
     });
-    let lines = vec!["line".into()];
-    let view =
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    let view = InquiryProcurementView::from_completed_task(&inquiry, 1, now(), now()).unwrap();
     assert_eq!(view.feedbacks[0].data.fees.len(), 1);
-    assert_eq!(view.draft.lines.len(), 1);
-    let other =
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "another", 1, now(), now()).unwrap();
-    assert!(other.feedbacks[0].data.fees.is_empty());
+    assert_eq!(view.draft.lines.len(), 2);
     inquiry.feedback_work[0].saved_at = later();
-    let later_work =
-        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
-    assert!(later_work.feedbacks[0].data.fees.is_empty());
+    let later_work = InquiryProcurementView::from_completed_task(&inquiry, 1, now(), now()).unwrap();
+    assert_eq!(later_work.feedbacks[0].data.fees.len(), 1);
 }
 
 #[test]
@@ -1516,4 +1493,33 @@ fn fee_balance_validates_fee_before_allocation_and_preserves_exhausted_zero() {
     inquiry.allocate_fee("allocation", "sales-order", 1, "fee", amount("100"), now()).unwrap();
     inquiry.reserve_fee(fee_reservation("reservation", "100"), now()).unwrap();
     assert_eq!(inquiry.fee_available_amount("fee", "allocation", 1, now()).unwrap(), Amount::zero());
+}
+
+#[test]
+fn authorized_procurement_view_includes_all_buyers_current_work_and_all_inquiry_lines() {
+    let (mut inquiry, data) = two_line_accepted_inquiry();
+    inquiry.feedbacks[0].data.fees[0].line_ids.clear();
+    for (actor, line, frozen, version) in [
+        ("buyer-a", "line", false, inquiry.requirement_version),
+        ("buyer-b", "line-b", false, inquiry.requirement_version),
+        ("frozen", "line", true, inquiry.requirement_version),
+        ("stale", "line-b", false, 0),
+    ] {
+        inquiry.feedback_work.push(InquiryFeedbackWork {
+            requirement_version: version,
+            actor_id: actor.into(),
+            line_ids: vec![line.into()],
+            data: data.clone(),
+            saved_at: now(),
+            frozen,
+        });
+    }
+    let view = InquiryProcurementView::from_inquiry_at(&inquiry, now());
+    assert_eq!(view.draft.lines.len(), 2);
+    assert_eq!(view.feedbacks[0].data.lines.len(), 2);
+    assert_eq!(view.feedbacks[0].data.fees.len(), 2);
+    assert_eq!(view.feedback_work.len(), 2);
+    assert_eq!(view.feedback_work[0].actor_id, "buyer-a");
+    assert_eq!(view.feedback_work[1].actor_id, "buyer-b");
+    assert_eq!(view.feedback_work[1].data, data);
 }

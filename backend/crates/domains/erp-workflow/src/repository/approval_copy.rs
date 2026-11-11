@@ -1,13 +1,16 @@
-//! 抄送配置和收件箱集合；所有查询先限定接收人。
+//! 抄送配置和收件箱集合；个人收件查询使用 identity 编译约束。
+pub(crate) mod authorization;
 use std::collections::BTreeMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
 use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::change_feed::ChangeSource;
-use persistence_core::{Executor, Repository, Result, insert_literal_regex_filter, mongo_ops};
+use persistence_core::{Error, Executor, Repository, Result, insert_literal_regex_filter, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::approval_copy::{ApprovalCopyConfig, ApprovalCopyReceipt};
@@ -108,40 +111,29 @@ impl<'a> CopyRepository<'a> {
         }
         mongo_ops::insert_many(&self.db.collection::<ApprovalCopyReceipt>(RECEIPTS), rows, ex).await
     }
-    /// 只取得本人的已送达抄送。
+    /// 读取未删除的收件原始事实，个人访问资格由 identity 核验。
     /// # 参数
-    /// 收件 ID、认证账号、执行器。
+    /// 收件 ID 和当前执行器。
     /// # 返回
-    /// 越界时为空。
+    /// 不存在时为空。
     /// # 错误
     /// 数据库错误。
-    pub async fn receipt(
-        &self,
-        id: &str,
-        actor: &str,
-        ex: &mut dyn Executor,
-    ) -> Result<Option<ApprovalCopyReceipt>> {
-        let mut filter = recipient_filter(actor);
-        filter.insert("id", id);
-        Repository::new(self.db, RECEIPTS).find_one(filter, ex).await
+    pub async fn receipt(&self, id: &str, ex: &mut dyn Executor) -> Result<Option<ApprovalCopyReceipt>> {
+        Repository::new(self.db, RECEIPTS).find_by_id(id, ex).await
     }
     /// 首次阅读原子写入；重复阅读保留原时间。
     /// # 参数
-    /// 已授权 ID 集合、账号、服务端时间、执行器。
+    /// 原事务已由 identity 完整授权的 ID 集合、服务端时间和原执行器。
     /// # 返回
     /// 实际改变的条数。
     /// # 错误
     /// 数据库错误。
-    pub async fn mark_read(
-        &self,
-        ids: &[String],
-        actor: &str,
-        at: i64,
-        ex: &mut dyn Executor,
-    ) -> Result<u64> {
-        let mut filter = recipient_filter(actor);
-        filter.insert("id", doc! { "$in": ids });
-        filter.insert("read_at", Bson::Null);
+    pub async fn mark_read(&self, ids: &[String], at: i64, ex: &mut dyn Executor) -> Result<u64> {
+        let filter = doc! {
+            "id": { "$in": ids },
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            "read_at": Bson::Null,
+        };
         Ok(mongo_ops::update_many(
             &self.db.collection::<ApprovalCopyReceipt>(RECEIPTS),
             filter,
@@ -178,14 +170,28 @@ impl<'a> CopyRepository<'a> {
     }
     /// 返回本人分页和完整计数，不逐条查询。
     /// # 参数
-    /// 认证账号、已规范化查询、执行器。
+    /// identity 编译的收件约束、已规范化查询和原事务执行器。
     /// # 返回
     /// 每页 20 条及服务端统计。
     /// # 错误
     /// 数据库或解码错误。
-    pub async fn page(&self, actor: &str, query: &CopyListQuery, ex: &mut dyn Executor) -> Result<CopyPage> {
+    pub async fn page(
+        &self,
+        access: &CompiledAccess,
+        query: &CopyListQuery,
+        ex: &mut dyn Executor,
+    ) -> Result<CopyPage> {
+        let model = access.model();
+        if model.resource != "approval_copy"
+            || model.collection != RECEIPTS
+            || model.key.as_str() != "approval_copy_receipts"
+            || model.output != QueryOutput::Object
+        {
+            return Err(Error::UnsupportedDeployment("抄送授权模型不匹配"));
+        }
         let collection = self.db.collection::<Document>(RECEIPTS);
-        let pipeline = list_pipeline(actor, query);
+        let mut pipeline = access.stages().to_vec();
+        pipeline.extend(list_pipeline(query));
         let mut rows = match ex.session() {
             Some(session) => {
                 collection
@@ -211,10 +217,7 @@ impl<'a> CopyRepository<'a> {
         })
     }
 }
-fn recipient_filter(actor: &str) -> Document {
-    doc! { "recipient_user_id": actor, "delivered": true, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
-}
-fn list_pipeline(actor: &str, query: &CopyListQuery) -> Vec<Document> {
+fn list_pipeline(query: &CopyListQuery) -> Vec<Document> {
     let mut filter = Document::new();
     if let Some(read) = query.read {
         filter.insert(
@@ -235,7 +238,6 @@ fn list_pipeline(actor: &str, query: &CopyListQuery) -> Vec<Document> {
     }
     let offset = u64::from(query.page.unwrap_or(1).saturating_sub(1)) * 20;
     vec![
-        doc! { "$match": recipient_filter(actor) },
         doc! { "$lookup": { "from": "approval_subject_snapshots", "localField": "snapshot_id", "foreignField": "id", "as": "snapshot" } },
         doc! { "$unwind": "$snapshot" },
         doc! { "$match": { "snapshot.deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$and": [

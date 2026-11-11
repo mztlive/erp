@@ -248,9 +248,10 @@ async fn create_from_basis_apply(
     }
     let task = load_owned_open_procurement_task(
         db,
+        rbac,
         &command.req.work_item_id,
         command.sales_order_id,
-        command.actor.id(),
+        command.actor,
         executor,
     )
     .await?;

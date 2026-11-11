@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
+use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::{NoTransaction, Transactional};
 
@@ -30,7 +30,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     ) -> Result<SupplierSettlementStatementView> {
         self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
         let (mut statement, replayed) =
-            self.domain().prepare_void(id, &req, actor.id(), &mut NoTransaction).await?;
+            self.domain().prepare_void(id, &req, actor, &mut NoTransaction).await?;
         if replayed {
             return Ok(statement.into());
         }
@@ -41,9 +41,14 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let access = self.data_scope.clone();
+        let actor = actor.clone();
         let statement = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    access
+                        .require_action(&actor, SettlementAction::Void, &statement.base.id, executor)
+                        .await?;
                     SupplierSettlementService::new(db.clone())
                         .persist_statement(&mut statement, executor)
                         .await?;

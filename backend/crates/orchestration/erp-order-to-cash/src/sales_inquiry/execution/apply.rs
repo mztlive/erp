@@ -175,7 +175,7 @@ impl SalesInquiryProcess {
             },
             _ => return Err(Error::Internal("询价采购命令分派错误".into())),
         }
-        task.record_activity(actor.id(), now)?;
+        task.record_activity(now)?;
         Ok(())
     }
 
@@ -195,6 +195,6 @@ impl SalesInquiryProcess {
             .collect::<Vec<_>>();
         let data = inquiry.merge_feedback_work(&responsibilities)?;
         inquiry.publish(version, actor.id(), data, Instant::now())?;
-        self.complete_tasks(&inquiry.base.id, executor).await
+        self.complete_tasks(inquiry, executor).await
     }
 }

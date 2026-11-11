@@ -165,7 +165,7 @@ impl InvestigationCommit {
         )
         .await?;
         work_item.subject_version = order.base.version.to_string();
-        work_item.record_activity(self.actor.id(), Instant::now())?;
+        work_item.record_activity(Instant::now())?;
         db.work_items().update(&mut work_item, executor).await?;
         Ok(Some(work_item.base.version))
     }

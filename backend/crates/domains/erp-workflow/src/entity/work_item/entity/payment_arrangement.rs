@@ -7,14 +7,13 @@ use crate::entity::work_item::payment_due_at;
 impl WorkItem {
     /// 当前负责人登记下一次付款跟进日，保留开放责任。
     /// # 参数
-    /// 当前处理人、跟进日期、业务当天及活动时间。
+    /// 跟进日期、业务当天及活动时间；调用方已证明当前任务分配。
     /// # 返回
     /// 保存跟进时间；当天起在工作台到期筛选中出现。
     /// # 错误
-    /// 非付款安排任务、非当前负责人或日期早于当天时拒绝。
+    /// 非付款安排任务、任务非开放或日期早于当天时拒绝。
     pub fn schedule_payment_follow_up(
         &mut self,
-        actor: &str,
         date: BusinessDate,
         today: BusinessDate,
         now: Instant,
@@ -23,7 +22,7 @@ impl WorkItem {
         if date < today {
             return Err(Error::from("跟进日期不能早于今天"));
         }
-        self.record_activity(actor, now)?;
+        self.record_activity(now)?;
         self.due_at = Some(payment_due_at(date)?);
         Ok(())
     }
@@ -73,16 +72,15 @@ mod tests {
         .unwrap()
     }
     #[test]
-    fn follow_up_preserves_open_responsibility_and_rejects_other_owner_or_past_date() {
+    fn authorized_follow_up_preserves_responsibility_and_rejects_past_date() {
         let today = BusinessDate::from_ymd(2026, 10, 19).unwrap();
         let past = BusinessDate::from_ymd(2026, 10, 18).unwrap();
         let now = Instant::from_unix_secs(100);
         let mut item = task();
         let before = item.clone();
-        assert!(item.schedule_payment_follow_up("bob", today, today, now).is_err());
-        assert!(item.schedule_payment_follow_up("alice", past, today, now).is_err());
+        assert!(item.schedule_payment_follow_up(past, today, now).is_err());
         assert_eq!(item, before);
-        item.schedule_payment_follow_up("alice", today, today, now).unwrap();
+        item.schedule_payment_follow_up(today, today, now).unwrap();
         assert_eq!(item.status, WorkItemStatus::Open);
         assert_eq!(item.due_at, Some(payment_due_at(today).unwrap()));
         assert_eq!(item.started_at, Some(now));
@@ -92,7 +90,7 @@ mod tests {
         assert_eq!(item.completed_at, Some(now));
         assert_eq!(item.last_activity_at, Some(now));
         assert_eq!(item.started_at, Some(now));
-        assert!(item.schedule_payment_follow_up("alice", today, today, now).is_err());
+        assert!(item.schedule_payment_follow_up(today, today, now).is_err());
         assert!(item.complete_payment_arrangement(now).is_err());
     }
     #[test]

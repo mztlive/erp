@@ -1,5 +1,6 @@
 //! 客户选品工作簿：有界解析、逐行预览和原子确认。
 
+mod access;
 mod confirm;
 mod creation;
 mod creation_preview;
@@ -15,7 +16,7 @@ mod views;
 use std::sync::Arc;
 
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
 use mongodb::Database;
 pub use views::{ConfirmInquiryImportCommand, CreateInquiryImportCommand, InquiryImportPreviewView};
@@ -26,6 +27,7 @@ pub struct SalesInquiryImportProcess {
     inquiry: Arc<SalesInquiryProcess>,
     db: Database,
     rbac: SharedRbacService,
+    preview_access: AuthorizationService,
     supply: Arc<dyn CatalogSupplyQueryPort>,
 }
 
@@ -43,6 +45,7 @@ impl SalesInquiryImportProcess {
         supply: Arc<dyn CatalogSupplyQueryPort>,
         inquiry: Arc<SalesInquiryProcess>,
     ) -> Self {
-        Self { db, rbac, supply, inquiry }
+        let preview_access = access::authorization(db.clone(), rbac.clone());
+        Self { db, rbac, preview_access, supply, inquiry }
     }
 }

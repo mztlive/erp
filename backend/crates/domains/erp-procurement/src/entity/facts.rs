@@ -372,66 +372,6 @@ pub struct StockBalanceFact {
     pub available_quantity: Quantity,
 }
 
-/// 身份提供方当前账号资格事实。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdentityOwnerFact {
-    /// 账号身份。
-    pub id: String,
-    /// 当前姓名。
-    pub name: String,
-    /// 账号当前是否可登录。
-    pub can_login: bool,
-    /// 是否后台管理员类型。
-    pub is_admin: bool,
-}
-
-impl IdentityOwnerFact {
-    /// 由必填账号身份与姓名构造资格事实。
-    ///
-    /// # 参数
-    /// * `id` - 账号身份
-    /// * `name` - 当前姓名
-    ///
-    /// # 返回
-    /// 返回不可登录、非管理员的资格事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
-        Self { id: id.into(), name: name.into(), can_login: false, is_admin: false }
-    }
-
-    /// 设置账号是否可登录。
-    ///
-    /// # 参数
-    /// * `can_login` - 账号当前是否可登录
-    ///
-    /// # 返回
-    /// 返回更新后的资格事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_can_login(mut self, can_login: bool) -> Self {
-        self.can_login = can_login;
-        self
-    }
-
-    /// 设置是否为后台管理员类型。
-    ///
-    /// # 参数
-    /// * `is_admin` - 是否后台管理员类型
-    ///
-    /// # 返回
-    /// 返回更新后的资格事实。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_is_admin(mut self, is_admin: bool) -> Self {
-        self.is_admin = is_admin;
-        self
-    }
-}
-
 /// 供应商受控付款条件解析后的采购消费事实。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaymentTermFact {

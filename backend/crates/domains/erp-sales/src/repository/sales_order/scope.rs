@@ -9,9 +9,8 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, aggregate};
 
-use crate::Result;
 use crate::repository::SalesOrderExt;
-use crate::service::authorization_error::identity_error;
+use crate::{Error, Result};
 
 /// 必须持有完整授权凭证的仓储读取载体。
 #[derive(Clone)]
@@ -80,7 +79,7 @@ impl SalesReadScope {
         {
             return Err(crate::Error::ValidationError("销售授权查询模型不匹配".into()));
         }
-        self.authorization.validate(&self.access, executor).await.map_err(identity_error)
+        self.authorization.validate(&self.access, executor).await.map_err(Error::from)
     }
 }
 

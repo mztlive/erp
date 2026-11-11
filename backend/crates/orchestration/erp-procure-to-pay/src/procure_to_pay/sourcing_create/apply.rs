@@ -63,9 +63,10 @@ async fn prepare_plan(
 ) -> Result<(WorkItem, SalesOrder, SourcingPlan, SourcingEventSequencePlan)> {
     let task = load_owned_open_procurement_task(
         db,
+        input.rbac,
         &input.req.work_item_id,
         input.sales_order_id,
-        input.actor.id(),
+        input.actor,
         executor,
     )
     .await?;

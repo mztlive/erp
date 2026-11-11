@@ -9,7 +9,7 @@ use erp_finance::entity::payable::{
     PayableAccount, PayableEntry, PaymentRequestAllocation, PendingPaymentAllocation, SupplierPayment,
 };
 use erp_finance::repository::PurchasePaymentRequestSnapshotExt;
-use erp_identity::{AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::AccessControlExt;
 use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
@@ -20,6 +20,7 @@ use erp_workflow::entity::work_item::{
 use id_generator::next_id;
 
 use super::*;
+use crate::finance_posting::task_access::{TaskPurpose, require_task};
 use crate::{FinancePostingPorts, FinanceTaskPort};
 
 /// 最终审批通过后授予原逐行额度并派发指定出纳任务。
@@ -117,8 +118,7 @@ pub(crate) async fn authorize_payment_result(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    require_result_permissions(db, rbac, actor, executor).await?;
-    if payment.created_by != actor.id() || payment.payment_request_id.as_deref() != Some(request_id) {
+    if payment.payment_request_id.as_deref() != Some(request_id) {
         return Err(Error::Forbidden("付款命令结果不属于当前操作人或申请".into()));
     }
     let task = db
@@ -126,9 +126,22 @@ pub(crate) async fn authorize_payment_result(
         .find_by_id(task_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原付款申请任务不存在".into()))?;
-    if !can_read_payment_result_task(&task, request_id, actor.id()) {
+    if !matches_payment_result_task(&task, request_id) {
         return Err(Error::Forbidden("原付款任务责任资格已变化".into()));
     }
+    require_task(
+        db,
+        rbac,
+        actor,
+        &task,
+        TaskPurpose::PaymentResult {
+            id: payment.base.id.to_string(),
+            version: payment.base.version.to_string(),
+            owner: payment.created_by.clone(),
+        },
+        executor,
+    )
+    .await?;
     let version = task
         .subject_version
         .parse::<u32>()
@@ -141,35 +154,8 @@ pub(crate) async fn authorize_payment_result(
     basis::validate_snapshot(payment, &snapshot)
 }
 
-pub(super) fn can_read_payment_result_task(task: &WorkItem, request_id: &str, actor_id: &str) -> bool {
+pub(super) fn matches_payment_result_task(task: &WorkItem, request_id: &str) -> bool {
     matches_purchase_payment_request_identity(task, request_id)
-        && task.owner_user_id.as_deref() == Some(actor_id)
-}
-
-/// 在原读取事务证明结果入口及付款功能由同一有效角色授予。
-/// # 参数
-/// db、rbac 为当前流程设施，actor 为原命令操作人，executor 为原读取执行器。
-/// # 返回
-/// identity 已核验账号及完整功能资格时成功。
-/// # 错误
-/// 账号失效、权限撤销或身份设施取证失败时返回对应错误。
-pub(super) async fn require_result_permissions(
-    db: &Database,
-    rbac: &FinancePostingPorts,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let required = [
-        Permission::parse("purchase_payment_request:detail")?,
-        Permission::parse("purchase_payment_request:pay")?,
-    ];
-    let authorization =
-        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
-    let qualified = authorization.permissions(actor, &required, executor).await?;
-    if !qualified.is_some_and(|qualified| qualified.same_role(&required)) {
-        return Err(Error::Forbidden("付款结果读取权限已撤销".into()));
-    }
-    Ok(())
 }
 
 /// 授权当前指定出纳并消耗该申请各采购行的实际付款金额。
@@ -225,7 +211,7 @@ pub(crate) async fn record_payment_execution(
     payment.payer_party_id = Some(request.payer_party_id.clone());
     payment.payer_party_name = Some(request.payer_party_name.clone());
     payment.request_allocations = request_allocations;
-    task.record_activity(actor.id(), Instant::now())?;
+    task.record_activity(Instant::now())?;
     db.work_items().update(&mut task, executor).await?;
     db.purchase_payment_requests().update(&mut request, executor).await?;
     audit_payment(db, &request.base.id, actor, executor).await?;
@@ -269,6 +255,7 @@ pub(super) async fn authorize_task(
         .await?
         .ok_or_else(|| Error::NotFound("申请付款任务不存在".into()))?;
     authorize_loaded_task(rbac.tasks.as_ref(), request, &task, version, actor, executor).await?;
+    require_task(db, rbac, actor, &task, TaskPurpose::Payment, executor).await?;
     Ok(task)
 }
 
@@ -300,9 +287,6 @@ pub(super) async fn authorize_loaded_task(
         )
     {
         return Err(Error::ConflictError("此任务没有当前有效的已批准付款申请".into()));
-    }
-    if !task.is_owned_by(actor.id()) {
-        return Err(Error::Forbidden("只有该申请指定出纳可以登记付款".into()));
     }
     tasks.ensure_domain_decision_access(actor, task, executor).await?;
     Ok(())
@@ -654,7 +638,7 @@ mod tests {
                 0 => request.work_item_id = Some("other-task".into()),
                 1 => request.submission_version += 1,
                 2 => request.status = PurchasePaymentRequestStatus::Draft,
-                3 => task.owner_user_id = Some("other-cashier".into()),
+                3 => task.business_object_id = "other-request".into(),
                 4 => task.status = WorkItemStatus::Completed,
                 _ => version += 1,
             }
@@ -669,14 +653,13 @@ mod tests {
     }
 
     #[test]
-    fn completed_or_closed_original_task_allows_result_recovery_only_for_its_owner() {
+    fn completed_or_closed_original_task_keeps_the_payment_request_identity() {
         let mut completed = request_task();
         assert!(completed.is_owned_by("cashier-1"));
         completed.complete_when_payment_request_paid(Instant::from_unix_secs(200)).unwrap();
         assert!(!completed.is_owned_by("cashier-1"));
-        assert!(can_read_payment_result_task(&completed, "request-1", "cashier-1"));
-        assert!(!can_read_payment_result_task(&completed, "request-1", "cashier-2"));
-        assert!(!can_read_payment_result_task(&completed, "request-2", "cashier-1"));
+        assert!(matches_payment_result_task(&completed, "request-1"));
+        assert!(!matches_payment_result_task(&completed, "request-2"));
         let mut closed = request_task();
         closed
             .close(
@@ -685,9 +668,9 @@ mod tests {
                 Instant::from_unix_secs(200),
             )
             .unwrap();
-        assert!(can_read_payment_result_task(&closed, "request-1", "cashier-1"));
+        assert!(matches_payment_result_task(&closed, "request-1"));
         closed.reason_code = Some("INITIAL".into());
-        assert!(!can_read_payment_result_task(&closed, "request-1", "cashier-1"));
+        assert!(!matches_payment_result_task(&closed, "request-1"));
     }
 
     #[test]

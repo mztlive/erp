@@ -1,12 +1,11 @@
-//! 采购仅接收本轮、本责任范围的重询说明，不接收重询中的完整销售需求。
-use std::collections::HashSet;
+//! 采购接收指定轮次的完整重询说明，不包含销售参考价。
 
 use erp_core::common::time::Instant;
 use serde::Serialize;
 
 use crate::entity::sales_inquiry::SalesInquiry;
 
-/// 当前采购轮次的销售重询说明；商品和费用身份已按任务范围裁剪。
+/// 当前采购轮次的完整重询说明。
 #[derive(Debug, Clone, Serialize)]
 pub struct InquiryProcurementReinquiry {
     pub initiated_by_procurement: bool,
@@ -20,11 +19,11 @@ pub struct InquiryProcurementReinquiry {
 }
 
 impl InquiryProcurementReinquiry {
-    /// 从指定轮次及已授权范围生成重询说明。
+    /// 从指定业务轮次生成完整重询说明。
     /// # 参数
-    /// 版本、轮次、截止时刻来自当前任务或历史任务快照；行及费用身份已完成授权裁剪。
+    /// 版本、轮次、截止时刻来自当前询价或已核验的历史任务快照。
     /// # 返回
-    /// 返回涉及本任务的最近一次匹配说明；无匹配、无责任行或范围不相交时返回 `None`。
+    /// 返回最近一次匹配说明；没有匹配版本、轮次或时间时返回 None。
     /// # 错误
     /// 无；不回退到其他轮次或需求版本。
     pub(super) fn from_round(
@@ -32,23 +31,13 @@ impl InquiryProcurementReinquiry {
         requirement_version: u32,
         previous_round: u32,
         before: Instant,
-        line_ids: &[String],
-        fee_ids: &HashSet<String>,
     ) -> Option<Self> {
-        if line_ids.is_empty() {
-            return None;
-        }
         let entry = inquiry.reinquiries.iter().rev().find(|entry| {
             entry.requirement_version == requirement_version
                 && entry.previous_feedback_round == previous_round
                 && entry.at <= before
         })?;
         let all_items = entry.data.line_ids.is_empty() && entry.data.fee_ids.is_empty();
-        let lines: Vec<_> = entry.data.line_ids.iter().filter(|id| line_ids.contains(id)).cloned().collect();
-        let fees: Vec<_> = entry.data.fee_ids.iter().filter(|id| fee_ids.contains(*id)).cloned().collect();
-        if !all_items && lines.is_empty() && fees.is_empty() {
-            return None;
-        }
         Some(Self {
             initiated_by_procurement: entry.initiated_by_procurement,
             at: entry.at,
@@ -56,8 +45,8 @@ impl InquiryProcurementReinquiry {
             reason: entry.data.reason.clone(),
             concerns: entry.data.concerns.clone(),
             all_items,
-            line_ids: lines,
-            fee_ids: fees,
+            line_ids: entry.data.line_ids.clone(),
+            fee_ids: entry.data.fee_ids.clone(),
         })
     }
 }

@@ -16,13 +16,15 @@ use config::JdVopConfig;
 pub use dto::{JdVopAuthorizationRequest, JdVopAuthorizationStatus, JdVopAuthorizationStatusQuery};
 use engine::AuthorizationEngine;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
 pub use erp_supply::ports::jd_vop::authorization::{AuthorizationError, Result};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 pub use tasks::JdVopAuthorizationTasks;
 pub use tokens::JdVopTokenConfiguration;
+
+use crate::Error as ProcessError;
 
 #[cfg(test)]
 mod tests;
@@ -84,7 +86,18 @@ impl JdVopAuthorizationProcess {
             ));
         }
         let mut status = engine.status(operation_id).await;
-        let permitted = self.access.permission(actor, "authorize", &mut NoTransaction).await?;
+        let permitted = AuthorizationService::new(
+            self.access.db.clone(),
+            self.access.rbac.clone(),
+            AuthorizationRegistry::default(),
+        )
+        .has_permission(
+            actor,
+            &Permission::parse("supplier_api_connection:authorize").map_err(ProcessError::from)?,
+            &mut NoTransaction,
+        )
+        .await
+        .map_err(ProcessError::from)?;
         status.can_authorize &= permitted;
         status.can_configure_tokens = permitted
             && status.state != "unconfigured"

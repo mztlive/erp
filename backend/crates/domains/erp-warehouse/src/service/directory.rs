@@ -5,7 +5,7 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::authorization::{WarehouseAuthorization, WarehouseQuery, map_identity_error};
+use crate::authorization::{WarehouseAuthorization, WarehouseQuery};
 use crate::repository::directory::{snapshot, warehouses};
 use crate::{Error, Result, WarehouseListParams, WarehouseView};
 
@@ -41,7 +41,7 @@ impl WarehouseDirectoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let read = access.query(&actor, executor).await.map_err(map_identity_error)?;
+                    let read = access.query(&actor, executor).await?;
                     let rows = snapshot(&db, &read, &query, executor).await?;
                     let scope = directory_scope(&read, rows.iter().map(|row| row.id.clone()).collect());
                     let page = DirectoryPage::from_snapshot(rows, &query, scope)?;
@@ -81,7 +81,7 @@ impl WarehouseDirectoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let read = access.query(&actor, executor).await.map_err(map_identity_error)?;
+                    let read = access.query(&actor, executor).await?;
                     if params.scope_version.as_ref().is_some_and(|v| v != &read.version()) {
                         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：仓库范围已变化".into()));
                     }

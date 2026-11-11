@@ -371,10 +371,11 @@ async fn requested_contract_owners(
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
-    let expanded = data_scope
+    let organization = data_scope.organization();
+    let expanded = organization
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
-    let members = data_scope.org_member_ids(&expanded, context.as_of(), executor).await?;
+    let members = organization.org_member_ids(&expanded, context.as_of(), executor).await?;
     if members.len() > 10_000 {
         return Err(Error::ValidationError("组织成员超过查询上限，请收窄组织筛选".into()));
     }

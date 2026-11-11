@@ -3,7 +3,10 @@ use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{AccountSummary, Permission, SharedRbacService};
+use erp_identity::{
+    AccountSummary, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
+};
+use erp_supply::service::supplier_settlement::SettlementAction;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -35,7 +38,7 @@ async fn qualified_reviewer(
             .into_iter()
             .map(Permission::parse)
             .collect::<StdResult<Vec<_>, _>>()?;
-    Ok(crate::authorization::features(db.clone(), identity.clone())
+    Ok(AuthorizationService::new(db.clone(), identity.clone(), AuthorizationRegistry::default())
         .permissions(actor, &required, executor)
         .await?
         .filter(|qualified| qualified.same_role(&required))
@@ -57,9 +60,12 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<SettlementReviewerOption>> {
-        let statement =
-            self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
-        if !statement.is_prepared_by(actor.id()) || !statement.is_editable() {
+        self.domain()
+            .access()
+            .require_action(actor, SettlementAction::Submit, id, &mut NoTransaction)
+            .await?;
+        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        if !statement.is_editable() {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
         let accounts = self
@@ -70,7 +76,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await?;
         let mut options = Vec::new();
         for account in accounts {
-            if account.id == actor.id() || !account.is_active_backoffice() {
+            if account.id == actor.id() {
                 continue;
             }
             let candidate = AuditActor::new(account.id, account.login_account, account.kind);

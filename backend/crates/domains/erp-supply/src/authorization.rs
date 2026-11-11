@@ -162,7 +162,7 @@ impl AccessFactsPort for Facts {
 /// 固定资源目录及事实映射；每次调用独立读取当前授权。
 #[derive(Clone)]
 pub(crate) struct Authorization {
-    service: AuthorizationService,
+    pub(crate) service: AuthorizationService,
     mapping: Arc<dyn AccessMapping>,
     resource: String,
 }
@@ -257,22 +257,6 @@ impl Authorization {
                 executor,
             )
             .await
-    }
-
-    /// 使用固定目录的身份设施读取当前功能资格。
-    /// # 参数
-    /// actor 为当前账号，permission 为具体功能权限，executor 为原执行器。
-    /// # 返回
-    /// 当前账号具有功能资格时为真。
-    /// # 错误
-    /// 身份、策略或数据库读取失败时返回原错误。
-    pub(crate) async fn has_permission(
-        &self,
-        actor: &AuditActor,
-        permission: &Permission,
-        executor: &mut dyn Executor,
-    ) -> erp_identity::Result<bool> {
-        self.service.has_permission(actor, permission, executor).await
     }
 }
 

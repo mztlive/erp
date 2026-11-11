@@ -37,17 +37,10 @@ impl FundsAccess {
             .await
             .map_err(Error::from)?
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(account.sales_order_id.as_ref(), executor)
-            .await
-            .map_err(Error::from)?
-            .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
         if self
             .db
             .sales_orders()
-            .find_authorized(&order.base.id, authorization.sales_scope()?, executor)
+            .find_authorized(account.sales_order_id.as_ref(), authorization.sales_scope()?, executor)
             .await?
             .is_none()
         {

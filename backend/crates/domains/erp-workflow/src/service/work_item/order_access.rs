@@ -1,7 +1,6 @@
 //! 订单与供应商申请任务的独立对象授权；读模型与任务命令复用同一合同。
 
 use application_core::AuditActor;
-use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
@@ -28,9 +27,6 @@ pub async fn require_supplier_portal_task_read(
 ) -> Result<()> {
     if kind != ObjectKind::SupplierPortalRequest {
         return Ok(());
-    }
-    if actor.kind() != AccountKind::Admin {
-        return Err(Error::Forbidden("供应商申请任务账号不是当前启用的内部账号".into()));
     }
     if auth.supplier_portal_request_readable(actor, object_id, executor).await? {
         return Ok(());
@@ -60,9 +56,6 @@ pub(super) async fn require_supplier_portal_task_review(
 ) -> Result<()> {
     if kind != ObjectKind::SupplierPortalRequest {
         return Ok(());
-    }
-    if actor.kind() != AccountKind::Admin {
-        return Err(Error::Forbidden("供应商申请确认人不是当前启用的内部账号".into()));
     }
     if auth.supplier_portal_request_reviewable(actor, object_id, executor).await? {
         return Ok(());
@@ -126,6 +119,7 @@ pub async fn require_order_task_read(
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use erp_core::AccountKind;
     use persistence_core::NoTransaction;
 
     use super::*;

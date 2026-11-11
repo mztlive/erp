@@ -1,7 +1,5 @@
 //! 采购详情资格与关联付款读取必须在同一事务证明。
 
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_core::ids::PurchaseOrderId;
 use persistence_core::Transactional;
@@ -19,7 +17,7 @@ impl PurchaseOrderReadService {
     /// # 错误
     /// 采购详情资格失效、来源不可见或文件事实读取失败时拒绝。
     pub async fn payment_records(&self, actor: &AuditActor, id: &str) -> Result<Vec<PurchasePaymentView>> {
-        let this = Self::with_scope(self.db.clone(), Arc::clone(&self.data_scope));
+        let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
         self.db

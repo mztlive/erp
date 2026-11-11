@@ -207,15 +207,7 @@ where
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustmentCancelAuthorization> {
-        authorize_with(
-            &self.service.identity,
-            &self.service.db,
-            &self.service.auth,
-            instance,
-            actor,
-            executor,
-        )
-        .await
+        authorize_with(&self.service.identity, &self.service.db, instance, actor, executor).await
     }
 
     async fn persist_start_snapshot(
@@ -263,6 +255,14 @@ where
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        crate::supply_execution::task_authorization::require_assignee(
+            &self.service.db,
+            &self.service.identity,
+            actor,
+            item,
+            executor,
+        )
+        .await?;
         Ok(self.service.ensure_domain_decision_access(actor, item, executor).await?)
     }
 }

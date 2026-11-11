@@ -177,35 +177,34 @@ pub struct PaymentReversal {
 }
 
 impl PaymentReversal {
-    /// 校验提交及已提交命令回放的原经办人职责。
+    /// 校验经办复核岗位分离，不限制当前单据状态。
     ///
     /// # 参数
-    /// * `actor_id` - 当前提交人的账号。
+    /// 无。
     ///
     /// # 返回
-    /// 经办本人发起且与复核岗位分离时返回成功。
+    /// 经办人与复核人不同时返回成功。
     ///
     /// # 错误
-    /// 非原经办人或岗位未分离时返回权限错误。
-    pub fn ensure_submitter(&self, actor_id: &str) -> DraftEditResult<()> {
-        FinancialDraftEditPolicy::ensure_submitter(&self.handled_by, &self.reviewed_by, actor_id)
+    /// 岗位未分离时返回权限错误。
+    pub fn ensure_separation(&self) -> DraftEditResult<()> {
+        FinancialDraftEditPolicy::ensure_separation(&self.handled_by, &self.reviewed_by)
     }
 
-    /// 校验原经办人修改原单草稿的资格。
+    /// 校验原单的经办复核分离与可编辑状态。
     ///
     /// # 参数
-    /// * `actor_id` - 当前编辑人的账号
+    /// 无。
     ///
     /// # 返回
-    /// 原经办人与复核岗位分离且单据为草稿或已驳回时返回成功。
+    /// 经办人与复核岗位分离且单据为草稿或已驳回时返回成功。
     ///
     /// # 错误
-    /// 非原经办人返回权限错误，不可编辑状态返回状态冲突。
-    pub fn ensure_draft_editor(&self, actor_id: &str) -> DraftEditResult<()> {
+    /// 岗位未分离返回权限错误，不可编辑状态返回状态冲突。
+    pub fn ensure_draft_editable(&self) -> DraftEditResult<()> {
         FinancialDraftEditPolicy::ensure(
             &self.handled_by,
             &self.reviewed_by,
-            actor_id,
             matches!(self.status, PaymentReversalStatus::Draft | PaymentReversalStatus::Rejected),
         )
     }
@@ -458,7 +457,7 @@ pub(crate) mod tests {
 
     /// 已提交回放保留职责守卫，不要求再次进入草稿。
     #[test]
-    fn submitter_authority_is_independent_of_reversal_state() {
+    fn separation_is_independent_of_reversal_state() {
         let mut record = PaymentReversal::new(PaymentReversalId::new("pr-1"), data(), "creator-1").unwrap();
         for status in [
             PaymentReversalStatus::Draft,
@@ -467,13 +466,10 @@ pub(crate) mod tests {
             PaymentReversalStatus::Reversed,
         ] {
             record.status = status;
-            assert!(record.ensure_submitter("handler-1").is_ok());
-            for actor in ["", "other", "reviewer-1"] {
-                assert!(matches!(record.ensure_submitter(actor), Err(DraftEditError::Forbidden(_))));
-            }
+            assert!(record.ensure_separation().is_ok());
         }
         record.reviewed_by = "handler-1".into();
-        assert!(matches!(record.ensure_submitter("handler-1"), Err(DraftEditError::Forbidden(_))));
+        assert!(matches!(record.ensure_separation(), Err(DraftEditError::Forbidden(_))));
     }
 
     pub(crate) fn data() -> PaymentReversalData {
@@ -629,20 +625,18 @@ pub(crate) mod tests {
         assert!(reversal.mark_posted().is_err());
     }
 
-    /// 经办人撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
+    /// 撤回驳回单据后编辑原单并重提；原编号、来源和岗位保持一致。
     #[test]
-    fn original_handler_can_edit_cancelled_draft_and_resubmit() {
+    fn cancelled_draft_can_be_edited_and_resubmitted() {
         let mut record =
             PaymentReversal::new(PaymentReversalId::new("edit-original"), data(), "creator-1").unwrap();
         let identity = serde_json::to_value(&record).unwrap();
-        assert!(matches!(record.ensure_draft_editor("other"), Err(DraftEditError::Forbidden(_))));
-        assert!(matches!(record.ensure_draft_editor("reviewer-1"), Err(DraftEditError::Forbidden(_))));
-        record.ensure_draft_editor("handler-1").unwrap();
+        record.ensure_draft_editable().unwrap();
         assert!(!record.matches_version(0));
         record.start_approval().unwrap();
-        assert!(matches!(record.ensure_draft_editor("handler-1"), Err(DraftEditError::ConflictError(_))));
+        assert!(matches!(record.ensure_draft_editable(), Err(DraftEditError::ConflictError(_))));
         record.cancel_approval().unwrap();
-        record.ensure_draft_editor("handler-1").unwrap();
+        record.ensure_draft_editable().unwrap();
         record
             .update(PaymentReversalUpdate {
                 amount: Some(Amount::from_str("120.00").unwrap()),
@@ -692,8 +686,7 @@ pub(crate) mod tests {
         assert!(record.reject_approval(1).is_err());
         assert!(record.mark_posted().is_err());
         assert_eq!(record, before);
-        assert!(record.ensure_draft_editor("other").is_err());
-        assert!(record.ensure_draft_editor("handler-1").is_ok());
+        assert!(record.ensure_draft_editable().is_ok());
         record.update(PaymentReversalUpdate::default()).unwrap();
         assert_eq!(record.status, PaymentReversalStatus::Rejected);
         assert_eq!(record.start_approval().unwrap(), 2);

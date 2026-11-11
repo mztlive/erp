@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::AccountKind;
 use erp_core::ids::SupplierOfferingId;
 use erp_identity::repository::{AccessControlExt, AccountCoreRepositoryExt};
 use erp_procurement::PurchaseAccess;
@@ -107,9 +106,6 @@ impl PortalOfferingImpactReadService {
         offering_id: &str,
         params: &PortalListParams,
     ) -> Result<PortalOfferingImpactView> {
-        if actor.kind() != AccountKind::Admin {
-            return Err(Error::Forbidden("仅内部人员可以查看采购影响".into()));
-        }
         if params.status.as_deref().is_some_and(|status| !status.trim().is_empty()) {
             return Err(Error::ValidationError("采购影响不接受申请状态筛选".into()));
         }

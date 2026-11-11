@@ -126,7 +126,6 @@ impl OfferingAccess {
         at: erp_core::common::time::Instant,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone()).own_org(user_id, at, executor).await?)
     }
 
@@ -181,7 +180,7 @@ impl OfferingAccess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let permission = authorization::action_permission("supplier_offering", action)?;
-        if !self.authorization()?.has_permission(actor, &permission, executor).await? {
+        if !self.authorization()?.service.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有该操作权限".into()));
         }
         Ok(())

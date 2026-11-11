@@ -104,12 +104,13 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
     ) -> Result<AdoptionResolution> {
         self.batch_access(connection, actor, &mut NoTransaction).await?;
+        self.require_preview_owner(actor, preview_id, &mut NoTransaction).await?;
         let preview = self
             .db
             .catalog_adoption_previews()
             .find_by_id(preview_id, &mut NoTransaction)
             .await?
-            .filter(|p| p.connection_id == connection && p.actor_id == actor.id())
+            .filter(|p| p.connection_id == connection)
             .ok_or_else(|| Error::NotFound("选品预览不存在".into()))?;
         if preview.expires_at <= Instant::now() {
             return Err(Error::ConflictError("选品预览已过期，请重新预览".into()));

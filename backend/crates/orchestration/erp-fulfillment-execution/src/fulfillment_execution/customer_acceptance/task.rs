@@ -7,7 +7,9 @@
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_core::ids::SalesOrderId;
-use erp_identity::{AccountSummary, Permission, SharedRbacService};
+use erp_identity::{
+    AccountSummary, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
+};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
@@ -116,7 +118,7 @@ pub async fn prepare_customer_acceptance_task_command(
     .await?;
     ensure_command_identity(&task, work_item_id, expected_task_version)?;
     ensure_current_owner_execution_access(db, identity_factory, &task, actor_id, executor).await?;
-    task.record_activity(actor_id, erp_core::common::time::Instant::now())?;
+    task.record_activity(erp_core::common::time::Instant::now())?;
     Ok(task)
 }
 
@@ -265,21 +267,15 @@ async fn ensure_customer_acceptance_owner_eligible(
         .map(|code| Permission::parse(code).expect("固定客户验收操作权限必须合法"))
         .collect();
     let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-    let qualified = crate::authorization::features(db.clone(), rbac.clone())
+    let qualified = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
         .permissions(&actor, &required, executor)
         .await?;
-    if qualified.is_none() {
-        let account = rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
-            Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string())
-        })?;
-        if !account.can_login {
-            return Err(Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()));
-        }
-    }
     if let Some(qualified) = qualified.filter(|value| value.same_role(&required)) {
         return Ok(qualified.account().clone());
     }
-    Err(Error::BusinessLogicError("销售责任人缺少客户验收完整操作权限，请先调整角色或责任配置".to_string()))
+    Err(Error::BusinessLogicError(
+        "销售责任人账号无效或缺少客户验收完整操作权限，请先调整角色或责任配置".to_string(),
+    ))
 }
 
 /// 操作人须具备验收权限和销售单 detail 范围，并且是任务当前负责人。
@@ -293,13 +289,18 @@ async fn ensure_current_owner_execution_access(
     let rbac = identity_factory();
     let account = ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
     let actor = AuditActor::new(account.id, account.login_account, account.kind);
-    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
+    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
         .require_object(&actor, "detail", &task.business_object_id, &[], executor)
         .await?;
-    if task.owner_user_id.as_deref() == Some(actor_id) {
-        return Ok(());
-    }
-    Err(Error::Forbidden("只有当前销售责任人可以登记客户验收".to_string()))
+    super::super::task_access::require_assignee(
+        db,
+        &rbac,
+        &actor,
+        task,
+        super::super::task_access::TaskPurpose::CustomerAcceptance,
+        executor,
+    )
+    .await
 }
 
 #[cfg(test)]

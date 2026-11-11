@@ -25,8 +25,9 @@ use super::dto::{
 };
 use super::status::stage_code_label_tone;
 use super::{SalesOrderReadService, dto};
-use crate::Result;
+use crate::purchase_center::creation_authorization::creation_tasks;
 use crate::purchase_center::freight_follow_up::{FreightFollowUpView, freight_follow_ups};
+use crate::{Error, Result};
 
 impl SalesOrderReadService {
     /// 分页查询销售单列表。
@@ -120,10 +121,16 @@ impl SalesOrderReadService {
         let Some(actor) = actor else {
             return Ok(blocked_purchase_creation_access("当前调用缺少供给分配责任上下文"));
         };
-        if let Some(message) = self.purchase_creation_actor_blocker(actor).await? {
-            return Ok(blocked_purchase_creation_access(message));
-        }
-        let task_count = self.purchase_creation_task_count(&order.base.id, actor.id()).await?;
+        let task_count =
+            match creation_tasks(&self.db, self.require_rbac()?, actor, Some(&order.base.id), None).await {
+                Ok(tasks) => tasks.len(),
+                Err(Error::Forbidden(_) | Error::Unauthenticated(_)) => {
+                    return Ok(blocked_purchase_creation_access(
+                        "当前账号不能执行供给分配，请检查账号状态和 purchase_order:create 权限",
+                    ));
+                },
+                Err(error) => return Err(error),
+            };
         if task_count == 0 {
             return Ok(blocked_purchase_creation_access("当前账号不是该销售单供给分配任务负责人"));
         }
@@ -149,60 +156,20 @@ impl SalesOrderReadService {
         let Some(actor) = actor else {
             return Ok(Vec::new());
         };
-        if self.purchase_creation_actor_blocker(actor).await?.is_some() {
-            return Ok(Vec::new());
-        }
-        let mut grouped =
-            freight_follow_ups(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
-        Ok(grouped.remove(&order.base.id).unwrap_or_default())
-    }
-
-    /// 重验当前账号的登录状态、身份与供给分配权限。
-    ///
-    /// # 参数
-    /// * `actor` - JWT 已认证但需要按当前账号和 RBAC 事实重验的操作人
-    ///
-    /// # 返回
-    /// 账号与权限均有效时返回 `None`；否则返回可直接下发的明确 blocker。
-    ///
-    /// # 错误
-    /// 账号或 RBAC 查询失败，以及权限值对象不合法时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 必须使用当前账号记录和规范 Casbin 主体，不能仅信任请求中的历史认证
-    /// 快照。
-    async fn purchase_creation_actor_blocker(&self, actor: &AuditActor) -> Result<Option<&'static str>> {
         let authorization = AuthorizationService::new(
             self.db.clone(),
             self.require_rbac()?.clone(),
             AuthorizationRegistry::default(),
         );
-        let permission = Permission::parse("purchase_order:create")?;
-        let allowed = authorization.has_permission(actor, &permission, &mut NoTransaction).await?;
-        Ok((!allowed).then_some("当前账号不能执行供给分配，请检查账号状态和 purchase_order:create 权限"))
-    }
-
-    /// 统计当前账号在指定销售单下拥有的开放供给分配任务。
-    ///
-    /// # 参数
-    /// * `sales_order_id` - 销售单稳定主键
-    /// * `actor_id` - 已通过当前账号与采购建单权限重验的账号主键
-    ///
-    /// # 返回
-    /// 返回该账号拥有的开放供给分配任务数量。
-    ///
-    /// # 错误
-    /// 工作项查询失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 只统计任务仓储认定为开放且由当前账号负责的供给分配任务。
-    async fn purchase_creation_task_count(&self, sales_order_id: &str, actor_id: &str) -> Result<usize> {
-        Ok(self
-            .db
-            .work_items()
-            .list_open_procurement_owned_by(actor_id, Some(sales_order_id), None, &mut NoTransaction)
+        if !authorization
+            .has_permission(actor, &Permission::parse("purchase_order:create")?, &mut NoTransaction)
             .await?
-            .len())
+        {
+            return Ok(Vec::new());
+        }
+        let mut grouped =
+            freight_follow_ups(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
+        Ok(grouped.remove(&order.base.id).unwrap_or_default())
     }
 
     /// 解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。

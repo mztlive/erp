@@ -93,6 +93,7 @@ impl SalesInquiryImportProcess {
         }
         let mut inquiry = self.require_import(actor, id, executor).await?;
         let (command_id, fingerprint) = command_identity(actor.id(), id, command)?;
+        self.require_preview(actor, &command.preview_id, executor).await?;
         let mut preview = self
             .db
             .inquiry_import_previews()
@@ -100,7 +101,6 @@ impl SalesInquiryImportProcess {
             .await?
             .ok_or_else(|| Error::NotFound("导入预览不存在或不可用".into()))?;
         preview.ensure_confirmable(
-            actor.id(),
             id,
             command.expected_version,
             &command.input_fingerprint,

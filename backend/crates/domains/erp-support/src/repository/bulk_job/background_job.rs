@@ -2,7 +2,8 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::BackgroundJobId;
-use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
+use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
@@ -11,7 +12,6 @@ use serde::{Deserialize, Serialize};
 
 use super::super::page::search_projected_page;
 use super::sort_doc;
-use crate::authorization::background::BackgroundAuthorization;
 use crate::dto::bulk_job::BackgroundJobListQuery;
 use crate::entity::bulk_job::{BackgroundJob, JobStatus, JobType};
 use crate::repository::BulkJobExt;
@@ -129,14 +129,21 @@ impl From<BackgroundJobListQuery> for BackgroundJobFilter {
 /// # 返回
 /// 同一授权条件内的任务页与总数。
 /// # 错误
-/// 授权失效、数量越界或数据库失败时拒绝。
-pub(crate) async fn authorized_background_page(
+/// 授权模型不是完整后台任务、凭证失效、数量越界或数据库失败时拒绝。
+pub async fn authorized_background_page(
     db: &Database,
     filter: &BackgroundJobFilter,
-    authorization: &BackgroundAuthorization,
+    authorization: &AuthorizationService,
     access: &CompiledAccess,
     executor: &mut dyn Executor,
 ) -> crate::Result<PageResult<BackgroundJobRow>> {
+    let model = access.model();
+    if model.collection != Database::BACKGROUND_JOBS
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(crate::Error::ValidationError("后台任务分页要求完整后台任务模型".into()));
+    }
     authorization.validate(access, executor).await?;
     let collection = db.background_jobs().collection().clone_with_type::<BackgroundJobRow>();
     let options = FindOptions::builder()

@@ -121,21 +121,20 @@ impl WorkItem {
         self.complete_open_by_system(at)
     }
 
-    /// 记录当前责任人的首次处理或后续非终结活动。
+    /// 记录已由 identity 授权的开放任务活动。
     ///
     /// `started_at` 只在第一次调用时写入；后续调用仅推进 `last_activity_at`。
     ///
     /// # 参数
-    /// * `actor_id` - 当前操作人。
-    /// * `at` - 活动时间。
+    /// * `at` - 活动时间；调用方已在原事务证明当前任务分配。
     ///
     /// # 返回
     /// 无返回值；首次写入 `started_at`，并更新 `last_activity_at`。
     ///
     /// # 错误
-    /// 任务非开放、没有个人责任或操作人不是当前责任人时返回错误。
-    pub fn record_activity(&mut self, actor_id: &str, at: Instant) -> Result<()> {
-        self.ensure_current_owner(actor_id)?;
+    /// 任务非开放时返回错误。
+    pub fn record_activity(&mut self, at: Instant) -> Result<()> {
+        self.ensure_open()?;
         self.started_at.get_or_insert(at);
         self.last_activity_at = Some(at);
         Ok(())
@@ -163,17 +162,17 @@ impl WorkItem {
     /// 由强类型领域命令完成当前开放任务。
     ///
     /// 本方法只形成任务事实；调用方必须把正式领域事实、审批推进和本实体写入
-    /// 放在同一事务。完成动作同时按 `if_null` 语义形成首次处理时间。
+    /// 放在同一事务，并先由 identity 证明指定人资格。完成动作同时形成首次处理时间。
     ///
     /// # 参数
-    /// * `completed_by` - 完成执行人，必须是当前责任人。
+    /// * `completed_by` - 已在原事务完成身份和任务分配授权的执行人。
     /// * `at` - 完成时间。
     ///
     /// # 返回
     /// 无返回值；状态变为 `COMPLETED`，并在此前没有处理时间时写入 `started_at`。
     ///
     /// # 错误
-    /// 单据审批或带审批节点执行引用、供应商申请确认任务、执行人为空或超长、任务非开放，或执行人不是当前责任人时返回错误。
+    /// 单据审批或带审批节点执行引用、供应商申请确认任务、执行人为空或超长或任务非开放时返回错误。
     pub fn complete_by_domain_command(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type == WorkItemType::SupplierPortalReview {
@@ -294,7 +293,7 @@ impl WorkItem {
         Ok(())
     }
 
-    /// 把开放任务标为完成，并要求执行人就是当前责任人。
+    /// 记录已授权执行人的开放任务完成事实。
     ///
     /// # 参数
     /// * `completed_by` - 完成执行人。
@@ -304,7 +303,7 @@ impl WorkItem {
     /// 无返回值；状态变为 `COMPLETED`。此前没有处理时间时写入 `started_at`。
     ///
     /// # 错误
-    /// 执行人为空或超长、任务非开放，或执行人不是当前责任人时返回错误。
+    /// 执行人为空或超长或任务非开放时返回错误。
     pub(super) fn complete_open(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         let completed_by = normalize_required_text(
             completed_by.into(),
@@ -312,7 +311,7 @@ impl WorkItem {
             USER_ID_MAX_LEN,
             "完成执行人过长",
         )?;
-        self.ensure_current_owner(&completed_by)?;
+        self.ensure_open()?;
         self.started_at.get_or_insert(at);
         self.status = WorkItemStatus::Completed;
         self.completed_at = Some(at);
@@ -424,7 +423,7 @@ mod tests {
             )
             .unwrap();
             if started {
-                task.record_activity("alice", Instant::from_unix_secs(110)).unwrap();
+                task.record_activity(Instant::from_unix_secs(110)).unwrap();
             }
             let before = task.clone();
             let completed_at = Instant::from_unix_secs(120);
@@ -504,7 +503,7 @@ mod tests {
     fn reassign_and_complete_preserve_first_times() {
         let first = Instant::from_unix_secs(100);
         let mut item = WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), first).unwrap();
-        item.record_activity("alice", Instant::from_unix_secs(110)).unwrap();
+        item.record_activity(Instant::from_unix_secs(110)).unwrap();
         item.reassign("bob", Instant::from_unix_secs(130)).unwrap();
         item.complete_by_domain_command("bob", Instant::from_unix_secs(150)).unwrap();
         assert_eq!(item.assigned_at, Some(first));

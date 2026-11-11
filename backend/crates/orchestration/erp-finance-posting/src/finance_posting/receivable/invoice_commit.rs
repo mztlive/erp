@@ -68,6 +68,7 @@ impl InvoiceCommitTransaction {
         .await?;
         super::invoice_attachments::persist(
             &self.db,
+            &self.rbac.identity,
             &invoice.base.id,
             &self.attachment_ids,
             self.pending.as_ref(),

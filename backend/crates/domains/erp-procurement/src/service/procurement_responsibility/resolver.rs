@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use erp_identity::AccountSummary;
 use persistence_core::Executor;
 
 use super::ProcurementResponsibilityService;
-use crate::entity::facts::IdentityOwnerFact;
 use crate::entity::procurement_responsibility::{
     EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
     ProcurementResponsibilityResolutionLine, ProcurementResponsibilityRule, ProcurementResponsibilityRuleSet,
@@ -257,11 +257,11 @@ async fn attach_owner_accounts(
 /// * `account` - 身份提供方的当前账号事实
 ///
 /// # 返回
-/// `can_login` 与 `is_admin` 均为真时返回负责人值对象。
+/// 身份域确认账号为启用后台账号时返回负责人值对象。
 ///
 /// # 错误
 /// 账号不可登录或不是后台管理员时返回 `ValidationError`，文案包含账号 ID。
-pub fn eligible_owner(account: &IdentityOwnerFact) -> Result<EligibleProcurementOwner> {
+pub fn eligible_owner(account: &AccountSummary) -> Result<EligibleProcurementOwner> {
     EligibleProcurementOwner::from_account(account)
         .map_err(|_| Error::ValidationError(format!("采购负责人 {} 必须为可登录后台账号", account.id)))
 }
@@ -270,6 +270,7 @@ pub fn eligible_owner(account: &IdentityOwnerFact) -> Result<EligibleProcurement
 mod tests {
     use std::sync::Mutex;
 
+    use erp_core::AccountKind;
     use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, ProductId, SkuId};
     use mongodb::ClientSession;
 
@@ -287,7 +288,7 @@ mod tests {
         executors: Mutex<Vec<usize>>,
         catalog: ProcurementCatalogBundle,
         rules: Vec<ProcurementResponsibilityRule>,
-        owners: Vec<IdentityOwnerFact>,
+        owners: Vec<AccountSummary>,
         failure: Option<&'static str>,
         last_owners: HashMap<String, String>,
     }
@@ -334,7 +335,7 @@ mod tests {
                     .unwrap(),
                 ],
                 owners: vec![
-                    IdentityOwnerFact::new("owner-1", "张三").with_can_login(true).with_is_admin(true),
+                    AccountSummary::new("owner-1", AccountKind::Admin, true).with_display_name("张三"),
                 ],
                 failure: None,
                 last_owners: HashMap::new(),
@@ -392,7 +393,7 @@ mod tests {
             &self,
             owner_ids: &[String],
             executor: &mut dyn Executor,
-        ) -> persistence_core::Result<Vec<IdentityOwnerFact>> {
+        ) -> persistence_core::Result<Vec<AccountSummary>> {
             assert!(owner_ids.iter().all(|id| id.starts_with("owner-")));
             self.record("owners", executor)?;
             Ok(self.owners.clone())
@@ -401,7 +402,7 @@ mod tests {
             &self,
             _: &str,
             _: &mut dyn Executor,
-        ) -> persistence_core::Result<Option<IdentityOwnerFact>> {
+        ) -> persistence_core::Result<Option<AccountSummary>> {
             panic!("批量解析不得逐账号读取")
         }
         async fn sku_exists(&self, _: &SkuId, _: &mut dyn Executor) -> persistence_core::Result<bool> {
@@ -509,12 +510,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn can_login_and_admin_are_independent_required_facts() {
-        for (can_login, is_admin) in [(false, true), (true, false), (false, false)] {
+    async fn identity_backoffice_eligibility_rejects_disabled_and_supplier_accounts() {
+        for (can_login, kind) in
+            [(false, AccountKind::Admin), (true, AccountKind::Supplier), (false, AccountKind::Supplier)]
+        {
             let mut fixture = Fixture::new();
             fixture.owners[0].can_login = can_login;
-            fixture.owners[0].is_admin = is_admin;
-            fixture.owners[0].name = "超级管理员".into();
+            fixture.owners[0].kind = kind;
+            fixture.owners[0].display_name = "超级管理员".into();
             let error = fixture.run(&mut RecordingExecutor::default()).await.unwrap_err();
             assert!(
                 matches!(error, Error::ValidationError(message) if message == "采购负责人 owner-1 必须为可登录后台账号")
@@ -526,7 +529,7 @@ mod tests {
         let mut fixture = Fixture::new();
         fixture
             .owners
-            .push(IdentityOwnerFact::new("owner-2", "李四").with_can_login(true).with_is_admin(true));
+            .push(AccountSummary::new("owner-2", AccountKind::Admin, true).with_display_name("李四"));
         fixture.rules[0].owner_user_ids.push("owner-2".into());
         fixture.last_owners.insert("rule-1".into(), "owner-1".into());
         for _ in 0..2 {

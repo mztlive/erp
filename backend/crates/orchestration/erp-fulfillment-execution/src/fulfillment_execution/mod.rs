@@ -20,6 +20,7 @@ mod service_confirm_audit;
 pub(crate) mod service_crypto;
 mod service_fulfillment;
 pub mod task;
+mod task_access;
 
 use std::sync::Arc;
 

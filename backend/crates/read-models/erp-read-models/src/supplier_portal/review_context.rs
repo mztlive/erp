@@ -92,7 +92,7 @@ impl SupplierPortalReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Value> {
-        let authorization = self.internal_authorization(actor)?;
+        let authorization = self.internal_authorization()?;
         if !authorization.request_readable(actor, request_id, executor).await? {
             return Err(hidden_target());
         }
@@ -176,7 +176,7 @@ impl SupplierPortalReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ExistingOfferingReviewCandidate>> {
-        let authorization = self.internal_authorization(actor)?;
+        let authorization = self.internal_authorization()?;
         if !authorization.request_readable(actor, request_id, executor).await? {
             return Err(hidden_target());
         }

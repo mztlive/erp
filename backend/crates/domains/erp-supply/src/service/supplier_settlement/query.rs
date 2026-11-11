@@ -2,7 +2,7 @@ use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use super::{SupplierSettlementService, dto, zero_amount};
+use super::{SettlementActionAccess, SupplierSettlementService, dto, zero_amount};
 use crate::authorization::CompiledScope;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement::{
@@ -278,7 +278,7 @@ pub fn settlement_item_view(item: SupplierSettlementItem) -> SupplierSettlementI
 /// # 参数
 /// * `statement` - 当前结算单。
 /// * `differences` - 结算明细上的正式差异。
-/// * `actor_id` - 当前操作人。
+/// * `access` - identity 对各具体命令核验的完整对象资格。
 ///
 /// # 返回
 /// 返回允许的动作名、阻塞原因，以及处理态文本。
@@ -288,12 +288,12 @@ pub fn settlement_item_view(item: SupplierSettlementItem) -> SupplierSettlementI
 pub fn settlement_object_actions(
     statement: &SupplierSettlementStatement,
     differences: &[SupplierSettlementDifference],
-    actor_id: &str,
+    access: &SettlementActionAccess,
 ) -> (Vec<String>, Vec<dto::SettlementReviewActionBlockerView>, String) {
     let pending = differences.iter().filter(|difference| difference.is_pending()).count();
     let mut actions = Vec::new();
     let mut blockers = Vec::new();
-    extend_edit_actions(statement, actor_id, pending, &mut actions, &mut blockers);
+    extend_edit_actions(statement, access, pending, &mut actions, &mut blockers);
     (actions, blockers, settlement_processing_state(statement, pending))
 }
 
@@ -314,7 +314,7 @@ fn settlement_processing_state(statement: &SupplierSettlementStatement, pending:
 
 fn extend_edit_actions(
     statement: &SupplierSettlementStatement,
-    actor_id: &str,
+    access: &SettlementActionAccess,
     pending: usize,
     actions: &mut Vec<String>,
     blockers: &mut Vec<dto::SettlementReviewActionBlockerView>,
@@ -327,9 +327,17 @@ fn extend_edit_actions(
         ));
         return;
     }
-    actions.push("APPEND_EVIDENCE".into());
-    extend_preparer_actions(statement.is_prepared_by(actor_id), pending, actions, blockers);
-    if statement.is_difference_handler(actor_id) {
+    if access.append_evidence {
+        actions.push("APPEND_EVIDENCE".into());
+    } else {
+        blockers.push(super::review::review_blocker(
+            "APPEND_EVIDENCE",
+            "ACTION_NOT_AUTHORIZED",
+            "当前账号无权追加证据",
+        ));
+    }
+    extend_preparer_actions(access, pending, actions, blockers);
+    if access.resolve_difference {
         actions.push("RESOLVE_DIFFERENCE".into());
     } else {
         blockers.push(super::review::review_blocker(
@@ -341,29 +349,35 @@ fn extend_edit_actions(
 }
 
 fn extend_preparer_actions(
-    is_preparer: bool,
+    access: &SettlementActionAccess,
     pending: usize,
     actions: &mut Vec<String>,
     blockers: &mut Vec<dto::SettlementReviewActionBlockerView>,
 ) {
-    if is_preparer {
-        actions.extend(["REFRESH_TRIAL".into(), "VOID_DRAFT".into()]);
-        if pending == 0 {
-            actions.push("SUBMIT_REVIEW".into());
+    for (action, allowed) in [("REFRESH_TRIAL", access.refresh), ("VOID_DRAFT", access.void)] {
+        if allowed {
+            actions.push(action.into());
         } else {
             blockers.push(super::review::review_blocker(
-                "SUBMIT_REVIEW",
-                "PENDING_DIFFERENCES",
-                "存在未处理差异，禁止提交财务复核",
+                action,
+                "ACTION_NOT_AUTHORIZED",
+                "当前账号无权执行该动作",
             ));
         }
-        return;
     }
-    for action in ["REFRESH_TRIAL", "VOID_DRAFT", "SUBMIT_REVIEW"] {
+    if !access.submit {
         blockers.push(super::review::review_blocker(
-            action,
-            "PREPARER_REQUIRED",
-            "该动作仅允许当前对账负责人执行",
+            "SUBMIT_REVIEW",
+            "ACTION_NOT_AUTHORIZED",
+            "当前账号无权提交财务复核",
+        ));
+    } else if pending == 0 {
+        actions.push("SUBMIT_REVIEW".into());
+    } else {
+        blockers.push(super::review::review_blocker(
+            "SUBMIT_REVIEW",
+            "PENDING_DIFFERENCES",
+            "存在未处理差异，禁止提交财务复核",
         ));
     }
 }

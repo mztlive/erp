@@ -9,6 +9,7 @@ use erp_identity::{
     AuthorizationService, CompiledAccess, DataAccess, Permission, ResourceTargets, SharedRbacService,
 };
 use erp_sales::entity::sales_inquiry::SalesInquiry;
+use erp_workflow::entity::work_item::WorkItemStatus;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -177,17 +178,23 @@ pub(super) async fn require_task_owner(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let permission = Permission::parse(format!("procurement_inquiry:{action}"))?;
+    let data = if task.status == WorkItemStatus::Completed {
+        DataAccess {
+            subject: AccessSubject::Direct,
+            required_facts: [FactKind::Assignee, FactKind::Participants].into(),
+            policy: AccessPolicy::All(vec![AccessPolicy::Assigned, AccessPolicy::Participant]),
+        }
+    } else {
+        DataAccess {
+            subject: AccessSubject::Direct,
+            required_facts: [FactKind::Assignee].into(),
+            policy: AccessPolicy::Assigned,
+        }
+    };
     let entry = AccessRegistration {
         permission: permission.clone(),
         required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Assignee].into(),
-                policy: AccessPolicy::Assigned,
-            },
-            facts: Arc::new(TaskFacts(task.clone())),
-        },
+        access: AccessMode::Object { data, facts: Arc::new(TaskFacts(task.clone())) },
     };
     let service = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
     service

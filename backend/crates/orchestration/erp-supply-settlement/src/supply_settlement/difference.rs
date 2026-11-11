@@ -9,10 +9,10 @@ use erp_supply::entity::supplier_settlement::{
 };
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::difference::{
     difference_conclusion_kind, difference_decision_fingerprint, settlement_difference_view,
 };
+use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -62,7 +62,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await?;
         let (statement, difference) = self
             .domain()
-            .prepare_difference_decision(id, &req, &conclusion, actor.id(), &mut NoTransaction)
+            .prepare_difference_decision(id, &req, &conclusion, actor, &mut NoTransaction)
             .await?;
         let operation_id = req.operation_id.clone();
         let input =
@@ -179,7 +179,12 @@ impl DifferenceCommit {
         let context = self.context;
         context
             .data_scope
-            .require_statement(&context.actor, "update", &self.request.statement_id, executor)
+            .require_action(
+                &context.actor,
+                SettlementAction::ResolveDifference,
+                &self.request.statement_id,
+                executor,
+            )
             .await?;
         SupplierSettlementService::new(context.db.clone())
             .persist_difference_decision(&mut self.statement, &mut self.difference, executor)

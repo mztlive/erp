@@ -28,6 +28,7 @@ pub async fn purchase_paper(
     Ok(ApiResponse::ok_with_data(
         purchase_correspondence::download(
             state.application().db(),
+            state.application().rbac(),
             MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
             &id,
             &actor,
@@ -78,6 +79,7 @@ pub async fn purchase_email_history(
     Ok(ApiResponse::ok_with_data(
         purchase_correspondence::history(
             state.application().db(),
+            state.application().rbac(),
             MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
             &id,
             &actor,

@@ -7,13 +7,12 @@ use erp_procurement::service::purchase_order::creation_basis::zero_quantity;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItem;
-use erp_workflow::repository::prelude::*;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use super::super::PurchaseOrderReadService;
+use super::super::creation_authorization::creation_tasks;
 use super::super::dto::{CreationBasisListParams, CreationBasisView};
 use super::super::repository::{
     InquiryBasis, WarehouseRegionFact, active_warehouse_regions, load_creation_basis_facts,
@@ -46,20 +45,13 @@ impl PurchaseOrderReadService {
     ) -> Result<Vec<CreationBasisView>> {
         let sales_order_id = normalized_optional_filter(params.sales_order_id.as_deref());
         let work_item_id = normalized_optional_filter(params.work_item_id.as_deref());
-        let tasks = self
-            .db
-            .work_items()
-            .list_open_procurement_owned_by(
-                actor.id(),
-                sales_order_id.as_deref(),
-                work_item_id.as_deref(),
-                &mut NoTransaction,
-            )
-            .await?;
+        let tasks =
+            creation_tasks(&self.db, &self.rbac, actor, sales_order_id.as_deref(), work_item_id.as_deref())
+                .await?;
         if tasks.is_empty() {
             return Ok(Vec::new());
         }
-        let list = BasisList::load(self, tasks, actor).await?;
+        let list = BasisList::load(self, tasks).await?;
         let mut views = list.views(&self.db).await?;
         let ids = views
             .iter()
@@ -86,12 +78,8 @@ struct BasisList {
 
 impl BasisList {
     /// 按已授权任务批量装载销售、覆盖及供给，不按行重复查询供给。
-    async fn load(
-        service: &PurchaseOrderReadService,
-        tasks: Vec<WorkItem>,
-        actor: &AuditActor,
-    ) -> Result<Self> {
-        let task_indexes = group_tasks(&tasks, actor)?;
+    async fn load(service: &PurchaseOrderReadService, tasks: Vec<WorkItem>) -> Result<Self> {
+        let task_indexes = group_tasks(&tasks)?;
         let ids = task_indexes.iter().map(|(id, _)| SalesOrderId::new(id.clone())).collect::<Vec<_>>();
         let orders = service.db.sales_orders().find_effective_orders_by_ids(&ids, &mut NoTransaction).await?;
         let owner_names = service
@@ -156,11 +144,11 @@ impl BasisList {
     }
 }
 
-/// 重验每个任务的负责人及冻结责任范围，保持任务原有顺序。
-fn group_tasks(tasks: &[WorkItem], actor: &AuditActor) -> Result<Vec<(String, Vec<usize>)>> {
+/// 校验已授权任务的开放状态及冻结责任范围，保持任务原有顺序。
+fn group_tasks(tasks: &[WorkItem]) -> Result<Vec<(String, Vec<usize>)>> {
     let mut grouped: Vec<(String, Vec<usize>)> = Vec::new();
     for (index, task) in tasks.iter().enumerate() {
-        if !task.owns_procurement_task(actor.id()) {
+        if !task.is_open_procurement_task() {
             return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".into()));
         }
         if let Some((_, indexes)) = grouped.iter_mut().find(|(id, _)| *id == task.business_object_id) {

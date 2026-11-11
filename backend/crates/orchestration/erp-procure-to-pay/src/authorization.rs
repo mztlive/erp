@@ -3,5 +3,5 @@ use erp_identity::{AuthorizationRegistry, AuthorizationService, SharedRbacServic
 use mongodb::Database;
 
 pub(crate) fn features(db: Database, rbac: SharedRbacService) -> AuthorizationService {
-    AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![]).expect("空功能目录合法"))
+    AuthorizationService::new(db, rbac, AuthorizationRegistry::default())
 }

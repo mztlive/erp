@@ -9,7 +9,6 @@ use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::bson::Document;
 use persistence_core::Executor;
 
-use crate::authorization::map_identity_error;
 use crate::error::Result;
 
 /// 本次库存用例需要取证的动作；未请求的动作不加载仓库范围。
@@ -284,7 +283,7 @@ impl InventoryQuery {
     /// # 错误
     /// 身份、权限、事实或版本失效拒绝。
     pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.authorization.validate(&self.compiled, executor).await.map_err(map_identity_error)
+        self.authorization.validate(&self.compiled, executor).await.map_err(Into::into)
     }
 }
 

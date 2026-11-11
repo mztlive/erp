@@ -7,8 +7,8 @@ use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use persistence_core::Executor;
 
+use crate::Error;
 use crate::repository::SalesInquiryExt;
-use crate::service::authorization_error::identity_error;
 
 /// 必须持有完整授权凭证的仓储读取载体。
 #[derive(Clone)]
@@ -67,6 +67,6 @@ impl InquiryReadScope {
         {
             return Err(crate::Error::ValidationError("询价授权查询模型不匹配".into()));
         }
-        self.authorization.validate(&self.access, executor).await.map_err(identity_error)
+        self.authorization.validate(&self.access, executor).await.map_err(Error::from)
     }
 }

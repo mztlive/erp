@@ -23,7 +23,7 @@ use crate::{BackgroundJob, BulkJobExt, Result};
 
 #[derive(Clone)]
 pub(crate) struct BackgroundAuthorization {
-    service: AuthorizationService,
+    pub(crate) service: AuthorizationService,
     mapping: Arc<dyn AccessMapping>,
 }
 
@@ -59,17 +59,6 @@ impl BackgroundAuthorization {
             .query(actor, &Permission::parse("background_job:list")?, AccessSubject::Direct, executor)
             .await?;
         Ok(query.compile(self.mapping.as_ref(), executor).await?)
-    }
-
-    /// 复验读取阶段的完整身份与映射凭证。
-    /// # 参数
-    /// access 为本服务产生的凭证，executor 沿用原事务。
-    /// # 返回
-    /// 授权依赖保持有效时成功。
-    /// # 错误
-    /// 撤权、身份或事实版本变化时拒绝。
-    pub(crate) async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
-        Ok(self.service.validate(access, executor).await?)
     }
 
     /// 检查真实后台任务的当前动作资格。

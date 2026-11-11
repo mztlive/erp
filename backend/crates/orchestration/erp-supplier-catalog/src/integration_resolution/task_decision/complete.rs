@@ -36,7 +36,7 @@ impl super::execution::TaskCommandPort for CompletionCommand<'_> {
 
     async fn load_bound(&mut self, executor: &mut dyn Executor) -> Result<Self::Item> {
         let action = self.command.as_non_terminal_action();
-        load_bound_work_item(self.db, self.prepared, &action, self.actor.id(), executor).await
+        load_bound_work_item(self.db, self.work_items, self.prepared, &action, self.actor, executor).await
     }
 
     async fn authorize(&mut self, item: &Self::Item, executor: &mut dyn Executor) -> Result<()> {

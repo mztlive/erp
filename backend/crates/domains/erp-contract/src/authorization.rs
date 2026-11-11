@@ -139,36 +139,15 @@ impl ContractAccess {
         models.creation.require_create(actor, customer_id, executor).await
     }
 
-    /// 展开业务筛选使用的有效内部组织。
+    /// 返回筛选所需的身份域组织目录。
     /// # 参数
-    /// ids 为组织集合，desc 指定包含下级，executor 为原执行器。
+    /// 无。
     /// # 返回
-    /// 启用组织集合。
+    /// 使用当前数据库的组织事实查询能力。
     /// # 错误
-    /// 未知组织、组织状态非法或读取失败时拒绝。
-    pub async fn expand_org_units(
-        &self,
-        ids: &[String],
-        desc: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<std::collections::BTreeSet<String>> {
-        Ok(OrganizationDirectoryService::new(self.db.clone()).expand_org_units(ids, desc, executor).await?)
-    }
-
-    /// 读取指定时点的有效组织成员，供业务筛选收窄。
-    /// # 参数
-    /// ids 为已展开组织，at 为业务时点，executor 为原执行器。
-    /// # 返回
-    /// 去重后的成员身份。
-    /// # 错误
-    /// 事实读取失败时返回错误。
-    pub async fn org_member_ids(
-        &self,
-        ids: &std::collections::BTreeSet<String>,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        Ok(OrganizationDirectoryService::new(self.db.clone()).org_member_ids(ids, at, executor).await?)
+    /// 构造不执行 I/O。
+    pub fn organization(&self) -> OrganizationDirectoryService {
+        OrganizationDirectoryService::new(self.db.clone())
     }
 }
 

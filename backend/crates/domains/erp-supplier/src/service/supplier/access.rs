@@ -1,18 +1,24 @@
 //! 供应商对象读取与写入范围；维护人与业务组织分别解释。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{OrganizationDirectoryService, SharedRbacService};
+use erp_identity::{
+    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, OrganizationDirectoryService,
+    Permission, ResourceTargets, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use crate::authorization::{Authorization, CompiledScope};
+use crate::authorization::{CompiledScope, registration};
 use crate::error::{Error, Result};
 
 /// 供应商对象访问范围；列表、详情、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct SupplierAccess {
     db: Database,
-    authorization: Authorization,
+    authorization: AuthorizationService,
+    mapping: Arc<dyn AccessMapping>,
 }
 
 impl SupplierAccess {
@@ -28,8 +34,9 @@ impl SupplierAccess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let authorization = Authorization::new(&db, rbac, "supplier").expect("固定资源授权目录有效");
-        Self { db, authorization }
+        let (registry, mapping) = registration(&db).expect("固定资源授权目录有效");
+        let authorization = AuthorizationService::new(db.clone(), rbac, registry);
+        Self { db, authorization, mapping }
     }
 
     /// 在调用方事务内证明资源动作并映射供应商责任条件。
@@ -53,7 +60,17 @@ impl SupplierAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(self.authorization.resolve(actor, action, executor).await?)
+        let query = self
+            .authorization
+            .query(actor, &Permission::parse(format!("supplier:{action}"))?, AccessSubject::Direct, executor)
+            .await?;
+        let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
+        self.authorization.validate(&compiled, executor).await?;
+        Ok(CompiledScope {
+            scope_version: compiled.version(),
+            compiled,
+            authorization: self.authorization.clone(),
+        })
     }
 
     /// 在独立事务中重验对象资格。
@@ -102,7 +119,18 @@ impl SupplierAccess {
         supplier_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self.authorization.require(actor, action, supplier_id, executor).await?)
+        Ok(self
+            .authorization
+            .require(
+                actor,
+                &Permission::parse(format!("supplier:{action}"))?,
+                AccessTarget::Records {
+                    subject: AccessSubject::Direct,
+                    ids: ResourceTargets::new(&[supplier_id])?,
+                },
+                executor,
+            )
+            .await?)
     }
 
     /// 在调用方事务内证明创建资格。

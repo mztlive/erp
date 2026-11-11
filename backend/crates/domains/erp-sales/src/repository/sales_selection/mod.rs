@@ -32,7 +32,6 @@ use crate::entity::sales_selection::{
 };
 use crate::repository::extensions::SalesSelectionExt;
 use crate::repository::filter::push_undeleted;
-use crate::service::authorization_error::identity_error;
 
 /// 选品册集合名（单一来源）。
 const BOOKLETS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS;
@@ -278,7 +277,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .limit(filter.limit())
             .build();
         let condition = filter.to_doc();
-        authorized_scope.validate(executor).await.map_err(identity_error)?;
+        authorized_scope.validate(executor).await?;
         let stages = authorized_scope.lookup_after(condition.clone());
         let items = aggregate::find(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
@@ -295,7 +294,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             executor,
         )
         .await?;
-        authorized_scope.validate(executor).await.map_err(identity_error)?;
+        authorized_scope.validate(executor).await?;
         Ok(PageResult {
             items,
             total: i64::try_from(total).map_err(|_| crate::Error::Internal("选品计数超限".into()))?,

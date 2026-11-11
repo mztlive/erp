@@ -1,5 +1,7 @@
 //! W01 活动与完成命令的真实生产读取、责任重验与写入边界。
+use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_read_models::work_item_links;
@@ -9,10 +11,11 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::{
-    FulfillmentIdentityFactory, FulfillmentTaskObject, ensure_fulfillment_owner_eligible,
-    ensure_task_matches_frozen_identity, load_single_open_task,
+    FulfillmentIdentityFactory, FulfillmentTaskObject, ensure_task_matches_frozen_identity,
+    load_single_open_task,
 };
 use crate::Result;
+use crate::fulfillment_execution::task_access::{TaskPurpose, require_assignee};
 
 #[derive(Clone, Copy)]
 enum CommandKind {
@@ -58,8 +61,8 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        ensure_fulfillment_owner_eligible(self.db, identity, actor_id, &task.business_object_type, executor)
-            .await
+        let actor = AuditActor::new(actor_id.into(), actor_id.into(), AccountKind::Admin);
+        require_assignee(self.db, identity, &actor, task, TaskPurpose::Fulfillment, executor).await
     }
     async fn update(&self, task: &mut WorkItem, executor: &mut dyn Executor) -> Result<()> {
         if task.status == WorkItemStatus::Open {
@@ -77,7 +80,7 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         Ok(())
     }
 }
-/// 同步已保存草稿版本与任务活动，再重验当前责任人权限并写回同一执行器。
+/// 同一执行器先核验当前任务指定人，再同步活动或完成事实并写回。
 async fn execute<P: TaskCommandPort>(
     port: &P,
     identity_factory: &(dyn Fn() -> P::Identity + Send + Sync),
@@ -89,21 +92,21 @@ async fn execute<P: TaskCommandPort>(
     let mut task =
         port.load_open(object.business_object_type(), object.business_object_id(), executor).await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
+    let identity = identity_factory();
+    port.authorize(&identity, &task, actor_id, executor).await?;
     match kind {
         CommandKind::Activity => {
-            task.record_activity(actor_id, Instant::now())?;
+            task.record_activity(Instant::now())?;
             task.subject_version = object.subject_version();
         },
         CommandKind::Complete => task.complete_by_domain_command(actor_id, Instant::now())?,
     }
-    let identity = identity_factory();
-    port.authorize(&identity, &task, actor_id, executor).await?;
     port.update(&mut task, executor).await?;
     Ok(())
 }
 /// 在调用方执行器内记录履约任务活动。
 ///
-/// 先形成活动事实，再重验当前责任人权限并写回。
+/// 先核验当前任务指定人及完整资格，再形成活动事实并写回。
 ///
 /// # 参数
 /// * `db` - 业务数据库。
@@ -135,7 +138,7 @@ pub(super) async fn record(
 }
 /// 在调用方执行器内完成履约执行任务。
 ///
-/// 先形成完成事实，再重验当前责任人权限并写回。
+/// 先核验当前任务指定人及完整资格，再形成完成事实并写回。
 ///
 /// # 参数
 /// * `db` - 业务数据库。
@@ -186,7 +189,6 @@ mod tests {
     struct RecordingPort {
         executor: usize,
         task: WorkItem,
-        kind: CommandKind,
         fail_at: Option<usize>,
         recorded: Mutex<Recorded>,
     }
@@ -234,19 +236,6 @@ mod tests {
             self.record("authorize", executor)?;
             assert_eq!(self.recorded.lock().unwrap().identities.last(), Some(identity));
             assert_eq!(actor_id, "buyer-1");
-            assert!(task.started_at.is_some());
-            match self.kind {
-                CommandKind::Activity => {
-                    assert!(task.last_activity_at.is_some());
-                    assert_eq!(task.completed_at, self.task.completed_at);
-                    assert_eq!(task.completed_by, self.task.completed_by);
-                },
-                CommandKind::Complete => {
-                    assert!(task.completed_at.is_some());
-                    assert_eq!(task.completed_by.as_deref(), Some(actor_id));
-                    assert_eq!(task.last_activity_at, self.task.last_activity_at);
-                },
-            }
             self.recorded.lock().unwrap().status_at_authorization = Some(task.status);
             Ok(())
         }
@@ -266,7 +255,6 @@ mod tests {
         let port = RecordingPort {
             executor: (&mut executor as *mut TestExecutor) as usize,
             task,
-            kind,
             fail_at,
             recorded: Mutex::default(),
         };
@@ -295,7 +283,6 @@ mod tests {
             let port = RecordingPort {
                 executor: (&mut executor as *mut TestExecutor) as usize,
                 task: current,
-                kind: CommandKind::Activity,
                 fail_at: None,
                 recorded: Mutex::default(),
             };
@@ -328,9 +315,9 @@ mod tests {
         }
     }
 
-    /// 活动与完成均先形成原任务内存事实，再重验权限并写回同一执行器。
+    /// 活动与完成均先核验当前任务指定人，再改变任务并写回同一执行器。
     #[tokio::test]
-    async fn task_command_preserves_executor_and_original_mutate_authorize_write_order() {
+    async fn task_command_authorizes_before_mutating_and_preserves_executor() {
         for (kind, status) in [
             (CommandKind::Activity, WorkItemStatus::Open),
             (CommandKind::Complete, WorkItemStatus::Completed),
@@ -339,7 +326,7 @@ mod tests {
             result.unwrap();
             assert_eq!(recorded.calls, ["load", "identity", "authorize", "update"]);
             assert_eq!(recorded.identities, [1]);
-            assert_eq!(recorded.status_at_authorization, Some(status));
+            assert_eq!(recorded.status_at_authorization, Some(WorkItemStatus::Open));
             assert_eq!(recorded.written.unwrap().status, status);
         }
     }
@@ -367,7 +354,6 @@ mod tests {
             let mut port = RecordingPort {
                 executor: (&mut executor as *mut TestExecutor) as usize,
                 task: task(),
-                kind,
                 fail_at: Some(2),
                 recorded: Mutex::default(),
             };
@@ -410,16 +396,5 @@ mod tests {
         assert_eq!(recorded.calls, ["load"]);
         assert!(recorded.identities.is_empty());
         assert!(recorded.written.is_none());
-    }
-    /// 非当前责任人先被任务实体拒绝，不能绕过原顺序调用权限源或写入。
-    #[tokio::test]
-    async fn wrong_actor_stops_before_permission_revalidation() {
-        for kind in [CommandKind::Activity, CommandKind::Complete] {
-            let (result, recorded) = invoke(kind, task(), "other-user", None).await;
-            assert!(matches!(result, Err(Error::Logic(_))));
-            assert_eq!(recorded.calls, ["load"]);
-            assert!(recorded.identities.is_empty());
-            assert!(recorded.written.is_none());
-        }
     }
 }

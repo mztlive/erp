@@ -1,5 +1,6 @@
 //! 供应商结算单域准备、查询和事务内写入；跨域根事务由 supply_settlement 组合。
 pub mod access;
+mod authorization;
 pub mod difference;
 pub mod draft;
 pub mod evidence;
@@ -10,6 +11,7 @@ pub mod shared;
 pub mod source;
 mod void;
 pub use access::SettlementAccess;
+pub use authorization::{SettlementAction, SettlementActionAccess};
 use mongodb::Database;
 use persistence_core::Executor;
 use shared::*;

@@ -62,8 +62,9 @@ impl Reads {
         match kind {
             SalesOrders => sales(state, query, actor).await,
             PurchaseOrders => output(
-                PurchaseOrderReadService::with_scope(
+                PurchaseOrderReadService::new(
                     state.db(),
+                    state.rbac(),
                     MongoPurchaseDataScope::shared(state.db(), state.rbac()),
                 )
                 .purchase_order_list(&input(query)?, actor)

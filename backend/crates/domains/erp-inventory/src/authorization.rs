@@ -221,25 +221,6 @@ fn management_permissions(entry: &Permission, required: &[Permission]) -> Result
     Ok(expected.into_iter().collect())
 }
 
-/// 机械保留统一身份授权错误分类。
-pub(crate) fn map_identity_error(error: Error) -> crate::Error {
-    match error {
-        Error::Internal(value) | Error::Rbac(value) => crate::Error::Internal(value),
-        Error::NotFound(value) => crate::Error::NotFound(value),
-        Error::ValidationError(value) => crate::Error::ValidationError(value),
-        Error::InvalidInput(value) => crate::Error::InvalidInput(value),
-        Error::BusinessLogicError(value) => crate::Error::BusinessLogicError(value),
-        Error::ConflictError(value) => crate::Error::ConflictError(value),
-        Error::ReceiptDuplicate(value) => crate::Error::ReceiptDuplicate(value),
-        Error::TransientTransaction(value) => crate::Error::TransientTransaction(value),
-        Error::Forbidden(value) => crate::Error::Forbidden(value),
-        Error::Unauthenticated(value) => crate::Error::Unauthenticated(value),
-        Error::Logic(value) => crate::Error::Logic(value),
-        Error::OutcomeUnknown(value) => crate::Error::OutcomeUnknown(value),
-        Error::RepositoryError(value) => crate::Error::RepositoryError(value),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

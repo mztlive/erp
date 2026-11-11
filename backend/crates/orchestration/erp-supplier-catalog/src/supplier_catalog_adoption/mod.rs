@@ -10,6 +10,7 @@ use mongodb::Database;
 use crate::wiring::CatalogServices;
 use crate::{Error, Result};
 
+mod authorization;
 mod batch;
 mod batch_draft;
 mod batch_execution;

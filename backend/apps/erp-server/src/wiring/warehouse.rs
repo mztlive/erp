@@ -19,9 +19,6 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::audit_conversion::{PreparedAudit, map_audit_error};
-use super::identity_error::map_identity_error;
-
-map_identity_error!(erp_warehouse);
 
 /// 把仓库审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
@@ -149,8 +146,7 @@ impl MongoWarehouseIdentity {
         let requested = inbound.iter().chain(&outbound).cloned().collect::<Vec<_>>();
         let qualified = super::authorization::authorization_service(self.db.clone(), self.rbac.clone())
             .permissions(&actor, &requested, &mut NoTransaction)
-            .await
-            .map_err(map_identity_error)?;
+            .await?;
         let can_login = qualified.is_some();
         let inbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&inbound));
         let outbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&outbound));

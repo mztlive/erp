@@ -90,7 +90,7 @@ fn execute(
             }
         },
     };
-    work_item.record_activity(input.actor_id, input.at)?;
+    work_item.record_activity(input.at)?;
     work_item.complete_by_domain_command(input.actor_id, input.at)?;
     Ok(prepared)
 }

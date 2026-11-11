@@ -6,7 +6,9 @@ mod approval_query;
 pub(crate) mod approval_supplier;
 mod change;
 pub mod change_bounds;
+pub(crate) mod creation_authorization;
 mod creation_basis;
+pub use creation_authorization::require_creation_task;
 mod delivery_options;
 pub mod direct_return;
 pub mod dto;
@@ -25,49 +27,37 @@ pub(crate) mod source_sales;
 use std::sync::Arc;
 
 pub use change::query::PurchaseChangeListView;
-use erp_procurement::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort};
+use erp_identity::SharedRbacService;
+use erp_procurement::PurchaseDataScopePort;
 pub use scope::{PurchaseListParams, PurchaseListView};
 pub use source_sales::PurchaseSalesMaterialReference;
 
 /// 使用提供方公开事实装配采购视图；构造本身不访问数据库。
+#[derive(Clone)]
 pub struct PurchaseOrderReadService {
     db: mongodb::Database,
     data_scope: Arc<dyn PurchaseDataScopePort>,
+    rbac: SharedRbacService,
 }
 impl PurchaseOrderReadService {
-    /// 以数据库句柄构造只读服务；查询各自保留原无事务读取边界。
+    /// 装配采购读取所需的数据库、身份设施和对象范围。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库
+    /// * `db` - 采购事实数据库。
+    /// * `rbac` - 当前共享身份设施。
+    /// * `data_scope` - 已装配的采购对象范围端口。
     ///
     /// # 返回
-    /// 返回未注入范围 Port 的服务。
+    /// 不缓存授权结论的采购读取服务。
     ///
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 列表、详情与导出必须改用 `with_scope`，未注入时失败关闭。
-    pub fn new(db: mongodb::Database) -> Self {
-        Self { db, data_scope: FailClosedPurchaseDataScopePort::shared() }
-    }
-
-    /// 使用数据库句柄和采购范围 Port 构造只读查询服务。
-    ///
-    /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `data_scope` - 组合层注入的采购范围 Port
-    ///
-    /// # 返回
-    /// 返回可解析采购范围的服务；构造不执行查询。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// HTTP 列表、详情、候选、导出、变更单与退货必须经此入口。
-    pub fn with_scope(db: mongodb::Database, data_scope: Arc<dyn PurchaseDataScopePort>) -> Self {
-        Self { db, data_scope }
+    /// 构造不执行 I/O。
+    pub fn new(
+        db: mongodb::Database,
+        rbac: SharedRbacService,
+        data_scope: Arc<dyn PurchaseDataScopePort>,
+    ) -> Self {
+        Self { db, rbac, data_scope }
     }
 
     /// 构造绑定当前 Port 的采购访问器。

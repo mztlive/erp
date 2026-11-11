@@ -193,7 +193,7 @@ impl TaskCompletion {
             self.idempotency_key,
         )?;
         let completed_at = Instant::now();
-        work_item.record_activity(self.actor.id(), completed_at)?;
+        work_item.record_activity(completed_at)?;
         work_item.complete_by_domain_command(self.actor.id(), completed_at)?;
         persist_completed_task(
             CompletionWrite {
@@ -333,7 +333,6 @@ async fn load_completion_task(
         command.decision.order_id.as_ref(),
         expected_task_version,
         &command.expected_subject_version,
-        actor.id(),
     )?;
     workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
 

@@ -146,6 +146,7 @@ impl SupplierCatalogAdoptionProcess {
             item.operation_id.clone().ok_or_else(|| Error::Internal("原入库操作缺失，请人工核查".into()))?;
         self.confirm_execution(
             AdoptionExecution {
+                preview_id: None,
                 preview: batch_preview(batch, item),
                 source: item.source.clone(),
                 row,

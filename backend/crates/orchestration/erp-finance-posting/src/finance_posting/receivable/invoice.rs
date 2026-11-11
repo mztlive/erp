@@ -500,6 +500,7 @@ async fn persist_created_invoice(
                 db.invoices().create(&invoice, executor).await?;
                 super::invoice_attachments::persist(
                     &db,
+                    &rbac.identity,
                     &invoice.base.id,
                     &attachment_ids,
                     pending.as_ref(),

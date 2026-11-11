@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, PermissionSet};
 use erp_supply::catalog_adoption::{
     CatalogAdoptionExt, CatalogAdoptionPreview, MAX_CONFIRM_ROWS, MAX_PREVIEW_ROWS, PreviewAdoptionRequest,
 };
@@ -162,10 +162,7 @@ impl SupplierCatalogAdoptionProcess {
             AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
                 .permissions(actor, &required, &mut NoTransaction)
                 .await?;
-        if !qualified.is_some_and(|value| {
-            let permissions = value.permissions();
-            required.iter().all(|permission| permissions.covers_one(permission))
-        }) {
+        if !qualified.is_some_and(|value| value.permissions().covers(&PermissionSet::new(required))) {
             return Err(Error::Forbidden("当前账号无权执行选品操作".into()));
         }
         Ok(())

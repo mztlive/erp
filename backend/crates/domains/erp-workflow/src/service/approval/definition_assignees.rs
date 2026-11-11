@@ -1,8 +1,6 @@
 //! 定义期审批人候选：只做静态账号过滤，不读具体单据 DataScopeFact。
 
 use application_core::AuditActor;
-use erp_identity::{AccountSummary, SharedRbacService};
-use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
@@ -61,36 +59,22 @@ impl ApprovalDefinitionService {
             .await?;
         let mut items = Vec::new();
         for account in accounts {
-            let eligible = eligible_candidate(&self.db, &self.identity, &account, query.copies).await?;
-            if eligible {
-                items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
+            if !query.copies {
+                let candidate =
+                    AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+                if !approval_participant_permissions_with_executor(
+                    &self.db,
+                    &self.identity,
+                    &candidate,
+                    &mut NoTransaction,
+                )
+                .await?
+                {
+                    continue;
+                }
             }
+            items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
         }
         Ok(DefinitionAssigneePage { items })
     }
-}
-
-/// 按用途校验候选账号；抄送不要求审批或角色权限。
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-///
-/// 授权端口、候选账号和是否用于抄送。
-/// # 返回
-/// 有效内部抄送人直接通过，审批人继续校验审批权限。
-/// # 错误
-/// 审批权限读取失败时拒绝。
-pub(super) async fn eligible_candidate(
-    db: &Database,
-    identity_service: &SharedRbacService,
-    account: &AccountSummary,
-    copies: bool,
-) -> Result<bool> {
-    if !account.is_active_backoffice() {
-        return Ok(false);
-    }
-    if copies {
-        return Ok(true);
-    }
-    let candidate = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-    approval_participant_permissions_with_executor(db, identity_service, &candidate, &mut NoTransaction).await
 }

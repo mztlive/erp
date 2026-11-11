@@ -1,7 +1,5 @@
 use std::str::FromStr;
 
-use application_core::AuditActor;
-use erp_core::AccountKind;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SupplierAccountId, SupplierSettlementStatementId, WorkItemId};
 use erp_core::money::Amount;
@@ -10,7 +8,7 @@ use erp_supply::command_receipt::{
 };
 use erp_supply::entity::supplier_settlement::{SupplierSettlementStatement, SupplierSettlementStatementData};
 use erp_workflow::entity::work_item::{
-    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 
 use super::review::*;
@@ -100,21 +98,14 @@ fn typed_results_preserve_original_versions_and_cost_delta() {
 }
 
 #[test]
-fn work_item_validation_requires_exact_three_versions_and_current_owner() {
+fn work_item_validation_requires_exact_three_versions_and_open_state() {
     let mut statement = sample_statement();
     statement.submit_review().unwrap();
     let mut item = sample_work_item(&statement);
-    let actor = AuditActor::new("reviewer-1".to_string(), "reviewer".to_string(), AccountKind::Admin);
 
     assert!(
-        validate_settlement_review_work_item(
-            &item,
-            &statement,
-            item.base.version,
-            &statement.subject_hash,
-            &actor,
-        )
-        .is_ok()
+        validate_settlement_review_work_item(&item, &statement, item.base.version, &statement.subject_hash,)
+            .is_ok()
     );
     assert!(
         validate_settlement_review_work_item(
@@ -122,47 +113,27 @@ fn work_item_validation_requires_exact_three_versions_and_current_owner() {
             &statement,
             item.base.version + 1,
             &statement.subject_hash,
-            &actor,
         )
         .is_err()
     );
     assert!(
-        validate_settlement_review_work_item(&item, &statement, item.base.version, &"0".repeat(64), &actor,)
+        validate_settlement_review_work_item(&item, &statement, item.base.version, &"0".repeat(64),).is_err()
+    );
+    item.status = WorkItemStatus::Completed;
+    assert!(
+        validate_settlement_review_work_item(&item, &statement, item.base.version, &statement.subject_hash,)
             .is_err()
     );
-    item.owner_user_id = Some("other-reviewer".to_string());
-    assert!(
-        validate_settlement_review_work_item(
-            &item,
-            &statement,
-            item.base.version,
-            &statement.subject_hash,
-            &actor,
-        )
-        .is_err()
-    );
-    item.owner_user_id = Some("reviewer-1".to_string());
+    item.status = WorkItemStatus::Open;
     item.owner_organization_id = "company".into();
     assert!(
-        validate_settlement_review_work_item(
-            &item,
-            &statement,
-            item.base.version,
-            &statement.subject_hash,
-            &actor,
-        )
-        .is_err()
+        validate_settlement_review_work_item(&item, &statement, item.base.version, &statement.subject_hash,)
+            .is_err()
     );
     item.owner_organization_id = "other-org".into();
     assert!(
-        validate_settlement_review_work_item(
-            &item,
-            &statement,
-            item.base.version,
-            &statement.subject_hash,
-            &actor,
-        )
-        .is_err()
+        validate_settlement_review_work_item(&item, &statement, item.base.version, &statement.subject_hash,)
+            .is_err()
     );
 }
 

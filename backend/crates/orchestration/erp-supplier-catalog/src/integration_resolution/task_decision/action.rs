@@ -37,7 +37,15 @@ impl super::execution::TaskCommandPort for ActionCommand<'_> {
     type Output = IntegrationTaskActionResult;
 
     async fn load_bound(&mut self, executor: &mut dyn Executor) -> Result<Self::Item> {
-        load_bound_work_item(self.db, self.prepared, &self.command.action, self.actor.id(), executor).await
+        load_bound_work_item(
+            self.db,
+            self.work_items,
+            self.prepared,
+            &self.command.action,
+            self.actor,
+            executor,
+        )
+        .await
     }
 
     async fn authorize(&mut self, item: &Self::Item, executor: &mut dyn Executor) -> Result<()> {
@@ -61,7 +69,7 @@ impl super::execution::TaskCommandPort for ActionCommand<'_> {
         if let Some(subject_version) = fact.next_subject_version.clone() {
             item.subject_version = subject_version;
         }
-        item.record_activity(self.actor.id(), Instant::now())?;
+        item.record_activity(Instant::now())?;
         Ok(())
     }
 

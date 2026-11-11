@@ -48,7 +48,7 @@ pub(super) async fn load_change_document_approval(
             has_more: runtime.history.has_more,
         };
     }
-    view.allowed_actions = change_actions(db, rbac, change, &view, cancellable, actor, executor).await?;
+    view.allowed_actions = change_actions(db, rbac, change, cancellable, actor, executor).await?;
     Ok(view)
 }
 
@@ -57,7 +57,6 @@ async fn change_actions(
     db: &Database,
     rbac: &SharedRbacService,
     change: &SalesChangeOrder,
-    view: &DocumentApprovalView,
     cancellable: bool,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -70,37 +69,13 @@ async fn change_actions(
     if !has_document_permission(db, rbac, actor, "sales_change_order", "submit", executor).await? {
         return Ok(Vec::new());
     }
-    let order = match SalesAccess::new(db.clone(), rbac.clone())
+    match SalesAccess::new(db.clone(), rbac.clone())
         .require_object(actor, action, change.sales_order_id.as_ref(), &[], executor)
         .await
     {
-        Ok(order) => order,
+        Ok(_) => {},
         Err(Error::Forbidden(_) | Error::NotFound(_)) => return Ok(Vec::new()),
         Err(error) => return Err(error),
-    };
-    let submitter = view.instance.as_ref().and_then(|instance| instance.started_by.as_deref());
-    if !action_owner(actor.id(), &order.sales_owner_user_id, &change.stable.created_by, submitter) {
-        return Ok(Vec::new());
     }
     Ok(vec![if action == "submit" { "SUBMIT" } else { "CANCEL" }.into()])
-}
-
-/// 普通详情读取或历史参与不能代替当前负责人、原创建人或原提交人。
-fn action_owner(actor: &str, owner: &str, creator: &str, submitter: Option<&str>) -> bool {
-    !actor.is_empty() && (actor == owner || actor == creator || submitter == Some(actor))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::action_owner;
-
-    /// 有详情范围的其他人员不会被投影为原单取消经办人。
-    #[test]
-    fn sales_change_actions_require_current_or_original_responsibility() {
-        assert!(action_owner("owner", "owner", "creator", Some("submitter")));
-        assert!(action_owner("creator", "owner", "creator", Some("submitter")));
-        assert!(action_owner("submitter", "owner", "creator", Some("submitter")));
-        assert!(!action_owner("reader", "owner", "creator", Some("submitter")));
-        assert!(!action_owner("", "", "", Some("")));
-    }
 }

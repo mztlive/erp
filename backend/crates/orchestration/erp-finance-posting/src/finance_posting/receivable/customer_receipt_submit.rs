@@ -23,7 +23,7 @@ use super::customer_receipt_command::{
     receipt_command_context, replay_receipt_command,
 };
 use super::customer_receipt_posting::prepare_dispatch_start;
-use super::draft_read::{ensure_receipt_owner, receipt_view_with_actions};
+use super::draft_read::receipt_view_with_actions;
 use super::draft_update::ensure_receipt_edit_authorized;
 use super::start_approval::{CustomerReceiptStartPersistInput, persist_customer_receipt_start_apply};
 use crate::{Error, FinancePostingPorts, Result};
@@ -258,7 +258,7 @@ pub(super) async fn persist_receipt_submit(
                         "历史回款启动缺少完整提交收据，不能确认本次载荷".into(),
                     ));
                 }
-                current.ensure_draft_editor(input.actor.id())?;
+                current.ensure_draft_editable()?;
                 ensure_expected_version(current.base.version, input.receipt.base.version)?;
                 let context = receipt_command_context(&command, &input.actor)?;
                 let receipt = persist_customer_receipt_start_apply(&db, &rbac, input, executor).await?;
@@ -290,7 +290,6 @@ async fn authorized_receipt(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
-    ensure_receipt_owner(&receipt, actor.id())?;
     Ok(receipt)
 }
 

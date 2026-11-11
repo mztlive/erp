@@ -1,6 +1,4 @@
 //! 付款安排读取同一事务内的采购、应付和开放待办。
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::PurchaseOrderId;
@@ -93,7 +91,7 @@ impl PurchaseOrderReadService {
     /// # 错误
     /// 无采购详情资格、来源缺失或读取失败时拒绝。
     pub async fn payment_arrangement(&self, actor: &AuditActor, id: &str) -> Result<PaymentArrangementView> {
-        let this = Self::with_scope(self.db.clone(), Arc::clone(&self.data_scope));
+        let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
         self.db

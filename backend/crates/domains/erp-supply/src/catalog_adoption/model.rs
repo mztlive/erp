@@ -99,41 +99,35 @@ impl CatalogAdoptionPreview {
         Ok(())
     }
 
-    /// 核验预览归属、冻结版本、有效期及请求行是否属于冻结集合。
+    /// 在 identity 完成创建人授权后核验连接、冻结版本、有效期及请求行。
     /// # 参数
-    /// 连接、操作人、版本、确认行与当前时间由命令入口提供。
+    /// 连接、版本、确认行与当前时间由命令入口提供。
     /// # 返回
     /// 全部行合法时返回空结果。
     /// # 错误
-    /// 越权、过期、旧版本、重复或超量行时拒绝。
+    /// 连接不符、过期、旧版本、重复或超量行时拒绝。
     pub fn ensure_confirmable(
         &self,
         connection: &str,
-        actor: &str,
         request: &ConfirmAdoptionRequest,
         now: Instant,
     ) -> Result<()> {
-        self.ensure_request(connection, actor, request)?;
+        self.ensure_request(connection, request)?;
         if self.expires_at <= now {
             return Err(Error::ConflictError("选品预览已变化或过期，请重新预览".into()));
         }
         Ok(())
     }
 
-    /// 核验原始选择及归属，允许已提交命令在预览过期后只读恢复结果。
+    /// 核验连接和原始选择，允许已提交命令在预览过期后只读恢复结果。
     /// # 参数
-    /// 连接、操作人及原始确认请求。
+    /// 连接及原始确认请求；创建人资格由调用方通过 identity 核验。
     /// # 返回
     /// 请求属于该冻结预览时返回空结果。
     /// # 错误
-    /// 越权、版本不符、重复或越界行时拒绝。
-    pub fn ensure_request(
-        &self,
-        connection: &str,
-        actor: &str,
-        request: &ConfirmAdoptionRequest,
-    ) -> Result<()> {
-        if self.connection_id != connection || self.actor_id != actor || self.base.is_deleted() {
+    /// 连接不符、版本不符、重复或越界行时拒绝。
+    pub fn ensure_request(&self, connection: &str, request: &ConfirmAdoptionRequest) -> Result<()> {
+        if self.connection_id != connection || self.base.is_deleted() {
             return Err(Error::NotFound("选品预览不存在或无权使用".into()));
         }
         if self.base.version != request.expected_version {
@@ -515,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_validates_owner_expiry_version_and_membership_before_writes() {
+    fn preview_validates_connection_expiry_version_and_membership_before_writes() {
         let item = source_item();
         let preview = CatalogAdoptionPreview {
             base: BaseModel::new("preview".into()),
@@ -551,15 +545,14 @@ mod tests {
             idempotency_key: "key".into(),
             rows: vec![row],
         };
-        assert!(preview.ensure_confirmable("c", "actor", &request, Instant::from_unix_secs(100)).is_ok());
-        assert!(preview.ensure_confirmable("c", "actor", &request, Instant::from_unix_secs(200)).is_err());
-        assert!(preview.ensure_request("c", "actor", &request).is_ok());
-        assert!(preview.ensure_request("c", "other", &request).is_err());
-        assert!(preview.ensure_request("other", "actor", &request).is_err());
+        assert!(preview.ensure_confirmable("c", &request, Instant::from_unix_secs(100)).is_ok());
+        assert!(preview.ensure_confirmable("c", &request, Instant::from_unix_secs(200)).is_err());
+        assert!(preview.ensure_request("c", &request).is_ok());
+        assert!(preview.ensure_request("other", &request).is_err());
         request.expected_version += 1;
-        assert!(preview.ensure_request("c", "actor", &request).is_err());
+        assert!(preview.ensure_request("c", &request).is_err());
         request.expected_version = preview.base.version;
         request.rows[0].item_id = "other-source".into();
-        assert!(preview.ensure_request("c", "actor", &request).is_err());
+        assert!(preview.ensure_request("c", &request).is_err());
     }
 }
