@@ -164,7 +164,7 @@ self.authorization.validate(&access, executor).await?;
 - 新建 `erp-permissions`，将 `erp-server/permission_catalog/` 的权限编码及公共目录定义迁入该 crate，统一操作和资源标识。业务模块、server、wiring 及生成器引用同一份定义，删除已迁出的原目录定义和重复权限字符串。
 - 允许其它crate编译不通过
 
-### 第一阶段：统一权限定义、业务授权声明和 identity 新 API
+### 第二阶段：统一权限定义、业务授权声明和 identity 新 API
 
 - 调整 server 的普通依赖、构建依赖、前端权限生成器及权限漂移检查，使用公共目录；HTTP 路由与接口专属信息保留在 server。本阶段保持既有路由鉴权，不提前删除 `with_permission`。
 - 新建 `erp-authorization-wiring`，集中声明现有业务操作的授权要求，覆盖 `ConsumerSpec` 的业务规格及原业务模块的固定权限组合。分别声明共享同一权限编码的不同操作，不将业务声明迁入 identity。
@@ -174,14 +174,14 @@ self.authorization.validate(&access, executor).await?;
 
 阶段通过条件：`erp-permissions`、`erp-identity` 和 wiring 基础结构编译通过；业务授权声明已集中定义。目录生成及权限漂移检查通过，既有权限编码、共享关系及展示内容保持一致。授权行为单元测试覆盖重复操作、未知引用及共享权限下不同操作的独立声明；依赖边界检查确认业务模块不依赖 wiring，公共定义不依赖 identity 或业务实现。允许尚未迁移的下游 crate 编译失败，完整事实读取器及 Mapping 装配在第二阶段完成。目录生成与漂移检查不得依赖未迁移下游的编译。不得保留旧接口兼容分支来维持中间状态的 workspace 编译。
 
-### 第二阶段：逐 crate 接入 erp-identity 以及 erp-authorization-wiring 装配
+### 第三阶段：逐 crate 接入 erp-identity 以及 erp-authorization-wiring 装配
 
 - 本 crate 引用 `erp-permissions` 的操作常量，接入已在 wiring 定义的业务授权声明及 identity 统一授权入口；删除自行拼装政策、数据范围、额外权限的代码、重复动作白名单和临时授权服务工厂。通用授权判断由 identity 执行，保留业务状态校验、事实读取及对统一授权服务的调用。
 - 在 wiring 中完成本 crate 的事实读取器及 Mapping 绑定。如果可以用一个结构体实现两个 trait，就不要拆分 Facts 和 Mapping 对象，例如 `CustomerAccess`。
 
 阶段通过条件：每个已迁移 crate 可以编译；执行对应的授权行为单元测试。第二阶段结束时，`erp-authorization-wiring` 完成全部装配并编译通过。受影响 crate 已通过 `cargo test --lib` 时，不重复执行该 crate 的 `cargo check`。允许尚未迁移的下游 crate 编译失败。
 
-### 第三阶段：完成应用入口迁移和全 workspace 验证
+### 第四阶段：完成应用入口迁移和全 workspace 验证
 
 - 适配 handler、CLI、worker 和服务工厂，确认全部受保护业务入口已执行对应操作的 `query` 或 `require`，再删除 `with_permission`、RBAC 中间件及路由包装调用。迁移期间不得出现缺少业务授权的接口。
 - 调整路由合同检查及生成器的路由关联方式，移除对 `with_permission` 调用形式的依赖；沿用第一阶段统一的权限定义，同步 `backend/AGENTS.md` 的 HTTP 授权规则。保留 JWT 认证和已有公开入口的认证规则。
