@@ -84,13 +84,13 @@ pub trait AccessFactsPort: Send + Sync {
 
 ## 业务 API
 
-| 用途 | 目标方法 | 返回 |
-| --- | --- | --- |
-| 单项功能资格 | `has_permission(actor, permission, executor)` | `Result<bool>` |
-| 批量功能资格 | `permissions(actor, permissions, executor)` | `Result<Option<QualifiedPermissions>>` |
-| 操作及对象检查 | `require(actor, permission, target, executor)` | `Result<()>` |
-| 查询条件生成及编译 | `query(actor, permission, model, executor)` | `Result<CompiledAccess>` |
-| 查询复验 | `validate(access, executor)` | `Result<()>` |
+| 用途               | 目标方法                                       | 返回                                   |
+| ------------------ | ---------------------------------------------- | -------------------------------------- |
+| 单项功能资格       | `has_permission(actor, permission, executor)`  | `Result<bool>`                         |
+| 批量功能资格       | `permissions(actor, permissions, executor)`    | `Result<Option<QualifiedPermissions>>` |
+| 操作及对象检查     | `require(actor, permission, target, executor)` | `Result<()>`                           |
+| 查询条件生成及编译 | `query(actor, permission, model, executor)`    | `Result<CompiledAccess>`               |
+| 查询复验           | `validate(access, executor)`                   | `Result<()>`                           |
 
 功能资格不替代对象授权。额外必需权限仍须由同一有效角色证明；固定独立入口按各自的有效角色检查。
 
@@ -138,22 +138,17 @@ self.authorization.validate(&access, executor).await?;
 
 ### 第一阶段：完成 identity 新 API 和装配基础
 
-- 盘点全部 `AuthorizationService::new`、`AuthorizationRegistry`、`AccessRegistration` 和查询编译调用，记录操作、目标、政策、额外权限、事实及模型，作为后续迁移清单。
 - 删除被新 API 替代的旧类型和接口，包括 `AuthorizationRegistry`、`AccessRegistration`、业务侧政策构造入口及旧公开查询编译入口。
 - 在 `erp-identity` 实现统一操作定义、Builder、构造校验、授权判断及查询编译。
 - 新建 `erp-authorization-wiring`，建立装配入口和基础结构；同步 workspace 成员、`scripts/crate-layers.json`、依赖边界配置和 `crates/README.md`。
 
-阶段通过条件：`erp-identity` 编译通过。`erp-authorization-wiring` 按已迁移能力逐步接入，完整装配及其编译通过在第二阶段完成。允许尚未迁移的下游 crate 编译失败，不保留旧接口兼容分支来维持中间状态的 workspace 编译。
+阶段通过条件：`erp-identity` 编译通过。`erp-authorization-wiring` 编译通过。 允许尚未迁移的下游 crate 编译失败，完整装配及其编译通过在第二阶段完成。 不保留旧接口兼容分支来维持中间状态的 workspace 编译。
 
-### 第二阶段：按依赖顺序逐 crate 迁移
+### 第二阶段：逐 crate 接入 erp-identity 以及 erp-authorization-wiring 装配
 
-- 按迁移清单和依赖顺序处理业务领域、Process 和 ReadModel；先完成被依赖的 crate，再迁移调用方。
-- 实现本 crate 的 Facts、Mapping 及必要的跨域 Port。事实读取使用本次目标和执行器，不保存请求对象或预计算授权集合。
-- 适配 identity 新 API，通过构造函数接收共享授权服务，切换对象、创建、归属变更、任务、来源和查询入口。
 - 将本 crate 的权限政策及判断迁入 identity，删除自行拼装政策、数据范围、额外权限的代码、重复动作白名单和临时授权服务工厂。保留业务状态校验、事实读取及对统一授权服务的调用。
-- 将已迁移的事实读取器、查询映射及跨域适配接入 `erp-authorization-wiring`，同步验证对应授权行为。
 
-阶段通过条件：每个已迁移 crate 及其依赖可以编译；执行对应的授权行为单元测试。第二阶段结束时，`erp-authorization-wiring` 完成全部装配并编译通过。受影响 crate 已通过 `cargo test --lib` 时，不重复执行该 crate 的 `cargo check`。
+阶段通过条件：每个已迁移 crate 可以编译；执行对应的授权行为单元测试。第二阶段结束时，`erp-authorization-wiring` 完成全部装配并编译通过。受影响 crate 已通过 `cargo test --lib` 时，不重复执行该 crate 的 `cargo check`。 允许下游carte编译失败
 
 ### 第三阶段：完成应用入口迁移和全 workspace 验证
 
