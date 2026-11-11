@@ -12,7 +12,7 @@ HTTP、worker 将实例保存在 `Application`，需要业务授权的 CLI 命�
 
 ## 统一操作定义
 
-在 `erp-identity` 中统一定义操作标识、权限编码、授权方式、额外必需权限、必需事实和允许使用的查询模型。业务模块和 HTTP 路由引用同一份操作常量，删除业务模块自行维护的动作白名单及权限字符串拼接。
+在 `erp-identity` 中统一定义操作标识、权限编码、授权方式、额外必需权限及必需事实。操作与 Mapping 的绑定由组合根装配。业务模块和权限目录引用同一份操作常量，删除业务模块自行维护的动作白名单及权限字符串拼接。
 
 现有 `ConsumerSpec` 的动作和范围规格并入统一操作定义。普通对象操作按该动作的功能资格和有效数据范围检查；任务、来源继承、读取补充及独立入口资格由操作定义固定。业务调用不提交政策或临时追加权限组合。
 
@@ -42,7 +42,10 @@ pub fn build(
             Resource::Customer,
             Arc::new(CustomerFacts::new(db.clone())),
         )?
-        .mapping(Arc::new(SalesInquiryMapping::new()))?
+        .mapping(
+            &permissions::sales_inquiry::LIST,
+            Arc::new(SalesInquiryMapping::new()),
+        )?
         .build()?;
     Ok(Arc::new(service))
 }
@@ -52,10 +55,12 @@ builder 只用于构造服务。`build()` 完成后，服务不提供注册、�
 
 构造时必须检查：
 
-- 同一资源的事实读取器唯一，查询模型标识唯一。
-- 查询模型与所属资源一致，模型支持操作要求的事实及输出粒度。
+- 同一资源的事实读取器唯一，每个查询操作绑定一个 Mapping，重复绑定拒绝。
+- Mapping 与操作要求的资源一致，并支持操作要求的事实维度。
 
-运行时缺少操作、模型或必需事实返回错误。
+同一 Mapping 可以由多个查询操作复用。业务调用方不选择查询模型，不提供 `models` 常量或模型选择参数。Mapping 中的集合、主键和事实维度只作为内部查询编译及复验信息。
+
+运行时缺少操作、Mapping 或必需事实返回错误。
 
 初始化顺序为 repository、事实读取器、授权服务、业务服务。事实读取器不能依赖需要授权服务的业务 Service，避免循环构造。
 
@@ -88,10 +93,16 @@ pub trait AccessFactsPort: Send + Sync {
 | 单项功能资格       | `has_permission(actor, permission, executor)`  | `Result<bool>`                         |
 | 批量功能资格       | `permissions(actor, permissions, executor)`    | `Result<Option<QualifiedPermissions>>` |
 | 操作及对象检查     | `require(actor, permission, target, executor)` | `Result<()>`                           |
-| 查询条件生成及编译 | `query(actor, permission, model, executor)`    | `Result<CompiledAccess>`               |
+| 查询条件生成及编译 | `query(actor, permission, executor)`           | `Result<CompiledAccess>`               |
 | 查询复验           | `validate(access, executor)`                   | `Result<()>`                           |
 
 功能资格不替代对象授权。额外必需权限仍须由同一有效角色证明；固定独立入口按各自的有效角色检查。
+
+删除 `with_permission` 鉴权中间件及路由包装调用。HTTP 层通过 JWT 认证身份，Handler 调用受保护的业务用例；每个受保护的公共业务用例通过 `query` 或 `require` 统一检查功能权限与操作要求的数据资格。所有执行路径必须在返回业务数据或执行写入前完成对应操作的授权。
+
+只需功能权限的操作使用 `require` 和 `AccessTarget::Operation`。`has_permission`、`permissions` 保留用于功能资格查询和按钮展示，不作为 HTTP 主流程的另一条授权分支。CLI、worker 调用相同的受保护业务用例，不依赖 HTTP 中间件。
+
+权限目录继续用于角色权限配置、前端权限生成及按钮展示，直接引用统一操作定义，不依赖路由鉴权中间件。
 
 `require` 根据操作定义选择政策，通过已装配的事实接口读取完整目标，再统一判断。调用方只指定身份、操作和目标。
 
@@ -110,7 +121,7 @@ self.authorization
 
 已有记录从持久化数据读取当前归属。创建候选由业务模块从已验证输入生成服务端事实，校验目标归属；归属变更同时检查原对象操作资格和目标归属。候选事实不能从 HTTP 参数直接反序列化为授权凭证，也不能替代已有记录的当前事实。
 
-`query` 根据固定模型标识取得 Mapping，在服务内部生成并编译完整授权条件。业务代码不再取得或传入 Mapping，也不再调用 `AuthorizedQuery::compile`；`AuthorizedQuery` 收为内部类型。
+`query` 根据统一操作定义取得该操作绑定的 Mapping，在服务内部生成并编译完整授权条件。业务代码不再取得或传入 Mapping，也不再调用 `AuthorizedQuery::compile`；`AuthorizedQuery` 收为内部类型。
 
 领域公共读取方法封装以下流程：
 
@@ -119,17 +130,19 @@ let access = self.authorization
     .query(
         actor,
         &permissions::sales_inquiry::LIST,
-        &models::sales_inquiry::MAIN,
         executor,
     )
     .await?;
 
-self.authorization.validate(&access, executor).await?;
+// 仓储检查凭证绑定，并在分页、计数和汇总前执行完整授权过滤。
 let page = self.repository.list(filter, &access, executor).await?;
+// 返回前由当前读取流程统一复验，仓储不重复调用 validate。
 self.authorization.validate(&access, executor).await?;
 ```
 
-授权条件在数据库内先于分页、计数、汇总和导出执行。查询结果绑定操作、模型、共享服务、身份与业务版本及执行器会话，只用于当前读取阶段。共享服务不缓存授权结果；复验失效时丢弃读取结果。
+领域公共读取方法统一管理查询生成、仓储执行和返回前复验。编译后不立即重复执行完整授权复验；执行前只检查凭证绑定、执行器及有效期。返回前的 `validate` 按原事务快照或非事务完整依赖版本检查，不在业务层与仓储重复叠加。凭证延后使用或切换执行器时，重新取得相应读取阶段的授权。
+
+授权条件在数据库内先于分页、计数、汇总和导出执行。查询结果绑定操作、Mapping、共享服务、身份与业务版本及执行器会话，只用于当前读取阶段。共享服务不缓存授权结果；复验失效时丢弃读取结果。
 
 写入前在业务事务内完成授权，事实读取、业务读取和写入沿用同一执行器。对象版本、归属和授权变化必须通过当前版本复验及业务并发冲突保护处理。
 
@@ -152,7 +165,8 @@ self.authorization.validate(&access, executor).await?;
 
 ### 第三阶段：完成应用入口迁移和全 workspace 验证
 
-- 适配 handler、CLI、worker 和服务工厂，迁移 HTTP 权限引用及前端权限生成器。
+- 适配 handler、CLI、worker 和服务工厂，确认全部受保护业务入口已执行对应操作的 `query` 或 `require`，再删除 `with_permission`、RBAC 中间件及路由包装调用。迁移期间不得出现缺少业务授权的接口。
+- 调整权限目录、前端权限生成器及路由合同检查，移除对 `with_permission` 调用形式的依赖；同步 `backend/AGENTS.md` 的 HTTP 授权规则。保留 JWT 认证和已有公开入口的认证规则。
 - 各进程通过 `erp-authorization-wiring` 构造共享授权服务，由 `Application` 或 CLI 命令运行时持有，并完成业务服务的依赖注入。
 - 对照迁移清单清理剩余旧接口调用、临时工厂和业务侧重复权限判断。
 - 同步 `erp-identity` README、`erp-authorization-wiring` README 和根目录的统一权限 API 设计。
@@ -165,8 +179,10 @@ self.authorization.validate(&access, executor).await?;
 - 生产路径统一通过 `erp-authorization-wiring` 构造授权服务；各进程持有自己的共享实例，所有业务入口使用注入的实例。
 - `erp-authorization-wiring` 只负责授权装配，政策、判断和查询编译集中在 `erp-identity`；业务领域、Process 和 ReadModel 不依赖装配 crate。
 - 操作编码及政策统一定义，业务侧只提供事实、映射和操作目标。
+- `with_permission` 鉴权中间件及路由包装调用全部移除；受保护业务入口通过 `query` 或 `require` 完成授权，只有功能权限要求的操作使用 `AccessTarget::Operation`。
 - `AuthorizationRegistry`、`AccessRegistration` 及业务侧政策构造调用全部移除。
-- 对象、创建、归属变更、任务、来源和受限查询全部使用目标 API，HTTP、worker 与需要业务授权的 CLI 入口无临时授权服务。
-- 缺少事实、错误模型和重复装配均被拒绝；权限撤销、对象归属变化和任务改派按版本及事务约束处理。
+- 查询调用不传模型标识，Mapping 由操作定义固定；不保留通过模型选择不同授权政策或输出份额的接口。
+- 对象、创建、归属变更、任务和来源查询全部使用目标 API，HTTP、worker 与需要业务授权的 CLI 入口无临时授权服务。
+- 缺少事实、Mapping 与操作资源不匹配和重复装配均被拒绝；权限撤销、对象归属变化和任务改派按版本及事务约束处理。
 - 行为测试覆盖功能资格与对象范围、同角色额外权限、独立入口、对象与查询成员一致性、创建和归属变更、任务及查询失效。
 - README 和统一权限 API 设计与实际接口一致，全部原调用已迁移，无旧入口兼容分支。
