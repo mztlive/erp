@@ -99,13 +99,13 @@ pub trait AccessFactsPort: Send + Sync {
 
 ## 业务 API
 
-| 用途               | 目标方法                                       | 返回                                   |
-| ------------------ | ---------------------------------------------- | -------------------------------------- |
-| 单项功能资格       | `has_permission(actor, permission, executor)`  | `Result<bool>`                         |
-| 批量功能资格       | `permissions(actor, permissions, executor)`    | `Result<Option<QualifiedPermissions>>` |
+| 用途               | 目标方法                                      | 返回                                   |
+| ------------------ | --------------------------------------------- | -------------------------------------- |
+| 单项功能资格       | `has_permission(actor, permission, executor)` | `Result<bool>`                         |
+| 批量功能资格       | `permissions(actor, permissions, executor)`   | `Result<Option<QualifiedPermissions>>` |
 | 操作及对象检查     | `require(actor, operation, target, executor)` | `Result<()>`                           |
 | 查询条件生成及编译 | `query(actor, operation, executor)`           | `Result<CompiledAccess>`               |
-| 查询复验           | `validate(access, executor)`                   | `Result<()>`                           |
+| 查询复验           | `validate(access, executor)`                  | `Result<()>`                           |
 
 功能资格不替代对象授权。额外必需权限仍须由同一有效角色证明；固定独立入口按各自的有效角色检查。
 
@@ -159,9 +159,13 @@ self.authorization.validate(&access, executor).await?;
 
 ## 实施顺序
 
-### 第一阶段：统一权限定义、业务授权声明和 identity 新 API
+### 第一阶段：创建 erp-permissions crate
 
 - 新建 `erp-permissions`，将 `erp-server/permission_catalog/` 的权限编码及公共目录定义迁入该 crate，统一操作和资源标识。业务模块、server、wiring 及生成器引用同一份定义，删除已迁出的原目录定义和重复权限字符串。
+- 允许其它crate编译不通过
+
+### 第一阶段：统一权限定义、业务授权声明和 identity 新 API
+
 - 调整 server 的普通依赖、构建依赖、前端权限生成器及权限漂移检查，使用公共目录；HTTP 路由与接口专属信息保留在 server。本阶段保持既有路由鉴权，不提前删除 `with_permission`。
 - 新建 `erp-authorization-wiring`，集中声明现有业务操作的授权要求，覆盖 `ConsumerSpec` 的业务规格及原业务模块的固定权限组合。分别声明共享同一权限编码的不同操作，不将业务声明迁入 identity。
 - 在 `erp-identity` 实现通用授权声明类型、Builder、构造校验、授权判断及查询编译；通过启动装配接收具体业务授权声明，移除 identity 内对应的业务动作白名单和固定业务权限组合。
