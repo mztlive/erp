@@ -146,6 +146,7 @@ self.authorization.validate(&access, executor).await?;
 ### 第二阶段：逐 crate 接入 erp-identity 以及 erp-authorization-wiring 装配
 
 - 将本 crate 的权限政策及判断迁入 identity，删除自行拼装政策、数据范围、额外权限的代码、重复动作白名单和临时授权服务工厂。保留业务状态校验、事实读取及对统一授权服务的调用。
+- 如果可以用一个结构体实现两个trait，就不要分为Facts和Mapping两个对象， 例如： CustomerAccess
 
 阶段通过条件：每个已迁移 crate 可以编译；执行对应的授权行为单元测试。第二阶段结束时，`erp-authorization-wiring` 完成全部装配并编译通过。受影响 crate 已通过 `cargo test --lib` 时，不重复执行该 crate 的 `cargo check`。 允许下游carte编译失败
 
