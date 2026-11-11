@@ -7,12 +7,13 @@ use erp_workflow::service::approval::read;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::{Error, Result};
+use crate::{Error, Result, ReverseFlowPorts};
 
 /// 加载绑定定义并解析新申请负责人；收据回放恢复原实例指派。
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `rbac` - 调用方共享身份与审批能力。
 /// * `binding` - 创建时冻结的定义绑定
 /// * `actor` - 本次申请人
 /// * `receipt` - 已提交启动收据，可空
@@ -24,12 +25,15 @@ use crate::{Error, Result};
 /// 定义不存在或仓储失败时返回冲突或仓储错误。
 pub async fn load_start_graph(
     db: &Database,
+    rbac: &ReverseFlowPorts,
     binding: &ApprovalDefinitionBinding,
     actor: &str,
     receipt: Option<&ApprovalCommandReceipt>,
 ) -> Result<DefinitionGraph> {
     let graph = load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await?;
-    resolve_start_approvers(db, graph, actor, receipt, &mut NoTransaction).await.map_err(Into::into)
+    resolve_start_approvers(db, &rbac.identity, graph, actor, receipt, &mut NoTransaction)
+        .await
+        .map_err(Into::into)
 }
 
 /// 使用调用方执行器加载冻结绑定的定义图。

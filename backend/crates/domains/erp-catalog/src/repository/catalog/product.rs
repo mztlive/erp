@@ -7,7 +7,7 @@ use erp_core::money::Amount;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -119,8 +119,7 @@ impl QueryFilter for ProductFilter {
     /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`ids`、`maintainer_user_ids` 与
     /// `business_org_unit_ids` 为 `Some` 时，分别写入 `id`、`maintainer_user_id`、
     /// `business_org_unit_id` 的 `$in`。`product_no` 有值时按字面量正则匹配；`product_kind` 与
-    /// `status` 有值时按稳定代码精确匹配。`scope` 为 `Some` 时，先把当时已有条件与
-    /// `scope.document()` 包成 `$and`，其后字段写在这个外层文档上。`keyword`、`category_id`、
+    /// `status` 有值时按稳定代码精确匹配。授权阶段由查询仓储独立完整执行。`keyword`、`category_id`、
     /// `brand_id`、`supplier_id`、`listing_status`、`supply_coverage`、销售价上下限以及分页排序
     /// 不进入本条件。
     ///
@@ -130,9 +129,6 @@ impl QueryFilter for ProductFilter {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(ids) = &self.ids {
             filter.extend(in_filter("id", ids.iter().cloned()));
-        }
-        if let Some(scope) = &self.scope {
-            filter = doc! { "$and": [filter, scope.document()] };
         }
         if let Some(ids) = &self.maintainer_user_ids {
             filter.extend(in_filter("maintainer_user_id", ids.iter().cloned()));
@@ -238,13 +234,11 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
         struct ProductIdRow {
             id: String,
         }
-        let rows = mongo_ops::find_many(
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<ProductIdRow>(),
-            doc! {
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                "$and": [scope.document()]
-            },
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
             FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            scope.stages().to_vec(),
             executor,
         )
         .await?;

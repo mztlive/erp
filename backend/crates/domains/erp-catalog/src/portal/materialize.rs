@@ -119,7 +119,6 @@ impl CatalogPortalService {
         if org != command.business_org_unit_id {
             return Err(Error::ConflictError("商品维护人主属组织已变化".into()));
         }
-        self.catalog.access().ensure_writable(&command.actor, "create", executor).await?;
         self.create_product(input, &command.normalized, owner, org, &command.actor, executor)
             .await
             .map(|product| (product, true))
@@ -146,6 +145,7 @@ impl CatalogPortalService {
             },
             actor.id(),
         )?;
+        self.catalog.access().require_create(actor, &product.base.id, executor).await?;
         let revision = ProductRevision::new(
             ProductRevisionId::new(next_id()),
             ProductRevisionData {

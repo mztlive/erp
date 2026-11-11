@@ -594,7 +594,7 @@ pub fn inventory_adjustment_process(db: Database, rbac: SharedRbacService) -> In
         approval_runtime(db.clone(), rbac.clone()),
     ));
     let inventory = Arc::new(inventory_service(db.clone(), rbac.clone()));
-    InventoryAdjustmentProcess::new(db, workflow, inventory)
+    InventoryAdjustmentProcess::new(db, rbac, workflow, inventory)
 }
 
 fn map_audit_to_inventory(error: erp_audit::Error) -> erp_inventory::Error {

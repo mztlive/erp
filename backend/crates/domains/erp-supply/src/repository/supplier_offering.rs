@@ -15,7 +15,7 @@ use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -169,7 +169,7 @@ impl QueryFilter for SupplierOfferingFilter {
     /// 编译未删除供给查询；授权范围与筛选取交集，供应商 SKU 编码与关键词 SKU 取并集。
     ///
     /// 始终写入未删除的 `deleted_at`。供给主键、公司 SKU、供应商、状态、来源、维护人与业务组织按字段追加。
-    /// `scope` 与已有条件组成 `$and`。只给出 `supplier_sku_code` 时按字面量正则匹配；只给出
+    /// 授权阶段由仓储在业务筛选和分页前执行。只给出 `supplier_sku_code` 时按字面量正则匹配；只给出
     /// `keyword_sku_ids` 时按 `sku_id` 的 `$in`，空集合也写入。两者同时为 `Some` 时组成 `$or`，
     /// 但空的关键词 SKU 不进入该 `$or`。
     ///
@@ -185,9 +185,6 @@ impl QueryFilter for SupplierOfferingFilter {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(offering_ids) = &self.offering_ids {
             filter.extend(in_filter("id", offering_ids.iter().map(ToString::to_string)));
-        }
-        if let Some(scope) = &self.scope {
-            filter = doc! { "$and": [filter, scope.document()] };
         }
         if let Some(ids) = &self.maintainer_user_ids {
             filter.extend(in_filter("maintainer_user_id", ids.iter().cloned()));
@@ -365,8 +362,9 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             .projection(supplier_offering_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierOfferingRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let prefix = filter.scope.as_ref().map_or_else(Vec::new, |scope| scope.stages().to_vec());
+        let items = aggregate::find(&collection, filter.to_doc(), options, prefix.clone(), executor).await?;
+        let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
         if let Some(scope) = &filter.scope {
             scope.validate(executor).await?;
         }
@@ -422,13 +420,11 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         struct OfferingIdRow {
             id: String,
         }
-        let rows = mongo_ops::find_many(
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<OfferingIdRow>(),
-            doc! {
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                "$and": [scope.document()]
-            },
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
             FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            scope.stages().to_vec(),
             executor,
         )
         .await?;

@@ -58,10 +58,11 @@ pub fn scoped_settlement_process(
 ) -> SupplierSettlementProcess<WorkflowAuth> {
     SupplierSettlementProcess::new(
         db.clone(),
+        SettlementAccess::new(db.clone(), rbac.clone()),
+        rbac.clone(),
         work_item_service(db.clone(), rbac.clone()),
         Arc::new(fresh_work_items(db.clone())),
     )
-    .with_scope(SettlementAccess::new(db.clone(), rbac.clone()), rbac)
 }
 
 fn fresh_work_items(db: Database) -> impl Fn() -> WorkItemService<WorkflowAuth> + Send + Sync {

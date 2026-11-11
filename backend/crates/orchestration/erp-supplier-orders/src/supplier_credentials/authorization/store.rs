@@ -78,6 +78,7 @@ impl MongoAuthorizationStore {
         mutation: Mutation,
         context: CommandContext,
     ) -> Result<Option<SupplierCredential>> {
+        let before_remote_call = matches!(&mutation, Mutation::Sent(..) | Mutation::Exchange(..));
         let this = self.clone();
         let result: ProcessResult<_> = self
             .access
@@ -90,8 +91,7 @@ impl MongoAuthorizationStore {
                         let connection = this
                             .access
                             .require(&context.connection_id, &context.actor, "authorize", executor)
-                            .await
-                            .map_err(|_| ProcessError::Forbidden("当前账号不能继续授权此连接".into()))?;
+                            .await?;
                         this.access
                             .binding(&connection)
                             .map_err(|_| ProcessError::ConflictError("京东连接配置已变化".into()))?;
@@ -104,7 +104,9 @@ impl MongoAuthorizationStore {
                 })
             })
             .await;
-        result.map_err(|_| AuthorizationError::Unknown)
+        result.map_err(|error| {
+            if before_remote_call { AuthorizationError::from(error) } else { AuthorizationError::Unknown }
+        })
     }
 
     async fn apply(
@@ -172,8 +174,7 @@ impl AuthorizationStore for MongoAuthorizationStore {
                     let connection = this
                         .access
                         .require(&context.connection_id, &context.actor, "authorize", executor)
-                        .await
-                        .map_err(|_| ProcessError::Forbidden("当前账号不能授权此连接".into()))?;
+                        .await?;
                     this.access
                         .binding(&connection)
                         .map_err(|_| ProcessError::ConflictError("京东连接配置已变化".into()))?;
@@ -190,7 +191,7 @@ impl AuthorizationStore for MongoAuthorizationStore {
                 })
             })
             .await;
-        result.map_err(|_| AuthorizationError::Conflict)
+        result.map_err(AuthorizationError::from)
     }
 
     async fn sent(

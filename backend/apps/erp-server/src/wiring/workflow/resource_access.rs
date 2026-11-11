@@ -1,6 +1,6 @@
 //! 固定任务及审批入口将完整功能资格与真实来源交给同一次 identity 授权。
 use application_core::AuditActor;
-use erp_identity::entity::resource_access::{ResourceKind, SourceKey};
+use erp_identity::entity::resource_access::SourceKey;
 use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_resource_grants::{GrantReadiness, ResourceGrantProcess};
@@ -21,53 +21,18 @@ pub(super) async fn readable(
     entry: &str,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let (kind, id) = match source {
-        OrderTaskSource::Sales(id) => (ResourceKind::SalesOrder, id),
-        OrderTaskSource::Purchase(id) => (ResourceKind::PurchaseOrder, id),
-    };
-    Ok(readable_batch(db, rbac, actor, kind, std::slice::from_ref(id), entry, executor).await?.contains(id))
-}
-
-/// 对每个精确来源执行统一对象检查，结果仅用于当前读取批次。
-/// # 参数
-/// db、rbac、actor 为认证设施；kind、ids 为有界目标；entry 为真实入口；executor 为原事务。
-/// # 返回
-/// 本批有读取权的目标 ID。
-/// # 错误
-/// 身份、功能、来源或数据库失败时拒绝。
-pub(super) async fn readable_batch(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    kind: ResourceKind,
-    ids: &[String],
-    entry: &str,
-    executor: &mut dyn Executor,
-) -> Result<Vec<String>> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
     let permission = Permission::parse(entry)?;
-    let mut readable = Vec::with_capacity(ids.len());
-    for id in ids {
-        let required = if permission.resource() == "approval_instance" && permission.action() == "decide" {
-            vec![Permission::parse("approval_instance:read")?]
-        } else {
-            Vec::new()
-        };
-        let source = match kind {
-            ResourceKind::SalesOrder => OrderTaskSource::Sales(id.clone()),
-            ResourceKind::PurchaseOrder => OrderTaskSource::Purchase(id.clone()),
-        };
-        let result =
-            require_source_operation(db, rbac, actor, &source, &permission, &required, executor).await;
-        match result {
-            Ok(()) => readable.push(id.clone()),
-            Err(Error::Forbidden(_) | Error::NotFound(_)) => {},
-            Err(error) => return Err(error),
-        }
+    let required = if permission.resource() == "approval_instance" && permission.action() == "decide" {
+        vec![Permission::parse("approval_instance:read")?]
+    } else {
+        Vec::new()
+    };
+    let result = require_source_operation(db, rbac, actor, source, &permission, &required, executor).await;
+    match result {
+        Ok(()) => Ok(true),
+        Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(error),
     }
-    Ok(readable)
 }
 
 /// 实际办理审批时检查当前来源；合法分配事件未应用时只返回刷新状态。

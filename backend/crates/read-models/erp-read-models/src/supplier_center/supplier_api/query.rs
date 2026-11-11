@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
+use erp_identity::{Permission, PermissionSet};
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
@@ -17,13 +18,15 @@ use erp_supply::entity::supplier_api::{
     SupplierConnectionGovernance, SupplierHealthCheckRun, SupplierHealthCheckType,
 };
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
-use erp_supply::service::supplier_api::context::{blocker, governance_blocker_view, safe_reference};
+use erp_supply::service::supplier_api::context::{
+    action_permission, blocker, governance_blocker_view, safe_reference,
+};
 use erp_support::BulkJobExt;
 use erp_support::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::SupplierApiReadService;
-use super::context::GovernanceContext;
+use super::context::{GovernanceContext, REFERENCE_METADATA_PERMISSION};
 use crate::Result;
 
 impl SupplierApiReadService {
@@ -137,8 +140,8 @@ impl SupplierApiReadService {
         context: GovernanceContext,
         actor: &AuditActor,
     ) -> Result<SupplierApiConnectionDetailView> {
-        let reference_visible =
-            self.has_permission(actor, "supplier_api_connection:view_reference_metadata").await?;
+        let permissions = self.connection_permissions(actor).await?;
+        let reference_visible = permissions.covers_one(&Permission::parse(REFERENCE_METADATA_PERMISSION)?);
         let connector_description = self
             .reference_registry
             .as_ref()
@@ -149,7 +152,7 @@ impl SupplierApiReadService {
             .unwrap_or_default();
 
         let (allowed_actions, action_blockers) =
-            self.connection_action_projection(&connection, &context, actor).await?;
+            self.connection_action_projection(&connection, &permissions).await?;
         let mut connection_view: SupplierApiConnectionView = connection.clone().into();
         connection_view.safe_references = SafeReferencesView {
             endpoint: safe_reference(connection.endpoint_reference_bound, reference_visible),
@@ -193,8 +196,7 @@ impl SupplierApiReadService {
     async fn connection_action_projection(
         &self,
         connection: &SupplierApiConnection,
-        _context: &GovernanceContext,
-        actor: &AuditActor,
+        permissions: &PermissionSet,
     ) -> Result<(Vec<String>, Vec<SupplierActionBlockerView>)> {
         let mut allowed = Vec::new();
         let mut blocked = Vec::new();
@@ -214,7 +216,7 @@ impl SupplierApiReadService {
             ) {
                 continue;
             }
-            if !self.has_action_permission(actor, action).await? {
+            if !permissions.covers_one(&Permission::parse(action_permission(action))?) {
                 continue;
             }
             let blockers = self.operation_blockers(connection, action, deployment.is_some(), catalog_running);

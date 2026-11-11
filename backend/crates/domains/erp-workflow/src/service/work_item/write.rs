@@ -258,8 +258,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let access = self.task_actions(actor, &item, executor).await?;
         let scope = WorkItemScope::for_task(&item, actor.id());
         self.ensure_task_facts(&item, actor, executor).await?;
-        let view_access = ViewAccess::from_fields(&item.clone().into(), scope, &access.task);
-        self.authorization.require(actor, "detail", id, executor).await?;
+        let view_access = ViewAccess::from_fields(&item.clone().into(), scope, &access);
         Ok(AuthorizedWorkItem {
             item,
             allowed_actions: view_access.allowed_actions,

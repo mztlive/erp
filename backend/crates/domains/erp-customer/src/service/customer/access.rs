@@ -84,7 +84,7 @@ impl CustomerAccess {
             user_id: actor.id().into(),
             current,
             scope_version: compiled.version(),
-            as_of: Instant::now(),
+            as_of: compiled.as_of(),
             compiled: Some(Arc::new(compiled)),
         })
     }
@@ -156,7 +156,6 @@ impl CustomerAccess {
     ) -> Result<CustomerResolvedScope> {
         let context = self.query_context(&actor, action, executor).await?;
         let compiled = context.compiled.as_ref().ok_or_else(|| Error::Internal("客户查询缺少凭证".into()))?;
-        self.validate(&context, executor).await?;
         let ids = authorized_ids(&self.db, compiled, Some(customer_id), executor).await?;
         self.validate(&context, executor).await?;
         if ids.is_empty() {

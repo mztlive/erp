@@ -82,7 +82,7 @@ impl SalesChangeProcess {
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".into()))?;
         let order =
-            self.command_access(actor, "update")?.current(change.sales_order_id.as_ref(), executor).await?;
+            self.command_access(actor, "update").current(change.sales_order_id.as_ref(), executor).await?;
         if order.current_revision_id() != Some(change.base_revision_id.as_ref()) {
             return Err(Error::ConflictError("销售单当前版本已变化，请重新核对变更基准".into()));
         }

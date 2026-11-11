@@ -9,7 +9,7 @@ use mongodb::Database;
 
 use super::finance_responsibility::finance_tasks;
 use super::identity::shared_rbac_service;
-use super::{approval_runtime, funds_access_with_rbac, purchase_access};
+use super::{approval_runtime, funds_access_with_rbac};
 
 /// 装配财务命令提供者，并为付款保持独立的原局部权限事务边界。
 /// # 参数
@@ -23,7 +23,6 @@ pub fn finance_posting_ports(db: Database, rbac: SharedRbacService) -> FinancePo
     FinancePostingPorts::new(
         rbac.clone(),
         approval_runtime(db.clone(), rbac.clone()),
-        purchase_access(db.clone(), rbac.clone()),
         funds_access_with_rbac(db.clone(), rbac.clone()),
         PurchasePaymentRequestReadService::new(db.clone(), rbac.clone()),
         finance_tasks(db, rbac),

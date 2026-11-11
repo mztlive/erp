@@ -37,7 +37,7 @@ pub use catalog::{MongoCatalogAudit, MongoCatalogFileAssets, catalog_service};
 pub use contract::{contract_access, contract_service, scoped_contract_service};
 pub use contract_data_scope::contract_authorization;
 pub use contract_template::contract_template_service;
-pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
+pub use customer::{MongoCustomerAudit, MongoCustomerPartyFacts};
 pub use customer_data_scope::customer_access;
 use erp_customer::{CustomerAssignmentService, CustomerService};
 use erp_identity::SharedRbacService;
@@ -175,7 +175,6 @@ pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> Custome
         db.clone(),
         MongoCustomerAudit::shared(db.clone()),
         MongoCustomerPartyFacts::shared(db.clone()),
-        MongoCustomerAccountFacts::shared(db.clone()),
         customer_access(db, rbac),
     )
 }
@@ -201,7 +200,6 @@ pub fn scoped_customer_assignment_service(
     CustomerAssignmentService::new(
         db.clone(),
         MongoCustomerAudit::shared(db.clone()),
-        MongoCustomerAccountFacts::shared(db.clone()),
         customer_access(db, rbac),
     )
 }

@@ -22,8 +22,8 @@
 
 术语与统一分工见[总索引](../../README.md#代码中常见名称的含义)。
 
-- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
-- 主体身份通过 PartyFactPort 获取；账号资格和审计通过各自 Port 获取。
+- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。身份与授权只依赖 `erp-identity` 的公开 API；其余常规、构建和测试依赖不得指向其他业务领域或组合层。
+- 主体身份通过 `PartyFactPort` 获取；账号资格和姓名通过 `AccountDirectoryService` 读取；审计通过 `CustomerAuditPort` 写入。
 - 跨主体资料写入由 erp-master-data::customer_profile 编排；客户中心聚合查询属于 erp-read-models。
 - 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
 

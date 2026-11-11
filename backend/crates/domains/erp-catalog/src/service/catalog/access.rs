@@ -100,12 +100,45 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Product> {
-        self.authorization()?.require(actor, action, id, executor).await?;
+        self.require(actor, action, id, executor).await?;
         self.db
             .products()
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))
+    }
+
+    /// 在原业务事务内检查已有商品的完整授权。
+    /// # 参数
+    /// actor 为当前账号，action/id 为实际动作与商品，executor 为原事务。
+    /// # 返回
+    /// 对象授权通过时成功，不再重复装载业务实体。
+    /// # 错误
+    /// 对象缺失、无权或身份设施失效时拒绝。
+    pub async fn require(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self.authorization()?.require(actor, action, id, executor).await?)
+    }
+
+    /// 在创建事务内检查拟写入商品的完整授权。
+    /// # 参数
+    /// actor 为当前账号，id 为拟创建商品主键，executor 为原写事务。
+    /// # 返回
+    /// 固定创建政策允许本次目标时成功。
+    /// # 错误
+    /// 账号、功能资格、范围或身份设施失效时拒绝。
+    pub async fn require_create(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self.authorization()?.require_create(actor, id, executor).await?)
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。
@@ -184,11 +217,11 @@ impl CatalogAccess {
         Ok((maintainer.to_string(), org))
     }
 
-    /// 检查共享商品写动作的功能资格。
+    /// 检查商品写入按钮和预检入口的功能资格。
     /// # 参数
     /// actor 为操作人，action 为写动作，executor 为原业务执行器。
     /// # 返回
-    /// 有效账号具备该动作时成功。
+    /// 有效账号具备该动作时成功；实际写入仍须执行对象授权。
     /// # 错误
     /// 缺少功能资格或身份取证失败时拒绝。
     pub async fn ensure_writable(

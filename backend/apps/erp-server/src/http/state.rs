@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use super::auth::{JwtEngine, JwtError};
 use super::notification_feed::NotificationFeed;
 use super::tasks::RequestTasks;
-use crate::wiring::{Application, supplier_access};
+use crate::wiring::Application;
 
 /// HTTP 专属缓存与任务边界；业务能力由共享装配提供。
 #[derive(Clone)]
@@ -85,7 +85,6 @@ impl HttpState {
             self.application().db(),
             config.jd_vop.as_ref(),
             self.application().rbac(),
-            supplier_access(self.application().db(), self.application().rbac()),
             self.jd_vop_authorization.clone(),
             config
                 .jd_vop

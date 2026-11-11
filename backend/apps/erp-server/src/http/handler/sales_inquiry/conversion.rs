@@ -74,7 +74,7 @@ pub async fn sales_basis(
     Query(params): Query<InquirySalesBasisParams>,
 ) -> Result<InquirySalesBasis> {
     Ok(ApiResponse::ok_with_data(
-        SalesOrderCommandProcess::with_rbac(
+        SalesOrderCommandProcess::new(
             state.application().db(),
             state.application().rbac(),
             crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),

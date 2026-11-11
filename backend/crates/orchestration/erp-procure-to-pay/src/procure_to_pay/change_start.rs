@@ -11,6 +11,7 @@ use erp_approval_runtime::ApprovalRuntimePort;
 use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::PurchaseChangeSubmitResult;
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseCommandReceipt,
@@ -337,7 +338,7 @@ async fn apply_change_start(
         .await?;
     persist_runtime_writes(
         db,
-        input.ports.approval.as_ref(),
+        (input.ports.approval.as_ref(), &(input.ports.task_identity)()),
         writes,
         &input.snapshot_payload,
         StartTaskContext {
@@ -429,17 +430,18 @@ async fn guard_change_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    approval: &dyn ApprovalRuntimePort,
+    runtime: (&dyn ApprovalRuntimePort, &SharedRbacService),
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartTaskContext<'_>,
     resubmission_reason: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let (approval, identity) = runtime;
     let mut snapshot = persist_start_runtime(
         db,
+        identity,
         writes,
-        context.document_type,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交采购变更单",

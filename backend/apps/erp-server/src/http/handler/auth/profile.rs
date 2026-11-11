@@ -58,7 +58,8 @@ pub async fn own_approval_leader(
     Extension(actor): Extension<AuditActor>,
     Query(query): Query<LeaderQuery>,
 ) -> HttpResult<Response, Error> {
-    let view = own_leader_preview(state.application().db(), actor, query.kind).await?;
+    let view =
+        own_leader_preview(state.application().db(), state.application().rbac(), actor, query.kind).await?;
     let mut response = ApiResponse::ok_with_data(view).into_response();
     response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     Ok(response)

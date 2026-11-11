@@ -230,6 +230,7 @@ impl PurchaseOrderProcess {
         .await?;
         let graph = resolve_start_approvers(
             &self.db,
+            self.require_rbac()?,
             graph,
             command.actor.id(),
             receipt.as_ref(),

@@ -428,8 +428,8 @@ pub(crate) async fn persist_runtime_writes(
     } = input;
     let mut snapshot = persist_start_runtime(
         db,
+        &rbac.identity,
         writes,
-        document_type,
         snapshot_payload,
         now,
         "启动计划缺少入口执行，不得提交客户回款",

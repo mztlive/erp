@@ -1,4 +1,4 @@
-//! 客户审计、主体事实与账号事实 adapter。
+//! 客户审计与主体事实 adapter。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,11 +8,7 @@ use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::PartyId;
-use erp_customer::{
-    AccountFactPort, CustomerAuditPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit,
-};
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
+use erp_customer::{CustomerAuditPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit};
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
 use mongodb::Database;
@@ -161,64 +157,6 @@ impl PartyFactPort for MongoCustomerPartyFacts {
             .into_iter()
             .map(|id| id.to_string())
             .collect())
-    }
-}
-
-/// 为客户命令读取账号登录事实的 Mongo adapter。
-#[derive(Clone)]
-pub struct MongoCustomerAccountFacts {
-    db: Database,
-}
-
-impl MongoCustomerAccountFacts {
-    /// 绑定身份账号集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 身份账号集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db }
-    }
-
-    /// 包装为客户域可注入的账号事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 身份账号集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回共享的账号事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn shared(db: Database) -> Arc<dyn AccountFactPort> {
-        Arc::new(Self::new(db))
-    }
-}
-
-#[async_trait]
-impl AccountFactPort for MongoCustomerAccountFacts {
-    async fn ensure_can_login(&self, user_id: &str) -> erp_customer::Result<()> {
-        let account = self
-            .db
-            .accounts()
-            .find_account(user_id, &mut NoTransaction)
-            .await
-            .map_err(erp_customer::Error::from)?
-            .ok_or_else(|| erp_customer::Error::NotFound("负责销售账号不存在".to_string()))?;
-        account.ensure_can_login().map_err(|error| erp_customer::Error::BusinessLogicError(error.to_string()))
-    }
-
-    async fn names_by_ids(&self, account_ids: &[String]) -> erp_customer::Result<HashMap<String, String>> {
-        self.db
-            .accounts()
-            .names_by_ids(account_ids, &mut NoTransaction)
-            .await
-            .map_err(erp_customer::Error::from)
     }
 }
 

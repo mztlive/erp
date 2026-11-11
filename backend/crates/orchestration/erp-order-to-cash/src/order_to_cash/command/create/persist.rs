@@ -61,7 +61,7 @@ impl SalesOrderCommandProcess {
         inquiry_source: Option<InquirySalesSourceRequest>,
     ) -> Result<CreationWriteContext> {
         let bind_command = sales_create_bind_command(plan.order(), actor)?;
-        let rbac = self.require_rbac().cloned()?;
+        let rbac = self.rbac.clone();
 
         let sellable_refs = SalesOrderService::sellable_working_copy_refs(plan.working_copy_lines())?;
         Ok(CreationWriteContext {
@@ -162,7 +162,9 @@ async fn persist_created_submission(
         executor,
     )
     .await?;
-    let prepared = prepare_bound_submission(&context.db, &submit, &binding, &context.actor, executor).await?;
+    let prepared =
+        prepare_bound_submission(&context.db, &context.rbac, &submit, &binding, &context.actor, executor)
+            .await?;
     ensure_creation_org(&context.db, &submit.creation.order, executor).await?;
     persist_submission_records(&context.db, &submit, executor).await?;
     persist_created_runtime(context, &submit, prepared, executor).await?;
@@ -193,6 +195,7 @@ async fn persist_creation_binding(
 /// 绑定成功后才读取冻结定义并构造首次提交的审批计划。
 async fn prepare_bound_submission(
     db: &Database,
+    identity: &SharedRbacService,
     submit: &CreationSubmit,
     binding: &ApprovalDefinitionBinding,
     actor: &AuditActor,
@@ -200,7 +203,7 @@ async fn prepare_bound_submission(
 ) -> Result<PreparedExecution> {
     let approval = &submit.approval;
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
-    let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
+    let graph = resolve_approvers(db, identity, graph, actor.id(), executor).await?;
     let start_input = build_sales_order_start_input(SalesOrderStartInput {
         resubmission_reason: None,
         graph,
@@ -254,6 +257,7 @@ async fn persist_created_runtime(
             &writes,
             SalesOrderRuntimeWriteInput {
                 resubmission_reason: None,
+                identity: &context.rbac,
                 approvals: context.services.approvals.as_ref(),
                 document_type: approval.ports.document_type,
                 snapshot_payload: &approval.snapshot,

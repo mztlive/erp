@@ -36,53 +36,32 @@ use crate::{Error, Result};
 pub struct SalesOrderCommandProcess {
     services: Arc<SalesServices>,
     db: Database,
-    rbac: Option<SharedRbacService>,
+    rbac: SharedRbacService,
 }
 impl SalesOrderCommandProcess {
-    /// 构造业务流程；审批命令须显式注入共享身份服务。
+    /// 用共享授权源构造销售命令流程。
     ///
     /// # 参数
     /// * `db` - 业务数据库。
+    /// * `rbac` - 共享授权源。
     /// * `services` - 应用已装配的领域服务、范围及审批能力。
     ///
     /// # 返回
-    /// 返回未注入授权源、对象读取失败关闭的命令流程。
+    /// 返回已完整装配授权依赖的命令流程。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, services: Arc<SalesServices>) -> Self {
-        Self { db, services, rbac: None }
-    }
-    /// 用共享授权源构造审批业务流程。
-    ///
-    /// # 参数
-    /// * `db` - 业务数据库。
-    /// * `services` - 应用已装配的领域服务、范围及审批能力。
-    /// * `rbac` - 授权源。
-    ///
-    /// # 返回
-    /// 返回已注入授权源的命令流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
-        Self { rbac: Some(rbac), ..Self::new(db, services) }
-    }
-    /// 未注入授权源时拒绝，避免审批绑定退回无范围读取。
-    fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac.as_ref().ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
+    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
+        Self { db, services, rbac }
     }
     fn sales(&self) -> SalesOrderService {
         SalesOrderService::new(self.db.clone())
     }
     fn read_model(&self) -> erp_read_models::sales_center::order::SalesOrderReadService {
-        match &self.rbac {
-            Some(rbac) => erp_read_models::sales_center::order::SalesOrderReadService::with_rbac(
-                self.db.clone(),
-                rbac.clone(),
-            ),
-            None => erp_read_models::sales_center::order::SalesOrderReadService::new(self.db.clone()),
-        }
+        erp_read_models::sales_center::order::SalesOrderReadService::with_rbac(
+            self.db.clone(),
+            self.rbac.clone(),
+        )
     }
     fn catalog(&self) -> adapters::catalog::CatalogQualificationAdapter {
         adapters::catalog::CatalogQualificationAdapter::new(self.services.catalog.clone())

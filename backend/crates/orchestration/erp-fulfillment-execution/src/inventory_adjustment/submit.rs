@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use bpm::SubjectRef;
 use erp_approval_runtime::approver_directory::resolve_approvers;
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use erp_inventory::{
     StockAdjustment, StockAdjustmentApprovalSnapshot, StockAdjustmentDetailView, StockAdjustmentLine,
     StockAdjustmentSubmitResultQuery, StockAdjustmentUpdate, SubmitStockAdjustmentRequest,
@@ -39,10 +40,12 @@ impl StockAdjustmentSubmission {
         id: &str,
         req: &SubmitStockAdjustmentRequest,
         actor: &AuditActor,
+        identity: SharedRbacService,
         workflow: std::sync::Arc<dyn crate::workflow::FulfillmentWorkflow>,
         writes: PlannedWrites,
     ) -> start_persist::StockAdjustmentStartPersistInput {
         start_persist::StockAdjustmentStartPersistInput {
+            identity,
             resubmission_reason: req.resubmission_reason.clone(),
             workflow,
             adjustment: self.adjustment,
@@ -97,7 +100,8 @@ impl InventoryAdjustmentProcess {
         let context = self.prepare_adjustment_submission(id, &req, actor).await?;
         let writes = self.prepare_adjustment_runtime(&context, &req, actor).await?;
         let result_instance_id = writes.instance.base.id.clone();
-        let input = context.into_persist_input(id, &req, actor, self.workflow.clone(), writes);
+        let input =
+            context.into_persist_input(id, &req, actor, self.identity.clone(), self.workflow.clone(), writes);
         let persist_result = start_persist::persist_stock_adjustment_start(&self.db, input).await;
         if let Err(error) = persist_result {
             if let Some(view) = recover_stock_adjustment_start_replay(self, id, &req, actor).await? {
@@ -191,7 +195,8 @@ impl InventoryAdjustmentProcess {
         actor: &AuditActor,
     ) -> Result<PlannedWrites> {
         let graph = start_approval::load_bound_definition_graph(&self.db, &context.binding).await?;
-        let graph = resolve_approvers(&self.db, graph, actor.id(), &mut NoTransaction).await?;
+        let graph =
+            resolve_approvers(&self.db, &self.identity, graph, actor.id(), &mut NoTransaction).await?;
         let input = start_approval::build_stock_adjustment_start_input(
             &self.db,
             self.workflow.as_ref(),

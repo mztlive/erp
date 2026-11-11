@@ -275,8 +275,8 @@ pub async fn persist_receipt_reversal_runtime(
     let context = StartTaskContext { document_type: DocumentType::ReceiptReversal, ..context };
     let mut snapshot = persist_start_runtime(
         db,
+        &rbac.identity,
         writes,
-        DocumentType::ReceiptReversal,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交回款冲正",

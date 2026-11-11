@@ -4,7 +4,6 @@ mod access;
 mod bootstrap;
 pub mod leader;
 mod profile;
-pub mod qualification;
 
 use std::mem::take;
 use std::sync::Arc;

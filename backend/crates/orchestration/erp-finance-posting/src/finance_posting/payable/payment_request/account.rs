@@ -69,11 +69,12 @@ async fn reveal(
     executor: &mut dyn Executor,
 ) -> Result<PaymentRecipientRevealView> {
     let RevealInput { id, req, task_version, actor, codec } = input;
-    let permissions = [Permission::parse("party_bank_account:reveal")?];
     let authorization =
         AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
-    let qualified = authorization.permissions(actor, &permissions, executor).await?;
-    if !qualified.is_some_and(|qualified| qualified.same_role(&permissions)) {
+    if !authorization
+        .has_permission(actor, &Permission::parse("party_bank_account:reveal")?, executor)
+        .await?
+    {
         return Err(Error::Forbidden("没有完整银行账号揭示权限".into()));
     }
     let request = load(db, id, executor).await?;
@@ -135,8 +136,15 @@ async fn authorize_reveal_task(
     }
     match task.work_item_type {
         WorkItemType::SupplierPaymentExecution => {
-            execution::authorize_task(db, rbac, request, &req.work_item_id, task_version, actor, executor)
-                .await?;
+            execution::authorize_loaded_task(
+                rbac.tasks.as_ref(),
+                request,
+                &task,
+                task_version,
+                actor,
+                executor,
+            )
+            .await?;
         },
         WorkItemType::DocumentApproval => {
             if request.status != PurchasePaymentRequestStatus::InApproval {

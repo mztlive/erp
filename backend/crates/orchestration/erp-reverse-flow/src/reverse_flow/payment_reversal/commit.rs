@@ -201,6 +201,7 @@ async fn write_commit(
     .await?;
     let prepared = prepare_commit_start(
         db,
+        rbac,
         &input.approval,
         &binding,
         input.reversal.approval_subject_version,
@@ -232,6 +233,7 @@ async fn write_commit(
 /// 在调用方事务中读取绑定图、重验审批人并准备启动写集合。
 async fn prepare_commit_start(
     db: &Database,
+    rbac: &ReverseFlowPorts,
     approval: &CommitApproval,
     binding: &ApprovalDefinitionBinding,
     subject_version: u32,
@@ -239,7 +241,7 @@ async fn prepare_commit_start(
     executor: &mut dyn Executor,
 ) -> Result<PreparedExecution> {
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
-    let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
+    let graph = resolve_approvers(db, &rbac.identity, graph, actor.id(), executor).await?;
     let start_input = build_payment_reversal_start_input(ReverseStartInput {
         resubmission_reason: None,
         graph,

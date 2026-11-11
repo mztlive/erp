@@ -443,6 +443,7 @@ impl PurchaseOrderProcess {
         .await?;
         let graph = resolve_start_approvers(
             &self.db,
+            self.require_rbac()?,
             graph,
             actor.id(),
             existing_receipt.as_ref(),

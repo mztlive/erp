@@ -8,7 +8,7 @@ use erp_core::{AccountKind, Result as CoreResult};
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use super::access::{TaskEligibility, candidate_facts_current, ensure_generic_work_item_mutation};
+use super::access::{candidate_facts_current, ensure_generic_work_item_mutation};
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
     task_read_error,
@@ -275,8 +275,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if !qualified.same_role(&required) {
             return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
         }
-        let access = TaskEligibility::new(actor);
-        self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
+        self.ensure_assignment_candidate_access_with_executor(item, &actor, executor)
             .await
             .map_err(task_read_error)?;
         self.ensure_assignment_separation(user_id, item, allow_current_owner, executor).await
@@ -334,7 +333,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ///
     /// # 参数
     /// * `item` - 待转交任务
-    /// * `access` - 由当前角色与权限形成的目标账号访问快照
+    /// * `actor` - 已由统一资格入口核验的目标账号
     /// * `executor` - 调用方事务执行器
     ///
     /// # 返回
@@ -348,7 +347,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     async fn ensure_assignment_candidate_access_with_executor(
         &self,
         item: &WorkItem,
-        access: &TaskEligibility,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let policy = item
@@ -362,7 +361,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
         require_supplier_portal_task_read(
             &self.auth,
-            &access.actor,
+            actor,
             policy.object_kind,
             &item.business_object_id,
             executor,
@@ -370,7 +369,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         .await?;
         require_order_task_read(
             &self.auth,
-            &access.actor,
+            actor,
             policy.object_kind,
             fact,
             TaskReadAction::Detail,
@@ -379,7 +378,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         .await?;
         require_supplier_portal_task_review(
             &self.auth,
-            &access.actor,
+            actor,
             policy.object_kind,
             &item.business_object_id,
             executor,
@@ -451,12 +450,11 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
         .permissions(&actor, &required, executor)
         .await?
         .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-    let target_access = TaskEligibility::new(actor);
     for task in tasks {
         if !qualified.same_role(&task.qualification_permissions()?) {
             return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
         }
-        service.ensure_assignment_candidate_access_with_executor(task, &target_access, executor).await?;
+        service.ensure_assignment_candidate_access_with_executor(task, &actor, executor).await?;
     }
     Ok(())
 }

@@ -323,7 +323,7 @@ impl SalesChangeStartPersistInput {
             &writes,
             &self.snapshot_payload,
             (self.owner_role, &self.organization_id, self.resubmission_reason.as_deref()),
-            self.approvals.as_ref(),
+            (self.approvals.as_ref(), &self.rbac),
             self.now,
             executor,
         )
@@ -343,14 +343,14 @@ async fn persist_runtime_writes(
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     (owner_role, organization_id, resubmission_reason): (&str, &str, Option<&str>),
-    approvals: &dyn ApprovalRuntimePort,
+    (approvals, identity): (&dyn ApprovalRuntimePort, &SharedRbacService),
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut snapshot = persist_start_runtime(
         db,
+        identity,
         writes,
-        DocumentType::SalesChangeOrder,
         snapshot_payload,
         now,
         "启动计划缺少入口执行，不得提交销售变更单",

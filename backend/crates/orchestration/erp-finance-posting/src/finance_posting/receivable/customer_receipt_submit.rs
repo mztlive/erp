@@ -87,6 +87,7 @@ impl ReceivableProcess {
         let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
         let prepared = prepare_dispatch_start(
             &self.db,
+            &self.rbac,
             &binding,
             &subject,
             receipt.approval_subject_version,

@@ -10,7 +10,7 @@ use mongodb::bson::Document;
 use persistence_core::Executor;
 
 use crate::authorization::map_identity_error;
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// 本次库存用例需要取证的动作；未请求的动作不加载仓库范围。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -116,40 +116,6 @@ pub trait AuthorizationPort: Send + Sync {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>>;
-}
-
-/// Fail-closed authorization port used when composition has not injected an adapter.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct FailClosedAuthorizationPort;
-
-#[async_trait]
-impl AuthorizationPort for FailClosedAuthorizationPort {
-    async fn authorize(
-        &self,
-        _actor: &AuditActor,
-        _actions: &[InventoryAction],
-        _executor: &mut dyn Executor,
-    ) -> Result<InventoryAuthorization> {
-        Err(Error::Internal("库存授权端口未接线".to_string()))
-    }
-    async fn require_warehouse(
-        &self,
-        _: &AuditActor,
-        _: InventoryAction,
-        _: &str,
-        _: &mut dyn Executor,
-    ) -> Result<()> {
-        Err(Error::Internal("库存授权端口未接线".into()))
-    }
-    async fn allowed_warehouses(
-        &self,
-        _: &AuditActor,
-        _: InventoryAction,
-        _: &[String],
-        _: &mut dyn Executor,
-    ) -> Result<BTreeSet<String>> {
-        Err(Error::Internal("库存授权端口未接线".into()))
-    }
 }
 
 /// 列表动作的授权指纹；不含内部证明或全量人员集合。

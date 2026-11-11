@@ -1,6 +1,6 @@
 //! 业务服务使用的账号身份与显示资料，不暴露凭证。
 use application_core::AuditActor;
-use erp_core::AccountKind;
+use erp_core::{AccountKind, Error, Result};
 
 use crate::AccountCore;
 
@@ -77,6 +77,21 @@ impl AccountSummary {
         self.id == actor.id() && self.kind == actor.kind() && self.can_login
     }
 
+    /// 校验账号摘要允许承担需要可登录身份的业务操作。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 账号启用时成功。
+    /// # 错误
+    /// 账号停用时返回与身份实体一致的业务错误。
+    pub fn ensure_can_login(&self) -> Result<()> {
+        if self.can_login {
+            Ok(())
+        } else {
+            Err(Error::from("账号已停用，不能参与需要可登录身份的业务操作"))
+        }
+    }
+
     /// 判断账号是否可以承担后台责任。
     ///
     /// # 参数
@@ -98,5 +113,18 @@ impl From<&AccountCore> for AccountSummary {
         Self::new(account.base.id.clone(), account.kind, account.can_login())
             .with_display_name(account.name.clone())
             .with_login_account(account.secret.account().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_eligibility_rejects_inactive_accounts_for_every_kind() {
+        for kind in [AccountKind::Admin, AccountKind::Supplier] {
+            assert!(AccountSummary::new("enabled", kind, true).ensure_can_login().is_ok());
+            assert!(AccountSummary::new("disabled", kind, false).ensure_can_login().is_err());
+        }
     }
 }

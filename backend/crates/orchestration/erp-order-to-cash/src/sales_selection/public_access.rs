@@ -226,7 +226,7 @@ impl SalesSelectionProcess {
         req: SalesSelectionPasswordRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let fingerprint =
             self.crypto.request_fingerprint(IdempotencyOperation::SetAccessPassword, &(&id, &req))?;
         let hash = password_hash(req.access_password.clone()).await?;
@@ -245,7 +245,7 @@ impl SalesSelectionProcess {
     /// 权限或范围不足时拒绝。
     pub async fn vouchers(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionVoucherView>> {
         let mut executor = NoTransaction;
-        self.selection_access()?.require_booklet(actor, "copy_link", id, &mut executor).await?;
+        self.services.selections.clone().require_booklet(actor, "copy_link", id, &mut executor).await?;
         Ok(SalesSelectionService::new(self.db.clone()).vouchers(id, &self.crypto, &mut executor).await?)
     }
 
@@ -261,7 +261,7 @@ impl SalesSelectionProcess {
     /// 权限或范围不足时拒绝。
     pub async fn selection_details(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionDetailView>> {
         let mut executor = NoTransaction;
-        self.selection_access()?.require_booklet(actor, "get", id, &mut executor).await?;
+        self.services.selections.clone().require_booklet(actor, "get", id, &mut executor).await?;
         Ok(SalesSelectionService::new(self.db.clone())
             .selection_details(id, &self.crypto, &mut executor)
             .await?)

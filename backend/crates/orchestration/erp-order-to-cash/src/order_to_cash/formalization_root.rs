@@ -62,7 +62,7 @@ impl SalesOrderFormalizationProcess {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         let service =
-            SalesOrderCommandProcess::with_rbac(self.db.clone(), self.rbac.clone(), self.services.clone());
+            SalesOrderCommandProcess::new(self.db.clone(), self.rbac.clone(), self.services.clone());
         if let Some(write) = service.prepare_approved_submission(id, actor, &mut NoTransaction).await? {
             let audit = actor.clone().resource_log(
                 "sales_order.formalize",
@@ -100,7 +100,7 @@ impl SalesOrderFormalizationProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let service =
-            SalesOrderCommandProcess::with_rbac(self.db.clone(), self.rbac.clone(), self.services.clone());
+            SalesOrderCommandProcess::new(self.db.clone(), self.rbac.clone(), self.services.clone());
         if let Some(write) = service.prepare_approved_submission(id, actor, executor).await? {
             let audit = actor.clone().resource_log(
                 "sales_order.formalize",

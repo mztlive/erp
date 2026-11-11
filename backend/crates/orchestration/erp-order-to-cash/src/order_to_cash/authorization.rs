@@ -29,7 +29,7 @@ pub(super) struct SalesCommandAccess {
 }
 
 impl SalesOrderCommandProcess {
-    /// 构造写命令检查器；缺少身份装配时拒绝，不退回路由级授权。
+    /// 构造在原事务执行对象授权的写命令检查器。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
@@ -39,24 +39,19 @@ impl SalesOrderCommandProcess {
     /// 返回可在原事务重验销售单及关联合同／客户的检查器。
     ///
     /// # 错误
-    /// 未注入 RBAC 时拒绝。
+    /// 不执行 I/O，不返回错误。
     ///
     /// # 关键业务约束
     /// 关联合同／客户必须另走各自资源动作，不能复用本销售动作码。
-    pub(super) fn command_access(
-        &self,
-        actor: &AuditActor,
-        action: &'static str,
-    ) -> Result<SalesCommandAccess> {
-        let rbac = self.require_rbac()?.clone();
-        Ok(SalesCommandAccess {
+    pub(super) fn command_access(&self, actor: &AuditActor, action: &'static str) -> SalesCommandAccess {
+        SalesCommandAccess {
             services: self.services.clone(),
             db: self.db.clone(),
-            access: SalesAccess::new(self.db.clone(), rbac),
+            access: SalesAccess::new(self.db.clone(), self.rbac.clone()),
             actor: actor.clone(),
             action,
             permissions: vec![],
-        })
+        }
     }
 }
 
@@ -147,28 +142,18 @@ impl SalesCommandAccess {
             .customer_access
             .require_current(&self.actor, order.customer_id.as_ref(), executor)
             .await?;
-        self.require_creation_action(order, self.action, &self.permissions, executor).await?;
+        self.access.require_loaded(&self.actor, self.action, order, &self.permissions, executor).await?;
         if !self.permissions.is_empty() {
-            self.require_creation_action(
-                order,
-                "submit",
-                &[Permission::parse("sales_order:create")?],
-                executor,
-            )
-            .await?;
+            self.access
+                .require_loaded(
+                    &self.actor,
+                    "submit",
+                    order,
+                    &[Permission::parse("sales_order:create")?],
+                    executor,
+                )
+                .await?;
         }
-        Ok(())
-    }
-
-    /// 创建与提交分别使用当前动作范围，禁止把读取参与权用于写入。
-    async fn require_creation_action(
-        &self,
-        order: &SalesOrder,
-        action: &str,
-        permissions: &[Permission],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.access.require_loaded(&self.actor, action, order, permissions, executor).await?;
         Ok(())
     }
 

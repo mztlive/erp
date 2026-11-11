@@ -17,25 +17,6 @@ use crate::ports::{ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
 use crate::service::authorization::features;
 
-/// identity 已证明的当前任务动作；不携带角色条款或业务参与授权。
-#[derive(Clone)]
-pub struct TaskEligibility {
-    pub(super) actor: AuditActor,
-    pub task: TaskAccess,
-}
-impl TaskEligibility {
-    /// 创建尚未授予任务动作的身份载体。
-    /// # 参数
-    /// actor 为当前真实账号。
-    /// # 返回
-    /// 返回精确任务动作集合为空的载体。
-    /// # 错误
-    /// 无。
-    pub fn new(actor: AuditActor) -> Self {
-        Self { task: TaskAccess::new(actor.id().to_owned()), actor }
-    }
-}
-
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 任务详情已在本阶段授权后，计算展示动作资格。
     /// # 参数
@@ -49,7 +30,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: &AuditActor,
         item: &WorkItem,
         executor: &mut dyn Executor,
-    ) -> Result<TaskEligibility> {
+    ) -> Result<TaskAccess> {
         let mut required = item.qualification_permissions()?;
         required.extend(
             ["approval_instance:read", "approval_instance:decide"]
@@ -61,18 +42,18 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .permissions(actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?;
-        let mut access = TaskEligibility::new(actor.clone());
+        let mut access = TaskAccess::new(actor.id().to_owned());
         if qualified.same_role(&item.qualification_permissions()?) {
-            access.task.executable_task_ids.insert(item.base.id.clone());
+            access.executable_task_ids.insert(item.base.id.clone());
         }
         let decide =
             [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
         if qualified.same_role(&decide) {
-            access.task.decidable_task_ids.insert(item.base.id.clone());
+            access.decidable_task_ids.insert(item.base.id.clone());
         }
         match self.authorization.require(actor, "manage", &item.base.id, executor).await {
             Ok(()) => {
-                access.task.managed_task_ids.insert(item.base.id.clone());
+                access.managed_task_ids.insert(item.base.id.clone());
             },
             Err(Error::Forbidden(_)) => {},
             Err(error) => return Err(error),

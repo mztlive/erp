@@ -88,7 +88,7 @@ impl SalesOrderCommandProcess {
         let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
         prepare_formalized_submission_write(
             &self.db,
-            (self.require_rbac()?.clone(), self.services.finance_responsibility.clone()),
+            (self.rbac.clone(), self.services.finance_responsibility.clone()),
             &mut order,
             submission,
             lines,
@@ -118,7 +118,7 @@ impl SalesOrderCommandProcess {
             return Ok(None);
         }
         let inputs = submission_procurement_inputs(lines)?;
-        let resolution = ProcurementResponsibilityProcess::new(self.db.clone(), self.require_rbac()?.clone())
+        let resolution = ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone())
             .resolve_strict(&inputs)
             .await?;
         Ok(Some(ProcurementFormalizationPlan { inputs, resolution }))

@@ -112,7 +112,7 @@ impl SalesOrderCommandProcess {
         let sellable_refs = erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
             &working_copy_lines,
         )?;
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         let related_order = order.clone();
         let persisted = client
             .with_transaction(move |executor| {

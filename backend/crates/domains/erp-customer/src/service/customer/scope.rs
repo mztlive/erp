@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, EmptyScopeVersion, PageView, ScopeVersion};
 use erp_core::common::time::BusinessDate;
+use erp_identity::AccountDirectoryService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
@@ -13,7 +14,7 @@ use super::CustomerService;
 use super::access::ensure_limit;
 use crate::dto::customer::{CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, PartyFactPort};
+use crate::ports::PartyFactPort;
 use crate::repository::scope::{CustomerReadScope, CustomerVersion, authorized_page, authorized_versions};
 use crate::repository::{CustomerAccountFilter, CustomerAssignmentRepositoryExt, CustomerExt};
 use crate::{CustomerAccess, CustomerResolvedScope};
@@ -60,7 +61,7 @@ struct ListTxDeps {
     db: Database,
     access: super::access::CustomerAccess,
     party: Arc<dyn PartyFactPort>,
-    accounts: Arc<dyn AccountFactPort>,
+    accounts: AccountDirectoryService,
     actor: AuditActor,
     query: CustomerListQuery,
 }
@@ -180,7 +181,7 @@ async fn run_list_snapshot(
     let page = authorized_page(&deps.db, &filter, &context, &deps.access, executor).await?;
     let items = hydrate_rows(
         &deps.db,
-        (&*deps.party, &*deps.accounts),
+        (&*deps.party, &deps.accounts),
         page.items,
         deps.actor.id(),
         deps.query.scope,
@@ -567,7 +568,7 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
 /// 范围标签只描述命中原因，不授予额外权限。
 async fn hydrate_rows(
     db: &mongodb::Database,
-    facts: (&dyn crate::ports::PartyFactPort, &dyn crate::ports::AccountFactPort),
+    facts: (&dyn PartyFactPort, &AccountDirectoryService),
     rows: Vec<crate::repository::CustomerAccountRow>,
     actor_user_id: &str,
     requested_scope: CustomerScope,
@@ -585,7 +586,7 @@ async fn hydrate_rows(
     let assignments =
         db.customer_assignments().list_active_for_customers(&customer_ids, as_of, executor).await?;
     let account_ids: Vec<String> = assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
-    let account_names = accounts.names_by_ids(&account_ids).await?;
+    let account_names = accounts.names(&account_ids, executor).await?;
     Ok(super::assemble_customer_views(
         rows,
         identities,

@@ -9,7 +9,9 @@ use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::SharedRbacService;
-use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::approval_integration::{
+    ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload, resolve_runtime_document_type,
+};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
@@ -37,8 +39,8 @@ pub struct StartTaskContext<'a> {
 ///
 /// # 参数
 /// * `db` - 业务与审批数据库。
+/// * `identity` - 应用共享身份服务。
 /// * `writes` - 已写入启动收据对应的计划。
-/// * `document_type` - 入口确定的业务单据类型。
 /// * `payload` - 已冻结的业务提交载荷。
 /// * `now` - 调用方状态变更时间。
 /// * `missing_entry` - 入口既有的缺少执行错误。
@@ -51,16 +53,18 @@ pub struct StartTaskContext<'a> {
 /// 缺少入口执行、人员复验、运行态写入或快照构造失败时立即停止。
 pub async fn persist_start_runtime(
     db: &Database,
+    identity: &SharedRbacService,
     writes: &PlannedWrites,
-    document_type: DocumentType,
     payload: &ApprovalSubjectSnapshotPayload,
     now: Instant,
     missing_entry: &str,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalSubjectSnapshot> {
+    let document_type =
+        resolve_runtime_document_type(writes.instance.subject.subject_kind(), writes.instance.process_kind)?;
     let first =
         writes.created_executions.first().ok_or_else(|| Error::Internal(missing_entry.to_string()))?;
-    apply_runtime_steps(&MongoStartRuntime { db, writes, first, now }, executor).await?;
+    apply_runtime_steps(&MongoStartRuntime { db, identity, writes, first, now }, executor).await?;
     ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
@@ -80,6 +84,7 @@ trait StartRuntimeSteps: Sync {
 
 struct MongoStartRuntime<'a> {
     db: &'a Database,
+    identity: &'a SharedRbacService,
     writes: &'a PlannedWrites,
     first: &'a ApprovalNodeExecution,
     now: Instant,
@@ -88,7 +93,7 @@ struct MongoStartRuntime<'a> {
 #[async_trait]
 impl StartRuntimeSteps for MongoStartRuntime<'_> {
     async fn revalidate(&self, executor: &mut dyn Executor) -> Result<()> {
-        revalidate_approvers(self.db, self.writes, executor).await
+        revalidate_approvers(self.db, self.identity, self.writes, executor).await
     }
 
     async fn create_runtime(&self, executor: &mut dyn Executor) -> Result<()> {

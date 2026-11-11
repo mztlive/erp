@@ -24,9 +24,7 @@ mod write;
 use std::sync::Arc;
 
 #[cfg(test)]
-use access::{
-    TaskEligibility, candidate_facts_current, ensure_generic_work_item_mutation, task_facts_current,
-};
+use access::{candidate_facts_current, ensure_generic_work_item_mutation, task_facts_current};
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
     WorkItemAllowedAction, WorkItemApprovalContextView, WorkItemCommandView, WorkItemConflict,
@@ -114,19 +112,17 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
 mod tests {
     use std::collections::{HashMap, HashSet};
 
-    use application_core::AuditActor;
-    use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
 
     use super::{
-        AssignmentSeparationPolicy, ObjectFact, ObjectFactMap, ObjectKind, TaskEligibility,
-        WorkItemAllowedAction, WorkItemScope, approval_assignment_separated, audited_fact_operator_actors,
-        candidate_facts_current, ensure_generic_work_item_mutation, expected_task_version,
-        non_empty_assignment_actors, purchase_order_fulfillment_responsibility_id, task_facts_current,
+        AssignmentSeparationPolicy, ObjectFact, ObjectFactMap, ObjectKind, WorkItemAllowedAction,
+        WorkItemScope, approval_assignment_separated, audited_fact_operator_actors, candidate_facts_current,
+        ensure_generic_work_item_mutation, expected_task_version, non_empty_assignment_actors,
+        purchase_order_fulfillment_responsibility_id, task_facts_current,
     };
     use crate::entity::work_item::{
-        AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
+        AssignmentSource, DocumentApprovalWorkItemData, TaskAccess, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemType,
     };
     use crate::error::{Error, ErrorCode};
@@ -197,13 +193,9 @@ mod tests {
         .unwrap()
     }
 
-    fn managed_action_access() -> TaskEligibility {
-        let mut access = TaskEligibility::new(AuditActor::new(
-            "manager-1".to_string(),
-            "manager-1".to_string(),
-            AccountKind::Admin,
-        ));
-        access.task.managed_task_ids.insert("wi-managed-w29".into());
+    fn managed_action_access() -> TaskAccess {
+        let mut access = TaskAccess::new("manager-1".into());
+        access.managed_task_ids.insert("wi-managed-w29".into());
         access
     }
 
@@ -329,13 +321,13 @@ mod tests {
 
         let type_bound = document_approval_fields_without_execution();
         assert_eq!(
-            type_bound.allowed_actions(WorkItemScope::Managed, "manager-1", &access.task),
+            type_bound.allowed_actions(WorkItemScope::Managed, "manager-1", &access),
             vec![WorkItemAllowedAction::View]
         );
 
         let execution_bound = managed_w29_fields(true);
         assert_eq!(
-            execution_bound.allowed_actions(WorkItemScope::Managed, "manager-1", &access.task),
+            execution_bound.allowed_actions(WorkItemScope::Managed, "manager-1", &access),
             vec![WorkItemAllowedAction::View]
         );
     }
@@ -346,7 +338,7 @@ mod tests {
         let item = managed_w29_fields(false);
 
         assert_eq!(
-            item.allowed_actions(WorkItemScope::Managed, "manager-1", &access.task),
+            item.allowed_actions(WorkItemScope::Managed, "manager-1", &access),
             vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Reassign, WorkItemAllowedAction::Close,]
         );
     }

@@ -72,7 +72,7 @@ fn settings() -> JdVopConfig {
     .unwrap()
 }
 
-fn connection() -> SupplierApiConnection {
+pub(super) fn connection() -> SupplierApiConnection {
     SupplierApiConnection::new(
         SupplierApiConnectionId::new("connection"),
         SupplierApiConnectionData {
@@ -97,15 +97,7 @@ async fn process(
     let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
     let db = client.database("jd-authorization-binding-unit-test");
     let rbac = shared_rbac_service(db.clone(), Arc::new(NoAudit));
-    let supplier_access = SupplierAccess::unwired(db.clone());
-    JdVopAuthorizationProcess::new(
-        db,
-        settings,
-        rbac,
-        supplier_access,
-        Arc::new(JdVopAuthorizationTasks::default()),
-        http,
-    )
+    JdVopAuthorizationProcess::new(db, settings, rbac, Arc::new(JdVopAuthorizationTasks::default()), http)
 }
 
 #[tokio::test]

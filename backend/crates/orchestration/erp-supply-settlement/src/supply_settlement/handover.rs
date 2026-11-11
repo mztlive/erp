@@ -122,11 +122,7 @@ struct SettlementDependencies {
 impl SettlementDependencies {
     /// 捕获事务所需依赖，事务闭包仅消费一次，无需再次复制句柄。
     fn from_process<A: WorkflowAuthorizationPort>(process: &SupplierSettlementProcess<A>) -> Result<Self> {
-        Ok(Self {
-            db: process.db.clone(),
-            access: process.data_scope.clone(),
-            rbac: process.require_rbac()?.clone(),
-        })
+        Ok(Self { db: process.db.clone(), access: process.data_scope.clone(), rbac: process.rbac.clone() })
     }
 
     /// 业务更新之后依次保存独立命令回执与展示审计，沿用同一执行器。
@@ -183,13 +179,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         if let Some(existing) = self.replay_handover(&command).await? {
             return Ok(existing);
         }
-        ensure_target_qualified(
-            &self.db,
-            self.require_rbac()?,
-            req.target_user_id.trim(),
-            &mut NoTransaction,
-        )
-        .await?;
+        ensure_target_qualified(&self.db, &self.rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
         ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
         let dependencies = SettlementDependencies::from_process(self)?;
         let client = dependencies.db.client().clone();
@@ -229,13 +219,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         if let Some(existing) = self.replay_handler(&command).await? {
             return Ok(existing);
         }
-        ensure_target_qualified(
-            &self.db,
-            self.require_rbac()?,
-            req.target_user_id.trim(),
-            &mut NoTransaction,
-        )
-        .await?;
+        ensure_target_qualified(&self.db, &self.rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
         let dependencies = SettlementDependencies::from_process(self)?;
         let client = dependencies.db.client().clone();
         client
@@ -263,7 +247,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     ) -> Result<Vec<HandoverCandidateView>> {
         let current =
             self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
-        list_candidates(&self.db, self.require_rbac()?, &current.prepared_by, &mut NoTransaction).await
+        list_candidates(&self.db, &self.rbac, &current.prepared_by, &mut NoTransaction).await
     }
 
     async fn replay_handover(

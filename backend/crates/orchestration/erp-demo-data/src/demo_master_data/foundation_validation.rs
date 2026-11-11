@@ -126,6 +126,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// # 错误
     /// 缺权时返回账号和具体权限；数据库或策略读取失败时停止。
     pub(super) async fn validate_demo_permissions(&self, accounts: &PreparedAccounts) -> Result<()> {
+        let service =
+            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
         for account in &spec::foundation_spec().accounts {
             let user = accounts
                 .by_key
@@ -136,14 +138,9 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 .map(Permission::parse)
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             let actor = AuditActor::new(user.clone(), account.account.clone(), AccountKind::Admin);
-            let service = AuthorizationService::new(
-                self.db.clone(),
-                self.rbac.clone(),
-                AuthorizationRegistry::new(vec![])?,
-            );
             let qualified = service.permissions(&actor, &required, &mut NoTransaction).await?;
             for permission in required {
-                if qualified.as_ref().is_none_or(|value| !value.permissions().covers_one(&permission)) {
+                if qualified.as_ref().is_none_or(|value| value.roles(&permission).is_empty()) {
                     return Err(Error::Forbidden(format!(
                         "演示账号 {} 缺少操作权限 {permission}，请在角色配置中核定后重新生成",
                         account.account

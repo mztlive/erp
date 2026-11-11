@@ -12,6 +12,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::ApprovalNotificationOutboxId;
+use erp_identity::SharedRbacService;
 use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
@@ -58,6 +59,8 @@ use crate::{Error, Result};
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
 pub struct StockAdjustmentStartPersistInput {
+    /// 与原库存和工作流能力同源的身份服务。
+    pub identity: SharedRbacService,
     /// 本次重新提交说明。
     pub resubmission_reason: Option<String>,
     /// 授权服务；事务内重验提交人与节点候选人权限。
@@ -123,6 +126,7 @@ pub async fn persist_stock_adjustment_start(
                 persist_start_document(&db, &mut input, executor).await?;
                 persist_runtime_writes(
                     &db,
+                    &input.identity,
                     &input.writes,
                     &input.snapshot_payload,
                     StartRuntimeContext {
@@ -437,6 +441,7 @@ struct StartRuntimeContext<'a> {
 /// 使用已写入的业务事实冻结审批展示，并沿原事务写入运行事实与入口任务。
 async fn persist_runtime_writes(
     db: &Database,
+    identity: &SharedRbacService,
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartRuntimeContext<'_>,
@@ -448,8 +453,8 @@ async fn persist_runtime_writes(
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交库存调整".to_string()))?;
     let mut snapshot = persist_start_runtime(
         db,
+        identity,
         writes,
-        DocumentType::StockAdjustment,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交库存调整",

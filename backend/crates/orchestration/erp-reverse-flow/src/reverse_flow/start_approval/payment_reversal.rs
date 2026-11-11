@@ -274,8 +274,8 @@ pub async fn persist_payment_reversal_runtime(
     let context = StartTaskContext { document_type: DocumentType::PaymentReversal, ..context };
     let mut snapshot = persist_start_runtime(
         db,
+        &rbac.identity,
         writes,
-        DocumentType::PaymentReversal,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交付款冲正",

@@ -26,7 +26,7 @@ pub async fn sales_order_contract_check(
     Path(id): Path<String>,
     Query(req): Query<BindSalesOrderContractRequest>,
 ) -> Result<ContractBindingCheck> {
-    let check = SalesOrderCommandProcess::with_rbac(
+    let check = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),

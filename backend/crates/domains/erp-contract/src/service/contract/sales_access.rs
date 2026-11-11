@@ -52,7 +52,15 @@ impl ContractService {
                     contract.set_shared_sales(request.shared_sales_user_ids)?;
                     contract.sales_access_change_reason = Some(request.change_reason.trim().to_string());
                     contract.stable.updated_by = actor_id;
-                    accounts.ensure_enabled(&contract.shared_sales_user_ids, executor).await?;
+                    for id in &contract.shared_sales_user_ids {
+                        let account = accounts
+                            .account(id, executor)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("共享销售账号不存在".into()))?;
+                        account
+                            .ensure_can_login()
+                            .map_err(|error| Error::ValidationError(error.to_string()))?;
+                    }
                     db.contracts().update(&mut contract, executor).await?;
                     Ok(())
                 })

@@ -73,8 +73,7 @@ impl SupplierCatalogAdoptionProcess {
         request: PreviewAdoptionRequest,
         actor: &AuditActor,
     ) -> Result<AdoptionPreviewView> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
-        self.ensure_permission(actor, "supplier_offering_cost:detail").await?;
+        self.ensure_adoption_permissions(actor).await?;
         request.validate()?;
         let source = self.batch_access(connection, actor, &mut NoTransaction).await?;
         self.ensure_source(&source)?;
@@ -153,11 +152,20 @@ impl SupplierCatalogAdoptionProcess {
             .ok_or_else(|| Error::NotFound("供应商商品不存在".into()))
     }
 
-    pub(super) async fn ensure_permission(&self, actor: &AuditActor, permission: &str) -> Result<()> {
-        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
-            .has_permission(actor, &Permission::parse(permission)?, &mut NoTransaction)
-            .await?
-        {
+    /// 一次读取选品功能资格；各项可以来自不同的启用角色。
+    pub(super) async fn ensure_adoption_permissions(&self, actor: &AuditActor) -> Result<()> {
+        let required = [
+            Permission::parse("supplier_api_connection:catalog_sync")?,
+            Permission::parse("supplier_offering_cost:detail")?,
+        ];
+        let qualified =
+            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+                .permissions(actor, &required, &mut NoTransaction)
+                .await?;
+        if !qualified.is_some_and(|value| {
+            let permissions = value.permissions();
+            required.iter().all(|permission| permissions.covers_one(permission))
+        }) {
             return Err(Error::Forbidden("当前账号无权执行选品操作".into()));
         }
         Ok(())

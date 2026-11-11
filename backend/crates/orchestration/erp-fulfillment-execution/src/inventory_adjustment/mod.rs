@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use erp_identity::SharedRbacService;
 use erp_inventory::InventoryService;
 use erp_read_models::inventory_center::InventoryAdjustmentReadService;
 use mongodb::Database;
@@ -31,6 +32,7 @@ mod start_tests;
 /// Holds the root transaction for submit/cancel/create and reuses the caller
 /// Executor for approval-runtime post and cancel actions.
 pub struct InventoryAdjustmentProcess {
+    identity: SharedRbacService,
     inventory_service: Arc<InventoryService>,
     workflow: Arc<dyn FulfillmentWorkflow>,
     db: Database,
@@ -41,6 +43,7 @@ impl InventoryAdjustmentProcess {
     ///
     /// # 参数
     /// * `db` - 各领域仓储共用的 MongoDB 数据库。
+    /// * `identity` - 与工作流、库存能力同源的共享身份服务。
     /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
     /// * `inventory_service` - 已注入权威库存授权与事实 Port 的领域服务。
     ///
@@ -51,10 +54,11 @@ impl InventoryAdjustmentProcess {
     /// 不返回错误。
     pub fn new(
         db: Database,
+        identity: SharedRbacService,
         workflow: Arc<dyn FulfillmentWorkflow>,
         inventory_service: Arc<InventoryService>,
     ) -> Self {
-        Self { workflow, inventory_service, db }
+        Self { identity, workflow, inventory_service, db }
     }
 
     /// 装配库存调整跨域读取与正式命令共用的动作政策。

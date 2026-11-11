@@ -1,8 +1,10 @@
 //! 供给维护人交接：范围重验、CAS 与责任字段。
 
 use application_core::AuditActor;
+use mongodb::Database;
+use persistence_core::Executor;
 
-use super::SupplierOfferingService;
+use super::{OfferingAccess, SupplierOfferingService};
 use crate::dto::{HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
 use crate::entity::supplier_offering::SupplierOffering;
 use crate::error::{Error, Result};
@@ -18,7 +20,7 @@ impl SupplierOfferingService {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回交接后视图。
+    /// 返回交接前实体与交接后视图，供调用方记录审计事实。
     ///
     /// # 错误
     /// 版本、范围或目标非法时拒绝。
@@ -27,8 +29,8 @@ impl SupplierOfferingService {
         id: &str,
         req: &HandoverSupplierOfferingRequest,
         actor: &AuditActor,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> Result<HandoverSupplierOfferingView> {
+        executor: &mut dyn Executor,
+    ) -> Result<(SupplierOffering, HandoverSupplierOfferingView)> {
         persist_handover(&self.db, &self.access(), id, req, actor, executor).await
     }
 }
@@ -44,27 +46,28 @@ impl SupplierOfferingService {
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回交接后视图。
+/// 返回交接前实体与交接后视图，供调用方记录审计事实。
 ///
 /// # 错误
 /// 版本、范围或目标非法时整事务回滚。
 async fn persist_handover(
-    db: &mongodb::Database,
-    access: &crate::service::supplier_offering::OfferingAccess,
+    db: &Database,
+    access: &OfferingAccess,
     id: &str,
     req: &HandoverSupplierOfferingRequest,
     actor: &AuditActor,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<HandoverSupplierOfferingView> {
+    executor: &mut dyn Executor,
+) -> Result<(SupplierOffering, HandoverSupplierOfferingView)> {
     let mut offering = access.require_offering(actor, "update", id, executor).await?;
     if offering.base.version != req.expected_version {
         return Err(Error::ConflictError("供给责任或版本已变化，请刷新后重试".into()));
     }
+    let before = offering.clone();
     offering
         .handover(req.target_user_id.clone(), req.target_org_unit_id.clone(), actor.id())
         .map_err(Error::from)?;
     db.supplier_offerings().update(&mut offering, executor).await?;
-    Ok(handover_view(&offering))
+    Ok((before, handover_view(&offering)))
 }
 
 /// 构造交接响应。

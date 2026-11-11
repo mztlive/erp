@@ -284,10 +284,7 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Err(Error::Forbidden("目标账号不存在、已失效或不具备供应商订单跟进资格".into()));
-    };
-    if !account.is_active_backoffice() || !account_can_follow(db, rbac, target, executor).await? {
+    if !account_can_follow(db, rbac, target, executor).await? {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备供应商订单跟进资格".into()));
     }
     Ok(())

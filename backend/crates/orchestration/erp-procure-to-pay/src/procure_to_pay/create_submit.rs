@@ -6,6 +6,7 @@ use application_core::AuditActor;
 use erp_approval_runtime::approver_directory::resolve_approvers;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use erp_procurement::entity::purchase_order::{
     PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
@@ -252,8 +253,8 @@ async fn persist_created_order_start(
     )?;
     let prepared = prepare_created_order_start(
         db,
+        &(ports.task_identity)(),
         &frozen.order,
-        &organization_id,
         actor,
         idempotency_key,
         now,
@@ -274,7 +275,6 @@ async fn persist_created_order_start(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `order` - 已进入审批中的采购单
-/// * `organization_id` - 单据责任组织
 /// * `actor` - 提交人
 /// * `idempotency_key` - 建单幂等键
 /// * `now` - 调用方时间
@@ -290,17 +290,18 @@ async fn persist_created_order_start(
 /// 新建提交没有既有启动收据。
 async fn prepare_created_order_start(
     db: &Database,
+    identity: &SharedRbacService,
     order: &PurchaseOrder,
-    organization_id: &str,
     actor: &AuditActor,
     idempotency_key: &str,
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
+    let organization_id = purchase_order_responsible_org_id(order)?;
     let binding = find_approval_binding(db, &order.base.id, executor).await.map_err(crate::Error::from)?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
-    let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
+    let graph = resolve_approvers(db, identity, graph, actor.id(), executor).await?;
     let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
         resubmission_reason: None,
         graph,
@@ -308,7 +309,7 @@ async fn prepare_created_order_start(
         subject: purchase_order_subject_ref(&order.base.id)?,
         subject_version: order.approval_subject_version,
         actor_id: actor.id(),
-        organization_id,
+        organization_id: &organization_id,
         idempotency_key,
         receipt: None,
         now,

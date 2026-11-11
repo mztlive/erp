@@ -21,7 +21,7 @@ pub async fn selection_basis(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SelectionOrderBasis> {
-    let basis = SalesOrderCommandProcess::with_rbac(
+    let basis = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),

@@ -61,7 +61,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<WorkingCopyView> {
         req.validate()?;
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         let this = self.clone();
         let read_access = access.clone();
         let read_actor = actor.clone();

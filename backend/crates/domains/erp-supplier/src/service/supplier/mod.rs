@@ -9,6 +9,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::SupplierCapabilityId;
+use erp_identity::AccountDirectoryService;
 use list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use mongodb::Database;
 use persistence_core::NoTransaction;
@@ -23,9 +24,9 @@ use crate::entity::supplier::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountFactPort, FailClosedAccountFactPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact,
-    PartyFactsPort, PartyListFact, PartyRevisionFact, PartyTaxProfileFact, SensitiveFieldKindFact,
-    SensitiveTokenPort, select_current_default,
+    PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyFactsPort, PartyListFact,
+    PartyRevisionFact, PartyTaxProfileFact, SensitiveFieldKindFact, SensitiveTokenPort,
+    select_current_default,
 };
 use crate::repository::{SupplierAccountRow, SupplierDetailBundle, SupplierExt};
 
@@ -50,7 +51,7 @@ pub struct SupplierService {
     party: Arc<dyn PartyFactsPort>,
     sensitive_data: Option<Arc<dyn SensitiveTokenPort>>,
     data_scope: SupplierAccess,
-    accounts: Arc<dyn AccountFactPort>,
+    accounts: AccountDirectoryService,
 }
 
 impl SupplierService {
@@ -64,14 +65,14 @@ impl SupplierService {
     /// 返回服务实例。
     ///
     /// # 错误
-    /// 无；未注入的账号与范围能力默认拒绝访问。
+    /// 无；未注入的范围能力默认拒绝访问。
     pub fn new(db: Database, party: Arc<dyn PartyFactsPort>) -> Self {
         Self {
             db: db.clone(),
             party,
             sensitive_data: None,
             data_scope: SupplierAccess::unwired(db.clone()),
-            accounts: Arc::new(FailClosedAccountFactPort),
+            accounts: AccountDirectoryService::new(db),
         }
     }
 
@@ -83,7 +84,7 @@ impl SupplierService {
     /// * `sensitive_data` - 敏感字段令牌签发端口
     ///
     /// # 返回
-    /// 返回具备令牌签发能力的服务；账号与范围能力仍须通过 `with_scope` 注入。
+    /// 返回具备令牌签发能力的服务；范围能力仍须通过 `with_scope` 注入。
     ///
     /// # 错误
     /// 无；构造过程不读取业务事实。
@@ -97,24 +98,22 @@ impl SupplierService {
             party,
             sensitive_data: Some(sensitive_data),
             data_scope: SupplierAccess::unwired(db.clone()),
-            accounts: Arc::new(FailClosedAccountFactPort),
+            accounts: AccountDirectoryService::new(db),
         }
     }
 
-    /// 注入授权能力 与账号事实。
+    /// 注入供应商授权能力。
     ///
     /// # 参数
     /// * `data_scope` - 已接线供应商授权能力
-    /// * `accounts` - 账号显示名与登录资格
     ///
     /// # 返回
     /// 返回可解析范围的服务。
     ///
     /// # 错误
     /// 无。
-    pub fn with_scope(mut self, data_scope: SupplierAccess, accounts: Arc<dyn AccountFactPort>) -> Self {
+    pub fn with_scope(mut self, data_scope: SupplierAccess) -> Self {
         self.data_scope = data_scope;
-        self.accounts = accounts;
         self
     }
 
@@ -241,7 +240,7 @@ impl SupplierService {
         let row = SupplierAccountRow::from_account(&loaded.bundle.supplier);
         let maintainer_names = self
             .accounts
-            .names_by_ids(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id))
+            .names(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id), &mut NoTransaction)
             .await?;
         assemble_supplier_views(SupplierViewAssembleInput {
             rows: vec![row],

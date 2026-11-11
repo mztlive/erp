@@ -1,6 +1,7 @@
 //! 供应商列表的一致授权快照；范围与业务版本跨页携带。
 
 use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, ScopeVersion};
+use erp_identity::AccountDirectoryService;
 use persistence_core::Transactional;
 use serde::Serialize;
 use validator::Validate;
@@ -130,7 +131,7 @@ impl SupplierService {
                     hydrate_snapshot(HydrateArgs {
                         bundle,
                         party: party.as_ref(),
-                        accounts: accounts.as_ref(),
+                        accounts: &accounts,
                         context,
                         page: input.page,
                         page_size: input.page_size,
@@ -309,7 +310,7 @@ fn account_filter(input: &SupplierListSearchInput) -> crate::repository::Supplie
 struct HydrateArgs<'a> {
     bundle: crate::repository::SupplierListBundle,
     party: &'a dyn crate::ports::PartyFactsPort,
-    accounts: &'a dyn crate::ports::AccountFactPort,
+    accounts: &'a AccountDirectoryService,
     context: SupplierResolvedScope,
     page: u64,
     page_size: u32,
@@ -323,7 +324,7 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     let (parties, revisions) = party.list_with_current_revisions(&bundle.party_ids, executor).await?;
     let entity_names = load_entity_names(party, &bundle.profiles, executor).await?;
     let maintainer_ids = unique_ids(bundle.page.items.iter().map(|row| row.maintainer_user_id.clone()));
-    let names = accounts.names_by_ids(&maintainer_ids).await?;
+    let names = accounts.names(&maintainer_ids, executor).await?;
     let items = assemble_supplier_views(SupplierViewAssembleInput {
         rows: bundle.page.items,
         parties,

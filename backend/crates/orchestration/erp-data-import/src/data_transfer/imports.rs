@@ -1,7 +1,6 @@
 use application_core::AuditActor;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_supplier_catalog::supply_governance::offering::batch::{BatchRequest, Targeted};
 use erp_supply::dto::supplier_offering::{
@@ -35,9 +34,6 @@ impl BusinessTransfers {
         input: Value,
         actor: &AuditActor,
     ) -> Result<Value> {
-        if actor.kind() == AccountKind::Supplier && kind != TransferKind::PortalBatch {
-            return Err(Error::Forbidden("此任务仅供管理端使用".into()));
-        }
         self.authorize_import(kind, &input, &Value::Null, actor).await?;
         if matches!(kind, TransferKind::InquiryPreview | TransferKind::InquiryCreationPreview) {
             let file = required(&input, "file_name")?;

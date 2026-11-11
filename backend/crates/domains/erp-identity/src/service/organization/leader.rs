@@ -2,6 +2,7 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::{Executor, Repository};
@@ -10,7 +11,7 @@ use serde::Serialize;
 use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind};
 use crate::repository::OrganizationRepository;
 use crate::repository::organization::ORG_UNITS;
-use crate::{Error, Result};
+use crate::{AuthorizationRegistry, AuthorizationService, Error, Permission, Result, SharedRbacService};
 
 /// 查询申请人主属组织到根的完整有效路径，按最近同类组织取得负责人。
 /// # 参数
@@ -56,15 +57,19 @@ pub struct LeaderPreview {
 
 /// 在同一只读事务内预览当前内部账号的负责人及审批资格。
 /// # 参数
-/// 数据库、认证账号和组织类型；不接受其他人员身份。
+/// 数据库、共享身份服务、认证账号和组织类型；不接受其他人员身份。
 /// # 返回
 /// 负责人姓名和来源组织。
 /// # 错误
 /// 非内部账号、组织缺失、负责人或审批资格失效时拒绝。
-pub async fn own_leader_preview(db: Database, actor: AuditActor, kind: OrgUnitKind) -> Result<LeaderPreview> {
+pub async fn own_leader_preview(
+    db: Database,
+    identity: SharedRbacService,
+    actor: AuditActor,
+    kind: OrgUnitKind,
+) -> Result<LeaderPreview> {
     use persistence_core::Transactional;
 
-    use super::qualification::qualified_account;
     use crate::AccessControlExt;
     db.client()
         .clone()
@@ -78,14 +83,23 @@ pub async fn own_leader_preview(db: Database, actor: AuditActor, kind: OrgUnitKi
                     .ok_or_else(|| Error::Forbidden("当前账号不可查询内部组织负责人".into()))?;
                 let unit = applicant_leader(&db, &applicant.base.id, kind, Instant::now(), ex).await?;
                 let leader = unit.leader.ok_or_else(|| Error::ValidationError("组织负责人未设置".into()))?;
-                let person = qualified_account(
-                    &db,
-                    &leader.user_id,
-                    &["approval_instance:read", "approval_instance:decide"],
-                    ex,
-                )
-                .await?;
-                Ok(LeaderPreview { name: person.name, organization_name: unit.name })
+                let subject = AuditActor::new(leader.user_id.clone(), leader.user_id, AccountKind::Admin);
+                let required = ["approval_instance:read", "approval_instance:decide"]
+                    .map(|code| Permission::parse(code).expect("固定审批权限合法"));
+                let authorization = AuthorizationService::new(db, identity, AuthorizationRegistry::default());
+                let qualified =
+                    authorization.permissions(&subject, &required, ex).await?.ok_or_else(|| {
+                        Error::ValidationError("审批负责人账号不存在或已停用，请调整负责人".into())
+                    })?;
+                if !qualified.same_role(&required) {
+                    return Err(Error::ValidationError(
+                        "审批负责人缺少审批读取或决定权限，请联系管理员配置角色".into(),
+                    ));
+                }
+                Ok(LeaderPreview {
+                    name: qualified.account().display_name.clone(),
+                    organization_name: unit.name,
+                })
             })
         })
         .await

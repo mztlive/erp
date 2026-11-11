@@ -49,7 +49,6 @@ impl FundsAccess {
         if matches!(resource, "customer_receipt" | "supplier_payment") {
             required.push(Permission::parse(FINANCE_LEDGER_READ)?);
         }
-        require_qualification(&self.db, &self.rbac, actor, entry, &required, executor).await?;
         let facts = management_facts::load(&self.db, resource, id, executor).await?;
         if partition(&facts) == 0 {
             return zero_source(&self.db, &self.rbac, actor, &facts, entry, required, executor).await;
@@ -86,28 +85,6 @@ impl FundsAccess {
             .await?;
         Ok(())
     }
-}
-
-async fn require_qualification(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    entry: &Permission,
-    required: &[Permission],
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let qualification =
-        AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
-    let mut complete = required.to_vec();
-    complete.push(entry.clone());
-    if !qualification
-        .permissions(actor, &complete, executor)
-        .await?
-        .is_some_and(|value| value.same_role(&complete))
-    {
-        return Err(Error::Forbidden("管理入口所需权限须由同一有效角色提供".into()));
-    }
-    Ok(())
 }
 
 fn ensure_entry(entry: &Permission, required: &[Permission]) -> Result<()> {

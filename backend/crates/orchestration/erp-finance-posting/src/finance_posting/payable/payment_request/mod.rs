@@ -6,6 +6,7 @@ use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentReques
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
 use erp_procure_to_pay::procure_to_pay::sync_payment_arrangement;
+use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_workflow::ApprovalActionContext;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -127,7 +128,7 @@ async fn require_sources(
     actor: &AuditActor,
     action: &str,
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<Vec<PurchaseOrder>> {
     let mut ids = Vec::with_capacity(request.data.lines.len());
     for line in &request.data.lines {
         let account = db
@@ -138,8 +139,7 @@ async fn require_sources(
         ids.push(account.source_document_id);
     }
     let read = &rbac.payment_request_read;
-    read.require_request_sources(actor, action, &ids, executor).await?;
-    Ok(())
+    Ok(read.require_request_sources(actor, action, &ids, executor).await?)
 }
 
 /// 校验回调仍属于当前冻结提交及审批实例。

@@ -115,7 +115,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
         target: &str,
     ) -> Result<SalesCommandAccess> {
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         let current = access.current(id, &mut NoTransaction).await?;
         if current.base.version != req.expected_version {
             return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".to_string()));
@@ -152,9 +152,9 @@ impl SalesOrderCommandProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<HandoverCandidateView>> {
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         let order = access.current(id, &mut NoTransaction).await?;
-        let rbac = self.require_rbac()?.clone();
+        let rbac = self.rbac.clone();
         let approvers = open_approval_assignees(&self.db, &order.base.id, &mut NoTransaction).await?;
         let accounts =
             self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
@@ -213,7 +213,7 @@ impl SalesOrderCommandProcess {
         let expected_key_hash = expected_key_hash.clone();
         let order_id = sales_order_id.to_string();
         let actor_id = actor.id().to_string();
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -244,7 +244,7 @@ impl SalesOrderCommandProcess {
         if target == current_owner {
             return Err(Error::BusinessLogicError("目标已是当前负责人，无需交接".to_string()));
         }
-        let rbac = self.require_rbac()?.clone();
+        let rbac = self.rbac.clone();
         ensure_target_qualified(&self.db, &rbac, target, executor).await?;
         ensure_handover_separation(&self.db, sales_order_id, target, executor).await
     }

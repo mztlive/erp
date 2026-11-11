@@ -77,8 +77,9 @@ impl SupplierProfileProcess {
         if let Some(view) = replay_supplier(&self.db, &rbac, &command, id, actor, &mut NoTransaction).await? {
             return Ok(view);
         }
-        self.ensure_target_qualified(req.target_user_id.trim(), &mut NoTransaction).await?;
-        self.ensure_org_enabled(req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
+        ensure_target_qualified(&self.db, &self.authorization, req.target_user_id.trim(), &mut NoTransaction)
+            .await?;
+        ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
         let context = handover_context(actor, &command, SUPPLIER_ACTION)?;
         let operation = SupplierHandoverCommand {
             db: self.db.clone(),
@@ -139,7 +140,8 @@ impl SupplierProfileProcess {
         {
             return Ok(view);
         }
-        self.ensure_target_qualified(req.target_user_id.trim(), &mut NoTransaction).await?;
+        ensure_target_qualified(&self.db, &self.authorization, req.target_user_id.trim(), &mut NoTransaction)
+            .await?;
         let context = handover_context(actor, &command, CAPABILITY_ACTION)?;
         let operation = SupplierHandoverCommand {
             db: self.db.clone(),
@@ -183,14 +185,6 @@ impl SupplierProfileProcess {
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         list_candidates(&self.db, &self.authorization, &current.maintainer_user_id, &mut NoTransaction).await
-    }
-
-    async fn ensure_target_qualified(&self, target: &str, executor: &mut dyn Executor) -> Result<()> {
-        ensure_target_qualified(&self.db, &self.authorization, target, executor).await
-    }
-
-    async fn ensure_org_enabled(&self, target_org: Option<&str>, executor: &mut dyn Executor) -> Result<()> {
-        ensure_org_enabled(&self.db, target_org, executor).await.map_err(Into::into)
     }
 }
 

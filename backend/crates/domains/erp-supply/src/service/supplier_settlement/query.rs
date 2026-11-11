@@ -71,7 +71,6 @@ impl SupplierSettlementService {
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let context = self.access().resolve(actor, "list", executor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
-        context.validate(executor).await?;
         let org_ids = expand_org_filter(
             &self.access(),
             query.org_unit_ids.as_ref().map(|ids| ids.as_slice()),

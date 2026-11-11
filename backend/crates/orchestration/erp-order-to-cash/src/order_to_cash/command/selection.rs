@@ -38,10 +38,9 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SelectionOrderBasis> {
-        self.require_rbac()?;
         let access = self.services.selections.clone();
         let proposal = access.require_proposal(actor, "get", id, executor).await?;
-        self.command_access(actor, "create")?.load_customer(proposal.customer_id.as_ref(), executor).await?;
+        self.command_access(actor, "create").load_customer(proposal.customer_id.as_ref(), executor).await?;
         let lines = self.db.sales_selection_proposal_sku_lines().list_by_proposal(id, executor).await?;
         Ok(SelectionOrderBasis::from_proposal(&proposal, lines)?)
     }
@@ -61,7 +60,6 @@ impl SalesOrderCommandProcess {
         business_type: BusinessType,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionSource> {
-        self.require_rbac()?;
         let access = self.services.selections.clone();
         let proposal = access.require_proposal(actor, "get", id, executor).await?;
         Ok(SalesSelectionSource::from_proposal(&proposal, customer, business_type)?)

@@ -7,13 +7,14 @@
 //! - 追加版本 / 终止：跨集合（版本 + 主表 CAS + 审计）→ 同一事务模板；
 //! - 列表 / 详情：单集合无跨步骤原子性要求 → `&mut NoTransaction`。
 //!
-//! 跨域读取（客户存在性、归属、账号名、附件存在）走消费方 Port；
+//! 客户、归属与附件事实走消费方 Port；账号目录使用 identity 公开 API。
 //! 文件资产写入与跨域根事务由 `erp-processes` 持有，本模块提供事务内接口。
 
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::ids::{CustomerAccountId, FileAssetId};
+use erp_identity::AccountDirectoryService;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
@@ -26,8 +27,7 @@ use crate::dto::contract::{
 use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountNamePort, ContractAuditPort, CustomerAccountFact, CustomerFactsPort, PreparedContractAudit,
-    SigningCompanyPort,
+    ContractAuditPort, CustomerAccountFact, CustomerFactsPort, PreparedContractAudit, SigningCompanyPort,
 };
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
@@ -51,7 +51,7 @@ pub struct ContractService {
     db: Database,
     audit: Arc<dyn ContractAuditPort>,
     customers: Arc<dyn CustomerFactsPort>,
-    accounts: Arc<dyn AccountNamePort>,
+    accounts: AccountDirectoryService,
     companies: Arc<dyn SigningCompanyPort>,
     data_scope: ContractAuthorization,
 }
@@ -63,7 +63,6 @@ impl ContractService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `customers` - 客户存在性与编号事实
-    /// * `accounts` - 负责人显示名
     /// * `companies` - 我方公司身份及启停事实
     /// * `authorization` - 组合层装配固定责任模型和真实客户来源的授权能力
     ///
@@ -79,11 +78,17 @@ impl ContractService {
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
         customers: Arc<dyn CustomerFactsPort>,
-        accounts: Arc<dyn AccountNamePort>,
         companies: Arc<dyn SigningCompanyPort>,
         authorization: ContractAuthorization,
     ) -> Self {
-        Self { db, audit, customers, accounts, companies, data_scope: authorization }
+        Self {
+            accounts: AccountDirectoryService::new(db.clone()),
+            db,
+            audit,
+            customers,
+            companies,
+            data_scope: authorization,
+        }
     }
 
     /// 构造复用本服务授权能力 的合同访问器。
@@ -276,7 +281,7 @@ impl ContractService {
         let shared_sales_user_ids = contract.shared_sales_user_ids.clone();
         let view: ContractView = contract.into();
         let names = match &view.owner_user_id {
-            Some(id) => self.accounts.names_by_ids(std::slice::from_ref(id)).await?,
+            Some(id) => self.accounts.names(std::slice::from_ref(id), &mut NoTransaction).await?,
             None => Default::default(),
         };
         Ok(ContractDetailView {

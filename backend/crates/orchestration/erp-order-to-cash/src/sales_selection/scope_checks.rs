@@ -177,7 +177,6 @@ pub(crate) async fn start_prepare_checked(
     req: PrepareSalesSelectionRequest,
     actor: AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(db, &access, &actor, "prepare", &id).await?;
     let mut command = req;
     command.booklet_id = id;
     let catalog = CatalogAdapter { query: services.catalog.clone() };
@@ -213,7 +212,6 @@ pub(crate) async fn delete_item_checked(
     req: DeleteDisplayItemRequest,
     actor: AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(db, &access, &actor, "maintain", &booklet_id).await?;
     let actor_id = actor.id().to_string();
     Ok(SalesSelectionService::new(db.clone())
         .with_authorization(access, actor)
@@ -246,7 +244,7 @@ pub(crate) async fn publish_checked(
     req: PublishSalesSelectionRequest,
     actor: AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(db, &access, &actor, "publish", &id).await?;
+    require_action(&access, &actor, "publish", &id).await?;
     let catalog = CatalogAdapter { query: services.catalog.clone() };
     let actor_id = actor.id().to_string();
     Ok(SalesSelectionService::new(db.clone())
@@ -276,7 +274,7 @@ pub(crate) async fn copy_link_checked(
     id: &str,
     actor: &AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(db, &access, actor, "copy_link", id).await?;
+    require_action(&access, actor, "copy_link", id).await?;
     let service = SalesSelectionService::new(db.clone());
     let token = service.copy_link(id, crypto).await?;
     let mut view = service.booklet_detail(id).await?;
@@ -335,7 +333,6 @@ pub(crate) async fn rotate_link_checked(
     req: SalesSelectionCommandRequest,
     actor: AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(db, &access, &actor, "rotate_link", &id).await?;
     let actor_id = actor.id().to_string();
     Ok(SalesSelectionService::new(db.clone())
         .with_authorization(access, actor)
@@ -390,14 +387,7 @@ pub(crate) async fn image_key_checked(
 ///
 /// # 错误
 /// 不可见对象返回未找到。
-async fn require_action(
-    db: &Database,
-    access: &SelectionAccess,
-    actor: &AuditActor,
-    action: &str,
-    id: &str,
-) -> Result<()> {
-    let _ = db;
+async fn require_action(access: &SelectionAccess, actor: &AuditActor, action: &str, id: &str) -> Result<()> {
     let mut executor = NoTransaction;
     access.require_booklet(actor, action, id, &mut executor).await?;
     Ok(())

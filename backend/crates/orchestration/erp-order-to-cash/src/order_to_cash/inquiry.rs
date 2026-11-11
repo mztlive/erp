@@ -30,7 +30,7 @@ impl SalesOrderCommandProcess {
         round: u32,
         actor: &AuditActor,
     ) -> Result<InquirySalesBasis> {
-        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.require_rbac()?.clone())
+        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
             .require_sales(actor, "convert_sales", inquiry_id, &mut NoTransaction)
             .await?;
         Ok(InquirySalesBasis::from_inquiry(&inquiry, round, Instant::now())?)
@@ -57,7 +57,7 @@ impl SalesOrderCommandProcess {
                 "询价来源只适用于实物与服务销售，不能同时使用选品方案来源".into(),
             ));
         }
-        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.require_rbac()?.clone())
+        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
             .require_sales(actor, "convert_sales", &source.inquiry_id, executor)
             .await?;
         if request.customer_id.as_ref().is_some_and(|id| id.as_ref() != inquiry.customer_id) {

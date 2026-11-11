@@ -23,45 +23,32 @@ pub struct SupplierApiGovernanceProcess {
     db: Database,
     services: Arc<CatalogServices>,
     reference_registry: Arc<dyn SupplierReferenceRegistry>,
-    rbac: Option<SharedRbacService>,
+    rbac: SharedRbacService,
     gateway: Option<Arc<dyn SupplierApiGateway>>,
 }
 impl SupplierApiGovernanceProcess {
-    /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
+    /// 绑定应用数据库和必需授权源，未注入的引用元数据保持失败关闭。
     ///
     /// # 参数
     /// * `db` - 应用数据库。
+    /// * `rbac` - 应用共享的权威授权源。
     /// * `services` - 已装配的商品和供给对象授权。
     ///
     /// # 返回
-    /// 引用注册表为不可用实现、且未注入 RBAC 的流程。
+    /// 引用注册表为不可用实现的流程。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, services: Arc<CatalogServices>) -> Self {
+    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<CatalogServices>) -> Self {
         Self {
             db,
             services,
             reference_registry: Arc::new(
                 erp_supply::ports::supplier_reference_registry::UnavailableSupplierReferenceRegistry,
             ),
-            rbac: None,
+            rbac,
             gateway: None,
         }
-    }
-    /// 注入应用已有的权威 RBAC。消耗 `self`。
-    ///
-    /// # 参数
-    /// * `rbac` - 共享 RBAC 服务。
-    ///
-    /// # 返回
-    /// 换上该授权源后的流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
-        self.rbac = Some(rbac);
-        self
     }
     /// 复用组合根的引用注册表；不创建新的外部连接器。消耗 `self`。
     ///

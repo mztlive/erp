@@ -20,7 +20,7 @@ use erp_workflow::entity::work_item::{
 use id_generator::next_id;
 
 use super::*;
-use crate::FinancePostingPorts;
+use crate::{FinancePostingPorts, FinanceTaskPort};
 
 /// 最终审批通过后授予原逐行额度并派发指定出纳任务。
 /// # 参数
@@ -247,6 +247,13 @@ async fn audit_payment(
     Ok(())
 }
 
+/// 读取当前申请指定的付款任务并证明其正式办理资格。
+/// # 参数
+/// db、rbac、executor 为原事务能力；request、task_id、version、actor 为当前命令事实。
+/// # 返回
+/// 返回已校验申请关联、版本、责任人和工作流资格的任务。
+/// # 错误
+/// 任务不存在、申请关联或资格失效及读取失败时拒绝。
 pub(super) async fn authorize_task(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -255,16 +262,35 @@ pub(super) async fn authorize_task(
     version: u64,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<erp_workflow::entity::work_item::WorkItem> {
+) -> Result<WorkItem> {
     let task = db
         .work_items()
         .find_by_id(task_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("申请付款任务不存在".into()))?;
+    authorize_loaded_task(rbac.tasks.as_ref(), request, &task, version, actor, executor).await?;
+    Ok(task)
+}
+
+/// 复用调用方已读取的精确付款任务，在原执行器中重验正式办理资格。
+/// # 参数
+/// tasks、request、task 为原能力与已读事实，version、actor 为当前命令身份，executor 为原事务。
+/// # 返回
+/// 任务、申请、责任人和正式工作流资格均有效时成功。
+/// # 错误
+/// 任务版本、申请关联或状态失效、责任人不符及资格读取失败时拒绝。
+pub(super) async fn authorize_loaded_task(
+    tasks: &dyn FinanceTaskPort,
+    request: &PurchasePaymentRequest,
+    task: &WorkItem,
+    version: u64,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     if task.base.version != version {
         return Err(Error::ConflictError("付款任务版本已变化，请刷新后重试".into()));
     }
-    if !matches_purchase_payment_request_identity(&task, &request.base.id)
+    if !matches_purchase_payment_request_identity(task, &request.base.id)
         || request.work_item_id.as_deref() != Some(task.base.id.as_str())
         || task.subject_version != request.submission_version.to_string()
         || task.status != WorkItemStatus::Open
@@ -278,8 +304,8 @@ pub(super) async fn authorize_task(
     if !task.is_owned_by(actor.id()) {
         return Err(Error::Forbidden("只有该申请指定出纳可以登记付款".into()));
     }
-    rbac.tasks.ensure_domain_decision_access(actor, &task, executor).await?;
-    Ok(task)
+    tasks.ensure_domain_decision_access(actor, task, executor).await?;
+    Ok(())
 }
 
 fn allocations_by_account(
@@ -482,11 +508,21 @@ fn restored_task_matches(task: &WorkItem, request_id: &str, submission_version: 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::{PayableAccountId, PayableEntryId};
-    use erp_finance::entity::payable::{EntryDirection, PayableEntryData, PayableEntryType};
-    use erp_workflow::entity::work_item::WorkItemCloseData;
+    use erp_finance::entity::payable::{
+        EntryDirection, PayableEntryData, PayableEntryType, PaymentRequestLineData,
+        PurchasePaymentRequestData,
+    };
+    use erp_workflow::entity::work_item::{WorkItemCloseData, WorkItemType};
+    use erp_workflow::ports::FinanceResponsibilityPort;
+    use erp_workflow::service::work_item::ResolvedFinanceResponsibility;
+    use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
+    use persistence_core::NoTransaction;
 
     use super::*;
 
@@ -507,6 +543,129 @@ mod tests {
             "FKSQ-1",
         )
         .unwrap()
+    }
+
+    struct Tasks {
+        calls: AtomicUsize,
+        deny: bool,
+    }
+
+    #[async_trait]
+    impl FinanceResponsibilityPort for Tasks {
+        async fn resolve_finance_responsibility(
+            &self,
+            _: FinanceResponsibilityOperation,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> WorkflowResult<ResolvedFinanceResponsibility> {
+            panic!("付款任务资格检查不得重新分配负责人")
+        }
+
+        async fn resolve_return_finance_responsibility(
+            &self,
+            _: WorkItemType,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> WorkflowResult<ResolvedFinanceResponsibility> {
+            panic!("付款任务资格检查不得解析退货责任")
+        }
+    }
+
+    #[async_trait]
+    impl FinanceTaskPort for Tasks {
+        async fn ensure_domain_decision_access(
+            &self,
+            actor: &AuditActor,
+            task: &WorkItem,
+            _: &mut dyn Executor,
+        ) -> WorkflowResult<()> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(actor.id(), "cashier-1");
+            assert_eq!(task.base.id, "task-1");
+            if self.deny {
+                return Err(WorkflowError::Forbidden("付款资格已撤销".into()));
+            }
+            Ok(())
+        }
+
+        async fn ensure_item_access(
+            &self,
+            _: &AuditActor,
+            _: &WorkItem,
+            _: &mut dyn Executor,
+        ) -> WorkflowResult<()> {
+            panic!("付款任务办理资格不得替换为任务读取资格")
+        }
+    }
+
+    fn approved_request() -> PurchasePaymentRequest {
+        let mut request = PurchasePaymentRequest::new(
+            "request-1".into(),
+            PurchasePaymentRequestData {
+                supplier_id: "supplier-1".into(),
+                payee_bank_account_id: "bank-1".into(),
+                execution_method: Default::default(),
+                lines: vec![PaymentRequestLineData {
+                    payable_account_id: "account-1".into(),
+                    amount: "10".parse().unwrap(),
+                }],
+                desired_payment_date: BusinessDate::from_ymd(2026, 11, 11).unwrap(),
+                reason: "支付已核对采购款".into(),
+                attachment_ids: vec![],
+            },
+            "buyer-1",
+        )
+        .unwrap();
+        request.status = PurchasePaymentRequestStatus::Approved;
+        request.submission_version = 2;
+        request.work_item_id = Some("task-1".into());
+        request
+    }
+
+    #[tokio::test]
+    async fn loaded_payment_task_keeps_the_formal_workflow_qualification_check() {
+        let task = request_task();
+        let actor = AuditActor::new("cashier-1".into(), "cashier".into(), AccountKind::Admin);
+        for deny in [false, true] {
+            let tasks = Tasks { calls: AtomicUsize::new(0), deny };
+            let result = authorize_loaded_task(
+                &tasks,
+                &approved_request(),
+                &task,
+                task.base.version,
+                &actor,
+                &mut NoTransaction,
+            )
+            .await;
+            assert_eq!(result.is_ok(), !deny);
+            assert_eq!(tasks.calls.load(Ordering::Relaxed), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn loaded_payment_task_rejects_stale_or_unrelated_facts_before_workflow_reads() {
+        let actor = AuditActor::new("cashier-1".into(), "cashier".into(), AccountKind::Admin);
+        let tasks = Tasks { calls: AtomicUsize::new(0), deny: false };
+        for mutation in 0..6 {
+            let mut request = approved_request();
+            let mut task = request_task();
+            let mut version = task.base.version;
+            match mutation {
+                0 => request.work_item_id = Some("other-task".into()),
+                1 => request.submission_version += 1,
+                2 => request.status = PurchasePaymentRequestStatus::Draft,
+                3 => task.owner_user_id = Some("other-cashier".into()),
+                4 => task.status = WorkItemStatus::Completed,
+                _ => version += 1,
+            }
+            assert!(
+                authorize_loaded_task(&tasks, &request, &task, version, &actor, &mut NoTransaction,)
+                    .await
+                    .is_err(),
+                "mutation {mutation}"
+            );
+        }
+        assert_eq!(tasks.calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]

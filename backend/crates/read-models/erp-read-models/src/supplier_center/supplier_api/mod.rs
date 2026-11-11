@@ -17,24 +17,25 @@ mod references;
 /// 供应连接跨域只读入口。
 pub struct SupplierApiReadService {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    rbac: SharedRbacService,
     reference_registry: Option<Arc<dyn SupplierReferenceRegistry>>,
     supplier_access: Option<SupplierAccess>,
     gateway: Option<Arc<dyn SupplierApiGateway>>,
 }
 impl SupplierApiReadService {
-    /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
+    /// 复用应用数据库与权威身份服务。
     ///
     /// # 参数
     /// * `db` - 应用数据库。
+    /// * `rbac` - 当前身份服务。
     ///
     /// # 返回
-    /// 返回未注入 RBAC 和引用注册表的读取服务。构造不执行查询。
+    /// 返回已绑定身份服务的读取服务。构造不执行查询。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db, rbac: None, reference_registry: None, supplier_access: None, gateway: None }
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+        Self { db, rbac, reference_registry: None, supplier_access: None, gateway: None }
     }
 
     /// 注入供应商对象范围，目录读取不得因具有连接角色而扩大数据范围。
@@ -46,20 +47,6 @@ impl SupplierApiReadService {
     /// 不返回错误；实际读取时重新检查授权。
     pub fn with_supplier_access(mut self, access: SupplierAccess) -> Self {
         self.supplier_access = Some(access);
-        self
-    }
-    /// 注入应用已有的权威 RBAC。
-    ///
-    /// # 参数
-    /// * `rbac` - 应用已有的 RBAC 服务。
-    ///
-    /// # 返回
-    /// 消耗当前服务并返回已写入 `rbac` 的同一服务。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
-        self.rbac = Some(rbac);
         self
     }
     /// 复用组合根的引用注册表；不创建新的外部连接器。

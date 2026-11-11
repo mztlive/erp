@@ -23,7 +23,6 @@ use persistence_core::{Executor, mongo_ops};
 pub struct CompiledScope {
     compiled: Arc<CompiledAccess>,
     authorization: AuthorizationService,
-    filter: Document,
     pub scope_version: String,
     pub policy_version: u64,
     pub organization_version: u64,
@@ -35,15 +34,15 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 返回身份域已编译的完整授权条件。
+    /// 返回身份域编译的完整授权阶段。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 完整 MongoDB 条件。
+    /// 必须在分页、计数与投影前完整执行的聚合阶段。
     /// # 错误
     /// 不执行 I/O。
-    pub fn document(&self) -> Document {
-        self.filter.clone()
+    pub fn stages(&self) -> &[Document] {
+        self.compiled.stages()
     }
     /// 复验账号、权限、版本和有效期。
     /// # 参数
@@ -206,13 +205,6 @@ impl Authorization {
         let query = self.service.query(actor, &permission, AccessSubject::Direct, executor).await?;
         let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
         self.service.validate(&compiled, executor).await?;
-        let [stage] = compiled.stages() else {
-            return Err(erp_identity::Error::ValidationError("共享资料查询产生未支持的关联阶段".into()));
-        };
-        let filter = stage
-            .get_document("$match")
-            .map_err(|_| erp_identity::Error::ValidationError("共享资料查询缺少授权条件".into()))?
-            .clone();
         Ok(CompiledScope {
             scope_version: compiled.version(),
             policy_version: compiled.policy_version(),
@@ -220,7 +212,6 @@ impl Authorization {
             as_of: compiled.as_of(),
             compiled,
             authorization: self.service.clone(),
-            filter,
         })
     }
 

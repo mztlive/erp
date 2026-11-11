@@ -1,8 +1,8 @@
-//! 供应商授权条件；由应用层完成 DataScope 解析后再交给仓储。
+//! 供应商仓储完整执行 identity 编译阶段，不解释权限规则。
 
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Repository, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Repository, aggregate};
 use serde::Deserialize;
 
 use super::supplier::SupplierAccountFilter;
@@ -47,21 +47,18 @@ impl SupplierAccountRepositoryScopeExt for Repository<'_, SupplierAccount> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<SupplierVersion>> {
         filter.authorized_scope.validate(executor).await?;
-        let result: persistence_core::Result<_> = async {
-            mongo_ops::find_many(
-                &self.collection().clone_with_type::<SupplierVersion>(),
-                filter.to_doc(),
-                FindOptions::builder()
-                    .projection(doc! { "id": 1, "version": 1 })
-                    .sort(doc! { "id": 1 })
-                    .limit(10001)
-                    .build(),
-                executor,
-            )
-            .await
-        }
-        .await;
-        let result = result?;
+        let result = aggregate::find(
+            &self.collection().clone_with_type::<SupplierVersion>(),
+            filter.to_doc(),
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "version": 1 })
+                .sort(doc! { "id": 1 })
+                .limit(10001)
+                .build(),
+            filter.authorized_scope.stages().to_vec(),
+            executor,
+        )
+        .await?;
         filter.authorized_scope.validate(executor).await?;
         Ok(result)
     }

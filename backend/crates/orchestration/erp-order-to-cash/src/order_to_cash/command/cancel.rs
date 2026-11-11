@@ -49,7 +49,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
-        let access = self.command_access(actor, "cancel_approval")?;
+        let access = self.command_access(actor, "cancel_approval");
         let authorized_order = access.current(id, &mut NoTransaction).await?;
         let mut order = authorized_order;
         let expected_order_version = order.base.version;

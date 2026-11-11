@@ -2,6 +2,7 @@
 mod access;
 mod dto;
 mod engine;
+mod policy;
 mod status;
 mod store;
 mod tasks;
@@ -16,7 +17,6 @@ pub use dto::{JdVopAuthorizationRequest, JdVopAuthorizationStatus, JdVopAuthoriz
 use engine::AuthorizationEngine;
 use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
-use erp_supplier::SupplierAccess;
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
 pub use erp_supply::ports::jd_vop::authorization::{AuthorizationError, Result};
 use mongodb::Database;
@@ -45,17 +45,10 @@ impl JdVopAuthorizationProcess {
         db: Database,
         settings: Option<&JdVopConfig>,
         rbac: SharedRbacService,
-        supplier_access: SupplierAccess,
         tasks: Arc<JdVopAuthorizationTasks>,
         http: Result<Arc<dyn AuthorizationHttp>>,
     ) -> Self {
-        let access = ConnectionAccess {
-            db,
-            rbac,
-            supplier_access,
-            settings: settings.cloned(),
-            protocol: http.clone(),
-        };
+        let access = ConnectionAccess { db, rbac, settings: settings.cloned(), protocol: http.clone() };
         let engine = settings
             .ok_or(AuthorizationError::Unavailable)
             .and_then(|settings| AuthorizationEngine::new(access.clone(), settings, tasks, http?));

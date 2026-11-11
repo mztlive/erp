@@ -217,8 +217,7 @@ impl AuditedCommand for ProductHandoverCommand {
         }
         ensure_target_qualified(&self.db, &self.rbac, self.req.target_user_id.trim(), executor).await?;
         ensure_org_enabled(&self.db, self.req.target_org_unit_id.as_deref(), executor).await?;
-        let before = self.ports.access.require_product(&self.actor, "update", &self.id, executor).await?;
-        let view =
+        let (before, view) =
             self.ports.service.apply_product_handover(&self.id, &self.req, &self.actor, executor).await?;
         let receipt = ProductHandoverReceipt::new(&self.command, view.clone(), self.event_id.clone())?;
         self.db.product_handover_receipts().create(&receipt, executor).await?;

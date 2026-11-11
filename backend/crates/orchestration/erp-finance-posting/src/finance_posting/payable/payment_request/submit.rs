@@ -256,9 +256,9 @@ impl SubmitWrite<'_> {
             return Ok(id);
         }
         let mut request = load(db, id, executor).await?;
-        require_sources(db, rbac, &request, actor, "submit", executor).await?;
+        let sources = require_sources(db, rbac, &request, actor, "submit", executor).await?;
         ensure_version(&request, req.expected_version)?;
-        let submission = source::prepare_submission(db, rbac, &request, actor, true, executor).await?;
+        let submission = source::prepare_submission(db, &sources, &request, actor, true, executor).await?;
         request.submit(submission)?;
         db.purchase_payment_requests().update(&mut request, executor).await?;
         let binding = bind(db, rbac, &request, actor, executor).await?;
@@ -284,7 +284,7 @@ impl SubmitWrite<'_> {
     ) -> Result<PlannedWrites> {
         let Self { db, rbac, req, actor, .. } = *self;
         let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
-        let graph = resolve_approvers(db, graph, actor.id(), executor).await?;
+        let graph = resolve_approvers(db, &rbac.identity, graph, actor.id(), executor).await?;
         let context =
             BindingRevalidationContext::new(request.payer_party_id.clone(), request.created_by.clone())
                 .with_business_org_unit_id(request.org_unit_id.clone());

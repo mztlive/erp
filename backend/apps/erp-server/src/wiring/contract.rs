@@ -1,6 +1,5 @@
 //! 合同客户、身份、参与与审计 adapter。
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -9,14 +8,13 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_contract::authorization::ContractAuthorization;
 use erp_contract::{
-    AccountNamePort, ContractAuditPort, ContractParticipantPort, ContractService, CustomerAccountFact,
-    CustomerFactsPort, Error as ContractError, PreparedContractAudit,
+    ContractAuditPort, ContractParticipantPort, ContractService, CustomerAccountFact, CustomerFactsPort,
+    Error as ContractError, PreparedContractAudit,
 };
 use erp_core::ids::CustomerAccountId;
 use erp_customer::CustomerExt;
 use erp_customer::repository::prelude::*;
-use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, SharedRbacService};
+use erp_identity::SharedRbacService;
 use erp_workflow::repository::document_registry::participant_access;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::{DocumentRegistryExt, Error as WorkflowError};
@@ -217,71 +215,6 @@ impl ContractParticipantPort for MongoContractParticipants {
     }
 }
 
-/// 为合同列表读取账号显示名的 Mongo adapter。
-#[derive(Clone)]
-pub struct MongoContractAccounts {
-    db: Database,
-}
-
-impl MongoContractAccounts {
-    /// 绑定身份账号集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 身份账号集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db }
-    }
-
-    /// 包装为合同域可注入的账号名称 Port。
-    ///
-    /// # 参数
-    /// * `db` - 身份账号集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回共享的账号名称 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn shared(db: Database) -> Arc<dyn AccountNamePort> {
-        Arc::new(Self::new(db))
-    }
-}
-
-#[async_trait]
-impl AccountNamePort for MongoContractAccounts {
-    async fn ensure_enabled(
-        &self,
-        account_ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<()> {
-        for id in account_ids {
-            let account = self
-                .db
-                .accounts()
-                .find_account(id, executor)
-                .await
-                .map_err(map_identity_to_contract)?
-                .ok_or_else(|| ContractError::NotFound("共享销售账号不存在".into()))?;
-            account.ensure_can_login().map_err(|error| ContractError::ValidationError(error.to_string()))?;
-        }
-        Ok(())
-    }
-
-    async fn names_by_ids(&self, account_ids: &[String]) -> erp_contract::Result<HashMap<String, String>> {
-        self.db
-            .accounts()
-            .names_by_ids(account_ids, &mut NoTransaction)
-            .await
-            .map_err(map_identity_to_contract)
-    }
-}
-
 /// 构造只装载合同事实的服务；授权能力 失败关闭。
 ///
 /// # 参数
@@ -300,7 +233,6 @@ pub fn contract_service(db: Database) -> ContractService {
         db.clone(),
         MongoContractAudit::shared(db.clone()),
         MongoContractCustomers::shared(db.clone()),
-        MongoContractAccounts::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
         ContractAuthorization::unwired(db),
     )
@@ -325,7 +257,6 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
         db.clone(),
         MongoContractAudit::shared(db.clone()),
         MongoContractCustomers::shared(db.clone()),
-        MongoContractAccounts::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
         contract_authorization(db, rbac),
     )
@@ -361,10 +292,6 @@ fn customer_account_fact(account: erp_customer::CustomerAccount) -> CustomerAcco
 map_audit_error!(fn map_audit_to_contract -> erp_contract);
 
 fn map_customer_to_contract(error: persistence_core::Error) -> erp_contract::Error {
-    erp_contract::Error::from(error)
-}
-
-fn map_identity_to_contract(error: persistence_core::Error) -> erp_contract::Error {
     erp_contract::Error::from(error)
 }
 

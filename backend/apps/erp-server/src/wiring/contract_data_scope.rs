@@ -152,16 +152,14 @@ pub fn contract_authorization(db: Database, rbac: SharedRbacService) -> Contract
         write: builder.service("update").expect("固定合同写入目录有效"),
         creation: Arc::new(CreationAccess {
             db: db.clone(),
-            rbac: rbac.clone(),
             model: builder.creation().expect("固定合同客户来源目录有效"),
         }),
     };
-    ContractAuthorization::new(db, rbac, models)
+    ContractAuthorization::new(db, models)
 }
 
 struct CreationAccess {
     db: Database,
-    rbac: SharedRbacService,
     model: (AuthorizationService, Arc<dyn AccessMapping>),
 }
 
@@ -194,12 +192,7 @@ impl ContractCreationPort for CreationAccess {
         if rows.is_empty() {
             return Err(erp_contract::Error::Forbidden("当前账号无权为该客户归档合同".into()));
         }
-        Ok(scope(
-            compiled,
-            service.clone(),
-            self.rbac.policy_revision_with_executor(executor).await.map_err(map_identity_error)?,
-            OrganizationRepository::new(&self.db).state(executor).await?.version,
-        ))
+        Ok(scope(compiled, service.clone()))
     }
 }
 

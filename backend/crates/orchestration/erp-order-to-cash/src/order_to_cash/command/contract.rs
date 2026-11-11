@@ -73,7 +73,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         let db = self.db.clone();
         let client = db.client().clone();
         let id_owned = id.to_string();
@@ -114,7 +114,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<ContractBindingCheck> {
         req.validate()?;
-        let access = self.command_access(actor, "update")?;
+        let access = self.command_access(actor, "update");
         let order = access.current(id, &mut NoTransaction).await?;
         let (check, _) = contract_binding_check(&self.db, &access, &order, &req, &mut NoTransaction).await?;
         Ok(check)

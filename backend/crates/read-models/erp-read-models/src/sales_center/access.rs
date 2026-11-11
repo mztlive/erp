@@ -7,9 +7,7 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::repository::OrganizationRepository;
-use erp_identity::{
-    AccessTarget, AuthorizationService, CompiledAccess, Permission, ResourceTargets, SharedRbacService,
-};
+use erp_identity::{AccessTarget, Permission, ResourceTargets, SharedRbacService};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
@@ -26,8 +24,7 @@ use crate::{Error, Result};
 pub struct SalesReadContext {
     pub scope_version: String,
     pub as_of: Instant,
-    pub compiled: Arc<CompiledAccess>,
-    authorization: AuthorizationService,
+    scope: SalesReadScope,
 }
 impl SalesReadContext {
     /// 组合业务版本，不改变 identity 凭证。
@@ -48,7 +45,7 @@ impl SalesReadContext {
     /// # 错误
     /// 返回 identity 的原始分类。
     pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.authorization.validate(&self.compiled, executor).await?;
+        self.scope.validate(executor).await?;
         Ok(())
     }
 }
@@ -94,7 +91,6 @@ impl SalesAccess {
                         .find_authorized(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
-                    context.validate(executor).await?;
                     let version =
                         format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                     Ok((order, version))
@@ -148,13 +144,13 @@ impl SalesAccess {
         let query = authorization.query(actor, &permission, subject, executor).await?;
         let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
         authorization.validate(&compiled, executor).await?;
+        let scope = SalesReadScope::from_compiled(compiled.clone(), authorization);
         let context = SalesReadContext {
             scope_version: compiled.version(),
             as_of: Instant::now(),
-            compiled: compiled.clone(),
-            authorization: authorization.clone(),
+            scope: scope.clone(),
         };
-        Ok((context, SalesReadScope::from_compiled(compiled, authorization)))
+        Ok((context, scope))
     }
     /// 在当前写事务验证完整销售对象；状态校验由业务执行。
     /// # 参数

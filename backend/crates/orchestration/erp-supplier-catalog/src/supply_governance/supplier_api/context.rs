@@ -26,7 +26,7 @@ impl SupplierApiGovernanceProcess {
         let permission = action_permission(action);
         self.ensure_permission(actor, permission).await
     }
-    /// 要求当前账号持有指定权限；未注入 RBAC 时视为无权。
+    /// 要求当前账号持有指定权限；设施错误保持原分类。
     ///
     /// # 参数
     /// * `actor` - 当前认证账号。
@@ -38,29 +38,13 @@ impl SupplierApiGovernanceProcess {
     /// # 错误
     /// 无权时返回 `Forbidden`；权限码无法解析或鉴权读取失败时返回对应错误。
     pub(super) async fn ensure_permission(&self, actor: &AuditActor, permission: &str) -> Result<()> {
-        if self.has_permission(actor, permission).await? {
-            return Ok(());
-        }
-        Err(Error::Forbidden("当前角色不能执行该连接治理动作".to_string()))
-    }
-    /// 查询当前账号是否持有指定权限。未注入 RBAC 时返回 `false`，不视为错误。
-    ///
-    /// # 参数
-    /// * `actor` - 当前认证账号。
-    /// * `permission` - 权限码。
-    ///
-    /// # 返回
-    /// 持有权限时为 `true`；未注入 RBAC 或不持有时为 `false`。
-    ///
-    /// # 错误
-    /// 权限码无法解析或鉴权读取失败时返回对应错误。
-    pub(super) async fn has_permission(&self, actor: &AuditActor, permission: &str) -> Result<bool> {
-        let Some(rbac) = self.rbac.as_ref() else {
-            return Ok(false);
-        };
         let permission = Permission::parse(permission)?;
-        Ok(AuthorizationService::new(self.db.clone(), rbac.clone(), AuthorizationRegistry::default())
+        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
             .has_permission(actor, &permission, &mut NoTransaction)
-            .await?)
+            .await?
+        {
+            return Err(Error::Forbidden("当前角色不能执行该连接治理动作".to_string()));
+        }
+        Ok(())
     }
 }

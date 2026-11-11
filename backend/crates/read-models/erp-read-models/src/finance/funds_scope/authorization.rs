@@ -217,11 +217,8 @@ impl FundsAccess {
     ) -> Result<Vec<String>> {
         let mut allowed = Vec::new();
         for batch in ids.chunks(500) {
-            let rows = self
-                .db
-                .sales_orders()
-                .scope_order_versions(batch, &authorization.sales, &authorization.sales, executor)
-                .await?;
+            let rows =
+                self.db.sales_orders().scope_order_versions(batch, &authorization.sales, executor).await?;
             allowed.extend(rows.into_iter().map(|row| row.id));
         }
         Ok(allowed)

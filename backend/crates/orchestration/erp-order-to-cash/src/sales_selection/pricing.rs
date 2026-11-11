@@ -35,7 +35,8 @@ impl SalesSelectionProcess {
             registered_action("sales_selection_booklet.update_prices", "sales_selection_booklet")?,
         )?
         .with_target(Some(id.clone()), None)?;
-        let command = PriceCommand { db: self.db.clone(), access: self.selection_access()?, id, req, actor };
+        let command =
+            PriceCommand { db: self.db.clone(), access: self.services.selections.clone(), id, req, actor };
         let mut view = run_audited_event(&self.db, context, command).await?;
         enrich_selection_prices(&self.db, &mut view, &mut NoTransaction).await?;
         Ok(view)

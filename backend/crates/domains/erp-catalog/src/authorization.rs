@@ -1,4 +1,5 @@
 //! 本域授权登记和持久化事实；所有判定与条件均由身份域生成。
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -23,7 +24,6 @@ use persistence_core::{Executor, mongo_ops};
 pub struct CompiledScope {
     compiled: Arc<CompiledAccess>,
     authorization: AuthorizationService,
-    filter: Document,
     pub scope_version: String,
     pub policy_version: u64,
     pub organization_version: u64,
@@ -35,15 +35,15 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 返回身份域已编译的完整授权条件。
+    /// 返回身份域编译的完整授权阶段。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 完整 MongoDB 条件。
+    /// 必须在分页、计数与投影前完整执行的聚合阶段。
     /// # 错误
     /// 不执行 I/O。
-    pub fn document(&self) -> Document {
-        self.filter.clone()
+    pub fn stages(&self) -> &[Document] {
+        self.compiled.stages()
     }
     /// 复验账号、权限、版本和有效期。
     /// # 参数
@@ -133,6 +133,8 @@ impl AccessFactsPort for Facts {
 /// 固定资源目录及事实映射；每次调用独立读取当前授权。
 #[derive(Clone)]
 pub(crate) struct Authorization {
+    db: Database,
+    rbac: SharedRbacService,
     service: AuthorizationService,
     mapping: Arc<dyn AccessMapping>,
     resource: String,
@@ -181,6 +183,8 @@ impl Authorization {
             });
         }
         Ok(Self {
+            db: db.clone(),
+            rbac: rbac.clone(),
             service: AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::new(entries)?),
             mapping,
             resource: resource.into(),
@@ -206,13 +210,6 @@ impl Authorization {
         let query = self.service.query(actor, &permission, AccessSubject::Direct, executor).await?;
         let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
         self.service.validate(&compiled, executor).await?;
-        let [stage] = compiled.stages() else {
-            return Err(erp_identity::Error::ValidationError("共享资料查询产生未支持的关联阶段".into()));
-        };
-        let filter = stage
-            .get_document("$match")
-            .map_err(|_| erp_identity::Error::ValidationError("共享资料查询缺少授权条件".into()))?
-            .clone();
         Ok(CompiledScope {
             scope_version: compiled.version(),
             policy_version: compiled.policy_version(),
@@ -220,7 +217,6 @@ impl Authorization {
             as_of: compiled.as_of(),
             compiled,
             authorization: self.service.clone(),
-            filter,
         })
     }
 
@@ -248,6 +244,32 @@ impl Authorization {
             .await
     }
 
+    /// 在原写事务检查拟创建商品的完整授权。
+    /// # 参数
+    /// actor 为当前账号，id 为即将写入的真实商品主键，executor 为原写执行器。
+    /// # 返回
+    /// 固定创建政策允许该目标时成功。
+    /// # 错误
+    /// 主键非法、账号无效、功能资格或共享资料范围失效时返回错误。
+    pub(crate) async fn require_create(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<()> {
+        let targets = ResourceTargets::new(&[id])?;
+        let permission = Permission::parse("product:create")?;
+        let registry = creation_registry(id)?;
+        AuthorizationService::new(self.db.clone(), self.rbac.clone(), registry)
+            .require(
+                actor,
+                &permission,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: targets },
+                executor,
+            )
+            .await
+    }
+
     /// 使用固定目录的身份设施读取当前功能资格。
     /// # 参数
     /// actor 为当前账号，permission 为具体功能权限，executor 为原执行器。
@@ -262,5 +284,83 @@ impl Authorization {
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<bool> {
         self.service.has_permission(actor, permission, executor).await
+    }
+}
+
+/// 创建事实只绑定本次命令的真实新商品身份，不读取尚未持久化的行。
+struct CreationFacts(ObjectFacts);
+
+#[async_trait]
+impl AccessFactsPort for CreationFacts {
+    async fn load(
+        &self,
+        context: &AccessContext,
+        ids: &ResourceTargets,
+        _: &mut dyn Executor,
+    ) -> erp_identity::Result<Vec<ObjectFacts>> {
+        if context.resource != self.0.resource || ids.ids() != &BTreeSet::from([self.0.id.clone()]) {
+            return Err(erp_identity::Error::ValidationError("商品创建授权目标不匹配".into()));
+        }
+        Ok(vec![self.0.clone()])
+    }
+}
+
+fn creation_registry(id: &str) -> erp_identity::Result<AuthorizationRegistry> {
+    let permission = Permission::parse("product:create")?;
+    let facts = ObjectFacts {
+        resource: "product".into(),
+        id: id.into(),
+        version: "proposed".into(),
+        ..Default::default()
+    };
+    AuthorizationRegistry::new(vec![AccessRegistration {
+        permission: permission.clone(),
+        required_permissions: vec![],
+        access: AccessMode::Object {
+            data: DataAccess {
+                subject: AccessSubject::Direct,
+                required_facts: Default::default(),
+                policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
+            },
+            facts: Arc::new(CreationFacts(facts)),
+        },
+    }])
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
+
+    use super::*;
+
+    fn context() -> AccessContext {
+        AccessContext {
+            actor: AuditActor::new("actor".into(), "Actor".into(), AccountKind::Admin),
+            permission: Permission::parse("product:create").unwrap(),
+            resource: "product".into(),
+            model: None,
+            as_of: Instant::from_unix_secs(0),
+        }
+    }
+
+    #[tokio::test]
+    async fn proposed_creation_facts_are_stable_and_bound_to_the_new_product() {
+        let fact = ObjectFacts {
+            resource: "product".into(),
+            id: "new-product".into(),
+            version: "proposed".into(),
+            ..Default::default()
+        };
+        let port = CreationFacts(fact.clone());
+        let targets = ResourceTargets::new(&["new-product"]).unwrap();
+        let mut executor = NoTransaction;
+        assert_eq!(port.load(&context(), &targets, &mut executor).await.unwrap(), vec![fact]);
+        assert!(creation_registry("new-product").is_ok());
+        let other = ResourceTargets::new(&["other-product"]).unwrap();
+        assert!(port.load(&context(), &other, &mut executor).await.is_err());
+        let mut wrong_resource = context();
+        wrong_resource.resource = "supplier".into();
+        assert!(port.load(&wrong_resource, &targets, &mut executor).await.is_err());
     }
 }

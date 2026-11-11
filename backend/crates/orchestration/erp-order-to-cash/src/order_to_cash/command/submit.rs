@@ -220,7 +220,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SubmissionView> {
         req.validate()?;
-        let access = self.command_access(actor, "submit")?;
+        let access = self.command_access(actor, "submit");
         let authorized_order = access.current(id, &mut NoTransaction).await?;
         let identity = SubmissionIdentity::new(id, &req, actor)?;
         if let Some(existing) = self
@@ -437,6 +437,7 @@ impl SalesOrderCommandProcess {
             access: context.access,
             expected_order_version: context.expected_order_version,
             input: SalesOrderStartPersistInput {
+                identity: self.rbac.clone(),
                 resubmission_reason: start.resubmission_reason,
                 order: start.order,
                 working_copy: start.working_copy,
@@ -463,7 +464,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
         idempotency_key: &str,
     ) -> Result<SalesSubmissionApprovalContext> {
-        let access = self.command_access(actor, "submit")?;
+        let access = self.command_access(actor, "submit");
         let expected_order_version = start.order.base.version;
         let ports = sales_approval_ports(start.order.business_type)?;
         let subject = subject_ref_for_sales_business(start.order.business_type, start.id)
@@ -519,9 +520,15 @@ impl SalesOrderCommandProcess {
             idempotency_key,
         )
         .await?;
-        let graph =
-            resolve_start_approvers(&self.db, graph, actor.id(), receipt.as_ref(), &mut NoTransaction)
-                .await?;
+        let graph = resolve_start_approvers(
+            &self.db,
+            &self.rbac,
+            graph,
+            actor.id(),
+            receipt.as_ref(),
+            &mut NoTransaction,
+        )
+        .await?;
         let input = build_sales_order_start_input(SalesOrderStartInput {
             resubmission_reason: start.resubmission_reason.clone(),
             graph,
@@ -553,7 +560,7 @@ impl SalesOrderCommandProcess {
         let expected_key_hash = expected_key_hash.clone();
         let sales_order_id = sales_order_id.to_string();
         let actor_id = actor.id().to_string();
-        let access = self.command_access(actor, "submit")?;
+        let access = self.command_access(actor, "submit");
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -587,7 +594,7 @@ impl SalesOrderCommandProcess {
             document_type: input.document_type,
             subject_version: input.subject_version,
         };
-        let access = self.command_access(input.actor, "submit")?;
+        let access = self.command_access(input.actor, "submit");
         let started = self
             .db
             .client()

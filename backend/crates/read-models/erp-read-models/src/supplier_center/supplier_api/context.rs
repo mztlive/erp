@@ -1,6 +1,7 @@
 use application_core::AuditActor;
+use erp_core::Result as CoreResult;
 use erp_core::ids::SupplierApiConnectionId;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, PermissionSet};
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierConnectionAction, SupplierHealthCheckRun,
 };
@@ -10,6 +11,9 @@ use persistence_core::NoTransaction;
 
 use super::SupplierApiReadService;
 use crate::Result;
+
+pub(super) const REFERENCE_METADATA_PERMISSION: &str = "supplier_api_connection:view_reference_metadata";
+
 pub(super) struct GovernanceContext {
     pub(super) health_runs: Vec<SupplierHealthCheckRun>,
 }
@@ -37,23 +41,27 @@ impl SupplierApiReadService {
             .await?;
         Ok(GovernanceContext { health_runs })
     }
-    /// 判断操作人是否持有该连接动作要求的权限。
+    /// 在同次身份快照读取连接详情的全部独立功能资格。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人。
-    /// * `action` - 供应连接动作。
     ///
     /// # 返回
-    /// 持有对应权限时返回 `true`。未注入 RBAC 时返回 `false`。
+    /// 返回已授予的动作与引用元数据权限；失效账号返回空集合。
     ///
     /// # 错误
     /// 权限码无法解析或 RBAC 执行失败时返回对应错误。
-    pub(super) async fn has_action_permission(
-        &self,
-        actor: &AuditActor,
-        action: SupplierConnectionAction,
-    ) -> Result<bool> {
-        self.has_permission(actor, action_permission(action)).await
+    pub(super) async fn connection_permissions(&self, actor: &AuditActor) -> Result<PermissionSet> {
+        let mut permissions = SupplierConnectionAction::all()
+            .into_iter()
+            .map(|action| Permission::parse(action_permission(action)))
+            .collect::<CoreResult<Vec<_>>>()?;
+        permissions.push(Permission::parse(REFERENCE_METADATA_PERMISSION)?);
+        Ok(AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+            .permissions(actor, &permissions, &mut NoTransaction)
+            .await?
+            .map(|qualified| qualified.permissions())
+            .unwrap_or_default())
     }
     /// 判断操作人是否持有给定权限码。
     ///
@@ -62,16 +70,13 @@ impl SupplierApiReadService {
     /// * `permission` - 权限码。
     ///
     /// # 返回
-    /// 持有权限时返回 `true`。未注入 RBAC 时返回 `false`，不把它当成授权通过。
+    /// 持有权限时返回 `true`；账号失效或未授予时返回 `false`。
     ///
     /// # 错误
     /// 权限码无法解析或 RBAC 执行失败时返回对应错误。
     pub(super) async fn has_permission(&self, actor: &AuditActor, permission: &str) -> Result<bool> {
-        let Some(rbac) = self.rbac.as_ref() else {
-            return Ok(false);
-        };
         let permission = Permission::parse(permission)?;
-        Ok(AuthorizationService::new(self.db.clone(), rbac.clone(), AuthorizationRegistry::default())
+        Ok(AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
             .has_permission(actor, &permission, &mut NoTransaction)
             .await?)
     }

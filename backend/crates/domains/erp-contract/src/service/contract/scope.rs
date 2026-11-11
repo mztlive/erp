@@ -1,6 +1,7 @@
 //! 合同列表与范围指标的一致授权快照；范围与业务版本跨页携带。
 
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
+use erp_identity::AccountDirectoryService;
 use persistence_core::Transactional;
 use serde_json::to_vec;
 
@@ -57,7 +58,7 @@ impl ContractService {
                         &db,
                         &data_scope,
                         customers.as_ref(),
-                        accounts.as_ref(),
+                        &accounts,
                         &context,
                         &query,
                         executor,
@@ -100,7 +101,7 @@ impl ContractService {
                         &db,
                         &data_scope,
                         customers.as_ref(),
-                        accounts.as_ref(),
+                        &accounts,
                         &context,
                         &query,
                         executor,
@@ -121,7 +122,7 @@ impl ContractService {
 /// * `db` - 合同数据库
 /// * `data_scope` - 组织展开与成员事实 Port
 /// * `customers` - 客户编号事实
-/// * `accounts` - 账号显示名 Port
+/// * `accounts` - identity 公开账号目录
 /// * `context` - 已解析的合同范围事实
 /// * `query` - 归一化查询
 /// * `executor` - 调用方执行器
@@ -136,7 +137,7 @@ async fn load_list_filter_and_search(
     db: &mongodb::Database,
     data_scope: &ContractAuthorization,
     customers: &dyn crate::ports::CustomerFactsPort,
-    accounts: &dyn crate::ports::AccountNamePort,
+    accounts: &AccountDirectoryService,
     context: &ContractResolvedScope,
     query: &ContractListQuery,
     executor: &mut dyn persistence_core::Executor,
@@ -156,7 +157,7 @@ async fn load_list_filter_and_search(
     let customer_facts = super::query::list_customer_facts_with(customers, &ids, executor).await?;
     filter.require_existing_customers(customer_facts.iter().map(|fact| fact.id.clone()).collect());
     let owner_ids = db.contract().list_owner_ids(&filter, executor).await?;
-    let owner_names = accounts.names_by_ids(&owner_ids).await?;
+    let owner_names = accounts.names(&owner_ids, executor).await?;
     let search = ContractSearch {
         q: query.q.clone(),
         metric: query.metric,

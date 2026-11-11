@@ -39,7 +39,6 @@ fn process(state: &HttpState) -> SalesSelectionProcess {
         state.application().config_snapshot().app.secret.as_bytes(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
     )
-    .with_rbac(state.application().rbac())
 }
 
 /// 查询选品册列表。

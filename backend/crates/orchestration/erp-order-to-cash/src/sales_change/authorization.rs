@@ -38,12 +38,12 @@ impl SalesChangeProcess {
         &self,
         actor: &AuditActor,
         action: &'static str,
-    ) -> Result<SalesChangeCommandAccess> {
-        Ok(SalesChangeCommandAccess {
+    ) -> SalesChangeCommandAccess {
+        SalesChangeCommandAccess {
             access: SalesAccess::new(self.db.clone(), self.rbac.clone()),
             actor: actor.clone(),
             action,
-        })
+        }
     }
 }
 

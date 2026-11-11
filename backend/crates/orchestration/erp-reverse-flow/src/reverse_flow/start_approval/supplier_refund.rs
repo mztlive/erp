@@ -267,8 +267,8 @@ pub async fn persist_supplier_refund_runtime(
     let context = StartTaskContext { document_type: DocumentType::SupplierRefund, ..context };
     let mut snapshot = persist_start_runtime(
         db,
+        &rbac.identity,
         writes,
-        context.document_type,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交供应商退款",

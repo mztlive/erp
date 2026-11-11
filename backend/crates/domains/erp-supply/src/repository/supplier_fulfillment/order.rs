@@ -2,6 +2,8 @@
 
 #![allow(async_fn_in_trait)]
 
+use persistence_core::aggregate;
+
 use super::*;
 use crate::ports::connector::order::OrderKey;
 
@@ -113,7 +115,7 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
     /// 供应商与履约、取消、退款状态按等值写入，`external_order_no` 按字面量正则匹配。
     /// 跟进人、业务组织与处理人订单经 `insert_id_in` 写入；空列表写成 `$expr: false`。
     /// `q` 在履约单号与外部订单号上取 `$or`。`view` 与 `aftersale_pending` 用 `$and` 追加，
-    /// `scope` 为 `Some` 时再与已有条件取 `$and`。
+    /// 授权阶段由仓储在业务筛选和分页前执行。
     ///
     /// # 参数
     /// 无。
@@ -155,9 +157,6 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
         and_optional(&mut filter, view_clause(self.view.as_deref()));
         if self.aftersale_pending {
             and_optional(&mut filter, Some(aftersale_pending_clause()));
-        }
-        if let Some(scope) = &self.scope {
-            filter = doc! { "$and": [filter, scope.document()] };
         }
         filter
     }
@@ -285,8 +284,9 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
             .projection(supplier_fulfillment_order_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierFulfillmentOrderRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let prefix = filter.scope.as_ref().map_or_else(Vec::new, |scope| scope.stages().to_vec());
+        let items = aggregate::find(&collection, filter.to_doc(), options, prefix.clone(), executor).await?;
+        let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
 
         if let Some(scope) = &filter.scope {
             scope.validate(executor).await?;

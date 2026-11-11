@@ -7,7 +7,8 @@
 //!
 //! 跨域事实只走消费方 Port：
 //! - D07 `party`：创建客户前校验主体存在、详情补充主体编号/当前法定名称；
-//! - D06 `access_control`：负责销售账号存在性校验。
+//!
+//! 账号事实与姓名直接使用 identity 的公开账号目录。
 //!
 //! 组合层持有根事务时必须调用显式 `executor` 的事务内接口，不得再开事务。
 
@@ -16,6 +17,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
+use erp_identity::AccountDirectoryService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -29,7 +31,7 @@ use crate::entity::customer::{
     CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
 };
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, CustomerAuditPort, PartyFactPort, PartyIdentityFact};
+use crate::ports::{CustomerAuditPort, PartyFactPort, PartyIdentityFact};
 use crate::repository::prelude::*;
 use crate::repository::{CustomerAccountRow, CustomerExt};
 
@@ -51,7 +53,7 @@ pub struct CustomerService {
     db: Database,
     audit: Arc<dyn CustomerAuditPort>,
     party: Arc<dyn PartyFactPort>,
-    accounts: Arc<dyn AccountFactPort>,
+    accounts: AccountDirectoryService,
     access: CustomerAccess,
 }
 
@@ -62,7 +64,6 @@ impl CustomerService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `party` - 主体事实端口
-    /// * `accounts` - 账号事实端口
     /// * `access` - 客户统一授权访问器
     ///
     /// # 返回
@@ -77,10 +78,9 @@ impl CustomerService {
         db: Database,
         audit: Arc<dyn CustomerAuditPort>,
         party: Arc<dyn PartyFactPort>,
-        accounts: Arc<dyn AccountFactPort>,
         access: CustomerAccess,
     ) -> Self {
-        Self { db, audit, party, accounts, access }
+        Self { accounts: AccountDirectoryService::new(db.clone()), db, audit, party, access }
     }
 
     /// 创建客户（跨集合事务：customer_account + 首条 OWNER 归属 + 审计原子写入）。
@@ -111,7 +111,6 @@ impl CustomerService {
         req.validate()?;
         self.party.ensure_exists(&req.party_id).await?;
         let owner_user_id = actor.id().to_string();
-        self.accounts.ensure_can_login(&owner_user_id).await?;
         let (account, assignment) = prepare_new_customer(&req, actor.id())?;
         let audit =
             self.audit.resource_log(actor.clone(), "customer.create", "customer", account.base.id.clone())?;
@@ -122,10 +121,17 @@ impl CustomerService {
         let account_for_tx = account;
         let assignment_for_tx = assignment;
         let access = self.access.clone();
+        let accounts = self.accounts.clone();
         let actor_for_tx = actor.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    accounts
+                        .account(&owner_user_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
+                        .ensure_can_login()
+                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
                     access.require_create(&actor_for_tx, executor).await?;
                     persist_new_account(&db, &account_for_tx, &assignment_for_tx, executor).await?;
                     access

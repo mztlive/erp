@@ -376,10 +376,10 @@ impl Application {
     ) -> erp_supplier_catalog::supply_governance::SupplierApiGovernanceProcess {
         erp_supplier_catalog::supply_governance::SupplierApiGovernanceProcess::new(
             self.db(),
+            self.rbac(),
             crate::wiring::catalog_services(self.db(), self.rbac()),
         )
         .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
-        .with_rbac(self.rbac())
         .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
     }
 
@@ -387,9 +387,8 @@ impl Application {
     pub fn supplier_api_read_service(
         &self,
     ) -> erp_read_models::supplier_center::supplier_api::SupplierApiReadService {
-        erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(self.db())
+        erp_read_models::supplier_center::supplier_api::SupplierApiReadService::new(self.db(), self.rbac())
             .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
-            .with_rbac(self.rbac())
             .with_gateway(Arc::clone(&self.external_connectors.supplier_api))
             .with_supplier_access(supplier_access(self.db(), self.rbac()))
     }

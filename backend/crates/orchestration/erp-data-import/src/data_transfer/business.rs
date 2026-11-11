@@ -111,8 +111,7 @@ impl BusinessTransfers {
         for page in 1..=1000 {
             query["page"] = json!(page);
             query["page_size"] = json!(100);
-            self.access(kind, &query, actor).await?;
-            let response = self.reader.page(kind, &query, actor).await?;
+            let response = self.export_page(kind, &query, actor).await?;
             if response["empty_reason"] == "no_scope" {
                 return Err(Error::Forbidden("当前无可导出范围".into()));
             }
@@ -152,6 +151,19 @@ impl BusinessTransfers {
         }
         Err(Error::ValidationError("导出超过十万行，请缩小范围".into()))
     }
+    /// 已接入完整授权的列表由拥有域复验；无账号列表及报价的附加资格在读取前补验。
+    async fn export_page(&self, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
+        if matches!(
+            kind,
+            TransferKind::ProductPoolExcel
+                | TransferKind::SupplierQuoteArchive
+                | TransferKind::SupplierQuotePreview
+        ) || (kind == TransferKind::MasterData && query["resource"] == "sellable")
+        {
+            self.access(kind, query, actor).await?;
+        }
+        self.reader.page(kind, query, actor).await
+    }
     async fn check_final_scope(
         &self,
         kind: TransferKind,
@@ -159,7 +171,7 @@ impl BusinessTransfers {
         actor: &AuditActor,
         expected: Option<u64>,
     ) -> Result<()> {
-        let last = self.reader.page(kind, query, actor).await?;
+        let last = self.export_page(kind, query, actor).await?;
         if last["total"].as_u64() != expected
             || last["empty_reason"] == "no_scope"
             || last

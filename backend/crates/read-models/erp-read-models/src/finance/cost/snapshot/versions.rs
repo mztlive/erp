@@ -182,11 +182,7 @@ impl CostReadModel {
             .collect::<Vec<_>>();
         let mut orders = BTreeSet::new();
         for chunk in ids.chunks(500) {
-            let current = self
-                .db
-                .sales_orders()
-                .scope_order_versions(chunk, &access.sales, &access.sales, executor)
-                .await?;
+            let current = self.db.sales_orders().scope_order_versions(chunk, &access.sales, executor).await?;
             for order in current {
                 order.id.hash(&mut access.fingerprint);
                 order.version.hash(&mut access.fingerprint);

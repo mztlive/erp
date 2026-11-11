@@ -135,7 +135,7 @@ impl CatalogService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.ensure_writable(&actor, "update", executor).await?;
+                    access.require(&actor, "update", product_id.as_ref(), executor).await?;
                     for sku in &mut changed {
                         db.skus().update(sku, executor).await?;
                     }
@@ -193,7 +193,7 @@ impl CatalogService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.ensure_writable(&actor, "update", executor).await?;
+                    access.require(&actor, "update", sku.product_id.as_ref(), executor).await?;
                     db.skus().update(&mut sku, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<Sku, crate::error::Error>(sku)

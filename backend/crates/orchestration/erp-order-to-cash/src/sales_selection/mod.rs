@@ -13,7 +13,6 @@ mod scope_checks;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
 use erp_identity::service::business_ownership::required_business_org;
 use erp_read_models::sales_center::selection_pricing::enrich_selection_prices;
 use erp_sales::dto::sales_selection::{
@@ -32,8 +31,9 @@ use storage::S3Storage;
 
 use self::adapters::{CatalogAdapter, CustomerAdapter, ImageAdapter};
 use self::scope_checks::{
-    booklet_list_snapshot, copy_link_checked, delete_item_checked, image_key_checked, owner_display_names,
-    proposal_list_snapshot, publish_checked, rotate_link_checked, session_checked, start_prepare_checked,
+    booklet_list_snapshot, check_create_scope, copy_link_checked, delete_item_checked, image_key_checked,
+    owner_display_names, proposal_list_snapshot, publish_checked, rotate_link_checked, session_checked,
+    start_prepare_checked,
 };
 use crate::{Error, Result};
 
@@ -43,7 +43,6 @@ pub struct SalesSelectionProcess {
     db: Database,
     storage: S3Storage,
     crypto: LinkTokenCrypto,
-    rbac: Option<SharedRbacService>,
 }
 
 impl SalesSelectionProcess {
@@ -61,54 +60,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, storage: S3Storage, secret: &[u8], services: Arc<SalesServices>) -> Self {
-        Self { db, storage, services, crypto: LinkTokenCrypto::from_secret(secret), rbac: None }
-    }
-
-    /// 注入组合根的授权源；未注入时授权入口失败关闭。
-    ///
-    /// # 参数
-    /// * `rbac` - 当前 RBAC 快照
-    ///
-    /// # 返回
-    /// 返回已注入的流程。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得把 RBAC 交给选品域，只能用于组合层 adapter。
-    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
-        self.rbac = Some(rbac);
-        self
-    }
-
-    /// 返回列表与候选使用的授权源。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回注入的 RBAC。
-    ///
-    /// # 错误
-    /// 未注入时返回内部错误，不得补公司范围。
-    fn require_rbac(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Internal("选品范围授权未装配".into()))
-    }
-
-    /// 构造当前流程的选品范围访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已注入组合层 adapter 的访问器。
-    ///
-    /// # 错误
-    /// 未注入 RBAC 时拒绝。
-    fn selection_access(&self) -> Result<erp_sales::service::sales_selection::SelectionAccess> {
-        self.require_rbac()?;
-        Ok(self.services.selections.clone())
+        Self { db, storage, services, crypto: LinkTokenCrypto::from_secret(secret) }
     }
 
     /// 创建选品册并排队首次准备。
@@ -131,7 +83,6 @@ impl SalesSelectionProcess {
         let password_hash = public_access::password_hash(req.access_password.clone()).await?;
         let db = self.db.clone();
         let customer = CustomerAdapter { service: self.services.customers.clone() };
-        self.require_rbac()?;
         let selection = self.services.selections.clone();
         let client = db.client().clone();
         client
@@ -184,7 +135,7 @@ impl SalesSelectionProcess {
         params: SalesSelectionBookletListParams,
         actor: AuditActor,
     ) -> Result<SelectionBookletListView> {
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let db = self.db.clone();
         self.db
             .client()
@@ -209,7 +160,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 不存在或无权查看。
     pub async fn booklet_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionBookletView> {
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let mut executor = NoTransaction;
         let book = access.require_booklet(actor, "get", id, &mut executor).await?;
         let mut view = SalesSelectionService::new(self.db.clone())
@@ -246,7 +197,7 @@ impl SalesSelectionProcess {
             &self.db,
             &self.storage,
             &self.services,
-            self.selection_access()?,
+            self.services.selections.clone(),
             id,
             req,
             actor,
@@ -274,7 +225,7 @@ impl SalesSelectionProcess {
         req: DeleteDisplayItemRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        delete_item_checked(&self.db, self.selection_access()?, booklet_id, item_id, req, actor).await
+        delete_item_checked(&self.db, self.services.selections.clone(), booklet_id, item_id, req, actor).await
     }
 
     /// 发布。
@@ -295,8 +246,16 @@ impl SalesSelectionProcess {
         req: PublishSalesSelectionRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        publish_checked(&self.db, &self.services, &self.crypto, self.selection_access()?, id, req, actor)
-            .await
+        publish_checked(
+            &self.db,
+            &self.services,
+            &self.crypto,
+            self.services.selections.clone(),
+            id,
+            req,
+            actor,
+        )
+        .await
     }
 
     /// 复制链接。
@@ -311,7 +270,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 不存在或无权操作。
     pub async fn copy_link(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionBookletView> {
-        copy_link_checked(&self.db, &self.crypto, self.selection_access()?, id, actor).await
+        copy_link_checked(&self.db, &self.crypto, self.services.selections.clone(), id, actor).await
     }
     /// 复制当前链接的相对地址。
     ///
@@ -325,7 +284,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 无链接或无权操作。
     pub async fn copy_link_url(&self, id: &str, actor: &AuditActor) -> Result<CopyLinkView> {
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let mut executor = NoTransaction;
         access.require_booklet(actor, "copy_link", id, &mut executor).await?;
         let token = SalesSelectionService::new(self.db.clone()).copy_link(id, &self.crypto).await?;
@@ -345,7 +304,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 无会话或无权查看。
     pub async fn admin_session(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionSessionView> {
-        session_checked(&self.db, self.selection_access()?, id, actor).await
+        session_checked(&self.db, self.services.selections.clone(), id, actor).await
     }
 
     /// 更换链接。
@@ -366,7 +325,7 @@ impl SalesSelectionProcess {
         req: SalesSelectionCommandRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        rotate_link_checked(&self.db, &self.crypto, self.selection_access()?, id, req, actor).await
+        rotate_link_checked(&self.db, &self.crypto, self.services.selections.clone(), id, req, actor).await
     }
 
     /// 关闭。
@@ -450,7 +409,7 @@ impl SalesSelectionProcess {
         params: SalesSelectionProposalListParams,
         actor: AuditActor,
     ) -> Result<SelectionProposalListView> {
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let db = self.db.clone();
         self.db
             .client()
@@ -475,7 +434,7 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 不存在或无权查看。
     pub async fn proposal_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionProposalView> {
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let mut executor = NoTransaction;
         let proposal = access.require_proposal(actor, "get", id, &mut executor).await?;
         SalesSelectionService::new(self.db.clone())
@@ -519,7 +478,7 @@ impl SalesSelectionProcess {
         asset_id: &str,
         actor: &AuditActor,
     ) -> Result<(Vec<u8>, String)> {
-        let key = image_key_checked(&self.db, self.selection_access()?, id, asset_id, actor).await?;
+        let key = image_key_checked(&self.db, self.services.selections.clone(), id, asset_id, actor).await?;
         self.read_image_bytes(&key).await
     }
 
@@ -606,10 +565,7 @@ impl SalesSelectionProcess {
         actor: AuditActor,
         kind: CommandKind,
     ) -> Result<SalesSelectionBookletView> {
-        let access = self.selection_access()?;
-        let action = kind.action();
-        let mut executor = NoTransaction;
-        access.require_booklet(&actor, action, &id, &mut executor).await?;
+        let access = self.services.selections.clone();
         let actor_id = actor.id().to_string();
         let service = SalesSelectionService::new(self.db.clone()).with_authorization(access, actor);
         match kind {
@@ -674,52 +630,4 @@ enum CommandKind {
     Revoke,
     /// 作废。
     Void,
-}
-
-impl CommandKind {
-    /// 返回本次命令对应的选品册动作。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已注册动作名。
-    ///
-    /// # 错误
-    /// 无。
-    const fn action(self) -> &'static str {
-        match self {
-            Self::Close => "close",
-            Self::Revoke => "revoke",
-            Self::Void => "void",
-        }
-    }
-}
-
-/// 校验创建责任在创建动作范围内；提交人不成为负责人。
-///
-/// # 参数
-/// * `access` - 选品范围访问器
-/// * `actor` - 已认证操作人
-/// * `owner` - 拟写入的显式销售负责人
-/// * `org` - 拟写入的业务组织
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 范围允许时成功。
-///
-/// # 错误
-/// 无动作权限或责任不在范围内时拒绝。
-///
-/// # 关键业务约束
-/// 归属必须来自认证创建人及其有效主属组织，客户公开提交人不成为负责人。
-async fn check_create_scope(
-    access: &erp_sales::service::sales_selection::SelectionAccess,
-    actor: &AuditActor,
-    customer_id: &str,
-    owner: &str,
-    org: &str,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<()> {
-    scope_checks::check_create_scope(access, actor, customer_id, owner, org, executor).await
 }

@@ -138,18 +138,16 @@ pub trait SalesOrderRepositoryScopeExt {
     ///
     /// # 参数
     /// * `ids` - 关联销售身份，调用方按批次限制大小。
-    /// * `sales` - 已证明的销售范围。
-    /// * `resource` - 已证明的消费资源范围。
+    /// * `scope` - 已包含消费入口资格与销售来源范围的完整凭证。
     /// * `executor` - 调用方事务执行器。
     /// # 返回
-    /// 返回同时满足两组范围的身份和版本，按身份稳定排序。
+    /// 返回完整授权范围内的身份和版本，按身份稳定排序。
     /// # 错误
     /// 数据库查询或反序列化失败时返回仓储错误。
     async fn scope_order_versions(
         &self,
         ids: &[String],
-        sales: &SalesReadScope,
-        resource: &SalesReadScope,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesVersion>>;
 
@@ -180,31 +178,24 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
     async fn scope_order_versions(
         &self,
         ids: &[String],
-        sales: &SalesReadScope,
-        resource: &SalesReadScope,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesVersion>> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        sales.validate(executor).await?;
-        resource.validate(executor).await?;
+        scope.validate(executor).await?;
         let result = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
-                { "id": { "$in": ids } }, sales.document(), resource.document()
+                { "id": { "$in": ids } }, scope.document()
             ] },
             FindOptions::builder().projection(doc! { "id": 1, "version": 1 }).sort(doc! { "id": 1 }).build(),
-            {
-                let mut stages = sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } });
-                stages.extend(resource.stages());
-                stages
-            },
+            scope.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } }),
             executor,
         )
         .await?;
-        sales.validate(executor).await?;
-        resource.validate(executor).await?;
+        scope.validate(executor).await?;
         Ok(result)
     }
 

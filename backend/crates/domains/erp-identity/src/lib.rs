@@ -30,6 +30,7 @@ pub use service::auth::{AuthRequest, AuthResponse, BackofficeAuthResult, Backoff
 pub use service::authorization::{
     AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService, DataAccess,
 };
+pub use service::directory::AccountDirectoryService;
 pub use service::iam::{
     AccountProfile, AccountProfileService, AdminItem, AdminService, AuthorizedAccountManagement,
     AuthorizedRoleGrant, CreateAdminParams, CreateRoleParams, InitializeSuperAdminParams,

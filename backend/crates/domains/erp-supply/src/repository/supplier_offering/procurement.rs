@@ -3,7 +3,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Result, aggregate, mongo_ops};
 use serde::Deserialize;
 
 use super::{SupplierOfferingFilter, SupplierOfferingRepository, in_filter};
@@ -69,10 +69,11 @@ impl ProcurementOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         struct CandidateId {
             id: String,
         }
-        let rows = mongo_ops::find_many(
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<CandidateId>(),
             filter.to_doc(),
             FindOptions::builder().projection(doc! { "id": 1 }).sort(doc! { "id": 1 }).limit(10001).build(),
+            filter.scope.as_ref().map_or_else(Vec::new, |scope| scope.stages().to_vec()),
             executor,
         )
         .await?;

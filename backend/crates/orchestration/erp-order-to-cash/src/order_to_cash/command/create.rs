@@ -76,7 +76,7 @@ impl SalesOrderCommandProcess {
         contract_id: &Option<ContractId>,
         customer_id: &Option<CustomerAccountId>,
     ) -> Result<CustomerAccountId> {
-        let access = self.command_access(actor, "detail")?;
+        let access = self.command_access(actor, "detail");
         let contract_id = contract_id.clone();
         let customer_id = customer_id.clone();
         self.db
@@ -215,7 +215,7 @@ impl SalesOrderCommandProcess {
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
         let access = self
-            .command_access(actor, "create")?
+            .command_access(actor, "create")
             .require_submit(req.intent == SalesOrderCreateIntent::Submit)?;
         let identity = CreationIdentity::new(&mut req, actor)?;
         if let Some(order_id) = self

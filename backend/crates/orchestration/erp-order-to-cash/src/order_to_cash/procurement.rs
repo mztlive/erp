@@ -32,7 +32,7 @@ impl SalesOrderCommandProcess {
             .into_iter()
             .map(resolution_input)
             .collect::<Vec<_>>();
-        ProcurementResponsibilityProcess::new(self.db.clone(), self.require_rbac()?.clone())
+        ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone())
             .resolve_strict(&inputs)
             .await?;
         Ok(())

@@ -11,7 +11,10 @@ use application_core::AuditActor;
 use erp_catalog::CatalogService;
 use erp_catalog::dto::BrandImportJobRequest;
 use erp_core::AccountKind;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::{
+    AccessMode, AccessRegistration, AccessTarget, AuthorizationRegistry, AuthorizationService,
+    Error as IdentityError, Permission, SharedRbacService,
+};
 use erp_party::SensitiveDataCodec;
 use erp_support::BackgroundJob;
 use mongodb::Database;
@@ -29,7 +32,7 @@ pub const BRAND_IMPORT_DOMAIN: &str = "BRAND_IMPORT";
 pub struct BrandImportProcess {
     db: Database,
     catalog: CatalogService,
-    rbac: SharedRbacService,
+    authorization: AuthorizationService,
     storage: S3Storage,
     codec: Arc<SensitiveDataCodec>,
     sources: Arc<ImportSourceCache<BrandImportJobRequest>>,
@@ -54,10 +57,20 @@ impl BrandImportProcess {
         storage: S3Storage,
         codec: Arc<SensitiveDataCodec>,
     ) -> Self {
+        let registration = AccessRegistration {
+            permission: Permission::parse("product_brand:create").expect("固定品牌创建权限"),
+            required_permissions: vec![],
+            access: AccessMode::Operation,
+        };
+        let authorization = AuthorizationService::new(
+            db.clone(),
+            rbac,
+            AuthorizationRegistry::new(vec![registration]).expect("品牌创建是固定无对象操作"),
+        );
         Self {
             db,
             catalog,
-            rbac,
+            authorization,
             storage,
             codec,
             sources: Arc::new(ImportSourceCache::new(20 * 1024 * 1024)),
@@ -66,13 +79,13 @@ impl BrandImportProcess {
 
     /// 每次提交、执行和下载都重验当前账号及品牌创建权限，不缓存授权结论。
     async fn authorize(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        let authorization =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
-        if !authorization.has_permission(actor, &Permission::parse("product_brand:create")?, executor).await?
-        {
-            return Err(Error::Forbidden("当前账号无权导入品牌".into()));
-        }
-        Ok(())
+        self.authorization
+            .require(actor, &Permission::parse("product_brand:create")?, AccessTarget::Operation, executor)
+            .await
+            .map_err(|error| match error {
+                IdentityError::Forbidden(_) => Error::Forbidden("当前账号无权导入品牌".into()),
+                error => error.into(),
+            })
     }
 }
 

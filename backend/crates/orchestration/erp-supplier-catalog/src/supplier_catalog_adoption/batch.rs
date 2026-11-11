@@ -73,8 +73,7 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SupplierApiConnection> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
-        self.ensure_permission(actor, "supplier_offering_cost:detail").await?;
+        self.ensure_adoption_permissions(actor).await?;
         let source = SupplierApiService::new(self.db.clone()).load_connection(connection, executor).await?;
         self.services.suppliers.require_with(actor, "detail", source.supplier_id.as_ref(), executor).await?;
         Ok(source)

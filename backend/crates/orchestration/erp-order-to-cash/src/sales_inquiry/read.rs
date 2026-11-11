@@ -1,7 +1,7 @@
 //! 询价的销售安全视图、当前责任采购视图及受控模板资料。
 use std::collections::BTreeSet;
 
-use application_core::{AuditActor, CommandFingerprint};
+use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::BusinessDocumentId;
 use erp_identity::{Permission, SharedRbacService};
@@ -263,14 +263,13 @@ impl InquiryReadService {
         params: &InquiryListParams,
         executor: &mut dyn Executor,
     ) -> Result<InquiryListView<ProcurementInquiryDetail>> {
-        self.access.ensure_procurement_permission(actor, "list", executor).await?;
         let tasks = self.owned_tasks(actor, params.task_status, executor).await?;
-        let version = self.procurement_version(actor, &tasks, executor).await?;
-        validate_page(params, &version)?;
-        let mut filter = list_filter(params);
         let (access, authorization) =
             authorization::task_query(self.db.clone(), self.rbac.clone(), actor, &tasks, executor).await?;
-        filter.access_scope = InquiryReadScope::from_compiled(access, authorization);
+        let version = access.version();
+        validate_page(params, &version)?;
+        let mut filter = list_filter(params);
+        filter.access_scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
         filter.inquiry_ids = Some(tasks.iter().map(|task| task.business_object_id.clone()).collect());
         let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, executor).await?;
         let mut items = Vec::with_capacity(page.items.len());
@@ -286,17 +285,7 @@ impl InquiryReadService {
                 .await?;
             items.push(ProcurementInquiryDetail::from_task(&current, &task, actor.id())?);
         }
-        if self
-            .procurement_version(
-                actor,
-                &self.owned_tasks(actor, params.task_status, executor).await?,
-                executor,
-            )
-            .await?
-            != version
-        {
-            return Err(scope_changed());
-        }
+        authorization.validate(&access, executor).await?;
         Ok(list_view(items, page.total, params, version, false))
     }
 
@@ -472,28 +461,6 @@ impl InquiryReadService {
             )
             .await?)
     }
-
-    async fn procurement_version(
-        &self,
-        actor: &AuditActor,
-        tasks: &[WorkItem],
-        executor: &mut dyn Executor,
-    ) -> Result<String> {
-        let permission = Permission::parse("procurement_inquiry:list")?;
-        let authorization = crate::authorization::features(self.db.clone(), self.rbac.clone())
-            .permissions(actor, &[permission], executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("当前账号已失效".into()))?
-            .version()
-            .to_owned();
-        let mut parts = tasks
-            .iter()
-            .map(|task| format!("{}:{}:{}", task.base.id, task.base.version, task.subject_version))
-            .collect::<Vec<_>>();
-        parts.sort();
-        parts.insert(0, authorization);
-        Ok(CommandFingerprint::from_parts(parts).as_str().to_string())
-    }
 }
 
 fn validate_template_ids(ids: &[String]) -> Result<()> {
@@ -590,5 +557,20 @@ mod tests {
         assert!(validate_template_ids(&[]).is_err());
         assert!(validate_template_ids(&["sku".into(), "sku".into()]).is_err());
         assert!(validate_template_ids(&["sku".into()]).is_ok());
+    }
+
+    #[test]
+    fn paging_rejects_replaced_or_changed_authorization_versions() {
+        for page in [1, 2] {
+            let params = InquiryListParams {
+                page: Some(page),
+                scope_version: Some("previous-authorization-version".into()),
+                ..Default::default()
+            };
+            assert!(matches!(
+                validate_page(&params, "current-authorization-version"),
+                Err(Error::ConflictError(message)) if message.contains("DATA_SCOPE_CHANGED")
+            ));
+        }
     }
 }

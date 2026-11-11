@@ -6,7 +6,8 @@ use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, aggregate,
+    insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -143,7 +144,7 @@ impl QueryFilter for SupplierAccountFilter {
     /// `supplier_ids` 为 `Some` 时写入 `id` 的 `$in`（空集合即无命中），
     /// `excluded_supplier_ids` 为 `Some` 时再写入 `$nin`；只排除时只写 `$nin`。
     /// `maintainer_user_ids` 为 `Some` 时按 `$in` 过滤。
-    /// 完整授权条件与前述业务筛选做 `$and`。
+    /// 授权阶段由查询仓储独立完整执行。
     /// 分页与排序字段不进入条件。
     ///
     /// # 错误
@@ -180,7 +181,7 @@ impl QueryFilter for SupplierAccountFilter {
         if let Some(owners) = &self.maintainer_user_ids {
             filter.insert("maintainer_user_id", doc! { "$in": owners });
         }
-        doc! { "$and": [filter, self.authorized_scope.document()] }
+        filter
     }
 }
 
@@ -422,11 +423,26 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
             .projection(supplier_account_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierAccountRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items = aggregate::find(
+            &collection,
+            filter.to_doc(),
+            options,
+            filter.authorized_scope.stages().to_vec(),
+            executor,
+        )
+        .await?;
+        let total = aggregate::count(
+            &self.collection(),
+            filter.to_doc(),
+            filter.authorized_scope.stages().to_vec(),
+            executor,
+        )
+        .await?;
 
         filter.authorized_scope.validate(executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        let total =
+            i64::try_from(total).map_err(|_| crate::Error::ValidationError("供应商总数超限".into()))?;
+        Ok(PageResult { items, total })
     }
 
     async fn find_by_party(

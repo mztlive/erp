@@ -2,6 +2,8 @@
 
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
+use bpm::engine::DefinitionGraph;
+use bpm::model::{ApprovalCommandReceipt, SubjectRef};
 use erp_approval_runtime::approver_directory::resolve_start_approvers;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, BusinessEventContext};
@@ -563,20 +565,18 @@ pub(super) async fn persist_loaded_commit_start(
     let binding = require_frozen_binding(Some(&request.binding))?.clone();
     start_customer_receipt_approval(&mut request.receipt, request.allocations)?;
     let id = request.receipt.base.id.clone();
-    let subject = customer_receipt_subject_ref(&id)?;
     let now = Instant::now();
     let (snapshot, organization_id) = receipt_start_metadata(&request.receipt, &request.actor, now)?;
-    let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
-    let existing_receipt = load_start_receipt_with_executor(
+    let (graph, subject, existing_receipt) = load_receipt_start_graph(
         db,
-        &subject,
-        request.receipt.approval_subject_version,
+        rbac,
+        &binding,
+        &request.receipt,
+        &request.actor,
         &request.idempotency_key,
         executor,
     )
     .await?;
-    let graph =
-        resolve_start_approvers(db, graph, request.actor.id(), existing_receipt.as_ref(), executor).await?;
     let prepared = prepare_start(build_document_start_input(DocumentStartInput {
         resubmission_reason: request.resubmission_reason.as_deref(),
         document_type: DocumentType::CustomerReceipt,
@@ -610,6 +610,31 @@ pub(super) async fn persist_loaded_commit_start(
     let writes = MongoReceiptCommandWrites { db };
     persist_receipt_command_success(&writes, command_receipt, context, &committed, executor).await?;
     Ok(committed)
+}
+
+/// 在原事务读取冻结定义及启动回执，并解析本次提交的正式审批人员。
+async fn load_receipt_start_graph(
+    db: &Database,
+    rbac: &FinancePostingPorts,
+    binding: &ApprovalDefinitionBinding,
+    receipt: &CustomerReceipt,
+    actor: &AuditActor,
+    idempotency_key: &str,
+    executor: &mut dyn Executor,
+) -> Result<(DefinitionGraph, SubjectRef, Option<ApprovalCommandReceipt>)> {
+    let subject = customer_receipt_subject_ref(&receipt.base.id)?;
+    let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
+    let existing = load_start_receipt_with_executor(
+        db,
+        &subject,
+        receipt.approval_subject_version,
+        idempotency_key,
+        executor,
+    )
+    .await?;
+    let graph =
+        resolve_start_approvers(db, &rbac.identity, graph, actor.id(), existing.as_ref(), executor).await?;
+    Ok((graph, subject, existing))
 }
 
 /// 按原顺序准备提交快照、责任组织和对象可读资格。
@@ -656,6 +681,7 @@ impl ReceiptReplayPort for MongoReceiptCommitReplay<'_> {
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `rbac` - 调用方共享身份与审批能力。
 /// * `binding` - 创建时冻结的定义绑定
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
@@ -672,6 +698,7 @@ impl ReceiptReplayPort for MongoReceiptCommitReplay<'_> {
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn prepare_dispatch_start(
     db: &Database,
+    rbac: &FinancePostingPorts,
     binding: &ApprovalDefinitionBinding,
     subject: &bpm::SubjectRef,
     subject_version: u32,
@@ -683,8 +710,15 @@ pub(super) async fn prepare_dispatch_start(
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
     let graph = load_bound_definition_graph(db, binding).await?;
     let existing_receipt = load_start_receipt(db, subject, subject_version, idempotency_key).await?;
-    let graph =
-        resolve_start_approvers(db, graph, actor_id, existing_receipt.as_ref(), &mut NoTransaction).await?;
+    let graph = resolve_start_approvers(
+        db,
+        &rbac.identity,
+        graph,
+        actor_id,
+        existing_receipt.as_ref(),
+        &mut NoTransaction,
+    )
+    .await?;
     let start_input = build_document_start_input(DocumentStartInput {
         resubmission_reason,
         document_type: DocumentType::CustomerReceipt,

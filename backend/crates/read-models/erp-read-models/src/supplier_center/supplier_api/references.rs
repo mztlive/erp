@@ -3,6 +3,7 @@ use erp_supply::entity::supplier_api::SupplierConnectionAction;
 use erp_supply::ports::supplier_reference_registry::{
     SupplierReferenceKind, SupplierReferenceOption, SupplierReferenceTarget,
 };
+use erp_supply::service::supplier_api::context::action_permission;
 use persistence_core::NoTransaction;
 
 use super::SupplierApiReadService;
@@ -23,7 +24,7 @@ impl SupplierApiReadService {
         actor: &AuditActor,
     ) -> Result<Vec<SupplierReferenceOption>> {
         let action = reference_action(kind)?;
-        if !self.has_action_permission(actor, action).await? {
+        if !self.has_permission(actor, action_permission(action)).await? {
             return Err(Error::Forbidden("当前账号没有绑定该配置的权限".into()));
         }
         let connection = self.domain().load_connection(id, &mut NoTransaction).await?;

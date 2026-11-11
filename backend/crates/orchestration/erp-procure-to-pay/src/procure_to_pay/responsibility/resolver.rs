@@ -1,5 +1,7 @@
 //! 采购责任解析所需的目录事实加载、规则选择与负责人资格校验。
 
+use std::slice;
+
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::Permission;
@@ -17,8 +19,6 @@ use persistence_core::{Executor, NoTransaction};
 use super::ProcurementResponsibilityProcess;
 use super::adapter::ResponsibilityFactsAdapter;
 use crate::{Error, Result};
-
-const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
 /// 内部批量解析输入；实体负责行键与区域规范化。
 pub type ResolutionInput = ProcurementResponsibilityResolutionLine;
@@ -162,18 +162,22 @@ impl ProcurementResponsibilityProcess {
     /// 账号可登录、为后台管理员且拥有 `purchase_order:create` 时返回稳定策略版本。
     ///
     /// # 错误
-    /// 账号不存在、状态/类型不符、缺少权限或策略持续变化时返回校验错误。
+    /// 账号失效、缺少权限或身份设施读取失败时返回对应错误。
     pub async fn authorize_owner_eligibility(&self, owner_user_id: &str) -> Result<u64> {
-        for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-            let before = self.rbac.current_policy_revision().await?;
-            let owner = load_owner_account(&self.db, owner_user_id, &mut NoTransaction).await?;
-            ensure_purchase_create_permission(&self.db, &self.rbac, &owner).await?;
-            let after = self.rbac.current_policy_revision().await?;
-            if before == after {
-                return Ok(before);
-            }
+        let permission = purchase_create_permission()?;
+        let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
+        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+            .permissions(&actor, slice::from_ref(&permission), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| {
+                Error::ValidationError(format!("采购负责人 {owner_user_id} 必须为可登录后台账号"))
+            })?;
+        if !qualified.same_role(&[permission]) {
+            return Err(Error::ValidationError(format!(
+                "采购负责人 {owner_user_id} 缺少 purchase_order:create 权限"
+            )));
         }
-        Err(Error::Rbac("采购负责人授权策略持续变化，无法形成稳定快照".to_string()))
+        Ok(qualified.policy_revision())
     }
 
     /// 在调用方事务中按采购规则解析候选；不授予采购任务或普通单据访问权。
@@ -305,33 +309,6 @@ pub(super) async fn load_owner_account(
         .await?
         .ok_or_else(|| Error::ValidationError("采购负责人账号不存在".to_string()))?;
     Ok(erp_procurement::service::procurement_responsibility::eligible_owner(&account)?)
-}
-
-/// 校验单个账号拥有采购建单权限.
-///
-/// # 参数
-/// * `rbac` - 当前应用共享的 RBAC 服务
-/// * `account` - 已通过后台账号状态校验的采购负责人
-///
-/// # 返回
-/// 账号拥有 `purchase_order:create` 时返回 `Ok(())`。
-///
-/// # 错误
-/// 权限解析、Casbin 判定失败或账号缺少权限时返回错误。
-async fn ensure_purchase_create_permission(
-    db: &mongodb::Database,
-    rbac: &erp_identity::SharedRbacService,
-    owner: &EligibleProcurementOwner,
-) -> Result<()> {
-    let permission = purchase_create_permission()?;
-    let actor = AuditActor::new(owner.user_id().into(), owner.user_id().into(), AccountKind::Admin);
-    if crate::authorization::features(db.clone(), rbac.clone())
-        .has_permission(&actor, &permission, &mut NoTransaction)
-        .await?
-    {
-        return Ok(());
-    }
-    Err(Error::ValidationError(format!("采购负责人 {} 缺少 purchase_order:create 权限", owner.user_id())))
 }
 
 /// 构造采购建单权限值对象。

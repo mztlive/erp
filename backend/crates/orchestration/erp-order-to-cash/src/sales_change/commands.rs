@@ -80,7 +80,7 @@ impl SalesChangeProcess {
         rbac: &SharedRbacService,
     ) -> Result<SalesChangeOrderDetailView> {
         let source_order = self
-            .command_access(actor, "update")?
+            .command_access(actor, "update")
             .current(req.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
         let sales_write = SalesReviewService::new(self.db.clone()).prepare_creation(req, actor).await?;
@@ -198,7 +198,7 @@ impl SalesChangeProcess {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".to_string()))?;
-        self.command_access(actor, "update")?
+        self.command_access(actor, "update")
             .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
         let mut sales_write = SalesReviewService::new(self.db.clone()).prepare_void(id, req, actor).await?;
@@ -263,7 +263,7 @@ impl SalesChangeProcess {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".to_string()))?;
-        self.command_access(actor, "cancel_approval")?
+        self.command_access(actor, "cancel_approval")
             .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
             .await?;
         let mut change_order =
@@ -437,6 +437,7 @@ impl SalesChangeProcess {
             load_start_receipt(&self.db, &context.subject, subject_version, idempotency_key).await?;
         let graph = resolve_start_approvers(
             &self.db,
+            &self.rbac,
             graph,
             actor.id(),
             existing_receipt.as_ref(),

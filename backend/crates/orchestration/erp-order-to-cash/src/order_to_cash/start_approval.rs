@@ -10,6 +10,7 @@ use erp_approval_runtime::approval_start::{
     StartReplayErrors, StartTaskContext, persist_start_runtime, persist_start_tasks, replay_start,
 };
 use erp_core::common::time::Instant;
+use erp_identity::SharedRbacService;
 use erp_sales::dto::sales_order::SubmissionView;
 use erp_sales::entity::command_receipt::SalesCommandReceipt;
 use erp_sales::entity::sales_order::SalesOrder;
@@ -304,6 +305,8 @@ fn start_bindings_from_graph(
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(super) struct SalesOrderStartPersistInput {
+    /// 与销售命令共享的身份源，审批运行事实落库前重验分配资格。
+    pub identity: SharedRbacService,
     pub resubmission_reason: Option<String>,
     /// 已进入审批中的销售单。
     pub order: SalesOrder,
@@ -471,6 +474,7 @@ impl SalesOrderStartPersistInput {
             &writes,
             SalesOrderRuntimeWriteInput {
                 resubmission_reason: self.resubmission_reason.as_deref(),
+                identity: &self.identity,
                 approvals: access.services.approvals.as_ref(),
                 document_type: self.document_type,
                 snapshot_payload: &self.snapshot_payload,
@@ -565,6 +569,8 @@ async fn guard_sales_approval_start(
 /// # 关键业务约束
 /// `document_type` 必须与提交分派一致，不得在此改写。
 pub(super) struct SalesOrderRuntimeWriteInput<'a> {
+    /// 审批人资格重验使用的共享身份源。
+    pub identity: &'a SharedRbacService,
     pub resubmission_reason: Option<&'a str>,
     pub approvals: &'a dyn ApprovalRuntimePort,
     /// 按业务性质分派的单据类型。
@@ -605,6 +611,7 @@ pub(super) async fn persist_runtime_writes(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let SalesOrderRuntimeWriteInput {
+        identity,
         resubmission_reason,
         approvals,
         document_type,
@@ -615,8 +622,8 @@ pub(super) async fn persist_runtime_writes(
     } = input;
     let mut snapshot = persist_start_runtime(
         db,
+        identity,
         writes,
-        document_type,
         snapshot_payload,
         now,
         "启动计划缺少入口执行，不得提交销售单",

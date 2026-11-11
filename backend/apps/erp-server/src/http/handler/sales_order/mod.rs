@@ -70,7 +70,7 @@ pub async fn sales_order_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let service = SalesOrderCommandProcess::with_rbac(
+    let service = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -130,7 +130,7 @@ pub async fn sales_order_save_working_copy(
     if let Some(contract_id) = req.contract_id.as_ref() {
         ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
     }
-    let service = SalesOrderCommandProcess::with_rbac(
+    let service = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -167,7 +167,7 @@ pub async fn sales_order_submit(
     if let Some(contract_id) = req.contract_id.as_ref() {
         ensure_contract_access(&state, &actor, "detail", contract_id.as_ref()).await?;
     }
-    let service = SalesOrderCommandProcess::with_rbac(
+    let service = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -195,7 +195,7 @@ pub async fn sales_order_cancel_approval(
     Path(id): Path<String>,
     Json(req): Json<CancelSalesOrderApprovalRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::with_rbac(
+    let view = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -222,7 +222,7 @@ pub async fn sales_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::with_rbac(
+    let view = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -252,7 +252,7 @@ pub async fn sales_order_handover(
     Path(id): Path<String>,
     Json(req): Json<HandoverSalesOrderRequest>,
 ) -> Result<HandoverSalesOrderView> {
-    let view = SalesOrderCommandProcess::with_rbac(
+    let view = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -277,7 +277,7 @@ pub async fn sales_order_handover_candidates(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let candidates = SalesOrderCommandProcess::with_rbac(
+    let candidates = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),
@@ -361,7 +361,7 @@ pub async fn sales_order_bind_contract(
     Path(id): Path<String>,
     Json(req): Json<BindSalesOrderContractRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::with_rbac(
+    let view = SalesOrderCommandProcess::new(
         state.application().db(),
         state.application().rbac(),
         crate::wiring::sales::sales_services(state.application().db(), state.application().rbac()),

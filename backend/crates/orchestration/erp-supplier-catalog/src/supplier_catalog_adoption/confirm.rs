@@ -77,8 +77,7 @@ impl SupplierCatalogAdoptionProcess {
         request: ConfirmAdoptionRequest,
         actor: &AuditActor,
     ) -> Result<AdoptionBatchResult> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
-        self.ensure_permission(actor, "supplier_offering_cost:detail").await?;
+        self.ensure_adoption_permissions(actor).await?;
         let preview = self
             .db
             .catalog_adoption_previews()

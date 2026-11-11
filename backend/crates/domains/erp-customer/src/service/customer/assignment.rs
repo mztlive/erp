@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, normalize_sort, page_or_default, page_size_or_default};
 use erp_core::ids::CustomerAccountId;
+use erp_identity::AccountDirectoryService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -25,7 +26,7 @@ use crate::entity::customer::{
     EndCustomerAssignment,
 };
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, CustomerAuditPort};
+use crate::ports::CustomerAuditPort;
 use crate::repository::CustomerExt;
 use crate::repository::prelude::*;
 
@@ -36,7 +37,7 @@ type CustomerAssignmentFilter = <mongodb::Database as CustomerExt>::CustomerAssi
 pub struct CustomerAssignmentService {
     db: Database,
     audit: Arc<dyn CustomerAuditPort>,
-    accounts: Arc<dyn AccountFactPort>,
+    accounts: AccountDirectoryService,
     access: CustomerAccess,
 }
 
@@ -46,7 +47,6 @@ impl CustomerAssignmentService {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
-    /// * `accounts` - 账号事实端口
     /// * `access` - 客户统一授权访问器
     ///
     /// # 返回
@@ -57,13 +57,8 @@ impl CustomerAssignmentService {
     ///
     /// # 关键业务约束
     /// 归属变更必须通过注入的访问器 证明 customer:update 范围。
-    pub fn new(
-        db: Database,
-        audit: Arc<dyn CustomerAuditPort>,
-        accounts: Arc<dyn AccountFactPort>,
-        access: CustomerAccess,
-    ) -> Self {
-        Self { db, audit, accounts, access }
+    pub fn new(db: Database, audit: Arc<dyn CustomerAuditPort>, access: CustomerAccess) -> Self {
+        Self { accounts: AccountDirectoryService::new(db.clone()), db, audit, access }
     }
 
     /// 分页查询客户归属列表。
@@ -191,7 +186,6 @@ impl CustomerAssignmentService {
             .find_customer(customer_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-        self.accounts.ensure_can_login(&new_assignment.user_id).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "customer_assignment.assign",
@@ -204,10 +198,17 @@ impl CustomerAssignmentService {
         let audit_port = self.audit.clone();
         let customer_id_for_tx = customer_id.to_string();
         let access = self.access.clone();
+        let accounts = self.accounts.clone();
         let actor_for_tx = actor.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    accounts
+                        .account(&new_assignment.user_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
+                        .ensure_can_login()
+                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
                     access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
                     persist_assign(&db, &customer_id_for_tx, &new_assignment, executor).await?;
                     audit_port.persist(&audit, executor).await?;

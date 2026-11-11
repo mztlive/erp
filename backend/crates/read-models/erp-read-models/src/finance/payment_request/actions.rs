@@ -5,7 +5,6 @@ use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentReques
 use persistence_core::Executor;
 
 use super::PurchasePaymentRequestReadService;
-use crate::approval_runtime::has_document_permission;
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
@@ -48,11 +47,6 @@ impl PurchasePaymentRequestReadService {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        if !has_document_permission(&self.db, &self.rbac, actor, "purchase_payment_request", action, executor)
-            .await?
-        {
-            return Ok(false);
-        }
         let scope = match self.source_scope(actor, action, executor).await {
             Ok(scope) => scope,
             Err(Error::Forbidden(_)) => return Ok(false),

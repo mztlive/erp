@@ -32,10 +32,8 @@ pub fn supplier_access(db: Database, rbac: SharedRbacService) -> SupplierAccess 
 /// # 错误
 /// 无。
 pub fn scoped_supplier_service(db: Database, rbac: SharedRbacService) -> SupplierService {
-    SupplierService::new(db.clone(), super::MongoSupplierPartyFacts::shared(db.clone())).with_scope(
-        SupplierAccess::new(db.clone(), rbac),
-        super::supplier::MongoSupplierAccountFacts::shared(db),
-    )
+    SupplierService::new(db.clone(), super::MongoSupplierPartyFacts::shared(db.clone()))
+        .with_scope(SupplierAccess::new(db, rbac))
 }
 
 /// 构造可签发敏感字段短时揭示令牌且已接入范围的供应商服务。
@@ -60,5 +58,5 @@ pub fn scoped_supplier_service_with_sensitive(
         super::MongoSupplierPartyFacts::shared(db.clone()),
         super::MongoSupplierSensitiveTokens::shared(sensitive_data),
     )
-    .with_scope(SupplierAccess::new(db.clone(), rbac), super::supplier::MongoSupplierAccountFacts::shared(db))
+    .with_scope(SupplierAccess::new(db, rbac))
 }

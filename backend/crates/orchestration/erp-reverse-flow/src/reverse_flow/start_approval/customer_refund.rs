@@ -266,8 +266,8 @@ pub async fn persist_runtime_writes(
     let context = StartTaskContext { document_type: DocumentType::CustomerRefund, ..context };
     let mut snapshot = persist_start_runtime(
         db,
+        &rbac.identity,
         writes,
-        context.document_type,
         snapshot_payload,
         context.now,
         "启动计划缺少入口执行，不得提交客户退款",

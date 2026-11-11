@@ -1,6 +1,5 @@
 //! 逐采购证明申请资格，并冻结精确生效版本、销售来源与账户。
 
-use crate::FinancePostingPorts;
 mod funding;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::PurchaseOrderRevisionId;
@@ -19,16 +18,23 @@ use erp_support::FileAssetExt;
 
 use super::*;
 
+/// 按付款申请动作已授权的采购来源冻结申请依据，不再要求采购提交权限。
+/// # 参数
+/// db、executor 为原事务；sources 为本次申请动作已授权对象，request、actor 为申请及操作人。
+/// reserve 控制是否原子占用应付金额。
+/// # 返回
+/// 返回已校验当前生效版本、金额、付款主体和账户的完整申请依据。
+/// # 错误
+/// 来源不在授权结果中、业务事实变化、余额不足、附件或账户无效时拒绝。
 pub(super) async fn prepare_submission(
     db: &Database,
-    rbac: &FinancePostingPorts,
+    sources: &[PurchaseOrder],
     request: &PurchasePaymentRequest,
     actor: &AuditActor,
     reserve: bool,
     executor: &mut dyn Executor,
 ) -> Result<PaymentRequestSubmission> {
     let mut lines = Vec::with_capacity(request.data.lines.len());
-    let access = rbac.purchase.clone();
     let mut subject: Option<(String, String, String)> = None;
     for data in &request.data.lines {
         let account = db
@@ -36,10 +42,9 @@ pub(super) async fn prepare_submission(
             .find_by_id(&data.payable_account_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购应付不存在".into()))?;
-        let order =
-            access.require_object(actor, "submit", &account.source_document_id, &[], executor).await?;
-        let revision = current_revision(db, &order, executor).await?;
-        validate_account(&account, &order, &revision, request)?;
+        let order = authorized_source(sources, &account.source_document_id)?;
+        let revision = current_revision(db, order, executor).await?;
+        validate_account(&account, order, &revision, request)?;
         let payer = &revision.payment_subject;
         if subject.as_ref().is_some_and(|(id, _, _)| id != payer.settlement_party_id.as_ref()) {
             return Err(Error::ValidationError("所选采购跨我方付款主体，请按主体分组分别申请".into()));
@@ -50,7 +55,7 @@ pub(super) async fn prepare_submission(
             payer.settlement_party_name.clone(),
             order.business_org_unit_id.clone(),
         ));
-        lines.push(freeze_line(db, &account, &order, &revision, data.amount, executor).await?);
+        lines.push(freeze_line(db, &account, order, &revision, data.amount, executor).await?);
         if reserve
             && !db
                 .payable_accounts()
@@ -78,6 +83,14 @@ pub(super) async fn prepare_submission(
         deposit_account,
         lines,
     })
+}
+
+/// 只复用本次申请动作已授权的精确采购对象，不以其他来源或默认对象回退。
+fn authorized_source<'a>(sources: &'a [PurchaseOrder], id: &str) -> Result<&'a PurchaseOrder> {
+    sources
+        .iter()
+        .find(|order| order.base.id == id)
+        .ok_or_else(|| Error::Forbidden("采购应付来源未通过付款申请授权".into()))
 }
 
 async fn sync_reserved_arrangements(
@@ -276,4 +289,59 @@ async fn ensure_company(db: &Database, id: &str, executor: &mut dyn Executor) ->
         return Err(Error::ConflictError("采购付款主体必须为有效的我方公司".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::{
+        PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId, WarehouseId,
+    };
+    use erp_procurement::entity::facts::PaymentTermFact;
+    use erp_procurement::entity::purchase_order::{
+        FulfillmentResponsibility, PurchaseOrderData, PurchaseType,
+    };
+
+    use super::*;
+
+    fn purchase(id: &str) -> PurchaseOrder {
+        let mut order = PurchaseOrder::new(
+            PurchaseOrderId::new(id),
+            PurchaseOrderData {
+                business_org_unit_id: "procurement".into(),
+                purchase_no: format!("PO-{id}"),
+                sales_order_id: SalesOrderId::new("sales-1"),
+                sales_order_revision_id: SalesOrderRevisionId::new("sales-revision-1"),
+                creation_basis_id: format!("basis-{id}"),
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                purchase_type: PurchaseType::Physical,
+                payment_term_code: "POSTPAY_NET30".into(),
+                fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                owner_user_id: "buyer-1".into(),
+                target_warehouse_id: Some(WarehouseId::new("warehouse-1")),
+            },
+            "buyer-1",
+            |_| Ok(PaymentTermFact::new("POSTPAY_NET30").with_days_after_delivery(30)),
+        )
+        .unwrap();
+        order.stable.status = PurchaseOrderStatus::Effective;
+        order.stable.current_revision_id = Some(format!("revision-{id}"));
+        order
+    }
+
+    #[test]
+    fn submission_reuses_the_exact_source_authorized_for_the_payment_action() {
+        let sources = [purchase("purchase-2"), purchase("purchase-1")];
+        let order = authorized_source(&sources, "purchase-1").unwrap();
+        assert_eq!(order.base.id, "purchase-1");
+        assert_eq!(order.owner_user_id.as_deref(), Some("buyer-1"));
+        assert_eq!(order.stable.status, PurchaseOrderStatus::Effective);
+        assert_eq!(order.stable.current_revision_id.as_deref(), Some("revision-purchase-1"));
+    }
+
+    #[test]
+    fn submission_rejects_sources_outside_the_payment_authorization_result() {
+        for sources in [Vec::new(), vec![purchase("purchase-2")]] {
+            assert!(matches!(authorized_source(&sources, "purchase-1"), Err(Error::Forbidden(_))));
+        }
+    }
 }

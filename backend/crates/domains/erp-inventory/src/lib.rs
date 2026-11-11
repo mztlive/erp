@@ -23,12 +23,11 @@ pub use entity::inventory::{
 pub use error::{Error, Result};
 pub use ports::{
     AdjustmentPeopleFact, AdjustmentPeopleFactsPort, AuthorizationPort, CatalogFactsPort,
-    FailClosedAdjustmentPeopleFactsPort, FailClosedAuditPort, FailClosedAuthorizationPort,
-    FailClosedCatalogFacts, FailClosedFulfillmentFacts, FailClosedWarehouseFacts, FulfillmentFactsPort,
-    InventoryAction, InventoryAuditPort, InventoryAuthorization, InventoryQuery, InventoryScopeMeta,
-    PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort,
-    WarehouseRevisionFact, applicant_object_ids, intersect_object_ids, latest_snapshot_submitters,
-    merge_adjustment_people,
+    FailClosedAdjustmentPeopleFactsPort, FailClosedAuditPort, FailClosedCatalogFacts,
+    FailClosedFulfillmentFacts, FailClosedWarehouseFacts, FulfillmentFactsPort, InventoryAction,
+    InventoryAuditPort, InventoryAuthorization, InventoryQuery, InventoryScopeMeta, PreparedInventoryAudit,
+    ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact,
+    applicant_object_ids, intersect_object_ids, latest_snapshot_submitters, merge_adjustment_people,
 };
 pub use repository::{
     AdjustmentSnapshotReadFilter, InventoryExt, InventoryRepository, StockAdjustmentFilter,

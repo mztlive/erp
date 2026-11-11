@@ -11,8 +11,7 @@ use erp_customer::{
     CustomerAssignment, CustomerAssignmentView, CustomerExt, CustomerProfileDetailView,
     CustomerSensitiveFieldView, CustomerView,
 };
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
+use erp_identity::AccountDirectoryService;
 use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision};
 use persistence_core::NoTransaction;
@@ -45,7 +44,8 @@ impl CustomerProfileProcess {
             .await?;
         let account_ids: Vec<String> =
             assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
-        let account_names = self.db.accounts().names_by_ids(&account_ids, &mut NoTransaction).await?;
+        let account_names =
+            AccountDirectoryService::new(self.db.clone()).names(&account_ids, &mut NoTransaction).await?;
         let (contacts, addresses, tax_profiles, bank_accounts) = self
             .db
             .party()

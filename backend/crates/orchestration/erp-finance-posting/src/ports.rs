@@ -7,7 +7,6 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_approval_runtime::ApprovalRuntimePort;
 use erp_identity::SharedRbacService;
-use erp_procurement::PurchaseAccess;
 use erp_read_models::finance::funds_scope::FundsAccess;
 use erp_read_models::finance::payment_request::PurchasePaymentRequestReadService;
 use erp_workflow::entity::work_item::WorkItem;
@@ -76,7 +75,6 @@ type FreshTaskFactory = Arc<dyn Fn() -> Arc<dyn FinanceTaskPort> + Send + Sync>;
 pub struct FinancePostingPorts {
     pub(crate) identity: SharedRbacService,
     pub(crate) runtime: Arc<dyn ApprovalRuntimePort>,
-    pub(crate) purchase: PurchaseAccess,
     pub(crate) funds: FundsAccess,
     pub(crate) payment_request_read: PurchasePaymentRequestReadService,
     pub(crate) tasks: Arc<dyn FinanceTaskPort>,
@@ -87,7 +85,7 @@ pub struct FinancePostingPorts {
 impl FinancePostingPorts {
     /// 注入身份、统一来源授权及财务任务事实提供者。
     /// # 参数
-    /// 各参数为应用共享身份、审批运行、采购和资金访问、付款申请读取及任务能力。
+    /// 各参数为应用共享身份、审批运行、资金来源访问、付款申请读取及任务能力。
     /// # 返回
     /// 返回无I/O的财务能力集合。
     /// # 错误
@@ -95,7 +93,6 @@ impl FinancePostingPorts {
     pub fn new(
         identity: SharedRbacService,
         runtime: Arc<dyn ApprovalRuntimePort>,
-        purchase: PurchaseAccess,
         funds: FundsAccess,
         payment_request_read: PurchasePaymentRequestReadService,
         tasks: Arc<dyn FinanceTaskPort>,
@@ -103,7 +100,6 @@ impl FinancePostingPorts {
         Self {
             identity,
             runtime,
-            purchase,
             funds,
             payment_request_read,
             tasks,

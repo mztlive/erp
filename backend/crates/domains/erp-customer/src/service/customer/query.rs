@@ -101,17 +101,14 @@ impl CustomerService {
             self.party.identities_by_ids(std::slice::from_ref(&account.party_id)).await?.into_iter().next();
         let party_no = identity.as_ref().map(|fact| fact.party_no.clone());
         let legal_name = identity.as_ref().and_then(|fact| fact.legal_name.clone());
+        let executor = &mut NoTransaction;
         let assignments = self
             .db
             .customer_assignments()
-            .list_active_for_customers(
-                slice::from_ref(&account.base.id),
-                BusinessDate::today(),
-                &mut NoTransaction,
-            )
+            .list_active_for_customers(slice::from_ref(&account.base.id), BusinessDate::today(), executor)
             .await?;
         let owner_ids = CustomerAssignment::owner_ids(&assignments);
-        let names = self.accounts.names_by_ids(&owner_ids).await?;
+        let names = self.accounts.names(&owner_ids, executor).await?;
         let owner_user_id = owner_ids.first().cloned();
         let mut view: CustomerView = account.into();
         view.party_no = party_no.clone();

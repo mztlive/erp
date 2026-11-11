@@ -1,11 +1,9 @@
 //! 主体事实、敏感令牌与资质附件的消费方端口。
 
-mod account;
 mod file_asset;
 mod party;
 mod sensitive;
 
-pub use account::{AccountFactPort, FailClosedAccountFactPort};
 pub use file_asset::{EmptyFileAssetFacts, FileAssetFact, FileAssetFactsPort};
 pub use party::{
     AddressTypeFact, EffectiveRecordStatusFact, EmptyPartyFacts, PartyAddressFact, PartyBankAccountFact,

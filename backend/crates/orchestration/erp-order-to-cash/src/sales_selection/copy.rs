@@ -33,7 +33,7 @@ impl SalesSelectionProcess {
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
         let fingerprint = self.crypto.request_fingerprint(IdempotencyOperation::Copy, &(&id, &req))?;
-        let access = self.selection_access()?;
+        let access = self.services.selections.clone();
         let customer_access = self.services.customer_access.clone();
         let db = self.db.clone();
         let client = db.client().clone();

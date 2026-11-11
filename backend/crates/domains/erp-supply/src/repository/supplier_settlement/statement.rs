@@ -3,11 +3,10 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PayableAccountId, SupplierAccountId};
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -217,9 +216,6 @@ impl SupplierSettlementStatementFilter {
         let mut ands = Vec::new();
         if let Some(q) = &self.q {
             ands.push(keyword_clause(q, &self.keyword_supplier_ids));
-        }
-        if let Some(scope) = &self.authorized_scope {
-            ands.push(scope.document());
         }
         if let Some(ids) = &self.owner_user_ids {
             ands.push(doc! { "prepared_by": { "$in": ids } });
@@ -466,9 +462,16 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierSettlementStatement>> {
         scope.validate(executor).await?;
-        let result =
-            async { self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await }.await;
-        let result = result?;
+        let result = aggregate::find(
+            &self.collection(),
+            doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::builder().limit(1).build(),
+            scope.stages().to_vec(),
+            executor,
+        )
+        .await?
+        .into_iter()
+        .next();
         scope.validate(executor).await?;
         Ok(result)
     }
@@ -532,8 +535,9 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
             .projection(supplier_settlement_statement_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierSettlementStatementRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let prefix = filter.authorized_scope.as_ref().map_or_else(Vec::new, |scope| scope.stages().to_vec());
+        let items = aggregate::find(&collection, filter.to_doc(), options, prefix.clone(), executor).await?;
+        let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
 
         if let Some(scope) = &filter.authorized_scope {
             scope.validate(executor).await?;
@@ -565,37 +569,14 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         if let Some(scope) = &filter.authorized_scope {
             scope.validate(executor).await?;
         }
-        let result: persistence_core::Result<_> = async {
-            let pipeline = statement_stats_pipeline(filter);
-            let collection = self.collection();
-            let rows = match executor.session() {
-                Some(session) => {
-                    collection
-                        .aggregate(pipeline)
-                        .with_type::<SupplierSettlementStatementStatsRow>()
-                        .session(&mut *session)
-                        .await?
-                        .stream(session)
-                        .try_collect::<Vec<_>>()
-                        .await?
-                },
-                None => {
-                    collection
-                        .aggregate(pipeline)
-                        .with_type::<SupplierSettlementStatementStatsRow>()
-                        .await?
-                        .try_collect::<Vec<_>>()
-                        .await?
-                },
-            };
-            Ok(rows.into_iter().next())
-        }
-        .await;
-        let result = result?;
+        let authorization = filter.authorized_scope.as_ref().map_or(&[][..], |scope| scope.stages());
+        let collection = self.collection().clone_with_type::<SupplierSettlementStatementStatsRow>();
+        let rows =
+            aggregate::rows(&collection, statement_stats_pipeline(filter, authorization), executor).await?;
         if let Some(scope) = &filter.authorized_scope {
             scope.validate(executor).await?;
         }
-        Ok(result)
+        Ok(rows.into_iter().next())
     }
 
     async fn matching_ids_by_number(
@@ -792,8 +773,12 @@ impl SupplierSettlementSourceEvidenceRepositoryExt for SupplierSettlementSourceE
 }
 
 /// 固定结算统计管道，授权过滤已经由identity编译。
-fn statement_stats_pipeline(filter: &SupplierSettlementStatementFilter) -> Vec<Document> {
-    vec![
+fn statement_stats_pipeline(
+    filter: &SupplierSettlementStatementFilter,
+    authorization: &[Document],
+) -> Vec<Document> {
+    let mut pipeline = authorization.to_vec();
+    pipeline.extend([
         doc! { "$match": filter.to_doc() },
         doc! {
             "$group": {
@@ -817,12 +802,45 @@ fn statement_stats_pipeline(filter: &SupplierSettlementStatementFilter) -> Vec<D
             }
         },
         doc! { "$project": { "_id": 0 } },
-    ]
+    ]);
+    pipeline
 }
 
 #[cfg(test)]
 mod keyword_regression_tests {
     use super::*;
+
+    /// 来源关联完成后才过滤业务条件和汇总，不能把授权管道压成单条条件。
+    #[test]
+    fn statistics_preserve_related_authorization_before_grouping() {
+        let authorization = vec![
+            doc! { "$lookup": { "from": "source_records", "as": "__identity_fact_0", "pipeline": [] } },
+            doc! { "$match": { "__identity_fact_0.0": { "$exists": true } } },
+            doc! { "$unset": "__identity_fact_0" },
+        ];
+        let filter = SupplierSettlementStatementFilter {
+            supplier_id: Some(SupplierAccountId::new("supplier")),
+            ..Default::default()
+        };
+        let pipeline = statement_stats_pipeline(&filter, &authorization);
+        assert_eq!(&pipeline[..authorization.len()], authorization.as_slice());
+        let business_filter = pipeline[authorization.len()].get_document("$match").unwrap();
+        assert_eq!(business_filter.get_str("supplier_id").unwrap(), "supplier");
+        assert_eq!(business_filter.get_i64("deleted_at").unwrap(), NOT_DELETED_TIMESTAMP_BSON);
+        assert!(pipeline[authorization.len() + 1].contains_key("$group"));
+    }
+
+    /// 业务筛选不能丢弃身份域给出的拒绝条件。
+    #[test]
+    fn statistics_keep_denied_authorization() {
+        let authorization = vec![doc! { "$match": { "$expr": false } }];
+        let pipeline =
+            statement_stats_pipeline(&SupplierSettlementStatementFilter::default(), &authorization);
+        assert_eq!(pipeline[0], authorization[0]);
+        assert!(pipeline[1].contains_key("$match"));
+        assert!(pipeline[2].contains_key("$group"));
+    }
+
     #[test]
     fn keyword_preserves_structural_scope() {
         let mut filter = SupplierSettlementStatementFilter {

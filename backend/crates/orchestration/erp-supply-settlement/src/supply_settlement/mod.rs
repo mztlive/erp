@@ -45,7 +45,7 @@ use shared::*;
 pub struct SupplierSettlementProcess<A: WorkflowAuthorizationPort> {
     db: Database,
     data_scope: SettlementAccess,
-    rbac: Option<SharedRbacService>,
+    rbac: SharedRbacService,
     // 候选查询沿用调用方身份；写入、决定和重放在原调用点创建独立身份。
     work_items: WorkItemService<A>,
     fresh_work_items: Arc<dyn Fn() -> WorkItemService<A> + Send + Sync>,
@@ -57,47 +57,28 @@ struct SettlementWriteContext {
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
-    /// 使用原数据库依赖构造结算流程；授权访问器 缺省失败关闭。
+    /// 绑定原数据库、已装配的结算范围及必需授权源。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库。
+    /// * `data_scope` - 已接入身份域的结算范围。
+    /// * `rbac` - 应用共享的权威授权源。
     /// * `work_items` - 应用注入且复用同一授权源的工作项服务。
     /// * `fresh_work_items` - 每次调用创建独立授权实例的工作项工厂。
     ///
     /// # 返回
-    /// 返回未注入 RBAC 的流程；范围查询使用 未接线访问器。
+    /// 返回依赖完整的结算流程。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn new(
         db: Database,
+        data_scope: SettlementAccess,
+        rbac: SharedRbacService,
         work_items: WorkItemService<A>,
         fresh_work_items: Arc<dyn Fn() -> WorkItemService<A> + Send + Sync>,
     ) -> Self {
-        Self {
-            db: db.clone(),
-            data_scope: SettlementAccess::unwired(db.clone()),
-            rbac: None,
-            work_items,
-            fresh_work_items,
-        }
-    }
-
-    /// 注入结算授权访问器 与 RBAC。消耗 `self` 并返回同一流程。
-    ///
-    /// # 参数
-    /// * `data_scope` - 结算数据范围。
-    /// * `rbac` - 权限服务。
-    ///
-    /// # 返回
-    /// 返回已注入依赖的流程。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_scope(mut self, data_scope: SettlementAccess, rbac: SharedRbacService) -> Self {
-        self.data_scope = data_scope;
-        self.rbac = Some(rbac);
-        self
+        Self { db, data_scope, rbac, work_items, fresh_work_items }
     }
 
     fn write_context(&self, actor: &AuditActor) -> SettlementWriteContext {
@@ -110,10 +91,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
     fn domain(&self) -> SupplierSettlementService {
         SupplierSettlementService::new(self.db.clone()).with_data_scope(self.data_scope.clone())
-    }
-
-    fn require_rbac(&self) -> crate::Result<&SharedRbacService> {
-        self.rbac.as_ref().ok_or_else(|| crate::Error::Internal("结算范围 RBAC 未接线".into()))
     }
 }
 

@@ -104,10 +104,7 @@ impl JdVopAuthorizationProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let connection = access
-                        .require(&id, &actor, "authorize", executor)
-                        .await
-                        .map_err(|_| ProcessError::Forbidden("当前账号不能配置此连接".into()))?;
+                    let connection = access.require(&id, &actor, "authorize", executor).await?;
                     access
                         .binding(&connection)
                         .map_err(|_| ProcessError::ConflictError("京东连接配置已变化".into()))?;
@@ -147,7 +144,7 @@ fn configuration_error(error: ProcessError) -> AuthorizationError {
             AuthorizationError::Conflict
         },
         ProcessError::ValidationError(_) => AuthorizationError::InvalidTokens,
-        _ => AuthorizationError::Unknown,
+        other => AuthorizationError::from(other),
     }
 }
 

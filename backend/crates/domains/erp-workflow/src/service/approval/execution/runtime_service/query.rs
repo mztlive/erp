@@ -10,10 +10,9 @@ use bpm::engine::TaskIntent;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
-use erp_core::Result as CoreResult;
 use erp_core::common::time::Instant;
 use erp_identity::Permission;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use serde::{Deserialize, Serialize};
 
 use super::super::apply_plan::PlannedWrites;
@@ -31,7 +30,9 @@ use super::read_auth::{
 };
 use super::{ApprovalRuntimeService, hidden_not_found};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
-use crate::error::Result;
+use crate::entity::document_registry::DocumentType;
+use crate::error::{Error, Result};
+use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::approval_integration::{ApprovalRuntimeReadRow, ApprovalRuntimeReadTypeScope};
 use crate::repository::bpm::{
     ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
@@ -142,7 +143,7 @@ struct ResumeVersionHints {
     closed_task_version: Option<String>,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
+impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 按固定 view 查询实例摘要。
     ///
     /// # 参数
@@ -262,25 +263,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.ensure_management_runtime_read(actor, &subject).await?;
         let blocked = subject.instance.status == ApprovalProcessInstanceStatus::Blocked;
         let candidates = recovery_options_for(blocked, subject.instance.blocker_code);
-        let required = candidates
-            .iter()
-            .map(|action| match action {
-                RuntimeRecoveryAction::ResumeCurrentApprover => Permission::parse("approval_instance:resume"),
-                RuntimeRecoveryAction::CancelBlocked => Permission::parse("approval_instance:cancel_blocked"),
-            })
-            .collect::<CoreResult<Vec<_>>>()?;
-        let mut actions = Vec::new();
-        if !required.is_empty()
-            && let Some(qualified) =
-                features(&self.db, &self.identity).permissions(actor, &required, &mut NoTransaction).await?
-        {
-            let granted = qualified.permissions();
-            actions = candidates
-                .into_iter()
-                .zip(&required)
-                .filter_map(|(action, permission)| granted.covers_one(permission).then_some(action))
-                .collect();
-        }
+        let actions = authorized_recovery_actions(
+            &self.auth,
+            actor,
+            subject.document_type,
+            &subject.snapshot.business_object_id,
+            candidates,
+            &mut NoTransaction,
+        )
+        .await?;
         let hints = self.resume_version_hints(&subject).await?;
         Ok(RuntimeRecoveryOptionsView {
             instance_id: instance_id.to_string(),
@@ -763,11 +754,147 @@ pub(super) fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -
     })
 }
 
+/// 恢复动作展示复用写端的完整同角色权限及真实来源授权。
+async fn authorized_recovery_actions(
+    auth: &impl WorkflowAuthorizationPort,
+    actor: &AuditActor,
+    document_type: DocumentType,
+    document_id: &str,
+    candidates: Vec<RuntimeRecoveryAction>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<RuntimeRecoveryAction>> {
+    let mut actions = Vec::new();
+    for action in candidates {
+        let permission = match action {
+            RuntimeRecoveryAction::ResumeCurrentApprover => "approval_instance:resume",
+            RuntimeRecoveryAction::CancelBlocked => "approval_instance:cancel_blocked",
+        };
+        match require_approval_management_with_executor(
+            auth,
+            actor,
+            permission,
+            document_type,
+            document_id,
+            executor,
+        )
+        .await
+        {
+            Ok(()) => actions.push(action),
+            Err(Error::Forbidden(_)) => {},
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(actions)
+}
+
 #[cfg(test)]
 mod runtime_recovery_options_view_tests {
+    use std::sync::{Arc, Mutex};
+
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::Permission;
+    use persistence_core::{Executor, NoTransaction};
     use serde_json::json;
 
-    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView};
+    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView, authorized_recovery_actions};
+    use crate::entity::document_registry::DocumentType;
+    use crate::error::{Error, Result};
+    use crate::ports::WorkflowAuthorizationPort;
+
+    struct ManagementCheck {
+        entry: String,
+        required: Vec<String>,
+        document_type: DocumentType,
+        document_id: String,
+    }
+
+    #[derive(Clone, Default)]
+    struct RecoveryAuthorization {
+        denied: bool,
+        unavailable: bool,
+        calls: Arc<Mutex<Vec<ManagementCheck>>>,
+    }
+
+    impl WorkflowAuthorizationPort for RecoveryAuthorization {
+        async fn require_approval_management(
+            &self,
+            _: &AuditActor,
+            entry: &Permission,
+            required: &[Permission],
+            document_type: DocumentType,
+            document_id: &str,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            self.calls.lock().unwrap().push(ManagementCheck {
+                entry: entry.to_string(),
+                required: required.iter().map(ToString::to_string).collect(),
+                document_type,
+                document_id: document_id.to_owned(),
+            });
+            if self.unavailable {
+                return Err(Error::Internal("identity unavailable".into()));
+            }
+            if self.denied {
+                return Err(Error::Forbidden("完整同角色资格不足".into()));
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn recovery_actions_use_the_same_complete_management_authorization_as_commands() {
+        let auth = RecoveryAuthorization::default();
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let candidates =
+            vec![RuntimeRecoveryAction::ResumeCurrentApprover, RuntimeRecoveryAction::CancelBlocked];
+        let actual = authorized_recovery_actions(
+            &auth,
+            &actor,
+            DocumentType::SalesOrder,
+            "order",
+            candidates.clone(),
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap();
+        assert_eq!(actual, candidates);
+        let calls = auth.calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        for check in calls.iter() {
+            assert!(check.required.contains(&check.entry));
+            assert!(check.required.iter().any(|permission| permission == "approval_instance:read"));
+            assert!(
+                check.required.iter().any(|permission| permission == "sales_order:approval_runtime_admin")
+            );
+            assert_eq!(check.document_type, DocumentType::SalesOrder);
+            assert_eq!(check.document_id, "order");
+        }
+    }
+
+    #[tokio::test]
+    async fn recovery_actions_hide_denied_candidates_and_preserve_infrastructure_errors() {
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let denied = RecoveryAuthorization { denied: true, ..Default::default() };
+        assert!(
+            authorized_recovery_actions(
+                &denied,
+                &actor,
+                DocumentType::SalesOrder,
+                "order",
+                vec![RuntimeRecoveryAction::ResumeCurrentApprover],
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap()
+            .is_empty()
+        );
+        let unavailable = RecoveryAuthorization { unavailable: true, ..Default::default() };
+        assert!(matches!(authorized_recovery_actions(
+            &unavailable, &actor, DocumentType::SalesOrder, "order",
+            vec![RuntimeRecoveryAction::ResumeCurrentApprover], &mut NoTransaction,
+        ).await, Err(Error::Internal(message)) if message == "identity unavailable"));
+    }
 
     /// 旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
     #[test]

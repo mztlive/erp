@@ -53,7 +53,11 @@ impl CatalogSupplyRepository<'_> {
         }
 
         let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
-        let pipeline = product_candidate_pipeline(filter);
+        let mut pipeline = Vec::new();
+        if let Some(scope) = &filter.scope {
+            pipeline.extend_from_slice(scope.stages());
+        }
+        pipeline.extend(product_candidate_pipeline(filter));
         let rows = persistence_core::aggregate::rows(
             &collection.clone_with_type::<ProductCandidate>(),
             pipeline,
@@ -88,7 +92,12 @@ impl CatalogSupplyRepository<'_> {
             scope.validate(executor).await?;
         }
 
-        let facet = self.aggregate_products(product_list_pipeline(filter), executor).await?;
+        let mut pipeline = Vec::new();
+        if let Some(scope) = &filter.scope {
+            pipeline.extend_from_slice(scope.stages());
+        }
+        pipeline.extend(product_list_pipeline(filter));
+        let facet = self.aggregate_products(pipeline, executor).await?;
         if let Some(scope) = &filter.scope {
             scope.validate(executor).await?;
         }

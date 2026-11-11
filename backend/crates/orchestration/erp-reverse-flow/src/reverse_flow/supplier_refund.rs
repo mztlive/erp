@@ -190,7 +190,8 @@ impl ReturnsProcess {
             &idempotency_key,
         )
         .await?;
-        let graph = load_start_graph(&self.db, &binding, actor.id(), existing_receipt.as_ref()).await?;
+        let graph =
+            load_start_graph(&self.db, &self.rbac, &binding, actor.id(), existing_receipt.as_ref()).await?;
         let start_input = build_supplier_refund_start_input(ReverseStartInput {
             resubmission_reason: resubmission_reason.clone(),
             graph,
