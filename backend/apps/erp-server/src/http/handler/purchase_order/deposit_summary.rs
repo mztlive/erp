@@ -5,20 +5,24 @@ use erp_identity::Permission;
 use erp_read_models::Error as ReadError;
 use erp_read_models::purchase_center::dto::PurchaseOrderCenterView;
 use erp_supplier_orders::supplier_deposits::SupplierDepositReadAccess;
+use persistence_core::NoTransaction;
 
 use super::purchase_reads;
 use crate::http::errors::Error;
-use crate::http::middleware::RbacSubject;
 use crate::http::state::HttpState;
 
 pub(super) async fn attach(
     state: &HttpState,
-    subject: &RbacSubject,
     actor: &AuditActor,
     view: &mut PurchaseOrderCenterView,
 ) -> Result<(), Error> {
     for code in ["supplier_deposit:detail", "supplier_offering_cost:detail"] {
-        if !state.application().rbac().enforce(&subject.0, &Permission::parse(code)?).await? {
+        if !state
+            .application()
+            .authorization()
+            .has_permission(actor, &Permission::parse(code)?, &mut NoTransaction)
+            .await?
+        {
             return Ok(());
         }
     }

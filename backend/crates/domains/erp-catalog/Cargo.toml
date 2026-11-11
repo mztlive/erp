@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+erp-identity = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }
 entity-core = { workspace = true }

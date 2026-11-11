@@ -3,7 +3,6 @@ use application_core::AuditActor;
 
 use super::super::customer::{ensure_customer_access, has_permission};
 use crate::http::errors::Error;
-use crate::http::middleware::RbacSubject;
 use crate::http::state::HttpState;
 
 /// 解析列表允许访问的客户集合。全量权限必须在服务端验证。
@@ -11,11 +10,11 @@ use crate::http::state::HttpState;
 /// 客户归属查询失败时拒绝请求。
 pub(super) async fn customer_ids(
     state: &HttpState,
-    subject: &RbacSubject,
+    actor: &AuditActor,
     user: &str,
 ) -> Result<Option<Vec<String>>, Error> {
     let mut scope = erp_customer::CustomerScope::Assigned;
-    if has_permission(state, subject, "customer_scope:detail").await? {
+    if has_permission(state, actor, "customer_scope:detail").await? {
         scope = erp_customer::CustomerScope::AllAuthorized;
     }
     Ok(state.application().customer_service().customer_ids_for_scope(scope, user).await?)

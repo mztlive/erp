@@ -332,8 +332,6 @@ pub struct ProfitLossView {
     pub empty_reason: Option<String>,
     pub scope_summary: String,
     pub as_of: String,
-    pub policy_version: u64,
-    pub organization_version: u64,
     pub scope_version: String,
     pub scope: Scope,
     pub period: Period,

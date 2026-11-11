@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+erp-identity = { workspace = true }
 bson = { workspace = true }
 sha2 = { workspace = true }
 application-core = { workspace = true }

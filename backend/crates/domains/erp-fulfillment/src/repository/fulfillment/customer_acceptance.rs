@@ -174,29 +174,37 @@ impl CustomerAcceptanceRepositoryExt for persistence_core::Repository<'_, Custom
             sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, CUSTOMER_ACCEPTANCE_SORT_FIELDS),
             filter.skip(),
             filter.limit(),
-            customer_acceptance_projection(),
+            CustomerAcceptanceRow::projection(),
             executor,
         )
         .await
     }
 }
 
-/// 客户验收单列表投影字段。
-///
-/// # 返回
-/// 返回投影条件文档。
-fn customer_acceptance_projection() -> Document {
-    doc! {
-        "id": 1,
-        "acceptance_no": 1,
-        "sales_order_id": 1,
-        "accepted_at": 1,
-        "evidence_attachment_id": 1,
-        "result": 1,
-        "status": 1,
-        "reversal_of_acceptance_id": 1,
-        "version": 1,
-        "created_at": 1,
+impl CustomerAcceptanceRow {
+    /// 客户验收单列表投影字段。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 仅包含验收列表行字段的投影文档。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn projection() -> Document {
+        doc! {
+            "id": 1,
+            "acceptance_no": 1,
+            "sales_order_id": 1,
+            "accepted_at": 1,
+            "evidence_attachment_id": 1,
+            "result": 1,
+            "status": 1,
+            "reversal_of_acceptance_id": 1,
+            "version": 1,
+            "created_at": 1,
+        }
     }
 }
 
@@ -204,11 +212,11 @@ fn customer_acceptance_projection() -> Document {
 mod tests {
     use mongodb::bson::doc;
 
-    use super::{CUSTOMER_ACCEPTANCE_SORT_FIELDS, customer_acceptance_projection, sort_doc};
+    use super::{CUSTOMER_ACCEPTANCE_SORT_FIELDS, CustomerAcceptanceRow, sort_doc};
 
     #[test]
     fn projection_exposes_exact_list_fields() {
-        let projection = customer_acceptance_projection();
+        let projection = CustomerAcceptanceRow::projection();
         let keys: Vec<&str> = projection.keys().map(String::as_str).collect();
         assert_eq!(
             keys,

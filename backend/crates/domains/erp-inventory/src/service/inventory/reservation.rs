@@ -70,9 +70,9 @@ impl InventoryService {
                         sort_by,
                         sort_ascending,
                     };
-                    Ok::<_, Error>(
-                        db.stock_reservations().search_stock_reservations(&filter, executor).await?,
-                    )
+                    let page = db.stock_reservations().search_stock_reservations(&filter, executor).await?;
+                    authorization.validate(executor).await?;
+                    Ok::<_, Error>(page)
                 })
             })
             .await?;

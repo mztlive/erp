@@ -6,7 +6,7 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
 use erp_identity::service::resource_access::append_event;
 use id_generator::next_id;
-use persistence_core::{Error as PersistenceError, Executor};
+use persistence_core::{Error as PersistenceError, Executor, Transactional};
 
 use super::WorkItemService;
 use super::order_access::task_read_error;
@@ -53,7 +53,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 授权变化、版本冲突或仓储失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 事务内必须重验管理人和目标责任人，并以授权快照版本执行 policy CAS 后才可提交。
+    /// 事务内必须通过统一授权入口重验管理人和目标责任人，再提交任务与审计。
     pub(super) async fn reassign_with_assignment_policy_audit(
         &self,
         input: AssignmentPolicyAuditInput<'_>,
@@ -65,8 +65,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let attempt_audit = context.audit.clone();
         let validation = self.clone();
         let result = self
-            .identity
-            .run_authorized_policy_transaction(context.authorization.policy_revision, move |executor| {
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
                 Box::pin(async move { validation.apply_reassignment(context, executor).await })
             })
             .await;
@@ -333,7 +335,6 @@ async fn ensure_assignment_policy<A: WorkflowAuthorizationPort>(
             check.assignee_id,
             check.authorization.assignee_kind,
             check.item,
-            check.authorization,
             check.allow_current_owner,
             executor,
         )

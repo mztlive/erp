@@ -1,7 +1,6 @@
 //! 费用采购来源：以采购创建资格读取销售协同范围，不要求销售菜单权限。
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderRevisionId, SalesOrderRevisionLineId};
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Permission, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
@@ -9,16 +8,16 @@ use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use erp_sales::repository::sales_order::{SalesOrderFilter, SalesOrderRow};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::sales_center::access::sales_scope;
+use crate::sales_center::access::{SalesAccess, SalesReadContext};
 use crate::sales_center::order::SalesOrderReadService;
 use crate::support::{data_scope_changed, ensure_deep_page};
 use crate::{Error, Result};
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ExpenseSourceParams {
     pub q: Option<String>,
     pub page: Option<u64>,
@@ -57,6 +56,7 @@ pub struct ExpenseSourceDetail {
 }
 
 /// 费用采购候选与提交共用的来源资格读取器。
+#[derive(Clone)]
 pub struct ExpenseSourceReadService {
     db: Database,
     rbac: SharedRbacService,
@@ -78,14 +78,11 @@ impl ExpenseSourceReadService {
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<(String, SalesReadScope)> {
-        let entry_permission = Permission::parse("purchase_order:create")?;
-        let source_permission = Permission::parse("sales_order:detail")?;
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_source_scope(actor, &entry_permission, &source_permission, executor)
+    ) -> Result<(SalesReadContext, SalesReadScope)> {
+        let (access, scope) = SalesAccess::new(self.db.clone(), self.rbac.clone())
+            .resolve_source(actor, &Permission::parse("purchase_order:create")?, executor)
             .await?;
-        let scope = sales_scope(&access, actor.id(), &[], Vec::new());
-        Ok((access.scope_version.clone(), scope))
+        Ok((access, scope))
     }
 
     /// 分页搜索可追加费用的销售单摘要。
@@ -96,12 +93,31 @@ impl ExpenseSourceReadService {
     /// # 错误
     /// 权限、范围版本、参数或读取失败时拒绝。
     pub async fn list(&self, params: &ExpenseSourceParams, actor: &AuditActor) -> Result<ExpenseSourceList> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.list_page(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn list_page(
+        &self,
+        params: &ExpenseSourceParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ExpenseSourceList> {
         let page = params.page.unwrap_or(1);
         if page == 0 || params.q.as_ref().is_some_and(|q| q.chars().count() > 100) {
             return Err(Error::ValidationError("页码须大于零，搜索内容不能超过 100 字".into()));
         }
         ensure_deep_page(page, params.scope_version.as_deref())?;
-        let (version, scope) = self.scope(actor, &mut NoTransaction).await?;
+        let (access, scope) = self.scope(actor, executor).await?;
+        let version = access.scope_version.clone();
         if params.scope_version.as_ref().is_some_and(|expected| expected != &version) {
             return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
@@ -114,7 +130,7 @@ impl ExpenseSourceReadService {
             page_size: 20,
             ..Default::default()
         };
-        let result = self.db.sales_orders().search_sales_orders(&filter, &scope, &mut NoTransaction).await?;
+        let result = self.db.sales_orders().search_sales_orders(&filter, &scope, executor).await?;
         let names = sales
             .customer_names_batch(&result.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>())
             .await?;
@@ -126,9 +142,7 @@ impl ExpenseSourceReadService {
                 summary(row, name)
             })
             .collect();
-        if self.scope(actor, &mut NoTransaction).await?.0 != version {
-            return Err(data_scope_changed("数据范围已变化，请重新查询"));
-        }
+        access.validate(executor).await?;
         Ok(ExpenseSourceList {
             items,
             total: result.total,
@@ -152,13 +166,14 @@ impl ExpenseSourceReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SalesOrder> {
-        let (_, scope) = self.scope(actor, executor).await?;
+        let (access, scope) = self.scope(actor, executor).await?;
         let order = self
             .db
             .sales_orders()
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或不在费用采购可选范围内".into()))?;
+        access.validate(executor).await?;
         order.ensure_extra_cost_source()?;
         Ok(order)
     }
@@ -171,8 +186,26 @@ impl ExpenseSourceReadService {
     /// # 错误
     /// 来源不可选、版本缺失、读取失败或期间授权变化时拒绝。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<ExpenseSourceDetail> {
-        let (version, _) = self.scope(actor, &mut NoTransaction).await?;
-        let order = self.require_order(id, actor, &mut NoTransaction).await?;
+        let service = self.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.detail_view(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn detail_view(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ExpenseSourceDetail> {
+        let (access, _) = self.scope(actor, executor).await?;
+        let order = self.require_order(id, actor, executor).await?;
         let revision = order
             .stable
             .current_revision_id
@@ -181,13 +214,13 @@ impl ExpenseSourceReadService {
         let lines = self
             .db
             .sales_order_revision_lines()
-            .list_lines_by_revision(&SalesOrderRevisionId::new(revision), &mut NoTransaction)
+            .list_lines_by_revision(&SalesOrderRevisionId::new(revision), executor)
             .await?;
         let ids = lines.iter().map(|line| SalesOrderRevisionLineId::new(&line.base.id)).collect::<Vec<_>>();
         let goods = self
             .db
             .sales_order_goods_service_line_revisions()
-            .list_by_revision_line_ids(&ids, &mut NoTransaction)
+            .list_by_revision_line_ids(&ids, executor)
             .await?;
         let lines = lines
             .into_iter()
@@ -205,9 +238,7 @@ impl ExpenseSourceReadService {
         let names = SalesOrderReadService::new(self.db.clone())
             .customer_names_batch(&[order.customer_id.to_string()])
             .await?;
-        if self.scope(actor, &mut NoTransaction).await?.0 != version {
-            return Err(data_scope_changed("数据范围已变化，请重新选择"));
-        }
+        access.validate(executor).await?;
         Ok(ExpenseSourceDetail {
             summary: ExpenseSourceSummary {
                 id: order.base.id,

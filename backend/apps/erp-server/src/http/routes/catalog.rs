@@ -9,7 +9,7 @@
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::catalog;
 use crate::http::middleware::with_permission;
@@ -25,7 +25,7 @@ use crate::permissions;
 /// 返回逐路由绑定权限的完整管理端路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(product_category_routes(rbac))
         .merge(product_brand_collection_routes(rbac))
@@ -57,7 +57,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_category_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_category_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/product-categories",
@@ -109,7 +109,7 @@ fn product_category_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_brand_collection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_brand_collection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/product-brands",
@@ -160,7 +160,7 @@ fn product_brand_collection_routes(rbac: &SharedRbacService) -> Router<HttpState
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_brand_item_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_brand_item_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/product-brands/{id}",
@@ -199,7 +199,7 @@ fn product_brand_item_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn unit_of_measure_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/unit-of-measures",
@@ -243,7 +243,7 @@ fn unit_of_measure_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn sku_attribute_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sku_attribute_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sku-attributes",
@@ -283,7 +283,7 @@ fn sku_attribute_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sku_attribute_value_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sku-attribute-values",
@@ -327,7 +327,7 @@ fn sku_attribute_value_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_collection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_collection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products",
@@ -366,7 +366,7 @@ fn product_collection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_import_upload_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/import",
@@ -421,7 +421,7 @@ fn product_import_upload_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_import_job_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_import_job_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/import-jobs",
@@ -457,7 +457,7 @@ fn product_import_job_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_item_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_item_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/{id}",
@@ -485,7 +485,7 @@ fn product_item_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_handover_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_handover_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/{id}/handover",
@@ -513,7 +513,7 @@ fn product_handover_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_revision_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_revision_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/{id}/revisions",
@@ -549,7 +549,7 @@ fn product_revision_query_routes(rbac: &SharedRbacService) -> Router<HttpState> 
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_asset_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_asset_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/products/{id}/with-assets",
         with_permission(
@@ -571,7 +571,7 @@ fn product_asset_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_status_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_status_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/{id}/disable",
@@ -599,7 +599,7 @@ fn product_status_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_revision_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_revision_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/product-revisions",
         with_permission(
@@ -618,7 +618,7 @@ fn product_revision_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn sku_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sku_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/skus",
@@ -642,7 +642,7 @@ fn sku_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn sellable_sku_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sellable_sku_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sellable-skus",
@@ -670,7 +670,7 @@ fn sellable_sku_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn sku_revision_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sku_revision_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/sku-revisions",
         with_permission(
@@ -689,7 +689,7 @@ fn sku_revision_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验与上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn voucher_category_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn voucher_category_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/voucher-category-profiles",
@@ -724,7 +724,7 @@ fn voucher_category_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 两条具有独立动作权限的管理路由。
 /// # 错误
 /// 无；业务错误由处理器返回。
-fn product_source_diff_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn product_source_diff_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/products/{id}/source-diff",

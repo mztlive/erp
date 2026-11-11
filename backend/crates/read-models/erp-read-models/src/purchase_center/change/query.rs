@@ -1,17 +1,20 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use application_core::{AuditActor, PageView, SortDir, normalize_sort};
 use erp_procurement::dto::purchase_order::PurchaseChangeOrderListParams;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_procurement::repository::purchase_order::PurchaseChangeSearch;
+use erp_procurement::repository::purchase_order::scope::PurchaseVersion;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
 use super::super::PurchaseOrderReadService;
+use super::super::access::PurchaseAccess;
 use super::super::dto::PurchaseChangeOrderView;
 use super::coverage_effects::load_coverage_effects;
 use super::mapping::change_list_view;
@@ -28,7 +31,6 @@ pub struct PurchaseChangeListView {
     /// RBAC 策略版本。
     pub policy_version: u64,
     /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`。
@@ -130,58 +132,7 @@ impl PurchaseOrderReadService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
-                    let no_scope = scope.is_empty();
-                    let authorized = access.authorized_source_ids(&scope, executor).await?;
-                    let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
-                    let page = params.page.unwrap_or(1);
-                    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
-                    let purchase_order_id = normalized_filter(params.purchase_order_id.as_deref());
-                    let status = normalized_filter(params.status.as_deref());
-                    let result = db
-                        .purchase_order()
-                        .search_change_orders(
-                            PurchaseChangeSearch {
-                                purchase_order_id: purchase_order_id.as_deref(),
-                                status: status.as_deref(),
-                                authorized_purchase_order_ids: authorized.as_deref(),
-                                page,
-                                page_size,
-                                sort_ascending: matches!(sort_dir, SortDir::Asc),
-                            },
-                            executor,
-                        )
-                        .await?;
-                    let versions = db
-                        .purchase_order()
-                        .query_change_versions(
-                            purchase_order_id.as_deref(),
-                            status.as_deref(),
-                            authorized.as_deref(),
-                            executor,
-                        )
-                        .await?;
-                    if versions.len() > 10_000 {
-                        return Err(Error::ValidationError(
-                            "采购变更查询超过上限，请收窄原采购单条件".into(),
-                        ));
-                    }
-                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-                    versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    let views =
-                        result.items.into_iter().map(|change| change_list_view(change, None)).collect();
-                    Ok(PurchaseChangeListView {
-                        page: PageView { items: views, total: result.total, page, page_size },
-                        scope_version: context.scope_version,
-                        policy_version: context.policy_version,
-                        organization_version: context.organization_version,
-                        as_of: context.as_of.as_utc().to_rfc3339(),
-                        empty_reason: no_scope.then_some("no_scope"),
-                        scope_summary: "采购变更单沿来源采购单当前负责人及单据业务组织范围",
-                    })
-                })
+                Box::pin(async move { read_change_list(&db, &access, &params, &actor, executor).await })
             })
             .await
     }
@@ -197,6 +148,61 @@ impl PurchaseOrderReadService {
             Err(error) => Err(error),
         }
     }
+}
+
+/// 在原事务内读取业务筛选与来源授权交集的列表及版本。
+async fn read_change_list(
+    db: &Database,
+    access: &PurchaseAccess,
+    params: &PurchaseChangeOrderListParams,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseChangeListView> {
+    let (mut context, scope) = access.resolve(actor, "list", executor).await?;
+    let no_scope = scope.is_empty();
+    let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
+    let page = params.page.unwrap_or(1);
+    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
+    let purchase_order_id = normalized_filter(params.purchase_order_id.as_deref());
+    let status = normalized_filter(params.status.as_deref());
+    let result = db
+        .purchase_order()
+        .search_change_orders(
+            PurchaseChangeSearch {
+                purchase_order_id: purchase_order_id.as_deref(),
+                status: status.as_deref(),
+                scope: &scope,
+                page,
+                page_size,
+                sort_ascending: matches!(sort_dir, SortDir::Asc),
+            },
+            executor,
+        )
+        .await?;
+    let versions = db
+        .purchase_order()
+        .query_change_versions(purchase_order_id.as_deref(), status.as_deref(), &scope, executor)
+        .await?;
+    context.scope_version = change_scope_version(&context.scope_version, &versions)?;
+    let views = result.items.into_iter().map(|change| change_list_view(change, None)).collect();
+    Ok(PurchaseChangeListView {
+        page: PageView { items: views, total: result.total, page, page_size },
+        scope_version: context.scope_version,
+        policy_version: context.policy_version,
+        as_of: context.as_of.as_utc().to_rfc3339(),
+        empty_reason: no_scope.then_some("no_scope"),
+        scope_summary: "采购变更单沿来源采购单当前负责人及单据业务组织范围",
+    })
+}
+
+/// 只对完整业务授权交集的变更版本执行上限和指纹绑定。
+fn change_scope_version(scope_version: &str, versions: &[PurchaseVersion]) -> Result<String> {
+    if versions.len() > 10_000 {
+        return Err(Error::ValidationError("采购变更查询超过上限，请收窄原采购单条件".into()));
+    }
+    let mut fingerprint = DefaultHasher::new();
+    versions.hash(&mut fingerprint);
+    Ok(format!("{scope_version}:{:x}", fingerprint.finish()))
 }
 
 /// 在独立事务中重验来源采购单后装配变更单详情。

@@ -2,7 +2,6 @@
 
 use application_core::AuditActor;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
-use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt};
 use persistence_core::Executor;
 
 use super::PurchasePaymentRequestReadService;
@@ -23,7 +22,7 @@ impl PurchasePaymentRequestReadService {
                 | PurchasePaymentRequestStatus::Rejected
                 | PurchasePaymentRequestStatus::Withdrawn
         );
-        if actor.id() == request.created_by && editable {
+        if editable {
             if self.actionable(actor, request, "update", executor).await? {
                 actions.push("EDIT".into());
             }
@@ -31,39 +30,15 @@ impl PurchasePaymentRequestReadService {
                 actions.push("SUBMIT".into());
             }
         }
-        if actor.id() == request.created_by
-            && request.status == PurchasePaymentRequestStatus::InApproval
+        if request.status == PurchasePaymentRequestStatus::InApproval
             && self.actionable(actor, request, "withdraw", executor).await?
         {
             actions.push("WITHDRAW".into());
         }
-        if request.status.can_close()
-            && self.actionable(actor, request, "close", executor).await?
-            && self.creator_or_finance(actor, request, executor).await?
-        {
+        if request.status.can_close() && self.actionable(actor, request, "close", executor).await? {
             actions.push("CLOSE".into());
         }
         Ok(actions)
-    }
-
-    async fn creator_or_finance(
-        &self,
-        actor: &AuditActor,
-        request: &PurchasePaymentRequest,
-        executor: &mut dyn Executor,
-    ) -> Result<bool> {
-        if request.created_by == actor.id() {
-            return Ok(true);
-        }
-        let required = [
-            Permission::parse("purchase_payment_request:close")?,
-            Permission::parse("approval_instance:decide")?,
-        ];
-        let snapshot = self.rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-        let roles = snapshot.granting_role_ids_for_all(&required);
-        let allowed = !self.db.roles().enabled_roles(&roles, executor).await?.is_empty();
-        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        Ok(allowed)
     }
 
     async fn actionable(

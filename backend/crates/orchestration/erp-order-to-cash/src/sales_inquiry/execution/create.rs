@@ -10,7 +10,6 @@ use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::sales_inquiry::SalesInquiryProcess;
-use crate::sales_inquiry::access::SalesInquiryAccess;
 use crate::sales_inquiry::dto::CreateInquiryCommand;
 use crate::sales_inquiry::eligibility::normalize_requirement;
 use crate::{Error, Result};
@@ -29,7 +28,6 @@ impl SalesInquiryProcess {
         req: &CreateInquiryCommand,
         executor: &mut dyn Executor,
     ) -> Result<SalesInquiry> {
-        let access = self.access().resolve_selection(actor, "create", executor).await?;
         let mut data = req.data.clone();
         data.sales_owner_user_id = actor.id().to_string();
         data.business_org_unit_id = required_business_org(&self.db, actor.id(), executor).await?;
@@ -40,9 +38,7 @@ impl SalesInquiryProcess {
         normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut data.draft, executor).await?;
         let id = next_id();
         let inquiry = SalesInquiry::create(id.clone(), format!("IQ{id}"), data.clone())?;
-        if !SalesInquiryAccess::allows_sales(&access, &inquiry) {
-            return Err(Error::Forbidden("没有该业务责任范围的询价创建权限".into()));
-        }
+        self.access().ensure_selection(actor, "create", &inquiry, executor).await?;
         Ok(SalesInquiryService::new(self.db.clone())
             .create(id.clone(), format!("IQ{id}"), data, executor)
             .await?)

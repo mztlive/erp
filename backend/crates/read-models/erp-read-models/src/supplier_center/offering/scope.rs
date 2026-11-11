@@ -93,6 +93,7 @@ async fn build_snapshot(
     let access = OfferingAccess::new(db.clone(), data_scope);
     let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
     let no_scope = !context.has_scope_rules();
+    context.validate(executor).await?;
     let mut query = super::prepare_list_query(&params)?;
     query.scope = Some(scope.clone());
     let filter = apply_procurement_filter(&db, &query, procurement.as_ref(), &params, executor).await?;
@@ -113,6 +114,7 @@ async fn build_snapshot(
     for row in &mut view.items {
         row.maintainer_user_name = names.get(&row.maintainer_user_id).cloned();
     }
+    context.validate(executor).await?;
     Ok(OfferingSnapshot {
         no_scope,
         page: view,

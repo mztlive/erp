@@ -42,8 +42,6 @@ pub struct PurchaseReturnOrderFilter {
     pub purchase_return_no: Option<String>,
     /// 原采购单；`None` 表示不筛选。
     pub purchase_order_id: Option<PurchaseOrderId>,
-    /// 已证明可见的来源采购单；`None` 表示公司范围不限制。
-    pub authorized_purchase_order_ids: Option<Vec<String>>,
     /// 退货单状态；`None` 表示不筛选。
     pub status: Option<PurchaseReturnStatus>,
     /// 页码（1 起）。
@@ -71,7 +69,6 @@ impl Default for PurchaseReturnOrderFilter {
         Self {
             purchase_return_no: None,
             purchase_order_id: None,
-            authorized_purchase_order_ids: None,
             status: None,
             page: 1,
             page_size: 20,
@@ -84,11 +81,8 @@ impl Default for PurchaseReturnOrderFilter {
 impl QueryFilter for PurchaseReturnOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// `purchase_return_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`status` 为
-    /// `Some` 时精确匹配。`purchase_order_id` 与 `authorized_purchase_order_ids` 都缺省时
-    /// 不限制采购单；只有前者时精确匹配；只有后者且非空时按 `$in` 匹配，空则写入
-    /// `$expr: false`。两者都有时，授权列表包含该采购单才精确匹配，否则同样写入
-    /// `$expr: false`。
+    /// `purchase_return_no` 按字面量模糊匹配，来源采购单和状态按指定值精确匹配。
+    /// 此处只构造业务筛选，授权由读取入口的完整来源查询执行。
     ///
     /// # 参数
     /// 无。
@@ -104,28 +98,8 @@ impl QueryFilter for PurchaseReturnOrderFilter {
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
-        match (
-            self.purchase_order_id.as_ref().map(ToString::to_string),
-            self.authorized_purchase_order_ids.as_deref(),
-        ) {
-            (Some(purchase_order_id), None) => {
-                filter.insert("purchase_order_id", purchase_order_id);
-            },
-            (Some(purchase_order_id), Some(authorized)) => {
-                if authorized.iter().any(|id| id == &purchase_order_id) {
-                    filter.insert("purchase_order_id", purchase_order_id);
-                } else {
-                    filter.insert("$expr", false);
-                }
-            },
-            (None, Some(authorized)) => {
-                if authorized.is_empty() {
-                    filter.insert("$expr", false);
-                } else {
-                    filter.insert("purchase_order_id", doc! { "$in": authorized });
-                }
-            },
-            (None, None) => {},
+        if let Some(purchase_order_id) = &self.purchase_order_id {
+            filter.insert("purchase_order_id", purchase_order_id.to_string());
         }
         filter
     }
@@ -304,7 +278,6 @@ fn purchase_return_order_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::bson::doc;
     use persistence_core::QueryFilter;
 
     use super::PurchaseReturnOrderFilter;
@@ -321,45 +294,5 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_str("purchase_order_id").unwrap(), "po-1");
         assert_eq!(document.get_str("status").unwrap(), "returned");
-    }
-
-    /// 授权空集与越界原单必须保持恒假条件，不得退化为无授权限制。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// `Some([])` 与筛选原单不在授权集时都必须写入 `$expr: false`。
-    #[test]
-    fn purchase_return_missing_authorized_source_ids_stay_empty() {
-        use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-        let empty = PurchaseReturnOrderFilter {
-            authorized_purchase_order_ids: Some(Vec::new()),
-            ..Default::default()
-        };
-        assert_eq!(empty.to_doc(), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false });
-
-        let out_of_scope = PurchaseReturnOrderFilter {
-            purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
-            authorized_purchase_order_ids: Some(vec!["po-2".into()]),
-            ..Default::default()
-        };
-        assert_eq!(out_of_scope.to_doc(), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false });
-
-        let in_scope = PurchaseReturnOrderFilter {
-            purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
-            authorized_purchase_order_ids: Some(vec!["po-1".into()]),
-            ..Default::default()
-        };
-        assert_eq!(
-            in_scope.to_doc(),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1" }
-        );
     }
 }

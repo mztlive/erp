@@ -7,7 +7,7 @@ use erp_audit::{AuditAction, BusinessEventContent};
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, Permission, PermissionSet};
+use erp_identity::{AccessControlExt, Permission};
 use erp_supplier::entity::handover_receipt::{
     CAPABILITY_HANDOVER_ACTION, SUPPLIER_HANDOVER_ACTION, SupplierHandoverReceipt, SupplierHandoverResult,
 };
@@ -21,7 +21,9 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::{SupplierProfileAuthorization, SupplierProfileProcess};
-use crate::handover_common::{HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context};
+use crate::handover_common::{
+    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, target_qualified,
+};
 use crate::{Error, Result};
 
 /// 供应商交接明确登记的安全动作。
@@ -500,17 +502,7 @@ async fn account_can_maintain(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Ok(false);
-    };
-    if !account.is_active_backoffice() {
-        return Ok(false);
-    }
-    let granted = rbac.permissions(account.kind, target).await?;
-    let Ok(required) = Permission::parse("supplier:update") else {
-        return Ok(false);
-    };
-    Ok(granted.covers(&PermissionSet::new(vec![required])))
+    target_qualified(db, rbac, target, &Permission::parse("supplier:update")?, executor).await
 }
 
 async fn list_candidates(
@@ -522,7 +514,7 @@ async fn list_candidates(
     let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
     let mut candidates = Vec::new();
     for account in accounts {
-        if account.base.id == current || !account.is_active_backoffice() {
+        if account.base.id == current {
             continue;
         }
         if !account_can_maintain(db, rbac, &account.base.id, executor).await? {

@@ -8,7 +8,7 @@ use erp_core::{AccountKind, Result as CoreResult};
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use super::access::{TaskEligibility, ensure_generic_work_item_mutation, has_assignment_candidate_access};
+use super::access::{TaskEligibility, candidate_facts_current, ensure_generic_work_item_mutation};
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
     task_read_error,
@@ -23,11 +23,9 @@ use crate::entity::work_item::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{TaskReadAction, WorkflowAuthorizationPort};
-
-const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
+use crate::service::authorization::features;
 
 pub(super) struct AssignmentAuthorizationSnapshot {
-    pub(super) policy_revision: u64,
     pub(super) actor_kind: erp_core::AccountKind,
     pub(super) assignee_kind: erp_core::AccountKind,
 }
@@ -214,44 +212,31 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         }
     }
 
-    /// 形成事务外的授权版本锚点；事务内仍会重新读取全部资格与业务事实。
+    /// 形成事务外的账号类型事实；事务内仍会重新执行完整授权和业务事实检查。
     async fn assignment_authorization_snapshot(
         &self,
         actor: &AuditActor,
         assignee_id: &str,
         item: &WorkItem,
     ) -> Result<AssignmentAuthorizationSnapshot> {
-        let identity = &self.identity;
-        for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-            let before = identity.current_policy_revision().await?;
-            let assignee = self
-                .identity
-                .directory()
-                .account(assignee_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
-            let candidate = AuditActor::new(assignee.id, assignee.login_account, assignee.kind);
-            let snapshot = AssignmentAuthorizationSnapshot {
-                policy_revision: before,
-                actor_kind: actor.kind(),
-                assignee_kind: candidate.kind(),
-            };
-            self.ensure_task_manage(actor, item, &mut NoTransaction).await?;
-            self.ensure_assignment_candidate(
-                assignee_id,
-                candidate.kind(),
-                item,
-                &snapshot,
-                item.owner_user_id.as_deref() == Some(assignee_id),
-                &mut NoTransaction,
-            )
-            .await?;
-            let after = identity.policy_revision_with_executor(&mut NoTransaction).await?;
-            if before == after {
-                return Ok(snapshot);
-            }
-        }
-        Err(Error::Rbac("授权策略持续变化，无法形成稳定的任务分派快照".to_string()))
+        let assignee = self
+            .identity
+            .directory()
+            .account(assignee_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
+        let snapshot =
+            AssignmentAuthorizationSnapshot { actor_kind: actor.kind(), assignee_kind: assignee.kind };
+        self.ensure_task_manage(actor, item, &mut NoTransaction).await?;
+        self.ensure_assignment_candidate(
+            assignee_id,
+            assignee.kind,
+            item,
+            item.owner_user_id.as_deref() == Some(assignee_id),
+            &mut NoTransaction,
+        )
+        .await?;
+        Ok(snapshot)
     }
 
     /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
@@ -260,7 +245,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// * `user_id` - 待接收任务的具体账号 ID
     /// * `expected_kind` - 事务外授权快照冻结的账号类型
     /// * `item` - 待转交任务
-    /// * `authorization` - 事务外形成的稳定授权快照
     /// * `allow_current_owner` - 是否允许目标账号保持为当前负责人
     /// * `executor` - 调用方事务执行器
     ///
@@ -274,15 +258,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         user_id: &str,
         expected_kind: erp_core::AccountKind,
         item: &WorkItem,
-        authorization: &AssignmentAuthorizationSnapshot,
         allow_current_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let actor = AuditActor::new(user_id.into(), user_id.into(), expected_kind);
         let required = item.qualification_permissions()?;
-        let qualified = self
-            .identity
-            .qualified_permissions(&actor, &required, executor)
+        let qualified = features(&self.db, &self.identity)
+            .permissions(&actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
         let account = qualified.account();
@@ -290,8 +272,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             return Err(Error::Forbidden("供应商申请确认人必须为启用的内部账号".into()));
         }
         let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-        self.identity.ensure_policy_snapshot_with_executor(authorization.policy_revision, executor).await?;
-        let access = TaskEligibility::new(actor).with_permissions(qualified.permissions());
+        if !qualified.same_role(&required) {
+            return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
+        }
+        let access = TaskEligibility::new(actor);
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
             .map_err(task_read_error)?;
@@ -384,17 +368,15 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             executor,
         )
         .await?;
-        if !item.is_open_procurement_task() {
-            require_order_task_read(
-                &self.auth,
-                &access.actor,
-                policy.object_kind,
-                fact,
-                TaskReadAction::Detail,
-                executor,
-            )
-            .await?;
-        }
+        require_order_task_read(
+            &self.auth,
+            &access.actor,
+            policy.object_kind,
+            fact,
+            TaskReadAction::Detail,
+            executor,
+        )
+        .await?;
         require_supplier_portal_task_review(
             &self.auth,
             &access.actor,
@@ -403,8 +385,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             executor,
         )
         .await?;
-        let access = self.participation(access, &facts, executor).await?;
-        if !has_assignment_candidate_access(item, &access, &facts) {
+        if !candidate_facts_current(item, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
         Ok(())
@@ -466,13 +447,15 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
-    let qualified = service
-        .identity
-        .qualified_permissions(&actor, &required, executor)
+    let qualified = features(&service.db, &service.identity)
+        .permissions(&actor, &required, executor)
         .await?
         .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-    let target_access = TaskEligibility::new(actor).with_permissions(qualified.permissions());
+    let target_access = TaskEligibility::new(actor);
     for task in tasks {
+        if !qualified.same_role(&task.qualification_permissions()?) {
+            return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
+        }
         service.ensure_assignment_candidate_access_with_executor(task, &target_access, executor).await?;
     }
     Ok(())

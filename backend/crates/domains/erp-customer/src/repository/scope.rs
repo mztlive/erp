@@ -1,71 +1,29 @@
-//! 客户授权条件；由应用层完成 DataScope 解析后再交给仓储。
-
+//! 已由 identity 查询得到的客户主键与业务筛选。
 #![allow(async_fn_in_trait)]
-
+use erp_identity::CompiledAccess;
+use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Repository, Result, mongo_ops};
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result as RepositoryResult, aggregate,
+    mongo_ops,
+};
 use serde::Deserialize;
 
-use super::customer::CustomerAccountFilter;
+use super::CustomerExt;
+use super::customer::{CustomerAccountFilter, CustomerAccountRow};
+use super::customer_shared::{customer_account_projection, sort_doc};
 use crate::entity::customer::{CustomerAccount, CustomerAssignment};
+use crate::ports::{CustomerDataScopePort, CustomerResolvedScope};
+use crate::{Error, Result};
 
-/// 同一角色已证明的客户责任条件；主责、协作与负责人组织分别解释。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CustomerScopeClause {
-    /// 公司范围覆盖该资源动作的全部客户。
-    pub company: bool,
-    /// 当前主负责人为该账号的客户。
-    pub owner_user_id: Option<String>,
-    /// 当前协作者可见的客户 ID。
-    pub collaborative_customer_ids: Vec<String>,
-    /// 当前主负责人必须属于的内部组织。
-    pub owner_org_unit_ids: Vec<String>,
-}
-
-/// 角色并集与个人上限保留为独立条件；历史参与只补充读取。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 完整授权查询结果；不含角色、范围条款或个人上限。
+#[derive(Debug, Clone, Default)]
 pub struct CustomerReadScope {
-    /// 同角色正向范围。
-    pub roles: Vec<CustomerScopeClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<CustomerScopeClause>,
-    /// 已证明的历史参与客户；不得用于修改。
-    pub historical_customer_ids: Vec<String>,
-    /// 当前主责客户，供目录「我的客户」收窄。
-    pub owned_customer_ids: Vec<String>,
-    /// 当前协作客户，供目录「协作客户」收窄。
-    pub collaborative_customer_ids: Vec<String>,
-    /// 已转换成仓储条件的授权客户集合；`None` 表示公司范围。
     pub authorized_customer_ids: Option<Vec<String>>,
+    pub owned_customer_ids: Vec<String>,
+    pub collaborative_customer_ids: Vec<String>,
 }
-
-impl Default for CustomerReadScope {
-    /// 缺省授权为空集，禁止未解析范围退化为公司范围。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不含角色、上限和历史参与的空授权。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// `authorized_customer_ids = Some([])` 才是空集；`None` 表示公司范围。
-    fn default() -> Self {
-        Self {
-            roles: Vec::new(),
-            user_limit: None,
-            historical_customer_ids: Vec::new(),
-            owned_customer_ids: Vec::new(),
-            collaborative_customer_ids: Vec::new(),
-            authorized_customer_ids: Some(Vec::new()),
-        }
-    }
-}
-
 /// 跨页校验使用的客户身份和版本，不包含展示字段。
 #[derive(Debug, Deserialize)]
 pub struct CustomerVersion {
@@ -75,164 +33,29 @@ pub struct CustomerVersion {
     pub version: u64,
 }
 
-impl CustomerScopeClause {
-    /// 判断尚未持久化或已装载的客户责任是否被该条款覆盖。
-    ///
-    /// 生产授权语义（erp-customer-008）：生产路径经 Port `allows` 判定对象资格；
-    /// 本方法是同一谓词的轻量镜像，供 Service 组装授权集合前做条款级解释，
-    /// 并由单元测试锁定语义，改动时必须同步评估 Port 侧。
-    ///
-    /// # 参数
-    /// * `owner` - 当前或拟写入的主负责人
-    /// * `owner_org` - 主负责人当前主属组织
-    /// * `collaborating` - 当前账号是否为协作销售
-    ///
-    /// # 返回
-    /// 公司、主责、协作或负责人组织任一命中即覆盖；空条款不覆盖。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得把创建人当作主责；组织条件只解释当前主负责人所属组织。
-    pub fn allows(&self, owner: &str, owner_org: Option<&str>, collaborating: bool) -> bool {
-        self.company
-            || self.owner_user_id.as_deref() == Some(owner)
-            || (self.collaborative() && collaborating)
-            || owner_org.is_some_and(|org| self.owner_org_unit_ids.iter().any(|id| id == org))
-    }
-
-    /// 判断该条款是否包含协作范围。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 存在协作客户集合时返回 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 空集合不得解释为全部协作客户。
-    pub fn collaborative(&self) -> bool {
-        !self.collaborative_customer_ids.is_empty()
-    }
-
-    /// 判断条款是否构成有效客户范围规则。
-    ///
-    /// 与 Port 侧 `CustomerResolvedClause::has_scope_rules` 同语义（erp-customer-005），
-    /// 为 `is_empty` 取反；映射只经 `access::customer_scope/map_clause` 单一入口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、主责、协作或组织条件时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn has_scope_rules(&self) -> bool {
-        !self.is_empty()
-    }
-
-    /// 判断该条款是否确定不产生可见对象。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 非公司且没有任何主责、协作或组织条件时为空。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 空条款必须保持空集，不得补公司范围。
-    pub fn is_empty(&self) -> bool {
-        !self.company
-            && self.owner_user_id.is_none()
-            && self.collaborative_customer_ids.is_empty()
-            && self.owner_org_unit_ids.is_empty()
-    }
-}
-
 impl CustomerReadScope {
-    /// 校验创建客户时的拟写入责任；历史参与不授予创建权。
-    ///
-    /// 生产授权语义（erp-customer-008）：与 [`CustomerScopeClause::allows`] 同，
-    /// 为生产判定在仓储侧的组合入口；单元测试锁定角色并集与个人上限语义。
-    ///
-    /// # 参数
-    /// * `owner` - 拟写入的主负责人，必须是当前操作人
-    /// * `owner_org` - 操作人当前主属组织
-    ///
-    /// # 返回
-    /// 角色并集覆盖且个人上限允许时返回 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 创建固定以操作人为主责，协作身份与历史参与不得单独放行建档。
-    pub fn allows_creation(&self, owner: &str, owner_org: Option<&str>) -> bool {
-        self.roles.iter().any(|clause| clause.allows(owner, owner_org, false))
-            && self.user_limit.as_ref().is_none_or(|clause| clause.allows(owner, owner_org, false))
-    }
-
-    /// 判断授权是否覆盖全部未删除客户。
-    ///
+    /// 将已执行 identity 查询得到的客户集合用于业务筛选。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 仅在角色公司授权且未被个人上限收窄时为 true。
-    ///
+    /// 返回完整查询结果的主键条件。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 公司范围仍受个人上限约束，不得用其补齐缺范围角色。
-    pub fn is_company(&self) -> bool {
-        self.authorized_customer_ids.is_none()
-    }
-
-    /// 判断授权规则是否确定不产生可见对象。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 空授权返回 true；非空规则仍可能被业务筛选收成空页。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 缺范围必须保持空集，不得退化为全量查询。
-    pub fn is_empty(&self) -> bool {
-        self.authorized_customer_ids.as_ref().is_some_and(Vec::is_empty)
-    }
-
-    /// 生成客户角色集合上的授权条件。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 公司范围为恒真；明确 ID 使用 `$in`；空集使用恒假表达式。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// MongoDB 不接受空 `$in` 作为全量；空授权必须拒绝匹配。
     pub fn document(&self) -> Document {
         match &self.authorized_customer_ids {
-            None => doc! {},
-            Some(ids) if ids.is_empty() => doc! { "$expr": false },
             Some(ids) => doc! { "id": { "$in": ids } },
+            None => doc! { "$expr": false },
         }
+    }
+    /// 判断已经查询的授权结果是否为空。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 空结果为 true。
+    /// # 错误
+    /// 无。
+    pub fn is_empty(&self) -> bool {
+        self.authorized_customer_ids.as_ref().is_none_or(Vec::is_empty)
     }
 }
 
@@ -259,7 +82,7 @@ pub trait CustomerAccountRepositoryScopeExt {
         id: &str,
         scope: &CustomerReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<CustomerAccount>>;
+    ) -> RepositoryResult<Option<CustomerAccount>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
     ///
@@ -279,7 +102,7 @@ pub trait CustomerAccountRepositoryScopeExt {
         &self,
         filter: &CustomerAccountFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CustomerVersion>>;
+    ) -> RepositoryResult<Vec<CustomerVersion>>;
 }
 
 impl CustomerAccountRepositoryScopeExt for Repository<'_, CustomerAccount> {
@@ -288,7 +111,7 @@ impl CustomerAccountRepositoryScopeExt for Repository<'_, CustomerAccount> {
         id: &str,
         scope: &CustomerReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<CustomerAccount>> {
+    ) -> RepositoryResult<Option<CustomerAccount>> {
         self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
     }
 
@@ -296,7 +119,7 @@ impl CustomerAccountRepositoryScopeExt for Repository<'_, CustomerAccount> {
         &self,
         filter: &CustomerAccountFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CustomerVersion>> {
+    ) -> RepositoryResult<Vec<CustomerVersion>> {
         mongo_ops::find_many(
             &self.collection().clone_with_type::<CustomerVersion>(),
             filter.to_doc(),
@@ -332,7 +155,7 @@ pub trait CustomerAssignmentRepositoryScopeExt {
         &self,
         user_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CustomerAssignment>>;
+    ) -> RepositoryResult<Vec<CustomerAssignment>>;
 }
 
 impl CustomerAssignmentRepositoryScopeExt for Repository<'_, CustomerAssignment> {
@@ -340,80 +163,154 @@ impl CustomerAssignmentRepositoryScopeExt for Repository<'_, CustomerAssignment>
         &self,
         user_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CustomerAssignment>> {
+    ) -> RepositoryResult<Vec<CustomerAssignment>> {
         self.find_many(doc! { "user_id": user_id }, executor).await
     }
 }
 
+/// 执行 identity 的完整查询阶段，返回有界客户主键。
+/// # 参数
+/// db 为客户仓储，access 为本阶段凭证，id 可收窄单一目标，executor 为原事务。
+/// # 返回
+/// 已授权且实际存在的客户主键。
+/// # 错误
+/// 超限或数据库读取失败时拒绝，不截断授权集合。
+pub async fn authorized_ids(
+    db: &Database,
+    access: &CompiledAccess,
+    id: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<String>> {
+    let mut pipeline = Vec::new();
+    if let Some(id) = id {
+        pipeline.push(doc! {"$match": {"id": id}});
+    }
+    pipeline.extend_from_slice(access.stages());
+    pipeline.extend([doc! {"$project": {"id": 1, "version": 1}}, doc! {"$limit": 10001}]);
+    let collection = db.customer_accounts().collection().clone_with_type::<CustomerVersion>();
+    let rows = aggregate::rows(&collection, pipeline, executor).await?;
+    if rows.len() > 10000 {
+        return Err(Error::ValidationError("客户查询超过上限，请收窄授权范围".into()));
+    }
+    Ok(rows.into_iter().map(|row| row.id).collect())
+}
+
+/// 在相同完整授权管道内执行客户分页与计数。
+/// # 参数
+/// db、filter 为客户仓储及业务筛选，context、port 为本阶段授权，executor 为原事务。
+/// # 返回
+/// 完整授权范围内的客户页。
+/// # 错误
+/// 凭证失效、数据库失败或数值越界时拒绝。
+pub async fn authorized_page(
+    db: &Database,
+    filter: &CustomerAccountFilter,
+    context: &CustomerResolvedScope,
+    port: &dyn CustomerDataScopePort,
+    executor: &mut dyn Executor,
+) -> Result<PageResult<CustomerAccountRow>> {
+    let compiled = compiled(context)?;
+    port.validate(context, executor).await?;
+    let collection = db.customer_accounts().collection().clone_with_type::<CustomerAccountRow>();
+    let options = page_options(filter);
+    let items =
+        aggregate::find(&collection, filter.to_doc(), options, compiled.stages().to_vec(), executor).await?;
+    let total = aggregate::count(&collection, filter.to_doc(), compiled.stages().to_vec(), executor).await?;
+    port.validate(context, executor).await?;
+    let total = i64::try_from(total).map_err(|_| Error::ValidationError("客户总数超限".into()))?;
+    Ok(PageResult { items, total })
+}
+
+fn page_options(filter: &CustomerAccountFilter) -> FindOptions {
+    FindOptions::builder()
+        .sort(sort_doc(
+            filter.sort_by.as_deref(),
+            filter.sort_ascending,
+            &["created_at", "updated_at", "customer_no", "status"],
+        ))
+        .skip(filter.skip())
+        .limit(filter.limit())
+        .projection(customer_account_projection())
+        .build()
+}
+
+/// 在业务条件收窄后读取完整授权客户身份版本。
+/// # 参数
+/// db、filter 为客户仓储及筛选，context、port 为本阶段授权，executor 为原事务。
+/// # 返回
+/// 有界、稳定排序的授权客户版本。
+/// # 错误
+/// 数据库或凭证复验失败时拒绝；超限由调用方整体拒绝。
+pub async fn authorized_versions(
+    db: &Database,
+    filter: &CustomerAccountFilter,
+    context: &CustomerResolvedScope,
+    port: &dyn CustomerDataScopePort,
+    executor: &mut dyn Executor,
+) -> Result<Vec<CustomerVersion>> {
+    let compiled = compiled(context)?;
+    port.validate(context, executor).await?;
+    let mut stages = vec![doc! {"$match": filter.to_doc()}];
+    stages.extend_from_slice(compiled.stages());
+    stages.extend([
+        doc! {"$sort": {"id": 1}},
+        doc! {"$project": {"id": 1, "version": 1}},
+        doc! {"$limit": 10001},
+    ]);
+    let collection = db.customer_accounts().collection().clone_with_type::<CustomerVersion>();
+    let rows = aggregate::rows(&collection, stages, executor).await?;
+    port.validate(context, executor).await?;
+    Ok(rows)
+}
+
+fn compiled(context: &CustomerResolvedScope) -> Result<&CompiledAccess> {
+    context.compiled.as_deref().ok_or_else(|| Error::Internal("客户查询缺少凭证".into()))
+}
+
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+
     use super::*;
 
     #[test]
-    fn empty_role_scope_rejects_create() {
-        let empty = CustomerReadScope::default();
-        assert!(!empty.allows_creation("sales-a", Some("org-a")));
-        let self_owned = CustomerReadScope {
-            roles: vec![CustomerScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() }],
-            authorized_customer_ids: Some(Vec::new()),
-            owned_customer_ids: vec![],
-            collaborative_customer_ids: vec![],
-            historical_customer_ids: vec![],
-            user_limit: None,
-        };
-        assert!(self_owned.is_empty());
-        assert!(self_owned.allows_creation("sales-a", Some("org-a")));
+    fn unmaterialized_or_empty_customer_results_never_become_an_unrestricted_filter() {
+        let mut scope = CustomerReadScope::default();
+        assert!(scope.is_empty());
+        assert_eq!(scope.document(), doc! {"$expr": false});
+        scope.authorized_customer_ids = Some(Vec::new());
+        assert!(scope.is_empty());
+        assert_eq!(scope.document(), doc! {"id": {"$in": Vec::<String>::new()}});
+        scope.authorized_customer_ids = Some(vec!["customer".into()]);
+        assert!(!scope.is_empty());
+        assert_eq!(scope.document(), doc! {"id": {"$in": ["customer"]}});
     }
 
     #[test]
-    fn creation_requires_role_and_personal_limit_without_history() {
-        let mut scope = CustomerReadScope {
-            roles: vec![CustomerScopeClause { company: true, ..Default::default() }],
-            authorized_customer_ids: None,
-            owned_customer_ids: vec![],
-            collaborative_customer_ids: vec![],
-            historical_customer_ids: vec![],
-            user_limit: None,
+    fn missing_compiled_access_is_an_explicit_error() {
+        let context = CustomerResolvedScope {
+            user_id: "sales".into(),
+            current: false,
+            scope_version: String::new(),
+            as_of: Instant::from_unix_secs(0),
+            compiled: None,
         };
-        assert!(scope.allows_creation("sales-a", Some("org-a")));
-        scope.user_limit =
-            Some(CustomerScopeClause { owner_org_unit_ids: vec!["org-b".into()], ..Default::default() });
-        assert!(!scope.allows_creation("sales-a", Some("org-a")));
-        assert!(scope.allows_creation("sales-a", Some("org-b")));
-        scope.historical_customer_ids.push("old-customer".into());
-        scope.roles.clear();
-        scope.authorized_customer_ids = Some(vec!["old-customer".into()]);
-        assert!(!scope.allows_creation("sales-a", Some("org-b")));
+        assert!(matches!(compiled(&context), Err(Error::Internal(_))));
     }
 
     #[test]
-    fn owner_and_collaborator_are_not_interchangeable() {
-        let owner = CustomerScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() };
-        let collab = CustomerScopeClause {
-            collaborative_customer_ids: vec!["customer-b".into()],
+    fn authorized_page_uses_bounded_paging_and_stable_sort_fallback() {
+        let filter = CustomerAccountFilter {
+            page: 3,
+            page_size: 20,
+            sort_by: Some("untrusted_field".into()),
+            sort_ascending: false,
             ..Default::default()
         };
-        assert!(owner.allows("sales-a", Some("org-a"), false));
-        assert!(!owner.allows("sales-b", Some("org-a"), true));
-        assert!(collab.allows("sales-b", Some("org-a"), true));
-        assert!(!collab.allows("sales-b", Some("org-a"), false));
-    }
-
-    #[test]
-    fn missing_scope_stays_restricted_and_company_is_explicit() {
-        assert_eq!(CustomerReadScope::default().document(), doc! { "$expr": false });
-        assert!(CustomerReadScope::default().is_empty());
-        assert!(!CustomerReadScope::default().is_company());
-        let company = CustomerReadScope {
-            authorized_customer_ids: None,
-            roles: vec![CustomerScopeClause { company: true, ..Default::default() }],
-            user_limit: None,
-            historical_customer_ids: vec![],
-            owned_customer_ids: vec![],
-            collaborative_customer_ids: vec![],
-        };
-        assert!(company.is_company());
-        assert!(!company.is_empty());
-        assert_eq!(company.document(), doc! {});
+        let options = page_options(&filter);
+        assert_eq!(options.skip, Some(40));
+        assert_eq!(options.limit, Some(20));
+        assert_eq!(options.sort, Some(doc! {"created_at": -1, "id": -1}));
+        assert!(options.projection.unwrap().contains_key("id"));
     }
 }

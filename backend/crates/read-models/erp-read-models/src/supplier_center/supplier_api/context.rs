@@ -1,11 +1,12 @@
 use application_core::AuditActor;
 use erp_core::ids::SupplierApiConnectionId;
-use erp_identity::{Permission, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierConnectionAction, SupplierHealthCheckRun,
 };
 use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::context::action_permission;
+use persistence_core::NoTransaction;
 
 use super::SupplierApiReadService;
 use crate::Result;
@@ -70,6 +71,8 @@ impl SupplierApiReadService {
             return Ok(false);
         };
         let permission = Permission::parse(permission)?;
-        Ok(rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await?)
+        Ok(AuthorizationService::new(self.db.clone(), rbac.clone(), AuthorizationRegistry::default())
+            .has_permission(actor, &permission, &mut NoTransaction)
+            .await?)
     }
 }

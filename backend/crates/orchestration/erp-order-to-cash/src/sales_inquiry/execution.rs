@@ -3,9 +3,10 @@
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_identity::Permission;
 use erp_sales::entity::sales_inquiry::{InquiryCommandReceipt, InquiryCommandResult, SalesInquiry};
 use erp_sales::service::sales_inquiry::SalesInquiryService;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
 
 use super::SalesInquiryProcess;
@@ -122,10 +123,11 @@ impl SalesInquiryProcess {
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
-        let revision = self.rbac.current_policy_revision().await?;
         let result = self
-            .rbac
-            .run_authorized_policy_transaction(revision, {
+            .db
+            .client()
+            .clone()
+            .with_transaction({
                 let actor = actor.clone();
                 let id = id.clone();
                 let command = command.clone();
@@ -224,7 +226,13 @@ impl SalesInquiryProcess {
                 .ensure_procurement_permission(actor, command.procurement_action(), executor)
                 .await?;
         } else if matches!(command, InquiryCommand::Create(_)) {
-            self.access().resolve_sales(actor, "create", executor).await?;
+            let required =
+                [Permission::parse("sales_inquiry:create")?, Permission::parse("sellable_sku:list")?];
+            crate::authorization::features(self.db.clone(), self.rbac.clone())
+                .permissions(actor, &required, executor)
+                .await?
+                .filter(|qualified| qualified.same_role(&required))
+                .ok_or_else(|| Error::Forbidden("当前账号缺少询价创建资格".into()))?;
         } else {
             self.access().require_sales(actor, command.sales_action(), id, executor).await?;
         }

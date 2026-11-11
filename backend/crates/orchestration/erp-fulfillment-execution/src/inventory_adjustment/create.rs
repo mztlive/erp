@@ -207,6 +207,7 @@ async fn validate_creation_source(
     if !balance.matches_adjustment_dimensions(&persist.adjustment, &persist.lines) {
         return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
     }
+    authorization.validate(executor).await?;
     Ok(())
 }
 

@@ -6,42 +6,42 @@ pub(super) mod flow;
 pub(super) mod invoice;
 pub(super) mod invoice_sources;
 pub(super) mod invoice_summary;
+mod management;
+mod management_facts;
 mod page;
 pub(super) mod payment;
 pub(super) mod receipt;
 mod request;
 mod source;
 
+pub(super) mod payable_source;
+pub(super) mod settlement_mapping;
+pub(super) mod source_access;
+pub(super) mod whole_access;
+pub(super) mod whole_facts;
+pub(super) mod whole_read;
+
 pub(super) use page::{aggregate, page_facet, page_only_facet, sort_document};
-pub(super) use source::{linked_condition_document, source_scope_document, source_stages};
+pub(super) use source::{linked_condition_document, source_stages};
 
 #[cfg(test)]
 pub(super) mod tests {
     use erp_core::common::time::Instant;
-    use erp_identity::entity::access_control::ResolvedScope;
-    use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeFacts};
 
-    use super::super::FundsAuthorization;
-
-    /// 构造已完成解析的空范围，查询合同测试只验证最终数据库条件，不执行资格 I/O。
+    use super::super::{FundsAuthorization, FundsReadContext};
     pub(super) fn authorization() -> FundsAuthorization {
         FundsAuthorization {
+            whole: Default::default(),
             sales: Default::default(),
             ledger_read: false,
             settlement: None,
             purchase_scope: None,
-            no_scope: true,
-            context: AuthorizedDataScope::test_fixture(DataScopeFacts {
-                user_id: "actor".into(),
+
+            context: FundsReadContext {
                 resource: "invoice".into(),
-                action: "list".into(),
-                scope: ResolvedScope { role_clauses: Vec::new(), user_limit: None },
-                qualified_roles: Default::default(),
-                organizations: Default::default(),
-                policy_version: 1,
                 scope_version: "scope".into(),
                 as_of: Instant::from_unix_secs(1),
-            }),
+            },
         }
     }
 }

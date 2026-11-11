@@ -126,6 +126,7 @@ impl SalesSelectionService {
         hash: String,
     ) -> Result<SalesSelectionBookletView> {
         let db = self.db.clone();
+        let service = self.clone();
         let client = db.client().clone();
         let scope = actor_id.to_string();
         let token_version = booklet.link_token_version;
@@ -136,6 +137,7 @@ impl SalesSelectionService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let executor: &mut dyn Executor = executor;
+                    service.authorize_booklet(&booklet_tx.base.id, "publish", executor).await?;
                     db.sales_selection_booklets().update(&mut booklet_tx, executor).await?;
                     for session in &sessions_tx {
                         db.sales_selection_sessions().create(session, executor).await?;
@@ -257,7 +259,7 @@ impl SalesSelectionService {
         expected_version: u64,
         actor_id: &str,
     ) -> Result<SalesSelectionBookletView> {
-        let service = Self::new(self.db.clone());
+        let service = self.clone();
         let (booklet_id, display_id, actor_id) =
             (booklet_id.to_string(), display_id.to_string(), actor_id.to_string());
         self.db
@@ -287,6 +289,7 @@ impl SalesSelectionService {
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
+        self.authorize_booklet(booklet_id, "maintain", executor).await?;
         let mut booklet = self.load_booklet(booklet_id, executor).await?;
         booklet
             .ensure_version(expected_version)

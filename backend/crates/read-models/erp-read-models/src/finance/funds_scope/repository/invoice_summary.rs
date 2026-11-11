@@ -9,10 +9,10 @@ use mongodb::Database;
 use persistence_core::Executor;
 use serde::Deserialize;
 
-use super::super::payable_source::source_key;
 use super::super::rows::{FundsSummaryView, build_summary, zero_amount};
 use super::super::whole_amount;
 use super::invoice::InvoiceVersion;
+use super::payable_source::source_key;
 use crate::{Error, Result};
 
 /// 首拍版本游标顺带读取的必要票面资格，不包括分配金额数组。

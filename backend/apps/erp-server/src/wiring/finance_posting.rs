@@ -22,7 +22,6 @@ pub fn finance_posting_ports(db: Database, rbac: SharedRbacService) -> FinancePo
     let task_db = db.clone();
     FinancePostingPorts::new(
         rbac.clone(),
-        shared_rbac_service(db.clone()),
         approval_runtime(db.clone(), rbac.clone()),
         purchase_access(db.clone(), rbac.clone()),
         funds_access_with_rbac(db.clone(), rbac.clone()),

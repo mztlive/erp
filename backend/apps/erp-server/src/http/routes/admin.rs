@@ -1,6 +1,6 @@
 use axum::routing::{delete, get, post, put};
 use axum::{Router, middleware};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::admin;
 use crate::http::middleware::{authenticate, with_permission};
@@ -20,7 +20,7 @@ use crate::permissions;
 /// # 返回值
 /// 返回统一认证的管理后台路由；业务操作按各路由校验 Casbin RBAC。
 pub fn routes(state: HttpState) -> Router<HttpState> {
-    let rbac_service = state.application().rbac();
+    let rbac_service = state.application().authorization();
 
     Router::new()
         .merge(account_routes(&rbac_service))
@@ -74,7 +74,7 @@ pub fn routes(state: HttpState) -> Router<HttpState> {
 ///
 /// # 返回值
 /// 返回账号相关路由集合
-fn account_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
+fn account_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/admins",
@@ -125,12 +125,12 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回值
 /// 返回角色相关路由集合
-fn role_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
+fn role_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
     role_template_routes(rbac_service).merge(role_crud_routes(rbac_service))
 }
 
 /// 内建岗位模板预览和生成，复用角色查看与创建权限。
-fn role_template_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
+fn role_template_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/role-templates",
@@ -151,7 +151,7 @@ fn role_template_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 普通角色的列表、创建、修改和删除入口。
-fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
+fn role_crud_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/roles",
@@ -198,7 +198,7 @@ fn role_crud_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回值
 /// 返回审计日志相关路由集合
-fn audit_log_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
+fn audit_log_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/audit-logs",
         with_permission(
@@ -216,7 +216,7 @@ fn audit_log_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回
 /// 返回规则查询、创建、更新和逐行解析路由集合。
-fn procurement_responsibility_routes(rbac_service: &SharedRbacService) -> Router<HttpState> {
+fn procurement_responsibility_routes(rbac_service: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-responsibility-rules",

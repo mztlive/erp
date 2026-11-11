@@ -2,65 +2,64 @@ use std::future::{Future, poll_fn};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use axum::routing::MethodRouter;
-use erp_identity::{AuthorizationPort, OrganizationScopeFact, Permission, SharedRbacService};
+use erp_identity::{AuthorizationService, Permission};
+use persistence_core::NoTransaction;
 use tower::{Layer, Service};
 use tracing::{error, warn};
 
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::permissions::PermissionBinding;
 
-/// Composition-root adapter: expose authorization facts without leaking RbacService.
-struct RbacAuthorizationPort(SharedRbacService);
+/// HTTP 层仅通过统一授权服务读取真实账号的功能资格。
+#[async_trait]
+trait HttpAuthorization: Send + Sync {
+    async fn allows(&self, actor: &AuditActor, permission: &Permission) -> erp_identity::Result<bool>;
+}
+
+struct RbacAuthorizationPort(AuthorizationService);
 
 #[async_trait]
-impl AuthorizationPort for RbacAuthorizationPort {
-    async fn allows(&self, subject: &str, permission: &Permission) -> erp_identity::Result<bool> {
-        self.0.enforce(subject, permission).await
-    }
-
-    async fn organization_scope(
-        &self,
-        _subject: &str,
-    ) -> erp_identity::Result<Option<OrganizationScopeFact>> {
-        Ok(None)
+impl HttpAuthorization for RbacAuthorizationPort {
+    async fn allows(&self, actor: &AuditActor, permission: &Permission) -> erp_identity::Result<bool> {
+        self.0.has_permission(actor, permission, &mut NoTransaction).await
     }
 }
 
-/// 为路由附加统一的 Casbin RBAC 权限校验。
+/// 为路由附加 identity 统一功能资格检查。
 ///
 /// # 参数
 /// * `route` - 待保护路由
-/// * `rbac_service` - 共享 RBAC 服务；中间件只通过 AuthorizationPort 读取判定事实
+/// * `authorization` - 账号与功能资格统一入口
 /// * `permission` - 所需权限
 ///
 /// # 返回值
 /// 返回带权限校验层的路由。
 pub fn with_permission(
     route: MethodRouter<HttpState>,
-    rbac_service: &SharedRbacService,
+    authorization: &AuthorizationService,
     permission: impl Into<PermissionBinding>,
 ) -> MethodRouter<HttpState> {
     route.route_layer(RbacAuthorizeLayer::new(
-        std::sync::Arc::new(RbacAuthorizationPort(rbac_service.clone())),
+        std::sync::Arc::new(RbacAuthorizationPort(authorization.clone())),
         permission.into().required.permission(),
     ))
 }
 
 #[derive(Clone)]
 struct RbacAuthorizeLayer {
-    authorization: std::sync::Arc<dyn AuthorizationPort>,
+    authorization: std::sync::Arc<dyn HttpAuthorization>,
     permission: Permission,
 }
 
 impl RbacAuthorizeLayer {
-    fn new(authorization: std::sync::Arc<dyn AuthorizationPort>, permission: Permission) -> Self {
+    fn new(authorization: std::sync::Arc<dyn HttpAuthorization>, permission: Permission) -> Self {
         Self { authorization, permission }
     }
 }
@@ -80,7 +79,7 @@ impl<Inner> Layer<Inner> for RbacAuthorizeLayer {
 #[derive(Clone)]
 struct RbacAuthorizeService<Inner> {
     inner: Inner,
-    authorization: std::sync::Arc<dyn AuthorizationPort>,
+    authorization: std::sync::Arc<dyn HttpAuthorization>,
     permission: Permission,
 }
 
@@ -101,15 +100,15 @@ where
         let mut inner = self.inner.clone();
         let authorization = self.authorization.clone();
         let permission = self.permission.clone();
-        let subject = request.extensions().get::<RbacSubject>().cloned();
+        let subject = request.extensions().get::<AuditActor>().cloned();
 
         Box::pin(async move {
             let Some(subject) = subject else {
-                warn!(event_kind = "authorization_attempt", result = "rejected", permission = %permission, "RBAC denied request without authenticated subject");
+                warn!(event_kind = "authorization_attempt", result = "rejected", permission = %permission, "Identity authorization denied request without authenticated actor");
                 return Ok(ApiResponse::<()>::unauthorized().into_response());
             };
 
-            match authorization.allows(&subject.0, &permission).await {
+            match authorization.allows(&subject, &permission).await {
                 Ok(true) => {
                     poll_fn(|context| inner.poll_ready(context)).await?;
                     inner.call(request).await
@@ -118,9 +117,9 @@ where
                     warn!(
                         event_kind = "authorization_attempt",
                         result = "rejected",
-                        subject = %subject.0,
+                        subject = %subject.id(),
                         permission = %permission,
-                        "RBAC denied request"
+                        "Identity authorization denied request"
                     );
                     Ok(ApiResponse::<()>::missing_permission(&permission).into_response())
                 },
@@ -128,10 +127,10 @@ where
                     error!(
                         event_kind = "authorization_attempt",
                         result = "unknown",
-                        subject = %subject.0,
+                        subject = %subject.id(),
                         permission = %permission,
                         error = %err,
-                        "Casbin authorization failed"
+                        "Identity authorization failed"
                     );
                     Ok(ApiResponse::<()>::system_error().into_response())
                 },
@@ -154,12 +153,9 @@ mod tests {
     struct Authorization(Option<bool>);
 
     #[async_trait]
-    impl AuthorizationPort for Authorization {
-        async fn allows(&self, _: &str, _: &Permission) -> erp_identity::Result<bool> {
+    impl HttpAuthorization for Authorization {
+        async fn allows(&self, _: &AuditActor, _: &Permission) -> erp_identity::Result<bool> {
             self.0.ok_or_else(|| erp_identity::Error::Internal("private provider error".into()))
-        }
-        async fn organization_scope(&self, _: &str) -> erp_identity::Result<Option<OrganizationScopeFact>> {
-            Ok(None)
         }
     }
 
@@ -180,7 +176,11 @@ mod tests {
             });
             let mut request = Request::new(Body::empty());
             if authenticated {
-                request.extensions_mut().insert(RbacSubject("user".into()));
+                request.extensions_mut().insert(AuditActor::new(
+                    "user".into(),
+                    "user".into(),
+                    erp_core::AccountKind::Admin,
+                ));
             }
             let response = layer.layer(inner).oneshot(request).await.unwrap();
             assert_eq!(response.status(), status);

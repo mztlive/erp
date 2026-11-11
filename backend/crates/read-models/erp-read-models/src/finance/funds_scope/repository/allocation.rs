@@ -157,33 +157,40 @@ pub(in crate::finance::funds_scope) async fn allocation_snapshot(
     materialize: bool,
     executor: &mut dyn Executor,
 ) -> Result<AllocationSnapshot> {
-    let base = allocation_pipeline(query, authorization, condition);
-    let mut pipeline = base.clone();
-    let sort = doc! { "created_at": -1, "id": -1 };
-    let projection = doc! { "_id": 0, "id": 1, "version": 1, "order": 1,
-    "source_version": "$_source.version" };
-    pipeline.extend([
-        doc! { "$sort": sort.clone() },
-        doc! { "$limit": 10000 },
-        doc! { "$project": projection },
-    ]);
-    let collection = db.collection::<Document>(<Database as PayableExt>::PURCHASE_INVOICE_ALLOCATIONS);
-    let versions = aggregate(collection.clone(), pipeline, executor).await?;
-    let mut snapshot = AllocationSnapshot { versions, ..Default::default() };
-    snapshot.ensure_bounded()?;
-    if materialize {
-        let page = allocation_page(db, base.clone(), query, sort.clone(), executor).await?;
-        snapshot.items = page.items;
-        snapshot.total = page.total;
-        let mut summary = base;
-        summary.extend([
-            doc! { "$sort": sort },
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let base = allocation_pipeline(query, authorization, condition);
+        let mut pipeline = base.clone();
+        let sort = doc! { "created_at": -1, "id": -1 };
+        let projection = doc! { "_id": 0, "id": 1, "version": 1, "order": 1,
+        "source_version": "$_source.version" };
+        pipeline.extend([
+            doc! { "$sort": sort.clone() },
             doc! { "$limit": 10000 },
-            doc! { "$project": summary_projection() },
+            doc! { "$project": projection },
         ]);
-        snapshot.summary = aggregate(collection, summary, executor).await?;
+        let collection = db.collection::<Document>(<Database as PayableExt>::PURCHASE_INVOICE_ALLOCATIONS);
+        let versions = aggregate(collection.clone(), pipeline, executor).await?;
+        let mut snapshot = AllocationSnapshot { versions, ..Default::default() };
+        snapshot.ensure_bounded()?;
+        if materialize {
+            let page = allocation_page(db, base.clone(), query, sort.clone(), executor).await?;
+            snapshot.items = page.items;
+            snapshot.total = page.total;
+            let mut summary = base;
+            summary.extend([
+                doc! { "$sort": sort },
+                doc! { "$limit": 10000 },
+                doc! { "$project": summary_projection() },
+            ]);
+            snapshot.summary = aggregate(collection, summary, executor).await?;
+        }
+        Ok(snapshot)
     }
-    Ok(snapshot)
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 最终授权后的页面和计数共用一个分支，完整版本与金额独立游标读取。

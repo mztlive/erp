@@ -10,8 +10,7 @@ mod query;
 
 use application_core::AuditActor;
 pub use dto::{DocumentApprovalHistoryItemView, DocumentApprovalInstanceView};
-use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_workflow::service::approval::execution::RuntimeHistoryPage;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -53,6 +52,6 @@ pub(crate) async fn has_document_permission(
     executor: &mut dyn Executor,
 ) -> crate::Result<bool> {
     let permission = Permission::parse(format!("{resource}:{action}"))?;
-    let service = DataScopeService::new(db.clone(), rbac.clone());
-    Ok(service.batch(actor, std::slice::from_ref(&permission), executor).has_permission(&permission).await?)
+    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
+    Ok(service.has_permission(actor, &permission, executor).await?)
 }

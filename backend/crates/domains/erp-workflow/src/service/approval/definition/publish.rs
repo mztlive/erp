@@ -169,7 +169,7 @@ async fn publish_tx(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let PublishTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(identity_service, actor, &policy, executor).await?;
+    ensure_definition_admin_permission(db, identity_service, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -261,7 +261,7 @@ async fn publish_candidate(
     let current = reload_draft_for_cas(db, &graph.definition, expected_lock, executor).await?;
     current.validate_linear().map_err(map_model_error)?;
     validate_required_purposes(policy, &current.purpose_refs())?;
-    let snapshots = validate_assignees(identity_service, &current.assignee_ids(), executor).await?;
+    let snapshots = validate_assignees(db, identity_service, &current.assignee_ids(), executor).await?;
     ensure_actions_registered(policy)?;
     if let Some(config) = db.approval_copies().config(&current.definition.base.id, executor).await? {
         let rules = ApprovalCopyRule::prepare(config.rules, current.nodes.len())?;

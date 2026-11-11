@@ -526,7 +526,6 @@ impl WarehouseListQuery {
     /// 不返回错误。
     pub(crate) fn into_filter(self) -> WarehouseFilter {
         WarehouseFilter {
-            authorized_ids: None,
             warehouse_id: self.warehouse_id,
             require_inbound_handler: self.require_inbound_handler,
             q: self.q,

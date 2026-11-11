@@ -9,7 +9,7 @@ use erp_sales::entity::sales_order::{
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::mapper::{build_stable_lines, build_working_copy};
 use erp_workflow::entity::document_registry::{BusinessDocument, BusinessDocumentData};
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::super::SalesOrderCommandProcess;
 use super::super::authorization::SalesCommandAccess;
@@ -30,6 +30,7 @@ impl SalesOrderCommandProcess {
     ///
     /// # 参数
     /// * `req` / `actor` / `access` - 当前完整命令及其认证授权
+    /// * `executor` - 调用方读取事务执行器
     /// # 返回
     /// 返回保持相同行顺序的稳定销售、单据注册及工作副本。
     /// # 错误
@@ -39,31 +40,26 @@ impl SalesOrderCommandProcess {
         req: &CreateSalesOrderRequest,
         actor: &AuditActor,
         access: &SalesCommandAccess,
+        executor: &mut dyn Executor,
     ) -> Result<PreparedSalesCreation> {
-        let editable = self.inquiry_sales_draft(req, actor, &mut NoTransaction).await?;
+        let editable = self.inquiry_sales_draft(req, actor, executor).await?;
         let (customer_id, settlement_party_id, draft) = self
-            .resolve_sales_command_draft(
-                access,
-                &req.contract_id,
-                &req.customer_id,
-                editable,
-                &mut NoTransaction,
-            )
+            .resolve_sales_command_draft(access, &req.contract_id, &req.customer_id, editable, executor)
             .await?;
-        self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
-        let organization = required_business_org(&self.db, actor.id(), &mut NoTransaction).await?;
+        let refs = draft
+            .lines
+            .iter()
+            .filter_map(|line| line.goods.as_ref())
+            .map(|goods| (goods.sku_id.to_string(), goods.sku_revision_id.to_string()))
+            .collect::<Vec<_>>();
+        self.sales().ensure_sellable_refs(&refs, &self.catalog(), executor).await?;
+        let organization = required_business_org(&self.db, actor.id(), executor).await?;
         let mut order =
             SalesOrderService::prepare_order(req, customer_id, settlement_party_id, actor, organization)?;
         if let Some(id) = &req.selection_proposal_id {
             order.selection_source = Some(
-                self.selection_source(
-                    id.as_ref(),
-                    actor,
-                    &order.customer_id,
-                    order.business_type,
-                    &mut NoTransaction,
-                )
-                .await?,
+                self.selection_source(id.as_ref(), actor, &order.customer_id, order.business_type, executor)
+                    .await?,
             );
         }
         let order_id = SalesOrderId::new(order.base.id.clone());

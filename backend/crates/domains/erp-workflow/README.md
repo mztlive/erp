@@ -87,7 +87,10 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-workflow --lib --locked
 - 根对象必需事实为负责人和主属组织。已确认没有值时返回 `FactValue::Known(None)`，不能以未读取值代替。
 - 任务列表不增加历史参与或记录读取授权分支。Mine、Managed、History 视图均先通过 list 范围，再追加视图筛选。
 - 任务来源材料的读取资格、授权就绪状态和业务办理条件分别检查，不参与本人待办计数。
+- 审批管理、绑定升级、财务负责人和任务执行的完整功能资格必须通过 `QualifiedPermissions::same_role`；不得把不同角色的逐项资格拼成完整操作资格。
+- `TaskAccess` 只携带当前展示批次中，由 identity 管理对象结果及完整执行、审批功能资格生成的精确任务 ID；这些展示结果不能替代命令授权重验。动作投影不得保存角色权限集合或重新解释创建人、历史参与者与负责人读取规则。
+- 任务用例只在统一对象授权之后核验业务状态、冻结责任行、来源存在性及主体版本。
 - 查询 Mapping 只在调用方事务中编译和执行。事务内使用同一授权时点、组织版本和有效期边界；跨页版本包含读取及管理查询依赖。
 - 组织关联复用 identity 提供的查询片段及成员索引，按任务负责人查找当前关系，不预加载全部负责人名单。重复有效主属关系会被查询排除；对象检查返回事实错误。
 
-实现位置：[WorkItem Mapping](src/repository/work_item/authorization.rs)、[固定登记与统一调用](src/service/work_item/read/identity.rs)、[对象事实端口](src/service/work_item/read/facts.rs)。
+实现位置：[WorkItem Mapping](src/repository/work_item/authorization.rs)、[固定登记与统一调用](src/service/work_item/read/identity.rs)、[对象事实端口](src/service/work_item/authorization/facts.rs)。

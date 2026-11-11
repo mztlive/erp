@@ -197,7 +197,8 @@ where
         assets: &[FileAsset],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(authorize_material_transfer(&self.service.identity, actor, assets, executor).await?)
+        Ok(authorize_material_transfer(&self.service.identity, &self.service.db, actor, assets, executor)
+            .await?)
     }
 
     async fn authorize_stock_adjustment_cancel(
@@ -231,15 +232,7 @@ where
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        authorize_submit_with(
-            &self.service.identity,
-            &self.service.db,
-            &self.service.auth,
-            adjustment,
-            actor,
-            executor,
-        )
-        .await
+        authorize_submit_with(&self.service.identity, &self.service.db, adjustment, actor, executor).await
     }
 
     async fn revalidate_stock_adjustment_candidates(

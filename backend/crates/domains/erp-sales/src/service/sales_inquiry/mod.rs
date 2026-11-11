@@ -82,7 +82,7 @@ impl SalesInquiryService {
         filter: &InquiryListFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SalesInquiry>> {
-        Ok(SalesInquiryRepository::new(&self.db).inquiry_list(filter, executor).await?)
+        SalesInquiryRepository::new(&self.db).inquiry_list(filter, executor).await
     }
 
     /// 取得不含采购工作草稿及内部资料的销售投影。

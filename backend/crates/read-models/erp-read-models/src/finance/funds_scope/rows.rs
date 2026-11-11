@@ -16,8 +16,8 @@ use serde::Serialize;
 
 use super::authorization::*;
 use super::invoice::sales_invoice_allocation_view;
-use super::payable_source::source_key;
 use super::receipt::receipt_allocation_view;
+use super::repository::payable_source::source_key;
 use crate::Result;
 
 mod payable;
@@ -42,10 +42,6 @@ pub struct FundsScopedPage<T> {
     pub page_size: u32,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 无范围时的空结果原因。
@@ -740,8 +736,6 @@ mod tests {
             page: 2,
             page_size: 20,
             scope_version: "scope-v1".into(),
-            policy_version: 3,
-            organization_version: 4,
             as_of: "2026-09-23T00:00:00Z".into(),
             empty_reason: None,
             scope_summary: "范围摘要",

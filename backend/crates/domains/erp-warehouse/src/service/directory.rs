@@ -1,16 +1,16 @@
 //! Warehouse 独立目录：资格、授权、搜索与回显采用同一事务路径。
 use std::sync::Arc;
 
-use application_core::directory::{DirectoryPage, DirectoryQuery, ScopedPage};
+use application_core::directory::{DirectoryPage, DirectoryQuery, DirectoryScope, ScopedPage};
 use application_core::{AuditActor, PageView};
+use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
+use crate::authorization::{WarehouseQuery, map_identity_error};
 use crate::ports::WarehouseDirectoryAccess;
-use crate::repository::WarehouseExt;
-use crate::repository::directory::snapshot;
-use crate::repository::prelude::*;
+use crate::repository::directory::{snapshot, warehouses};
 use crate::{Error, Result, WarehouseListParams, WarehouseView};
 
 /// 本域对象目录用例。
@@ -45,8 +45,10 @@ impl WarehouseDirectoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let scope = access.resolve(&actor, executor).await?;
-                    let rows = snapshot(&db, &scope, &query, executor).await?;
+                    let read = access.resolve(&actor, executor).await?;
+                    let rows = snapshot(&db, &read, &query, executor).await?;
+                    let scope = directory_scope(&read, rows.iter().map(|row| row.id.clone()).collect());
+                    read.validate(executor).await.map_err(map_identity_error)?;
                     let page = DirectoryPage::from_snapshot(rows, &query, scope)?;
                     if query.scope_version.as_ref().is_some_and(|v| v != &page.scope_version) {
                         return Err(Error::ConflictError(
@@ -84,22 +86,36 @@ impl WarehouseDirectoryService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let scope = access.resolve(&actor, executor).await?;
-                    if params.scope_version.as_ref().is_some_and(|v| v != &scope.scope_version) {
+                    let read = access.resolve(&actor, executor).await?;
+                    if params.scope_version.as_ref().is_some_and(|v| v != &read.version()) {
                         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：仓库范围已变化".into()));
                     }
-                    let mut filter = params.normalized()?.into_filter();
-                    filter.authorized_ids = scope.ids.clone();
-                    let result = db.warehouses().search_warehouses(&filter, executor).await?;
+                    let filter = params.normalized()?.into_filter();
+                    let result = warehouses(&db, &read, &filter, executor).await?;
+                    let scope =
+                        directory_scope(&read, result.items.iter().map(|row| row.id.clone()).collect());
                     let page = PageView {
                         items: result.items.into_iter().map(WarehouseView::from_row).collect(),
                         total: result.total,
                         page: filter.page,
                         page_size: filter.page_size,
                     };
+                    read.validate(executor).await.map_err(map_identity_error)?;
                     Ok(ScopedPage::new(page, scope))
                 })
             })
             .await
+    }
+}
+
+/// 响应元信息只记录本次已授权结果身份，不参与仓储授权条件。
+fn directory_scope(read: &WarehouseQuery, ids: Vec<String>) -> DirectoryScope {
+    DirectoryScope {
+        ids: Some(ids),
+        scope_version: read.version(),
+        policy_version: 0,
+        organization_version: 0,
+        as_of: Instant::now().as_utc().to_rfc3339(),
+        no_scope: read.is_empty(),
     }
 }

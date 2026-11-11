@@ -1,10 +1,9 @@
 //! 销售范围与采购当前任务授权分离，所有命令复用原事务执行器。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::access_control::ScopedObject;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use erp_identity::service::account_permissions::ensure_actor_permissions;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AuthorizationService, CompiledAccess, Permission, SharedRbacService};
 use erp_procure_to_pay::procure_to_pay::responsibility::eligibility::ProcurementInquiryEligibility;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
@@ -13,6 +12,7 @@ use erp_workflow::repository::{WorkItemExt, WorkItemRepositoryExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::authorization;
 use crate::{Error, Result};
 
 /// 当前询价销售范围与采购责任读取器。
@@ -23,39 +23,13 @@ pub struct SalesInquiryAccess {
 }
 
 impl SalesInquiryAccess {
-    /// 证明当前询价写动作与公司商品选择资格来自同一有效角色。
-    ///
+    /// 按当前询价事实核验动作及同角色商品选择资格。
     /// # 参数
-    /// `actor`、`action` 为销售需求写动作，`executor` 为原事务。
+    /// actor、action 为当前身份与动作，inquiry 为原事务可信事实，executor 为原执行器。
     /// # 返回
-    /// 同角色同时具备询价动作与商品选择权限的数据范围。
+    /// 完整资格与对象范围满足时成功。
     /// # 错误
-    /// 账号、角色、动作、商品选择权限或范围失效时拒绝。
-    pub async fn resolve_selection(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let permission = Permission::parse("sellable_sku:list")?;
-        Ok(DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(
-                actor,
-                &Permission::parse(format!("{}:{}", "sales_inquiry", action))?,
-                &[permission],
-                executor,
-            )
-            .await?)
-    }
-
-    /// 将商品选择资格与当前询价责任范围求交。
-    ///
-    /// # 参数
-    /// `inquiry` 为当前事务读取的询价，其余为当前需求写动作及执行器。
-    /// # 返回
-    /// 同角色完整资格的数据范围覆盖该询价时成功。
-    /// # 错误
-    /// 不允许跨角色拼接选择权限和公司范围；不覆盖时拒绝。
+    /// 无权或事实失效时拒绝。
     pub async fn ensure_selection(
         &self,
         actor: &AuditActor,
@@ -63,12 +37,29 @@ impl SalesInquiryAccess {
         inquiry: &SalesInquiry,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let access = self.resolve_selection(actor, action, executor).await?;
-        if !Self::allows_sales(&access, inquiry) {
-            return Err(Error::Forbidden("当前询价范围不具备商品选择资格".into()));
-        }
-        Ok(())
+        self.require_permissions(actor, action, inquiry, &[Permission::parse("sellable_sku:list")?], executor)
+            .await
     }
+
+    /// 按可信候选对象和额外功能资格执行统一授权。
+    /// # 参数
+    /// actor、action 为服务端入口，inquiry 为业务事实，extra 为固定权限集合，executor 为原事务。
+    /// # 返回
+    /// 完整对象授权成立时成功。
+    /// # 错误
+    /// 账号、资格或范围失效时拒绝。
+    pub async fn require_permissions(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        inquiry: &SalesInquiry,
+        extra: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        authorization::require(self.db.clone(), self.rbac.clone(), actor, action, inquiry, extra, executor)
+            .await
+    }
+
     /// 绑定身份与询价事实来源，不进行预授权。
     ///
     /// # 参数
@@ -81,50 +72,20 @@ impl SalesInquiryAccess {
         Self { db, rbac }
     }
 
-    /// 在调用方事务内解析当前销售动作范围。
-    ///
+    /// 编译当前询价查询约束，调用仓储前后复验。
     /// # 参数
-    /// `actor` 为当前账号，`action` 为已注册销售询价动作，`executor` 为原事务。
+    /// actor、action 为当前身份及动作，executor 为原执行器。
     /// # 返回
-    /// 当前有效账号与同角色动作的数据范围。
+    /// 查询凭证和生成它的授权服务。
     /// # 错误
-    /// 账号、角色或动作失效时失败关闭。
+    /// 账号、动作或编译失败时拒绝。
     pub async fn resolve_sales(
         &self,
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        Ok(DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(
-                actor,
-                &Permission::parse(format!("{}:{}", "sales_inquiry", action))?,
-                &[],
-                executor,
-            )
-            .await?)
-    }
-
-    /// 校验当前销售责任和业务组织是否在本动作范围内。
-    ///
-    /// # 参数
-    /// `access` 为同一事务解析结果，`inquiry` 为当前业务事实。
-    /// # 返回
-    /// 负责人或组织范围满足时为 `true`；历史参与不授予访问权。
-    /// # 错误
-    /// 不返回错误。
-    pub fn allows_sales(access: &AuthorizedDataScope, inquiry: &SalesInquiry) -> bool {
-        access.scope.allows(
-            &ScopedObject {
-                owned: inquiry.sales_owner_user_id == access.user_id,
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: Some(&inquiry.business_org_unit_id),
-                settlement_party_id: None,
-                warehouse_id: None,
-            },
-            false,
-        )
+    ) -> Result<(Arc<CompiledAccess>, AuthorizationService)> {
+        authorization::query(self.db.clone(), self.rbac.clone(), actor, action, executor).await
     }
 
     /// 在当前动作范围内读取询价，销售接口不得调用采购内部报价读取。
@@ -142,11 +103,8 @@ impl SalesInquiryAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesInquiry> {
-        let access = self.resolve_sales(actor, action, executor).await?;
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
-        if !Self::allows_sales(&access, &inquiry) {
-            return Err(Error::NotFound("询价不存在或无权操作".into()));
-        }
+        self.require_permissions(actor, action, &inquiry, &[], executor).await?;
         Ok(inquiry)
     }
 
@@ -170,6 +128,8 @@ impl SalesInquiryAccess {
     ) -> Result<(SalesInquiry, WorkItem)> {
         self.ensure_procurement_permission(actor, action, executor).await?;
         let item = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
+        authorization::require_task_owner(self.db.clone(), self.rbac.clone(), actor, action, &item, executor)
+            .await?;
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
         let ids = inquiry
             .current_procurement_requirement()?
@@ -207,6 +167,8 @@ impl SalesInquiryAccess {
         }
         self.ensure_procurement_permission(actor, action, executor).await?;
         let task = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
+        authorization::require_task_owner(self.db.clone(), self.rbac.clone(), actor, action, &task, executor)
+            .await?;
         if task.status == WorkItemStatus::Open {
             return self.require_task(actor, action, id, task_id, None, executor).await;
         }
@@ -265,7 +227,12 @@ impl SalesInquiryAccess {
             .iter()
             .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(ensure_actor_permissions(&self.db, &self.rbac, actor, &permissions, executor).await?)
+        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+            .permissions(actor, &permissions, executor)
+            .await?
+            .filter(|qualified| qualified.same_role(&permissions))
+            .ok_or_else(|| Error::Forbidden("当前账号缺少完整询价操作权限".into()))?;
+        Ok(qualified.policy_revision())
     }
 }
 

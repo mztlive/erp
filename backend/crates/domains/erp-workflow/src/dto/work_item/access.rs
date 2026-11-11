@@ -83,7 +83,6 @@ impl ViewAccess {
 #[cfg(test)]
 mod tests {
     use erp_core::ids::WorkItemId;
-    use erp_identity::{Permission, PermissionSet};
 
     use super::*;
     use crate::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemType};
@@ -111,13 +110,12 @@ mod tests {
         .into()
     }
 
-    /// 管理授权只作用于精确任务；通配权限仍由 identity 解释。
+    /// identity 管理判定只作用于精确任务。
     #[test]
     fn management_proof_does_not_transfer_to_another_task_with_the_same_owner() {
         let first = task("first");
         let second = task("second");
         let mut access = TaskAccess::new("manager".into());
-        access.permissions = PermissionSet::new([Permission::parse("work_item:*").unwrap()]);
         access.managed_task_ids.insert(first.id.clone());
         assert!(
             ViewAccess::from_fields(&first, WorkItemScope::Managed, &access)
@@ -129,7 +127,7 @@ mod tests {
                 .allowed_actions
                 .contains(&WorkItemAllowedAction::Reassign)
         );
-        access.permissions = PermissionSet::default();
+        access.managed_task_ids.clear();
         assert!(
             !ViewAccess::from_fields(&first, WorkItemScope::Managed, &access)
                 .allowed_actions
@@ -142,10 +140,32 @@ mod tests {
     fn history_and_terminal_responses_have_no_actions() {
         let mut fields = task("first");
         let mut access = TaskAccess::new("manager".into());
-        access.permissions = PermissionSet::new([Permission::parse("work_item:manage").unwrap()]);
         access.managed_task_ids.insert(fields.id.clone());
         assert!(ViewAccess::from_fields(&fields, WorkItemScope::History, &access).allowed_actions.is_empty());
         fields.status = WorkItemStatus::Completed;
         assert!(ViewAccess::from_fields(&fields, WorkItemScope::Managed, &access).allowed_actions.is_empty());
+    }
+    #[test]
+    fn execution_result_is_bound_to_exact_task_and_business_owner() {
+        let first = task("first");
+        let second = task("second");
+        let mut access = TaskAccess::new("owner".into());
+        access.executable_task_ids.insert(first.id.clone());
+        assert!(
+            ViewAccess::from_fields(&first, WorkItemScope::Mine, &access)
+                .allowed_actions
+                .contains(&WorkItemAllowedAction::Process)
+        );
+        assert!(
+            !ViewAccess::from_fields(&second, WorkItemScope::Mine, &access)
+                .allowed_actions
+                .contains(&WorkItemAllowedAction::Process)
+        );
+        access.executable_task_ids.clear();
+        assert!(
+            !ViewAccess::from_fields(&first, WorkItemScope::Mine, &access)
+                .allowed_actions
+                .contains(&WorkItemAllowedAction::Process)
+        );
     }
 }

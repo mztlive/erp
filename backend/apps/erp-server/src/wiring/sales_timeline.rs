@@ -4,7 +4,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_finance::repository::PurchasePaymentRequestExt;
-use erp_identity::{SharedRbacService, subject};
+use erp_identity::SharedRbacService;
 use erp_read_models::finance::payment_request::PurchasePaymentRequestReadService;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_read_models::sales_timeline::{SalesTimelineReadService, TimelineAccessPort, TimelineDocument};
@@ -61,7 +61,10 @@ impl TimelineAccess {
     ) -> Result<bool> {
         let policy = ReadPolicy::for_document(document.kind);
         let permission = policy.permission(document.kind)?;
-        if !self.rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
+        if !super::authorization::authorization_service(self.db.clone(), self.rbac.clone())
+            .has_permission(actor, &permission, executor)
+            .await?
+        {
             return Ok(false);
         }
         match policy {

@@ -32,14 +32,14 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> erp_catalog::Result<Vec<String>> {
         CatalogSupplyRepository::new(&self.db).product_candidate_ids(filter, executor).await
     }
     async fn product_page(
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>> {
+    ) -> erp_catalog::Result<PageResult<ProductRow>> {
         CatalogSupplyRepository::new(&self.db).product_page(filter, executor).await
     }
     async fn search_sellable_skus(

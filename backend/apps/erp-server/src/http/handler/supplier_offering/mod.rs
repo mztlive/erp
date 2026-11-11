@@ -23,10 +23,10 @@ use erp_supply::dto::supplier_offering::{
     UpdateSupplierOfferingAvailabilityResult,
 };
 use erp_supply::{HandoverCandidateView, HandoverSupplierOfferingRequest, HandoverSupplierOfferingView};
+use persistence_core::NoTransaction;
 
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{offering_access, scoped_offering_service};
@@ -42,7 +42,6 @@ use crate::wiring::{offering_access, scoped_offering_service};
 /// 返回供给分页列表；无成本权限时自动清除成本字段。
 pub async fn list(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierOfferingListParams>,
 ) -> Result<SupplierOfferingListView> {
@@ -53,7 +52,7 @@ pub async fn list(
     )
     .list(&params, &actor)
     .await?;
-    if !can_view_costs(&state, &subject).await? {
+    if !can_view_costs(&state, &actor).await? {
         for item in &mut page.data.page.items {
             item.redact_costs();
         }
@@ -199,9 +198,14 @@ pub async fn offering_handover_candidates(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-async fn can_view_costs(state: &HttpState, subject: &RbacSubject) -> std::result::Result<bool, Error> {
+async fn can_view_costs(state: &HttpState, actor: &AuditActor) -> std::result::Result<bool, Error> {
     let permission = Permission::parse("supplier_offering_cost:detail")?;
-    state.application().rbac().enforce(&subject.0, &permission).await.map_err(Into::into)
+    state
+        .application()
+        .authorization()
+        .has_permission(actor, &permission, &mut NoTransaction)
+        .await
+        .map_err(Into::into)
 }
 
 #[cfg(test)]

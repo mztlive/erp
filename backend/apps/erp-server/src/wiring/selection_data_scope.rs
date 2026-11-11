@@ -1,81 +1,96 @@
-//! 选品范围授权 adapter：调用身份域公共解析器，转换成选品 Port 事实。
-
+//! 选品统一授权登记；业务映射和事实由拥有领域提供。
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::access_control::{ScopeClause, ScopedObject};
-use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::{Permission, SharedRbacService};
-use erp_sales::ports::{
-    SelectionDataScopePort, SelectionResolvedClause, SelectionResolvedScope, SelectionScopeObject,
+use erp_identity::entity::authorization::{FactKind, ReadAccess};
+use erp_identity::ports::{AccessFactsPort, AccessMapping};
+use erp_identity::{
+    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget, AuthorizationRegistry,
+    AuthorizationService, DataAccess, Permission, ResourceTargets, SharedRbacService,
 };
+use erp_sales::ports::{SelectionDataScopePort, SelectionResolvedScope};
+use erp_sales::repository::sales_selection::authorization::{SelectionFacts, SelectionMapping};
 use erp_sales::service::sales_selection::SelectionAccess;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::identity_error::map_identity_error;
-use super::scope_support::{self, evaluate_registered, reject_unsupported_dimensions, scope_clause};
-
+use super::scope_support;
 map_identity_error!(erp_sales);
 
-/// 组合层选品范围 adapter，持有身份域解析所需依赖。
+type SelectionAuthorization = (AuthorizationService, Arc<dyn AccessMapping>, Arc<dyn AccessMapping>);
+
+/// 组合层固定选品目录及事实端口。
 #[derive(Clone)]
 pub struct MongoSelectionDataScope {
     db: Database,
     rbac: SharedRbacService,
 }
-
 impl MongoSelectionDataScope {
-    /// 绑定身份数据库及现有 RBAC 实例。
-    ///
+    /// 绑定身份设施。
     /// # 参数
-    /// * `db` - 身份与组织集合所在数据库
-    /// * `rbac` - 现有 RBAC 快照服务
-    ///
+    /// db 为数据库，rbac 为身份策略设施。
     /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
+    /// 不执行 I/O 的适配器。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在构造时补公司范围或自行解释原始范围规则。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
-
-    /// 包装为选品域可注入的共享 Port。
-    ///
+    /// 构造选品域共享端口。
     /// # 参数
-    /// * `db` - 身份与组织集合所在数据库
-    /// * `rbac` - 现有 RBAC 快照服务
-    ///
+    /// db、rbac 为应用共用身份设施。
     /// # 返回
-    /// 返回选品范围 Port。
-    ///
+    /// 已接线选品端口。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 解析必须调用 DataScopeService；不得把身份实体交给选品域。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn SelectionDataScopePort> {
         Arc::new(Self::new(db, rbac))
     }
+    fn service(&self, facts: Arc<dyn AccessFactsPort>) -> erp_identity::Result<SelectionAuthorization> {
+        let booklet: Arc<dyn AccessMapping> = Arc::new(SelectionMapping::new("sales_selection_booklet")?);
+        let proposal: Arc<dyn AccessMapping> = Arc::new(SelectionMapping::new("sales_selection_proposal")?);
+        let mut entries = Vec::new();
+        for (resource, actions, mapping) in [
+            (
+                "sales_selection_booklet",
+                &[
+                    "list",
+                    "get",
+                    "create",
+                    "maintain",
+                    "prepare",
+                    "publish",
+                    "copy_link",
+                    "rotate_link",
+                    "close",
+                    "revoke",
+                    "void",
+                ][..],
+                &booklet,
+            ),
+            ("sales_selection_proposal", &["list", "get"][..], &proposal),
+        ] {
+            for action in actions {
+                entries.push(registration(resource, action, mapping.clone(), facts.clone())?);
+            }
+        }
+        Ok((
+            AuthorizationService::new(
+                self.db.clone(),
+                self.rbac.clone(),
+                AuthorizationRegistry::new(entries)?,
+            ),
+            booklet,
+            proposal,
+        ))
+    }
 }
-
 #[async_trait]
 impl SelectionDataScopePort for MongoSelectionDataScope {
-    fn allows(
-        &self,
-        scope: &SelectionResolvedScope,
-        object: &SelectionScopeObject,
-    ) -> erp_sales::Result<bool> {
-        evaluate_object(scope, object)
-    }
-
     async fn resolve(
         &self,
         actor: &AuditActor,
@@ -83,14 +98,74 @@ impl SelectionDataScopePort for MongoSelectionDataScope {
         action: &str,
         executor: &mut dyn Executor,
     ) -> erp_sales::Result<SelectionResolvedScope> {
-        ensure_selection_resource(resource)?;
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, &Permission::parse(format!("{}:{}", resource, action))?, executor)
+        let (authorization, booklet, proposal) =
+            self.service(Arc::new(SelectionFacts::new(self.db.clone()))).map_err(map_identity_error)?;
+        let mapping = match resource {
+            "sales_selection_booklet" => booklet,
+            "sales_selection_proposal" => proposal,
+            _ => return Err(erp_sales::Error::ValidationError("非选品资源".into())),
+        };
+        let permission = Permission::parse(format!("{resource}:{action}"))?;
+        let query = authorization
+            .query(actor, &permission, AccessSubject::Direct, executor)
             .await
             .map_err(map_identity_error)?;
-        map_access(access)
+        let compiled = query.compile(mapping.as_ref(), executor).await.map_err(map_identity_error)?;
+        authorization.validate(&compiled, executor).await.map_err(map_identity_error)?;
+        Ok(SelectionResolvedScope {
+            user_id: actor.id().into(),
+            resource: resource.into(),
+            action: action.into(),
+            scope_version: compiled.version(),
+            as_of: Instant::now(),
+            access: Arc::new(compiled),
+            authorization,
+        })
     }
-
+    async fn require(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_sales::Result<()> {
+        let (authorization, _, _) =
+            self.service(Arc::new(SelectionFacts::new(self.db.clone()))).map_err(map_identity_error)?;
+        let permission = Permission::parse(format!("{resource}:{action}"))?;
+        let ids = ResourceTargets::new(&[id]).map_err(map_identity_error)?;
+        authorization
+            .require(
+                actor,
+                &permission,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids },
+                executor,
+            )
+            .await
+            .map_err(map_identity_error)
+    }
+    async fn require_new(
+        &self,
+        actor: &AuditActor,
+        owner: &str,
+        org: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_sales::Result<()> {
+        let (authorization, _, _) = self
+            .service(Arc::new(SelectionFacts::proposed(self.db.clone(), owner, org)))
+            .map_err(map_identity_error)?;
+        let permission = Permission::parse("sales_selection_booklet:create")?;
+        let ids = ResourceTargets::new(&["selection_new"]).map_err(map_identity_error)?;
+        authorization
+            .require(
+                actor,
+                &permission,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids },
+                executor,
+            )
+            .await
+            .map_err(map_identity_error)
+    }
     async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
@@ -126,282 +201,38 @@ impl SelectionDataScopePort for MongoSelectionDataScope {
         scope_support::own_org(&self.db, user_id, at, executor, Into::into, map_identity_error).await
     }
 }
-
-/// 校验选品资源名；方案沿所属册责任解释，共用同一 adapter。
-///
+/// 创建已接线选品授权服务。
 /// # 参数
-/// * `resource` - 请求资源
-///
+/// db、rbac 为应用共享设施。
 /// # 返回
-/// 选品册或方案资源时通过。
-///
+/// 选品用例授权入口。
 /// # 错误
-/// 其他资源返回校验错误。
-///
-/// # 关键业务约束
-/// 不得把选品以外的资源接入本 adapter。
-fn ensure_selection_resource(resource: &str) -> erp_sales::Result<()> {
-    if matches!(resource, "sales_selection_booklet" | "sales_selection_proposal") {
-        return Ok(());
-    }
-    Err(erp_sales::Error::ValidationError("范围资源与消费方不一致".into()))
-}
-
-/// 将身份域已解析授权转换为选品 Port 事实。
-///
-/// # 参数
-/// * `access` - 身份域公共解析结果
-///
-/// # 返回
-/// 返回选品适用维度。
-///
-/// # 错误
-/// 出现结算主体或仓库维度时拒绝。
-///
-/// # 关键业务约束
-/// 不支持的维度必须拒绝，不得静默丢弃或与部门 ID 求并。
-fn map_access(
-    access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
-) -> erp_sales::Result<SelectionResolvedScope> {
-    let access = access.into_facts();
-    Ok(SelectionResolvedScope {
-        user_id: access.user_id,
-        resource: access.resource,
-        action: access.action,
-        role_clauses: map_clauses(&access.scope.role_clauses)?,
-        user_limit: access.scope.user_limit.as_ref().map(map_clause).transpose()?,
-        policy_version: access.policy_version,
-        organization_version: access.organizations.version,
-        scope_version: access.scope_version,
-        as_of: access.as_of,
-    })
-}
-
-/// 转换全部角色条款；任一不支持维度即失败。
-///
-/// # 参数
-/// * `clauses` - 身份域正向范围
-///
-/// # 返回
-/// 返回选品域条款。
-///
-/// # 错误
-/// 出现结算主体或仓库维度时拒绝。
-///
-/// # 关键业务约束
-/// 不支持的维度必须拒绝，不得静默丢弃。
-fn map_clauses(clauses: &[ScopeClause]) -> erp_sales::Result<Vec<SelectionResolvedClause>> {
-    clauses.iter().map(map_clause).collect()
-}
-
-/// 将身份域条款转为选品已解析条款。
-///
-/// # 参数
-/// * `clause` - 身份域正向范围
-///
-/// # 返回
-/// 返回选品适用维度。
-///
-/// # 错误
-/// 结算主体或仓库目标非空时拒绝。
-///
-/// # 关键业务约束
-/// 必须保留公司、本人负责、协作和组织维度；不得改变语义。
-fn map_clause(clause: &ScopeClause) -> erp_sales::Result<SelectionResolvedClause> {
-    reject_unsupported_dimensions(clause, "选品范围不支持结算主体或仓库维度")
-        .map_err(erp_sales::Error::ValidationError)?;
-    Ok(SelectionResolvedClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: clause.collaborative,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-    })
-}
-
-/// 构造绑定身份数据库的选品访问器。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 当前 RBAC 快照
-///
-/// # 返回
-/// 返回已注入本 adapter 的选品访问器。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// HTTP 与命名 Process 必须经此入口，不得把 RBAC 直接交给选品域。
+/// 构造不执行 I/O。
 pub fn selection_access(db: Database, rbac: SharedRbacService) -> SelectionAccess {
     SelectionAccess::new(db.clone(), MongoSelectionDataScope::shared(db, rbac))
 }
 
-/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
-fn evaluate_object(scope: &SelectionResolvedScope, object: &SelectionScopeObject) -> erp_sales::Result<bool> {
-    ensure_selection_resource(&scope.resource)?;
-    evaluate_registered(
-        &scope.resource,
-        &scope.action,
-        scope.role_clauses.iter().map(public_clause),
-        scope.user_limit.as_ref().map(public_clause),
-        ScopedObject {
-            owned: object.owned,
-            collaborating: false,
-            historical_read_participant: object.historical_read_participant,
-            org_unit_id: object.org_unit_id.as_deref(),
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        map_identity_error,
-    )
-}
-
-/// 转换已解析条款，保留本人、协作、组织及空集。
-fn public_clause(clause: &SelectionResolvedClause) -> ScopeClause {
-    scope_clause(clause.company, clause.self_owned, clause.collaborative, &clause.org_unit_ids)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
-
-    use super::*;
-
-    #[test]
-    fn selection_adapter_rejects_unsupported_scope_dimensions() {
-        let warehouse =
-            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
-        match map_clause(&warehouse) {
-            Err(erp_sales::Error::ValidationError(message)) => {
-                assert!(message.contains("仓库"));
+/// 固定目录将方案责任解释为当前所属册责任；不增加来源菜单资格。
+fn registration(
+    resource: &str,
+    action: &str,
+    mapping: Arc<dyn AccessMapping>,
+    facts: Arc<dyn AccessFactsPort>,
+) -> erp_identity::Result<AccessRegistration> {
+    Ok(AccessRegistration {
+        permission: Permission::parse(format!("{resource}:{action}"))?,
+        required_permissions: vec![],
+        access: AccessMode::QueryAndObject {
+            data: DataAccess {
+                subject: AccessSubject::Direct,
+                required_facts: [FactKind::Owner, FactKind::Organization].into(),
+                policy: AccessPolicy::Scope {
+                    permission: Permission::parse(format!("{resource}:{action}"))?,
+                    read: ReadAccess::default(),
+                },
             },
-            other => panic!("expected validation error, got {other:?}"),
-        }
-        let settlement = ScopeClause {
-            settlement_party_ids: BTreeSet::from(["party-1".into()]),
-            ..ScopeClause::default()
-        };
-        assert!(matches!(map_clause(&settlement), Err(erp_sales::Error::ValidationError(_))));
-    }
-
-    #[test]
-    fn selection_adapter_keeps_owner_collab_and_org_dimensions() {
-        let clause = ScopeClause {
-            company: false,
-            self_owned: true,
-            collaborative: true,
-            org_unit_ids: BTreeSet::from(["org-b".into(), "org-a".into()]),
-            ..ScopeClause::default()
-        };
-        let mapped = map_clause(&clause).unwrap();
-        assert!(mapped.self_owned);
-        assert!(mapped.collaborative);
-        assert_eq!(mapped.org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
-    }
-
-    #[test]
-    fn non_selection_resource_is_rejected() {
-        assert!(ensure_selection_resource("sales_selection_booklet").is_ok());
-        assert!(ensure_selection_resource("sales_selection_proposal").is_ok());
-        assert!(ensure_selection_resource("work_item").is_err());
-    }
-}
-
-#[cfg(test)]
-mod equivalence_tests {
-    use erp_sales::repository::sales_selection::{SelectionReadScope, SelectionScopeClause};
-    use erp_sales::service::sales_selection::selection_scope;
-    use serde_json::json;
-    use test_support::matches_filter as matches;
-
-    use super::*;
-
-    fn clause(mask: u8) -> SelectionResolvedClause {
-        SelectionResolvedClause {
-            company: mask & 1 != 0,
-            self_owned: mask & 2 != 0,
-            collaborative: mask & 4 != 0,
-            org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
-        }
-    }
-
-    fn scope_clause(mask: u8, actor: &str) -> SelectionScopeClause {
-        SelectionScopeClause {
-            company: mask & 1 != 0,
-            owner_user_id: (mask & 2 != 0).then(|| actor.to_string()),
-            business_org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
-        }
-    }
-
-    #[test]
-    fn unwired_port_and_mismatched_resource_fail_closed() {
-        use erp_sales::ports::FailClosedSelectionDataScopePort;
-        let mut scope = SelectionResolvedScope {
-            user_id: "actor".into(),
-            resource: "sales_selection_booklet".into(),
-            action: "list".into(),
-            role_clauses: vec![clause(1)],
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 1,
-            scope_version: "v1".into(),
-            as_of: Instant::from_unix_secs(0),
-        };
-        let object = SelectionScopeObject::default();
-        assert!(FailClosedSelectionDataScopePort.allows(&scope, &object).is_err());
-        assert!(evaluate_object(&scope, &object).unwrap());
-        scope.resource = "work_item".into();
-        assert!(evaluate_object(&scope, &object).is_err());
-    }
-
-    #[test]
-    fn public_object_decision_matches_compiled_conditions() {
-        let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
-        for action in ["list", "get", "create"] {
-            for role in 0..16 {
-                for second in [0, 2, 8] {
-                    for limit in -1..16 {
-                        let access = SelectionResolvedScope {
-                            user_id: "actor".into(),
-                            resource: "sales_selection_booklet".into(),
-                            action: action.into(),
-                            role_clauses: vec![clause(role), clause(second)],
-                            user_limit: (limit >= 0).then(|| clause(limit as u8)),
-                            policy_version: 1,
-                            organization_version: 1,
-                            scope_version: "v1".into(),
-                            as_of: Instant::from_unix_secs(0),
-                        };
-                        let compiled = SelectionReadScope {
-                            roles: vec![scope_clause(role, "actor"), scope_clause(second, "actor")],
-                            user_limit: (limit >= 0).then(|| scope_clause(limit as u8, "actor")),
-                            historical_ids: vec![],
-                        };
-                        assert_eq!(
-                            selection_scope(&access, "actor"),
-                            compiled,
-                            "action={action}, role={role}, second={second}, limit={limit}"
-                        );
-                        for (index, id) in ids.iter().enumerate() {
-                            let object = SelectionScopeObject {
-                                owned: index & 1 != 0,
-                                historical_read_participant: false,
-                                org_unit_id: Some(if index & 4 != 0 { "org-a" } else { "org-b" }.into()),
-                            };
-                            let owner = if object.owned { "actor" } else { "other" };
-                            let org = object.org_unit_id.as_deref().unwrap();
-                            let document = json!({ "id": id,
-                            "sales_owner_user_id": owner,
-                            "business_org_unit_id": org });
-                            assert_eq!(
-                                evaluate_object(&access, &object).unwrap(),
-                                matches(&compiled.document(), &document),
-                                "action={action}, role={role}, second={second}, limit={limit}, object={index}"
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
+            mapping,
+            facts,
+        },
+    })
 }

@@ -161,7 +161,7 @@ async fn retire_tx(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let RetireTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(identity_service, actor, &policy, executor).await?;
+    ensure_definition_admin_permission(db, identity_service, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,

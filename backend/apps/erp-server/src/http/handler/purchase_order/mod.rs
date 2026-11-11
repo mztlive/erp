@@ -35,7 +35,6 @@ use erp_read_models::purchase_center::{PurchaseChangeListView, PurchaseListView,
 
 use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{MongoPurchaseDataScope, purchase_ports};
@@ -104,11 +103,10 @@ pub async fn purchase_order_list(
 pub async fn purchase_order_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
     let mut view = purchase_reads(&state).purchase_order_detail(&id, Some(&actor)).await?;
-    deposit_summary::attach(&state, &subject, &actor, &mut view).await?;
+    deposit_summary::attach(&state, &actor, &mut view).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

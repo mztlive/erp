@@ -35,13 +35,7 @@ fn statement_filter_ands_three_role_conditions_without_expanding_scope() {
         operator_user_ids: Some(vec!["op-1".into()]),
         handler_user_ids: Some(vec!["reviewer-1".into()]),
         handler_open_statement_ids: vec!["st-open".into()],
-        authorized_scope: Some(super::SettlementReadScope {
-            roles: vec![super::SettlementScopeClause {
-                owner_user_id: Some("owner-1".into()),
-                ..super::SettlementScopeClause::default()
-            }],
-            user_limit: None,
-        }),
+        authorized_scope: Some(super::SettlementReadScope::default()),
         ..Default::default()
     };
     let text = format!("{:?}", filter.to_doc());

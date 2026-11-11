@@ -59,13 +59,7 @@ impl IntegrationCenterReadService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("差异不存在".to_string()))?;
-        self.require_visible(
-            actor,
-            "reconciliation_difference",
-            &difference.owner_user_id,
-            &difference.owner_org_unit_id,
-        )
-        .await?;
+        self.require_visible(actor, "reconciliation_difference", &difference.base.id).await?;
         Ok(difference)
     }
 

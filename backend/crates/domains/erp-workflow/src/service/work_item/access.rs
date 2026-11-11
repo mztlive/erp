@@ -1,166 +1,100 @@
-//! 命令与候选人的业务资格；任务范围由共享 identity 授权服务证明。
-
+//! 任务授权统一交给 identity；业务只核验冻结事实及状态。
 use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_core::Result as CoreResult;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::Permission;
 use persistence_core::Executor;
 
-#[cfg(test)]
-use super::WorkItemAllowedAction;
-#[cfg(test)]
-use super::dto;
+use super::WorkItemService;
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
     task_read_error,
 };
-use super::{WorkItemScope, WorkItemService};
-use crate::entity::work_item::{
-    TaskAccess, WorkItem, WorkItemStatus, WorkItemType, required_execution_permissions,
-};
+use crate::entity::work_item::{TaskAccess, WorkItem, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{ObjectFact, ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
-use crate::repository::DocumentRegistryExt;
-use crate::repository::prelude::*;
+use crate::ports::{ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
+use crate::service::authorization::features;
 
-/// 办理人或转交候选人的操作权限与业务参与事实；查询范围另由 identity 证明。
+/// identity 已证明的当前任务动作；不携带角色条款或业务参与授权。
 #[derive(Clone)]
 pub struct TaskEligibility {
     pub(super) actor: AuditActor,
     pub task: TaskAccess,
-    pub participant_document_ids: HashSet<String>,
 }
 impl TaskEligibility {
-    /// 以必填身份构造访问快照；权限与范围默认为空。
-    ///
+    /// 创建尚未授予任务动作的身份载体。
     /// # 参数
-    /// * `actor` - 已认证的完整身份
-    ///
+    /// actor 为当前真实账号。
     /// # 返回
-    /// 返回空权限的访问快照。
-    ///
+    /// 返回精确任务动作集合为空的载体。
     /// # 错误
     /// 无。
     pub fn new(actor: AuditActor) -> Self {
-        Self { task: TaskAccess::new(actor.id().to_owned()), actor, participant_document_ids: HashSet::new() }
-    }
-
-    /// 设置权限代码。
-    ///
-    /// # 参数
-    /// * `permissions` - 权限代码
-    ///
-    /// # 返回
-    /// 返回更新后的快照。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_permissions(mut self, permissions: PermissionSet) -> Self {
-        self.task.permissions = permissions;
-        self
-    }
-
-    /// 设置参与单据范围。
-    ///
-    /// # 参数
-    /// * `ids` - 参与人关联单据
-    ///
-    /// # 返回
-    /// 返回更新后的快照。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_participant_document_ids(mut self, ids: std::collections::HashSet<String>) -> Self {
-        self.participant_document_ids = ids;
-        self
+        Self { task: TaskAccess::new(actor.id().to_owned()), actor }
     }
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 按操作人账号类型与 ID 构造访问快照。
-    ///
+    /// 在原执行器证明任务详情及展示动作资格。
     /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `item` - 实际工作项
-    /// * `executor` - 调用方执行器
-    ///
+    /// actor、item 为真实账号及任务，executor 为原读取或写事务。
     /// # 返回
-    /// 返回权限及当前任务的管理资格；参与关系在加载业务事实后按目标查询。
-    ///
+    /// 返回 identity 判定的精确任务动作，不组合角色权限。
     /// # 错误
-    /// 权限或任务管理授权失败时返回对应错误。
+    /// 身份、任务范围或授权设施错误透传。
     pub async fn task_eligibility(
         &self,
         actor: &AuditActor,
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<TaskEligibility> {
+        self.authorization.require(actor, "detail", &item.base.id, executor).await?;
         let mut required = item.qualification_permissions()?;
         required.extend(
-            ["work_item:list", "work_item:detail", "work_item:manage", "approval_instance:decide"]
+            ["approval_instance:read", "approval_instance:decide"]
                 .into_iter()
                 .map(Permission::parse)
                 .collect::<CoreResult<Vec<_>>>()?,
         );
-        let permissions = self
-            .identity
-            .qualified_permissions(actor, &required, executor)
+        let qualified = features(&self.db, &self.identity)
+            .permissions(actor, &required, executor)
             .await?
-            .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?
-            .permissions();
-        let can_manage = match self.authorization.require(actor, "manage", &item.base.id, executor).await {
-            Ok(()) => true,
-            Err(Error::Forbidden(_)) => false,
+            .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?;
+        let mut access = TaskEligibility::new(actor.clone());
+        if qualified.same_role(&item.qualification_permissions()?) {
+            access.task.executable_task_ids.insert(item.base.id.clone());
+        }
+        let decide =
+            [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+        if qualified.same_role(&decide) {
+            access.task.decidable_task_ids.insert(item.base.id.clone());
+        }
+        match self.authorization.require(actor, "manage", &item.base.id, executor).await {
+            Ok(()) => {
+                access.task.managed_task_ids.insert(item.base.id.clone());
+            },
+            Err(Error::Forbidden(_)) => {},
             Err(error) => return Err(error),
-        };
-        let mut access = TaskEligibility::new(actor.clone()).with_permissions(permissions);
-        if can_manage {
-            access.task.managed_task_ids.insert(item.base.id.clone());
         }
         Ok(access)
     }
 
-    /// 仅查询本次业务事实对应的根单据参与关系。
+    /// 证明精确任务及实际来源的读取资格，随后只检查业务事实。
     /// # 参数
-    /// access 为当前账号资格，facts 为原执行器读取的目标业务事实。
+    /// item、access 为当前任务及已认证账号，executor 沿用原事务。
     /// # 返回
-    /// 返回只包含本批目标参与关系的资格，不携带其他历史单据。
+    /// identity 授权及冻结业务事实均成立时成功。
     /// # 错误
-    /// 参与关系读取失败时拒绝。
-    pub(super) async fn participation(
-        &self,
-        access: &TaskEligibility,
-        facts: &ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<TaskEligibility> {
-        let mut ids = facts.values().map(|fact| fact.root_document_id.clone()).collect::<Vec<_>>();
-        ids.sort_unstable();
-        ids.dedup();
-        let participants =
-            self.db.document_participants().document_ids_in(access.actor.id(), &ids, executor).await?;
-        Ok(access.clone().with_participant_document_ids(participants.into_iter().collect()))
-    }
-
-    /// 使用调用方 executor 读取固定注册表对象事实并重验参与权。
-    ///
-    /// # 参数
-    /// * `item` - 待访问的工作项
-    /// * `access` - 当前账号访问快照
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 审批任务责任链匹配，或普通对象事实与读取权都成立时无返回值。
-    ///
-    /// # 错误
-    /// 账号缺失、责任链不匹配、对象未注册、事实不可访问或读取权不足时返回禁止；端口读取失败时返回对应错误。
+    /// 权限、来源缺失、冻结版本或责任行不匹配时拒绝。
     pub async fn ensure_item_access_with_executor(
         &self,
         item: &WorkItem,
         access: &TaskEligibility,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.authorization.require(&access.actor, "detail", &item.base.id, executor).await?;
         if item.work_item_type.is_document_approval() {
             return if approval_task_readable_with_executor(
                 &self.identity,
@@ -180,12 +114,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let policy = item
             .work_item_type
             .brief_relation(&item.business_object_type)
-            .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
+            .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.facts.load_object_facts(&keys, executor).await?;
         let fact = facts
             .get(&(policy.object_kind, item.business_object_id.clone()))
-            .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
+            .ok_or_else(|| Error::Forbidden("任务业务对象不存在".into()))?;
         require_supplier_portal_task_read(
             &self.auth,
             &access.actor,
@@ -194,36 +128,28 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             executor,
         )
         .await?;
-        if !item.owns_procurement_task(&access.task.actor_id) {
-            require_order_task_read(
-                &self.auth,
-                &access.actor,
-                policy.object_kind,
-                fact,
-                TaskReadAction::Detail,
-                executor,
-            )
-            .await?;
-        }
-        let access = self.participation(access, &facts, executor).await?;
-        if !has_item_access(item, &access, &facts) {
-            return Err(Error::Forbidden("业务对象不可访问".to_string()));
+        require_order_task_read(
+            &self.auth,
+            &access.actor,
+            policy.object_kind,
+            fact,
+            TaskReadAction::Detail,
+            executor,
+        )
+        .await?;
+        if !task_facts_current(item, &access.task.actor_id, &facts) {
+            return Err(Error::Forbidden("任务业务版本或冻结责任不匹配".into()));
         }
         Ok(())
     }
 
-    /// 在领域决定事务内按当前账号、有效角色、读取权限、数据范围和对象参与事实重验访问。
-    ///
+    /// 在业务决定事务证明同角色完整执行资格及精确任务访问。
     /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `item` - 待决定的工作项
-    /// * `executor` - 决定写入的事务执行器
-    ///
+    /// actor、item 为实际账号和任务，executor 为原写事务。
     /// # 返回
-    /// 执行权限、读取权限、对象参与与策略版本都仍成立时无返回值。
-    ///
+    /// 统一资格及业务版本均通过时成功。
     /// # 错误
-    /// 账号失效、任务未注册执行权限、权限或对象资格不足时返回禁止；授权或事实读取失败时返回对应错误。
+    /// 失效身份、完整资格不足、对象授权或业务事实错误透传。
     pub async fn ensure_domain_decision_access(
         &self,
         actor: &AuditActor,
@@ -235,17 +161,16 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .brief_relation(&item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
         let required = item.qualification_permissions()?;
-        let qualified = self
-            .identity
-            .qualified_permissions(actor, &required, executor)
+        let qualified = features(&self.db, &self.identity)
+            .permissions(actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".into()))?;
-        let permissions = qualified.permissions();
-        if !required.iter().all(|permission| permissions.covers_one(permission)) {
-            return Err(Error::Forbidden("当前账号已不具备任务所需的完整执行或读取权限".into()));
+        if !qualified.same_role(&required) {
+            return Err(Error::Forbidden("当前账号不具备同角色完整执行资格".into()));
         }
-        let access = TaskEligibility::new(actor.clone()).with_permissions(permissions);
-        self.ensure_item_access_with_executor(item, &access, executor).await.map_err(task_read_error)?;
+        self.ensure_item_access_with_executor(item, &TaskEligibility::new(actor.clone()), executor)
+            .await
+            .map_err(task_read_error)?;
         require_supplier_portal_task_review(
             &self.auth,
             actor,
@@ -257,13 +182,13 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(self.identity.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?)
     }
 
-    /// 在操作执行器内验证 work_item:manage 及其 DataScope。
+    /// 在原事务证明任务管理权限及对象范围。
     /// # 参数
-    /// `actor` 为真实账号，`item` 为当前任务，`executor` 与写入共享事务。
+    /// actor、item 为真实账号和当前任务，executor 为原事务。
     /// # 返回
-    /// 仅在当前管理数据范围覆盖负责人时成功。
+    /// identity 对当前任务管理判定成立时成功。
     /// # 错误
-    /// 无权限、越界、账号失效或授权读取失败时拒绝。
+    /// 身份、功能资格或数据范围拒绝时失败。
     pub async fn ensure_task_manage(
         &self,
         actor: &AuditActor,
@@ -274,19 +199,14 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 }
 
-/// 按对象权限、参与关系与权威版本判断单个工作项业务资格。
-///
+/// 验证已授权任务的业务版本与冻结询价责任，不执行访问授权。
 /// # 参数
-/// * `item` - 待授权工作项实体
-/// * `access` - 当前账号访问事实
-/// * `facts` - 已加载的业务对象事实
-///
+/// item 为任务、actor_id 为实际办理人、facts 为当前业务事实。
 /// # 返回
-/// 权限、参与关系和业务版本均满足时返回 true。
-///
+/// 根事实存在且冻结版本和责任仍一致时为 true。
 /// # 错误
-/// 无；未注册或无法证明访问权时失败关闭。
-pub fn has_item_access(item: &WorkItem, access: &TaskEligibility, facts: &ObjectFactMap) -> bool {
+/// 无；缺事实或版本损坏返回 false。
+pub fn task_facts_current(item: &WorkItem, actor_id: &str, facts: &ObjectFactMap) -> bool {
     let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else { return false };
     let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else { return false };
     if item.work_item_type == WorkItemType::SalesInquiryProcessing {
@@ -296,57 +216,26 @@ pub fn has_item_access(item: &WorkItem, access: &TaskEligibility, facts: &Object
         else {
             return false;
         };
-        if !item.owns_inquiry_task(&access.task.actor_id, &item.business_object_id, version, ids) {
+        if !item.owns_inquiry_task(actor_id, &item.business_object_id, version, ids) {
             return false;
         }
     }
-    access.task.permits(policy.read_permission)
-        && (supplier_fulfillment_owner(
-            item.work_item_type,
-            &item.business_object_type,
-            item.owner_user_id.as_deref(),
-            access,
-        ) || has_item_participation(
-            &item.base.id,
-            item.work_item_type,
-            item.owner_user_id.as_deref(),
-            access,
-            fact,
-        ))
-        && fact.subject_versions.accepts_task(
-            item.work_item_type,
-            item.status,
-            &item.base.id,
-            &item.subject_version,
-        )
+    fact.subject_versions.accepts_task(item.work_item_type, item.status, &item.base.id, &item.subject_version)
 }
 
-/// 判断转交目标是否满足任务类型要求的权限、参与关系和对象版本。
-///
+/// 验证转派候选使用的业务版本与冻结责任行，不决定账号权限。
 /// # 参数
-/// * `item` - 待转交任务
-/// * `access` - 目标账号访问事实
-/// * `facts` - 已加载的业务对象事实
-///
+/// item 为待转派任务、facts 为当前业务事实。
 /// # 返回
-/// 目标账号可接收任务时返回 `true`。
-///
+/// 任务状态及冻结责任完整且业务版本匹配时为 true。
 /// # 错误
-/// 无；对象未注册或事实缺失时返回 `false`。
-pub fn has_assignment_candidate_access(
-    item: &WorkItem,
-    access: &TaskEligibility,
-    facts: &ObjectFactMap,
-) -> bool {
+/// 无；缺事实或责任不完整返回 false。
+pub fn candidate_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
     if item.work_item_type == WorkItemType::ProcurementOrderCreation && !item.is_open_procurement_task() {
         return false;
     }
-    let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else {
-        return false;
-    };
-    let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else {
-        return false;
-    };
+    let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else { return false };
+    let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else { return false };
     if item.work_item_type == WorkItemType::SalesInquiryProcessing
         && !fact.responsibility_scope_ids.as_ref().is_some_and(|ids| {
             !item.responsibility_scope_ids().is_empty()
@@ -355,88 +244,7 @@ pub fn has_assignment_candidate_access(
     {
         return false;
     }
-    access.task.permits(policy.read_permission)
-        && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
-        && (item.work_item_type.uses_explicit_owner_authorization() || has_object_participation(access, fact))
-        && fact.subject_versions.accepts(&item.subject_version)
-}
-
-/// W26 只有供应商履约对象的两个正式异常任务使用具体责任人授权。
-fn is_supplier_fulfillment_task(kind: WorkItemType, object_type: &str) -> bool {
-    object_type == "SUPPLIER_FULFILLMENT_ORDER"
-        && matches!(kind, WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException)
-}
-
-/// 具体任务责任只补充该对象的任务读取，普通单据访问另行校验。
-fn supplier_fulfillment_owner(
-    kind: WorkItemType,
-    object_type: &str,
-    owner: Option<&str>,
-    access: &TaskEligibility,
-) -> bool {
-    is_supplier_fulfillment_task(kind, object_type) && owner == Some(access.task.actor_id.as_str())
-}
-
-/// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
-///
-/// # 参数
-/// * `work_item_type` - 工作项类型
-/// * `business_object_type` - 业务对象类型稳定码
-/// * `access` - 当前账号访问快照
-///
-/// # 返回
-/// 所需权限全部被账号权限覆盖时返回 `true`；未注册执行对象返回 `false`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn has_execution_permissions(
-    work_item_type: WorkItemType,
-    business_object_type: &str,
-    access: &TaskEligibility,
-) -> bool {
-    required_execution_permissions(work_item_type, business_object_type)
-        .is_some_and(|required| required.iter().all(|code| access.task.permits(code)))
-}
-
-/// 判断账号是否满足工作项的参与条件。
-///
-/// # 参数
-/// * `work_item_type` - 工作项类型
-/// * `owner_user_id` - 当前具体负责人
-/// * `access` - 当前账号访问事实
-/// * `fact` - 业务对象事实
-///
-/// # 返回
-/// 具备对象参与关系，或是供给分配任务的具体负责人时返回 `true`。
-///
-/// # 错误
-/// 无；调用方必须另行验证对象权限。
-pub fn has_item_participation(
-    task_id: &str,
-    work_item_type: WorkItemType,
-    owner_user_id: Option<&str>,
-    access: &TaskEligibility,
-    fact: &ObjectFact,
-) -> bool {
-    let is_explicit_owner = work_item_type.uses_explicit_owner_authorization()
-        && owner_user_id == Some(access.task.actor_id.as_str());
-    is_explicit_owner || access.task.can_manage(task_id) || has_object_participation(access, fact)
-}
-
-/// 按领域创建人或根单据参与名单判断对象参与关系。
-///
-/// # 参数
-/// * `access` - 当前账号访问事实
-/// * `fact` - 业务对象的领域创建人和根单据事实
-///
-/// # 返回
-/// 非空创建人与当前账号精确匹配，或账号参与根单据时返回 `true`。
-///
-/// # 错误
-/// 无；空白创建人不授予创建人资格，调用方须独立验证权限及任务责任。
-pub fn has_object_participation(access: &TaskEligibility, fact: &ObjectFact) -> bool {
-    (!fact.created_by.trim().is_empty() && fact.created_by == access.task.actor_id)
-        || access.participant_document_ids.contains(&fact.root_document_id)
+    fact.subject_versions.accepts(&item.subject_version)
 }
 
 /// 将实体对审批任务的通用责任变更禁令映射为稳定审批错误码。
@@ -455,222 +263,4 @@ pub fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
     }
     item.ensure_generic_responsibility_mutation()
         .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))
-}
-
-/// 判断当前账号查看该任务时应使用的队列范围。
-///
-/// # 参数
-/// * `item` - 工作项
-/// * `actor_id` - 当前账号 ID
-/// * `access` - 当前账号访问快照
-///
-/// # 返回
-/// 终态且本人有历史或管理覆盖时返回历史；本人当前负责时返回我的；开放且管理范围覆盖时返回管理。
-///
-/// # 错误
-/// 三种范围都不成立时返回禁止。
-pub fn detail_scope(item: &WorkItem, actor_id: &str, access: &TaskEligibility) -> Result<WorkItemScope> {
-    if item.is_terminal()
-        && (has_personal_history_access(item, actor_id) || access.task.can_manage(&item.base.id))
-    {
-        return Ok(WorkItemScope::for_task(item, actor_id));
-    }
-    if item.is_owned_by(actor_id) {
-        return Ok(WorkItemScope::for_task(item, actor_id));
-    }
-    if item.status == WorkItemStatus::Open && access.task.can_manage(&item.base.id) {
-        return Ok(WorkItemScope::for_task(item, actor_id));
-    }
-    Err(Error::Forbidden("当前账号无权查看该任务".to_string()))
-}
-
-/// 判断账号是否出现在任务的历史责任、完成或关闭记录中。
-///
-/// # 参数
-/// * `item` - 工作项
-/// * `actor_id` - 当前账号 ID
-///
-/// # 返回
-/// 责任历史、完成人或关闭人包含该账号时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn has_personal_history_access(item: &WorkItem, actor_id: &str) -> bool {
-    item.responsibility_actor_ids.iter().any(|id| id == actor_id)
-        || item.completed_by.as_deref() == Some(actor_id)
-        || item.closed_by.as_deref() == Some(actor_id)
-}
-
-#[cfg(test)]
-mod task_policy_tests {
-    use erp_core::AccountKind;
-    use erp_core::ids::WorkItemId;
-
-    use super::*;
-    use crate::entity::work_item::SupplierPortalReviewTaskData;
-    use crate::ports::ObjectKind;
-
-    #[test]
-    fn supplier_portal_review_requires_current_owner_and_review_permission() {
-        let task = WorkItem::new_supplier_portal_review(
-            WorkItemId::new("task"),
-            SupplierPortalReviewTaskData {
-                request_id: "request".into(),
-                subject_version: "submission-1".into(),
-                owner_user_id: "reviewer".into(),
-                owner_organization_id: "procurement".into(),
-                due_at: None,
-                impact_summary: None,
-            },
-        )
-        .unwrap();
-        let facts = ObjectFactMap::from([(
-            (ObjectKind::SupplierPortalRequest, "request".into()),
-            ObjectFact::new("request", "供应商申请", "supplier"),
-        )]);
-        let full = TaskEligibility::new(AuditActor::new(
-            "reviewer".to_string(),
-            "reviewer".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_permissions(PermissionSet::new(
-            vec!["supplier_portal_request:detail".into(), "supplier_portal_request:review".into()]
-                .into_iter()
-                .map(|code: String| Permission::parse(code).unwrap()),
-        ));
-        assert!(has_item_access(&task, &full, &facts));
-        let fields = dto::WorkItemFields::from(task.clone());
-        assert!(
-            fields
-                .allowed_actions(WorkItemScope::Mine, "reviewer", &full.task)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-        assert!(
-            !fields
-                .allowed_actions(WorkItemScope::Mine, "other", &full.task)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-        assert!(has_assignment_candidate_access(&task, &full, &facts));
-        let read_only = TaskEligibility::new(AuditActor::new(
-            "reviewer".to_string(),
-            "reviewer".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_permissions(PermissionSet::new(
-            vec!["supplier_portal_request:detail".into()]
-                .into_iter()
-                .map(|code: String| Permission::parse(code).unwrap()),
-        ));
-        assert!(has_item_access(&task, &read_only, &facts));
-        let read_fields = dto::WorkItemFields::from(task.clone());
-        assert!(
-            !read_fields
-                .allowed_actions(WorkItemScope::Mine, "reviewer", &read_only.task)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-        assert!(!has_assignment_candidate_access(&task, &read_only, &facts));
-        let unrelated = TaskEligibility::new(AuditActor::new(
-            "other".to_string(),
-            "other".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_permissions(full.task.permissions.clone());
-        assert!(!has_item_access(&task, &unrelated, &facts));
-        assert!(WorkItemType::SupplierPortalReview.required_execution_permissions("unknown").is_none());
-    }
-
-    #[test]
-    fn object_creator_participation_requires_exact_nonblank_identity() {
-        let fact = ObjectFact::new("root", "资金单据", "creator");
-        let creator = TaskEligibility::new(AuditActor::new(
-            "creator".to_string(),
-            "creator".to_string(),
-            AccountKind::Admin,
-        ));
-        assert!(has_object_participation(&creator, &fact));
-        for actor_id in ["", "another", " creator "] {
-            let access = TaskEligibility::new(AuditActor::new(
-                actor_id.to_string(),
-                actor_id.to_string(),
-                AccountKind::Admin,
-            ));
-            assert!(!has_object_participation(&access, &fact));
-        }
-        for identity in ["", " ", "\t\n"] {
-            let fact = ObjectFact::new("root", "资金单据", identity);
-            let access = TaskEligibility::new(AuditActor::new(
-                identity.to_string(),
-                identity.to_string(),
-                AccountKind::Admin,
-            ));
-            assert!(!has_object_participation(&access, &fact));
-        }
-    }
-
-    #[test]
-    fn root_participant_qualifies_independently_of_missing_creator() {
-        let participant = TaskEligibility::new(AuditActor::new(
-            "reader".to_string(),
-            "reader".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_participant_document_ids(HashSet::from(["root".into()]));
-        let unrelated = TaskEligibility::new(AuditActor::new(
-            "reader".to_string(),
-            "reader".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_participant_document_ids(HashSet::from(["other-root".into()]));
-        for identity in ["", " ", "\t\n", "another-creator"] {
-            let fact = ObjectFact::new("root", "资金单据", identity);
-            assert!(has_object_participation(&participant, &fact));
-            assert!(!has_object_participation(&unrelated, &fact));
-        }
-    }
-
-    #[test]
-    fn fulfillment_exception_owner_is_limited_to_exact_task_type_and_object() {
-        let owner = TaskEligibility::new(AuditActor::new(
-            "handler".to_string(),
-            "handler".to_string(),
-            AccountKind::Admin,
-        ));
-        assert!(supplier_fulfillment_owner(
-            WorkItemType::BusinessException,
-            "SUPPLIER_FULFILLMENT_ORDER",
-            Some("handler"),
-            &owner
-        ));
-        assert!(!supplier_fulfillment_owner(
-            WorkItemType::BusinessException,
-            "SUPPLIER_FULFILLMENT_ORDER",
-            Some("someone-else"),
-            &owner
-        ));
-        assert!(!supplier_fulfillment_owner(
-            WorkItemType::BusinessException,
-            "SUPPLIER_OFFERING",
-            Some("handler"),
-            &owner
-        ));
-        assert!(!supplier_fulfillment_owner(
-            WorkItemType::DocumentApproval,
-            "SUPPLIER_FULFILLMENT_ORDER",
-            Some("handler"),
-            &owner
-        ));
-        let permissions = required_execution_permissions(
-            WorkItemType::IntegrationResultUnknown,
-            "SUPPLIER_FULFILLMENT_ORDER",
-        )
-        .unwrap();
-        assert_eq!(
-            permissions,
-            vec![
-                "supplier_fulfillment_order:detail",
-                "supplier_fulfillment_order:investigate",
-                "supplier_fulfillment_order:complete"
-            ]
-        );
-    }
 }

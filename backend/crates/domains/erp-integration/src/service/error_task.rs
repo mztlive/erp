@@ -63,11 +63,14 @@ impl IntegrationOpsService {
             executor,
         )
         .await?;
-        let filter = error_task_filter(query, &scope.read_scope, scope.owner_org_unit_ids);
-        if scope.meta.empty_reason == Some("no_scope") {
-            return Ok(empty_error_task_page(&filter, scope.meta));
-        }
-        let page = self.db.integration_error_tasks().search_error_tasks(&filter, executor).await?;
+        let filter = error_task_filter(query, scope.owner_org_unit_ids);
+        access.validate(&scope.read_scope, executor).await?;
+        let page = self
+            .db
+            .integration_error_tasks()
+            .search_error_tasks(&filter, &scope.read_scope, executor)
+            .await?;
+        access.validate(&scope.read_scope, executor).await?;
         Ok(error_task_list_view(page, &filter, scope.meta))
     }
 
@@ -116,11 +119,7 @@ pub fn prepare_error_task(
 }
 
 /// 把已规范化查询与授权条件装配为仓储筛选。
-fn error_task_filter(
-    query: dto::ErrorTaskListQuery,
-    read_scope: &crate::repository::IntegrationReadScope,
-    owner_org_unit_ids: Vec<String>,
-) -> ErrorTaskFilter {
+fn error_task_filter(query: dto::ErrorTaskListQuery, owner_org_unit_ids: Vec<String>) -> ErrorTaskFilter {
     ErrorTaskFilter {
         q: query.q,
         message_id: query.message_id,
@@ -131,7 +130,6 @@ fn error_task_filter(
         handler_user_ids: query.handler_user_ids,
         operator_user_ids: query.operator_user_ids,
         owner_org_unit_ids,
-        scope_document: Some(read_scope.document()),
         page: query.paging.page,
         page_size: query.paging.page_size,
         sort_by: Some(query.paging.sort_by.to_string()),
@@ -153,8 +151,6 @@ fn error_task_list_view(
             page_size: filter.page_size,
         },
         scope_version: meta.scope_version,
-        policy_version: meta.policy_version,
-        organization_version: meta.organization_version,
         as_of: meta.as_of,
         empty_reason: None,
         scope_summary: meta.scope_summary,
@@ -181,19 +177,6 @@ fn map_error_task_row(row: crate::repository::integration_ops::IntegrationErrorT
         resolved_at: row.resolved_at.map(|at| at.unix_secs()),
         version: row.version,
         created_at: row.created_at,
-    }
-}
-
-fn empty_error_task_page(filter: &ErrorTaskFilter, meta: ScopedIntegrationList) -> ErrorTaskListView {
-    ErrorTaskListView {
-        data: PageView { items: Vec::new(), total: 0, page: filter.page, page_size: filter.page_size },
-        scope_version: meta.scope_version,
-        policy_version: meta.policy_version,
-        organization_version: meta.organization_version,
-        as_of: meta.as_of,
-        empty_reason: meta.empty_reason,
-        scope_summary: meta.scope_summary,
-        ownership_basis: meta.ownership_basis,
     }
 }
 

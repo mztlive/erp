@@ -9,11 +9,7 @@ use erp_procurement::ports::PurchaseDataScopePort;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
-use erp_procurement::service::purchase_order::access::{
-    PurchaseAccess as DomainPurchaseAccess, attach_history,
-};
-use erp_workflow::DocumentRegistryExt;
-use erp_workflow::repository::prelude::*;
+use erp_procurement::service::purchase_order::access::PurchaseAccess as DomainPurchaseAccess;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -169,87 +165,6 @@ impl PurchaseAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<(PurchaseResolvedScope, PurchaseReadScope)> {
-        let (mut access, mut scope) = self.inner.resolve(actor, action, executor).await?;
-        if allows_history(action) {
-            let history = self.participant_orders(actor.id(), executor).await?;
-            attach_history(&mut access, &mut scope, history);
-        }
-        Ok((access, scope))
-    }
-
-    /// 将已证明范围编译为来源采购单 ID 限制。
-    ///
-    /// # 参数
-    /// * `scope` - 已证明的采购对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// `None` 表示公司范围不限制来源单；`Some` 为必须命中的来源单集合。
-    ///
-    /// # 错误
-    /// 超过查询上限时整体拒绝。
-    ///
-    /// # 关键业务约束
-    /// 变更单和退货必须沿原采购单责任接入，不得另建平行对象集合。
-    pub async fn authorized_source_ids(
-        &self,
-        scope: &PurchaseReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<Vec<String>>> {
-        self.inner.authorized_source_ids(scope, executor).await.map_err(crate::Error::from)
-    }
-
-    /// 完整读取动作已由身份域证明，参与事实独立补充读取并继续受个人上限约束。
-    ///
-    /// # 参数
-    /// * `user` - 当前账号
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回有界的历史参与单据 ID。
-    ///
-    /// # 错误
-    /// 超过查询上限时整体拒绝。
-    ///
-    /// # 关键业务约束
-    /// 不得由历史业绩快照推导参与资格。
-    async fn participant_orders(&self, user: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
-        let ids = self.db.document_participants().document_ids_by_user(user, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("历史参与范围超过查询上限".into()));
-        }
-        Ok(ids)
-    }
-}
-
-/// 参与关系仅补充采购单明确登记的读取动作，不能为创建或状态迁移提供资格。
-///
-/// # 参数
-/// * `action` - 本次解析的采购动作
-///
-/// # 返回
-/// 列表和详情允许历史参与，写动作不允许。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 历史参与不提供修改、审批或资金操作权限。
-fn allows_history(action: &str) -> bool {
-    matches!(action, "list" | "detail")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn historical_participation_never_grants_commands() {
-        for action in ["list", "detail"] {
-            assert!(allows_history(action));
-        }
-        for action in ["create", "update", "submit", "cancel_approval", "delete", "transfer", "*"] {
-            assert!(!allows_history(action));
-        }
+        self.inner.resolve(actor, action, executor).await.map_err(crate::Error::from)
     }
 }

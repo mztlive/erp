@@ -11,9 +11,6 @@ use crate::entity::supplier::{
 mod detail;
 mod list;
 
-/// `PROC-R03`/`PROC-R04` 列表与详情事实束的真实 MongoDB 验收（隔离库，Quality 单独执行）。
-#[cfg(test)]
-mod proc_supplier_io_mongo_tests;
 #[cfg(test)]
 mod tests;
 

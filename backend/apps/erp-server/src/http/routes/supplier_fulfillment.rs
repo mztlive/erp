@@ -6,7 +6,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::supplier_fulfillment;
 use crate::http::middleware::with_permission;
@@ -20,14 +20,14 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     execution_routes(rbac)
         .merge(order_routes(rbac))
         .merge(order_action_routes(rbac))
         .merge(order_handover_routes(rbac))
 }
 
-fn order_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn order_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders",
@@ -71,7 +71,7 @@ fn order_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn order_action_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn order_action_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}",
@@ -107,7 +107,7 @@ fn order_action_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn order_handover_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn order_handover_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-fulfillment-orders/{id}/handover",
@@ -136,7 +136,7 @@ fn order_handover_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 将配送补充路由单独组装，保持读写各自既有动作授权。
-fn execution_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn execution_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     execution_query_routes(rbac).route(
         "/supplier-fulfillment-orders/{id}/execution-setup",
         with_permission(
@@ -152,7 +152,7 @@ fn execution_routes(rbac: &SharedRbacService) -> Router<HttpState> {
     )
 }
 
-fn execution_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn execution_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route("/supplier-fulfillment-orders/{id}/execution-address-candidates", with_permission(
             get(supplier_fulfillment::execution_setup::supplier_order_execution_address_candidates), rbac,

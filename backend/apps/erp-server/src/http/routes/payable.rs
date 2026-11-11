@@ -6,7 +6,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::payable;
 use crate::http::middleware::with_permission;
@@ -21,12 +21,12 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     account_routes(rbac).merge(payment_routes(rbac)).merge(invoice_routes(rbac))
 }
 
 /// 应付子账读取、建立与收款账户查看。
-fn account_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/payable-accounts",
@@ -55,7 +55,7 @@ fn account_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 供应商付款读取、回单与提交。
-fn payment_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-payments",
@@ -103,7 +103,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 进项发票分配列表与含文件登记。
-fn invoice_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn invoice_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-invoice-allocations",

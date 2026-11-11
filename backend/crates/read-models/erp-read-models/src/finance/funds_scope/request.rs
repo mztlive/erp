@@ -6,7 +6,6 @@ use std::hash::{Hash, Hasher};
 use application_core::AuditActor;
 use erp_core::ids::SalesOrderId;
 use erp_finance::entity::receivable::SalesInvoiceRequest;
-use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_sales::repository::SalesOrderExt;
@@ -14,7 +13,7 @@ use erp_sales::repository::prelude::*;
 use erp_workflow::ErrorCode;
 use persistence_core::{Executor, Transactional};
 
-use super::authorization::*;
+use super::authorization::{FundsReadContext, *};
 use super::linked::organization_condition;
 use super::rows::*;
 use crate::{Error, Result};
@@ -180,7 +179,7 @@ impl FundsAccess {
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
         rows: Vec<SalesInvoiceRequest>,
-        access: &FundsResolvedScope,
+        access: &FundsReadContext,
         authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<RequestSnapshot> {
@@ -310,8 +309,6 @@ impl FundsAccess {
             page,
             page_size,
             scope_version: version.clone(),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "开票申请按关联销售当前负责人、申请人与当前开票处理人授权；不改变正式开票准入",
@@ -368,8 +365,6 @@ impl FundsAccess {
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "开票申请按关联销售当前负责人、申请人与当前开票处理人授权；不改变正式开票准入",
@@ -399,7 +394,7 @@ fn decide_requests(
     facts: &HashMap<String, LinkedSalesFact>,
     allowed: &Option<BTreeSet<String>>,
     handlers: &HashMap<String, String>,
-    _access: &FundsResolvedScope,
+    _access: &FundsReadContext,
     condition: &FundsLinkedCondition,
 ) -> Result<Vec<(SalesInvoiceRequest, Option<String>)>> {
     let mut decided = Vec::new();
@@ -492,7 +487,6 @@ mod tests {
     use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
     use erp_core::money::Amount;
     use erp_finance::entity::receivable::{InvoiceRequestData, InvoiceRequestStatus};
-    use erp_finance::ports::funds_scope::FundsResolvedClause;
 
     use super::*;
 
@@ -521,15 +515,9 @@ mod tests {
     }
 
     /// 构造仅在本次查询中使用的公司范围，个人上限缺省。
-    fn access() -> FundsResolvedScope {
-        FundsResolvedScope {
-            user_id: "reader".into(),
+    fn access() -> FundsReadContext {
+        FundsReadContext {
             resource: "sales_invoice_request".into(),
-            action: "list".into(),
-            role_clauses: vec![FundsResolvedClause { company: true, ..Default::default() }],
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 1,
             scope_version: "v".into(),
             as_of: Instant::from_unix_secs(1),
         }

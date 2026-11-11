@@ -495,7 +495,6 @@ mod tests {
             task.complete_when_return_settled(Instant::from_unix_secs(2)).unwrap();
             assert_eq!(task.status, WorkItemStatus::Completed);
             assert!(task.complete_when_return_settled(Instant::from_unix_secs(3)).is_err());
-            assert!(kind.uses_explicit_owner_authorization());
         }
         let mut other =
             WorkItem::new_at(WorkItemId::new("other"), direct_data(), Instant::from_unix_secs(1)).unwrap();
@@ -550,7 +549,6 @@ mod tests {
                 .copied(),
             Some("purchase_payment_request:pay")
         );
-        assert!(WorkItemType::SupplierPaymentExecution.uses_explicit_owner_authorization());
     }
 
     #[test]
@@ -581,7 +579,6 @@ mod tests {
 
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
-        assert!(WorkItemType::SalesInvoiceExecution.uses_explicit_owner_authorization());
         assert_eq!(
             WorkItemType::SalesInvoiceExecution
                 .sales_invoice_execution_permissions("receivable_account")

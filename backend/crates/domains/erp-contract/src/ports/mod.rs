@@ -14,10 +14,7 @@ pub use customer::{
     ContractAssignmentFact, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
     EmptyAssignments, EmptyCustomers, FailClosedAssignmentFactsPort, FailClosedCustomerFactsPort,
 };
-pub use data_scope::{
-    ContractDataScopePort, ContractResolvedClause, ContractResolvedScope, ContractScopeObject,
-    FailClosedContractDataScopePort,
-};
+pub use data_scope::{ContractDataScopePort, ContractResolvedScope, FailClosedContractDataScopePort};
 pub use file_asset::{EmptyFileAssetFacts, FailClosedFileAssetFacts, FileAssetFact, FileAssetFactsPort};
 pub use identity::{AccountNamePort, EmptyAccountNames, FailClosedAccountNamePort};
 pub use participant::{

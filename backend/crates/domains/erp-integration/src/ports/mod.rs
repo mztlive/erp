@@ -3,7 +3,4 @@
 pub mod data_scope;
 pub mod evidence;
 
-pub use data_scope::{
-    FailClosedIntegrationDataScopePort, IntegrationDataScopePort, IntegrationResolvedClause,
-    IntegrationResolvedScope, IntegrationScopeObject,
-};
+pub use data_scope::{FailClosedIntegrationDataScopePort, IntegrationDataScopePort};

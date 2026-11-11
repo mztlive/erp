@@ -47,16 +47,22 @@ impl CatalogSupplyRepository<'_> {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> erp_catalog::Result<Vec<String>> {
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
+
         let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
         let pipeline = product_candidate_pipeline(filter);
-        let query = collection.aggregate(pipeline).with_type::<ProductCandidate>();
-        let rows = match executor.session() {
-            Some(session) => {
-                query.session(&mut *session).await?.stream(session).try_collect::<Vec<_>>().await?
-            },
-            None => query.await?.try_collect::<Vec<_>>().await?,
-        };
+        let rows = persistence_core::aggregate::rows(
+            &collection.clone_with_type::<ProductCandidate>(),
+            pipeline,
+            executor,
+        )
+        .await?;
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
     /// 分页查询商品及当前启用 SKU 的聚合筛选结果。
@@ -77,8 +83,15 @@ impl CatalogSupplyRepository<'_> {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>> {
+    ) -> erp_catalog::Result<PageResult<ProductRow>> {
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
+
         let facet = self.aggregate_products(product_list_pipeline(filter), executor).await?;
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
         Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
     }
 
@@ -97,7 +110,7 @@ impl CatalogSupplyRepository<'_> {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>> {
+    ) -> erp_catalog::Result<PageResult<ProductRow>> {
         self.search_products(filter, executor).await
     }
 

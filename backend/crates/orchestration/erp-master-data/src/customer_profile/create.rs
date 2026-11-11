@@ -90,6 +90,7 @@ impl CustomerProfileProcess {
                     let prepared = this.prepare_create(req, identity, replay, &actor)?;
                     let result = prepared.result.clone();
                     prepared.persist(&this.db, executor).await?;
+                    rbac.require_with(actor.clone(), "create", &result.customer_id, executor).await?;
                     Ok(result)
                 })
             })

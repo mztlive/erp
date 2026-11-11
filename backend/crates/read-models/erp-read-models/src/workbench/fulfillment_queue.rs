@@ -11,7 +11,6 @@ use erp_core::common::time::Instant;
 use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
 use erp_workflow::WorkItemReadService;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority};
-use erp_workflow::service::work_item::read::access::QueueAccess;
 use erp_workflow::service::work_item::read::context::{
     ensure_queue_context, ensure_scope_version, queue_scope_version,
 };
@@ -358,7 +357,7 @@ impl WorkbenchReadService {
     ) -> Result<FulfillmentQueuePageView> {
         let access = tasks.task_access(&actor, "list", executor).await?;
         let identity_version = access.version();
-        let visible_types = visible_operation_types(&query.operation_types, &access);
+        let visible_types = query.operation_types.clone();
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);
         ensure_queue_context(&query.queue_context_id, &context_id)?;
 
@@ -454,16 +453,6 @@ fn parse_operation_types(value: Option<&str>) -> Result<Vec<FulfillmentQueueOper
         return Err(Error::ValidationError("履约作业类型不能为空".to_string()));
     }
     Ok(ALL_OPERATION_TYPES.into_iter().filter(|operation_type| requested.contains(operation_type)).collect())
-}
-
-fn visible_operation_types(
-    requested: &[FulfillmentQueueOperationType],
-    access: &QueueAccess,
-) -> Vec<FulfillmentQueueOperationType> {
-    if !access.task.permits("work_item:list") {
-        return Vec::new();
-    }
-    requested.to_vec()
 }
 
 fn ensure_timezone(timezone: Option<&str>) -> Result<()> {

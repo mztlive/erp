@@ -4,12 +4,15 @@ use application_core::AuditActor;
 use erp_finance::entity::supplier_deposit::SupplierDepositAccount;
 use erp_finance::repository::supplier_deposit_query::account_page;
 use erp_finance::service::supplier_deposit::SupplierDepositService;
+use erp_identity::{AccessSubject, Permission, SharedRbacService};
 use erp_read_models::finance::supplier_deposits::{
     DepositAccountDetail, DepositAccountRow, account_detail, account_row,
 };
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::super::access::{account_access, audit, identity_access};
+use super::super::repository::authorization::authorization;
 use super::{DepositAccountList, DepositAccountQuery, OpenDepositAccount, SupplierDepositManagementProcess};
 use crate::{Error, Result};
 
@@ -41,32 +44,7 @@ impl SupplierDepositManagementProcess {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut candidates = account_page(
-                        &db,
-                        query.supplier_id.as_deref(),
-                        query.payer_party_id.as_deref(),
-                        skip,
-                        u32::try_from(size).map_err(|_| Error::ValidationError("分页范围无效".into()))?,
-                        executor,
-                    )
-                    .await?;
-                    let has_more = candidates.len()
-                        > usize::try_from(size).map_err(|_| Error::ValidationError("分页范围无效".into()))?;
-                    if has_more {
-                        candidates.pop();
-                    }
-                    let mut items = Vec::new();
-                    for candidate in candidates {
-                        match identity_access(&db, &rbac, &candidate.identity, &actor, "list", executor).await
-                        {
-                            Ok(()) => items.push(account_row(&db, candidate, executor).await?),
-                            Err(Error::Forbidden(_)) => {},
-                            Err(error) => return Err(error),
-                        }
-                    }
-                    Ok(DepositAccountList { items, has_more })
-                })
+                Box::pin(async move { list_accounts(&db, &rbac, query, &actor, skip, size, executor).await })
             })
             .await
     }
@@ -125,4 +103,42 @@ impl SupplierDepositManagementProcess {
             })
             .await
     }
+}
+
+async fn list_accounts(
+    db: &Database,
+    rbac: &SharedRbacService,
+    query: DepositAccountQuery,
+    actor: &AuditActor,
+    skip: u64,
+    size: u64,
+    executor: &mut dyn Executor,
+) -> Result<DepositAccountList<DepositAccountRow>> {
+    let (authorization, mapping) = authorization(db, rbac, None);
+    let access = authorization
+        .query(actor, &Permission::parse("supplier_deposit:list")?, AccessSubject::Direct, executor)
+        .await?;
+    let compiled = access.compile(mapping.as_ref(), executor).await?;
+    authorization.validate(&compiled, executor).await?;
+    let mut candidates = account_page(
+        db,
+        query.supplier_id.as_deref(),
+        query.payer_party_id.as_deref(),
+        skip,
+        u32::try_from(size).map_err(|_| Error::ValidationError("分页范围无效".into()))?,
+        &compiled,
+        executor,
+    )
+    .await?;
+    let has_more = candidates.len()
+        > usize::try_from(size).map_err(|_| Error::ValidationError("分页范围无效".into()))?;
+    if has_more {
+        candidates.pop();
+    }
+    let mut items = Vec::new();
+    for candidate in candidates {
+        items.push(account_row(db, candidate, executor).await?);
+    }
+    authorization.validate(&compiled, executor).await?;
+    Ok(DepositAccountList { items, has_more })
 }

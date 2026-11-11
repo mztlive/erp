@@ -6,7 +6,6 @@ use application_core::AuditActor;
 use erp_core::ids::CustomerReceiptId;
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::CustomerReceiptListQuery;
-use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::entity::receivable::{AllocationAction, ReceiptAllocation};
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
@@ -329,7 +328,16 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary =
             flow::summary(&snapshot.summary, &version)?.with_balance_access(authorization.ledger_read);
-        let items = self.receipt_page(snapshot.items, &snapshot.versions, &authorization, executor).await?;
+        let whole_ids = snapshot
+            .versions
+            .iter()
+            .zip(&snapshot.summary)
+            .filter(|(_, summary)| summary.whole)
+            .map(|(version, _)| version.id.clone())
+            .collect::<BTreeSet<_>>();
+        let items = self
+            .receipt_page(snapshot.items, &snapshot.versions, &whole_ids, &authorization, executor)
+            .await?;
         Ok(FundsScopedPage {
             items,
             total,
@@ -337,8 +345,6 @@ impl FundsAccess {
             page: query.paging.page,
             page_size: query.paging.page_size,
             scope_version: version,
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
@@ -392,10 +398,10 @@ impl FundsAccess {
         &self,
         rows: Vec<CustomerReceiptRow>,
         versions: &[flow::FlowVersion],
+        whole_ids: &BTreeSet<String>,
         authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ScopedCustomerReceiptRow>> {
-        let ledger_read = authorization.ledger_read;
         let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let links = self.receipt_matched_links(&ids, executor).await?;
         let facts = self
@@ -415,13 +421,13 @@ impl FundsAccess {
             &allowed,
             &HashMap::new(),
             &FundsLinkedCondition::default(),
-            ledger_read,
+            whole_ids,
         );
         if decided.len() != expected {
             return Err(Error::Internal("回款来源聚合与正式裁剪规则不一致".into()));
         }
         let links = self.receipt_decided_links(&ids, &links, executor).await?;
-        let mut items = self.receipt_page_items(&decided, &links, ledger_read);
+        let mut items = self.receipt_page_items(&decided, &links, whole_ids);
         self.attach_receipt_pending(&mut items, decided.iter().map(|(row, _)| row), authorization, executor)
             .await?;
         self.finish_receipt_names(&mut items, executor).await?;
@@ -506,7 +512,7 @@ fn decide_receipt_rows(
     allowed: &Option<BTreeSet<String>>,
     operators: &HashMap<String, Vec<String>>,
     condition: &FundsLinkedCondition,
-    ledger_read: bool,
+    whole_ids: &BTreeSet<String>,
 ) -> Vec<(CustomerReceiptRow, Vec<String>)> {
     let mut decided = Vec::new();
     for row in rows {
@@ -525,11 +531,7 @@ fn decide_receipt_rows(
         if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty() {
             continue;
         }
-        let whole = whole_document_readable(
-            ledger_read,
-            row_links.iter().map(|link| link.order.as_deref()),
-            &matched,
-        );
+        let whole = whole_ids.contains(&row.id);
         if !whole && matched.is_empty() {
             continue;
         }
@@ -632,11 +634,15 @@ impl FundsAccess {
         }
         let tuples = receipt_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
-        let whole = whole_document_readable(
-            authorization.ledger_read,
-            row_links.iter().map(|link| link.order.as_deref()),
-            &matched,
-        );
+        let whole = self
+            .whole_allowed(
+                &authorization,
+                &row.id,
+                &row_links.iter().filter_map(|link| link.order.clone()).collect::<Vec<_>>(),
+                &[],
+                executor,
+            )
+            .await?;
         if !whole && matched.is_empty() {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
@@ -649,15 +655,10 @@ impl FundsAccess {
         )
         .await?;
         self.finish_receipt_names(std::slice::from_mut(&mut data), executor).await?;
-        let mut parts = vec![format!("{}:{}", row.id, row.version)];
-        for order in matched.iter().filter_map(|id| facts.get(id)) {
-            parts.push(format!("{}:{}", order.owner_user_id, order.version));
-        }
+        let parts = receipt_detail_parts(&row, &matched, &facts);
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
@@ -672,20 +673,28 @@ impl FundsAccess {
         &self,
         rows: &[(CustomerReceiptRow, Vec<String>)],
         links: &HashMap<String, Vec<ReceiptLink>>,
-        ledger_read: bool,
+        whole_ids: &BTreeSet<String>,
     ) -> Vec<ScopedCustomerReceiptRow> {
         rows.iter()
             .map(|(row, matched)| {
                 let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
-                let whole = whole_document_readable(
-                    ledger_read,
-                    row_links.iter().map(|link| link.order.as_deref()),
-                    matched,
-                );
+                let whole = whole_ids.contains(&row.id);
                 Self::cut_receipt_row(row, row_links, matched, whole)
             })
             .collect()
     }
+}
+
+fn receipt_detail_parts(
+    row: &CustomerReceiptRow,
+    matched: &[String],
+    facts: &HashMap<String, LinkedSalesFact>,
+) -> Vec<String> {
+    let mut parts = vec![format!("{}:{}", row.id, row.version)];
+    for order in matched.iter().filter_map(|id| facts.get(id)) {
+        parts.push(format!("{}:{}", order.owner_user_id, order.version));
+    }
+    parts
 }
 
 #[cfg(test)]
@@ -921,18 +930,13 @@ mod tests {
             &Some(BTreeSet::from(["so-a".into()])),
             &HashMap::new(),
             &empty_condition(),
-            true,
+            &BTreeSet::new(),
         );
         assert_eq!(decided.iter().map(|(row, _)| row.id.as_str()).collect::<Vec<_>>(), ["second", "first"]);
         assert_eq!(decided[0].1, ["so-a"]);
         assert_eq!(sum_signed(&links["second"], &decided[0].1), "50".parse().unwrap());
         assert_eq!(sum_signed(&links["first"], &decided[1].1), "7.01".parse().unwrap());
         assert_eq!(facts[&decided[0].1[0]].version, 3);
-        assert!(!whole_document_readable(
-            true,
-            links["second"].iter().map(|link| link.order.as_deref()),
-            &decided[0].1,
-        ));
     }
 
     /// 关联缺失失败关闭，零分配沿用整账职责边界。
@@ -950,7 +954,7 @@ mod tests {
             &None,
             &HashMap::new(),
             &empty_condition(),
-            true,
+            &BTreeSet::from(["empty".into()]),
         );
         assert_eq!(decided.len(), 1);
         assert_eq!(decided[0].0.id, "empty");
@@ -963,7 +967,7 @@ mod tests {
                 &None,
                 &HashMap::new(),
                 &empty_condition(),
-                false,
+                &BTreeSet::new(),
             )
             .is_empty()
         );
@@ -984,17 +988,40 @@ mod tests {
         condition.org_unit_ids = Some(vec!["org-b".into()]);
         condition.operator_user_ids = Some(vec!["operator".into()]);
         assert!(
-            decide_receipt_rows(vec![receipt("r")], &links, &facts, &None, &operators, &condition, true)
-                .is_empty()
+            decide_receipt_rows(
+                vec![receipt("r")],
+                &links,
+                &facts,
+                &None,
+                &operators,
+                &condition,
+                &BTreeSet::new()
+            )
+            .is_empty()
         );
         condition.org_unit_ids = Some(vec!["org-a".into()]);
-        let decided =
-            decide_receipt_rows(vec![receipt("r")], &links, &facts, &None, &operators, &condition, true);
+        let decided = decide_receipt_rows(
+            vec![receipt("r")],
+            &links,
+            &facts,
+            &None,
+            &operators,
+            &condition,
+            &BTreeSet::new(),
+        );
         assert_eq!(decided[0].1, ["so-a"]);
         condition.operator_user_ids = Some(vec!["someone_else".into()]);
         assert!(
-            decide_receipt_rows(vec![receipt("r")], &links, &facts, &None, &operators, &condition, true)
-                .is_empty()
+            decide_receipt_rows(
+                vec![receipt("r")],
+                &links,
+                &facts,
+                &None,
+                &operators,
+                &condition,
+                &BTreeSet::new()
+            )
+            .is_empty()
         );
     }
 

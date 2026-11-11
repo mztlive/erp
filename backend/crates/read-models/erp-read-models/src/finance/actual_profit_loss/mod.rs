@@ -9,12 +9,14 @@ mod projection;
 mod query;
 mod source;
 
-use application_core::{EmptyScopeVersion, ScopeVersion};
+use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use dto::{PeriodBasisConfig, PeriodBasisOption, ProfitLossExport, ProfitLossQuery, ProfitLossView};
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Transactional;
 
 use crate::Result;
+use crate::sales_center::access::SalesReadContext;
 
 /// 入口复核的成本详情动作资格；销售单数据范围仍由读取事务独立解析。
 pub struct ProfitLossAccess {
@@ -24,7 +26,7 @@ pub struct ProfitLossAccess {
 #[derive(Clone)]
 pub struct ActualProfitLossReadModel {
     db: Database,
-    rbac: erp_identity::SharedRbacService,
+    rbac: SharedRbacService,
 }
 impl ActualProfitLossReadModel {
     /// 复用应用数据库与 RBAC，不持有独立连接或缓存旧权限。
@@ -37,7 +39,7 @@ impl ActualProfitLossReadModel {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: erp_identity::SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
     /// 提供已实现的口径，由用户显式选择，不伪装已配置财务收入确认规则。
@@ -67,7 +69,7 @@ impl ActualProfitLossReadModel {
         &self,
         query: ProfitLossQuery,
         access: ProfitLossAccess,
-        actor: &application_core::AuditActor,
+        actor: &AuditActor,
     ) -> Result<ProfitLossView> {
         self.read(query, access, actor, false).await
     }
@@ -87,7 +89,7 @@ impl ActualProfitLossReadModel {
         &self,
         query: ProfitLossQuery,
         access: ProfitLossAccess,
-        actor: &application_core::AuditActor,
+        actor: &AuditActor,
     ) -> Result<ProfitLossExport> {
         Ok(export::export(self.read(query, access, actor, true).await?))
     }
@@ -96,7 +98,7 @@ impl ActualProfitLossReadModel {
         &self,
         query: ProfitLossQuery,
         access: ProfitLossAccess,
-        actor: &application_core::AuditActor,
+        actor: &AuditActor,
         export: bool,
     ) -> Result<ProfitLossView> {
         let (sources, query, context, no_scope) = self.snapshot(query, actor).await?;
@@ -112,8 +114,6 @@ impl ActualProfitLossReadModel {
         self.recheck(&query, actor, &context.scope_version).await?;
         view.scope.permission_version = context.scope_version.clone();
         view.scope_version = context.scope_version.clone();
-        view.policy_version = context.policy_version;
-        view.organization_version = context.organizations.version;
         if no_scope {
             view.empty_reason = Some("no_scope".into());
         }
@@ -121,12 +121,7 @@ impl ActualProfitLossReadModel {
     }
 
     /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
-    async fn recheck(
-        &self,
-        query: &ProfitLossQuery,
-        actor: &application_core::AuditActor,
-        expected: &str,
-    ) -> Result<()> {
+    async fn recheck(&self, query: &ProfitLossQuery, actor: &AuditActor, expected: &str) -> Result<()> {
         let this = self.clone();
         let query = query.clone();
         let actor = actor.clone();
@@ -137,9 +132,11 @@ impl ActualProfitLossReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (context, scope) = this.authorized_scope(&actor, executor).await?;
+                    context.validate(executor).await?;
                     let orders =
                         source::authorized_orders(&this.db, &query, query.validate()?, scope, executor)
                             .await?;
+                    context.validate(executor).await?;
                     Ok::<_, crate::Error>(source::version(&context.scope_version, &orders))
                 })
             })
@@ -151,13 +148,8 @@ impl ActualProfitLossReadModel {
     async fn snapshot(
         &self,
         query: ProfitLossQuery,
-        actor: &application_core::AuditActor,
-    ) -> Result<(
-        source::Sources,
-        ProfitLossQuery,
-        erp_identity::service::access_control::resolve::AuthorizedDataScope,
-        bool,
-    )> {
+        actor: &AuditActor,
+    ) -> Result<(source::Sources, ProfitLossQuery, SalesReadContext, bool)> {
         let bounds = query.validate()?;
         let this = self.clone();
         let actor = actor.clone();
@@ -167,8 +159,10 @@ impl ActualProfitLossReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (mut context, scope) = this.authorized_scope(&actor, executor).await?;
+                    context.validate(executor).await?;
                     let no_scope = scope.is_empty();
                     let sources = source::Sources::load(&this.db, &query, bounds, scope, executor).await?;
+                    context.validate(executor).await?;
                     context.map_read_version(|base| source::version(base, &sources.orders));
                     ensure_version(query.scope_version.as_deref(), &context.scope_version)?;
                     Ok((sources, query, context, no_scope))

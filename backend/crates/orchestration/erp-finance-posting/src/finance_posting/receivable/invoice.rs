@@ -156,7 +156,7 @@ impl ReceivableProcess {
             .await?
         {
             return Ok(InvoiceWithAssetsResult {
-                view: self.finance.invoice_detail(&invoice_id).await?,
+                view: self.authorized_invoice_result(&invoice_id, actor).await?,
                 assets_committed: false,
             });
         }
@@ -178,15 +178,13 @@ impl ReceivableProcess {
                 &req.expected_task_version,
             )?,
         };
-        let policy_revision = self.rbac.current_policy_revision().await?;
         let result = self
-            .rbac
+            .db
+            .client()
             .clone()
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(transaction.execute(executor))
-            })
+            .with_transaction(move |executor| Box::pin(transaction.execute(executor)))
             .await;
-        self.committed_invoice_view(result, &command_receipt, has_pending).await
+        self.committed_invoice_view(result, &command_receipt, has_pending, actor).await
     }
 
     /// 结果恢复保留未知提交语义；已提交附件后读取失败不能触发存储补偿。
@@ -195,6 +193,7 @@ impl ReceivableProcess {
         result: Result<(String, bool)>,
         receipt: &CommandReceipt,
         has_pending: bool,
+        actor: &AuditActor,
     ) -> Result<InvoiceWithAssetsResult> {
         let (detail_id, assets_committed, original_unknown) = match result {
             Ok((id, fresh)) => (id, has_pending && fresh, None),
@@ -209,8 +208,7 @@ impl ReceivableProcess {
             },
         };
         let view = self
-            .finance
-            .invoice_detail(&detail_id)
+            .authorized_invoice_result(&detail_id, actor)
             .await
             .map_err(|error| committed_read_error(error, assets_committed));
         Ok(InvoiceWithAssetsResult { view: recovered_view(view, original_unknown)?, assets_committed })
@@ -245,7 +243,6 @@ impl ReceivableProcess {
         req.validate()?;
         let expected_task_version =
             erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
-        let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor_owned = actor.clone();
@@ -253,8 +250,10 @@ impl ReceivableProcess {
         let detail_id = invoice_id.clone();
         let work_item_id = req.work_item_id.clone();
         let plan_lines = convert_post_allocations(&req.allocations);
-        self.rbac
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut invoice = load_postable_invoice(&db, &invoice_id, executor).await?;
 
@@ -278,7 +277,7 @@ impl ReceivableProcess {
             })
             .await?;
 
-        self.finance.invoice_detail(&detail_id).await.map_err(Error::from)
+        self.authorized_invoice_result(&detail_id, actor).await
     }
 }
 
@@ -304,13 +303,14 @@ async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Execu
 }
 
 /// 已提交文件后的响应读取失败必须保留对象，由同操作号重试核对已完成结果。
-fn committed_read_error(error: erp_finance::Error, assets_committed: bool) -> Error {
+fn committed_read_error(error: impl Into<Error>, assets_committed: bool) -> Error {
+    let error = error.into();
     if assets_committed {
         Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom(
             format!("发票已提交但结果读取失败: {error}"),
         )))
     } else {
-        error.into()
+        error
     }
 }
 

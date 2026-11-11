@@ -22,6 +22,7 @@ use erp_workflow::service::approval::execution::{PreparedExecution, prepare_star
 use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
+use persistence_core::Transactional;
 
 use super::super::{ReceivableProcess, start_approval};
 use super::authorization::{MongoAccess, RequestAction, authorize};
@@ -59,10 +60,10 @@ impl ReceivableProcess {
         let response_actor = actor.clone();
         let actor = actor.clone();
         let recover = command.clone();
-        let revision = rbac.current_policy_revision().await?;
-        let result = rbac
+        let result = db
+            .client()
             .clone()
-            .run_authorized_policy_transaction(revision, move |executor| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     SubmitWrite { db: &db, rbac: &rbac, req: &req, actor: &actor, command: &command }
                         .apply(executor)
@@ -112,7 +113,7 @@ impl SubmitWrite<'_> {
     }
 }
 
-/// 固定销售应收来源；草稿修改仅限原申请人且必须提交版本。
+/// 固定销售应收来源；草稿修改必须提交版本，操作者资格由统一授权入口检查。
 async fn candidate(
     db: &Database,
     account: &ReceivableAccount,
@@ -126,8 +127,8 @@ async fn candidate(
             request.base.version,
             req.expected_version.ok_or_else(|| Error::ValidationError("请刷新申请后重试".into()))?,
         )?;
-        if request.created_by != actor.id() || request.receivable_account_id.as_ref() != account.base.id {
-            return Err(Error::Forbidden("只能修改本人申请且不能更换来源销售单".into()));
+        if request.receivable_account_id.as_ref() != account.base.id {
+            return Err(Error::Forbidden("不能更换申请来源销售单".into()));
         }
         if !matches!(request.status, InvoiceRequestStatus::Draft | InvoiceRequestStatus::Rejected) {
             return Err(Error::ConflictError("申请已提交，请刷新后重试".into()));

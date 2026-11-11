@@ -223,7 +223,6 @@ impl PayableProcess {
         }
         let has_pending_assets = !pending_assets.is_empty();
         let prepared = PreparedSupplierPayment::prepare(req, pending_assets.as_ref(), actor.id())?;
-        let policy_revision = self.authorization_rbac.current_policy_revision().await?;
         let transaction = SupplierPaymentTransaction {
             db: self.db.clone(),
             rbac: self.authorization_rbac.clone(),
@@ -233,10 +232,10 @@ impl PayableProcess {
             command_receipt: command_receipt.clone(),
         };
         let result = self
-            .transaction_rbac
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(transaction.execute(executor))
-            })
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| Box::pin(transaction.execute(executor)))
             .await;
         self.committed_payment_view(result, &command_receipt, has_pending_assets, &authority).await
     }

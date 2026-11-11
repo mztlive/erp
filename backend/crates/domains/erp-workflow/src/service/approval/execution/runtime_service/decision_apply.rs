@@ -589,6 +589,7 @@ async fn authorize_decision_terminal_replay(
         return Err(hidden_forbidden());
     }
     let eligibility = revalidate_decision_approver(
+        db,
         identity_service,
         rbac,
         RevalidateDecisionApproverInput {

@@ -4,9 +4,7 @@ use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
 use erp_identity::Permission;
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::service::business_ownership::required_business_org;
-use erp_order_to_cash::sales_inquiry::access::SalesInquiryAccess;
 use erp_sales::entity::sales_inquiry::{InquiryCreateData, InquiryRequirementData, SalesInquiry};
 use erp_sales::entity::sales_inquiry_import::{
     INQUIRY_IMPORT_MAX_BYTES, InquiryImportPreview, InquiryImportValidation,
@@ -69,9 +67,6 @@ impl SalesInquiryImportProcess {
     ) -> Result<InquiryCreateData> {
         let permissions =
             [Permission::parse("sales_inquiry:import")?, Permission::parse("sellable_sku:list")?];
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, &Permission::parse("sales_inquiry:create")?, &permissions, executor)
-            .await?;
         let name = self.inquiry.require_customer(actor, customer, executor).await?;
         let data = InquiryCreateData {
             customer_id: customer.into(),
@@ -83,9 +78,7 @@ impl SalesInquiryImportProcess {
             draft: InquiryRequirementData::default(),
         };
         let candidate = SalesInquiry::create("preview".into(), "preview".into(), data.clone())?;
-        if !SalesInquiryAccess::allows_sales(&access, &candidate) {
-            return Err(Error::Forbidden("没有该业务责任范围的询价导入创建权限".into()));
-        }
+        self.access().require_permissions(actor, "create", &candidate, &permissions, executor).await?;
         Ok(data)
     }
 

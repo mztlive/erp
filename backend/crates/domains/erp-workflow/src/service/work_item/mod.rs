@@ -14,7 +14,6 @@ pub use abandon_rework::AbandonApprovalReworkRequest;
 mod close;
 mod finance_responsibility;
 pub mod order_access;
-mod query_support;
 pub mod read;
 pub use read::WorkItemReadService;
 mod reassign;
@@ -26,8 +25,7 @@ use std::sync::Arc;
 
 #[cfg(test)]
 use access::{
-    TaskEligibility, detail_scope, ensure_generic_work_item_mutation, has_assignment_candidate_access,
-    has_item_access,
+    TaskEligibility, candidate_facts_current, ensure_generic_work_item_mutation, task_facts_current,
 };
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
@@ -120,17 +118,15 @@ mod tests {
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::WorkItemId;
-    use erp_identity::{Permission, PermissionSet};
 
     use super::{
         AssignmentSeparationPolicy, ObjectFact, ObjectFactMap, ObjectKind, TaskEligibility,
         WorkItemAllowedAction, WorkItemScope, approval_assignment_separated, audited_fact_operator_actors,
-        detail_scope, ensure_generic_work_item_mutation, expected_task_version,
-        has_assignment_candidate_access, has_item_access, non_empty_assignment_actors,
-        purchase_order_fulfillment_responsibility_id,
+        candidate_facts_current, ensure_generic_work_item_mutation, expected_task_version,
+        non_empty_assignment_actors, purchase_order_fulfillment_responsibility_id, task_facts_current,
     };
     use crate::entity::work_item::{
-        AssignmentSource, DocumentApprovalWorkItemData, TaskAccess, WorkItem, WorkItemData, WorkItemPriority,
+        AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemType,
     };
     use crate::error::{Error, ErrorCode};
@@ -142,45 +138,6 @@ mod tests {
         actor_id: &str,
     ) -> crate::ports::WorkflowAuditFact {
         crate::ports::WorkflowAuditFact::successful(actor_id, action, resource_type, resource_id)
-    }
-
-    fn w13_facts() -> ObjectFactMap {
-        HashMap::from([(
-            (ObjectKind::ReceivableAccount, "account-1".to_string()),
-            ObjectFact::new("sales-order-1", "应收子账 2", "sales-user"),
-        )])
-    }
-
-    fn w13_delta_item() -> WorkItem {
-        WorkItem::new_at(
-            WorkItemId::new("wi-w13-delta-detail"),
-            WorkItemData {
-                work_item_type: WorkItemType::CardFundsDeltaReview,
-                business_object_type: "receivable_account".to_string(),
-                business_object_id: "account-1".to_string(),
-                subject_version: "revision-2".to_string(),
-
-                owner_role: "role-finance".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: "alice".to_string(),
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::High,
-                due_at: None,
-                reason_code: Some("CARD_FUNDS_DELTA_REVIEW".to_string()),
-                impact_summary: Some("同步差额待复核".to_string()),
-            },
-            Instant::from_unix_secs(100),
-        )
-        .unwrap()
-    }
-
-    fn procurement_access(actor_id: &str) -> TaskEligibility {
-        TaskEligibility::new(AuditActor::new(actor_id.to_string(), actor_id.to_string(), AccountKind::Admin))
-            .with_permissions(PermissionSet::new(
-                vec!["purchase_order:create".to_string()]
-                    .into_iter()
-                    .map(|code: String| Permission::parse(code).unwrap()),
-            ))
     }
 
     fn procurement_facts() -> ObjectFactMap {
@@ -240,61 +197,12 @@ mod tests {
         .unwrap()
     }
 
-    fn invoice_execution_item(owner_user_id: &str) -> WorkItem {
-        WorkItem::new_with_responsibility_key(
-            WorkItemId::new("wi-invoice-execution"),
-            WorkItemData {
-                work_item_type: WorkItemType::SalesInvoiceExecution,
-                business_object_type: "receivable_account".to_string(),
-                business_object_id: "account-invoice-1".to_string(),
-                subject_version: "1".to_string(),
-                owner_role: "role-finance".to_string(),
-                owner_organization_id: "party-1".to_string(),
-                owner_user_id: owner_user_id.to_string(),
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-                reason_code: Some("RECEIVABLE_INVOICE_REQUIRED".to_string()),
-                impact_summary: Some("待开票金额 ¥100.00".to_string()),
-            },
-            "finance:SALES_INVOICE:rule-1",
-        )
-        .unwrap()
-    }
-
-    fn invoice_execution_facts() -> ObjectFactMap {
-        HashMap::from([(
-            (ObjectKind::ReceivableAccount, "account-invoice-1".to_string()),
-            ObjectFact::new("sales-order-1", "应收子账 1", "sales-user"),
-        )])
-    }
-
-    fn invoice_execution_access(actor_id: &str, full: bool) -> TaskEligibility {
-        let codes: &[&str] = if full {
-            &[
-                "receivable_account:list",
-                "receivable_account:detail",
-                "invoice:list",
-                "invoice:detail",
-                "invoice:create",
-                "sales_invoice_request:list",
-                "sales_invoice_request:detail",
-                "invoice:post",
-            ]
-        } else {
-            &["receivable_account:detail"]
-        };
-        TaskEligibility::new(AuditActor::new(actor_id.to_string(), actor_id.to_string(), AccountKind::Admin))
-            .with_permissions(PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())))
-    }
-
     fn managed_action_access() -> TaskEligibility {
         let mut access = TaskEligibility::new(AuditActor::new(
             "manager-1".to_string(),
             "manager-1".to_string(),
             AccountKind::Admin,
-        ))
-        .with_permissions(PermissionSet::new([Permission::parse("work_item:manage").unwrap()]));
+        ));
         access.task.managed_task_ids.insert("wi-managed-w29".into());
         access
     }
@@ -367,245 +275,6 @@ mod tests {
 
         assert_eq!(policy.object_kind, ObjectKind::IntegrationErrorTask);
         assert_eq!(policy.read_permission, "integration_error_task:detail");
-    }
-
-    #[test]
-    fn current_owner_does_not_bypass_revoked_object_participation() {
-        let mut item = w13_delta_item();
-        item.reassign("finance-user", Instant::from_unix_secs(101)).unwrap();
-        let access = TaskEligibility::new(AuditActor::new(
-            "finance-user".to_string(),
-            "finance-user".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_permissions(PermissionSet::new(
-            vec!["receivable_account:detail".to_string()]
-                .into_iter()
-                .map(|code: String| Permission::parse(code).unwrap()),
-        ));
-
-        assert_eq!(item.owner_user_id.as_deref(), Some("finance-user"));
-        assert!(!has_item_access(&item, &access, &w13_facts()));
-    }
-
-    /// 冻结的当前审批人有对象读取权限即可承接节点，陌生人与撤权者仍被拒绝。
-    #[test]
-    fn assigned_approver_requires_object_read_but_not_creator_participation() {
-        let mut item = w13_delta_item();
-        item.work_item_type = WorkItemType::DocumentApproval;
-        item.business_object_type = "purchase_change_order".into();
-        item.business_object_id = "change-1".into();
-        item.owner_role = "purchase_change_order_approver".into();
-        let facts = HashMap::from([(
-            (ObjectKind::PurchaseChangeOrder, "change-1".to_string()),
-            ObjectFact::new("change-1", "采购变更单", "buyer"),
-        )]);
-        let mut access = procurement_access("alice");
-        access.task.permissions =
-            PermissionSet::new([Permission::parse("purchase_change_order:detail").unwrap()]);
-        assert!(has_item_access(&item, &access, &facts));
-        access.task.actor_id = "stranger".into();
-        assert!(!has_item_access(&item, &access, &facts));
-        access.task.actor_id = "alice".into();
-        access.task.permissions = PermissionSet::default();
-        assert!(!has_item_access(&item, &access, &facts));
-    }
-
-    /// 导入确认的冻结负责人可读取系统批次，陌生人、撤权和缺失事实仍失败关闭。
-    #[test]
-    fn import_confirmation_owner_requires_read_permission_and_existing_batch() {
-        let item = WorkItem::new_at(
-            WorkItemId::new("wi-import-confirmation"),
-            WorkItemData {
-                work_item_type: WorkItemType::ImportBusinessConfirmation,
-                business_object_type: "LEGACY_IMPORT_BATCH".to_string(),
-                business_object_id: "batch-1".to_string(),
-                subject_version: "trial-1".to_string(),
-                owner_role: "role-sales".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: "confirmation-owner".to_string(),
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-                reason_code: Some("IMPORT_TRIAL_CONFIRMATION".to_string()),
-                impact_summary: None,
-            },
-            Instant::from_unix_secs(100),
-        )
-        .unwrap();
-        let facts = HashMap::from([(
-            (ObjectKind::LegacyImportBatch, "batch-1".to_string()),
-            ObjectFact::new("batch-1", "旧数据导入批次", "__system__"),
-        )]);
-        let mut access = TaskEligibility::new(AuditActor::new(
-            "confirmation-owner".to_string(),
-            "confirmation-owner".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_permissions(PermissionSet::new(
-            vec!["legacy_import_batch:detail".to_string()]
-                .into_iter()
-                .map(|code: String| Permission::parse(code).unwrap()),
-        ));
-        assert!(!access.task.can_manage(&item.base.id));
-        assert!(has_item_access(&item, &access, &facts));
-        assert!(!has_item_access(&item, &access, &HashMap::new()));
-        access.task.actor_id = "stranger".to_string();
-        assert!(!has_item_access(&item, &access, &facts));
-        access.task.actor_id = "confirmation-owner".to_string();
-        access.task.permissions = PermissionSet::default();
-        assert!(!has_item_access(&item, &access, &facts));
-    }
-
-    #[test]
-    fn procurement_owner_and_reassign_candidate_use_concrete_permission() {
-        let owner_access = procurement_access("buyer-1");
-        let facts = procurement_facts();
-        let item = procurement_item("buyer-1");
-        let policy = WorkItemType::ProcurementOrderCreation.brief_relation("sales_order").unwrap();
-
-        assert_eq!(policy.object_kind, ObjectKind::SalesOrder);
-        assert_eq!(policy.read_permission, "purchase_order:create");
-        assert_eq!(
-            WorkItemType::ProcurementOrderCreation.assignment_separation_policy(),
-            AssignmentSeparationPolicy::RoleAndParticipation
-        );
-        assert!(has_item_access(&item, &owner_access, &facts));
-        let fields = super::dto::WorkItemFields::from(item.clone());
-        assert!(
-            fields
-                .allowed_actions(WorkItemScope::Mine, "buyer-1", &owner_access.task)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-
-        let candidate_access = procurement_access("buyer-2");
-        assert!(has_assignment_candidate_access(&item, &candidate_access, &facts));
-    }
-
-    #[test]
-    fn procurement_direct_assignment_still_requires_create_permission() {
-        let item = procurement_item("buyer-1");
-        let access = TaskEligibility {
-            actor: AuditActor::new("buyer-1".to_string(), "buyer-1".to_string(), AccountKind::Admin),
-            task: TaskAccess {
-                actor_id: "buyer-1".to_string(),
-                permissions: PermissionSet::default(),
-                managed_task_ids: Default::default(),
-            },
-            participant_document_ids: HashSet::new(),
-        };
-
-        assert!(!has_item_access(&item, &access, &procurement_facts()));
-        assert!(!has_assignment_candidate_access(&item, &access, &procurement_facts()));
-    }
-
-    #[test]
-    fn fulfillment_candidate_requires_complete_execution_permissions() {
-        let item = fulfillment_item(
-            "purchase_receipt",
-            "warehouse_inbound_handler",
-            "warehouse:wh-1:receipt",
-            "PURCHASE_RECEIPT_READY",
-        );
-        let facts = HashMap::from([(
-            (ObjectKind::PurchaseReceipt, "purchase_receipt-1".to_string()),
-            ObjectFact::new("po-1", "采购入库单 GRN-1", "__system__"),
-        )]);
-        let access = |codes: &[&str]| TaskEligibility {
-            actor: AuditActor::new("candidate-1".to_string(), "candidate-1".to_string(), AccountKind::Admin),
-            task: TaskAccess {
-                actor_id: "candidate-1".to_string(),
-                permissions: PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())),
-                managed_task_ids: Default::default(),
-            },
-            participant_document_ids: HashSet::new(),
-        };
-        assert!(!has_assignment_candidate_access(&item, &access(&["purchase_receipt:post"]), &facts,));
-        assert!(has_assignment_candidate_access(
-            &item,
-            &access(&[
-                "purchase_receipt:list",
-                "purchase_receipt:detail",
-                "purchase_receipt:update",
-                "purchase_receipt:post",
-            ]),
-            &facts,
-        ));
-    }
-
-    #[test]
-    fn customer_acceptance_candidate_requires_complete_execution_permissions() {
-        let item = WorkItem::new_with_responsibility_key(
-            WorkItemId::new("wi-customer-acceptance"),
-            WorkItemData {
-                work_item_type: WorkItemType::CustomerAcceptanceRegistration,
-                business_object_type: "sales_order".to_string(),
-                business_object_id: "sales-order-1".to_string(),
-                subject_version: "1".to_string(),
-                owner_role: "sales_order_owner".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: "sales-1".to_string(),
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-                reason_code: Some("CUSTOMER_ACCEPTANCE_REQUIRED".to_string()),
-                impact_summary: None,
-            },
-            "sales_order:sales-order-1:customer_acceptance",
-        )
-        .unwrap();
-        let facts = HashMap::from([(
-            (ObjectKind::SalesOrder, "sales-order-1".to_string()),
-            ObjectFact::new("sales-order-1", "销售单 SO-1", "sales-1"),
-        )]);
-        let access = |codes: &[&str]| TaskEligibility {
-            actor: AuditActor::new("candidate-1".to_string(), "candidate-1".to_string(), AccountKind::Admin),
-            task: TaskAccess {
-                actor_id: "candidate-1".to_string(),
-                permissions: PermissionSet::new(codes.iter().map(|code| Permission::parse(code).unwrap())),
-                managed_task_ids: Default::default(),
-            },
-            participant_document_ids: HashSet::new(),
-        };
-
-        assert!(!has_assignment_candidate_access(&item, &access(&["sales_order:detail"]), &facts,));
-        assert!(has_assignment_candidate_access(
-            &item,
-            &access(&[
-                "customer_acceptance:list",
-                "customer_acceptance:detail",
-                "customer_acceptance:create",
-                "customer_acceptance:post",
-                "sales_order:detail",
-            ]),
-            &facts,
-        ));
-    }
-
-    #[test]
-    fn invoice_owner_can_view_but_cannot_process_after_execution_permission_is_revoked() {
-        let item = invoice_execution_item("finance-1");
-        let facts = invoice_execution_facts();
-        let revoked = invoice_execution_access("finance-1", false);
-        assert!(has_item_access(&item, &revoked, &facts));
-        let fields = super::dto::WorkItemFields::from(item.clone());
-
-        assert!(
-            !fields
-                .allowed_actions(WorkItemScope::Mine, "finance-1", &revoked.task)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-        assert!(!has_assignment_candidate_access(&item, &revoked, &facts));
-
-        let full = invoice_execution_access("finance-1", true);
-        assert!(has_item_access(&item, &full, &facts));
-        let fields = super::dto::WorkItemFields::from(item.clone());
-        assert!(
-            fields
-                .allowed_actions(WorkItemScope::Mine, "finance-1", &full.task)
-                .contains(&WorkItemAllowedAction::Process)
-        );
-        assert!(has_assignment_candidate_access(&item, &full, &facts));
     }
 
     #[test]
@@ -722,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn former_responsibility_actor_can_open_terminal_history_detail() {
+    fn authorized_terminal_task_projects_history_without_reauthorizing() {
         let mut item = WorkItem::new_at(
             WorkItemId::new("wi-history"),
             WorkItemData {
@@ -745,18 +414,8 @@ mod tests {
         .unwrap();
         item.reassign("bob", Instant::from_unix_secs(110)).unwrap();
         item.complete_by_domain_command("bob", Instant::from_unix_secs(120)).unwrap();
-        let access = |actor_id: &str| TaskEligibility {
-            actor: AuditActor::new(actor_id.to_string(), actor_id.to_string(), AccountKind::Admin),
-            task: TaskAccess {
-                actor_id: actor_id.to_string(),
-                permissions: PermissionSet::default(),
-                managed_task_ids: Default::default(),
-            },
-            participant_document_ids: HashSet::new(),
-        };
-
-        assert_eq!(detail_scope(&item, "alice", &access("alice")).unwrap(), WorkItemScope::History);
-        assert!(detail_scope(&item, "charlie", &access("charlie")).is_err());
+        assert_eq!(WorkItemScope::for_task(&item, "alice"), WorkItemScope::History);
+        assert_eq!(WorkItemScope::for_task(&item, "charlie"), WorkItemScope::History);
     }
 
     #[test]
@@ -957,6 +616,28 @@ mod tests {
             ),
             Err(Error::Forbidden(_))
         ));
+    }
+    #[test]
+    fn authorized_task_business_facts_require_existing_root_and_current_version() {
+        use crate::entity::work_item::WorkItemSubjectVersions;
+        let item = procurement_item("buyer-1");
+        let mut facts = procurement_facts();
+        let fact = facts.values_mut().next().unwrap();
+        fact.created_by = "unrelated-creator".into();
+        fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["submission-1".into()]).unwrap();
+        assert!(task_facts_current(&item, "buyer-1", &facts));
+        assert!(candidate_facts_current(&item, &facts));
+        facts.values_mut().next().unwrap().subject_versions =
+            WorkItemSubjectVersions::constrained(vec!["submission-2".into()]).unwrap();
+        assert!(!task_facts_current(&item, "buyer-1", &facts));
+        assert!(!candidate_facts_current(&item, &facts));
+        assert!(!task_facts_current(&item, "buyer-1", &ObjectFactMap::new()));
+    }
+    #[test]
+    fn closed_procurement_task_cannot_accept_a_new_candidate() {
+        let mut item = procurement_item("buyer-1");
+        item.status = crate::entity::work_item::WorkItemStatus::Completed;
+        assert!(!candidate_facts_current(&item, &procurement_facts()));
     }
 }
 

@@ -114,9 +114,11 @@ impl SupplierService {
                 Box::pin(async move {
                     let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
                     let no_scope = !context.has_scope_rules();
+                    context.validate(executor).await?;
                     let input = build_list_input(&query, &scope, party.as_ref(), executor).await?;
                     fingerprint_scope(&db, &mut context, &input, executor).await?;
                     if !hydrate {
+                        context.validate(executor).await?;
                         return Ok(SupplierSnapshot {
                             items: Vec::new(),
                             total: 0,
@@ -339,6 +341,7 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
         maintainer_names: names,
         as_of: erp_core::common::time::BusinessDate::today(),
     });
+    context.validate(executor).await?;
     Ok(SupplierSnapshot { no_scope, items, total, page, page_size, context })
 }
 

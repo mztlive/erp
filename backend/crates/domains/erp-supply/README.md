@@ -26,7 +26,7 @@
 
 术语与统一分工见[总索引](../../README.md#代码中常见名称的含义)。
 
-- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
+- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。身份与授权只依赖 `erp-identity` 的公开 API；其余常规、构建和测试依赖不得指向其他业务领域或组合层。
 - 供应商账户、资质与商业档案由 erp-supplier 提供；通过 Port 获取资格和引用事实。
 - 供应商协议由 adapters 实现，订单、资金与售后由 erp-supplier-orders 编排，目录与连接执行由 erp-supplier-catalog 编排，不得把外部 I/O 放入数据库事务。
 - 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
@@ -49,6 +49,9 @@
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 
 ## 修改执行要求
+
+- 权限检查必须使用 `erp-identity::AuthorizationService`；本域只提供对象事实和固定 Mapping，不得解释角色条款、组合权限范围或构造授权结果。
+- 查询必须使用当前阶段的编译凭证；读取前后复验账号、权限、事实版本和有效期，凭证不得跨请求或事务复用。
 
 1. 将无 I/O 的校验、状态迁移和不变式放入本域实体或值对象；Service 组织本域用例。
 2. Repository 使用调用方传入的 `persistence_core::Executor`；跨集合原子写入由本域用例或 Process 控制事务。

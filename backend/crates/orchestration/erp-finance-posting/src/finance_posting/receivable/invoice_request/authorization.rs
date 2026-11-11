@@ -2,9 +2,9 @@
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
-use erp_workflow::DocumentType;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -37,15 +37,19 @@ impl RequestAction {
 #[async_trait]
 trait RequestAccess: Send + Sync {
     type View: Send;
-    async fn active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool>;
     async fn allowed(
         &self,
         actor: &AuditActor,
         action: RequestAction,
         executor: &mut dyn Executor,
     ) -> Result<bool>;
-    async fn creator(&self, id: &str, executor: &mut dyn Executor) -> Result<String>;
-    async fn readable(&self, actor: &AuditActor, id: &str, executor: &mut dyn Executor) -> Result<bool>;
+    async fn readable(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        action: RequestAction,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
     async fn committed(
         &self,
         command: &CommandReceipt,
@@ -61,22 +65,43 @@ pub(super) struct MongoAccess<'a> {
 #[async_trait]
 impl RequestAccess for MongoAccess<'_> {
     type View = InvoiceRequestView;
-    async fn active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self.rbac.runtime.actor_active(actor, executor).await?)
-    }
     async fn allowed(
         &self,
         actor: &AuditActor,
         action: RequestAction,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(!self.rbac.runtime.action_roles(actor, action.permission(), executor).await?.is_empty())
+        let service = AuthorizationService::new(
+            self.db.clone(),
+            self.rbac.identity.clone(),
+            AuthorizationRegistry::new(vec![])?,
+        );
+        Ok(service.has_permission(actor, &Permission::parse(action.permission())?, executor).await?)
     }
-    async fn creator(&self, id: &str, executor: &mut dyn Executor) -> Result<String> {
-        Ok(super::load(self.db, id, executor).await?.created_by)
-    }
-    async fn readable(&self, actor: &AuditActor, id: &str, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self.rbac.runtime.source_readable(actor, DocumentType::SalesInvoiceRequest, id, executor).await?)
+    async fn readable(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        action: RequestAction,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let request = super::load(self.db, id, executor).await?;
+        match self
+            .rbac
+            .funds
+            .require_sales_sources(
+                actor,
+                action.permission(),
+                &[request.sales_order_id.to_string()],
+                executor,
+            )
+            .await
+            .map_err(Error::from)
+        {
+            Ok(()) => Ok(true),
+            Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
     async fn committed(
         &self,
@@ -101,22 +126,20 @@ async fn actor_access<P: RequestAccess>(
     action: RequestAction,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !port.active(actor, executor).await? || !port.allowed(actor, action, executor).await? {
+    if !port.allowed(actor, action, executor).await? {
         return Err(Error::Forbidden("当前账号不可办理该开票申请".into()));
     }
     Ok(())
 }
-/// 原申请人和当前完整来源范围必须同时成立，不依赖单据可编辑状态。
+/// 当前完整来源范围由统一授权入口检查，不依赖单据可编辑状态。
 async fn object_access<P: RequestAccess>(
     port: &P,
     actor: &AuditActor,
     id: &str,
+    action: RequestAction,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if port.creator(id, executor).await? != actor.id() {
-        return Err(Error::Forbidden("只能办理本人提交的开票申请".into()));
-    }
-    if !port.readable(actor, id, executor).await? {
+    if !port.readable(actor, id, action, executor).await? {
         return Err(Error::Forbidden("当前账号无权读取开票申请的来源销售单".into()));
     }
     Ok(())
@@ -140,7 +163,7 @@ async fn authorize_request<P: RequestAccess>(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     actor_access(port, actor, action, executor).await?;
-    object_access(port, actor, id, executor).await
+    object_access(port, actor, id, action, executor).await
 }
 /// 命令回放和未知结果恢复共用只读分支，旧回执不得替代当前对象资格。
 async fn replay<P: RequestAccess>(
@@ -152,7 +175,7 @@ async fn replay<P: RequestAccess>(
     actor_access(port, actor, RequestAction::from_command(command)?, executor).await?;
     let Some(id) = port.committed(command, executor).await? else { return Ok(None) };
     let result = async {
-        object_access(port, actor, &id, executor).await?;
+        object_access(port, actor, &id, RequestAction::from_command(command)?, executor).await?;
         port.view(&id, executor).await.map(Some)
     }
     .await;
@@ -169,7 +192,7 @@ impl MongoAccess<'_> {
     ) -> Result<Option<InvoiceRequestView>> {
         replay(self, actor, command, executor).await
     }
-    /// 当前命令完成后重新确认申请人及来源范围，再读取同事务详情。
+    /// 当前命令完成后重新确认操作资格及来源范围，再读取同事务详情。
     pub(super) async fn result(
         &self,
         actor: &AuditActor,
@@ -197,7 +220,6 @@ mod tests {
         active: AtomicBool,
         allowed: AtomicBool,
         readable: AtomicBool,
-        owner: bool,
         receipt: Option<FinanceCommandReceipt>,
         calls: Mutex<Vec<&'static str>>,
     }
@@ -207,7 +229,6 @@ mod tests {
                 active: AtomicBool::new(true),
                 allowed: AtomicBool::new(true),
                 readable: AtomicBool::new(true),
-                owner: true,
                 receipt: with_receipt.then(|| {
                     FinanceCommandReceipt::resource(&command(1), "request".into(), "audit".into()).unwrap()
                 }),
@@ -238,21 +259,17 @@ mod tests {
     #[async_trait]
     impl RequestAccess for RecordingAccess {
         type View = String;
-        async fn active(&self, _: &AuditActor, _: &mut dyn Executor) -> Result<bool> {
-            self.record("active");
-            Ok(self.active.load(Ordering::SeqCst))
-        }
-        async fn allowed(&self, _: &AuditActor, action: RequestAction, _: &mut dyn Executor) -> Result<bool> {
+        async fn allowed(&self, _: &AuditActor, _: RequestAction, _: &mut dyn Executor) -> Result<bool> {
             self.record("action");
-            assert_eq!(action.permission(), "sales_invoice_request:submit");
-            Ok(self.allowed.load(Ordering::SeqCst))
+            Ok(self.active.load(Ordering::SeqCst) && self.allowed.load(Ordering::SeqCst))
         }
-        async fn creator(&self, id: &str, _: &mut dyn Executor) -> Result<String> {
-            self.record("owner");
-            assert_eq!(id, "request");
-            Ok(if self.owner { "owner" } else { "other" }.into())
-        }
-        async fn readable(&self, _: &AuditActor, id: &str, _: &mut dyn Executor) -> Result<bool> {
+        async fn readable(
+            &self,
+            _: &AuditActor,
+            id: &str,
+            _: RequestAction,
+            _: &mut dyn Executor,
+        ) -> Result<bool> {
             self.record("scope");
             assert_eq!(id, "request");
             Ok(self.readable.load(Ordering::SeqCst))
@@ -274,49 +291,68 @@ mod tests {
             replay(&port, &actor(), &command(1), &mut NoTransaction).await.unwrap(),
             Some("request".into())
         );
-        assert_eq!(port.calls(), vec!["active", "action", "receipt", "owner", "scope", "view"]);
+        assert_eq!(port.calls(), vec!["action", "receipt", "scope", "view"]);
         port.allowed.store(false, Ordering::SeqCst);
         assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.is_err());
-        assert_eq!(port.calls(), vec!["active", "action"]);
+        assert_eq!(port.calls(), vec!["action"]);
         port.allowed.store(true, Ordering::SeqCst);
         port.readable.store(false, Ordering::SeqCst);
         assert!(matches!(
             replay(&port, &actor(), &command(1), &mut NoTransaction).await,
             Err(Error::CommittedResultUnavailable(_))
         ));
-        assert_eq!(port.calls(), vec!["active", "action", "receipt", "owner", "scope"]);
+        assert_eq!(port.calls(), vec!["action", "receipt", "scope"]);
     }
 
     #[tokio::test]
-    async fn replay_rejects_inactive_actor_wrong_creator_and_changed_payload() {
-        let mut port = RecordingAccess::new(true);
+    async fn replay_rejects_inactive_actor_and_changed_payload() {
+        let port = RecordingAccess::new(true);
         port.active.store(false, Ordering::SeqCst);
         assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.is_err());
-        assert_eq!(port.calls(), vec!["active"]);
+        assert_eq!(port.calls(), vec!["action"]);
         port.active.store(true, Ordering::SeqCst);
-        port.owner = false;
-        assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.is_err());
-        assert_eq!(port.calls(), vec!["active", "action", "receipt", "owner"]);
-        port.owner = true;
         assert!(replay(&port, &actor(), &command(2), &mut NoTransaction).await.is_err());
-        assert_eq!(port.calls(), vec!["active", "action", "receipt"]);
+        assert_eq!(port.calls(), vec!["action", "receipt"]);
     }
 
     #[tokio::test]
     async fn new_submission_and_existing_binding_require_the_same_current_source_qualification() {
         let port = RecordingAccess::new(false);
         assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.unwrap().is_none());
-        assert_eq!(port.calls(), vec!["active", "action", "receipt"]);
+        assert_eq!(port.calls(), vec!["action", "receipt"]);
         authorize_request(&port, &actor(), "request", RequestAction::Submit, &mut NoTransaction)
             .await
             .unwrap();
-        assert_eq!(port.calls(), vec!["active", "action", "owner", "scope"]);
+        assert_eq!(port.calls(), vec!["action", "scope"]);
         port.readable.store(false, Ordering::SeqCst);
         assert!(
             authorize_request(&port, &actor(), "request", RequestAction::Submit, &mut NoTransaction)
                 .await
                 .is_err()
         );
-        assert_eq!(port.calls(), vec!["active", "action", "owner", "scope"]);
+        assert_eq!(port.calls(), vec!["action", "scope"]);
+    }
+
+    #[tokio::test]
+    async fn authorized_delegate_can_handle_the_request_but_source_denial_still_stops_access() {
+        let port = RecordingAccess::new(false);
+        let delegate = AuditActor::new("delegate".into(), "delegate".into(), AccountKind::Admin);
+        for action in [RequestAction::Submit, RequestAction::Cancel] {
+            authorize_request(&port, &delegate, "request", action, &mut NoTransaction).await.unwrap();
+            assert_eq!(port.calls(), vec!["action", "scope"]);
+        }
+        port.allowed.store(false, Ordering::SeqCst);
+        assert!(matches!(
+            authorize_request(&port, &delegate, "request", RequestAction::Cancel, &mut NoTransaction).await,
+            Err(Error::Forbidden(message)) if message == "当前账号不可办理该开票申请"
+        ));
+        assert_eq!(port.calls(), vec!["action"]);
+        port.allowed.store(true, Ordering::SeqCst);
+        port.readable.store(false, Ordering::SeqCst);
+        assert!(matches!(
+            authorize_request(&port, &delegate, "request", RequestAction::Submit, &mut NoTransaction).await,
+            Err(Error::Forbidden(message)) if message == "当前账号无权读取开票申请的来源销售单"
+        ));
+        assert_eq!(port.calls(), vec!["action", "scope"]);
     }
 }

@@ -8,9 +8,10 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId, PurchaseOrderId};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Result, mongo_ops};
+use persistence_core::{Error as RepositoryError, Executor, PageResult, Result, aggregate, mongo_ops};
 
 use super::common::in_filter;
+use super::scope::PurchaseReadScope;
 use super::{PURCHASE_CHANGE_ORDERS, PurchaseOrderDomainRepository};
 use crate::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeSubmission, PurchaseChangeSubmissionLine,
@@ -23,8 +24,8 @@ pub struct PurchaseChangeSearch<'a> {
     pub purchase_order_id: Option<&'a str>,
     /// 可选单据状态。
     pub status: Option<&'a str>,
-    /// 已证明可见的来源单；None 表示公司范围，空集合保持无结果。
-    pub authorized_purchase_order_ids: Option<&'a [String]>,
+    /// 当前读取阶段的统一采购授权。
+    pub scope: &'a PurchaseReadScope,
     /// 从一开始的页码。
     pub page: u64,
     /// 每页条数。
@@ -37,7 +38,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 分页查询采购变更单，并按创建时间稳定排序。
     ///
     /// # 参数
-    /// * `search` - 已归一化的来源单、状态、授权集合及分页排序条件
+    /// * `search` - 已归一化的来源单、状态、统一授权凭证及分页排序条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -49,16 +50,12 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         &self,
         search: PurchaseChangeSearch<'_>,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<PurchaseChangeOrder>> {
-        let PurchaseChangeSearch {
-            purchase_order_id,
-            status,
-            authorized_purchase_order_ids,
-            page,
-            page_size,
-            sort_ascending,
-        } = search;
-        let filter = change_order_filter(purchase_order_id, status, authorized_purchase_order_ids);
+    ) -> crate::Result<PageResult<PurchaseChangeOrder>> {
+        let PurchaseChangeSearch { purchase_order_id, status, scope, page, page_size, sort_ascending } =
+            search;
+        scope.validate(executor).await?;
+        let filter = change_order_filter(purchase_order_id, status);
+        let stages = scope.related_stages(filter.clone(), "$purchase_order_id");
         let skip = page.saturating_sub(1).saturating_mul(u64::from(page_size));
         let direction = if sort_ascending { 1 } else { -1 };
         let options = FindOptions::builder()
@@ -67,9 +64,12 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             .limit(i64::from(page_size))
             .build();
         let collection = self.db.collection::<PurchaseChangeOrder>(PURCHASE_CHANGE_ORDERS);
-        let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
-        let total = mongo_ops::count_documents(&collection, filter, executor).await?;
-        Ok(PageResult { items, total: total as i64 })
+        let items = aggregate::find(&collection, filter.clone(), options, stages.clone(), executor).await?;
+        let total = aggregate::count(&collection, filter, stages, executor).await?;
+        scope.validate(executor).await?;
+        let total = i64::try_from(total)
+            .map_err(|_| RepositoryError::EntityMetadataOutOfRange("采购变更总数超限"))?;
+        Ok(PageResult { items, total })
     }
 
     /// 判断采购单是否存在草稿或审批中的变更单。
@@ -125,7 +125,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         let options = FindOptions::builder().sort(doc! { "created_at": 1, "id": 1 }).build();
         mongo_ops::find_many(
             &self.db.collection::<PurchaseChangeOrder>(PURCHASE_CHANGE_ORDERS),
-            change_order_filter(Some(purchase_order_id.as_ref()), None, None),
+            change_order_filter(Some(purchase_order_id.as_ref()), None),
             options,
             executor,
         )
@@ -137,7 +137,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// # 参数
     /// * `purchase_order_id` - 可选原采购单筛选
     /// * `status` - 可选状态代码筛选
-    /// * `authorized_purchase_order_ids` - 已证明可见的来源采购单；`None` 表示公司范围不限制
+    /// * `scope` - 当前读取阶段的统一采购授权
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -152,20 +152,25 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         &self,
         purchase_order_id: Option<&str>,
         status: Option<&str>,
-        authorized_purchase_order_ids: Option<&[String]>,
+        scope: &PurchaseReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<super::scope::PurchaseVersion>> {
-        persistence_core::mongo_ops::find_many(
+    ) -> crate::Result<Vec<super::scope::PurchaseVersion>> {
+        scope.validate(executor).await?;
+        let filter = change_order_filter(purchase_order_id, status);
+        let rows = aggregate::find(
             &self.db.collection::<super::scope::PurchaseVersion>(PURCHASE_CHANGE_ORDERS),
-            change_order_filter(purchase_order_id, status, authorized_purchase_order_ids),
+            filter.clone(),
             FindOptions::builder()
                 .projection(doc! { "id": 1, "version": 1 })
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
+            scope.related_stages(filter, "$purchase_order_id"),
             executor,
         )
-        .await
+        .await?;
+        scope.validate(executor).await?;
+        Ok(rows)
     }
 
     /// 按变更单读取全部提交，并按提交序号升序返回。
@@ -294,49 +299,14 @@ impl PurchaseChangeSubmissionRepositoryExt for persistence_core::Repository<'_, 
     }
 }
 
-/// 构造采购变更单筛选条件并排除软删除记录。
-///
-/// # 参数
-/// * `purchase_order_id` - 可选原采购单筛选
-/// * `status` - 可选状态代码筛选
-/// * `authorized_purchase_order_ids` - 已证明可见的来源采购单；`None` 表示不额外限制
-///
-/// # 返回
-/// 返回 MongoDB 查询条件。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 授权空集必须保持无结果，不得退化为查询全部变更单。
-fn change_order_filter(
-    purchase_order_id: Option<&str>,
-    status: Option<&str>,
-    authorized_purchase_order_ids: Option<&[String]>,
-) -> Document {
+/// 业务筛选只收窄来源授权查询，不包含人员范围推断。
+fn change_order_filter(purchase_order_id: Option<&str>, status: Option<&str>) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(status) = status {
         filter.insert("status", status);
     }
-    match (purchase_order_id, authorized_purchase_order_ids) {
-        (Some(purchase_order_id), None) => {
-            filter.insert("purchase_order_id", purchase_order_id);
-        },
-        (Some(purchase_order_id), Some(authorized)) => {
-            if authorized.iter().any(|id| id == purchase_order_id) {
-                filter.insert("purchase_order_id", purchase_order_id);
-            } else {
-                filter.insert("$expr", false);
-            }
-        },
-        (None, Some(authorized)) => {
-            if authorized.is_empty() {
-                filter.insert("$expr", false);
-            } else {
-                filter.insert("purchase_order_id", doc! { "$in": authorized });
-            }
-        },
-        (None, None) => {},
+    if let Some(purchase_order_id) = purchase_order_id {
+        filter.insert("purchase_order_id", purchase_order_id);
     }
     filter
 }
@@ -385,24 +355,17 @@ impl PurchaseChangeSubmissionLineRepositoryExt
 
 #[cfg(test)]
 mod tests {
+    use entity_core::NOT_DELETED_TIMESTAMP_BSON;
     use mongodb::bson::doc;
 
     use super::change_order_filter;
 
     #[test]
-    fn missing_authorized_source_ids_stay_empty() {
-        use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+    fn change_filter_preserves_requested_order_and_status() {
         assert_eq!(
-            change_order_filter(None, None, Some(&[])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+            change_order_filter(Some("po-1"), Some("draft")),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1", "status": "draft" }
         );
-        assert_eq!(
-            change_order_filter(Some("po-1"), None, Some(&["po-2".into()])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
-        );
-        assert_eq!(
-            change_order_filter(Some("po-1"), None, Some(&["po-1".into()])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1" }
-        );
+        assert_eq!(change_order_filter(None, None), doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON });
     }
 }

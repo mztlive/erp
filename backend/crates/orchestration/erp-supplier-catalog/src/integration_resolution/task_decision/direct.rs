@@ -1,6 +1,6 @@
 //! 无正式任务对账的任务关联闸门、事务与回执。
 use application_core::AuditActor;
-use erp_identity::{Permission, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_integration::dto::{
     DirectReconciliationCommand, DirectReconciliationResult, DirectReconciliationStatus,
     PreparedDirectDecisionTarget,
@@ -11,7 +11,7 @@ use erp_integration::service::task_decision::direct::execute_direct_decision;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::Executor;
+use persistence_core::{Executor, NoTransaction};
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::command_identity;
@@ -102,7 +102,10 @@ impl IntegrationResolutionProcess {
     async fn ensure_direct_permission(&self, actor: &AuditActor) -> Result<()> {
         let rbac = (self.identity_factory)();
         let permission = Permission::parse("reconciliation_difference:decide")?;
-        if !rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
+        if !AuthorizationService::new(self.db.clone(), rbac, AuthorizationRegistry::default())
+            .has_permission(actor, &permission, &mut NoTransaction)
+            .await?
+        {
             return Err(Error::Forbidden("当前账号已不具备对账差异决定权限".into()));
         }
         Ok(())

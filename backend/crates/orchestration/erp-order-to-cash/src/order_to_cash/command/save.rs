@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
-use erp_sales::dto::sales_order::{SaveWorkingCopyRequest, WorkingCopyView};
+use erp_sales::dto::sales_order::{SalesOrderDraftRequest, SaveWorkingCopyRequest, WorkingCopyView};
 use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
 };
@@ -62,21 +62,24 @@ impl SalesOrderCommandProcess {
     ) -> Result<WorkingCopyView> {
         req.validate()?;
         let access = self.command_access(actor, "update")?;
-        let authorized_order = access.current(id, &mut NoTransaction).await?;
+        let this = self.clone();
+        let read_access = access.clone();
+        let read_actor = actor.clone();
+        let order_id = id.to_string();
+        let copy_version = req.version;
         let (order, draft) = self
-            .prepare_sales_edit(
-                &access,
-                authorized_order,
-                (req.contract_id, req.customer_id),
-                req.draft,
-                actor,
-                false,
-            )
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.saved_draft_context(&read_access, &order_id, req, &read_actor, executor).await
+                })
+            })
             .await?;
         let expected_order_version = order.base.version;
         self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
         let (mut working_copy, stable, opened_new) =
-            self.load_or_reopen_first_submission_working_copy(&order, req.version, &draft, actor).await?;
+            self.load_or_reopen_first_submission_working_copy(&order, copy_version, &draft, actor).await?;
         if opened_new {
             return Ok(self.sales().working_copy_view(&working_copy).await?);
         }
@@ -103,6 +106,27 @@ impl SalesOrderCommandProcess {
         let working_copy = client.with_transaction(move |executor| Box::pin(write.persist(executor))).await?;
 
         Ok(self.sales().working_copy_view(&working_copy).await?)
+    }
+
+    /// 在同一读取事务内核验当前销售单、所选合同和客户后准备草稿。
+    async fn saved_draft_context(
+        &self,
+        access: &SalesCommandAccess,
+        id: &str,
+        req: SaveWorkingCopyRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(SalesOrder, SalesOrderDraftRequest)> {
+        let order = access.current(id, executor).await?;
+        self.prepare_sales_edit(
+            access,
+            order,
+            (req.contract_id, req.customer_id, req.draft),
+            actor,
+            false,
+            executor,
+        )
+        .await
     }
 }
 

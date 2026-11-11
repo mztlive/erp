@@ -18,11 +18,11 @@ use erp_sales::repository::SalesOrderExt;
 use erp_supply::inquiry::InquirySupplyService;
 use erp_workflow::service::work_item::approval_rework::complete_document_rework;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
-use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::authorization::PurchaseOrderAuthorization;
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::procure_to_pay::inquiry_expense::release_purchase;
@@ -115,7 +115,7 @@ impl PurchaseOrderProcess {
 /// * `receipt_id` - 稳定命令收据 ID
 /// * `fingerprint` - 请求载荷指纹
 /// * `actor` - 已认证审计操作人
-/// * `authorization` - 与事务提交绑定的授权源和策略版本
+/// * `authorization` - 当前命令的统一授权入口
 ///
 /// # 返回
 /// 返回首次事务结果或提交成功后回读到的原结果。
@@ -137,17 +137,18 @@ async fn execute_void_draft_transaction(
 ) -> Result<VoidPurchaseOrderResult> {
     let DraftVoidServices { service, ports } = context;
     let db = service.db.clone();
-    let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
     let object_scope = service.command_access(actor, "delete");
     let transaction_order_id = purchase_order_id.to_string();
     let transaction_actor = actor.clone();
     let transaction_receipt_id = receipt_id.clone();
     let transaction_fingerprint = fingerprint.clone();
     let ports = (*ports).clone();
-    let transaction_result = rbac
-        .run_authorized_policy_transaction(policy_revision, move |executor| {
+    let transaction_result = db
+        .client()
+        .clone()
+        .with_transaction(move |executor| {
             Box::pin(async move {
-                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
+                authorization.require(&transaction_actor, executor).await?;
                 object_scope
                     .revalidate(&transaction_order_id, request.expected_lock_version, executor)
                     .await?;

@@ -7,12 +7,8 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use crate::error::{Error, Result};
-use crate::ports::{
-    SupplierDataScopePort, SupplierResolvedClause, SupplierResolvedScope, SupplierScopeObject,
-};
-use crate::repository::SupplierExt;
-use crate::repository::prelude::*;
-use crate::repository::scope::{SupplierReadScope, SupplierScopeClause};
+use crate::ports::{SupplierDataScopePort, SupplierResolvedScope};
+use crate::repository::scope::SupplierReadScope;
 
 /// 供应商对象访问范围；列表、详情、导出和写命令复用同一解析。
 #[derive(Clone)]
@@ -59,8 +55,7 @@ impl SupplierAccess {
         executor: &mut dyn Executor,
     ) -> Result<(SupplierResolvedScope, SupplierReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        let scope = supplier_scope(&access, actor.id());
-        Ok((access, scope))
+        Ok((access.clone(), access))
     }
 
     /// 在独立事务中重验对象资格。
@@ -114,20 +109,8 @@ impl SupplierAccess {
         supplier_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierResolvedScope> {
-        let (access, scope) = self.resolve(actor, action, executor).await?;
-        let found = self.db.supplier_accounts().find_authorized(supplier_id, &scope, executor).await?;
-        let Some(account) = found else {
-            return Err(deny_object(action));
-        };
-        let object = SupplierScopeObject {
-            owned: account.maintainer_user_id == access.user_id,
-            historical_read_participant: false,
-            org_unit_id: Some(account.business_org_unit_id).filter(|value| !value.is_empty()),
-        };
-        if !self.scope.allows(&access, &object)? {
-            return Err(deny_object(action));
-        }
-        Ok(access)
+        self.scope.require(actor, action, supplier_id, executor).await?;
+        self.scope.resolve(actor, action, executor).await
     }
 
     /// 在调用方事务内证明创建资格。
@@ -157,92 +140,17 @@ impl SupplierAccess {
             .own_org(maintainer_user_id, access.as_of, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
-        let object = SupplierScopeObject {
-            owned: maintainer_user_id == actor.id(),
-            org_unit_id: Some(owner_org.clone()),
-            ..Default::default()
-        };
-        if !self.scope.allows(&access, &object)? {
-            return Err(Error::Forbidden("当前账号无权在授权范围内创建供应商".into()));
-        }
         Ok((access, owner_org))
     }
 }
 
-/// 映射同角色正向范围和独立个人上限。
-///
+/// 返回当前阶段的身份域查询凭证。
 /// # 参数
-/// * `access` - Port 返回的已解析授权
-/// * `user` - 当前账号
-///
+/// access 为已编译凭证，user 为兼容调用参数。
 /// # 返回
-/// 返回供应商仓储条件。
-///
+/// 相同凭证。
 /// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 本人负责解释整体维护人；组织解释业务组织。
-pub fn supplier_scope(access: &SupplierResolvedScope, user: &str) -> SupplierReadScope {
-    SupplierReadScope {
-        roles: access.role_clauses.iter().map(|clause| map_clause(clause, user)).collect(),
-        user_limit: access.user_limit.as_ref().map(|clause| map_clause(clause, user)),
-    }
-}
-
-/// 仅接受已解析的内部组织范围，不读取创建人作为授权。
-fn map_clause(clause: &SupplierResolvedClause, actor: &str) -> SupplierScopeClause {
-    SupplierScopeClause {
-        company: clause.company,
-        owner_user_id: clause.self_owned.then(|| actor.into()),
-        business_org_unit_ids: clause.org_unit_ids.clone(),
-    }
-}
-
-/// 读取动作对不可见对象隐藏存在性；写动作返回 Forbidden。
-fn deny_object(action: &str) -> Error {
-    if matches!(action, "list" | "detail") {
-        Error::NotFound("供应商不存在".into())
-    } else {
-        Error::Forbidden("当前账号无权操作该供应商".into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn write_commands_deny_out_of_scope_as_forbidden() {
-        match deny_object("update") {
-            Error::Forbidden(_) => {},
-            other => panic!("expected forbidden, got {other:?}"),
-        }
-        match deny_object("detail") {
-            Error::NotFound(_) => {},
-            other => panic!("expected not found, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn self_owned_maps_to_maintainer_not_created_by() {
-        let access = SupplierResolvedScope {
-            user_id: "actor".into(),
-            resource: "supplier".into(),
-            action: "list".into(),
-            role_clauses: vec![SupplierResolvedClause {
-                self_owned: true,
-                ..SupplierResolvedClause::default()
-            }],
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 1,
-            scope_version: "v1".into(),
-            as_of: erp_core::common::time::Instant::from_unix_secs(0),
-        };
-        let scope = supplier_scope(&access, "actor");
-        assert_eq!(scope.roles[0].owner_user_id.as_deref(), Some("actor"));
-        assert!(scope.allows_object("actor", "org-x"));
-        assert!(!scope.allows_object("created-by", "org-x"));
-    }
+/// 不执行I/O。
+pub fn supplier_scope(access: &SupplierResolvedScope, _user: &str) -> SupplierReadScope {
+    access.clone()
 }

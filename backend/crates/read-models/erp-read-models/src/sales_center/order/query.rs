@@ -11,7 +11,7 @@ use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
 use erp_core::money::Amount;
 use erp_customer::repository::prelude::*;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, subject};
+use erp_identity::{AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission};
 use erp_sales::dto::sales_order::{PageView, SubmissionView};
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus};
 use erp_sales::repository::sales_order::SalesOrderRow;
@@ -83,8 +83,6 @@ impl SalesOrderReadService {
 
         Ok(super::SalesListView {
             scope_version: context.scope_version.clone(),
-            policy_version: context.policy_version,
-            organization_version: context.organizations.version,
             as_of: context.as_of.as_utc().to_rfc3339(),
             empty_reason: no_scope.then_some("no_scope"),
             scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
@@ -174,15 +172,14 @@ impl SalesOrderReadService {
     /// 必须使用当前账号记录和规范 Casbin 主体，不能仅信任请求中的历史认证
     /// 快照。
     async fn purchase_creation_actor_blocker(&self, actor: &AuditActor) -> Result<Option<&'static str>> {
-        let account = self.db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
-        let Some(account) = account.filter(|account| account.kind == actor.kind() && account.can_login())
-        else {
-            return Ok(Some("当前账号不存在、已停用或身份已变化，不能分配供给"));
-        };
+        let authorization = AuthorizationService::new(
+            self.db.clone(),
+            self.require_rbac()?.clone(),
+            AuthorizationRegistry::default(),
+        );
         let permission = Permission::parse("purchase_order:create")?;
-        let allowed =
-            self.require_rbac()?.enforce(&subject(account.kind, &account.base.id), &permission).await?;
-        Ok((!allowed).then_some("当前账号缺少 purchase_order:create 权限"))
+        let allowed = authorization.has_permission(actor, &permission, &mut NoTransaction).await?;
+        Ok((!allowed).then_some("当前账号不能执行供给分配，请检查账号状态和 purchase_order:create 权限"))
     }
 
     /// 统计当前账号在指定销售单下拥有的开放供给分配任务。

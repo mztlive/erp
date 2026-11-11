@@ -169,8 +169,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     .role_actor(&account.account)
                     .await?
                     .ok_or_else(|| Error::Forbidden(format!("审批账号 {} 不可用", account.account)))?;
-                if !approval_participant_permissions_with_executor(&self.rbac, &actor, &mut NoTransaction)
-                    .await?
+                if !approval_participant_permissions_with_executor(
+                    &self.db,
+                    &self.rbac,
+                    &actor,
+                    &mut NoTransaction,
+                )
+                .await?
                 {
                     return Err(Error::Forbidden(format!(
                         "审批账号 {} 缺少同一启用角色的审批读取与决定权限",

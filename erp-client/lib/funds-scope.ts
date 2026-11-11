@@ -24,8 +24,8 @@ export type FundsScopedPageWire<T> = Readonly<{
     page: number
     page_size: number
     scope_version: string
-    policy_version: number
-    organization_version: number
+    policy_version?: number
+    organization_version?: number
     as_of: string
     empty_reason: string | null
     scope_summary: string
@@ -35,8 +35,8 @@ export type FundsScopedPageWire<T> = Readonly<{
 export type FundsScopedResultWire<T> = Readonly<{
     data: T
     scope_version: string
-    policy_version: number
-    organization_version: number
+    policy_version?: number
+    organization_version?: number
     as_of: string
     empty_reason: string | null
     scope_summary: string

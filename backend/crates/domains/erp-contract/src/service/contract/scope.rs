@@ -5,12 +5,10 @@ use persistence_core::Transactional;
 use serde_json::to_vec;
 
 use super::ContractService;
-use super::access::intersect_ids;
 use crate::dto::contract::{ContractListQuery, ContractListScope, ContractListView, PageView};
 use crate::error::{Error, Result};
 use crate::ports::{ContractDataScopePort, ContractResolvedScope};
 use crate::repository::list_search::ContractSearch;
-use crate::repository::prelude::*;
 use crate::repository::scope::{ContractReadScope, ContractVersion};
 use crate::repository::{ContractExt, ContractFilter};
 
@@ -71,6 +69,7 @@ impl ContractService {
                         executor,
                     )
                     .await?;
+                    context.validate(executor).await?;
                     finish_list_snapshot(&db, filter, search, versions, context, executor)
                         .await
                         .map(|(view, context)| ContractSnapshot { view, context, no_scope })
@@ -138,7 +137,7 @@ async fn load_list_filter_and_search(
     let (customer_ids, historical_contract_ids) =
         apply_list_filters(db, data_scope, assignments, context, scope, query, executor).await?;
     let mut filter = list_filter(query, customer_ids, historical_contract_ids);
-    filter.authorized_contract_ids = scope.authorized_contract_ids.clone();
+    filter.access = Some(scope.clone());
     filter.assigned_user_id = (query.scope == ContractListScope::Assigned).then(|| context.user_id.clone());
     filter.owner_user_ids = requested_contract_owners(data_scope, context, query, executor).await?;
     let versions = db.contract().query_versions(&filter, executor).await?;
@@ -214,6 +213,7 @@ async fn finish_list_snapshot(
         page: PageView { items, total, page: filter.page, page_size: filter.page_size },
         metrics: result.metrics.into_iter().next().unwrap_or_default(),
     };
+    context.validate(executor).await?;
     Ok((view, context))
 }
 
@@ -335,14 +335,13 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 fn list_filter(
     query: &ContractListQuery,
     customer_ids: Option<Vec<String>>,
-    historical_contract_ids: Vec<String>,
+    _historical_contract_ids: Vec<String>,
 ) -> ContractFilter {
     ContractFilter {
+        access: None,
         contract_no: query.contract_no.clone(),
         customer_id: None,
         customer_ids,
-        historical_contract_ids,
-        authorized_contract_ids: None,
         assigned_user_id: None,
         owner_user_ids: None,
         status: query.status,
@@ -382,64 +381,8 @@ async fn apply_list_filters(
     query: &ContractListQuery,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(Option<Vec<String>>, Vec<String>)> {
-    let as_of = super::access::business_date(context.as_of)?;
-    let mut ids = scope.authorized_customer_ids.clone();
-    let mut constraint: Option<Vec<String>> = None;
-    let _ = (data_scope, assignments, as_of);
-    if let Some(customer_id) = &query.customer_id {
-        constraint = intersect_ids(constraint, Some(vec![customer_id.clone()]));
-    }
-    ids = intersect_ids(ids, constraint.clone());
-    let history = narrow_history(
-        db,
-        scope.historical_contract_ids.clone(),
-        constraint.as_deref(),
-        ids.is_none() && constraint.is_none(),
-        executor,
-    )
-    .await?;
-    Ok((ids, history))
-}
-
-/// 按请求筛选收窄历史参与合同。
-///
-/// # 参数
-/// * `db` - 合同集合
-/// * `history` - 已证明的历史参与合同
-/// * `constraint` - 请求侧客户筛选；`None` 表示无额外筛选
-/// * `company_unfiltered` - 公司范围且无筛选时历史已被全量覆盖
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回仍应并入读取条件的历史合同 ID。
-///
-/// # 错误
-/// 读取合同客户映射失败时拒绝。
-///
-/// # 关键业务约束
-/// 筛选只能收窄；公司范围不必再并入历史 ID。
-async fn narrow_history(
-    db: &mongodb::Database,
-    history: Vec<String>,
-    constraint: Option<&[String]>,
-    company_unfiltered: bool,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<Vec<String>> {
-    if company_unfiltered || history.is_empty() {
-        return Ok(Vec::new());
-    }
-    let Some(customers) = constraint else {
-        return Ok(history);
-    };
-    let allowed = customers.iter().collect::<std::collections::BTreeSet<_>>();
-    Ok(db
-        .contracts()
-        .customer_refs_by_ids(&history, executor)
-        .await?
-        .into_iter()
-        .filter(|row| allowed.contains(&row.customer_id))
-        .map(|row| row.id)
-        .collect())
+    let _ = (db, data_scope, assignments, context, scope, executor);
+    Ok((query.customer_id.clone().map(|id| vec![id]), Vec::new()))
 }
 
 /// 请求组织只按合同独立负责销售收窄，不按客户负责名单解释。

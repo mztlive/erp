@@ -137,8 +137,6 @@ export function CaliberQueryBody({
                 orderCount={data.totals.orderCount}
                 grossTotal={data.totals.grossTotal}
                 unpricedCount={data.totals.unpricedCount}
-                policyVersion={data.policyVersion}
-                organizationVersion={data.organizationVersion}
                 scopeVersion={data.scopeVersion}
             />
             {emptyReason === "filtered-empty" || data.rows.total === 0 ? (

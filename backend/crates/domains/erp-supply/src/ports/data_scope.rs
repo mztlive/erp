@@ -10,104 +10,25 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// 身份域已解析的供给正向范围条款；不含身份域实体句柄。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct OfferingResolvedClause {
-    /// 公司范围覆盖该资源动作的全部供给。
-    pub company: bool,
-    /// 当前维护人为操作人的供给。
-    pub self_owned: bool,
-    /// 协作维度保留；供给不按协作展开。
-    pub collaborative: bool,
-    /// 已由公共解析器展开的内部组织。
-    pub org_unit_ids: Vec<String>,
-}
+/// 身份域编译的授权阶段凭证。
+pub type OfferingResolvedScope = crate::authorization::CompiledScope;
 
-impl OfferingResolvedClause {
-    /// 判断条款是否构成有效供给范围规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、本人负责或组织目标时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 协作单独存在不构成供给对象规则；空条款保持空集且不得补公司。
-    pub fn has_scope_rules(&self) -> bool {
-        self.company || self.self_owned || !self.org_unit_ids.is_empty()
-    }
-}
-
-/// 已通过资格检查的供给范围事实。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OfferingResolvedScope {
-    /// 已认证操作人。
-    pub user_id: String,
-    /// 固定为供给资源。
-    pub resource: String,
-    /// 本次解析的供给动作。
-    pub action: String,
-    /// 同角色正向范围。
-    pub role_clauses: Vec<OfferingResolvedClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<OfferingResolvedClause>,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
-    /// 跨页与导出必须原样回传的范围版本。
-    pub scope_version: String,
-    /// 授权解析时点。
-    pub as_of: Instant,
-}
-
-impl OfferingResolvedScope {
-    /// 判断角色正向范围是否含有效规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任一角色条款构成有效规则时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只看角色条款；个人上限不单独构成“有范围规则”。
-    pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses.iter().any(OfferingResolvedClause::has_scope_rules)
-    }
-}
-
-/// 业务域提供的单对象责任事实；不包含原始授权规则。
-#[derive(Debug, Clone, Default)]
-pub struct OfferingScopeObject {
-    /// 当前操作人是否为对象的权威维护人。
-    pub owned: bool,
-    /// 按本资源口径取得的内部组织。
-    pub org_unit_id: Option<String>,
-}
-
-/// 供给域消费的窄授权 Port；adapter 调用身份域公共解析器。
 #[async_trait]
 pub trait OfferingDataScopePort: Send + Sync {
-    /// 经生产 adapter 复用公共单对象范围判定。
-    ///
+    /// 统一检查完整对象操作。
     /// # 参数
-    /// * `scope` - 当前动作已解析事实
-    /// * `object` - 本域提供的当前维护人与业务组织事实
-    ///
+    /// actor、action 为当前入口；id 为完整目标；executor 为原执行器。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
-    ///
+    /// identity 允许时成功。
     /// # 错误
-    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
-    fn allows(&self, _scope: &OfferingResolvedScope, _object: &OfferingScopeObject) -> Result<bool> {
+    /// 未装配或无权时拒绝。
+    async fn require(
+        &self,
+        _actor: &AuditActor,
+        _action: &str,
+        _id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
         Err(unwired())
     }
 
@@ -246,63 +167,4 @@ impl OfferingDataScopePort for FailClosedOfferingDataScopePort {
 /// 禁止捕获后回退旧读取器或补 Company。
 fn unwired() -> Error {
     Error::Internal("供给范围端口未接线".into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!OfferingResolvedClause::default().has_scope_rules());
-        assert!(
-            OfferingResolvedClause { self_owned: true, ..OfferingResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            !OfferingResolvedClause { collaborative: true, ..OfferingResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            OfferingResolvedClause { company: true, ..OfferingResolvedClause::default() }.has_scope_rules()
-        );
-        assert!(
-            OfferingResolvedClause {
-                org_unit_ids: vec!["org-a".into()],
-                ..OfferingResolvedClause::default()
-            }
-            .has_scope_rules()
-        );
-        assert!(
-            !OfferingResolvedScope {
-                user_id: "u1".into(),
-                resource: "supplier_offering".into(),
-                action: "list".into(),
-                role_clauses: vec![],
-                user_limit: Some(OfferingResolvedClause {
-                    self_owned: true,
-                    ..OfferingResolvedClause::default()
-                }),
-                policy_version: 1,
-                organization_version: 1,
-                scope_version: "v1".into(),
-                as_of: Instant::from_unix_secs(0),
-            }
-            .has_scope_rules()
-        );
-    }
-
-    #[tokio::test]
-    async fn fail_closed_port_rejects_resolve_without_company_fallback() {
-        use persistence_core::NoTransaction;
-
-        let actor =
-            application_core::AuditActor::new("user-1".into(), "admin".into(), erp_core::AccountKind::Admin);
-        let err =
-            FailClosedOfferingDataScopePort.resolve(&actor, "list", &mut NoTransaction).await.unwrap_err();
-        match err {
-            Error::Internal(message) => assert!(message.contains("未接线")),
-            other => panic!("expected fail-closed internal, got {other:?}"),
-        }
-    }
 }

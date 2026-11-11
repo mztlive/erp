@@ -2,9 +2,10 @@
 use erp_core::common::time::Instant;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, aggregate};
+use persistence_core::{Executor, Repository, aggregate};
 use serde::Deserialize;
 
+use crate::Result;
 use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution, SalesOrder};
 
 /// 报表单次最多读取的销售单数；额外读取一条用于拒绝截断统计。
@@ -86,20 +87,23 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
         filter: &ProfitLossOrderFilter,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProfitLossOrder>> {
+        filter.authorized_scope.validate(executor).await?;
         let options = FindOptions::builder()
             .limit((PROFIT_LOSS_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
             .projection(doc! { "id": 1, "order_no": 1, "customer_id": 1, "current_revision_id": 1,
             "effective_at": 1, "fulfillment_progress": 1, "attribution": 1, "version": 1 })
             .build();
-        aggregate::find(
+        let rows = aggregate::find(
             &self.collection().clone_with_type(),
             filter.document(),
             options,
             filter.authorized_scope.lookup_after(filter.business_filter()),
             executor,
         )
-        .await
+        .await?;
+        filter.authorized_scope.validate(executor).await?;
+        Ok(rows)
     }
 }
 

@@ -36,13 +36,7 @@ impl IntegrationCenterReadService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
-        self.require_visible(
-            actor,
-            "integration_error_task",
-            task.owner_user_id.as_deref().unwrap_or(""),
-            &task.owner_org_unit_id,
-        )
-        .await?;
+        self.require_visible(actor, "integration_error_task", &task.base.id).await?;
         let resolution = task.resolution.clone();
         let work_item = self.find_task_work_item(&task.base.id).await?;
         let subject = EvidenceSubject::error(&task);

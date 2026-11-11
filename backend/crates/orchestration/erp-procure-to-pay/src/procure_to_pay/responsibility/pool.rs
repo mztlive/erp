@@ -1,6 +1,9 @@
-//! 全池成员资格与权限版本核验，询价池使用询价处理权限。
+//! 全池成员资格使用调用方原事务核验，询价池使用询价处理权限。
 use std::collections::HashSet;
 
+use application_core::AuditActor;
+use erp_core::AccountKind;
+use erp_identity::Permission;
 use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::entity::procurement_responsibility::{
     ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType, ResolutionPurpose,
@@ -13,29 +16,6 @@ use crate::procure_to_pay::responsibility::eligibility::ProcurementInquiryEligib
 use crate::{Error, Result};
 
 impl ProcurementResponsibilityProcess {
-    /// 取得全池资格校验覆盖的稳定授权版本。
-    /// # 参数
-    /// `data` 为当前规则与池成员。
-    /// # 返回
-    /// 返回全员资格同时成立的策略版本。
-    /// # 错误
-    /// 任一成员无效或策略持续变化时拒绝维护。
-    pub(super) async fn authorize_pool(&self, data: &ProcurementResponsibilityRuleData) -> Result<u64> {
-        for _ in 0..3 {
-            let before = self.rbac.current_policy_revision().await?;
-            self.validate_pool(data, &mut NoTransaction).await?;
-            if data.rule_type != ProcurementResponsibilityRuleType::Inquiry {
-                for owner in &data.owner_user_ids {
-                    self.authorize_owner_eligibility(owner).await?;
-                }
-            }
-            if before == self.rbac.current_policy_revision().await? {
-                return Ok(before);
-            }
-        }
-        Err(Error::Rbac("负责人池授权策略持续变化，请重新提交".into()))
-    }
-
     /// 在调用方执行器中重验全部成员的账号；询价池同时重验询价权限和组织。
     /// # 参数
     /// `data` 为待维护的规则，`executor` 为当前执行器。
@@ -55,6 +35,16 @@ impl ProcurementResponsibilityProcess {
                     .await?;
             } else {
                 load_owner_account(&self.db, owner, executor).await?;
+                let actor = AuditActor::new(owner.clone(), owner.clone(), AccountKind::Admin);
+                let permission = Permission::parse("purchase_order:create")?;
+                if !crate::authorization::features(self.db.clone(), self.rbac.clone())
+                    .has_permission(&actor, &permission, executor)
+                    .await?
+                {
+                    return Err(Error::BusinessLogicError(format!(
+                        "采购负责人 {owner} 缺少 purchase_order:create 权限"
+                    )));
+                }
             }
         }
         Ok(())

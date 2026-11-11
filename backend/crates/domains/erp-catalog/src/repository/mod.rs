@@ -6,9 +6,9 @@ pub mod owned;
 pub mod prelude;
 
 pub use catalog::{
-    CatalogReadScope, CatalogRepository, CatalogScopeClause, CategoryParentChainFact, ProductBrandFilter,
-    ProductBrandRow, ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow,
-    ProductFilter, ProductListingSummary, ProductRevisionFilter, ProductRevisionRow, ProductRow,
+    CatalogReadScope, CatalogRepository, CategoryParentChainFact, ProductBrandFilter, ProductBrandRow,
+    ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow, ProductFilter,
+    ProductListingSummary, ProductRevisionFilter, ProductRevisionRow, ProductRow,
     SELLABLE_SKU_PROJECTION_VERSION, SellableSkuFilter, SellableSkuProjectionState,
     SellableSkuProjectionStore, SellableSkuRow, SellableSort, SellableSortField, SkuAttributeFilter,
     SkuAttributeRow, SkuAttributeValueFilter, SkuAttributeValueRow, SkuFilter, SkuRevisionFilter,

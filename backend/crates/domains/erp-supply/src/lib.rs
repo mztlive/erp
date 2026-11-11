@@ -25,18 +25,17 @@ pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
     FailClosedFulfillmentExceptionHandlerPort, FailClosedFulfillmentOrderDataScopePort,
     FailClosedOfferingDataScopePort, FailClosedSettlementDataScopePort, FulfillmentExceptionHandlerPort,
-    FulfillmentOrderDataScopePort, FulfillmentOrderResolvedClause, FulfillmentOrderResolvedScope,
-    FulfillmentOrderScopeObject, OfferingDataScopePort, OfferingResolvedClause, OfferingResolvedScope,
-    OfferingScopeObject, SettlementDataScopePort, SettlementResolvedClause, SettlementResolvedScope,
-    SettlementScopeObject,
+    FulfillmentOrderDataScopePort, FulfillmentOrderResolvedScope, OfferingDataScopePort,
+    OfferingResolvedScope, SettlementDataScopePort, SettlementResolvedScope,
 };
-pub use repository::supplier_settlement::{SettlementReadScope, SettlementScopeClause};
+pub use repository::supplier_settlement::SettlementReadScope;
 pub use repository::{
-    FulfillmentOrderReadScope, FulfillmentOrderScopeClause, OfferingReadScope, OfferingScopeClause,
-    SupplierOfferingExt, SupplierOfferingFilter,
+    FulfillmentOrderReadScope, OfferingReadScope, SupplierOfferingExt, SupplierOfferingFilter,
 };
 pub use service::supplier_fulfillment::{FulfillmentOrderAccess, fulfillment_order_scope};
 pub use service::supplier_offering::{OfferingAccess, SupplierOfferingService, offering_scope};
 pub use service::supplier_settlement::{SettlementAccess, settlement_scope};
 
 pub mod connector_registry;
+
+pub mod authorization;

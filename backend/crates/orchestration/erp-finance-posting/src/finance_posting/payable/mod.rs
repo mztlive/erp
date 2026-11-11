@@ -9,7 +9,6 @@
 //! 展示读取复用 `erp-read-models`，文件上传与其他外部 I/O 在数据库事务外执行。
 
 use erp_finance::dto::payable::{self as dto, SupplierPaymentView};
-use erp_identity::SharedRbacService as IdentityRbac;
 use erp_read_models::finance::payable::{PayableReadService, mapping};
 use erp_support::FileAssetView;
 use mongodb::Database;
@@ -34,8 +33,6 @@ pub struct PayableProcess {
     db: Database,
     /// 付款任务和单据绑定读取复用的授权实例。
     authorization_rbac: FinancePostingPorts,
-    /// 保持本流程局部 policy 写锁与提交未知隔离边界的事务实例。
-    transaction_rbac: IdentityRbac,
 }
 
 /// 已确认付款结果的详情读取与本次银行回单提交状态。
@@ -69,16 +66,16 @@ impl PayableProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
-        Self { db, authorization_rbac: rbac.clone(), transaction_rbac: rbac.transaction_identity.clone() }
+        Self { db, authorization_rbac: rbac }
     }
 
-    /// 注入应用共享授权读取实例，保持付款 policy 事务实例独立。
+    /// 注入应用共享授权与事实读取实例。
     ///
     /// # 参数
     /// * `rbac` - 组合根已经装配的共享 RBAC 授权读取实例
     ///
     /// # 返回
-    /// 返回复用共享 Enforcer、并保留局部 policy 写锁及未知提交状态的流程。
+    /// 返回复用统一身份与来源授权入口的流程。
     ///
     /// # 错误
     /// 本方法不执行 I/O，不返回错误。

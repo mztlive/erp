@@ -40,7 +40,6 @@ pub struct PurchaseListView {
     /// RBAC 策略版本。
     pub policy_version: u64,
     /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
@@ -316,7 +315,6 @@ mod tests {
             ownership_basis: "current_procurement_owner",
             scope_version: "scope-v1".to_string(),
             policy_version: 3,
-            organization_version: 4,
             as_of: "2026-09-23T00:00:00Z".to_string(),
             empty_reason: None,
             scope_summary: "采购单当前负责人及单据业务组织范围",

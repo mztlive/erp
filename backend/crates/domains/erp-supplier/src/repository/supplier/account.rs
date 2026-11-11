@@ -354,7 +354,7 @@ pub trait SupplierAccountRepositoryExt {
         &self,
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierAccountRow>>;
+    ) -> crate::Result<PageResult<SupplierAccountRow>>;
 
     /// 按共用企业主体查找供应商角色（一个主体至多一个供应商角色，由
     /// `uk_supplier_accounts_party` 保证）。
@@ -437,7 +437,9 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
         &self,
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierAccountRow>> {
+    ) -> crate::Result<PageResult<SupplierAccountRow>> {
+        filter.authorized_scope.validate(executor).await?;
+
         let options = FindOptions::builder()
             .sort(sort_doc(
                 filter.sort_by.as_deref(),
@@ -452,6 +454,7 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
+        filter.authorized_scope.validate(executor).await?;
         Ok(PageResult { items, total: total as i64 })
     }
 

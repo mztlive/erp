@@ -1,5 +1,7 @@
 //! 销售、询价与选品的跨域业务编排。
+mod authorization;
 mod errors;
+pub(crate) mod repository;
 pub use errors::{Error, Result};
 pub mod order_to_cash;
 pub mod sales_change;

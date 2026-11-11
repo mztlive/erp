@@ -44,6 +44,7 @@ use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::{
     approval_participant_permissions_with_executor, require_approval_management_with_executor,
 };
+use crate::service::authorization::features;
 use crate::service::work_item::approval_rework::open_rework_id;
 
 /// 实例列表行。
@@ -271,7 +272,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let mut actions = Vec::new();
         if !required.is_empty()
             && let Some(qualified) =
-                self.identity.qualified_permissions(actor, &required, &mut NoTransaction).await?
+                features(&self.db, &self.identity).permissions(actor, &required, &mut NoTransaction).await?
         {
             let granted = qualified.permissions();
             actions = candidates
@@ -365,9 +366,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
     pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
-        if self
-            .identity
-            .qualified_permissions(actor, &[Permission::parse("approval_instance:read")?], &mut NoTransaction)
+        if features(&self.db, &self.identity)
+            .permissions(actor, &[Permission::parse("approval_instance:read")?], &mut NoTransaction)
             .await?
             .is_some_and(|qualified| !qualified.permissions().is_empty())
         {
@@ -491,7 +491,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
         require_approval_management_with_executor(
-            &self.identity,
             &self.auth,
             actor,
             "approval_instance:read",
@@ -513,8 +512,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         subject: &RuntimeReadSubject,
     ) -> Result<bool> {
         if subject.instance.status != ApprovalProcessInstanceStatus::Running
-            || !approval_participant_permissions_with_executor(&self.identity, actor, &mut NoTransaction)
-                .await?
+            || !approval_participant_permissions_with_executor(
+                &self.db,
+                &self.identity,
+                actor,
+                &mut NoTransaction,
+            )
+            .await?
         {
             return Ok(false);
         }

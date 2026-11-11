@@ -11,7 +11,7 @@ use erp_sales::entity::sales_inquiry_import::{
 };
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use sha2::{Digest, Sha256};
 
 use super::facts::sku_facts;
@@ -55,9 +55,10 @@ impl SalesInquiryImportProcess {
         let actor = actor.clone();
         let id = id.to_string();
         let command = command.clone();
-        let revision = self.rbac.current_policy_revision().await?;
-        self.rbac
-            .run_authorized_policy_transaction(revision, move |executor| {
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
                 Box::pin(async move { this.confirm_command(&actor, &id, &command, executor).await })
             })
             .await

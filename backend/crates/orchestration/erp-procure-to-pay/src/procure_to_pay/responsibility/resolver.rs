@@ -1,7 +1,8 @@
 //! 采购责任解析所需的目录事实加载、规则选择与负责人资格校验。
 
+use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{Permission, subject};
+use erp_identity::Permission;
 use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::entity::procurement_responsibility::{
     EligibleProcurementOwner, ProcurementResponsibilityResolutionIdentity,
@@ -146,7 +147,8 @@ impl ProcurementResponsibilityProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let candidates = self.resolve_candidates(inputs, executor).await?;
-        super::authorization::revalidate_candidates(&self.rbac, &candidates, expected, executor).await?;
+        super::authorization::revalidate_candidates(&self.db, &self.rbac, &candidates, expected, executor)
+            .await?;
         ProcurementResponsibilityService::new(self.db.clone()).claim_pools(&candidates, executor).await?;
         Ok(())
     }
@@ -165,7 +167,7 @@ impl ProcurementResponsibilityProcess {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.rbac.current_policy_revision().await?;
             let owner = load_owner_account(&self.db, owner_user_id, &mut NoTransaction).await?;
-            ensure_purchase_create_permission(&self.rbac, &owner).await?;
+            ensure_purchase_create_permission(&self.db, &self.rbac, &owner).await?;
             let after = self.rbac.current_policy_revision().await?;
             if before == after {
                 return Ok(before);
@@ -223,7 +225,7 @@ impl ProcurementResponsibilityProcess {
         &self,
         candidates: Vec<CandidateResolution>,
     ) -> Result<AuthorizedResolutionPlan> {
-        super::authorization::authorize_candidates(&self.rbac, candidates).await
+        super::authorization::authorize_candidates(&self.db, &self.rbac, candidates).await
     }
 }
 
@@ -317,11 +319,16 @@ pub(super) async fn load_owner_account(
 /// # 错误
 /// 权限解析、Casbin 判定失败或账号缺少权限时返回错误。
 async fn ensure_purchase_create_permission(
+    db: &mongodb::Database,
     rbac: &erp_identity::SharedRbacService,
     owner: &EligibleProcurementOwner,
 ) -> Result<()> {
     let permission = purchase_create_permission()?;
-    if rbac.enforce(&subject(AccountKind::Admin, owner.user_id()), &permission).await? {
+    let actor = AuditActor::new(owner.user_id().into(), owner.user_id().into(), AccountKind::Admin);
+    if crate::authorization::features(db.clone(), rbac.clone())
+        .has_permission(&actor, &permission, &mut NoTransaction)
+        .await?
+    {
         return Ok(());
     }
     Err(Error::ValidationError(format!("采购负责人 {} 缺少 purchase_order:create 权限", owner.user_id())))

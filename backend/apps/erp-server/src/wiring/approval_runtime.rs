@@ -16,5 +16,10 @@ use super::workflow::{workflow_audit, workflow_auth};
 /// # 错误
 /// 不返回错误；业务资格与持久化错误由实际调用点返回。
 pub fn approval_runtime(db: Database, rbac: SharedRbacService) -> Arc<dyn ApprovalRuntimePort> {
-    Arc::new(ApprovalRuntime::new(rbac.clone(), workflow_auth(db.clone(), rbac), workflow_audit(db)))
+    Arc::new(ApprovalRuntime::new(
+        db.clone(),
+        rbac.clone(),
+        workflow_auth(db.clone(), rbac),
+        workflow_audit(db),
+    ))
 }

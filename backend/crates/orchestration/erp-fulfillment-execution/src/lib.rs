@@ -1,6 +1,7 @@
 //! 履约、库存调整与供应执行的跨域命令及事务协调。
 
 pub mod attachments;
+mod authorization;
 mod errors;
 pub mod fulfillment_execution;
 pub mod inventory_adjustment;

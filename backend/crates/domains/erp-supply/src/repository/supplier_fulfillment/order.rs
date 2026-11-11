@@ -214,7 +214,7 @@ pub trait SupplierFulfillmentOrderRepositoryExt {
         &self,
         filter: &SupplierFulfillmentOrderFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierFulfillmentOrderRow>>;
+    ) -> crate::Result<PageResult<SupplierFulfillmentOrderRow>>;
 
     /// 按供应商批量读取全部未删除履约订单。
     ///
@@ -273,7 +273,11 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
         &self,
         filter: &SupplierFulfillmentOrderFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierFulfillmentOrderRow>> {
+    ) -> crate::Result<PageResult<SupplierFulfillmentOrderRow>> {
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
+
         let options = FindOptions::builder()
             .sort(order_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -284,6 +288,9 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
         Ok(PageResult { items, total: total as i64 })
     }
 

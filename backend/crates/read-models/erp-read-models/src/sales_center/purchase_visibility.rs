@@ -1,7 +1,7 @@
 //! 销售侧查看受影响采购明细的资格。
 
 use application_core::AuditActor;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
@@ -30,10 +30,7 @@ pub(crate) async fn can_list_purchases(
     let Some(actor) = actor else {
         return Ok(false);
     };
-    let account = db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
-    let Some(account) = account.filter(|account| account.kind == actor.kind() && account.can_login()) else {
-        return Ok(false);
-    };
     let permission = Permission::parse(PURCHASE_LIST_PERMISSION)?;
-    Ok(rbac.enforce(&subject(account.kind, &account.base.id), &permission).await?)
+    let authorization = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
+    Ok(authorization.has_permission(actor, &permission, &mut NoTransaction).await?)
 }

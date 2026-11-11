@@ -66,12 +66,14 @@ impl IntegrationOpsService {
         .await?;
         let operator_difference_ids =
             self.operator_difference_ids(&query.operator_user_ids, executor).await?;
-        let filter =
-            difference_filter(query, &scope.read_scope, scope.owner_org_unit_ids, operator_difference_ids);
-        if scope.meta.empty_reason == Some("no_scope") {
-            return Ok(empty_difference_page(&filter, scope.meta));
-        }
-        let page = self.db.reconciliation_differences().search_differences(&filter, executor).await?;
+        let filter = difference_filter(query, scope.owner_org_unit_ids, operator_difference_ids);
+        access.validate(&scope.read_scope, executor).await?;
+        let page = self
+            .db
+            .reconciliation_differences()
+            .search_differences(&filter, &scope.read_scope, executor)
+            .await?;
+        access.validate(&scope.read_scope, executor).await?;
         let total = page.total;
         let items = project_difference_rows(self, page.items, executor).await?;
         Ok(difference_list_view(total, items, &filter, scope.meta))
@@ -139,7 +141,6 @@ pub fn prepare_difference(
 /// 把已规范化查询与授权条件装配为差异仓储筛选。
 fn difference_filter(
     query: dto::DifferenceListQuery,
-    read_scope: &crate::repository::IntegrationReadScope,
     owner_org_unit_ids: Vec<String>,
     operator_difference_ids: Option<Vec<String>>,
 ) -> DifferenceFilter {
@@ -153,7 +154,6 @@ fn difference_filter(
         handler_user_ids: query.handler_user_ids,
         operator_difference_ids,
         owner_org_unit_ids,
-        scope_document: Some(read_scope.document()),
         page: query.paging.page,
         page_size: query.paging.page_size,
         sort_by: Some(query.paging.sort_by.to_string()),
@@ -171,8 +171,6 @@ fn difference_list_view(
     DifferenceListView {
         data: PageView { items, total, page: filter.page, page_size: filter.page_size },
         scope_version: meta.scope_version,
-        policy_version: meta.policy_version,
-        organization_version: meta.organization_version,
         as_of: meta.as_of,
         empty_reason: None,
         scope_summary: meta.scope_summary,
@@ -215,19 +213,6 @@ async fn project_difference_rows(
         });
     }
     Ok(items)
-}
-
-fn empty_difference_page(filter: &DifferenceFilter, meta: ScopedIntegrationList) -> DifferenceListView {
-    DifferenceListView {
-        data: PageView { items: Vec::new(), total: 0, page: filter.page, page_size: filter.page_size },
-        scope_version: meta.scope_version,
-        policy_version: meta.policy_version,
-        organization_version: meta.organization_version,
-        as_of: meta.as_of,
-        empty_reason: meta.empty_reason,
-        scope_summary: meta.scope_summary,
-        ownership_basis: meta.ownership_basis,
-    }
 }
 
 /// 在调用方事务内保存不可变差异事实。

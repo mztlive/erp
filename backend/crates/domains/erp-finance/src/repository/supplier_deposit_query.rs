@@ -1,9 +1,10 @@
 //! 预存款单域查询：所有 Mongo 条件、排序和有界读取仅在拥有仓储定义。
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
+use erp_identity::CompiledAccess;
 use futures_util::TryStreamExt;
 use mongodb::Database;
-use mongodb::bson::doc;
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Error as PersistenceError, Executor, Repository, mongo_ops};
 use serde::de::DeserializeOwned;
@@ -39,11 +40,12 @@ pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Syn
     .await?)
 }
 
-/// 有界装载资金账户候选，范围许可由调用方逐账户核验。
+/// 先执行 identity 编译的完整授权条件，再装载一页资金账户。
 /// # 参数
 /// * `db` / `executor` - 财务数据源和执行器。
 /// * `supplier` / `payer` - 仅收窄账户候选的筛选。
 /// * `skip` / `size` - 已规范化分页位置与上限。
+/// * `access` - 当前读取阶段由 identity 编译并复验的授权聚合阶段。
 /// # 返回
 /// 最多size加一条账户，额外一条用于继续分页。
 /// # 错误
@@ -54,6 +56,7 @@ pub async fn account_page(
     payer: Option<&str>,
     skip: u64,
     size: u32,
+    access: &CompiledAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierDepositAccount>> {
     if size == 0 || size > 100 {
@@ -66,12 +69,17 @@ pub async fn account_page(
     if let Some(payer) = payer {
         filter.insert("identity.payer_party_id", payer);
     }
-    let options = FindOptions::builder()
-        .sort(doc! {"created_at": -1, "id": -1})
-        .skip(skip)
-        .limit(i64::from(size) + 1)
-        .build();
-    Ok(mongo_ops::find_many(&db.supplier_deposit_accounts().collection(), filter, options, executor).await?)
+    if access.model().collection != "supplier_deposit_accounts" {
+        return Err(Error::ValidationError("预存款查询授权模型不匹配".into()));
+    }
+    let mut pipeline = access.stages().to_vec();
+    pipeline.extend([
+        doc! {"$match": filter},
+        doc! {"$sort": {"created_at": -1, "id": -1}},
+        doc! {"$skip": i64::try_from(skip).map_err(|_| Error::ValidationError("分页范围过大".into()))?},
+        doc! {"$limit": i64::from(size) + 1},
+    ]);
+    account_rows(db, pipeline, executor).await
 }
 
 /// 按真实到账时间和稳定身份装载可分配批次。
@@ -288,5 +296,33 @@ pub async fn ledger_balance_at(
         }
         .ok_or_else(|| Error::BusinessLogicError("资金流水余额重建溢出".into()))?;
         Amount::try_from(decimal).map_err(Into::into)
+    })
+}
+
+async fn account_rows(
+    db: &Database,
+    pipeline: Vec<Document>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SupplierDepositAccount>> {
+    let collection = db.supplier_deposit_accounts().collection();
+    Ok(match executor.session() {
+        Some(session) => collection
+            .aggregate(pipeline)
+            .with_type::<SupplierDepositAccount>()
+            .session(&mut *session)
+            .await
+            .map_err(PersistenceError::from)?
+            .stream(session)
+            .try_collect()
+            .await
+            .map_err(PersistenceError::from)?,
+        None => collection
+            .aggregate(pipeline)
+            .with_type::<SupplierDepositAccount>()
+            .await
+            .map_err(PersistenceError::from)?
+            .try_collect()
+            .await
+            .map_err(PersistenceError::from)?,
     })
 }

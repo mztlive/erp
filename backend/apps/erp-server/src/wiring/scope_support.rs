@@ -1,18 +1,11 @@
-//! 范围 adapter 共用的组织快照、维度拒绝与公共判定。
-//!
-//! 各 `*_data_scope` adapter 重复实现同一组织读取、不支持维度拒绝和已登记
-//! 资源判定；本模块只收敛与领域无关的机械部分。资源名校验、本域条款类型
-//! 构造和协作/历史参与字段仍由各 adapter 填写。组织快照错误映射由调用方
-//! 传入：资金必须继续走 `Error::RepositoryError`，不得改成 `?`。
+//! 组合层共用的组织事实读取；不解释权限或数据范围规则。
 
 use std::collections::BTreeSet;
 
 use erp_core::common::time::Instant;
-use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
 use erp_identity::entity::organization::{OrgMembership, OrgTree};
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
-use erp_identity::service::access_control::consumers::registration;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -94,55 +87,6 @@ pub(crate) fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, 
     ids.sort();
     ids.dedup();
     ids
-}
-
-/// 拒绝结算主体或仓库维度；文案由调用方原样传入。
-///
-/// # 参数
-/// * `clause` - 身份域正向范围
-/// * `message` - 本域拒绝文案
-///
-/// # 返回
-/// 两维皆空时成功。
-///
-/// # 错误
-/// 结算主体或仓库目标非空时返回调用方文案。
-///
-/// # 关键业务约束
-/// 不支持的维度必须拒绝，不得静默丢弃；不得改写调用方文案。
-pub(crate) fn reject_unsupported_dimensions(clause: &ScopeClause, message: &str) -> Result<(), String> {
-    if clause.settlement_party_ids.is_empty() && clause.warehouse_ids.is_empty() {
-        return Ok(());
-    }
-    Err(message.to_string())
-}
-
-/// 将已解析条款转回公共判定输入，保留公司、本人、协作和组织。
-///
-/// # 参数
-/// * `company` - 公司范围
-/// * `self_owned` - 本人负责
-/// * `collaborative` - 协作；集成域传入 `false`
-/// * `org_unit_ids` - 已展开内部组织
-///
-/// # 返回
-/// 返回不含结算主体和仓库的公共条款。
-///
-/// # 错误
-/// 无。
-pub(crate) fn scope_clause(
-    company: bool,
-    self_owned: bool,
-    collaborative: bool,
-    org_unit_ids: &[String],
-) -> ScopeClause {
-    ScopeClause {
-        company,
-        self_owned,
-        collaborative,
-        org_unit_ids: org_unit_ids.iter().cloned().collect(),
-        ..ScopeClause::default()
-    }
 }
 
 /// 展开启用组织及其可选下级；快照错误由调用方映射。
@@ -234,47 +178,6 @@ pub(crate) async fn own_org<E>(
     Ok(OrgMembership::primary_org(&memberships, user_id, at).map_err(map_identity)?.map(str::to_string))
 }
 
-/// 用已登记资源动作和本域填好的对象字段做公共判定。
-///
-/// # 参数
-/// * `resource` - 已通过本域校验的资源名
-/// * `action` - 已登记动作
-/// * `role_clauses` - 转回公共条款的角色范围
-/// * `user_limit` - 转回公共条款的个人上限
-/// * `object` - 本域填写的责任事实；`collaborating` / `historical_read_participant` 由调用方填
-/// * `map_identity` - 未登记资源动作的错误映射
-///
-/// # 返回
-/// 返回角色范围和个人上限共同允许的判定。
-///
-/// # 错误
-/// 资源动作未登记时返回调用方映射后的领域错误。
-///
-/// # 关键业务约束
-/// 结算主体与仓库恒为 `None`；不得在此补公司范围或重解释原始规则。
-pub(crate) fn evaluate_registered<E>(
-    resource: &str,
-    action: &str,
-    role_clauses: impl IntoIterator<Item = ScopeClause>,
-    user_limit: Option<ScopeClause>,
-    object: ScopedObject<'_>,
-    map_identity: impl FnOnce(erp_identity::Error) -> E,
-) -> Result<bool, E> {
-    let consumer = registration(resource, action).map_err(map_identity)?;
-    let resolved = ResolvedScope { role_clauses: role_clauses.into_iter().collect(), user_limit };
-    Ok(resolved.allows(
-        &ScopedObject {
-            owned: object.owned,
-            collaborating: object.collaborating,
-            historical_read_participant: object.historical_read_participant,
-            org_unit_id: object.org_unit_id,
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        consumer.allows_history(),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use entity_core::BaseModel;
@@ -354,64 +257,5 @@ mod tests {
             BTreeSet::from(["org-a".to_string()])
         );
         assert!(expand_org_ids(&state, &["org-b".to_string()], false).unwrap().is_empty());
-    }
-
-    /// 拒绝文案由调用方决定，空维度不得改写。
-    #[test]
-    fn reject_unsupported_dimensions_keeps_caller_message() {
-        let warehouse =
-            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
-        assert_eq!(
-            reject_unsupported_dimensions(&warehouse, "商品范围不支持结算主体或仓库维度").unwrap_err(),
-            "商品范围不支持结算主体或仓库维度"
-        );
-        let settlement = ScopeClause {
-            settlement_party_ids: BTreeSet::from(["party-1".into()]),
-            ..ScopeClause::default()
-        };
-        assert_eq!(
-            reject_unsupported_dimensions(&settlement, "资金范围不支持结算主体或仓库维度").unwrap_err(),
-            "资金范围不支持结算主体或仓库维度"
-        );
-        let allowed = ScopeClause { self_owned: true, ..ScopeClause::default() };
-        assert!(reject_unsupported_dimensions(&allowed, "unused").is_ok());
-    }
-
-    /// 公共判定忽略对象上的结算主体和仓库，即使调用方误填。
-    #[test]
-    fn evaluate_registered_ignores_settlement_and_warehouse() {
-        let warehouse_only =
-            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
-        let object = ScopedObject {
-            owned: true,
-            collaborating: false,
-            historical_read_participant: false,
-            org_unit_id: None,
-            settlement_party_id: None,
-            warehouse_id: Some("wh-1"),
-        };
-        let denied = evaluate_registered("product", "list", vec![warehouse_only], None, object, |error| {
-            error.to_string()
-        })
-        .unwrap();
-        assert!(!denied);
-        let company = ScopeClause { company: true, ..ScopeClause::default() };
-        let allowed = evaluate_registered(
-            "product",
-            "list",
-            vec![company],
-            None,
-            ScopedObject {
-                owned: false,
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: None,
-                settlement_party_id: None,
-                warehouse_id: None,
-            },
-            |error| error.to_string(),
-        )
-        .unwrap();
-        assert!(allowed);
     }
 }

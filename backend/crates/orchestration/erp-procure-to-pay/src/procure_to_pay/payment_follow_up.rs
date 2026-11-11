@@ -3,12 +3,13 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::{BusinessDate, Instant};
+use erp_identity::Permission;
 use erp_read_models::purchase_center::payment_arrangement::arrangement_facts;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
 use erp_workflow::repository::{WorkItemCommandExt, WorkItemCommandRepositoryExt};
 use mongodb::Database;
-use persistence_core::Executor;
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::PurchaseOrderProcess;
@@ -36,8 +37,8 @@ impl PurchaseOrderProcess {
         req: SchedulePaymentFollowUp,
         actor: &AuditActor,
     ) -> Result<()> {
-        let authorization = self.authorize_actor_permission(actor, "purchase_payment_request:submit").await?;
-        let access = self.command_access(actor, "detail");
+        let entry = Permission::parse("purchase_payment_request:submit")?;
+        let access = self.ports.access(self.db.clone());
         let command = CommandReceipt::from_resource_parts(
             "payment-follow-up-",
             actor.id(),
@@ -50,11 +51,11 @@ impl PurchaseOrderProcess {
         let db = self.db.clone();
         let id = id.to_owned();
         let actor = actor.clone();
-        authorization
-            .rbac
-            .run_authorized_policy_transaction(authorization.policy_revision, move |executor| {
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.current(&id, executor).await?;
+                    access.require_source(&actor, &entry, std::slice::from_ref(&id), executor).await?;
                     schedule(&db, &id, &req, &actor, &command, executor).await
                 })
             })

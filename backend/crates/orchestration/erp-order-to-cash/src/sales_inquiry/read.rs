@@ -4,23 +4,22 @@ use std::collections::BTreeSet;
 use application_core::{AuditActor, CommandFingerprint};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::BusinessDocumentId;
-use erp_identity::access_control::{ResolvedScope, ScopeClause};
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::catalog_supply::CatalogSupplyRepository;
 use erp_sales::dto::sales_inquiry::{InquiryProcurementView, InquirySalesView};
 use erp_sales::entity::sales_inquiry::{InquiryStatus, SalesInquiry};
-use erp_sales::repository::sales_inquiry::{InquiryListFilter, InquiryReadScope, InquiryScopeClause};
+use erp_sales::repository::sales_inquiry::{InquiryListFilter, InquiryReadScope};
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use erp_supply::inquiry::{InquiryFeeBasis, InquiryQuote, InquirySupplyService};
 use erp_support::repository::{DocumentAttachmentRepositoryExt, FileAssetExt};
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType, inquiry_subject_version};
 use erp_workflow::repository::{WorkItemExt, WorkItemRepositoryExt};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::access::SalesInquiryAccess;
+use super::authorization;
 use crate::{Error, Result};
 
 /// 分页只接受业务筛选，不接受调用方注入授权范围。
@@ -192,20 +191,34 @@ impl InquiryReadService {
         actor: &AuditActor,
         params: &InquiryListParams,
     ) -> Result<InquiryListView<InquirySalesView>> {
-        let access = self.access.resolve_sales(actor, "list", &mut NoTransaction).await?;
-        validate_page(params, &access.scope_version)?;
+        let this = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.sales_list_stage(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    async fn sales_list_stage(
+        &self,
+        actor: &AuditActor,
+        params: &InquiryListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<InquiryListView<InquirySalesView>> {
+        let (access, authorization) = self.access.resolve_sales(actor, "list", executor).await?;
+        let version = access.version().to_string();
+        validate_page(params, &version)?;
         let mut filter = list_filter(params);
-        filter.access_scope = read_scope(&access.scope, actor.id());
+        filter.access_scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
         filter.inquiry_ids = None;
-        let page =
-            SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &mut NoTransaction).await?;
+        let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, executor).await?;
+        authorization.validate(&access, executor).await?;
         let items = page.items.iter().map(InquirySalesView::from_inquiry).collect();
-        if self.access.resolve_sales(actor, "list", &mut NoTransaction).await?.scope_version
-            != access.scope_version
-        {
-            return Err(scope_changed());
-        }
-        Ok(list_view(items, page.total, params, access.scope_version.clone(), !access.scope.has_role_scope()))
+        Ok(list_view(items, page.total, params, version, false))
     }
 
     /// 读取销售安全详情，工作报价不会进入响应。
@@ -232,15 +245,34 @@ impl InquiryReadService {
         actor: &AuditActor,
         params: &InquiryListParams,
     ) -> Result<InquiryListView<ProcurementInquiryDetail>> {
-        self.access.ensure_procurement_permission(actor, "list", &mut NoTransaction).await?;
-        let tasks = self.owned_tasks(actor, params.task_status).await?;
-        let version = self.procurement_version(actor, &tasks).await?;
+        let this = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.procurement_list_stage(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    async fn procurement_list_stage(
+        &self,
+        actor: &AuditActor,
+        params: &InquiryListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<InquiryListView<ProcurementInquiryDetail>> {
+        self.access.ensure_procurement_permission(actor, "list", executor).await?;
+        let tasks = self.owned_tasks(actor, params.task_status, executor).await?;
+        let version = self.procurement_version(actor, &tasks, executor).await?;
         validate_page(params, &version)?;
         let mut filter = list_filter(params);
-        filter.access_scope = InquiryReadScope::company();
+        let (access, authorization) =
+            authorization::task_query(self.db.clone(), self.rbac.clone(), actor, &tasks, executor).await?;
+        filter.access_scope = InquiryReadScope::from_compiled(access, authorization);
         filter.inquiry_ids = Some(tasks.iter().map(|task| task.business_object_id.clone()).collect());
-        let page =
-            SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &mut NoTransaction).await?;
+        let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, executor).await?;
         let mut items = Vec::with_capacity(page.items.len());
         for inquiry in page.items {
             let task = tasks
@@ -250,11 +282,17 @@ impl InquiryReadService {
                 .ok_or_else(scope_changed)?;
             let (current, task) = self
                 .access
-                .require_read_task(actor, "list", &inquiry.base.id, &task.base.id, &mut NoTransaction)
+                .require_read_task(actor, "list", &inquiry.base.id, &task.base.id, executor)
                 .await?;
             items.push(ProcurementInquiryDetail::from_task(&current, &task, actor.id())?);
         }
-        if self.procurement_version(actor, &self.owned_tasks(actor, params.task_status).await?).await?
+        if self
+            .procurement_version(
+                actor,
+                &self.owned_tasks(actor, params.task_status, executor).await?,
+                executor,
+            )
+            .await?
             != version
         {
             return Err(scope_changed());
@@ -404,14 +442,12 @@ impl InquiryReadService {
     ) -> Result<Vec<InquiryTemplateProduct>> {
         validate_template_ids(ids)?;
         let permission = Permission::parse("sellable_sku:list")?;
-        DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(
-                actor,
-                &Permission::parse("sales_inquiry:create")?,
-                &[permission],
-                &mut NoTransaction,
-            )
-            .await?;
+        let required = [Permission::parse("sales_inquiry:create")?, permission];
+        crate::authorization::features(self.db.clone(), self.rbac.clone())
+            .permissions(actor, &required, &mut NoTransaction)
+            .await?
+            .filter(|qualified| qualified.same_role(&required))
+            .ok_or_else(|| Error::Forbidden("缺少完整询价商品选择权限".into()))?;
         let rows = CatalogSupplyRepository::new(&self.db)
             .find_sellable_skus_by_ids(ids, BusinessDate::today(), &mut NoTransaction)
             .await?;
@@ -422,6 +458,7 @@ impl InquiryReadService {
         &self,
         actor: &AuditActor,
         filter: Option<InquiryTaskFilter>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>> {
         Ok(self
             .db
@@ -431,15 +468,24 @@ impl InquiryReadService {
                 "sales_inquiry",
                 &[actor.id().into()],
                 InquiryTaskFilter::statuses(filter),
-                &mut NoTransaction,
+                executor,
             )
             .await?)
     }
 
-    async fn procurement_version(&self, actor: &AuditActor, tasks: &[WorkItem]) -> Result<String> {
-        let authorization = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .authorization_version(actor, &mut NoTransaction)
-            .await?;
+    async fn procurement_version(
+        &self,
+        actor: &AuditActor,
+        tasks: &[WorkItem],
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let permission = Permission::parse("procurement_inquiry:list")?;
+        let authorization = crate::authorization::features(self.db.clone(), self.rbac.clone())
+            .permissions(actor, &[permission], executor)
+            .await?
+            .ok_or_else(|| Error::Forbidden("当前账号已失效".into()))?
+            .version()
+            .to_owned();
         let mut parts = tasks
             .iter()
             .map(|task| format!("{}:{}:{}", task.base.id, task.base.version, task.subject_version))
@@ -507,24 +553,6 @@ fn scope_changed() -> Error {
     Error::ConflictError("DATA_SCOPE_CHANGED：询价访问范围已变化，请从第一页刷新".into())
 }
 
-fn read_scope(scope: &ResolvedScope, user: &str) -> InquiryReadScope {
-    InquiryReadScope {
-        clauses: scope.role_clauses.iter().map(|clause| read_clause(clause, user)).collect(),
-        limit: scope.user_limit.as_ref().map(|clause| read_clause(clause, user)),
-    }
-}
-
-fn read_clause(clause: &ScopeClause, user: &str) -> InquiryScopeClause {
-    if !clause.company && (!clause.settlement_party_ids.is_empty() || !clause.warehouse_ids.is_empty()) {
-        return InquiryScopeClause::default();
-    }
-    InquiryScopeClause {
-        company: clause.company,
-        owner_user_id: clause.self_owned.then(|| user.to_string()),
-        business_org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -546,26 +574,6 @@ mod tests {
         assert_eq!(
             InquiryTaskFilter::statuses(Some(InquiryTaskFilter::Completed)),
             &[WorkItemStatus::Completed]
-        );
-    }
-    #[test]
-    fn list_scope_preserves_role_union_and_personal_upper_bound() {
-        let scope = ResolvedScope {
-            role_clauses: vec![
-                ScopeClause { self_owned: true, ..Default::default() },
-                ScopeClause { org_unit_ids: ["sales-team".into()].into(), ..Default::default() },
-            ],
-            user_limit: Some(ScopeClause { self_owned: true, ..Default::default() }),
-        };
-        let actual = read_scope(&scope, "seller");
-        assert_eq!(actual.clauses.len(), 2);
-        assert_eq!(actual.clauses[0].owner_user_id.as_deref(), Some("seller"));
-        assert_eq!(actual.clauses[1].business_org_unit_ids, ["sales-team"]);
-        assert_eq!(actual.limit.unwrap().owner_user_id.as_deref(), Some("seller"));
-        assert!(
-            read_scope(&ResolvedScope { role_clauses: vec![], user_limit: None }, "seller")
-                .clauses
-                .is_empty()
         );
     }
     #[test]

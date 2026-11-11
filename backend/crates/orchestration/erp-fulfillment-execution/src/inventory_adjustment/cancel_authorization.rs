@@ -109,16 +109,13 @@ pub(crate) async fn authorize_with<A: WorkflowAuthorizationPort>(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<CancelAuthorization> {
-    if !identity_service.directory().actor_is_active(actor, executor).await? {
-        return Err(Error::Forbidden("当前账号不可执行库存调整审批撤回".to_string()));
-    }
     let snapshot = cancel_authorization_snapshot(db, instance, executor).await?;
     let required =
         [Permission::parse("approval_instance:cancel")?, Permission::parse("approval_instance:read")?];
-    let qualified = identity_service.qualified_permissions(actor, &required, executor).await?;
-    if qualified
-        .is_none_or(|value| !required.iter().all(|permission| value.permissions().covers_one(permission)))
-    {
+    let qualified = crate::authorization::features(db.clone(), identity_service.clone())
+        .permissions(actor, &required, executor)
+        .await?;
+    if qualified.is_none_or(|value| !value.same_role(&required)) {
         return Err(Error::Forbidden("当前账号缺少撤回审批或读取权限".to_string()));
     }
     if snapshot.payload.submitted_by == actor.id() {
@@ -129,7 +126,7 @@ pub(crate) async fn authorize_with<A: WorkflowAuthorizationPort>(
         });
     }
     let visibility =
-        definition_management_visibility_with_executor(identity_service, actor, executor).await?;
+        definition_management_visibility_with_executor(db, identity_service, actor, executor).await?;
     if !visibility.runtime_admin_types().contains(&DocumentType::StockAdjustment)
         || !auth
             .approval_source_readable(

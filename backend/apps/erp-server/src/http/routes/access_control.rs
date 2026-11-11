@@ -7,7 +7,7 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::{access_control, organization};
 use crate::http::middleware::with_permission;
@@ -21,7 +21,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(organization_routes(rbac))
         .merge(permission_routes(rbac))
@@ -34,7 +34,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 文件入口复用认证链路，应用仍要求底层角色和范围配置资格。
-fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn policy_bundle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/authorization-policies/validate",
@@ -72,7 +72,7 @@ fn policy_bundle_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 组织结构及人员查询资格路由。
-fn organization_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn organization_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/person-query-qualifications/{category}/{account_id}",
@@ -102,7 +102,7 @@ fn organization_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 权限目录管理路由。
-fn permission_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn permission_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/permissions",
@@ -139,7 +139,7 @@ fn permission_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 用户角色绑定及撤销路由。
-fn binding_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn binding_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/user-roles",
@@ -168,7 +168,7 @@ fn binding_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 访问检查与审计查询路由。
-fn inspection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn inspection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/access-check",
@@ -189,7 +189,7 @@ fn inspection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 按类别读取业务人员的目录路由。
-fn people_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/salespeople",
@@ -242,7 +242,7 @@ fn people_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 人员业务扩展授权使用现有范围配置动作，并在领域层重验公司配置边界。
-fn person_scope_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn person_scope_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/person-data-scopes/{user_id}",
@@ -263,7 +263,7 @@ fn person_scope_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 指定记录授权管理沿用范围维护入口，领域服务再次核验全公司管理资格。
-fn resource_grant_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn resource_grant_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/resource-grants",

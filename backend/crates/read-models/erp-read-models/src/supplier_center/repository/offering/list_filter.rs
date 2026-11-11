@@ -198,7 +198,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         &self,
         query: &SupplierOfferingListQuery,
         executor: &mut dyn Executor,
-    ) -> Result<SupplierOfferingListBundle> {
+    ) -> erp_supply::Result<SupplierOfferingListBundle> {
         let filter = self.resolve_list_filter(query, executor).await?;
         self.load_offering_list_page_by_filter(&filter, executor).await
     }
@@ -218,7 +218,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         &self,
         filter: &SupplierOfferingFilter,
         executor: &mut dyn Executor,
-    ) -> Result<SupplierOfferingListBundle> {
+    ) -> erp_supply::Result<SupplierOfferingListBundle> {
         let page = self.db.supplier_offerings().search_supplier_offerings(filter, executor).await?;
         let revisions =
             self.db.supplier_offering_repository().load_current_revisions(&page.items, executor).await?;
@@ -277,7 +277,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         &self,
         query: &SupplierOfferingListQuery,
         executor: &mut dyn Executor,
-    ) -> Result<SupplierOfferingListBundle> {
+    ) -> erp_supply::Result<SupplierOfferingListBundle> {
         self.load_offering_list_bundle(query, executor).await
     }
 }
@@ -590,7 +590,7 @@ mod isolation_tests {
             let db = fixture.db().clone();
             let client = db.client().clone();
             client
-                .with_transaction::<_, (), persistence_core::Error>(move |executor| {
+                .with_transaction::<_, (), erp_supply::Error>(move |executor| {
                     let db = db.clone();
                     Box::pin(async move {
                         let (offering, revision, availability) =

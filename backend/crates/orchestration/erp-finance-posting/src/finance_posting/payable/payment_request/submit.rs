@@ -22,7 +22,7 @@ use erp_workflow::service::approval::execution::{PlannedWrites, PreparedExecutio
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
-use persistence_core::NoTransaction;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::*;
 use crate::FinancePostingPorts;
@@ -61,7 +61,7 @@ impl PurchasePaymentRequestProcess {
     /// # 参数
     /// * `id` - 已保存的付款申请。
     /// * `req` - 本次版本及幂等键。
-    /// * `actor` - 原申请人。
+    /// * `actor` - 具备提交和完整来源资格的当前经办人。
     /// # 返回
     /// 返回审批中申请；相同幂等键只恢复原结果。
     /// # 错误
@@ -98,10 +98,10 @@ impl PurchasePaymentRequestProcess {
         let actor = actor.clone();
         let id = id.to_owned();
         let recovery = command.clone();
-        let revision = rbac.current_policy_revision().await?;
-        let result = rbac
+        let result = db
+            .client()
             .clone()
-            .run_authorized_policy_transaction(revision, move |executor| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     SubmitWrite { db: &db, rbac: &rbac, id: &id, req: &req, actor: &actor, command: &command }
                         .persist(executor)
@@ -256,9 +256,8 @@ impl SubmitWrite<'_> {
             return Ok(id);
         }
         let mut request = load(db, id, executor).await?;
-        ensure_creator(&request, actor)?;
-        ensure_version(&request, req.expected_version)?;
         require_sources(db, rbac, &request, actor, "submit", executor).await?;
+        ensure_version(&request, req.expected_version)?;
         let submission = source::prepare_submission(db, rbac, &request, actor, true, executor).await?;
         request.submit(submission)?;
         db.purchase_payment_requests().update(&mut request, executor).await?;

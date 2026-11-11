@@ -91,7 +91,7 @@ impl JdVopAuthorizationProcess {
             ));
         }
         let mut status = engine.status(operation_id).await;
-        let permitted = self.access.permission(actor, "authorize").await?;
+        let permitted = self.access.permission(actor, "authorize", &mut NoTransaction).await?;
         status.can_authorize &= permitted;
         status.can_configure_tokens = permitted
             && status.state != "unconfigured"

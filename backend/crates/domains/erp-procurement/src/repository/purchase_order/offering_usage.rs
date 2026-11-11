@@ -190,36 +190,7 @@ fn order_lookup(scope: &PurchaseReadScope) -> Document {
     let mut pipeline = vec![
         doc! { "$match": { "$expr": { "$eq": ["$id", "$$order_id"] }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": { "$nin": ["COMPLETED", "VOIDED"] } } },
     ];
-    pipeline.extend(scope.grant_lookup.clone());
+    pipeline.extend_from_slice(scope.stages());
     pipeline.push(doc! { "$match": scope.document() });
     doc! { "$lookup": { "from": PURCHASE_ORDERS, "let": { "order_id": "$header.purchase_order_id" }, "pipeline": pipeline, "as": "order" } }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::scope::PurchaseScopeClause;
-    use super::*;
-
-    #[test]
-    fn usage_query_keeps_explicit_offering_current_pointer_scope_and_sentinel_limit() {
-        let scope = PurchaseReadScope {
-            roles: vec![PurchaseScopeClause { owner_user_id: Some("buyer".into()), ..Default::default() }],
-            ..Default::default()
-        };
-        let revision = usage_pipeline(&SupplierOfferingId::new("offering-exact"), &scope, true, 100);
-        assert_eq!(
-            revision[0]
-                .get_document("$match")
-                .unwrap()
-                .get_str("supplier_offering_source.supplier_offering_id")
-                .unwrap(),
-            "offering-exact"
-        );
-        assert_eq!(revision.last().unwrap().get_i64("$limit").unwrap(), 101);
-        assert!(revision[3].to_string().contains("owner_user_id"));
-        assert!(revision[5].to_string().contains("current_revision_id"));
-        let submission = usage_pipeline(&SupplierOfferingId::new("offering-exact"), &scope, false, 100);
-        assert!(submission[5].to_string().contains("current_submission_id"));
-        assert!(submission[5].to_string().contains("current_revision_id"));
-    }
 }

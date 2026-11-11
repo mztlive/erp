@@ -43,14 +43,14 @@ impl CatalogSupplyQueryPort for RecordingQuery {
         &self,
         _: &ProductFilter,
         _: &mut dyn Executor,
-    ) -> persistence_core::Result<Vec<String>> {
+    ) -> erp_catalog::Result<Vec<String>> {
         panic!("sales qualification must use the exact-reference query")
     }
     async fn product_page(
         &self,
         _: &ProductFilter,
         _: &mut dyn Executor,
-    ) -> persistence_core::Result<PageResult<ProductRow>> {
+    ) -> erp_catalog::Result<PageResult<ProductRow>> {
         panic!("sales qualification must use the exact-reference query")
     }
     async fn search_sellable_skus(

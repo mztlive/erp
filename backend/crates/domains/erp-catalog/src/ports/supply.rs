@@ -23,7 +23,7 @@ pub trait CatalogSupplyQueryPort: Send + Sync {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
+    ) -> crate::Result<Vec<String>>;
     /// 分页读取商品和当前 SKU 供给覆盖。
     ///
     /// # 参数
@@ -39,7 +39,7 @@ pub trait CatalogSupplyQueryPort: Send + Sync {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>>;
+    ) -> crate::Result<PageResult<ProductRow>>;
     /// 分页读取符合原资格条件的可售 SKU。
     ///
     /// # 参数

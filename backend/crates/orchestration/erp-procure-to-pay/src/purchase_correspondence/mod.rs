@@ -6,7 +6,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use config::PurchaseMailConfig;
 use entity_core::BaseModel;
-use erp_identity::{Permission, SharedRbacService, subject};
+use erp_identity::{Permission, SharedRbacService};
 use erp_procurement::PurchaseDataScopePort;
 use erp_procurement::entity::purchase_email::{PurchaseEmail, PurchaseEmailStatus, SendPurchaseEmail};
 use erp_procurement::repository::purchase_email::{purchase_emails, recent};
@@ -63,7 +63,10 @@ pub async fn send(
     let config =
         config.ok_or_else(|| Error::ValidationError("尚未配置采购邮件服务，请联系系统管理员".into()))?;
     let permission = Permission::parse("purchase_order:send_email")?;
-    if !rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
+    if !crate::authorization::features(db.clone(), rbac)
+        .has_permission(actor, &permission, &mut NoTransaction)
+        .await?
+    {
         return Err(Error::Forbidden("当前账号没有发送采购邮件的权限".into()));
     }
     let recipient = req.recipient()?;

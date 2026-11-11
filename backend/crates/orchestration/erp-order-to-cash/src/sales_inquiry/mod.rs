@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::services::SalesServices;
 pub mod access;
 mod assignment;
+mod authorization;
 mod commands;
 pub mod dto;
 pub mod eligibility;

@@ -202,10 +202,6 @@ pub struct DifferenceListView {
     pub data: super::PageView<DifferenceView>,
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`。

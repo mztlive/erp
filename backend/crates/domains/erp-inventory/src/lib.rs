@@ -1,5 +1,6 @@
 //! 库存领域：库存余额、流水、预占与调整。
 
+pub mod authorization;
 pub mod dto;
 pub mod entity;
 mod error;
@@ -24,9 +25,10 @@ pub use ports::{
     AdjustmentPeopleFact, AdjustmentPeopleFactsPort, AuthorizationPort, CatalogFactsPort,
     FailClosedAdjustmentPeopleFactsPort, FailClosedAuditPort, FailClosedAuthorizationPort,
     FailClosedCatalogFacts, FailClosedFulfillmentFacts, FailClosedWarehouseFacts, FulfillmentFactsPort,
-    InventoryAuditPort, InventoryAuthorization, InventoryScopeMeta, PreparedInventoryAudit, ReceiptNoFact,
-    SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope,
-    applicant_object_ids, intersect_object_ids, latest_snapshot_submitters, merge_adjustment_people,
+    InventoryAuditPort, InventoryAuthorization, InventoryReadProof, InventoryScopeMeta,
+    PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort,
+    WarehouseRevisionFact, WarehouseScope, applicant_object_ids, intersect_object_ids,
+    latest_snapshot_submitters, merge_adjustment_people,
 };
 pub use repository::{
     AdjustmentSnapshotReadFilter, InventoryExt, InventoryRepository, StockAdjustmentFilter,

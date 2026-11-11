@@ -91,8 +91,8 @@ impl<'a> CustomerCenterRepository<'a> {
         &self,
         customer_id: &str,
         recent_limit: u32,
-        contract_scope: &Document,
-        sales_scope: &Document,
+        contract_scope: &[Document],
+        sales_scope: &[Document],
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerCenterRelatedRow>> {
         let recent_limit = i64::from(recent_limit);
@@ -128,8 +128,8 @@ impl<'a> CustomerCenterRepository<'a> {
 fn related_pipeline(
     customer_id: &str,
     recent_limit: i64,
-    contract_scope: &Document,
-    sales_scope: &Document,
+    contract_scope: &[Document],
+    sales_scope: &[Document],
 ) -> Vec<Document> {
     vec![
         doc! { "$match": { "id": customer_id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON } },
@@ -162,21 +162,20 @@ fn related_pipeline(
 fn related_lookup(
     collection: &str,
     output: &str,
-    scope: &Document,
+    scope: &[Document],
     recent_limit: i64,
     projection: Document,
     condition: Document,
 ) -> Document {
-    doc! { "$lookup": { "from": collection, "let": { "customer_id": "$id" }, "as": output,
-        "pipeline": [
-            { "$match": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$eq": ["$customer_id", "$$customer_id"] }, "$and": [scope] } },
-            { "$facet": {
-                "recent": [{ "$sort": { "created_at": -1, "id": -1 } }, { "$limit": recent_limit }, { "$project": projection }],
-                "matched": [{ "$match": condition }, { "$count": "count" }],
-            } },
-            { "$project": { "_id": 0, "recent": 1, "count": { "$ifNull": [{ "$arrayElemAt": ["$matched.count", 0] }, 0] } } },
-        ]
-    } }
+    let mut pipeline = vec![
+        doc! {"$match":{"deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$expr":{"$eq":["$customer_id","$$customer_id"]}}},
+    ];
+    pipeline.extend_from_slice(scope);
+    pipeline.extend([
+        doc! {"$facet":{"recent":[{"$sort":{"created_at":-1,"id":-1}},{"$limit":recent_limit},{"$project":projection}],"matched":[{"$match":condition},{"$count":"count"}]}},
+        doc! {"$project":{"_id":0,"recent":1,"count":{"$ifNull":[{"$arrayElemAt":["$matched.count",0]},0]}}},
+    ]);
+    doc! {"$lookup":{"from":collection,"let":{"customer_id":"$id"},"as":output,"pipeline":pipeline}}
 }
 
 #[cfg(test)]
@@ -187,16 +186,15 @@ mod tests {
 
     #[test]
     fn related_totals_and_recent_rows_use_each_business_scope() {
-        let contract_scope = doc! { "id": "contract-a" };
-        let sales_scope = doc! { "sales_owner_user_id": "sales-a" };
+        let contract_scope = vec![doc! {"$match": { "id": "contract-a" }}];
+        let sales_scope = vec![doc! {"$match": { "sales_owner_user_id": "sales-a" }}];
         let pipeline = related_pipeline("customer-1", 5, &contract_scope, &sales_scope);
         assert_eq!(pipeline[0].get_document("$match").unwrap().get_str("id").unwrap(), "customer-1");
         for (stage, scope) in [(1, contract_scope), (2, sales_scope)] {
             let lookup = pipeline[stage].get_document("$lookup").unwrap();
             let stages = lookup.get_array("pipeline").unwrap();
-            let filter = stages[0].as_document().unwrap().get_document("$match").unwrap();
-            assert_eq!(filter.get_array("$and").unwrap()[0], Bson::Document(scope));
-            let facet = stages[1].as_document().unwrap().get_document("$facet").unwrap();
+            assert_eq!(stages[1], Bson::Document(scope[0].clone()));
+            let facet = stages[2].as_document().unwrap().get_document("$facet").unwrap();
             let recent = facet.get_array("recent").unwrap();
             assert_eq!(recent[1].as_document().unwrap().get_i64("$limit").unwrap(), 5);
             assert_eq!(facet.get_array("matched").unwrap().len(), 2);

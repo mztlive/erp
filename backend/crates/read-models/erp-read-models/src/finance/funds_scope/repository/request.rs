@@ -17,6 +17,8 @@ impl FundsAccess {
         authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesInvoiceRequest>> {
+        authorization.validate(executor).await?;
+        let result: crate::Result<_> = async {
         let condition = self.request_condition(query, executor).await?;
         let filter = doc! { "$and": [authorization.sales.document(),
         super::linked_condition_document(&condition, "sales_owner_user_id")] };
@@ -27,7 +29,7 @@ impl FundsAccess {
             filter,
             "sales_owner_user_id",
             "order_no",
-            &authorization.sales.grant_lookup,
+            &authorization.sales.stages(),
         );
         stages.push(doc! { "$match": { "_source_allowed": true } });
         if let Some(ids) = condition.operator_user_ids {
@@ -40,5 +42,10 @@ impl FundsAccess {
         super::super::request::bounded_request_candidates(
             self.db.sales_invoice_requests().scope_candidates(query, stages, executor).await?,
         )
+
+    }.await;
+        let result = result?;
+        authorization.validate(executor).await?;
+        Ok(result)
     }
 }

@@ -4,18 +4,20 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use erp_customer::CustomerResolvedScope;
 use erp_customer::ports::CustomerDataScopePort;
+use erp_customer::repository::CustomerAccountFilter;
+use erp_customer::repository::scope::authorized_versions;
 use persistence_core::{Executor, Transactional};
 use rust_decimal::Decimal;
 
 use super::QualityAccess;
-use super::access::no_current_scope;
 use super::dto::{
     CurrentQualityQuery, CurrentQualityRow, CurrentQualityView, QualityPeriod, QualityRows, QualityScope,
     QualityTotals,
 };
 use super::query::{BASIS_LABEL, PERIOD_BASIS};
-use super::source::{CustomerFact, QUALITY_ORDER_LIMIT, QualityOrder, effective_label};
+use super::source::{CustomerFact, QualityOrder, effective_label};
 use crate::Result;
 
 /// 同一快照产生的当前视图与请求问询；版本校验需要原查询。
@@ -38,7 +40,7 @@ impl super::CustomerQualityReadModel {
     /// 返回当前视图、原查询，以及本次客户与销售范围合成的版本指纹。
     ///
     /// # 错误
-    /// 授权解析失败、授权客户数超过 `QUALITY_ORDER_LIMIT`、包含下级却没有组织、
+    /// 授权解析失败、期间订单或候选客户数超过业务上限、包含下级却没有组织、
     /// 组织展开或订单与客户事实读取失败时返回错误。查询已带的范围版本与本次快照不一致时返回范围变化错误。
     pub(super) async fn snapshot_current(
         &self,
@@ -49,64 +51,53 @@ impl super::CustomerQualityReadModel {
         executor: &mut dyn Executor,
     ) -> Result<(CurrentSnapshotOutput, String)> {
         let access = QualityAccess::new(self.db.clone(), self.rbac.clone(), self.customer_scope.clone());
-        let (customer_context, customer_scope, sales_context, sales_scope) =
-            access.resolve_current(actor, executor).await?;
-        if no_current_scope(&customer_context, &customer_scope) && sales_scope.is_empty() {
-            let mut view = assemble_current(query, Vec::new(), totals_for(&[]));
-            view.empty_reason = Some("no_scope".into());
-            apply_context(&mut view, &customer_context, &sales_context);
-            let expected = format!("{}:{}", customer_context.scope_version, sales_context.scope_version);
-            return Ok((CurrentSnapshotOutput { view, query: query.clone() }, expected));
-        }
+        let (customer_context, sales_context, sales_scope) = access.resolve_current(actor, executor).await?;
         let expanded = expand_requested_orgs(self.customer_scope.as_ref(), query, executor).await?;
-        let authorized = customer_scope.authorized_customer_ids.clone();
-        if let Some(ids) = &authorized
-            && ids.len() > QUALITY_ORDER_LIMIT
-        {
-            return Err(crate::Error::ValidationError("客户查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        // 订单先按销售范围与显式客户装载，客户授权在内存中求交，避免公司范围全表扫描。
-        let order_customer_ids = match (&authorized, &query.customer_id) {
-            (Some(ids), None) => Some(ids.clone()),
-            (Some(ids), Some(requested)) => {
-                Some(if ids.contains(requested) { vec![requested.clone()] } else { Vec::new() })
-            },
-            (None, requested) => requested.clone().map(|id| vec![id]),
-        };
+        let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
         let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
-        let raw_orders = super::source::CurrentSources::load_orders(&self.db, order_filter, executor).await?;
-        // 客户集合为订单客户与授权集合的交集；显式客户无订单时仍保留沉默行。
-        let mut customer_ids = raw_orders.iter().map(|o| o.customer_id.clone()).collect::<BTreeSet<_>>();
-        if let Some(ids) = &authorized {
-            let allowed = ids.iter().cloned().collect::<BTreeSet<_>>();
-            customer_ids = customer_ids.intersection(&allowed).cloned().collect();
-        }
-        if let Some(requested) = &query.customer_id
-            && is_customer_allowed(&authorized, requested)
-        {
-            customer_ids.insert(requested.clone());
-        }
-        let mut sources = super::source::CurrentSources::load_customers(
+        let raw_orders = super::source::CurrentSources::load_current_orders(
             &self.db,
-            customer_ids.into_iter().collect(),
-            &raw_orders,
+            order_filter,
+            &customer_context,
+            self.customer_scope.as_ref(),
             executor,
         )
         .await?;
+        let mut sources = self.current_sources(query, &customer_context, &raw_orders, executor).await?;
+        self.customer_scope.validate(&customer_context, executor).await?;
+        sales_context.validate(executor).await?;
         apply_request_filters(&mut sources, query, expanded.as_ref());
         let mut view = project_current(query, sources);
-        let no_scope =
-            !customer_context.has_scope_rules() && view.rows.total == 0 && view.totals.order_count == 0;
-        if no_scope {
-            view.empty_reason = Some("no_scope".into());
-        }
-        apply_context(&mut view, &customer_context, &sales_context);
+        apply_context(&mut view, &customer_context);
         let expected = combined_version(&customer_context.scope_version, &sales_context.scope_version, &view);
         super::ensure_version(query.scope_version.as_deref(), &expected)?;
         if !export {
             view.rows.items = page_items(view.rows.items, query);
         }
         Ok((CurrentSnapshotOutput { view, query: query.clone() }, expected))
+    }
+
+    /// 只读取期间订单关联客户及显式客户，并保留无订单客户的授权检查。
+    async fn current_sources(
+        &self,
+        query: &CurrentQualityQuery,
+        customer: &CustomerResolvedScope,
+        orders: &[QualityOrder],
+        executor: &mut dyn Executor,
+    ) -> Result<super::source::CurrentSnapshot> {
+        let mut candidates = orders.iter().map(|order| order.customer_id.clone()).collect::<BTreeSet<_>>();
+        candidates.extend(query.customer_id.iter().cloned());
+        let filter = CustomerAccountFilter {
+            customer_ids: Some(candidates.into_iter().collect()),
+            ..Default::default()
+        };
+        let authorized =
+            authorized_versions(&self.db, &filter, customer, self.customer_scope.as_ref(), executor)
+                .await?
+                .into_iter()
+                .map(|customer| customer.id)
+                .collect();
+        super::source::CurrentSources::load_customers(&self.db, authorized, orders, executor).await
     }
 
     /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
@@ -139,64 +130,14 @@ impl super::CustomerQualityReadModel {
                 let query = query.clone();
                 let actor = actor.clone();
                 Box::pin(async move {
-                    let access =
-                        QualityAccess::new(this.db.clone(), this.rbac.clone(), this.customer_scope.clone());
-                    let (customer_context, customer_scope, sales_context, sales_scope) =
-                        access.resolve_current(&actor, executor).await?;
-                    let expanded =
-                        expand_requested_orgs(this.customer_scope.as_ref(), &query, executor).await?;
-                    let authorized = customer_scope.authorized_customer_ids.clone();
-                    let order_customer_ids = match (&authorized, &query.customer_id) {
-                        (Some(ids), None) => Some(ids.clone()),
-                        (Some(ids), Some(requested)) => {
-                            Some(if ids.contains(requested) { vec![requested.clone()] } else { Vec::new() })
-                        },
-                        (None, requested) => requested.clone().map(|id| vec![id]),
-                    };
-                    let filter = super::source::quality_order_filter(
-                        &query.validate()?,
-                        order_customer_ids,
-                        &sales_scope,
-                    );
-                    let raw_orders =
-                        super::source::CurrentSources::load_orders(&this.db, filter, executor).await?;
-                    let mut customer_ids =
-                        raw_orders.iter().map(|o| o.customer_id.clone()).collect::<BTreeSet<_>>();
-                    if let Some(ids) = &authorized {
-                        let allowed = ids.iter().cloned().collect::<BTreeSet<_>>();
-                        customer_ids = customer_ids.intersection(&allowed).cloned().collect();
-                    }
-                    if let Some(requested) = &query.customer_id
-                        && is_customer_allowed(&authorized, requested)
-                    {
-                        customer_ids.insert(requested.clone());
-                    }
-                    let mut sources = super::source::CurrentSources::load_customers(
-                        &this.db,
-                        customer_ids.into_iter().collect(),
-                        &raw_orders,
-                        executor,
-                    )
-                    .await?;
-                    apply_request_filters(&mut sources, &query, expanded.as_ref());
-                    let mut view = project_current(&query, sources);
-                    view.rows.items = page_items(view.rows.items, &query);
-                    apply_context(&mut view, &customer_context, &sales_context);
-                    Ok::<_, crate::Error>(combined_version(
-                        &customer_context.scope_version,
-                        &sales_context.scope_version,
-                        &view,
-                    ))
+                    let bounds = query.validate()?;
+                    let (_, version) = this.snapshot_current(&query, &actor, bounds, true, executor).await?;
+                    Ok::<_, crate::Error>(version)
                 })
             })
             .await?;
         super::ensure_version(Some(expected), &current)
     }
-}
-
-/// 显式客户必须落在授权集合内；公司范围允许任意显式客户。
-fn is_customer_allowed(authorized: &Option<Vec<String>>, requested: &str) -> bool {
-    authorized.as_ref().is_none_or(|ids| ids.contains(&requested.to_string()))
 }
 
 /// 请求组织展开为启用节点；未知组织拒绝，不得忽略后查询全部。
@@ -582,8 +523,6 @@ fn assemble_current(
         empty_reason: None,
         scope_summary: "当前负责客户".into(),
         as_of: String::new(),
-        policy_version: 0,
-        organization_version: 0,
         scope_version: String::new(),
         scope: QualityScope::new("authorized".into(), "当前负责客户".into(), String::new()),
         period: QualityPeriod {
@@ -624,14 +563,8 @@ fn current_filter_summary(query: &CurrentQualityQuery) -> String {
 }
 
 /// 授权时点与版本随响应返回；不暴露完整角色证明或人员集合。
-fn apply_context(
-    view: &mut CurrentQualityView,
-    customer: &erp_customer::CustomerResolvedScope,
-    sales: &erp_identity::service::access_control::resolve::AuthorizedDataScope,
-) {
+fn apply_context(view: &mut CurrentQualityView, customer: &CustomerResolvedScope) {
     view.as_of = customer.as_of.as_utc().to_rfc3339();
-    view.policy_version = customer.policy_version;
-    view.organization_version = customer.organization_version.max(sales.organizations.version);
 }
 
 /// 组合版本覆盖客户与销售双重授权及业务责任版本；不返回身份集合。

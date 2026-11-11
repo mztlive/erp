@@ -6,11 +6,12 @@
 
 use std::sync::Arc;
 
+use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
@@ -405,11 +406,15 @@ pub async fn ensure_fulfillment_owner_eligible(
             "履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string(),
         ));
     }
-    let granted = rbac.permissions(account.kind, owner_user_id).await?;
-    let required = PermissionSet::new(
-        required_permissions.iter().map(|code| Permission::parse(code).expect("固定履约操作权限必须合法")),
-    );
-    if granted.covers(&required) {
+    let required: Vec<_> = required_permissions
+        .iter()
+        .map(|code| Permission::parse(code).expect("固定履约操作权限必须合法"))
+        .collect();
+    let actor = AuditActor::new(owner_user_id.into(), account.secret.account().into(), account.kind);
+    let qualified = crate::authorization::features(db.clone(), rbac.clone())
+        .permissions(&actor, &required, executor)
+        .await?;
+    if qualified.is_some_and(|value| value.same_role(&required)) {
         return Ok(());
     }
     Err(Error::BusinessLogicError("履约责任人缺少完成当前操作所需权限，请先调整角色或责任配置".to_string()))

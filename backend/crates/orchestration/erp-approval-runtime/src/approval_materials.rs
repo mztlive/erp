@@ -87,7 +87,7 @@ pub async fn authorize_attachment(
         .find_by_id(file_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
-    authorize_material_transfer(identity_service, actor, &[file], &mut NoTransaction).await?;
+    authorize_material_transfer(identity_service, db, actor, &[file], &mut NoTransaction).await?;
     Ok(())
 }
 

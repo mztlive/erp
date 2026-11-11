@@ -322,8 +322,6 @@ fn assemble(
         empty_reason: None,
         scope_summary: scope_label.into(),
         as_of: as_of.into(),
-        policy_version: 0,
-        organization_version: 0,
         scope_version: String::new(),
         scope: scope(scope_label),
         period: period(q),

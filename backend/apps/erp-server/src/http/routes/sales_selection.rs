@@ -9,7 +9,7 @@ use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY};
 use axum::response::Response;
 use axum::routing::{delete, get, post};
 use axum::{Router, middleware};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::sales_selection;
 use crate::http::middleware::with_permission;
@@ -23,7 +23,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回路由。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(book_collection_routes(rbac))
         .merge(book_copy_routes(rbac))
@@ -65,7 +65,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回
 /// 返回列表与创建路由。
-fn book_collection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_collection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-books",
@@ -111,7 +111,7 @@ fn book_collection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 错误
 /// 无。
-fn book_copy_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_copy_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-books/{id}/copy",
@@ -141,7 +141,7 @@ fn book_copy_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 错误
 /// 无。
-fn book_pricing_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_pricing_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-books/{id}/prices",
@@ -169,7 +169,7 @@ fn book_pricing_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回
 /// 返回实例路由。
-fn book_item_routes(rbac: &SharedRbacService, books: bool) -> Router<HttpState> {
+fn book_item_routes(rbac: &AuthorizationService, books: bool) -> Router<HttpState> {
     if books { book_item_routes_books(rbac) } else { book_item_routes_booklets(rbac) }
 }
 
@@ -180,7 +180,7 @@ fn book_item_routes(rbac: &SharedRbacService, books: bool) -> Router<HttpState> 
 ///
 /// # 返回
 /// 返回实例路由。
-fn book_item_routes_books(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_item_routes_books(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-books/{id}",
@@ -303,7 +303,7 @@ fn book_item_routes_books(rbac: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回
 /// 返回实例路由。
-fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_item_routes_booklets(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-booklets/{id}",
@@ -456,7 +456,7 @@ pub fn public_routes() -> Router<HttpState> {
         .layer(middleware::map_response(private_public_response))
 }
 
-fn book_protection_routes_books(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_protection_routes_books(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-books/{id}/access-password",
@@ -484,7 +484,7 @@ fn book_protection_routes_books(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn book_protection_routes_booklets(rbac: &SharedRbacService) -> Router<HttpState> {
+fn book_protection_routes_booklets(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-selection-booklets/{id}/access-password",

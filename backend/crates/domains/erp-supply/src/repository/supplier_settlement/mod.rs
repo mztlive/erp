@@ -38,7 +38,7 @@ pub use difference::{
 pub use item::{
     SupplierSettlementItemFilter, SupplierSettlementItemRepositoryExt, SupplierSettlementItemRow,
 };
-pub use scope::{SettlementReadScope, SettlementScopeClause};
+pub use scope::SettlementReadScope;
 pub use source_scope::SupplierSettlementSourceScope;
 pub use statement::{
     SupplierSettlementSourceEvidenceRepositoryExt, SupplierSettlementStatementFilter,

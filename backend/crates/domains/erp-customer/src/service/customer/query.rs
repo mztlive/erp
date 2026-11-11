@@ -142,8 +142,6 @@ impl CustomerService {
 fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
     CustomerListView {
         scope_version: snapshot.context.scope_version,
-        policy_version: snapshot.context.policy_version,
-        organization_version: snapshot.context.organization_version,
         as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
         empty_reason: snapshot.no_scope.then_some("no_scope"),
         scope_summary: "客户当前主负责人及负责人所属组织范围",
@@ -221,12 +219,8 @@ mod tests {
             page_size: 20,
             context: CustomerResolvedScope {
                 user_id: "actor-1".to_string(),
-                resource: "customer".to_string(),
-                action: "list".to_string(),
-                role_clauses: vec![],
-                user_limit: None,
-                policy_version: 3,
-                organization_version: 4,
+                compiled: None,
+                current: false,
                 scope_version: "scope-v1".to_string(),
                 as_of: Instant::from_unix_secs(0),
             },

@@ -189,13 +189,26 @@ impl ContractDomainRepository<'_> {
         &self,
         filter: &ContractFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
-        let mut query = collection.distinct("customer_id", filter.to_doc());
-        if let Some(session) = executor.session() {
-            query = query.session(session);
+    ) -> crate::Result<Vec<String>> {
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
         }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+        let result: persistence_core::Result<_> = async {
+            let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+            let mut stages = filter.stages();
+            stages.extend([doc! {"$match":filter.to_doc()}, doc! {"$group":{"_id":"$customer_id"}}]);
+            Ok(persistence_core::aggregate::rows(&collection, stages, executor)
+                .await?
+                .into_iter()
+                .filter_map(|row| row.get_str("_id").ok().map(str::to_owned))
+                .collect())
+        }
+        .await;
+        let result = result?;
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
+        }
+        Ok(result)
     }
 
     /// 读取已授权合同的独立负责销售，用于显示与筛选。
@@ -211,17 +224,26 @@ impl ContractDomainRepository<'_> {
         &self,
         filter: &ContractFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
-        let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
-        let mut query = collection.distinct("sales_owner_user_id", filter.to_doc());
-        if let Some(session) = executor.session() {
-            query = query.session(session);
+    ) -> crate::Result<Vec<String>> {
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
         }
-        Ok(query
-            .await?
-            .into_iter()
-            .filter_map(|id| id.as_str().filter(|id| !id.is_empty()).map(str::to_owned))
-            .collect())
+        let result: persistence_core::Result<_> = async {
+            let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+            let mut stages = filter.stages();
+            stages.extend([doc! {"$match":filter.to_doc()}, doc! {"$group":{"_id":"$sales_owner_user_id"}}]);
+            Ok(persistence_core::aggregate::rows(&collection, stages, executor)
+                .await?
+                .into_iter()
+                .filter_map(|row| row.get_str("_id").ok().filter(|id| !id.is_empty()).map(str::to_owned))
+                .collect())
+        }
+        .await;
+        let result = result?;
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
+        }
+        Ok(result)
     }
 
     /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
@@ -244,10 +266,22 @@ impl ContractDomainRepository<'_> {
         filter: &ContractFilter,
         search: &ContractSearch,
         executor: &mut dyn Executor,
-    ) -> Result<ContractSearchResult> {
-        let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
-        let pipeline = list_pipeline(filter, search, BusinessDate::today());
-        run_search_aggregate(&collection, pipeline, executor).await
+    ) -> crate::Result<ContractSearchResult> {
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
+        }
+        let result: persistence_core::Result<_> = async {
+            let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+            let mut pipeline = filter.stages();
+            pipeline.extend(list_pipeline(filter, search, BusinessDate::today()));
+            run_search_aggregate(&collection, pipeline, executor).await
+        }
+        .await;
+        let result = result?;
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
+        }
+        Ok(result)
     }
 }
 
@@ -391,11 +425,10 @@ mod tests {
     #[test]
     fn search_precedes_pagination_and_preserves_empty_scope() {
         let filter = ContractFilter {
+            access: None,
             contract_no: None,
             customer_id: None,
             customer_ids: Some(vec![]),
-            historical_contract_ids: vec![],
-            authorized_contract_ids: None,
             assigned_user_id: None,
             owner_user_ids: None,
             status: None,
@@ -413,10 +446,9 @@ mod tests {
             owners: HashMap::new(),
         };
         let pipeline = list_pipeline(&filter, &search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
-        assert_eq!(
-            pipeline[0].get_document("$match").unwrap(),
-            &doc! { "$and": [{ "deleted_at": 0_i64 }, { "$expr": false }] }
-        );
+        let candidates = pipeline[0].get_document("$match").unwrap();
+        assert_eq!(candidates.get_i64("deleted_at").unwrap(), 0);
+        assert!(candidates.get_document("customer_id").unwrap().get_array("$in").unwrap().is_empty());
         let facets = pipeline.last().unwrap().get_document("$facet").unwrap();
         let items = facets.get_array("items").unwrap();
         let totals = facets.get_array("totals").unwrap();

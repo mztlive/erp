@@ -11,7 +11,7 @@ use erp_support::{
 };
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
@@ -23,8 +23,9 @@ impl SalesOrderCommandProcess {
     ///
     /// # 参数
     /// * `access` / `order` - 当前命令授权及已授权稳定对象
-    /// * `source` / `editable` - 所选合同、客户及可编辑草稿
+    /// * `input` - 所选合同、客户及可编辑草稿
     /// * `actor` / `require_editable` - 当前用户及提交前的状态检查要求
+    /// * `executor` - 调用方读取事务执行器
     /// # 返回
     /// 返回已准备的稳定对象与完整草稿，不执行写入。
     /// # 错误
@@ -33,16 +34,15 @@ impl SalesOrderCommandProcess {
         &self,
         access: &SalesCommandAccess,
         mut order: SalesOrder,
-        source: (Option<ContractId>, Option<CustomerAccountId>),
-        mut editable: SalesOrderEditableDraftRequest,
+        input: (Option<ContractId>, Option<CustomerAccountId>, SalesOrderEditableDraftRequest),
         actor: &AuditActor,
         require_editable: bool,
+        executor: &mut dyn Executor,
     ) -> Result<(SalesOrder, SalesOrderDraftRequest)> {
-        let (contract_id, customer_id) = source;
+        let (contract_id, customer_id, mut editable) = input;
         editable.retain_settlement(&order.settlement_party_id, contract_id.is_some());
-        let (customer_id, settlement_party_id, draft) = self
-            .resolve_sales_command_draft(access, &contract_id, &customer_id, editable, &mut NoTransaction)
-            .await?;
+        let (customer_id, settlement_party_id, draft) =
+            self.resolve_sales_command_draft(access, &contract_id, &customer_id, editable, executor).await?;
         if require_editable {
             order
                 .ensure_first_submission_working_copy_editable()

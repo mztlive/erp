@@ -159,8 +159,6 @@ impl FundsAccess {
         Ok(FundsScopedResult {
             data: row,
             scope_version: version,
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "应收子账继承所属销售来源边界",
@@ -308,8 +306,6 @@ impl FundsAccess {
             page: query.paging.page,
             page_size: query.paging.page_size,
             scope_version: version,
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "应收子账继承所属销售来源边界",

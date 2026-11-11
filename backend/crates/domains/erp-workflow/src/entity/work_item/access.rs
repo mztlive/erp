@@ -1,8 +1,6 @@
 //! 工作项精确管理授权事实及统一动作权限。
 use std::collections::BTreeSet;
 
-use erp_identity::{Permission, PermissionSet};
-
 use super::{
     WorkItemActionAccess, WorkItemActionPolicy, WorkItemActionRequirement, WorkItemAllowedAction,
     WorkItemStatus, WorkItemType,
@@ -12,7 +10,8 @@ use super::{
 #[derive(Clone)]
 pub struct TaskAccess {
     pub actor_id: String,
-    pub permissions: PermissionSet,
+    pub executable_task_ids: BTreeSet<String>,
+    pub decidable_task_ids: BTreeSet<String>,
     pub managed_task_ids: BTreeSet<String>,
 }
 impl TaskAccess {
@@ -24,17 +23,12 @@ impl TaskAccess {
     /// # 错误
     /// 无。
     pub fn new(actor_id: String) -> Self {
-        Self { actor_id, permissions: PermissionSet::default(), managed_task_ids: BTreeSet::new() }
-    }
-    /// 按 identity 的通配规则核对固定业务权限。
-    /// # 参数
-    /// code 为服务端注册的权限码。
-    /// # 返回
-    /// 已授予该动作时返回 true。
-    /// # 错误
-    /// 固定权限码非法属于程序错误。
-    pub fn permits(&self, code: &str) -> bool {
-        self.permissions.covers_one(&Permission::parse(code).expect("固定任务权限合法"))
+        Self {
+            actor_id,
+            executable_task_ids: BTreeSet::new(),
+            decidable_task_ids: BTreeSet::new(),
+            managed_task_ids: BTreeSet::new(),
+        }
     }
     /// 判断当前任务的管理证明和管理动作权限是否同时成立。
     /// # 参数
@@ -44,7 +38,7 @@ impl TaskAccess {
     /// # 错误
     /// 无。
     pub fn can_manage(&self, id: &str) -> bool {
-        self.permits("work_item:manage") && self.managed_task_ids.contains(id)
+        self.managed_task_ids.contains(id)
     }
 }
 
@@ -67,11 +61,8 @@ impl TaskAccess {
         let mut actions = policy.allowed_actions(
             WorkItemActionAccess { actor_id, managed_queue, can_manage: can_control },
             |requirement| match requirement {
-                WorkItemActionRequirement::Execute => {
-                    required_execution_permissions(policy.work_item_type, policy.business_object_type)
-                        .is_some_and(|codes| codes.iter().all(|code| self.permits(code)))
-                },
-                WorkItemActionRequirement::Decide => self.permits("approval_instance:decide"),
+                WorkItemActionRequirement::Execute => self.executable_task_ids.contains(id),
+                WorkItemActionRequirement::Decide => self.decidable_task_ids.contains(id),
                 WorkItemActionRequirement::Reassign | WorkItemActionRequirement::Close => can_control,
             },
         );

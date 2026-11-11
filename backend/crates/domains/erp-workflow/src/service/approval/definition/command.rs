@@ -31,6 +31,7 @@ use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::BpmExt;
 use crate::repository::bpm::{APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX, CasWriteOutcome};
+use crate::service::authorization::features;
 
 const CREATE_DRAFT_COMMAND_DOMAIN: &str = "approval.definition.create-draft";
 const REPLACE_NODES_COMMAND_DOMAIN: &str = "approval.definition.replace-nodes";
@@ -97,7 +98,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         policy: &ProcessRequiredApprovalPolicy,
     ) -> Result<()> {
-        ensure_definition_admin_permission(&self.identity, actor, policy, &mut NoTransaction).await
+        ensure_definition_admin_permission(&self.db, &self.identity, actor, policy, &mut NoTransaction).await
     }
 
     /// 读取定义图，缺失时失败关闭。
@@ -184,7 +185,7 @@ impl ApprovalDefinitionService {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        ensure_definition_admin_permission(&identity_service, &actor, &policy, executor)
+                        ensure_definition_admin_permission(&db, &identity_service, &actor, &policy, executor)
                             .await?;
                         replay_prepared_definition_receipt(&db, &identity, &expectation, executor).await
                     })
@@ -797,6 +798,7 @@ pub(super) fn ensure_legacy_result(
 /// # 关键业务约束
 /// 回放与 Fresh 必须共用本检查，禁止用账号级 Casbin 判定绕过停用角色。
 pub(super) async fn ensure_definition_admin_permission(
+    db: &Database,
     identity_service: &SharedRbacService,
     actor: &AuditActor,
     policy: &ProcessRequiredApprovalPolicy,
@@ -804,7 +806,7 @@ pub(super) async fn ensure_definition_admin_permission(
 ) -> Result<()> {
     let permission = Permission::parse(&policy.definition_admin_permission)?;
     let qualified =
-        identity_service.qualified_permissions(actor, slice::from_ref(&permission), executor).await?;
+        features(db, identity_service).permissions(actor, slice::from_ref(&permission), executor).await?;
     ensure_definition_admin_allowed(
         qualified.is_some_and(|value| value.permissions().covers_one(&permission)),
     )

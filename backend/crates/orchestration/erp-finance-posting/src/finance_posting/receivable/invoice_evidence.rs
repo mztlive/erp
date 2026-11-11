@@ -11,7 +11,7 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_support::PendingAttachmentBatch;
 use erp_workflow::service::work_item::expected_task_version;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::invoice::register_created_invoice_document;
@@ -40,14 +40,13 @@ impl ReceivableProcess {
             .await?
         {
             return Ok(InvoiceWithAssetsResult {
-                view: self.finance.invoice_detail(&id).await?,
+                view: self.authorized_invoice_result(&id, actor).await?,
                 assets_committed: false,
             });
         }
         invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let expected = expected_task_version(&req.expected_task_version)?;
         let has_pending = !pending.is_empty();
-        let revision = self.rbac.current_policy_revision().await?;
         let command = EvidenceCommand {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
@@ -58,11 +57,12 @@ impl ReceivableProcess {
             expected,
         };
         let result = self
-            .rbac
+            .db
+            .client()
             .clone()
-            .run_authorized_policy_transaction(revision, move |executor| Box::pin(command.execute(executor)))
+            .with_transaction(move |executor| Box::pin(command.execute(executor)))
             .await;
-        self.committed_invoice_view(result, &receipt, has_pending).await
+        self.committed_invoice_view(result, &receipt, has_pending, actor).await
     }
 }
 

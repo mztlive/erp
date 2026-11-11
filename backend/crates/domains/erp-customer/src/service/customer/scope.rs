@@ -14,9 +14,8 @@ use super::access::{ensure_limit, intersect_ids};
 use crate::dto::customer::{CustomerListQuery, CustomerScope, CustomerView, SortDir};
 use crate::error::{Error, Result};
 use crate::ports::{AccountFactPort, CustomerDataScopePort, CustomerResolvedScope, PartyFactPort};
-use crate::repository::prelude::*;
-use crate::repository::scope::{CustomerReadScope, CustomerVersion};
-use crate::repository::{CustomerAccountFilter, CustomerExt};
+use crate::repository::scope::{CustomerReadScope, CustomerVersion, authorized_page, authorized_versions};
+use crate::repository::{CustomerAccountFilter, CustomerAssignmentRepositoryExt, CustomerExt};
 
 /// 列表响应保持分页、归属口径与授权时点，不传输负责销售候选。
 #[derive(Serialize)]
@@ -28,10 +27,6 @@ pub struct CustomerListView {
     pub ownership_basis: &'static str,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
@@ -170,7 +165,8 @@ async fn run_list_snapshot(
 ) -> Result<CustomerSnapshot> {
     let (mut context, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
     let filter = build_account_filter(&deps, authorized).await?;
-    let versions = deps.db.customer_accounts().query_versions(&filter, executor).await?;
+    let versions =
+        authorized_versions(&deps.db, &filter, &context, deps.data_scope.as_ref(), executor).await?;
     ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
     apply_version_fingerprint(&mut context, &versions);
     if !hydrate {
@@ -183,7 +179,7 @@ async fn run_list_snapshot(
             no_scope,
         });
     }
-    let page = deps.db.customer_accounts().search_customer_accounts(&filter, executor).await?;
+    let page = authorized_page(&deps.db, &filter, &context, deps.data_scope.as_ref(), executor).await?;
     let items = hydrate_rows(
         &deps.db,
         (&*deps.party, &*deps.accounts),
@@ -194,6 +190,7 @@ async fn run_list_snapshot(
         executor,
     )
     .await?;
+    deps.data_scope.validate(&context, executor).await?;
     Ok(CustomerSnapshot {
         no_scope,
         items,
@@ -219,8 +216,8 @@ async fn resolve_list_authorized(
     deps: &ListTxDeps,
     executor: &mut dyn Executor,
 ) -> Result<(CustomerResolvedScope, Option<Vec<String>>, BusinessDate, bool)> {
-    let (context, scope) = deps.access.resolve(&deps.actor, "list", executor).await?;
-    let no_scope = !context.has_scope_rules();
+    let (context, scope) = deps.access.query(&deps.actor, "list", executor).await?;
+    let no_scope = false;
     let authorized =
         apply_list_filters(&deps.db, deps.data_scope.as_ref(), &context, &scope, &deps.query, executor)
             .await?;
@@ -311,44 +308,6 @@ impl ScopeFingerprint {
     fn finish(self, base: &str) -> String {
         format!("{base}:{:016x}", self.0)
     }
-}
-
-/// 用确定性哈希计算范围版本指纹并拼接到基线版本（erp-customer-004）。
-///
-/// `DefaultHasher` 跨进程不保证稳定，重启后同授权可能算出不同版本并触发
-/// 无谓的 `DATA_SCOPE_CHANGED`。本函数使用 FNV-1a 64 位并固化字段顺序：
-/// 主责、协作、历史、组织映射依次写入；调用方不得自行拼接哈希。
-///
-/// # 参数
-/// * `base` - 基线范围版本
-/// * `owned` - 当前主责客户（调用方保证已排序）
-/// * `collaborating` - 当前协作客户（调用方保证已排序）
-/// * `history` - 历史参与客户（调用方保证已排序）
-/// * `org_owned` - 各组织集合对应的当前主责客户
-///
-/// # 返回
-/// 返回 `{base}:{hex指纹}` 格式的范围版本。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn fingerprint_scope_version(
-    base: &str,
-    owned: &[String],
-    collaborating: &[String],
-    history: &[String],
-    org_owned: &[(Vec<String>, Vec<String>)],
-) -> String {
-    let mut fingerprint = ScopeFingerprint::new();
-    for part in owned.iter().chain(collaborating.iter()).chain(history.iter()) {
-        fingerprint.feed_str(part);
-    }
-    for (orgs, customers) in org_owned {
-        for part in orgs.iter().chain(customers.iter()) {
-            fingerprint.feed_str(part);
-        }
-        fingerprint.feed_byte(0);
-    }
-    fingerprint.finish(base)
 }
 
 /// 用确定性哈希计算客户身份版本指纹并拼接到基线版本（erp-customer-004）。
@@ -697,9 +656,6 @@ mod tests {
     #[test]
     fn directory_scope_does_not_grant_company_access() {
         let scope = CustomerReadScope {
-            roles: vec![],
-            user_limit: None,
-            historical_customer_ids: vec![],
             owned_customer_ids: vec!["c-own".into()],
             collaborative_customer_ids: vec!["c-collab".into()],
             authorized_customer_ids: Some(vec!["c-1".into()]),
@@ -712,11 +668,6 @@ mod tests {
 
     #[test]
     fn fingerprint_is_deterministic_and_sensitive_to_inputs() {
-        let first = fingerprint_scope_version("v1", &["c-1".to_string()], &[], &[], &[]);
-        let second = fingerprint_scope_version("v1", &["c-1".to_string()], &[], &[], &[]);
-        assert_eq!(first, second);
-        assert!(first.starts_with("v1:"));
-        assert_ne!(first, fingerprint_scope_version("v1", &["c-2".to_string()], &[], &[], &[]));
         let versions = [("c-1", 1_u64), ("c-2", 2_u64)];
         let fingerprinted = fingerprint_versions("v1", versions);
         assert!(fingerprinted.starts_with("v1:"));

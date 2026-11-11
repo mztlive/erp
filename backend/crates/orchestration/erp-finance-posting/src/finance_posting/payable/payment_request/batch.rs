@@ -2,7 +2,7 @@
 use application_core::CommandReceipt;
 use erp_finance::FinanceCommandReceiptService;
 use erp_finance::dto::payable::payment_request::CreatePaymentRequestBatch;
-use persistence_core::NoTransaction;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::*;
 use crate::FinancePostingPorts;
@@ -28,10 +28,10 @@ impl PurchasePaymentRequestProcess {
 
         let writer = actor.clone();
         let recovery = commands.clone();
-        let revision = rbac.current_policy_revision().await?;
-        let result = rbac
+        let result = db
+            .client()
             .clone()
-            .run_authorized_policy_transaction(revision, move |executor| {
+            .with_transaction(move |executor| {
                 Box::pin(async move {
                     if let Some(rows) = recover(&db, &rbac, &commands, &writer, executor).await? {
                         return Ok(rows);
@@ -91,7 +91,6 @@ async fn recover(
             return Err(Error::Internal("批量申请提交结果不完整".into()));
         };
         let row = load(db, &id, executor).await?;
-        ensure_creator(&row, actor)?;
         require_sources(db, rbac, &row, actor, "create", executor).await?;
         require_sources(db, rbac, &row, actor, "submit", executor).await?;
         rows.push(row);

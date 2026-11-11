@@ -71,6 +71,7 @@ impl SupplierSettlementService {
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let (context, scope) = self.access().resolve(actor, "list", executor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
+        context.validate(executor).await?;
         if !context.has_scope_rules() {
             return Ok(empty_list_view(&query, &context, true));
         }
@@ -87,6 +88,7 @@ impl SupplierSettlementService {
         filter.handler_open_statement_ids = handler_open_statement_ids;
         filter.business_org_unit_ids = org_ids.map(|ids| ids.into_iter().collect());
         let mut view = self.load_statement_page(&filter, Some(&context), executor).await?;
+        context.validate(executor).await?;
         view.empty_reason = None;
         Ok(view)
     }
@@ -217,7 +219,7 @@ fn list_view(
         organization_version: context.map(|ctx| ctx.organization_version).unwrap_or_default(),
         as_of: context.map(|ctx| ctx.as_of.as_utc().to_rfc3339()).unwrap_or_default(),
         empty_reason: no_scope.then_some("no_scope"),
-        scope_summary: "结算对账负责人及其业务组织范围",
+        scope_summary: "结算单按岗位权限共享；负责人筛选为额外收窄",
         ownership_basis: "settlement_prepared_by",
     }
 }

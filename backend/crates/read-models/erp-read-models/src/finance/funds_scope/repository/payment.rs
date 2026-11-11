@@ -12,7 +12,7 @@ use persistence_core::{Executor, QueryFilter};
 
 use super::super::{FundsAuthorization, FundsLinkedCondition};
 use super::flow::{self, FlowHeader, FlowPage, FlowVersion, first, lookup};
-use super::{aggregate, linked_condition_document, source_scope_document, source_stages};
+use super::{aggregate, linked_condition_document, source_stages};
 use crate::{Error, Result};
 
 /// 银行回单等整单附件只接收完整读取资格，部分核销份额不能取得整单资格。
@@ -34,10 +34,17 @@ pub(in crate::finance::funds_scope) async fn full_read_qualification(
     authorization: &FundsAuthorization,
     executor: &mut dyn Executor,
 ) -> Result<(u64, String)> {
-    let stages = full_read_pipeline(id, authorization);
-    let rows: Vec<FlowVersion> =
-        aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
-    full_read_version(&authorization.context.scope_version, rows)
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let stages = full_read_pipeline(id, authorization);
+        let rows: Vec<FlowVersion> =
+            aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
+        full_read_version(&authorization.context.scope_version, rows)
+    }
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 复用付款最终来源集合后进一步要求整单覆盖，只投影必要身份版本。
@@ -81,25 +88,32 @@ pub(in crate::finance::funds_scope) async fn page(
     condition: &FundsLinkedCondition,
     executor: &mut dyn Executor,
 ) -> Result<FlowPage<SupplierPaymentRow>> {
-    let mut stages = pipeline(filter, authorization, condition);
-    stages.push(flow::facet(query.paging.page, query.paging.page_size, projection(), sort(query))?);
-    let mut rows = aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
-    let snapshot = rows.pop().unwrap_or_else(|| FlowPage {
-        items: vec![],
-        versions: vec![],
-        total: vec![],
-        summary: vec![],
-    });
-    if payment_count(&snapshot)? == 0 {
-        return Ok(snapshot);
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let mut stages = pipeline(filter, authorization, condition);
+        stages.push(flow::facet(query.paging.page, query.paging.page_size, projection(), sort(query))?);
+        let mut rows = aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
+        let snapshot = rows.pop().unwrap_or_else(|| FlowPage {
+            items: vec![],
+            versions: vec![],
+            total: vec![],
+            summary: vec![],
+        });
+        if payment_count(&snapshot)? == 0 {
+            return Ok(snapshot);
+        }
+        let mut stages = pipeline(filter, authorization, condition);
+        stages.extend(flow::header_stages(sort(query)));
+        let headers: Vec<FlowHeader> =
+            aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
+        let ids = headers.iter().map(|row| row.version.id.clone()).collect::<Vec<_>>();
+        let links = FundsSummaryRepository::new(db).payment_links(&ids, executor).await?;
+        finish_page(snapshot, headers, links)
     }
-    let mut stages = pipeline(filter, authorization, condition);
-    stages.extend(flow::header_stages(sort(query)));
-    let headers: Vec<FlowHeader> =
-        aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await?;
-    let ids = headers.iter().map(|row| row.version.id.clone()).collect::<Vec<_>>();
-    let links = FundsSummaryRepository::new(db).payment_links(&ids, executor).await?;
-    finish_page(snapshot, headers, links)
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 第二次授权只取完整责任版本，页外金额和分配视图不重新生成。
@@ -125,9 +139,16 @@ pub(in crate::finance::funds_scope) async fn versions(
     condition: &FundsLinkedCondition,
     executor: &mut dyn Executor,
 ) -> Result<Vec<FlowVersion>> {
-    let mut stages = pipeline(filter, authorization, condition);
-    stages.extend(flow::recheck_stages(sort(query)));
-    aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let mut stages = pipeline(filter, authorization, condition);
+        stages.extend(flow::recheck_stages(sort(query)));
+        aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await
+    }
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 原父单金额流按同拍完整头信息归组，拒绝缺失的非当前页版本。
@@ -162,10 +183,10 @@ fn pipeline(
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(condition));
     stages.push(allocation_lookup(authorization, condition));
-    stages.extend(flow::visibility(
-        authorization.ledger_read,
-        condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some(),
-    ));
+    stages.push(super::whole_facts::fields(Bson::Array(vec![]), "$scope_links.order".into(),
+        doc! { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }.into()));
+    stages.extend(authorization.whole.stages());
+    stages.extend(flow::visibility(condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()));
     stages
 }
 
@@ -205,10 +226,7 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
         .purchase_scope
         .as_ref()
         .map_or_else(|| doc! { "$expr": false }, |scope| scope.document());
-    let settlement = authorization
-        .settlement
-        .as_ref()
-        .map_or_else(|| doc! { "$expr": false }, |scope| source_scope_document(scope, "prepared_by"));
+    let settlement = authorization.settlement.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     let mut stages = source_stages(
         Database::PURCHASE_ORDERS,
         source_id("purchase_order"),
@@ -216,7 +234,7 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
         doc! { "$and": [purchase, linked_condition_document(condition, "owner_user_id")] },
         "owner_user_id",
         "purchase_no",
-        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.grant_lookup.as_slice()),
+        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.stages()),
     );
     stages.extend(source_stages(
         Database::SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -225,7 +243,7 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
         doc! { "$and": [settlement, linked_condition_document(condition, "prepared_by")] },
         "prepared_by",
         "statement_no",
-        &[],
+        authorization.settlement.as_ref().map_or(&[], |scope| scope.stages()),
     ));
     stages.push(doc! { "$set": {
         "scope_source": { "$cond": [{ "$eq": ["$scope_source_type", "supplier_settlement"] }, "$scope_settlement", "$scope_purchase"] },

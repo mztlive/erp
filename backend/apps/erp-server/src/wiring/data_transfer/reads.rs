@@ -2,7 +2,8 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_contract::Error as ContractError;
 use erp_data_import::data_transfer::{TransferKind, TransferReader};
-use erp_identity::{Permission, subject};
+use erp_identity::Permission;
+use persistence_core::NoTransaction;
 
 use crate::wiring::{
     MongoCustomerDataScope, MongoOfferingDataScope, MongoPurchaseDataScope, funds_access_with_rbac,
@@ -107,8 +108,8 @@ impl Reads {
         match kind {
             TransferKind::ProfitLoss => {
                 let can_drill_cost = state
-                    .rbac()
-                    .enforce(&subject(actor.kind(), actor.id()), &Permission::parse("cost_entry:detail")?)
+                    .authorization()
+                    .has_permission(actor, &Permission::parse("cost_entry:detail")?, &mut NoTransaction)
                     .await?;
                 output(
                     ActualProfitLossReadModel::new(state.db(), state.rbac())
@@ -198,8 +199,8 @@ async fn sales(state: &Application, query: &Value, actor: &AuditActor) -> Result
             .await?,
     )?;
     let can_read = state
-        .rbac()
-        .enforce(&subject(actor.kind(), actor.id()), &Permission::parse("contract:detail")?)
+        .authorization()
+        .has_permission(actor, &Permission::parse("contract:detail")?, &mut NoTransaction)
         .await?;
     if let Some(rows) = page["items"].as_array_mut() {
         for row in rows {

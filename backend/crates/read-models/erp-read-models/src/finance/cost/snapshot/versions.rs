@@ -86,12 +86,19 @@ impl CostReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut access = this.authorize(&actor, &resource, &action, executor).await?;
+                    access.context.validate(executor).await?;
+                    access.whole.validate(executor).await?;
                     access.require_filter(&filter)?;
                     if !access.empty() {
                         let facts = this.candidate_versions(&filter, id.as_deref(), executor).await?;
                         this.authorized_orders(&facts, &mut access, executor).await?;
+                        this.whole_orders(&facts, &access.whole, executor)
+                            .await?
+                            .hash(&mut access.fingerprint);
                         facts.hash(&mut access.fingerprint);
                     }
+                    access.context.validate(executor).await?;
+                    access.whole.validate(executor).await?;
                     Ok(format!("{:x}", access.fingerprint.finish()))
                 })
             })
@@ -125,6 +132,31 @@ impl CostReadModel {
             }
         }
         Ok(VersionFacts { entries, allocations })
+    }
+
+    /// 在完整实际分配引用上应用 identity 查询，只返回获准读取整笔金额的成本身份。
+    pub(super) async fn whole_orders(
+        &self,
+        facts: &VersionFacts,
+        access: &WholeAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<BTreeSet<String>> {
+        access.validate(executor).await?;
+        let stages = access.stages();
+        let ids = facts.entries.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let mut result = BTreeSet::new();
+        for batch in ids.chunks(500) {
+            result.extend(
+                self.db
+                    .cost_entries()
+                    .scope_whole_ids(batch, &stages, executor)
+                    .await?
+                    .into_iter()
+                    .map(|row| row.id),
+            );
+        }
+        access.validate(executor).await?;
+        Ok(result)
     }
 
     /// 相同销售范围读取窄身份版本；包含所有原候选分配的获授权来源。

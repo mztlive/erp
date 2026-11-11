@@ -170,7 +170,7 @@ async fn create_draft_tx(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let CreateDraftTxInput { policy, name, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(identity_service, actor, policy, executor).await?;
+    ensure_definition_admin_permission(db, identity_service, actor, policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -281,7 +281,7 @@ async fn copy_published_draft(
     let identities = next_copied_node_identities(source.nodes.len());
     let nodes = copy_nodes_for_definition(&source.nodes, definition_id.clone(), &identities, at)
         .map_err(map_model_error)?;
-    validate_assignees(identity_service, &assignee_ids(&nodes), session).await?;
+    validate_assignees(db, identity_service, &assignee_ids(&nodes), session).await?;
     let transition_ids = next_transition_ids(nodes.len());
     DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
         definition_id,

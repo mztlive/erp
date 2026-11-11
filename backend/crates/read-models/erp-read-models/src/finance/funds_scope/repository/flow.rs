@@ -345,22 +345,16 @@ pub(super) fn recheck_stages(sort: Document) -> Vec<Document> {
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn visibility(ledger: bool, require_source: bool) -> Vec<Document> {
-    let whole = doc! { "$and": [ledger, { "$allElementsTrue": [{ "$map": {
-        "input": "$scope_links", "as": "link", "in": "$$link.matched"
-    } }] }] };
+pub(super) fn visibility(require_source: bool) -> Vec<Document> {
     let matched = doc! { "$anyElementTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.matched" } }] };
     let visible = if require_source {
         matched.clone()
     } else {
-        doc! { "$or": [whole.clone(), matched.clone()] }
+        doc! { "$or": ["$scope_whole", matched.clone()] }
     };
-    vec![
-        doc! { "$set": { "scope_whole": whole } },
-        doc! { "$match": { "$expr": { "$and": [
-            { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }, visible
-        ] } } },
-    ]
+    vec![doc! { "$match": { "$expr": { "$and": [
+        { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }, visible
+    ] } } }]
 }
 
 /// 对关联身份执行拥有领域的明确过滤，不在仓储推断登录权限。

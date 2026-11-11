@@ -33,3 +33,5 @@ pub use repository::{
     WarehouseSkuPolicyRepository, WarehouseSkuPolicyRow,
 };
 pub use service::warehouse::WarehouseService;
+
+pub mod authorization;

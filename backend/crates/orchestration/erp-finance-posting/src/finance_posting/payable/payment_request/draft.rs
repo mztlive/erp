@@ -40,11 +40,11 @@ impl PurchasePaymentRequestProcess {
     /// # 参数
     /// * `id` - 申请身份。
     /// * `req` - 当前版本与完整表单。
-    /// * `actor` - 原申请人。
+    /// * `actor` - 具备操作和完整来源资格的当前经办人。
     /// # 返回
     /// 返回新版本申请；草稿不占用额度。
     /// # 错误
-    /// 非本人、版本变化、已经批准或来源不合法时拒绝。
+    /// 操作无权、版本变化、已经批准或来源不合法时拒绝。
     pub async fn update(
         &self,
         id: &str,
@@ -61,7 +61,7 @@ impl PurchasePaymentRequestProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut request = load(&db, &id, executor).await?;
-                    ensure_creator(&request, &actor)?;
+                    require_sources(&db, &rbac, &request, &actor, "update", executor).await?;
                     ensure_version(&request, version)?;
                     request.update(req.data)?;
                     require_sources(&db, &rbac, &request, &actor, "update", executor).await?;

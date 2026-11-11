@@ -185,7 +185,7 @@ async fn replace_nodes_tx(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let ReplaceNodesTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(identity_service, actor, &policy, executor).await?;
+    ensure_definition_admin_permission(db, identity_service, actor, &policy, executor).await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -199,7 +199,7 @@ async fn replace_nodes_tx(
     let reloaded =
         reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
-    let prepared = prepare_replacement(identity_service, &reloaded, &request.nodes, executor).await?;
+    let prepared = prepare_replacement(db, identity_service, &reloaded, &request.nodes, executor).await?;
     let repository = db.approval_copies();
     let rules = match request.copy_rules {
         Some(rules) => rules,
@@ -290,6 +290,7 @@ pub(super) async fn reload_draft_for_cas(
 /// # 关键业务约束
 /// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
 async fn prepare_replacement(
+    db: &Database,
     identity_service: &SharedRbacService,
     graph: &DefinitionGraph,
     requests: &[DefinitionNodeRequest],
@@ -297,7 +298,7 @@ async fn prepare_replacement(
 ) -> Result<DefinitionGraph> {
     let drafts = node_replacement_drafts(requests)?;
     let planned = graph.plan_replacement_nodes(&drafts, now()?).map_err(map_model_error)?;
-    let snapshots = validate_assignees(identity_service, &assignee_ids(&planned), session).await?;
+    let snapshots = validate_assignees(db, identity_service, &assignee_ids(&planned), session).await?;
     let nodes = apply_snapshots(planned, &snapshots)?;
     rebuild_draft_graph(&graph.definition, nodes)
 }
@@ -413,6 +414,7 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
 /// # 错误
 /// 账号失效返回校验错误，权限不足返回业务错误；基础设施失败原样传播。
 pub(super) async fn validate_assignees(
+    db: &Database,
     identity_service: &SharedRbacService,
     user_ids: &[String],
     executor: &mut dyn Executor,
@@ -420,7 +422,7 @@ pub(super) async fn validate_assignees(
     let mut accounts = HashMap::new();
     for user_id in user_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
-        let account = match approver_qualification(identity_service, &actor, executor).await? {
+        let account = match approver_qualification(db, identity_service, &actor, executor).await? {
             ApprovalQualification::Inactive => {
                 return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
             },

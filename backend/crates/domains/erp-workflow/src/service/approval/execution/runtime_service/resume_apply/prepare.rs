@@ -135,7 +135,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await?;
         let (snapshot, document_type) = self.load_resume_subject(&instance, instance_id).await?;
         require_approval_management_with_executor(
-            &self.identity,
             &self.auth,
             actor,
             "approval_instance:resume",
@@ -212,6 +211,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         executor: &mut dyn Executor,
     ) -> Result<Eligibility> {
         revalidate_decision_approver(
+            &self.db,
             &self.identity,
             &self.auth,
             RevalidateDecisionApproverInput {

@@ -1,6 +1,7 @@
 //! 集成领域应用错误，保留原唯一索引冲突文案映射。
 
 use application_core::{ValidationIssues, impl_application_error_conversions, impl_domain_error_class};
+use erp_identity::Error as IdentityError;
 use persistence_core::impl_repository_error;
 
 /// 集成领域结果别名。
@@ -94,6 +95,33 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         },
         Some("uk_reconciliation_differences_object") => "该对象的对账差异已存在，请勿重复提交".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
+    }
+}
+
+impl From<IdentityError> for Error {
+    /// 保留身份域拒绝、变化冲突和持久化失败的错误类别。
+    /// # 参数
+    /// error 为统一授权错误。
+    /// # 返回
+    /// 等价的集成领域错误。
+    /// # 错误
+    /// 不执行 I/O。
+    fn from(error: IdentityError) -> Self {
+        match error {
+            IdentityError::Internal(v) | IdentityError::Rbac(v) => Self::Internal(v),
+            IdentityError::NotFound(v) => Self::NotFound(v),
+            IdentityError::ValidationError(v) => Self::ValidationError(v),
+            IdentityError::InvalidInput(v) => Self::InvalidInput(v),
+            IdentityError::BusinessLogicError(v) => Self::BusinessLogicError(v),
+            IdentityError::ConflictError(v) => Self::ConflictError(v),
+            IdentityError::ReceiptDuplicate(v) => Self::ReceiptDuplicate(v),
+            IdentityError::TransientTransaction(v) => Self::TransientTransaction(v),
+            IdentityError::Forbidden(v) => Self::Forbidden(v),
+            IdentityError::Unauthenticated(v) => Self::Unauthenticated(v),
+            IdentityError::Logic(v) => Self::Logic(v),
+            IdentityError::OutcomeUnknown(v) => Self::OutcomeUnknown(v),
+            IdentityError::RepositoryError(v) => Self::RepositoryError(v),
+        }
     }
 }
 

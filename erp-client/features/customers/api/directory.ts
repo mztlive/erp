@@ -22,8 +22,8 @@ export async function fetchCustomerDirectory(
         Page<BackendCustomerView> & {
             empty_reason?: string | null
             scope_version: string
-            policy_version: number
-            organization_version: number
+            policy_version?: number
+            organization_version?: number
             scope_summary: string
             as_of: string
             ownership_basis: string

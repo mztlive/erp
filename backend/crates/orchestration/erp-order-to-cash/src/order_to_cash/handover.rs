@@ -9,7 +9,7 @@ use application_core::{AuditActor, CommandFingerprint};
 use erp_core::ids::SalesOrderId;
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_sales::dto::sales_order::{HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView};
 use erp_sales::entity::command_receipt::SalesCommandResult;
 use erp_sales::repository::SalesOrderExt;
@@ -514,7 +514,6 @@ async fn account_qualified_for_acceptance(
     if !account.is_active_backoffice() {
         return Ok(false);
     }
-    let granted = rbac.permissions(account.kind, target).await?;
     let Some(required_codes) = WorkItemType::CustomerAcceptanceRegistration
         .customer_acceptance_execution_permissions(ACCEPTANCE_OBJECT_TYPE)
     else {
@@ -527,7 +526,11 @@ async fn account_qualified_for_acceptance(
         };
         required.push(permission);
     }
-    Ok(granted.covers(&PermissionSet::new(required)))
+    let actor = AuditActor::new(target.into(), account.secret.account().into(), account.kind);
+    Ok(crate::authorization::features(db.clone(), rbac.clone())
+        .permissions(&actor, &required, executor)
+        .await?
+        .is_some_and(|qualified| qualified.same_role(&required)))
 }
 
 /// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
@@ -543,12 +546,11 @@ async fn target_can_read_order(
     };
     let actor = AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
     let access = erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone());
-    let (context, scope) = match access.resolve(&actor, "detail", &[], executor).await {
-        Ok(value) => value,
-        Err(erp_read_models::Error::Forbidden(_)) => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    Ok(erp_read_models::sales_center::access::SalesAccess::allows(&context, &scope, planned)?)
+    match access.require_loaded(&actor, "detail", planned, &[], executor).await {
+        Ok(()) => Ok(true),
+        Err(erp_read_models::Error::Forbidden(_) | erp_read_models::Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// 列出该销售单全部开放验收任务。
@@ -630,7 +632,6 @@ async fn open_approval_assignees(
 #[cfg(test)]
 mod tests {
     use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId};
-    use erp_identity::service::access_control::resolve::DataScopeFacts;
     use erp_sales::entity::sales_order::{
         BusinessType, CommercialStatus, OriginSystem, SalesOrder, SalesOrderData,
     };
@@ -727,37 +728,5 @@ mod tests {
             )
             .is_ok()
         );
-    }
-    #[test]
-    fn recipient_scope_is_checked_on_new_owner_and_explicit_business_org() {
-        use erp_core::common::time::Instant;
-        use erp_identity::access_control::{ResolvedScope, ScopeClause};
-        use erp_identity::service::access_control::resolve::AuthorizedDataScope;
-        use erp_read_models::sales_center::access::SalesAccess;
-        use erp_sales::repository::sales_order::scope::SalesReadScope;
-        let mut access = AuthorizedDataScope::test_fixture(DataScopeFacts {
-            user_id: "recipient".into(),
-            resource: "sales_order".into(),
-            action: "detail".into(),
-            scope: ResolvedScope {
-                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
-                user_limit: None,
-            },
-            qualified_roles: Default::default(),
-            organizations: Default::default(),
-            policy_version: 1,
-            scope_version: "v".into(),
-            as_of: Instant::from_unix_secs(1),
-        });
-        let scope = SalesReadScope::default();
-        let mut order = sales_order_owned_by("old-owner", "org-a");
-        assert!(!SalesAccess::allows(&access, &scope, &order).unwrap());
-        order.handover("recipient".into(), None, "operator").unwrap();
-        assert!(SalesAccess::allows(&access, &scope, &order).unwrap());
-        access.test_facts_mut().scope.user_limit =
-            Some(ScopeClause { org_unit_ids: ["org-b".into()].into(), ..Default::default() });
-        assert!(!SalesAccess::allows(&access, &scope, &order).unwrap());
-        order.handover("recipient".into(), Some("org-b".into()), "operator").unwrap();
-        assert!(SalesAccess::allows(&access, &scope, &order).unwrap());
     }
 }

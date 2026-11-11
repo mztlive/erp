@@ -3,7 +3,7 @@
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post, put};
 use axum::{Extension, Router, middleware};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::data_transfer as transfers;
 use crate::http::handler::supplier_portal::{self, assets, auth, read, write};
@@ -88,7 +88,7 @@ fn asset_routes() -> Router<HttpState> {
 /// 返回逐接口绑定专项权限的 `/supplier-portal` 子路由。
 /// # 错误
 /// 构建不执行授权读取；请求错误由权限层及处理器返回。
-pub fn admin_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn admin_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().nest(
         "/supplier-portal",
         account_routes(rbac)
@@ -99,7 +99,7 @@ pub fn admin_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 账号管理入口不授予内部角色或组织身份。
-fn account_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/accounts",
@@ -128,7 +128,7 @@ fn account_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 定向目录开放使用独立目录权限。
-fn catalog_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn catalog_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/catalog-grants",
@@ -149,7 +149,7 @@ fn catalog_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 申请列表、原稿读取和决定各自绑定对应专项权限。
-fn application_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/applications",
@@ -178,7 +178,7 @@ fn application_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 审核辅助字典与重复候选仍受专项读取权限及领域范围约束。
-fn review_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn review_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/offerings/{id}/impacts",

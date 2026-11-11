@@ -6,110 +6,74 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
+use erp_identity::{AuthorizationService, CompiledAccess};
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
+use crate::service::authorization_error::identity_error;
 
-/// 身份域已解析的选品正向范围条款；不含身份域实体句柄。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SelectionResolvedClause {
-    /// 公司范围覆盖该资源动作的全部选品册与方案。
-    pub company: bool,
-    /// 当前销售负责人为操作人的对象。
-    pub self_owned: bool,
-    /// 协作维度保留；选品对象不按协作客户展开。
-    pub collaborative: bool,
-    /// 已由公共解析器展开的内部组织。
-    pub org_unit_ids: Vec<String>,
-}
-
-impl SelectionResolvedClause {
-    /// 判断条款是否构成有效选品范围规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、本人负责或组织目标时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 协作单独存在不构成选品对象规则；空条款保持空集且不得补公司。
-    pub fn has_scope_rules(&self) -> bool {
-        self.company || self.self_owned || !self.org_unit_ids.is_empty()
-    }
-}
-
-/// 已通过资格检查的选品范围事实。
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// 身份域生成的查询凭证及展示元数据；不传递权限规则。
+#[derive(Clone)]
 pub struct SelectionResolvedScope {
-    /// 已认证操作人。
     pub user_id: String,
-    /// 本次解析的选品资源。
     pub resource: String,
-    /// 本次解析的选品动作。
     pub action: String,
-    /// 同角色正向范围。
-    pub role_clauses: Vec<SelectionResolvedClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<SelectionResolvedClause>,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
-    /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
-    /// 授权解析时点。
     pub as_of: Instant,
+    pub access: Arc<CompiledAccess>,
+    pub authorization: AuthorizationService,
 }
 
 impl SelectionResolvedScope {
-    /// 判断角色正向范围是否含有效规则。
-    ///
+    /// 在原执行器复验授权。
     /// # 参数
-    /// 无。
-    ///
+    /// executor 为原读取执行器。
     /// # 返回
-    /// 任一角色条款构成有效规则时为 true。
-    ///
+    /// 当前凭证仍有效时成功。
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只看角色条款；个人上限不单独构成“有范围规则”。
-    pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses.iter().any(SelectionResolvedClause::has_scope_rules)
+    /// 身份、映射、时点或版本变化时拒绝。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.authorization.validate(&self.access, executor).await.map_err(identity_error)
     }
-}
-
-/// 业务域提供的单对象责任事实；不包含原始授权规则。
-#[derive(Debug, Clone, Default)]
-pub struct SelectionScopeObject {
-    /// 当前操作人是否为对象的显式销售负责人。
-    pub owned: bool,
-    /// 当前操作人是否具备合法历史读取参与。
-    pub historical_read_participant: bool,
-    /// 按本资源口径取得的业务组织。
-    pub org_unit_id: Option<String>,
 }
 
 /// 选品域消费的窄授权 Port；adapter 调用身份域公共解析器。
 #[async_trait]
 pub trait SelectionDataScopePort: Send + Sync {
-    /// 经生产 adapter 复用公共单对象范围判定。
-    ///
+    /// 检查完整业务对象。
     /// # 参数
-    /// * `_scope` - 当前动作已解析事实
-    /// * `_object` - 本域提供的当前责任与合法参与事实
-    ///
+    /// actor、resource、action 与 id 指定服务端操作目标，executor 为原事务。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
-    ///
+    /// 统一授权允许时成功。
     /// # 错误
-    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
-    fn allows(&self, _scope: &SelectionResolvedScope, _object: &SelectionScopeObject) -> Result<bool> {
+    /// 目标缺失、无资格或身份设施失败时拒绝。
+    async fn require(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let _ = (actor, resource, action, id, executor);
+        Err(unwired())
+    }
+
+    /// 检查拟创建选品册的可信责任事实。
+    /// # 参数
+    /// actor 为操作人，owner/org 为已校验的拟写入责任，executor 为原事务。
+    /// # 返回
+    /// 统一授权允许时成功。
+    /// # 错误
+    /// 创建资格或责任范围不足时拒绝。
+    async fn require_new(
+        &self,
+        actor: &AuditActor,
+        owner: &str,
+        org: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let _ = (actor, owner, org, executor);
         Err(unwired())
     }
 
@@ -282,32 +246,4 @@ impl SelectionDataScopePort for FailClosedSelectionDataScopePort {
 /// 禁止捕获后回退旧读取器或补 Company。
 fn unwired() -> Error {
     Error::Internal("选品范围端口未接线".into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!SelectionResolvedClause::default().has_scope_rules());
-        assert!(
-            SelectionResolvedClause { self_owned: true, ..SelectionResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            !SelectionResolvedClause { collaborative: true, ..SelectionResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            SelectionResolvedClause { company: true, ..SelectionResolvedClause::default() }.has_scope_rules()
-        );
-        assert!(
-            SelectionResolvedClause {
-                org_unit_ids: vec!["org-a".into()],
-                ..SelectionResolvedClause::default()
-            }
-            .has_scope_rules()
-        );
-    }
 }

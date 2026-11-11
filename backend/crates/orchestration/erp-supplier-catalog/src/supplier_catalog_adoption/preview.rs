@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
-use erp_identity::{Permission, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_supply::catalog_adoption::{
     CatalogAdoptionExt, CatalogAdoptionPreview, MAX_CONFIRM_ROWS, MAX_PREVIEW_ROWS, PreviewAdoptionRequest,
 };
@@ -154,7 +154,10 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     pub(super) async fn ensure_permission(&self, actor: &AuditActor, permission: &str) -> Result<()> {
-        if !self.rbac.enforce(&subject(actor.kind(), actor.id()), &Permission::parse(permission)?).await? {
+        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+            .has_permission(actor, &Permission::parse(permission)?, &mut NoTransaction)
+            .await?
+        {
             return Err(Error::Forbidden("当前账号无权执行选品操作".into()));
         }
         Ok(())

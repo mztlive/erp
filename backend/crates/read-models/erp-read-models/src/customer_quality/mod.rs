@@ -10,6 +10,7 @@ mod dto;
 mod export;
 mod history;
 mod query;
+mod repository;
 mod source;
 
 use std::sync::Arc;

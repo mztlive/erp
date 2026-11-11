@@ -24,10 +24,12 @@ use crate::repository::bpm::{
 };
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
-use crate::service::approval::approval_participant_permissions_with_executor;
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use crate::service::approval::process_kind::process_kind_of;
+use crate::service::approval::{
+    approval_participant_permissions_with_executor, require_approval_management_with_executor,
+};
 
 /// 保持现有授权结果规模上限；流式读取不会保留完整 ID 集合。
 const MAX_AUTHORIZED_INSTANCES: u64 = 20_000;
@@ -125,7 +127,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        if !approval_participant_permissions_with_executor(&self.identity, actor, &mut NoTransaction).await? {
+        if !approval_participant_permissions_with_executor(
+            &self.db,
+            &self.identity,
+            actor,
+            &mut NoTransaction,
+        )
+        .await?
+        {
             return Ok(RuntimeInstanceListPage {
                 items: Vec::new(),
                 total: 0,
@@ -355,17 +364,19 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             let Some(snapshot) = &row.snapshot else {
                 continue;
             };
-            if !self
-                .auth
-                .approval_source_readable(
-                    actor,
-                    snapshot.document_type,
-                    &snapshot.business_object_id,
-                    executor,
-                )
-                .await?
+            match require_approval_management_with_executor(
+                &self.auth,
+                actor,
+                "approval_instance:read",
+                snapshot.document_type,
+                &snapshot.business_object_id,
+                executor,
+            )
+            .await
             {
-                continue;
+                Ok(()) => {},
+                Err(Error::Forbidden(_) | Error::NotFound(_)) => continue,
+                Err(error) => return Err(error),
             }
             page.append(row, filter)?;
         }
@@ -398,6 +409,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             process_required_document_types()?
         } else {
             crate::service::approval::scope::definition_management_visibility_with_executor(
+                &self.db,
                 &self.identity,
                 actor,
                 executor,

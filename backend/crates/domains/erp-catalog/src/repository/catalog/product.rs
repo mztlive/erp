@@ -201,7 +201,7 @@ pub trait ProductRepositoryExt {
         &self,
         scope: &super::scope::CatalogReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
+    ) -> crate::Result<Vec<String>>;
 
     /// 列出未删除商品主键，供公司范围采购负责人筛选。
     ///
@@ -231,7 +231,9 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
         &self,
         scope: &super::scope::CatalogReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> crate::Result<Vec<String>> {
+        scope.validate(executor).await?;
+
         #[derive(serde::Deserialize)]
         struct ProductIdRow {
             id: String,
@@ -246,6 +248,7 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
             executor,
         )
         .await?;
+        scope.validate(executor).await?;
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 

@@ -10,19 +10,18 @@ use erp_finance::dto::payable::{
     PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationListQuery, PurchaseInvoiceAllocationView,
 };
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
-use erp_finance::ports::funds_scope::FundsResolvedScope;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::authorization::*;
+use super::authorization::{FundsReadContext, *};
 use super::linked::organization_condition;
-use super::payable_source::source_key;
 use super::repository::allocation::{
     AllocationPageRow, AllocationSnapshot, AllocationVersion, allocation_snapshot,
 };
+use super::repository::payable_source::source_key;
 use super::rows::*;
 use crate::{Error, Result};
 
@@ -58,7 +57,7 @@ impl FundsAccess {
         action: &str,
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
-    ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
+    ) -> Result<(FundsReadContext, FundsAuthorization)> {
         let _ = purchase_access;
         self.resolve_sources(actor, resource, action, true, true, executor).await
     }
@@ -264,8 +263,6 @@ impl FundsAccess {
             page: query.paging.page,
             page_size: query.paging.page_size,
             scope_version: version,
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "收票分配继承应付子账的采购或结算来源边界，仅返回获授权分配",

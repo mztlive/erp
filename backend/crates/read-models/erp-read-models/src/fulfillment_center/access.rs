@@ -52,10 +52,7 @@ impl AcceptanceReadService {
                 Box::pin(async move {
                     let access = SalesAccess::new(this.db.clone(), this.rbac);
                     let (_, scope) = access.resolve(&actor, "list", &[], executor).await?;
-                    let ids = access.authorized_source_ids(&scope, executor).await?;
-                    Ok(FulfillmentService::new(this.db)
-                        .customer_acceptance_list(&params, ids, executor)
-                        .await?)
+                    super::repository::acceptance_list(&this.db, &params, &scope, executor).await
                 })
             })
             .await
@@ -117,39 +114,5 @@ impl AcceptanceReadService {
                 })
             })
             .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use erp_core::ids::SalesOrderId;
-    use erp_fulfillment::repository::fulfillment::CustomerAcceptanceFilter;
-    use persistence_core::QueryFilter;
-    use serde_json::json;
-    use test_support::matches_filter;
-
-    #[test]
-    fn acceptance_source_query_never_overrides_authorization_and_empty_denies() {
-        let mut filter = CustomerAcceptanceFilter {
-            authorized_sales_order_ids: Some(vec!["allowed".into()]),
-            sales_order_id: None,
-            status: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        };
-        let allowed = json!({"sales_order_id":"allowed", "deleted_at":0});
-        let other = json!({"sales_order_id":"other", "deleted_at":0});
-        assert!(matches_filter(&filter.to_doc(), &allowed));
-        assert!(!matches_filter(&filter.to_doc(), &other));
-        filter.sales_order_id = Some(SalesOrderId::new("other"));
-        assert!(!matches_filter(&filter.to_doc(), &allowed));
-        assert!(!matches_filter(&filter.to_doc(), &other));
-        filter.sales_order_id = None;
-        filter.authorized_sales_order_ids = Some(vec![]);
-        assert!(!matches_filter(&filter.to_doc(), &allowed));
-        filter.authorized_sales_order_ids = None;
-        assert!(matches_filter(&filter.to_doc(), &other));
     }
 }

@@ -69,26 +69,14 @@ impl SalesOrderFormalizationProcess {
                 "sales_order",
                 write.order_id().to_string(),
             )?;
-            let policy_revision = write.policy_revision();
             let db = self.db.clone();
-            if let Some(policy_revision) = policy_revision {
-                self.rbac
-                    .run_authorized_policy_transaction(policy_revision, move |executor| {
-                        Box::pin(
-                            async move { persist_formalized_submission(&db, write, &audit, executor).await },
-                        )
-                    })
-                    .await?;
-            } else {
-                self.db
-                    .client()
-                    .with_transaction(move |executor| {
-                        Box::pin(
-                            async move { persist_formalized_submission(&db, write, &audit, executor).await },
-                        )
-                    })
-                    .await?;
-            }
+            self.db
+                .client()
+                .clone()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { persist_formalized_submission(&db, write, &audit, executor).await })
+                })
+                .await?;
         }
         service.read_model().sales_order_detail(id, None).await.map_err(crate::Error::from)
     }

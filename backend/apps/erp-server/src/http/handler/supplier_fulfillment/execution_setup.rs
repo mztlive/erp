@@ -10,7 +10,6 @@ use persistence_core::NoTransaction;
 
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
@@ -24,7 +23,6 @@ use crate::http::state::HttpState;
 pub async fn supplier_order_execution_setup(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<ExecutionSetupView> {
     state
@@ -35,7 +33,7 @@ pub async fn supplier_order_execution_setup(
     let process = state.application().supplier_api_order_process().ok_or_else(|| {
         crate::wiring::errors::Error::NotFound("此订单没有已配置的 API 自动执行入口".into())
     })?;
-    let view = mask_execution_costs(&state, &subject, process.execution_setup(&id).await?).await?;
+    let view = mask_execution_costs(&state, &actor, process.execution_setup(&id).await?).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -49,7 +47,6 @@ pub async fn supplier_order_execution_setup(
 pub async fn save_supplier_order_execution_setup(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
     Json(request): Json<ExecutionSetupRequest>,
 ) -> Result<ExecutionSetupView> {
@@ -70,7 +67,7 @@ pub async fn save_supplier_order_execution_setup(
             &state.application().supplier_fulfillment_service().access(),
         )
         .await?;
-    Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &subject, view).await?))
+    Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &actor, view).await?))
 }
 
 /// 按原执行地址返回下一层供应商候选，前端不能指定外部编码。
@@ -108,7 +105,6 @@ pub async fn supplier_order_execution_address_candidates(
 pub async fn query_supplier_order_execution_result(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
     Json(request): Json<ExecutionQueryRequest>,
 ) -> Result<ExecutionSetupView> {
@@ -129,16 +125,16 @@ pub async fn query_supplier_order_execution_result(
             &state.application().supplier_fulfillment_service().access(),
         )
         .await?;
-    Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &subject, view).await?))
+    Ok(ApiResponse::ok_with_data(mask_execution_costs(&state, &actor, view).await?))
 }
 
 async fn mask_execution_costs(
     state: &HttpState,
-    subject: &RbacSubject,
+    actor: &AuditActor,
     mut view: ExecutionSetupView,
 ) -> std::result::Result<ExecutionSetupView, Error> {
     let permission = Permission::parse("supplier_offering_cost:detail")?;
-    if !state.application().rbac().enforce(&subject.0, &permission).await? {
+    if !state.application().authorization().has_permission(actor, &permission, &mut NoTransaction).await? {
         view.without_costs();
     }
     Ok(view)

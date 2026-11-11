@@ -83,11 +83,11 @@ impl CatalogSupplyQueryPort for RecordingQuery {
         &self,
         filter: &ProductFilter,
         _: &mut dyn Executor,
-    ) -> persistence_core::Result<Vec<String>> {
+    ) -> erp_catalog::Result<Vec<String>> {
         self.calls.lock().unwrap().push("candidates");
         *self.candidate_filter.lock().unwrap() = Some(filter.clone());
         if self.fail {
-            return Err(persistence_core::Error::OptimisticLockingError);
+            return Err(persistence_core::Error::OptimisticLockingError.into());
         }
         Ok(self.candidates.clone().expect("ordinary product query must not read procurement candidates"))
     }
@@ -95,11 +95,11 @@ impl CatalogSupplyQueryPort for RecordingQuery {
         &self,
         filter: &ProductFilter,
         executor: &mut dyn Executor,
-    ) -> persistence_core::Result<PageResult<ProductRow>> {
+    ) -> erp_catalog::Result<PageResult<ProductRow>> {
         self.calls.lock().unwrap().push("product");
         assert!(executor.session().is_none());
         if self.fail {
-            return Err(persistence_core::Error::OptimisticLockingError);
+            return Err(persistence_core::Error::OptimisticLockingError.into());
         }
         if let Some(ids) = filter.ids.as_deref() {
             assert_eq!((filter.page, filter.page_size), (1, 1));

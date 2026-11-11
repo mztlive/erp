@@ -48,7 +48,7 @@ impl CatalogCenterReadService {
             organization_version: snapshot.organization_version,
             as_of: snapshot.as_of,
             empty_reason: snapshot.no_scope.then_some("no_scope"),
-            scope_summary: "商品维护人及其业务组织范围；采购负责人筛选为额外收窄",
+            scope_summary: "商品按岗位权限共享；维护人及采购负责人筛选为额外收窄",
         })
     }
 
@@ -121,6 +121,7 @@ async fn build_snapshot(
     let access = CatalogAccess::new(db.clone(), data_scope.clone());
     let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
     let no_scope = !context.has_scope_rules();
+    context.validate(executor).await?;
     let mut filter = prepare_product_list(&params)?;
     filter.scope = Some(scope.clone());
     apply_org_filter(&mut filter, data_scope.as_ref(), &params, executor).await?;
@@ -133,6 +134,7 @@ async fn build_snapshot(
     let ids = view.items.iter().map(|row| row.maintainer_user_id.clone()).collect::<Vec<_>>();
     let names = db.accounts().names_by_ids(&ids, executor).await?;
     apply_maintainer_names(&mut view.items, &names);
+    context.validate(executor).await?;
     Ok(ProductSnapshot {
         no_scope,
         page: view,

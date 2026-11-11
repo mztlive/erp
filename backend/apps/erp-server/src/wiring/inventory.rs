@@ -1,6 +1,6 @@
 //! 库存授权、审计与外部事实 adapter。
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
@@ -9,21 +9,19 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_catalog::CatalogExt;
 use erp_catalog::repository::prelude::*;
+use erp_core::common::time::Instant;
 use erp_core::ids::SkuId;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment_execution::inventory_adjustment::InventoryAdjustmentProcess;
 use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
-use erp_identity::access_control::ScopedObject;
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeBatch, DataScopeService};
 use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
 use erp_inventory::{
     AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAuditPort, InventoryAuthorization,
-    InventoryScopeMeta, InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact,
-    WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope,
+    InventoryReadProof, InventoryScopeMeta, InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact,
+    SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact, WarehouseScope,
 };
 use erp_warehouse::WarehouseExt;
+use erp_warehouse::authorization::{WarehouseAuthorization, WarehouseRead};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -120,7 +118,7 @@ impl AuthorizationPort for MongoInventoryAuthorization {
 /// 返回八项操作的仓库范围及结存、流水、调整列表元数据。无单项权限时该项为空范围。
 ///
 /// # 错误
-/// 登录资格、策略或数据范围查询失败时返回映射后的库存错误。仓库目标超过 20000 时返回校验错误。
+/// 登录资格、策略或数据范围查询失败时返回映射后的库存错误。不截断已授权仓库集合。
 ///
 /// # Panics
 /// 固定库存权限码无法解析，或八项范围没有按顺序取完时 panic。
@@ -130,27 +128,72 @@ pub async fn authorize_inventory(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> erp_inventory::Result<InventoryAuthorization> {
-    if !rbac
-        .directory()
-        .actor_is_active(actor, executor)
+    let permissions = INVENTORY_OPERATIONS
+        .iter()
+        .map(|(code, _)| Permission::parse(*code))
+        .collect::<erp_core::Result<Vec<_>>>()?;
+    let function = super::authorization::authorization_service(db.clone(), rbac.clone());
+    if function
+        .permissions(actor, &permissions, executor)
         .await
-        .map_err(|error| map_svc(Error::from(error)))?
+        .map_err(|error| map_svc(error.into()))?
+        .is_none()
     {
         return Ok(InventoryAuthorization::inactive());
     }
-    let service = DataScopeService::new(db.clone(), rbac.clone());
-    let permissions = INVENTORY_OPERATIONS
-        .iter()
-        .map(|(code, _)| Permission::parse(*code).expect("固定库存权限合法"))
-        .collect::<Vec<_>>();
-    let mut batch = service.batch(actor, &permissions, executor);
     let mut scopes = Vec::with_capacity(INVENTORY_OPERATIONS.len());
     let mut metas = Vec::with_capacity(INVENTORY_OPERATIONS.len());
     for (code, requires_detail) in INVENTORY_OPERATIONS {
-        let (scope, meta) = inventory_scope(&mut batch, code, requires_detail).await?;
+        let (scope, meta) = inventory_scope(db, rbac, actor, code, requires_detail, executor).await?;
         scopes.push(scope);
         metas.push(meta);
     }
+    Ok(inventory_snapshot(scopes, metas))
+}
+
+/// 对固定入口执行 identity 查询；无该项权限只影响该项结果。
+async fn inventory_scope(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    code: &str,
+    requires_detail: bool,
+    executor: &mut dyn Executor,
+) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
+    let extra = requires_detail
+        .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定库存权限"))
+        .into_iter()
+        .collect();
+    let service = WarehouseAuthorization::new(
+        db.clone(),
+        rbac.clone(),
+        Permission::parse(code).expect("固定库存权限"),
+        extra,
+    )
+    .map_err(|error| map_svc(error.into()))?;
+    match service.ids(actor, executor).await {
+        Ok(read) => Ok((
+            WarehouseScope::from_authorized(
+                read.ids().to_vec(),
+                Arc::new(InventoryWarehouseProof(read.clone())),
+            ),
+            InventoryScopeMeta::new(read.version(), 0, 0, Instant::now().as_utc().to_rfc3339()),
+        )),
+        Err(IdentityError::Forbidden(_)) => Ok((WarehouseScope::empty(), InventoryScopeMeta::empty())),
+        Err(error) => Err(map_svc(error.into())),
+    }
+}
+
+struct InventoryWarehouseProof(WarehouseRead);
+#[async_trait]
+impl InventoryReadProof for InventoryWarehouseProof {
+    async fn validate(&self, executor: &mut dyn Executor) -> erp_inventory::Result<()> {
+        self.0.validate(executor).await.map_err(|error| map_svc(error.into()))
+    }
+}
+
+/// 将已经授权的固定顺序查询结果写入展示快照。
+fn inventory_snapshot(scopes: Vec<WarehouseScope>, metas: Vec<InventoryScopeMeta>) -> InventoryAuthorization {
     let mut scopes = scopes.into_iter();
     let mut metas = metas.into_iter();
     let mut next = || scopes.next().expect("八项已解析范围");
@@ -160,86 +203,8 @@ pub async fn authorize_inventory(
     let movement_meta = next_meta();
     let _ = next_meta();
     let adjustment_meta = next_meta();
-    Ok(InventoryAuthorization::from_scopes(
-        true,
-        next(),
-        next(),
-        next(),
-        next(),
-        next(),
-        next(),
-        next(),
-        next(),
-    )
-    .with_list_meta(balance_meta, movement_meta, adjustment_meta))
-}
-
-/// 库存查询共用仓库政策，保留各资源动作的授权槽，避免合并存量范围扩大权限。
-///
-/// 库存调整创建、更新及列表沿用同角色完整详情权限要求；仓库目录范围不参与。
-///
-/// # Panics
-/// 固定权限码不含冒号或无法解析时 panic。
-async fn inventory_scope(
-    batch: &mut DataScopeBatch<'_>,
-    code: &str,
-    requires_detail: bool,
-) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
-    let permission = Permission::parse(code)?;
-    let extra = requires_detail
-        .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定权限合法"))
-        .into_iter()
-        .collect::<Vec<_>>();
-    let access = match batch.resolve_permissions(&permission, &extra).await {
-        Ok(access) => access,
-        Err(IdentityError::Forbidden(_)) => {
-            return Ok((WarehouseScope::empty(), InventoryScopeMeta::empty()));
-        },
-        Err(error) => return Err(map_svc(error.into())),
-    };
-    Ok((warehouse_scope(&access)?, scope_meta(&access)))
-}
-
-fn scope_meta(access: &AuthorizedDataScope) -> InventoryScopeMeta {
-    InventoryScopeMeta::new(
-        access.scope_version.clone(),
-        access.policy_version,
-        access.organizations.version,
-        access.as_of.as_utc().to_rfc3339(),
-    )
-}
-
-/// 仅把公共判定通过的仓库转换为库存 Port 条件；其他维度和其他资源不能补授权。
-fn warehouse_scope(access: &AuthorizedDataScope) -> erp_inventory::Result<WarehouseScope> {
-    let allows = |warehouse_id| {
-        access.scope.allows(
-            &ScopedObject {
-                owned: false,
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: None,
-                settlement_party_id: None,
-                warehouse_id,
-            },
-            false,
-        )
-    };
-    if allows(None) {
-        return Ok(WarehouseScope::company());
-    }
-    let ids = access
-        .scope
-        .role_clauses
-        .iter()
-        .chain(access.scope.user_limit.iter())
-        .flat_map(|clause| clause.warehouse_ids.iter().cloned())
-        .collect::<BTreeSet<_>>();
-    if ids.len() > 20_000 {
-        return Err(erp_inventory::Error::ValidationError(
-            "库存范围超过 20000 个仓库，请缩小配置范围".into(),
-        ));
-    }
-    Ok(WarehouseScope::from_targets(ids.iter().filter(|id| allows(Some(id.as_str()))).cloned().collect()))
+    InventoryAuthorization::from_scopes(true, next(), next(), next(), next(), next(), next(), next(), next())
+        .with_list_meta(balance_meta, movement_meta, adjustment_meta)
 }
 
 /// 把库存审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -634,8 +599,6 @@ mod tests {
 
     use entity_core::BaseModel;
     use erp_core::AccountKind;
-    use erp_core::common::time::Instant;
-    use erp_identity::access_control::{ResolvedScope, ScopeClause};
 
     use super::*;
 
@@ -764,37 +727,5 @@ mod tests {
         prepared.actor_id = " ".into();
         prepared.action = " ".into();
         assert!(prepared.to_log().unwrap_err().to_string().contains("操作人ID不能为空"));
-    }
-
-    #[test]
-    fn inventory_scope_keeps_dimension_and_user_limit_without_fallback() {
-        let mut access = AuthorizedDataScope::test_fixture(DataScopeFacts {
-            user_id: "warehouse".into(),
-            resource: "stock_balance".into(),
-            action: "list".into(),
-            qualified_roles: Default::default(),
-            organizations: Default::default(),
-            policy_version: 1,
-            scope_version: "1".into(),
-            as_of: Instant::from_unix_secs(1),
-            scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-        });
-        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
-        access
-            .test_facts_mut()
-            .scope
-            .role_clauses
-            .push(ScopeClause { org_unit_ids: BTreeSet::from(["same-id".into()]), ..Default::default() });
-        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
-        access.test_facts_mut().scope.role_clauses.push(ScopeClause { company: true, ..Default::default() });
-        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::company());
-        access.test_facts_mut().scope.user_limit =
-            Some(ScopeClause { warehouse_ids: BTreeSet::from(["warehouse-a".into()]), ..Default::default() });
-        assert_eq!(
-            warehouse_scope(&access).unwrap(),
-            WarehouseScope::from_targets(vec!["warehouse-a".into()])
-        );
-        access.test_facts_mut().scope.user_limit = Some(ScopeClause::default());
-        assert_eq!(warehouse_scope(&access).unwrap(), WarehouseScope::empty());
     }
 }

@@ -5,7 +5,6 @@ use std::collections::{BTreeSet, HashMap};
 use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::dto::payable::SupplierPaymentListQuery;
-use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, SupplierPaymentFilter, SupplierPaymentRow};
@@ -218,9 +217,14 @@ impl FundsAccess {
         let version = flow::version(&authorization.context.scope_version, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary = flow::summary(&snapshot.summary, &version)?;
-        let items = self
-            .payment_page(snapshot.items, &snapshot.versions, authorization.ledger_read, executor)
-            .await?;
+        let whole_ids = snapshot
+            .versions
+            .iter()
+            .zip(&snapshot.summary)
+            .filter(|(_, summary)| summary.whole)
+            .map(|(version, _)| version.id.clone())
+            .collect::<BTreeSet<_>>();
+        let items = self.payment_page(snapshot.items, &snapshot.versions, &whole_ids, executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
@@ -228,8 +232,6 @@ impl FundsAccess {
             page: query.paging.page,
             page_size: query.paging.page_size,
             scope_version: version,
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "付款按核销关联采购或结算来源授权；整单另需财务整账职责及全部来源可见",
@@ -297,7 +299,7 @@ impl FundsAccess {
         &self,
         rows: Vec<SupplierPaymentRow>,
         versions: &[flow::FlowVersion],
-        ledger_read: bool,
+        whole_ids: &BTreeSet<String>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ScopedSupplierPaymentRow>> {
         let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
@@ -308,11 +310,11 @@ impl FundsAccess {
             versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect(),
         );
         let expected = rows.len();
-        let decided = decide_payment_rows(rows, &links, &facts, &allowed, ledger_read);
+        let decided = decide_payment_rows(rows, &links, &facts, &allowed, whole_ids);
         if decided.len() != expected {
             return Err(Error::Internal("付款来源聚合与正式裁剪规则不一致".into()));
         }
-        Ok(payment_page_items(&decided, &links, ledger_read))
+        Ok(payment_page_items(&decided, &links, whole_ids))
     }
 
     /// 付款关联筛选条件：采购负责人、付款经办人与组织分别精确匹配。
@@ -387,11 +389,15 @@ impl FundsAccess {
         }
         let tuples = payment_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
-        let whole = whole_document_readable(
-            authorization.ledger_read,
-            row_links.iter().map(|link| link.order.as_deref()),
-            &matched,
-        );
+        let whole = self
+            .whole_allowed(
+                &authorization,
+                &row.id,
+                &[],
+                &row_links.iter().filter_map(|link| link.order.clone()).collect::<Vec<_>>(),
+                executor,
+            )
+            .await?;
         if !whole && matched.is_empty() {
             return Err(Error::NotFound("供应商付款单不存在".into()));
         }
@@ -403,8 +409,6 @@ impl FundsAccess {
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "付款按核销关联采购或结算来源授权；整单另需财务整账职责及全部来源可见",
@@ -419,7 +423,7 @@ fn decide_payment_rows(
     links: &HashMap<String, Vec<PaymentLink>>,
     facts: &HashMap<String, LinkedPurchaseFact>,
     allowed: &Option<BTreeSet<String>>,
-    ledger_read: bool,
+    whole_ids: &BTreeSet<String>,
 ) -> Vec<(SupplierPaymentRow, Vec<String>)> {
     rows.into_iter()
         .filter_map(|row| {
@@ -428,11 +432,7 @@ fn decide_payment_rows(
                 return None;
             }
             let matched = matched_orders(&payment_tuples(&row, lines, facts), allowed);
-            let whole = whole_document_readable(
-                ledger_read,
-                lines.iter().map(|link| link.order.as_deref()),
-                &matched,
-            );
+            let whole = whole_ids.contains(&row.id);
             (whole || !matched.is_empty()).then_some((row, matched))
         })
         .collect()
@@ -549,16 +549,12 @@ pub(super) fn cut_payment_row(
 fn payment_page_items(
     rows: &[(SupplierPaymentRow, Vec<String>)],
     links: &HashMap<String, Vec<PaymentLink>>,
-    ledger_read: bool,
+    whole_ids: &BTreeSet<String>,
 ) -> Vec<ScopedSupplierPaymentRow> {
     rows.iter()
         .map(|(row, matched)| {
             let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
-            let whole = whole_document_readable(
-                ledger_read,
-                row_links.iter().map(|link| link.order.as_deref()),
-                matched,
-            );
+            let whole = whole_ids.contains(&row.id);
             cut_payment_row(row, row_links, matched, whole)
         })
         .collect()
@@ -635,20 +631,44 @@ mod tests {
     fn page_decision_distinguishes_dangling_sources_from_true_zero_allocations() {
         let allowed = Some(BTreeSet::new());
         assert!(
-            decide_payment_rows(vec![row("empty", "10")], &HashMap::new(), &HashMap::new(), &allowed, false)
-                .is_empty()
+            decide_payment_rows(
+                vec![row("empty", "10")],
+                &HashMap::new(),
+                &HashMap::new(),
+                &allowed,
+                &BTreeSet::new()
+            )
+            .is_empty()
         );
-        let readable =
-            decide_payment_rows(vec![row("empty", "10")], &HashMap::new(), &HashMap::new(), &allowed, true);
+        let readable = decide_payment_rows(
+            vec![row("empty", "10")],
+            &HashMap::new(),
+            &HashMap::new(),
+            &allowed,
+            &BTreeSet::from(["empty".into()]),
+        );
         assert_eq!(readable.len(), 1);
         let dangling = HashMap::from([("p".into(), vec![link("a", Some("missing"), "10")])]);
         assert!(
-            decide_payment_rows(vec![row("p", "10")], &dangling, &HashMap::new(), &allowed, true).is_empty()
+            decide_payment_rows(
+                vec![row("p", "10")],
+                &dangling,
+                &HashMap::new(),
+                &allowed,
+                &BTreeSet::from(["empty".into()])
+            )
+            .is_empty()
         );
         let missing_reference = HashMap::from([("p".into(), vec![link("a", None, "10")])]);
         assert!(
-            decide_payment_rows(vec![row("p", "10")], &missing_reference, &HashMap::new(), &allowed, true)
-                .is_empty()
+            decide_payment_rows(
+                vec![row("p", "10")],
+                &missing_reference,
+                &HashMap::new(),
+                &allowed,
+                &BTreeSet::from(["empty".into()])
+            )
+            .is_empty()
         );
     }
 
@@ -682,9 +702,9 @@ mod tests {
             })
             .collect();
         let allowed = Some(BTreeSet::from(["po-a".into()]));
-        let decided = decide_payment_rows(vec![row("p", max)], &links, &facts, &allowed, true);
+        let decided = decide_payment_rows(vec![row("p", max)], &links, &facts, &allowed, &BTreeSet::new());
         assert_eq!(decided[0].1, ["po-a"]);
-        let items = payment_page_items(&decided, &links, true);
+        let items = payment_page_items(&decided, &links, &BTreeSet::new());
         assert_eq!(items[0].visible_allocated_share, max.parse().unwrap());
         assert!(items[0].amount.is_none());
         assert!(items[0].permission_limited);

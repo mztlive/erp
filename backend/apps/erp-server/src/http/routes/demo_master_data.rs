@@ -2,7 +2,7 @@
 
 use axum::Router;
 use axum::routing::{delete, get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::demo_master_data;
 use crate::http::middleware::with_permission;
@@ -16,7 +16,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回查看、生成和删除三条路由。
-pub(super) fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub(super) fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/demo-master-data",

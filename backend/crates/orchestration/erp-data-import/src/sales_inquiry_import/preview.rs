@@ -4,7 +4,6 @@ use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
 use erp_identity::Permission;
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_order_to_cash::sales_inquiry::access::SalesInquiryAccess;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::entity::sales_inquiry_import::{
@@ -74,13 +73,8 @@ impl SalesInquiryImportProcess {
         executor: &mut dyn Executor,
     ) -> Result<SalesInquiry> {
         let catalog = Permission::parse("sellable_sku:list")?;
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, &Permission::parse("sales_inquiry:import")?, &[catalog], executor)
-            .await?;
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
-        if !SalesInquiryAccess::allows_sales(&access, &inquiry) {
-            return Err(Error::NotFound("询价不存在或无权操作".into()));
-        }
+        self.access().require_permissions(actor, "import", &inquiry, &[catalog], executor).await?;
         Ok(inquiry)
     }
 

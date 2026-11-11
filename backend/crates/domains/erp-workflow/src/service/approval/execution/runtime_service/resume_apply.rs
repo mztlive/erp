@@ -124,7 +124,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<Option<ApprovalCommandView>> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
-        let identity_service = self.identity.clone();
         let actor = actor.clone();
         let instance_id = instance_id.to_string();
         let identity = identity.clone();
@@ -132,16 +131,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    replay_resume_apply(
-                        &identity_service,
-                        &db,
-                        &rbac,
-                        &actor,
-                        &instance_id,
-                        &identity,
-                        executor,
-                    )
-                    .await
+                    replay_resume_apply(&db, &rbac, &actor, &instance_id, &identity, executor).await
                 })
             })
             .await
@@ -198,6 +188,7 @@ async fn apply_resume(
             continue;
         };
         revalidate_resume_with_executor(
+            db,
             identity_service,
             rbac,
             actor,
@@ -228,6 +219,7 @@ async fn apply_resume(
 
 /// 在恢复写入的同一事务中重验管理者及原审批人，所有单据类型一致执行。
 async fn revalidate_resume_with_executor(
+    db: &Database,
     identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -235,7 +227,6 @@ async fn revalidate_resume_with_executor(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     require_approval_management_with_executor(
-        identity_service,
         rbac,
         actor,
         "approval_instance:resume",
@@ -244,7 +235,7 @@ async fn revalidate_resume_with_executor(
         executor,
     )
     .await?;
-    let eligibility = revalidate_decision_approver(identity_service, rbac, input, executor).await?;
+    let eligibility = revalidate_decision_approver(db, identity_service, rbac, input, executor).await?;
     ensure_resume_approver_recovered(&eligibility)
 }
 
@@ -253,7 +244,6 @@ async fn revalidate_resume_with_executor(
 /// # Panics
 /// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_resume_apply(
-    identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -268,7 +258,6 @@ async fn replay_resume_apply(
         .ok_or_else(hidden_not_found)?;
     let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, true).await?;
     require_approval_management_with_executor(
-        identity_service,
         rbac,
         actor,
         "approval_instance:resume",

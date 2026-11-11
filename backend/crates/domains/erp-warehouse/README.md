@@ -54,3 +54,5 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-warehouse --lib --locked
 ```
 
 代码变更还须执行[统一质量门禁](../../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
+
+仓库目录及库存仓库身份授权统一使用 `authorization::WarehouseAuthorization`。调用方必须提供原事务执行器；服务经 identity 编译完整条件并在仓库仓储执行，返回前后复验。返回的仓库 ID 仅作为当次业务查询的收窄条件，不得跨请求缓存或解释为后续命令授权。

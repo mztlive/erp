@@ -168,10 +168,7 @@ impl SalesCommandAccess {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let (access, scope) = self.access.resolve(&self.actor, action, permissions, executor).await?;
-        if !SalesAccess::allows(&access, &scope, order)? {
-            return Err(Error::Forbidden("没有该业务责任范围的销售建单权限".into()));
-        }
+        self.access.require_loaded(&self.actor, action, order, permissions, executor).await?;
         Ok(())
     }
 

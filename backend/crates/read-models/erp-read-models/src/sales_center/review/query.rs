@@ -26,9 +26,7 @@ pub struct SalesChangeListView {
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
     /// RBAC 策略版本。
-    pub policy_version: u64,
     /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`。
@@ -185,6 +183,7 @@ async fn load_change_snapshot(
     let version =
         format!("{}:{}:{}:{}", context.scope_version, order.base.id, order.base.version, change.base.version);
     let view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
+    context.validate(executor).await?;
     Ok((view, version))
 }
 

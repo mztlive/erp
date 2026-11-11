@@ -8,21 +8,19 @@ use std::hash::{Hash, Hasher};
 
 use erp_finance::dto::cost::CostAllocationListQuery;
 use erp_finance::entity::cost::CostAllocation;
-use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::repository::CostExt;
 use erp_finance::repository::cost::read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT};
 use erp_finance::repository::cost::{CostEntryFilter, CostEntryRow};
 use erp_finance::repository::prelude::*;
 use erp_finance::service::cost::{cost_entry_filter, cost_entry_row_view};
 use erp_identity::Permission;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use persistence_core::{Executor, Transactional};
 use versions::VersionFacts;
 
 use super::*;
-use crate::finance::funds_scope::ledger_readable;
-use crate::sales_center::access::sales_scope;
+use crate::finance::funds_scope::WholeAccess;
+use crate::sales_center::access::{SalesAccess, SalesReadContext};
 
 #[derive(Clone, Default)]
 pub(super) struct CostSelection {
@@ -61,26 +59,24 @@ pub(super) struct Snapshot {
     pub allocation_created_at: HashMap<String, u64>,
     no_scope: bool,
     version: String,
-    policy: u64,
-    organization: u64,
     as_of: String,
 }
 
 struct CostAuthorization {
     sales: SalesReadScope,
-    ledger_read: bool,
-    context: AuthorizedDataScope,
+    whole: WholeAccess,
+    context: SalesReadContext,
     fingerprint: DefaultHasher,
 }
 impl CostAuthorization {
     /// 无销售来源范围且无整账职责时无需访问业务集合。
     fn empty(&self) -> bool {
-        !self.ledger_read && self.sales.is_empty()
+        self.whole.is_empty() && self.sales.is_empty()
     }
 
     /// 部分来源范围禁止探测整笔来源引用，初读与返回前重验使用相同规则。
     fn require_filter(&self, filter: &CostEntryFilter) -> Result<()> {
-        if !self.empty() && !self.ledger_read && filter.source_document_id.is_some() {
+        if !self.empty() && self.whole.is_empty() && filter.source_document_id.is_some() {
             return Err(Error::ValidationError("当前只能读取成本分配，不能按整笔来源单据筛选".into()));
         }
         Ok(())
@@ -94,8 +90,6 @@ impl Snapshot {
             allocation_created_at: HashMap::new(),
             no_scope: access.empty(),
             version: String::new(),
-            policy: access.context.policy_version,
-            organization: access.context.organizations.version,
             as_of: access.context.as_of.as_utc().to_rfc3339(),
         }
     }
@@ -111,8 +105,6 @@ impl Snapshot {
         CostReadResult {
             data,
             scope_version: self.version,
-            policy_version: self.policy,
-            organization_version: self.organization,
             as_of: self.as_of,
             empty_reason: self.no_scope.then_some("no_scope"),
             scope_summary: "按关联销售范围读取成本份额；整笔及未分配成本另需财务整账读取资格",
@@ -125,24 +117,16 @@ impl Snapshot {
         candidates: Vec<CostEntryRow>,
         allocations: Vec<CostAllocation>,
         orders: &BTreeSet<String>,
-        ledger_read: bool,
+        whole_ids: &BTreeSet<String>,
     ) -> Result<()> {
         let mut grouped = HashMap::<String, Vec<_>>::new();
         for line in allocations {
             self.allocation_created_at.insert(line.base.id.clone(), line.base.created_at);
             grouped.entry(line.cost_entry_id.to_string()).or_default().push(line);
         }
-        let visible_sources = orders.iter().cloned().collect::<Vec<_>>();
         for row in candidates {
             let allocations = grouped.remove(&row.id).unwrap_or_default();
-            let whole = whole_document_readable(
-                ledger_read,
-                allocations
-                    .iter()
-                    .filter_map(|line| line.sales_order_id.as_ref())
-                    .map(|id| Some(id.as_ref())),
-                &visible_sources,
-            );
+            let whole = whole_ids.contains(&row.id);
             if let Some(view) = cost_entry_row_view(row, allocations).restrict(whole, orders)? {
                 self.rows.push(view);
             }
@@ -208,17 +192,22 @@ impl CostReadModel {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CostAuthorization> {
-        let resolver = DataScopeService::new(self.db.clone(), self.rbac.clone());
-        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
-        let source_permission = Permission::parse("sales_order:list")?;
-        let context =
-            resolver.resolve_source_scope(actor, &entry_permission, &source_permission, executor).await?;
-        let sales = sales_scope(&context, actor.id(), &[], Vec::new());
-        let ledger_read = ledger_readable(&self.db, &self.rbac, actor, executor).await?;
+        let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
+        let entry = Permission::parse(format!("{resource}:{action}"))?;
+        let (context, sales) = resolver.resolve_source(actor, &entry, executor).await?;
+        let whole = WholeAccess::query(
+            &self.db,
+            &self.rbac,
+            actor,
+            &entry,
+            <Database as CostExt>::COST_ENTRIES,
+            executor,
+        )
+        .await?;
         let mut fingerprint = DefaultHasher::new();
         context.scope_version.hash(&mut fingerprint);
-        ledger_read.hash(&mut fingerprint);
-        Ok(CostAuthorization { sales, ledger_read, context, fingerprint })
+        whole.version().hash(&mut fingerprint);
+        Ok(CostAuthorization { sales, whole, context, fingerprint })
     }
     /// 隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
     async fn load_snapshot(
@@ -228,15 +217,21 @@ impl CostReadModel {
         mut access: CostAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Snapshot> {
+        access.context.validate(executor).await?;
+        access.whole.validate(executor).await?;
         let mut snapshot = Snapshot::new(&access);
         access.require_filter(filter)?;
         if !access.empty() {
             let (candidates, allocations, versions) =
                 self.candidate_facts(filter, selection, executor).await?;
             let orders = self.authorized_orders(&versions, &mut access, executor).await?;
+            let whole_ids = self.whole_orders(&versions, &access.whole, executor).await?;
+            whole_ids.hash(&mut access.fingerprint);
             versions.hash(&mut access.fingerprint);
-            snapshot.project(candidates, allocations, &orders, access.ledger_read)?;
+            snapshot.project(candidates, allocations, &orders, &whole_ids)?;
         }
+        access.context.validate(executor).await?;
+        access.whole.validate(executor).await?;
         snapshot.version = format!("{:x}", access.fingerprint.finish());
         Ok(snapshot)
     }
@@ -386,8 +381,6 @@ mod tests {
             allocation_created_at: HashMap::new(),
             no_scope: false,
             version: String::new(),
-            policy: 1,
-            organization: 1,
             as_of: String::new(),
         }
     }
@@ -397,7 +390,7 @@ mod tests {
         let lines = vec![allocation("a", "sales-a", "60"), allocation("b", "sales-b", "40")];
         let orders = BTreeSet::from(["sales-a".into()]);
         let mut partial = snapshot();
-        partial.project(vec![entry("cost-a")], lines.clone(), &orders, true).unwrap();
+        partial.project(vec![entry("cost-a")], lines.clone(), &orders, &BTreeSet::new()).unwrap();
         assert_eq!(partial.rows.len(), 1);
         assert_eq!(partial.rows[0].scope_net_amount, "60".parse().unwrap());
         assert!(!partial.rows[0].whole_document_access);
@@ -407,19 +400,46 @@ mod tests {
 
         let orders = BTreeSet::from(["sales-a".into(), "sales-b".into()]);
         let mut whole = snapshot();
-        whole.project(vec![entry("cost-a")], lines, &orders, true).unwrap();
+        whole.project(vec![entry("cost-a")], lines, &orders, &BTreeSet::from(["cost-a".into()])).unwrap();
         assert!(whole.rows[0].whole_document_access);
         assert_eq!(whole.rows[0].scope_net_amount, "100".parse().unwrap());
         assert_eq!(whole.rows[0].allocations.len(), 2);
     }
 
     #[test]
+    fn visible_sources_do_not_replace_identity_whole_membership() {
+        let mut projected = snapshot();
+        let mut missing_source = allocation("missing", "ignored", "40");
+        missing_source.sales_order_id = None;
+        projected
+            .project(
+                vec![entry("cost-a")],
+                vec![allocation("a", "sales-a", "60"), missing_source],
+                &BTreeSet::from(["sales-a".into()]),
+                &BTreeSet::new(),
+            )
+            .unwrap();
+        assert_eq!(projected.rows.len(), 1);
+        assert!(!projected.rows[0].whole_document_access);
+        assert!(projected.rows[0].net_amount.is_none());
+        assert!(projected.rows[0].source_document_id.is_none());
+        assert_eq!(projected.rows[0].scope_net_amount, "60".parse().unwrap());
+    }
+
+    #[test]
     fn no_scope_and_unallocated_cost_keep_explicit_ledger_requirement() {
         let mut denied = snapshot();
-        denied.project(vec![entry("unallocated")], vec![], &BTreeSet::new(), false).unwrap();
+        denied.project(vec![entry("unallocated")], vec![], &BTreeSet::new(), &BTreeSet::new()).unwrap();
         assert!(denied.rows.is_empty());
         let mut allowed = snapshot();
-        allowed.project(vec![entry("unallocated")], vec![], &BTreeSet::new(), true).unwrap();
+        allowed
+            .project(
+                vec![entry("unallocated")],
+                vec![],
+                &BTreeSet::new(),
+                &BTreeSet::from(["unallocated".into()]),
+            )
+            .unwrap();
         assert_eq!(allowed.rows.len(), 1);
         assert!(allowed.rows[0].whole_document_access);
         assert_eq!(allowed.rows[0].scope_net_amount, Amount::zero());
@@ -430,7 +450,9 @@ mod tests {
     fn narrowed_cost_projection_keeps_allocation_filter_and_persisted_sort_results() {
         let mut projected = snapshot();
         let lines = vec![allocation("a", "sales-a", "60"), allocation("b", "sales-b", "40")];
-        projected.project(vec![entry("cost-a")], lines, &BTreeSet::from(["sales-a".into()]), false).unwrap();
+        projected
+            .project(vec![entry("cost-a")], lines, &BTreeSet::from(["sales-a".into()]), &BTreeSet::new())
+            .unwrap();
         let query = CostAllocationListQuery {
             sales_order_id: Some(SalesOrderId::new("sales-a")),
             cost_entry_id: Some(CostEntryId::new("cost-a")),
@@ -470,7 +492,7 @@ mod tests {
                 vec![entry("cost-a")],
                 vec![allocation("a", "sales-a", "60")],
                 &BTreeSet::from(["sales-a".into()]),
-                false,
+                &BTreeSet::new(),
             )
             .unwrap();
         let result = checked_snapshot(first, Some("v1"), || async { Ok("v1".into()) }).await.unwrap();

@@ -36,7 +36,7 @@ mod scope;
 pub(crate) mod write;
 
 pub use query::{SupplierOfferingRepositoryQueryExt, SupplierOfferingRevisionRepositoryQueryExt};
-pub use scope::{OfferingReadScope, OfferingScopeClause};
+pub use scope::OfferingReadScope;
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
@@ -257,7 +257,7 @@ pub trait SupplierOfferingRepositoryExt {
         &self,
         filter: &SupplierOfferingFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierOfferingRow>>;
+    ) -> crate::Result<PageResult<SupplierOfferingRow>>;
 
     /// 按供给主键批量取回稳定身份。
     ///
@@ -330,7 +330,7 @@ pub trait SupplierOfferingRepositoryExt {
         &self,
         scope: &OfferingReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
+    ) -> crate::Result<Vec<String>>;
 
     /// 列出未删除供给主键，供公司范围采购负责人筛选。
     ///
@@ -353,7 +353,11 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         &self,
         filter: &SupplierOfferingFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierOfferingRow>> {
+    ) -> crate::Result<PageResult<SupplierOfferingRow>> {
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
+
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), OFFERING_SORT_FIELDS, filter.sort_ascending))
             .skip(filter.skip())
@@ -363,6 +367,9 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         let collection = self.collection().clone_with_type::<SupplierOfferingRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -408,7 +415,9 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         &self,
         scope: &OfferingReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> crate::Result<Vec<String>> {
+        scope.validate(executor).await?;
+
         #[derive(serde::Deserialize)]
         struct OfferingIdRow {
             id: String,
@@ -423,6 +432,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             executor,
         )
         .await?;
+        scope.validate(executor).await?;
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 
@@ -908,41 +918,6 @@ mod tests {
         assert_eq!(doc.get_document("id").unwrap(), &doc! { "$in": [] });
         assert_eq!(doc.get_document("sku_id").unwrap(), &doc! { "$in": [] });
         assert_eq!(filter.page_and_size(), (999, 100));
-    }
-
-    #[test]
-    fn maintainer_filter_ands_with_scope_and_ignores_created_by() {
-        use super::{OfferingReadScope, OfferingScopeClause};
-
-        let filter = SupplierOfferingFilter {
-            offering_ids: None,
-            sku_id: None,
-            supplier_id: None,
-            status: None,
-            source_type: None,
-            supplier_sku_code: None,
-            keyword_sku_ids: None,
-            sku_ids: None,
-            scope: Some(OfferingReadScope {
-                roles: vec![OfferingScopeClause {
-                    owner_user_id: Some("user-1".into()),
-                    business_org_unit_ids: vec!["org-a".into()],
-                    ..OfferingScopeClause::default()
-                }],
-                user_limit: None,
-            }),
-            maintainer_user_ids: Some(vec!["user-2".into()]),
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
-        .to_doc();
-        let encoded = filter.to_string();
-        assert!(!encoded.contains("created_by"));
-        assert_eq!(filter.get_document("maintainer_user_id").unwrap(), &doc! { "$in": ["user-2"] });
-        assert!(!filter.contains_key("business_org_unit_id"));
-        assert!(filter.contains_key("$and"));
     }
 
     #[test]

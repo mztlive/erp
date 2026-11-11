@@ -80,10 +80,8 @@ pub(super) fn linked_order_tuples<'a, F>(
 mod tests {
     use std::sync::Mutex;
 
-    use application_core::AuditActor;
     use async_trait::async_trait;
     use erp_core::common::time::Instant;
-    use erp_finance::ports::funds_scope::FundsResolvedScope;
     use erp_finance::{Error as FinanceError, Result as FinanceResult};
     use persistence_core::NoTransaction;
 
@@ -99,16 +97,6 @@ mod tests {
 
     #[async_trait]
     impl FundsDataScopePort for OrganizationPort {
-        async fn resolve(
-            &self,
-            _actor: &AuditActor,
-            _resource: &str,
-            _action: &str,
-            _executor: &mut dyn Executor,
-        ) -> FinanceResult<FundsResolvedScope> {
-            Err(FinanceError::Internal("未使用的授权解析".into()))
-        }
-
         async fn expand_org_units(
             &self,
             ids: &[String],

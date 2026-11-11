@@ -36,10 +36,10 @@ use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::authorization::PurchaseOrderAuthorization;
 use super::creation_basis::{
     CreateBasisCommand, VerifiedBasisInput, basis_groups_and_facts, load_effective_sales_order,
     persist_basis_draft, procurement_quantity_changed, stock_basis_groups_for_order,
@@ -93,7 +93,7 @@ impl PurchaseOrderProcess {
     ///
     /// # 关键业务约束
     /// 同一销售行可按库存与采购精确依据拆分；库存直接形成预占与仓发草稿，采购缺口按拆分维度建单；
-    /// 操作人授权版本通过 policy CAS 与提交绑定，事务内只推进一次销售单供给 guard；
+    /// 操作人在原业务事务中重新核验统一授权，事务内只推进一次销售单供给 guard；
     /// 采购单创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_sourcing(
         &self,
@@ -131,7 +131,7 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 保留授权事务的原克隆、账号复验和实际业务写入顺序。
+    /// 在原业务事务中先重验授权，再执行实际业务写入。
     async fn sourcing_transaction(
         &self,
         input: SourcingTransactionInput<'_>,
@@ -139,7 +139,7 @@ impl PurchaseOrderProcess {
         authorization: PurchaseOrderAuthorization,
     ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
         let ports = self.ports.clone();
-        let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
+        let rbac = authorization.rbac.clone();
         let SourcingTransactionInput { req, sales_order_id, receipt_identity, request_fingerprint, actor } =
             input;
         let db = self.db.clone();
@@ -150,27 +150,29 @@ impl PurchaseOrderProcess {
         let transaction_fingerprint = request_fingerprint.to_string();
         let transaction_receipt_identity = receipt_identity.clone();
         let transaction_sales_order_id = sales_order_id.clone();
-        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
-            Box::pin(async move {
-                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
-                create_from_sourcing_apply(
-                    &db,
-                    ports.as_ref(),
-                    CreateFromSourcingApplyInput {
-                        rbac: &binding_rbac,
-                        req: &transaction_req,
-                        assignments: &assignments,
-                        sales_order_id: &transaction_sales_order_id,
-                        receipt_identity: &transaction_receipt_identity,
-                        request_fingerprint: &transaction_fingerprint,
-                        actor: &transaction_actor,
-                    },
-                    executor,
-                )
-                .await
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization.require(&transaction_actor, executor).await?;
+                    create_from_sourcing_apply(
+                        &db,
+                        ports.as_ref(),
+                        CreateFromSourcingApplyInput {
+                            rbac: &binding_rbac,
+                            req: &transaction_req,
+                            assignments: &assignments,
+                            sales_order_id: &transaction_sales_order_id,
+                            receipt_identity: &transaction_receipt_identity,
+                            request_fingerprint: &transaction_fingerprint,
+                            actor: &transaction_actor,
+                        },
+                        executor,
+                    )
+                    .await
+                })
             })
-        })
-        .await
+            .await
     }
 }
 

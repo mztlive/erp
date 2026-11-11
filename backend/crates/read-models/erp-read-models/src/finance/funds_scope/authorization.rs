@@ -6,21 +6,15 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
+use erp_core::common::time::Instant;
 use erp_core::money::Amount;
-use erp_finance::ports::funds_scope::{FundsDataScopePort, FundsResolvedScope};
+use erp_finance::ports::funds_scope::FundsDataScopePort;
 use erp_identity::SharedRbacService;
-#[cfg(test)]
-use erp_identity::access_control::ResolvedScope;
-#[cfg(test)]
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::service::access_control::resolve::AuthorizedDataScope;
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_procurement::PurchaseAccess;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
+use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::Serialize;
@@ -29,19 +23,27 @@ use super::rows::*;
 use crate::ports::invoice_grants::InvoiceGrantReadiness;
 use crate::{Error, Result};
 
+/// 当前读取结果的展示元信息，权限凭证由源查询分别持有。
+#[derive(Clone)]
+pub struct FundsReadContext {
+    pub resource: String,
+    pub scope_version: String,
+    pub as_of: Instant,
+}
+
 /// 资金自身动作资格与真实来源边界；整账职责不替代任何来源判定。
 pub struct FundsAuthorization {
+    pub(super) whole: super::repository::whole_access::WholeAccess,
     /// 关联销售单的已解析范围。
     pub sales: SalesReadScope,
     /// 明确的财务整账读取职责，不授予来源业务动作。
     pub ledger_read: bool,
     /// 结算来源范围，必须按实际来源类型选择。
-    pub settlement: Option<AuthorizedDataScope>,
+    pub settlement: Option<super::repository::source_access::SourceQuery>,
     /// 采购关联资源的已解析采购范围；销售关联查询为 `None`。
     pub purchase_scope: Option<PurchaseReadScope>,
     /// 资金资源动作的解析上下文。
-    pub context: AuthorizedDataScope,
-    pub(super) no_scope: bool,
+    pub context: FundsReadContext,
 }
 
 impl FundsAuthorization {
@@ -59,7 +61,7 @@ impl FundsAuthorization {
         !self.ledger_read
             && self.sales.is_empty()
             && self.purchase_scope.as_ref().is_none_or(PurchaseReadScope::is_empty)
-            && self.settlement.as_ref().is_none_or(|scope| scope.scope.role_clauses.is_empty())
+            && self.settlement.is_none()
     }
 }
 
@@ -88,10 +90,6 @@ pub struct FundsScopedResult<T> {
     pub data: T,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 无范围时的空结果原因。
@@ -178,7 +176,7 @@ impl FundsAccess {
         resource: &str,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
+    ) -> Result<(FundsReadContext, FundsAuthorization)> {
         self.resolve_sources(actor, resource, action, false, false, executor).await
     }
 
@@ -203,7 +201,7 @@ impl FundsAccess {
         action: &str,
         _purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
-    ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
+    ) -> Result<(FundsReadContext, FundsAuthorization)> {
         self.resolve_sources(actor, resource, action, true, false, executor).await
     }
 
@@ -225,15 +223,7 @@ impl FundsAccess {
             let rows = self
                 .db
                 .sales_orders()
-                .scope_order_versions(
-                    batch,
-                    &authorization.sales,
-                    &SalesReadScope {
-                        roles: vec![SalesScopeClause { company: true, ..Default::default() }],
-                        ..Default::default()
-                    },
-                    executor,
-                )
+                .scope_order_versions(batch, &authorization.sales, &authorization.sales, executor)
                 .await?;
             allowed.extend(rows.into_iter().map(|row| row.id));
         }
@@ -263,12 +253,6 @@ impl FundsAccess {
     ) -> Result<BTreeSet<String>> {
         self.scope.expand_org_units(org_unit_ids, include_descendants, executor).await.map_err(Error::from)
     }
-}
-
-/// 由版本号构造组织版本快照；不读取组织集合。
-#[cfg(test)]
-pub(super) fn organization_version(version: u64) -> OrganizationState {
-    OrganizationState { version, ..Default::default() }
 }
 
 impl FundsLinkedFacts {
@@ -400,7 +384,7 @@ pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
 ///
 /// # 错误
 /// 不返回错误。
-pub fn scope_version(context: &AuthorizedDataScope, parts: &[String]) -> String {
+pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     context.scope_version.hash(&mut fingerprint);
     for part in parts {
@@ -469,8 +453,7 @@ pub(super) fn empty_page<T>(
         page: 1,
         page_size: 20,
         scope_version: authorization.context.scope_version.clone(),
-        policy_version: authorization.context.policy_version,
-        organization_version: authorization.context.organizations.version,
+
         as_of: authorization.context.as_of.as_utc().to_rfc3339(),
         empty_reason: Some(reason),
         scope_summary: summary,
@@ -628,8 +611,7 @@ mod tests {
             page,
             page_size: 20,
             scope_version: scope_version.to_string(),
-            policy_version: 0,
-            organization_version: 0,
+
             as_of: String::new(),
             empty_reason: None,
             scope_summary: "",
@@ -716,17 +698,11 @@ mod tests {
 
     #[test]
     pub(super) fn scope_versions_bind_authorization_and_linked_documents() {
-        let context = AuthorizedDataScope::test_fixture(DataScopeFacts {
-            user_id: "u1".into(),
+        let context = FundsReadContext {
             resource: "customer_receipt".into(),
-            action: "list".into(),
-            scope: ResolvedScope { role_clauses: vec![], user_limit: None },
-            qualified_roles: Default::default(),
-            organizations: organization_version(7),
-            policy_version: 1,
             scope_version: "base".into(),
-            as_of: erp_core::common::time::Instant::from_unix_secs(0),
-        });
+            as_of: Instant::from_unix_secs(0),
+        };
         let first = scope_version(&context, &["so-1:3".to_string()]);
         let second = scope_version(&context, &["so-1:4".to_string()]);
         assert_ne!(first, second);

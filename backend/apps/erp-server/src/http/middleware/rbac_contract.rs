@@ -4,15 +4,16 @@ use std::convert::Infallible;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use axum::body::{Body, to_bytes};
 use axum::extract::Request;
 use axum::response::IntoResponse;
-use erp_identity::{AuthorizationPort, OrganizationScopeFact, Permission};
+use erp_identity::Permission;
 use serde_json::{Value, json};
 use tower::{Layer, ServiceExt, service_fn};
 
-use super::{ApiResponse, RbacAuthorizeLayer, RbacSubject};
+use super::{ApiResponse, HttpAuthorization, RbacAuthorizeLayer};
 #[path = "rbac_contract_cases.rs"]
 mod fixtures;
 
@@ -22,14 +23,10 @@ struct Authorization {
 }
 
 #[async_trait]
-impl AuthorizationPort for Authorization {
-    async fn allows(&self, subject: &str, permission: &Permission) -> erp_identity::Result<bool> {
-        self.calls.lock().unwrap().push((subject.into(), permission.to_string()));
+impl HttpAuthorization for Authorization {
+    async fn allows(&self, subject: &AuditActor, permission: &Permission) -> erp_identity::Result<bool> {
+        self.calls.lock().unwrap().push((subject.id().into(), permission.to_string()));
         self.result.ok_or_else(|| erp_identity::Error::Internal("private provider error".into()))
-    }
-
-    async fn organization_scope(&self, _: &str) -> erp_identity::Result<Option<OrganizationScopeFact>> {
-        Ok(None)
     }
 }
 
@@ -53,7 +50,11 @@ async fn existing_permissions_preserve_http_authorization_contract() {
             });
             let mut request = Request::new(Body::empty());
             if authenticated {
-                request.extensions_mut().insert(RbacSubject("baseline-user".into()));
+                request.extensions_mut().insert(AuditActor::new(
+                    "baseline-user".into(),
+                    "user".into(),
+                    erp_core::AccountKind::Admin,
+                ));
             }
             let response = layer.layer(handler).oneshot(request).await.unwrap();
             assert_eq!(response.status().as_u16(), status, "{code}");
@@ -95,7 +96,11 @@ async fn layered_permissions_keep_outer_first_denial_and_stop_execution() {
         });
         let mut request = Request::new(Body::empty());
         if authenticated {
-            request.extensions_mut().insert(RbacSubject("baseline-user".into()));
+            request.extensions_mut().insert(AuditActor::new(
+                "baseline-user".into(),
+                "user".into(),
+                erp_core::AccountKind::Admin,
+            ));
         }
         let response = outer.layer(inner.layer(handler)).oneshot(request).await.unwrap();
         assert_eq!(response.status().as_u16(), status);

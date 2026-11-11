@@ -3,6 +3,7 @@
 //! 单集合 CRUD 直接复用 `owned` 仓储；本模块只承载跨集合多步骤写入入口与
 //! 列表投影查询。集合名统一取 `SalesSelectionExt` 关联常量。
 
+pub mod authorization;
 mod list_summary;
 mod proposal_scope;
 mod queries;
@@ -13,7 +14,7 @@ use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 pub use queries::{
     SalesSelectionBookletRepositoryExt, SalesSelectionDisplayItemRepositoryExt,
@@ -23,7 +24,7 @@ pub use queries::{
     SalesSelectionSessionRepositoryExt,
 };
 pub use rate::SalesSelectionRateRepository;
-pub use scope::{SelectionReadScope, SelectionScopeClause};
+pub use scope::SelectionReadScope;
 
 use crate::entity::sales_selection::{
     SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember, SalesSelectionPrepareTask,
@@ -31,6 +32,7 @@ use crate::entity::sales_selection::{
 };
 use crate::repository::extensions::SalesSelectionExt;
 use crate::repository::filter::push_undeleted;
+use crate::service::authorization_error::identity_error;
 
 /// 选品册集合名（单一来源）。
 const BOOKLETS: &str = <mongodb::Database as SalesSelectionExt>::SALES_SELECTION_BOOKLETS;
@@ -111,7 +113,6 @@ impl QueryFilter for SelectionBookFilter {
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
-        and.push(self.authorized_scope.document());
         if let Some(ids) = &self.authorized_customer_ids {
             and.push(doc! { "customer_id": { "$in": ids } });
         }
@@ -246,23 +247,6 @@ pub fn validate_book_sort(sort_by: Option<&str>, sort_ascending: bool) -> crate:
     Err(crate::Error::ValidationError(format!("不支持的排序字段: {field}")))
 }
 
-/// 合并并集条件；空集合返回恒假，缺范围不得变全量。
-///
-/// # 参数
-/// * `conditions` - 并集条件
-///
-/// # 返回
-/// 返回 `$or` 或恒假条件。
-///
-/// # 错误
-/// 无。
-pub(crate) fn scope_union(conditions: Vec<Document>) -> Document {
-    if conditions.is_empty() {
-        return doc! { "$expr": false };
-    }
-    doc! { "$or": conditions }
-}
-
 /// 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入与列表查询。
 pub struct SalesSelectionDomainRepository<'a> {
     db: &'a Database,
@@ -300,7 +284,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         &self,
         filter: &SelectionBookFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SalesSelectionBooklet>> {
+    ) -> crate::Result<PageResult<SalesSelectionBooklet>> {
         let sort_field = filter.sort_by.as_deref().unwrap_or("created_at");
         let direction = if filter.sort_ascending { 1 } else { -1 };
         let options = FindOptions::builder()
@@ -309,20 +293,28 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .limit(filter.limit())
             .build();
         let condition = filter.to_doc();
-        let items = mongo_ops::find_many(
+        filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
+        let stages = filter.authorized_scope.lookup_after(condition.clone());
+        let items = aggregate::find(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
             condition.clone(),
             options,
+            stages.clone(),
             executor,
         )
         .await?;
-        let total = mongo_ops::count_documents(
+        let total = aggregate::count(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
             condition,
+            stages,
             executor,
         )
         .await?;
-        Ok(PageResult { items, total: total as i64 })
+        filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
+        Ok(PageResult {
+            items,
+            total: i64::try_from(total).map_err(|_| crate::Error::Internal("选品计数超限".into()))?,
+        })
     }
 
     /// 分页检索方案（整文档）；计数与取数使用同一授权条件。
@@ -340,7 +332,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         &self,
         filter: &SelectionProposalFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SalesSelectionProposal>> {
+    ) -> crate::Result<PageResult<SalesSelectionProposal>> {
         proposal_scope::search(self.db, filter, executor).await
     }
 
@@ -586,10 +578,7 @@ mod tests {
     fn filter() -> SelectionBookFilter {
         SelectionBookFilter {
             authorized_customer_ids: None,
-            authorized_scope: super::SelectionReadScope {
-                roles: vec![super::SelectionScopeClause { company: true, ..Default::default() }],
-                ..Default::default()
-            },
+            authorized_scope: super::SelectionReadScope::default(),
             owner_user_ids: None,
             org_unit_ids: None,
             customer_id: Some("cust-1".into()),

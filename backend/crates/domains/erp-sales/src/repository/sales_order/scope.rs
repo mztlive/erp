@@ -1,163 +1,136 @@
-//! 销售单当前责任范围查询；输入必须由应用层完成资源动作授权。
+//! identity 编译凭证在销售仓储的执行载体；不解释权限规则。
+use std::sync::Arc;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_identity::entity::authorization::QueryOutput;
+use erp_identity::{AuthorizationService, CompiledAccess};
+use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, aggregate};
+use persistence_core::{Executor, Repository, aggregate};
 
-/// 一个已经通过同角色权限证明的销售责任范围。
-#[derive(Debug, Clone, Default)]
-pub struct SalesScopeClause {
-    pub company: bool,
-    pub owner_user_id: Option<String>,
-    pub business_org_unit_ids: Vec<String>,
-    pub collaborative_customer_ids: Vec<String>,
-}
+use crate::Result;
+use crate::repository::SalesOrderExt;
+use crate::service::authorization_error::identity_error;
 
-/// 角色并集与个人上限保留为独立条件，筛选不得覆盖授权。
-#[derive(Debug, Clone, Default)]
+/// 不可构造权限条件的仓储读取载体；缺凭证始终为空。
+#[derive(Clone, Default)]
 pub struct SalesReadScope {
-    /// 由统一授权接口生成的关联阶段，必须在范围条件和分页之前执行。
-    pub grant_lookup: Vec<Document>,
-    /// 由 workflow 按当前单据与账号编译的历史参与存在性查询。
-    pub history_lookup: Vec<Document>,
-    /// 其他敏感资源的独立范围，全部必须同时满足。
-    pub required_scopes: Vec<SalesReadScope>,
-    pub roles: Vec<SalesScopeClause>,
-    pub user_limit: Option<SalesScopeClause>,
-    /// 已证明合法读取参与的单据 ID，不得由历史归属快照构造。
-    pub historical_order_ids: Vec<String>,
+    access: Option<Arc<CompiledAccess>>,
+    authorization: Option<AuthorizationService>,
 }
-
-impl SalesScopeClause {
-    /// 按与仓储条件相同的当前责任事实判断待创建对象，不使用审计创建人。
-    #[cfg(test)]
-    fn allows(&self, owner: &str, org: &str, customer: &str) -> bool {
-        self.company
-            || self.owner_user_id.as_deref() == Some(owner)
-            || self.business_org_unit_ids.iter().any(|id| id == org)
-            || self.collaborative_customer_ids.iter().any(|id| id == customer)
-    }
-    /// 没有任何可匹配责任条件时，范围确定为空。
-    fn is_empty(&self) -> bool {
-        !self.company
-            && self.owner_user_id.is_none()
-            && self.business_org_unit_ids.is_empty()
-            && self.collaborative_customer_ids.is_empty()
-    }
-    /// 将当前销售责任转换为固定字段条件；空范围明确无结果。
-    fn document(&self) -> Document {
-        if self.company {
-            return doc! {};
-        }
-        let mut conditions = Vec::new();
-        if let Some(user) = &self.owner_user_id {
-            conditions.push(doc! { "sales_owner_user_id": user });
-        }
-        if !self.business_org_unit_ids.is_empty() {
-            conditions.push(doc! { "business_org_unit_id": { "$in": &self.business_org_unit_ids } });
-        }
-        if !self.collaborative_customer_ids.is_empty() {
-            conditions.push(doc! { "customer_id": { "$in": &self.collaborative_customer_ids } });
-        }
-        union(conditions)
+impl std::fmt::Debug for SalesReadScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SalesReadScope").field("access", &self.access).finish()
     }
 }
-
 impl SalesReadScope {
-    /// 先用本次业务筛选收窄集合，再关联有效读取来源。
+    /// 绑定本次 identity 编译结果和同一服务。
     /// # 参数
-    /// filter 为不含授权临时字段的业务条件。
+    /// access 为完整销售模型凭证，authorization 为生成它的服务。
     /// # 返回
-    /// 授权判定前的查询阶段；不得在这些阶段中分页。
+    /// 仅用于当前事务读取的执行载体。
     /// # 错误
-    /// 不执行 I/O。
+    /// 无；执行前后须复验。
+    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
+        Self { access: Some(access), authorization: Some(authorization) }
+    }
+    /// 返回完整授权阶段。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 生成的完整阶段。
+    /// # 错误
+    /// 无凭证时返回恒假阶段。
+    pub fn stages(&self) -> Vec<Document> {
+        self.access
+            .as_ref()
+            .map(|a| a.stages().to_vec())
+            .unwrap_or_else(|| vec![doc! {"$match": {"$expr": false}}])
+    }
+    /// 将业务筛选和完整授权前置于分页。
+    /// # 参数
+    /// filter 仅包含业务筛选。
+    /// # 返回
+    /// 查询前缀。
+    /// # 错误
+    /// 无。
     pub fn lookup_after(&self, filter: Document) -> Vec<Document> {
-        let mut stages = vec![doc! { "$match": filter }];
-        stages.extend(self.history_lookup.clone());
-        stages.extend(self.grant_lookup.clone());
+        let mut stages = vec![doc! {"$match": filter}];
+        stages.extend(self.stages());
         stages
     }
-
-    /// 校验尚未持久化的单据责任；只使用正向角色范围与个人上限。
-    ///
+    /// 按关联行的实际单个销售来源执行完整授权，不预载来源集合。
+    /// # 参数
+    /// source_field 为关联行中保存单个销售单身份的固定业务字段。
     /// # 返回
-    /// 全部独立资源范围同时覆盖责任事实时返回 true，历史参与不授予创建权。
-    #[cfg(test)]
-    pub fn allows_creation(&self, owner: &str, org: &str, customer: &str) -> bool {
-        self.roles.iter().any(|c| c.allows(owner, org, customer))
-            && self.user_limit.as_ref().is_none_or(|c| c.allows(owner, org, customer))
-            && self.required_scopes.iter().all(|c| c.allows_creation(owner, org, customer))
+    /// 来源存在且完整授权命中时保留关联行，不增加根记录数量。
+    /// # 错误
+    /// 无；执行前后由调用仓储复验凭证。
+    pub fn related_stages(&self, source_field: &str) -> Vec<Document> {
+        related_sales_stages(source_field, self.stages())
     }
-    /// 判断完整销售集合是否已获授权，个人上限仍须允许公司范围。
-    ///
+    /// 只表示是否缺少凭证，不推断权限规则。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 仅在角色公司授权且未被个人上限收窄时返回 true。
-    ///
+    /// 无凭证为 true。
     /// # 错误
-    /// 不返回错误。
-    pub fn is_company(&self) -> bool {
-        self.required_scopes.iter().all(Self::is_company)
-            && self.roles.iter().any(|c| c.company)
-            && self.user_limit.as_ref().is_none_or(|c| c.company)
-    }
-    /// 判断授权规则是否确定不产生可见对象。
-    ///
-    /// # 参数
     /// 无。
-    ///
-    /// # 返回
-    /// 仅证明空授权；非空规则仍可能因期间或业务筛选而没有记录。
-    ///
-    /// # 错误
-    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
-        if !self.grant_lookup.is_empty() {
-            return self.required_scopes.iter().any(Self::is_empty);
-        }
-        self.required_scopes.iter().any(Self::is_empty)
-            || (self.roles.iter().all(SalesScopeClause::is_empty)
-                && self.historical_order_ids.is_empty()
-                && self.history_lookup.is_empty())
-            || self.user_limit.as_ref().is_some_and(SalesScopeClause::is_empty)
+        self.access.is_none()
     }
-    /// 生成角色并集与个人上限交集，历史业绩字段不参与授权。
-    ///
+    /// 业务匹配不重复解释已经执行的授权阶段。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 返回仓储读取条件，空角色集不产生全量授权。
-    ///
+    /// 有凭证为空条件，缺凭证恒假。
     /// # 错误
-    /// 不返回错误。
+    /// 无。
     pub fn document(&self) -> Document {
-        let mut grants = self.roles.iter().map(SalesScopeClause::document).collect::<Vec<_>>();
-        if !self.historical_order_ids.is_empty() {
-            grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
+        if self.access.is_some() {
+            doc! {}
+        } else {
+            doc! {"$expr": false}
         }
-        if !self.history_lookup.is_empty() {
-            grants.push(doc! { "__document_participant.0": { "$exists": true } });
+    }
+    /// 在原执行器复验 identity 凭证。
+    /// # 参数
+    /// executor 为生成凭证时的执行器。
+    /// # 返回
+    /// 当前授权仍有效时成功。
+    /// # 错误
+    /// 身份、映射、版本或会话变化返回原始错误。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+        match (&self.access, &self.authorization) {
+            (Some(access), Some(service)) => {
+                if access.model().collection != Database::SALES_ORDERS
+                    || access.model().output != QueryOutput::Object
+                {
+                    return Err(crate::Error::ValidationError("销售授权查询模型不匹配".into()));
+                }
+                service.validate(access, executor).await.map_err(identity_error)
+            },
+            _ => Err(crate::Error::Forbidden("缺少销售授权凭证".into())),
         }
-        let mut roles = union(grants);
-        if let Some(limit) = &self.user_limit {
-            roles = doc! { "$and": [roles, limit.document()] };
-        }
-        if !self.grant_lookup.is_empty() {
-            roles = doc! { "$or": [roles, { "__resource_grant.0": { "$exists": true } }] };
-        }
-        if !self.required_scopes.is_empty() {
-            let mut required = self.required_scopes.iter().map(Self::document).collect::<Vec<_>>();
-            required.push(roles);
-            roles = doc! { "$and": required };
-        }
-        roles
     }
 }
 
+fn related_sales_stages(source_field: &str, authorization: Vec<Document>) -> Vec<Document> {
+    let mut source = vec![doc! {"$match": {"$expr": {"$eq": ["$id", "$$sales_source_id"]}}}];
+    source.extend(authorization);
+    source.extend([doc! {"$project": {"_id": 0, "id": 1}}, doc! {"$limit": 1}]);
+    vec![
+        doc! {"$lookup": {
+            "from": Database::SALES_ORDERS,
+            "let": {"sales_source_id": format!("${source_field}")},
+            "pipeline": source,
+            "as": "__authorized_sales_source",
+        }},
+        doc! {"$match": {"__authorized_sales_source.0": {"$exists": true}}},
+        doc! {"$unset": "__authorized_sales_source"},
+    ]
+}
 /// 销售单责任范围查询。
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryScopeExt {
@@ -180,7 +153,7 @@ pub trait SalesOrderRepositoryScopeExt {
         sales: &SalesReadScope,
         resource: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<crate::entity::sales_order::SalesOrder>>;
+    ) -> crate::Result<Vec<crate::entity::sales_order::SalesOrder>>;
 
     /// 只读取关联销售范围内的身份与版本，避免授权重验装载完整订单。
     ///
@@ -221,7 +194,7 @@ pub trait SalesOrderRepositoryScopeExt {
         id: &str,
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Option<crate::entity::sales_order::SalesOrder>>;
+    ) -> crate::Result<Option<crate::entity::sales_order::SalesOrder>>;
 
     /// 列出当前范围内的销售单主键，供变更单沿原单接入。
     ///
@@ -241,7 +214,7 @@ pub trait SalesOrderRepositoryScopeExt {
         &self,
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<String>>;
+    ) -> crate::Result<Vec<String>>;
 }
 
 impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order::SalesOrder> {
@@ -251,20 +224,29 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         sales: &SalesReadScope,
         resource: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<crate::entity::sales_order::SalesOrder>> {
+    ) -> crate::Result<Vec<crate::entity::sales_order::SalesOrder>> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        aggregate::find(
+        sales.validate(executor).await?;
+        resource.validate(executor).await?;
+        let result = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
                 { "id": { "$in": ids } }, sales.document(), resource.document()
             ] },
             FindOptions::default(),
-            sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } }),
+            {
+                let mut stages = sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } });
+                stages.extend(resource.stages());
+                stages
+            },
             executor,
         )
-        .await
+        .await?;
+        sales.validate(executor).await?;
+        resource.validate(executor).await?;
+        Ok(result)
     }
 
     async fn scope_order_versions(
@@ -277,16 +259,25 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        aggregate::find(
+        sales.validate(executor).await?;
+        resource.validate(executor).await?;
+        let result = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
                 { "id": { "$in": ids } }, sales.document(), resource.document()
             ] },
             FindOptions::builder().projection(doc! { "id": 1, "version": 1 }).sort(doc! { "id": 1 }).build(),
-            sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } }),
+            {
+                let mut stages = sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } });
+                stages.extend(resource.stages());
+                stages
+            },
             executor,
         )
-        .await
+        .await?;
+        sales.validate(executor).await?;
+        resource.validate(executor).await?;
+        Ok(result)
     }
 
     async fn find_authorized(
@@ -294,23 +285,26 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         id: &str,
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Option<crate::entity::sales_order::SalesOrder>> {
-        aggregate::find(
+    ) -> crate::Result<Option<crate::entity::sales_order::SalesOrder>> {
+        scope.validate(executor).await?;
+        let rows = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": 0, "$and": [{ "id": id }, scope.document()] },
             FindOptions::builder().limit(1).build(),
             scope.lookup_after(doc! { "deleted_at": 0, "id": id }),
             executor,
         )
-        .await
-        .map(|rows| rows.into_iter().next())
+        .await?;
+        scope.validate(executor).await?;
+        Ok(rows.into_iter().next())
     }
 
     async fn list_authorized_ids(
         &self,
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<String>> {
+    ) -> crate::Result<Vec<String>> {
+        scope.validate(executor).await?;
         let versions = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! {
@@ -326,16 +320,9 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             executor,
         )
         .await?;
+        scope.validate(executor).await?;
         Ok(versions.into_iter().map(|row| row.id).collect())
     }
-}
-
-/// MongoDB 不接受空 $or；用恒假表达式保持缺范围拒绝语义。
-fn union(conditions: Vec<Document>) -> Document {
-    if conditions.is_empty() {
-        return doc! { "$expr": false };
-    }
-    doc! { "$or": conditions }
 }
 
 /// 跨页校验使用的业务身份和版本，不包含金额及其他展示字段。
@@ -348,99 +335,38 @@ pub struct SalesVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn creation_requires_role_scope_and_every_action_and_personal_limit() {
-        let mut scope = SalesReadScope {
-            roles: vec![SalesScopeClause { company: true, ..Default::default() }],
-            required_scopes: vec![SalesReadScope {
-                roles: vec![SalesScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() }],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        assert!(scope.allows_creation("sales-a", "org-a", "customer-a"));
-        assert!(!scope.allows_creation("sales-b", "org-a", "customer-a"));
-        scope.user_limit =
-            Some(SalesScopeClause { business_org_unit_ids: vec!["org-b".into()], ..Default::default() });
-        assert!(!scope.allows_creation("sales-a", "org-a", "customer-a"));
-        assert!(scope.allows_creation("sales-a", "org-b", "customer-a"));
-        scope.roles.clear();
-        scope.historical_order_ids.push("old-order".into());
-        assert!(!scope.allows_creation("sales-a", "org-b", "customer-a"));
-    }
-
-    #[test]
-    fn independent_cost_scope_cannot_expand_sales_or_bypass_a_personal_limit() {
-        let mut scope = SalesReadScope {
-            roles: vec![SalesScopeClause { company: true, ..Default::default() }],
-            required_scopes: vec![SalesReadScope {
-                roles: vec![SalesScopeClause { owner_user_id: Some("sales-a".into()), ..Default::default() }],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        assert!(!scope.is_company());
-        assert!(!scope.is_empty());
-        assert!(scope.document().contains_key("$and"));
-        scope.required_scopes[0].user_limit = Some(SalesScopeClause::default());
+    fn absent_identity_credential_cannot_expose_sales_rows() {
+        let scope = SalesReadScope::default();
         assert!(scope.is_empty());
-        assert!(!scope.is_company());
-    }
-
-    #[test]
-    fn missing_scope_and_company_with_empty_personal_limit_stay_restricted() {
-        assert_eq!(SalesReadScope::default().document(), doc! { "$expr": false });
-        assert!(SalesReadScope::default().is_empty());
-        let scope = SalesReadScope {
-            required_scopes: vec![],
-            roles: vec![SalesScopeClause { company: true, ..Default::default() }],
-            user_limit: Some(SalesScopeClause::default()),
-            grant_lookup: Vec::new(),
-            history_lookup: Vec::new(),
-            historical_order_ids: vec![],
-        };
-        assert_eq!(scope.document(), doc! { "$and": [{ "$or": [{}] }, { "$expr": false }] });
-        assert!(scope.is_empty());
-    }
-
-    #[test]
-    fn historical_participation_adds_reads_without_bypassing_personal_limit() {
-        let mut scope =
-            SalesReadScope { historical_order_ids: vec!["old-order".into()], ..Default::default() };
-        assert!(!scope.is_empty());
-        assert_eq!(scope.document(), doc! { "$or": [{ "id": { "$in": ["old-order"] } }] });
-        scope.user_limit = Some(SalesScopeClause::default());
-        assert!(scope.is_empty());
+        assert_eq!(scope.stages(), vec![doc! {"$match":{"$expr":false}}]);
         assert_eq!(
-            scope.document(),
-            doc! { "$and": [
-                { "$or": [{ "id": { "$in": ["old-order"] } }] }, { "$expr": false }
-            ] }
+            scope.lookup_after(doc! {"customer_id":"c"}),
+            vec![doc! {"$match":{"customer_id":"c"}}, doc! {"$match":{"$expr":false}}]
         );
     }
 
     #[test]
-    fn responsibility_uses_current_order_facts_and_keeps_role_alternatives() {
-        let scope = SalesReadScope {
-            required_scopes: vec![],
-            roles: vec![SalesScopeClause {
-                owner_user_id: Some("sales-a".into()),
-                business_org_unit_ids: vec!["org-a".into()],
-                ..Default::default()
-            }],
-            user_limit: None,
-            grant_lookup: Vec::new(),
-            history_lookup: Vec::new(),
-            historical_order_ids: vec![],
-        };
-        assert!(!scope.is_empty());
+    fn related_query_correlates_one_source_then_preserves_every_authorization_stage() {
+        let authorization = vec![
+            doc! {"$lookup": {"from": "record_grants", "pipeline": [], "as": "_grants"}},
+            doc! {"$match": {"$or": [{"owner_user_id": "u1"}, {"_grants.0": {"$exists": true}}]}},
+            doc! {"$unset": "_grants"},
+        ];
+        let stages = related_sales_stages("sales_order_id", authorization.clone());
+        let lookup = stages[0].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_str("from").unwrap(), Database::SALES_ORDERS);
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! {"sales_source_id": "$sales_order_id"});
+        let source = lookup.get_array("pipeline").unwrap();
         assert_eq!(
-            scope.document(),
-            doc! { "$or": [{ "$or": [
-                { "sales_owner_user_id": "sales-a" },
-                { "business_org_unit_id": { "$in": ["org-a"] } }
-            ] }] }
+            source[0].as_document().unwrap(),
+            &doc! {"$match": {"$expr": {"$eq": ["$id", "$$sales_source_id"]}}}
         );
+        for (actual, expected) in source[1..=authorization.len()].iter().zip(authorization) {
+            assert_eq!(actual.as_document().unwrap(), &expected);
+        }
+        assert_eq!(source.last().unwrap().as_document().unwrap(), &doc! {"$limit": 1});
+        assert_eq!(stages[1], doc! {"$match": {"__authorized_sales_source.0": {"$exists": true}}});
+        assert_eq!(stages[2], doc! {"$unset": "__authorized_sales_source"});
     }
 }

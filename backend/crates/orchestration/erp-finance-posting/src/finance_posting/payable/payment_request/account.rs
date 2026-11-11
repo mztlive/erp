@@ -2,7 +2,7 @@
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_finance::dto::payable::{PaymentRecipientRevealView, RevealPaymentRecipientRequest};
-use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_party::{PartyExt, SensitiveDataCodec};
 use erp_workflow::service::work_item::expected_task_version;
 use erp_workflow::{WorkItemExt, WorkItemStatus, WorkItemType};
@@ -32,16 +32,6 @@ impl PurchasePaymentRequestProcess {
     ) -> Result<PaymentRecipientRevealView> {
         req.validate()?;
         let task_version = expected_task_version(&req.expected_task_version)?;
-        let permission = Permission::parse("party_bank_account:reveal")?;
-        let permissions = self
-            .rbac
-            .role_permission_snapshot(actor.kind(), actor.id(), std::slice::from_ref(&permission))
-            .await?;
-        let reveal_roles = permissions.granting_role_ids(&permission);
-        if reveal_roles.is_empty() {
-            return Err(Error::Forbidden("没有完整银行账号揭示权限".into()));
-        }
-        let revision = permissions.policy_revision();
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = actor.clone();
@@ -51,10 +41,6 @@ impl PurchasePaymentRequestProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.ensure_policy_snapshot_with_executor(revision, executor).await?;
-                    if db.roles().enabled_roles(&reveal_roles, executor).await?.is_empty() {
-                        return Err(Error::Forbidden("完整银行账号揭示角色已停用".into()));
-                    }
                     reveal(
                         &db,
                         &rbac,
@@ -83,6 +69,13 @@ async fn reveal(
     executor: &mut dyn Executor,
 ) -> Result<PaymentRecipientRevealView> {
     let RevealInput { id, req, task_version, actor, codec } = input;
+    let permissions = [Permission::parse("party_bank_account:reveal")?];
+    let authorization =
+        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
+    let qualified = authorization.permissions(actor, &permissions, executor).await?;
+    if !qualified.is_some_and(|qualified| qualified.same_role(&permissions)) {
+        return Err(Error::Forbidden("没有完整银行账号揭示权限".into()));
+    }
     let request = load(db, id, executor).await?;
     authorize_reveal_task(db, rbac, &request, req, task_version, actor, executor).await?;
     source::revalidate(db, &request, executor).await?;

@@ -116,8 +116,6 @@ type DualQualityViewBase = Readonly<{
     emptyReason?: string
     scopeSummary: string
     asOf: string
-    policyVersion: number
-    organizationVersion: number
     scopeVersion: string
     scope: QualityScope
     period: QualityPeriod

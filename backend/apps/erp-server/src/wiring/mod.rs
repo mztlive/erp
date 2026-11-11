@@ -1,5 +1,6 @@
 //! 把消费方端口接到提供方领域的组合 adapter。
 
+pub mod authorization;
 pub mod errors;
 
 #[cfg(test)]
@@ -191,7 +192,7 @@ pub fn customer_service(db: Database) -> CustomerService {
 /// 无。
 ///
 /// # 关键业务约束
-/// adapter 必须调用 DataScopeService；客户域不得直接依赖身份域。
+/// adapter 必须调用 identity 统一授权服务，不解释范围条款。
 pub fn scoped_customer_service(db: Database, rbac: SharedRbacService) -> CustomerService {
     CustomerService::new(
         db.clone(),
@@ -286,9 +287,6 @@ pub use offering_data_scope::{
 pub use supplier_fulfillment_identity::supplier_fulfillment_identity_factory;
 
 #[cfg(test)]
-mod scope_equivalence;
-
-#[cfg(test)]
 mod supplier_composition_tests;
 
 mod scope_target_validation;
@@ -299,8 +297,6 @@ pub use settlement_data_scope::{
 
 mod warehouse_directory;
 pub use warehouse_directory::warehouse_directory;
-
-mod directory_scope;
 
 mod sales_timeline;
 pub use sales_timeline::sales_timeline_service;

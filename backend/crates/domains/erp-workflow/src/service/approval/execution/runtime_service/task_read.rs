@@ -88,14 +88,12 @@ fn task_chain_matches_subject(
 /// # 错误
 /// 除 Forbidden 之外的策略及来源错误原样传播。
 async fn manager_can_read(
-    identity_service: &SharedRbacService,
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     subject: &RuntimeReadSubject,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     match require_approval_management_with_executor(
-        identity_service,
         auth,
         actor,
         "approval_instance:read",

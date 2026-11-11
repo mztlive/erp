@@ -384,13 +384,7 @@ mod tests {
             page: None,
             page_size: None,
         };
-        let scope = crate::repository::sales_selection::SelectionReadScope {
-            roles: vec![crate::repository::sales_selection::SelectionScopeClause {
-                company: true,
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
+        let scope = crate::repository::sales_selection::SelectionReadScope::default();
         let filter = booklet_filter(&params, &scope).unwrap();
         assert_eq!(filter.customer_id.as_deref(), Some("cust-1"));
         assert_eq!(filter.page, 1);

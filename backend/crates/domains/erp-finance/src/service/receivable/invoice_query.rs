@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use erp_core::ids::InvoiceId;
 use erp_core::money::Amount;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::ReceivableService;
@@ -137,23 +137,28 @@ impl ReceivableService {
     /// # 错误
     /// 发票不存在时返回 `NotFound`；发票或分配的仓储读取失败时返回对应错误。
     pub async fn invoice_detail(&self, id: &str) -> Result<InvoiceView> {
-        self.invoice_view(id.to_string()).await
+        self.invoice_detail_with_executor(id, &mut NoTransaction).await
     }
-    /// 装配发票视图。
+    /// 在调用方执行器装配财务事实；访问资格由调用方先行统一授权。
     ///
     /// # 参数
     /// * `id` - 发票 ID
+    /// * `executor` - 授权与当前财务事实读取使用的原执行器。
     ///
     /// # 返回
     /// 返回发票视图（含分配行与未分配余额）。
     ///
     /// # 错误
     /// * `NotFound` - 发票不存在
-    async fn invoice_view(&self, id: String) -> Result<InvoiceView> {
+    pub async fn invoice_detail_with_executor(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoiceView> {
         let invoice = self
             .db
             .invoices()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
         let (allocated_total, views) = match invoice.invoice_direction {
@@ -164,7 +169,7 @@ impl ReceivableService {
                 let rows = self
                     .db
                     .purchase_invoice_allocations()
-                    .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
+                    .find_allocations_by_invoices(&[invoice.base.id.clone().into()], executor)
                     .await?;
                 purchase_allocation_view(rows)
             },
@@ -172,7 +177,7 @@ impl ReceivableService {
                 let allocations = self
                     .db
                     .sales_invoice_allocations()
-                    .find_allocations_by_invoices(&[invoice.base.id.clone().into()], &mut NoTransaction)
+                    .find_allocations_by_invoices(&[invoice.base.id.clone().into()], executor)
                     .await?;
                 sales_allocation_view(allocations)
             },

@@ -74,7 +74,7 @@ pub async fn upgrade_unsubmitted_document_definition(
     ensure_prepared_upgrade_identity(command, actor, reason)?;
 
     let authorized =
-        load_authorized_upgrade_context(identity_service, db, rbac, upgrade, command, actor, executor)
+        load_authorized_upgrade_context(db, identity_service, rbac, upgrade, command, actor, executor)
             .await?;
 
     let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
@@ -140,7 +140,7 @@ pub async fn replay_unsubmitted_document_definition_upgrade(
     let reason = normalized_upgrade_reason(command)?;
     ensure_prepared_upgrade_identity(command, actor, reason)?;
     let _authorized =
-        load_authorized_upgrade_context(identity_service, db, rbac, upgrade, command, actor, executor)
+        load_authorized_upgrade_context(db, identity_service, rbac, upgrade, command, actor, executor)
             .await?;
     let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
     match command.identity.classify(receipt.as_ref()) {
@@ -166,8 +166,8 @@ fn normalized_upgrade_reason(command: &UpgradeUnsubmittedDefinitionCommand) -> R
 
 /// 先加载精确强事实，再重验账号与当前三重授权。
 async fn load_authorized_upgrade_context(
+    db: &Database,
     identity_service: &SharedRbacService,
-    _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     upgrade: &dyn crate::ports::UpgradeSubjectPort,
     command: &UpgradeUnsubmittedDefinitionCommand,
@@ -179,11 +179,11 @@ async fn load_authorized_upgrade_context(
             .await?;
     let policy = require_process_required(facts.document_type)?;
     let authorization = approval_binding_upgrade_authorization_with_executor(
+        db,
         identity_service,
         rbac,
         actor,
         facts.document_type,
-        &policy.definition_admin_permission,
         &facts.document_id,
         executor,
     )
@@ -326,7 +326,7 @@ async fn apply_fresh_upgrade(
     context.order_source = object.order_source;
     context.business_org_unit_id = object.business_org_unit_id;
     context.scope_owner_user_id = Some(object.owner_user_id);
-    revalidate_binding_graph(identity, policy, &context, &published, executor).await?;
+    revalidate_binding_graph(db, identity, policy, &context, &published, executor).await?;
     ensure_upgrade_changes_definition(&previous, &published)?;
 
     let current_definition_id = ApprovalProcessDefinitionId::new(published.definition.base.id.clone());

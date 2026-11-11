@@ -5,6 +5,14 @@ use erp_audit::{
     AuditAction, AuditCode, AuditFact, AuditField, AuditFieldKind, AuditValue, BusinessEventContent,
     BusinessEventContext, BusinessEventResult,
 };
+use erp_core::AccountKind;
+use erp_identity::repository::prelude::*;
+use erp_identity::{
+    AccessControlExt, AccountPermissionCandidate, AuthorizationRegistry, AuthorizationService, Permission,
+    SharedRbacService,
+};
+use mongodb::Database;
+use persistence_core::Executor;
 
 use crate::{Error, Result};
 
@@ -94,6 +102,58 @@ pub(crate) fn handover_content(value: HandoverEventFacts) -> BusinessEventConten
         field_changes: Vec::new(),
         facts,
     }
+}
+
+/// 通过统一授权服务检查实际目标账号的功能资格。
+/// # 参数
+/// db、rbac 为身份设施，target 为目标账号，permission 为已登记的具体功能，executor 为原事务。
+/// # 返回
+/// 账号有效且功能资格成立时返回 true。
+/// # 错误
+/// 身份设施或策略读取失败时透传。
+pub(crate) async fn target_qualified(
+    db: &Database,
+    rbac: &SharedRbacService,
+    target: &str,
+    permission: &Permission,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
+        return Ok(false);
+    };
+    let actor = AuditActor::new(account.base.id, account.name, account.kind);
+    let authorization =
+        AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
+    Ok(authorization.has_permission(&actor, permission, executor).await?)
+}
+
+/// 通过统一功能资格取得交接目标展示候选。
+/// # 参数
+/// db、rbac为身份设施，excluded为当前责任人，permission为目标岗位功能，executor为当前读取阶段。
+/// # 返回
+/// 按姓名、账号、ID排序的候选。
+/// # 错误
+/// 账号、权限或身份设施读取失败时停止。
+pub(crate) async fn qualified_candidates(
+    db: &Database,
+    rbac: &SharedRbacService,
+    excluded: &str,
+    permission: &Permission,
+    executor: &mut dyn Executor,
+) -> Result<Vec<AccountPermissionCandidate>> {
+    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
+    let mut candidates = Vec::new();
+    for account in db.accounts().list_by_kind(AccountKind::Admin, executor).await? {
+        if account.base.id == excluded {
+            continue;
+        }
+        let actor = AuditActor::new(account.base.id.clone(), account.name.clone(), account.kind);
+        if service.has_permission(&actor, permission, executor).await? {
+            candidates.push(AccountPermissionCandidate::from_account(&account));
+        }
+    }
+    candidates.sort();
+    Ok(candidates)
 }
 
 #[cfg(test)]

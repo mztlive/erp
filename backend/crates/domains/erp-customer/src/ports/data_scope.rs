@@ -1,176 +1,61 @@
-//! 客户范围授权 Port：只接收已解析事实，不暴露身份域实体或 Service。
-
+//! 客户授权端口只传输 identity 查询凭证与组织事实。
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
+use erp_identity::CompiledAccess;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// 身份域已解析的客户正向范围条款；不含身份域实体句柄。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct CustomerResolvedClause {
-    /// 公司范围覆盖该资源动作的全部客户。
-    pub company: bool,
-    /// 当前主负责人为操作人的客户。
-    pub self_owned: bool,
-    /// 当前协作者可见的客户。
-    pub collaborative: bool,
-    /// 已由公共解析器展开的内部组织。
-    pub org_unit_ids: Vec<String>,
-}
-
-impl CustomerResolvedClause {
-    /// 判断条款是否构成有效客户范围规则。
-    ///
-    /// 与仓储侧 [`crate::repository::scope::CustomerScopeClause::has_scope_rules`]
-    /// 同语义（erp-customer-005）：两套条款的谓词已对齐，`is_empty` 为其取反；
-    /// Port→仓储映射只经 `access::customer_scope/map_clause` 单一入口。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、主责、协作或组织目标时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 规则存在但当前无对象不得标为无范围；空条款保持空集且不得补公司。
-    pub fn has_scope_rules(&self) -> bool {
-        self.company || self.self_owned || self.collaborative || !self.org_unit_ids.is_empty()
-    }
-
-    /// 判断条款是否确定不产生可见对象。
-    ///
-    /// 与仓储侧 `is_empty` 同语义，为 `has_scope_rules` 取反（erp-customer-005）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无公司、主责、协作与组织条件时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn is_empty(&self) -> bool {
-        !self.has_scope_rules()
-    }
-}
-
-/// 已通过资格检查的客户范围事实。
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// 当前读取阶段的授权凭证与展示元信息。
+#[derive(Clone)]
 pub struct CustomerResolvedScope {
-    /// 已认证操作人。
     pub user_id: String,
-    /// 固定为客户资源。
-    pub resource: String,
-    /// 本次解析的客户动作。
-    pub action: String,
-    /// 同角色正向范围。
-    pub role_clauses: Vec<CustomerResolvedClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<CustomerResolvedClause>,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
-    /// 跨页与导出必须原样回传的范围版本。
+    pub current: bool,
     pub scope_version: String,
-    /// 授权解析时点。
     pub as_of: Instant,
+    pub compiled: Option<Arc<CompiledAccess>>,
 }
 
-impl CustomerResolvedScope {
-    /// 判断角色正向范围是否含有效规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任一角色条款构成有效规则时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只看角色条款；个人上限不单独构成“有范围规则”。
-    pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses.iter().any(CustomerResolvedClause::has_scope_rules)
-    }
-
-    /// 判断角色正向范围是否确定为空。
-    ///
-    /// 为 `has_scope_rules` 取反，与仓储侧空授权语义对齐（erp-customer-005）。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 无角色有效规则时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn is_empty(&self) -> bool {
-        !self.has_scope_rules()
-    }
-}
-
-/// 业务域提供的单对象责任事实；不包含原始授权规则。
-#[derive(Debug, Clone, Default)]
-pub struct CustomerScopeObject {
-    /// 当前操作人是否为对象的权威负责人。
-    pub owned: bool,
-    /// 当前操作人是否具备有效协作事实。
-    pub collaborating: bool,
-    /// 当前操作人是否具备合法历史读取参与。
-    pub historical_read_participant: bool,
-    /// 按本资源口径取得的内部组织。
-    pub org_unit_id: Option<String>,
-}
-
-/// 客户域消费的窄授权 Port；adapter 调用身份域公共解析器。
+/// 客户仅消费 identity 编译结果，不接收权限条款。
 #[async_trait]
 pub trait CustomerDataScopePort: Send + Sync {
-    /// 经生产 adapter 复用公共单对象范围判定。
-    ///
+    /// 生成并验证完整客户查询凭证。
     /// # 参数
-    /// * `_scope` - 当前动作已解析事实；默认实现不读取
-    /// * `_object` - 本域提供的当前责任与合法参与事实；默认实现不读取
+    /// actor、action 为当前服务端入口，executor 为调用方事务。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
+    /// 返回绑定当前读取阶段的查询凭证。
     /// # 错误
-    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
-    fn allows(&self, _scope: &CustomerResolvedScope, _object: &CustomerScopeObject) -> Result<bool> {
-        Err(unwired())
-    }
-
-    /// 在调用方事务内证明客户资源动作并返回已解析事实。
-    ///
-    /// # 参数
-    /// * `actor` - 服务端已认证身份
-    /// * `action` - 客户资源已注册动作
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回已通过资格检查的范围事实；全量、空集、缺少个人上限可区分。
-    ///
-    /// # 错误
-    /// 未装配、未注册、无动作权限或版本变化必须明确失败。
-    ///
-    /// # 关键业务约束
-    /// 资源由本 Port 固定为客户；不得把原始 `scope_type / scope_targets` 交给客户域再解析。
+    /// 身份、登记、权限或事实读取失败时拒绝。
     async fn resolve(
         &self,
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CustomerResolvedScope>;
-
+    /// 复验读取阶段的凭证。
+    /// # 参数
+    /// access 为原凭证，executor 为原事务。
+    /// # 返回
+    /// 凭证仍有效时成功。
+    /// # 错误
+    /// 权限或映射版本变化时拒绝。
+    async fn validate(&self, access: &CustomerResolvedScope, executor: &mut dyn Executor) -> Result<()>;
+    /// 检查创建入口的账号与功能资格；对象范围在持久化事务内重验。
+    /// # 参数
+    /// actor 为当前账号，executor 为原事务。
+    /// # 返回
+    /// 返回展示元信息。
+    /// # 错误
+    /// 账号或功能资格失效时拒绝。
+    async fn creation(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerResolvedScope>;
     /// 展开请求中的组织及其可选下级。
     ///
     /// # 参数
@@ -238,40 +123,32 @@ pub trait CustomerDataScopePort: Send + Sync {
     ) -> Result<Option<String>>;
 }
 
-/// 未接线时失败关闭，不得补公司范围。
-#[derive(Debug, Default, Clone, Copy)]
+/// 缺少装配时所有授权入口失败。
+#[derive(Clone, Copy, Default)]
 pub struct FailClosedCustomerDataScopePort;
-
 impl FailClosedCustomerDataScopePort {
-    /// 返回未接线的共享端口。
-    ///
+    /// 构造失败关闭端口。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 返回可注入客户 Service 的失败关闭端口。
-    ///
+    /// 共享端口。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 仅用于不解析范围的装载路径；解析入口必须注入真实 adapter。
     pub fn shared() -> Arc<dyn CustomerDataScopePort> {
         Arc::new(Self)
     }
 }
-
 #[async_trait]
 impl CustomerDataScopePort for FailClosedCustomerDataScopePort {
-    async fn resolve(
-        &self,
-        _actor: &AuditActor,
-        _action: &str,
-        _executor: &mut dyn Executor,
-    ) -> Result<CustomerResolvedScope> {
+    async fn resolve(&self, _: &AuditActor, _: &str, _: &mut dyn Executor) -> Result<CustomerResolvedScope> {
         Err(unwired())
     }
-
+    async fn validate(&self, _: &CustomerResolvedScope, _: &mut dyn Executor) -> Result<()> {
+        Err(unwired())
+    }
+    async fn creation(&self, _: &AuditActor, _: &mut dyn Executor) -> Result<CustomerResolvedScope> {
+        Err(unwired())
+    }
     async fn expand_org_units(
         &self,
         _org_unit_ids: &[String],
@@ -300,64 +177,6 @@ impl CustomerDataScopePort for FailClosedCustomerDataScopePort {
     }
 }
 
-/// 未装配授权 Port 时的失败关闭错误。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回内部错误，不退化为公司范围。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 禁止捕获后回退旧读取器或补 Company。
 fn unwired() -> Error {
-    Error::Internal("客户范围端口未接线".into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!CustomerResolvedClause::default().has_scope_rules());
-        assert!(
-            CustomerResolvedClause { self_owned: true, ..CustomerResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            CustomerResolvedClause { collaborative: true, ..CustomerResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            CustomerResolvedClause { company: true, ..CustomerResolvedClause::default() }.has_scope_rules()
-        );
-        assert!(
-            CustomerResolvedClause {
-                org_unit_ids: vec!["org-a".into()],
-                ..CustomerResolvedClause::default()
-            }
-            .has_scope_rules()
-        );
-        assert!(
-            !CustomerResolvedScope {
-                user_id: "u1".into(),
-                resource: "customer".into(),
-                action: "list".into(),
-                role_clauses: vec![],
-                user_limit: Some(CustomerResolvedClause {
-                    self_owned: true,
-                    ..CustomerResolvedClause::default()
-                }),
-                policy_version: 1,
-                organization_version: 1,
-                scope_version: "v1".into(),
-                as_of: Instant::from_unix_secs(0),
-            }
-            .has_scope_rules()
-        );
-    }
+    Error::Internal("客户授权端口未接线".into())
 }

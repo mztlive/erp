@@ -22,7 +22,7 @@ pub use super::scope::{DefinitionManagementVisibility, definition_management_vis
 /// 审批流程定义管理服务。
 pub struct ApprovalDefinitionService {
     pub(crate) identity: SharedRbacService,
-    db: Database,
+    pub(super) db: Database,
     pub(crate) audit: Arc<dyn WorkflowAuditPort>,
 }
 

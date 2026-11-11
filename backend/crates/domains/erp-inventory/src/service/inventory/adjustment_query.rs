@@ -100,6 +100,7 @@ impl InventoryService {
                     let page = db.stock_adjustments().search_stock_adjustments(&filter, executor).await?;
                     let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
                     let people = people_facts.people_by_adjustment_ids(&ids, executor).await?;
+                    authorization.validate(executor).await?;
                     Ok::<_, Error>((page, authorization, people))
                 })
             })
@@ -156,6 +157,7 @@ impl InventoryService {
         {
             return Err(Error::NotFound("库存调整单不存在".to_string()));
         }
+        authorization.validate(executor).await?;
         Ok(adjustment)
     }
 

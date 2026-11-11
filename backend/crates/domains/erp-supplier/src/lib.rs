@@ -47,8 +47,7 @@ pub use ports::{
     EmptySensitiveTokens, FailClosedAccountFactPort, FailClosedSupplierDataScopePort, FileAssetFact,
     FileAssetFactsPort, PartyAddressFact, PartyBankAccountFact, PartyContactFact, PartyFactsPort,
     PartyListFact, PartyRevisionFact, PartyStatusFact, PartyTaxProfileFact, SensitiveFieldKindFact,
-    SensitiveTokenPort, SupplierDataScopePort, SupplierResolvedClause, SupplierResolvedScope,
-    SupplierScopeObject, select_current_default,
+    SensitiveTokenPort, SupplierDataScopePort, SupplierResolvedScope, select_current_default,
 };
 pub use repository::{
     SupplierAccountFilter, SupplierAccountRepository, SupplierAccountRow, SupplierCapabilityFilter,
@@ -56,10 +55,12 @@ pub use repository::{
     SupplierCommercialProfileRevisionRepository, SupplierDetailBundle, SupplierExt, SupplierListBundle,
     SupplierListSearchInput, SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationFilter, SupplierQualificationHealthFilter, SupplierQualificationRepository,
-    SupplierReadScope, SupplierRepository, SupplierScopeClause,
+    SupplierReadScope, SupplierRepository,
 };
 pub use service::supplier::eligibility::ensure_capability_qualified;
 pub use service::supplier::{
     SupplierAccess, SupplierListView, SupplierService, capability_handover_fingerprint, command_view,
     supplier_handover_fingerprint, supplier_scope,
 };
+
+pub mod authorization;

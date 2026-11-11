@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use config::JdVopConfig;
-use erp_identity::{Permission, SharedRbacService, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_supplier::SupplierAccess;
 use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
@@ -22,11 +22,16 @@ pub(super) struct ConnectionAccess {
 }
 
 impl ConnectionAccess {
-    pub(super) async fn permission(&self, actor: &AuditActor, action: &str) -> Result<bool> {
+    pub(super) async fn permission(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
         let permission = Permission::parse(format!("supplier_api_connection:{action}"))
             .map_err(|_| AuthorizationError::Unavailable)?;
-        self.rbac
-            .enforce(&subject(actor.kind(), actor.id()), &permission)
+        AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+            .has_permission(actor, &permission, executor)
             .await
             .map_err(|_| AuthorizationError::Unavailable)
     }
@@ -38,7 +43,7 @@ impl ConnectionAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierApiConnection> {
-        if !self.permission(actor, action).await? {
+        if !self.permission(actor, action, executor).await? {
             return Err(AuthorizationError::Forbidden);
         }
         let connection = SupplierApiService::new(self.db.clone())

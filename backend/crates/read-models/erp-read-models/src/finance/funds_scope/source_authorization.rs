@@ -1,45 +1,35 @@
-//! 财务读取保留自身动作资格，数据边界继承实际业务来源。
+//! 财务入口统一证明操作权限及真实来源数据资格。
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::slice;
+use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_finance::ports::funds_scope::{FundsResolvedClause, FundsResolvedScope};
-use erp_identity::access_control::ScopeClause;
+use erp_core::common::time::Instant;
 use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
-use erp_identity::entity::resource_access::ResourceKind;
-use erp_identity::repository::resource_grants::lookup_stages;
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use erp_identity::service::resource_access::ResourceAccessService;
-use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt, SharedRbacService};
-use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
-use erp_sales::repository::sales_order::scope::{SalesReadScope, SalesScopeClause};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_procurement::authorization::PurchaseMapping;
+use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
+use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::authorization::FundsReadContext;
+use super::repository::settlement_mapping::SettlementMapping;
+use super::repository::source_access::{SourceQuery, source_query};
+use super::repository::whole_access::WholeAccess;
 use super::{FundsAccess, FundsAuthorization};
 use crate::Result;
-use crate::sales_center::access::sales_scope;
+use crate::sales_center::access::SalesAccess;
 
 impl FundsAccess {
-    /// 同一事务冻结目标动作、来源范围与显式整账资格。
-    ///
+    /// 在同一执行器取得资金入口及各实际来源的完整查询凭证。
     /// # 参数
-    /// * `actor` - 已认证操作人。
-    /// * `resource` - 目标资金资源。
-    /// * `action` - 目标动作。
-    /// * `purchase` - 为 true 时解析采购与结算来源。
-    /// * `dual` - 为 true 时额外解析销售来源。
-    /// * `executor` - 调用方事务。
-    ///
+    /// actor 为账号，resource/action 为固定入口，purchase/dual 指定实际业务来源。
     /// # 返回
-    /// 返回真实来源授权及整账职责；不读取退休资金范围。
-    ///
+    /// 本阶段元信息和可执行来源凭证。
     /// # 错误
-    /// 权限解析、来源范围解析或整账资格读取失败时返回对应错误。
+    /// 身份、入口、来源事实或映射失效时拒绝。
     pub(super) async fn resolve_sources(
         &self,
         actor: &AuditActor,
@@ -48,224 +38,130 @@ impl FundsAccess {
         purchase: bool,
         dual: bool,
         executor: &mut dyn Executor,
-    ) -> Result<(FundsResolvedScope, FundsAuthorization)> {
-        let resolver = DataScopeService::new(self.db.clone(), self.rbac.clone());
-        let ledger_permission = Permission::parse(FINANCE_LEDGER_READ)?;
-        let entry_permission = Permission::parse(format!("{resource}:{action}"))?;
-        let permissions = [entry_permission.clone(), ledger_permission.clone()];
-        let mut batch = resolver.batch(actor, &permissions, executor);
-        let source_permission =
-            Permission::parse(if purchase { "purchase_order:detail" } else { "sales_order:detail" })?;
-        let context = batch.resolve_source_scope(&entry_permission, &source_permission).await?;
-        let sales = if dual {
-            let sales_permission = Permission::parse("sales_order:detail")?;
-            Some(batch.resolve_source_scope(&entry_permission, &sales_permission).await?)
+    ) -> Result<(FundsReadContext, FundsAuthorization)> {
+        let entry = Permission::parse(format!("{resource}:{action}"))?;
+        let mut versions = Vec::new();
+        let sales = if !purchase || dual {
+            let (context, scope) = SalesAccess::new(self.db.clone(), self.rbac.clone())
+                .resolve_source(actor, &entry, executor)
+                .await?;
+            versions.push(context.scope_version);
+            scope
         } else {
-            None
+            SalesReadScope::default()
         };
-        let settlement = if purchase {
-            let settlement_permission = Permission::parse("supplier_settlement_statement:list")?;
-            Some(batch.resolve_source_scope(&entry_permission, &settlement_permission).await?)
+        let (purchase_scope, settlement) = self.purchase_sources(actor, &entry, purchase, executor).await?;
+        if let Some(scope) = &purchase_scope {
+            versions.push(scope.version().unwrap_or_default());
+        }
+        if let Some(scope) = &settlement {
+            versions.push(scope.access.version());
+        }
+        let ledger_read = ledger_readable(&self.db, &self.rbac, actor, executor).await?;
+        let mut hash = DefaultHasher::new();
+        versions.hash(&mut hash);
+        ledger_read.hash(&mut hash);
+        let whole = if let Some(collection) = whole_collection(resource) {
+            WholeAccess::query(&self.db, &self.rbac, actor, &entry, collection, executor).await?
         } else {
-            None
+            WholeAccess::default()
         };
-        let ledger_read = batch.has_permission(&ledger_permission).await?;
-        let (mut access, mut authorization) =
-            source_authorization(context, sales, settlement, actor.id(), purchase, ledger_read);
-        let resolver = ResourceAccessService::new(self.db.clone(), self.rbac.clone());
-        if !purchase || dual {
-            let query =
-                resolver.resolve(actor, &entry_permission, ResourceKind::SalesOrder, executor).await?;
-            authorization.sales.grant_lookup = lookup_stages(&query);
-            authorization.context.map_read_version(|base| format!("{base}{}", query.constraints().3));
+        whole.version().hash(&mut hash);
+        let context = FundsReadContext {
+            resource: resource.into(),
+            scope_version: format!("{:x}", hash.finish()),
+            as_of: Instant::now(),
+        };
+        let authorization = FundsAuthorization {
+            whole,
+            sales,
+            ledger_read,
+            settlement,
+            purchase_scope,
+            context: context.clone(),
+        };
+        authorization.validate(executor).await?;
+        Ok((context, authorization))
+    }
+    async fn purchase_sources(
+        &self,
+        actor: &AuditActor,
+        entry: &Permission,
+        purchase: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<(Option<PurchaseReadScope>, Option<SourceQuery>)> {
+        if purchase {
+            let access = source_query(
+                &self.db,
+                &self.rbac,
+                actor,
+                entry,
+                Arc::new(PurchaseMapping::new("purchase_order")?),
+                executor,
+            )
+            .await?;
+            let scope = PurchaseReadScope::from_compiled(access.access, access.service);
+            let settlement = source_query(
+                &self.db,
+                &self.rbac,
+                actor,
+                entry,
+                Arc::new(SettlementMapping::new()?),
+                executor,
+            )
+            .await?;
+            Ok((Some(scope), Some(settlement)))
+        } else {
+            Ok((None, None))
         }
-        if let Some(scope) = &mut authorization.purchase_scope {
-            let query =
-                resolver.resolve(actor, &entry_permission, ResourceKind::PurchaseOrder, executor).await?;
-            scope.grant_lookup = lookup_stages(&query);
-            authorization.context.map_read_version(|base| format!("{base}{}", query.constraints().3));
-        }
-        access.scope_version = authorization.context.scope_version.clone();
-        authorization.no_scope = authorization.empty();
-        Ok((access, authorization))
     }
 }
 
-/// 每个真实来源的独立指纹按旧顺序绑定，整账资格不能替代来源范围。
-fn source_authorization(
-    mut context: AuthorizedDataScope,
-    additional_sales: Option<AuthorizedDataScope>,
-    settlement: Option<AuthorizedDataScope>,
-    actor_id: &str,
-    purchase: bool,
-    ledger_read: bool,
-) -> (FundsResolvedScope, FundsAuthorization) {
-    let mut fingerprint = DefaultHasher::new();
-    context.scope_version.hash(&mut fingerprint);
-    let primary = sales_scope(&context, actor_id, &[], Vec::new());
-    let purchase_scope = purchase.then(|| purchase_condition(&primary));
-    let sales = if let Some(access) = additional_sales {
-        access.scope_version.hash(&mut fingerprint);
-        sales_scope(&access, actor_id, &[], Vec::new())
-    } else if purchase {
-        SalesReadScope::default()
-    } else {
-        primary
-    };
-    if let Some(access) = &settlement {
-        access.scope_version.hash(&mut fingerprint);
+impl FundsAuthorization {
+    /// 仓储在执行完整授权查询之前及交付之后复验全部来源凭证。
+    /// # 参数
+    /// executor 为原读取阶段执行器。
+    /// # 返回
+    /// 所有授权与映射事实保持当前时成功。
+    /// # 错误
+    /// 账号、权限、有效期、映射或身份设施失效时失败。
+    pub(super) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.whole.validate(executor).await?;
+        if !self.sales.is_empty() {
+            self.sales.validate(executor).await?;
+        }
+        if let Some(scope) = &self.purchase_scope {
+            scope.validate(executor).await?;
+        }
+        if let Some(scope) = &self.settlement {
+            scope.validate(executor).await?;
+        }
+        Ok(())
     }
-    ledger_read.hash(&mut fingerprint);
-    context.map_read_version(|_| format!("{:x}", fingerprint.finish()));
-    let access = resolved_funds(&context);
-    let mut authorization =
-        FundsAuthorization { sales, ledger_read, settlement, purchase_scope, context, no_scope: false };
-    authorization.no_scope = authorization.empty();
-    (access, authorization)
 }
 
-/// 显式整账职责只由当前启用角色授予，并绑定调用方事务策略版本。
-///
+/// 读取整账功能资格；功能资格不替代任何来源对象授权。
 /// # 参数
-/// * `db` - 角色集合所在数据库。
-/// * `rbac` - 当前 RBAC 快照服务。
-/// * `actor` - 已认证操作人。
-/// * `executor` - 调用方事务。
-///
+/// db/rbac 为身份设施，actor 为账号，executor 为当前执行器。
 /// # 返回
-/// 当前启用角色授予整账职责时返回 true。
-///
+/// identity 判断的单个功能资格。
 /// # 错误
-/// 策略快照失效或角色读取失败时返回对应错误。
+/// 账号、策略或数据库读取失败保留原错误。
 pub(crate) async fn ledger_readable(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let permission = Permission::parse(FINANCE_LEDGER_READ)?;
-    let snapshot =
-        rbac.role_permission_snapshot(actor.kind(), actor.id(), slice::from_ref(&permission)).await?;
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-    let roles = db.roles().enabled_roles(&snapshot.granting_role_ids(&permission), executor).await?;
-    Ok(!roles.is_empty())
+    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::new(vec![])?);
+    Ok(service.has_permission(actor, &Permission::parse(FINANCE_LEDGER_READ)?, executor).await?)
 }
 
-/// 把已经解析的来源边界投影为现有资金读取输入；不读取退休的资金授权记录。
-fn resolved_funds(context: &AuthorizedDataScope) -> FundsResolvedScope {
-    let clause = |scope: &ScopeClause| FundsResolvedClause {
-        company: scope.company,
-        self_owned: scope.self_owned,
-        collaborative: scope.collaborative,
-        org_unit_ids: scope.org_unit_ids.iter().cloned().collect(),
-    };
-    FundsResolvedScope {
-        user_id: context.user_id.clone(),
-        resource: context.resource.clone(),
-        action: context.action.clone(),
-        role_clauses: context.scope.role_clauses.iter().map(clause).collect(),
-        user_limit: context.scope.user_limit.as_ref().map(clause),
-        policy_version: context.policy_version,
-        organization_version: context.organizations.version,
-        scope_version: context.scope_version.clone(),
-        as_of: context.as_of,
-    }
-}
-
-/// 采购来源只接受当前采购责任及组织，不复制销售历史或协作资格。
-fn purchase_condition(source: &SalesReadScope) -> PurchaseReadScope {
-    let clause = |scope: &SalesScopeClause| PurchaseScopeClause {
-        company: scope.company,
-        owner_user_id: scope.owner_user_id.clone(),
-        business_org_unit_ids: scope.business_org_unit_ids.clone(),
-    };
-    PurchaseReadScope {
-        required_scopes: Vec::new(),
-        roles: source.roles.iter().map(clause).collect(),
-        user_limit: source.user_limit.as_ref().map(clause),
-        grant_lookup: Vec::new(),
-        historical_order_ids: Vec::new(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use erp_core::common::time::Instant;
-    use erp_identity::access_control::ResolvedScope;
-
-    use super::*;
-
-    /// 构造独立来源上下文，以范围指纹代表该来源已完成的当前资格取证。
-    fn context(version: &str, clause: Option<ScopeClause>) -> AuthorizedDataScope {
-        AuthorizedDataScope::test_fixture(DataScopeFacts {
-            user_id: "actor".into(),
-            resource: "invoice".into(),
-            action: "list".into(),
-            scope: ResolvedScope { role_clauses: clause.into_iter().collect(), user_limit: None },
-            qualified_roles: Default::default(),
-            organizations: Default::default(),
-            policy_version: 1,
-            scope_version: version.into(),
-            as_of: Instant::from_unix_secs(1),
-        })
-    }
-
-    /// 发票双来源分别保留销售与采购实际范围，各来源撤权与整账变化都使版本失效。
-    #[test]
-    fn source_versions_bind_each_independent_scope_and_ledger() {
-        let build = |purchase_version: &str, sales_version: &str, settlement_version: &str, ledger| {
-            source_authorization(
-                context(purchase_version, Some(ScopeClause { self_owned: true, ..Default::default() })),
-                Some(context(sales_version, Some(ScopeClause { company: true, ..Default::default() }))),
-                Some(context(settlement_version, None)),
-                "actor",
-                true,
-                ledger,
-            )
-        };
-        let (access, authorization) = build("purchase", "sales", "settlement", false);
-        assert_eq!(access.resource, "invoice");
-        assert_eq!(access.scope_version, authorization.context.scope_version);
-        assert!(authorization.sales.is_company());
-        let purchase = authorization.purchase_scope.unwrap();
-        assert_eq!(purchase.roles[0].owner_user_id.as_deref(), Some("actor"));
-        assert!(!purchase.roles[0].company);
-        let mut legacy = DefaultHasher::new();
-        for version in ["purchase", "sales", "settlement"] {
-            version.hash(&mut legacy);
-        }
-        false.hash(&mut legacy);
-        assert_eq!(access.scope_version, format!("{:x}", legacy.finish()));
-        for (purchase, sales, settlement, ledger) in [
-            ("changed", "sales", "settlement", false),
-            ("purchase", "changed", "settlement", false),
-            ("purchase", "sales", "changed", false),
-            ("purchase", "sales", "settlement", true),
-        ] {
-            assert_ne!(access.scope_version, build(purchase, sales, settlement, ledger).0.scope_version);
-        }
-    }
-
-    /// 全部来源无范围时按原合同返回空；整账职责只开放无来源读取，不补来源范围。
-    #[test]
-    fn denied_sources_remain_empty_and_ledger_does_not_add_scope() {
-        let build = |ledger| {
-            source_authorization(
-                context("purchase", None),
-                Some(context("sales", None)),
-                Some(context("settlement", None)),
-                "actor",
-                true,
-                ledger,
-            )
-        };
-        let (_, denied) = build(false);
-        assert!(denied.no_scope);
-        assert!(denied.empty());
-        let (_, ledger) = build(true);
-        assert!(!ledger.no_scope);
-        assert!(ledger.sales.is_empty());
-        assert!(ledger.purchase_scope.unwrap().is_empty());
-        assert!(ledger.settlement.unwrap().scope.role_clauses.is_empty());
+fn whole_collection(resource: &str) -> Option<&'static str> {
+    match resource {
+        "customer_receipt" => Some("customer_receipts"),
+        "supplier_payment" => Some("supplier_payments"),
+        "invoice" => Some("invoices"),
+        _ => None,
     }
 }

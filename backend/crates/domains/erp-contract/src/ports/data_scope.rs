@@ -10,106 +10,39 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// 身份域已解析的合同正向范围条款；不含身份域实体句柄。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ContractResolvedClause {
-    /// 公司范围覆盖该资源动作的全部合同。
-    pub company: bool,
-    /// 当前客户主负责人为操作人的合同。
-    pub self_owned: bool,
-    /// 当前客户协作者可见的合同。
-    pub collaborative: bool,
-    /// 已由公共解析器展开的内部组织。
-    pub org_unit_ids: Vec<String>,
-}
-
-impl ContractResolvedClause {
-    /// 判断条款是否构成有效合同范围规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、主责、协作或组织目标时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 规则存在但当前无对象不得标为无范围；空条款保持空集且不得补公司。
-    pub fn has_scope_rules(&self) -> bool {
-        self.company || self.self_owned || self.collaborative || !self.org_unit_ids.is_empty()
-    }
-}
-
-/// 已通过资格检查的合同范围事实。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ContractResolvedScope {
-    /// 已认证操作人。
-    pub user_id: String,
-    /// 固定为合同资源。
-    pub resource: String,
-    /// 本次解析的合同动作。
-    pub action: String,
-    /// 同角色正向范围。
-    pub role_clauses: Vec<ContractResolvedClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<ContractResolvedClause>,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
-    /// 跨页与导出必须原样回传的范围版本。
-    pub scope_version: String,
-    /// 授权解析时点。
-    pub as_of: Instant,
-}
-
-impl ContractResolvedScope {
-    /// 判断角色正向范围是否含有效规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任一角色条款构成有效规则时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只看角色条款；个人上限不单独构成“有范围规则”。
-    pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses.iter().any(ContractResolvedClause::has_scope_rules)
-    }
-}
-
-/// 业务域提供的单对象责任事实；不包含原始授权规则。
-#[derive(Debug, Clone, Default)]
-pub struct ContractScopeObject {
-    /// 当前操作人是否为对象的权威负责人。
-    pub owned: bool,
-    /// 当前操作人是否具备有效协作事实。
-    pub collaborating: bool,
-    /// 当前操作人是否具备合法历史读取参与。
-    pub historical_read_participant: bool,
-    /// 按本资源口径取得的内部组织。
-    pub org_unit_id: Option<String>,
-}
-
-/// 合同域消费的窄授权 Port；adapter 调用身份域公共解析器。
+/// 身份域已编译的本次授权阶段。
+pub type ContractResolvedScope = crate::authorization::CompiledScope;
 #[async_trait]
 pub trait ContractDataScopePort: Send + Sync {
-    /// 经生产 adapter 复用公共单对象范围判定。
-    ///
+    /// 检查完整合同对象。
     /// # 参数
-    /// * `scope` - 当前动作已解析事实
-    /// * `object` - 本域提供的当前责任与合法参与事实
+    /// actor、action、id为可信入口和目标；executor为原执行器。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
+    /// identity允许时成功。
     /// # 错误
-    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
-    fn allows(&self, _scope: &ContractResolvedScope, _object: &ContractScopeObject) -> Result<bool> {
+    /// 未装配或无权限拒绝。
+    async fn require(
+        &self,
+        _actor: &AuditActor,
+        _action: &str,
+        _id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Err(unwired())
+    }
+    /// 检查实际客户来源的合同创建资格。
+    /// # 参数
+    /// actor和customer_id为实际来源；executor为原执行器。
+    /// # 返回
+    /// identity生成的阶段凭证。
+    /// # 错误
+    /// 无权限或来源不存在拒绝。
+    async fn require_create(
+        &self,
+        _actor: &AuditActor,
+        _customer_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<ContractResolvedScope> {
         Err(unwired())
     }
 
@@ -279,49 +212,4 @@ impl ContractDataScopePort for FailClosedContractDataScopePort {
 /// 禁止捕获后回退旧读取器或补 Company。
 fn unwired() -> Error {
     Error::Internal("合同范围端口未接线".into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!ContractResolvedClause::default().has_scope_rules());
-        assert!(
-            ContractResolvedClause { self_owned: true, ..ContractResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            ContractResolvedClause { collaborative: true, ..ContractResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            ContractResolvedClause { company: true, ..ContractResolvedClause::default() }.has_scope_rules()
-        );
-        assert!(
-            ContractResolvedClause {
-                org_unit_ids: vec!["org-a".into()],
-                ..ContractResolvedClause::default()
-            }
-            .has_scope_rules()
-        );
-        assert!(
-            !ContractResolvedScope {
-                user_id: "u1".into(),
-                resource: "contract".into(),
-                action: "list".into(),
-                role_clauses: vec![],
-                user_limit: Some(ContractResolvedClause {
-                    self_owned: true,
-                    ..ContractResolvedClause::default()
-                }),
-                policy_version: 1,
-                organization_version: 1,
-                scope_version: "v1".into(),
-                as_of: Instant::from_unix_secs(0),
-            }
-            .has_scope_rules()
-        );
-    }
 }

@@ -6,7 +6,7 @@ use application_core::AuditActor;
 use bpm::engine::TaskIntent;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -16,7 +16,7 @@ use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 use crate::repository::ApprovalIntegrationExt;
-use crate::service::approval::definition_management_visibility_with_executor;
+use crate::service::approval::require_approval_management_with_executor;
 
 /// 决定通知只消费冻结快照、实际执行与当前权限事实。
 pub(super) struct DecisionNotificationFacts<'a> {
@@ -159,19 +159,19 @@ pub(super) async fn runtime_admin_notification_recipients(
             continue;
         }
         let actor = AuditActor::new(account.id.clone(), account.id.clone(), account.kind);
-        let visibility =
-            definition_management_visibility_with_executor(identity_service, &actor, executor).await?;
-        let can_read = identity_service
-            .qualified_permissions(&actor, &[Permission::parse("approval_instance:read")?], executor)
-            .await?
-            .is_some_and(|qualified| !qualified.permissions().is_empty());
-        if visibility.runtime_admin_types().contains(&document_type)
-            && can_read
-            && rbac
-                .approval_source_readable(&actor, document_type, &snapshot.business_object_id, executor)
-                .await?
+        match require_approval_management_with_executor(
+            rbac,
+            &actor,
+            "approval_instance:read",
+            document_type,
+            &snapshot.business_object_id,
+            executor,
+        )
+        .await
         {
-            recipients.push(account.id);
+            Ok(()) => recipients.push(account.id),
+            Err(Error::Forbidden(_) | Error::NotFound(_)) => {},
+            Err(error) => return Err(error),
         }
     }
     recipients.sort();

@@ -9,7 +9,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::legacy_import;
 use crate::http::middleware::with_permission;
@@ -23,7 +23,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/legacy-import-batches",

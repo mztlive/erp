@@ -6,7 +6,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::cost;
 use crate::http::middleware::with_permission;
@@ -20,7 +20,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/actual-profit-loss/history-directory",
@@ -72,7 +72,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 ///
 /// # 返回
 /// 返回挂载了权限校验层的附加费用路由集合。
-fn extra_cost_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn extra_cost_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/extra-costs",

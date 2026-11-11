@@ -9,7 +9,7 @@ use erp_core::assignment::AssignmentStrategy;
 use erp_core::{AccountKind, Result as CoreResult};
 use erp_identity::{Permission, PermissionSet};
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -23,8 +23,7 @@ use crate::ports::{PreparedWorkflowAudit, WorkflowAuthorizationPort};
 use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
 use crate::repository::work_item::finance_rotation;
-
-const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
+use crate::service::authorization::features;
 
 /// 创建财务责任规则请求。
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -217,8 +216,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
         async move {
             let data = request.into_data();
-            let probe = self.validate_finance_rule_data(&data, true, false, &mut NoTransaction).await?;
-            let policy_revision = self.authorize_finance_pool(probe.operation, &probe.owner_user_ids).await?;
             let rule = FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id())
                 .map_err(|error| Error::ValidationError(error.to_string()))?;
             let audit = PreparedWorkflowAudit::resource(
@@ -233,9 +230,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             let audit_port = Arc::clone(&self.audit);
             let identity = self.identity.clone();
             let rule = self
-                .identity
+                .db
+                .client()
                 .clone()
-                .run_authorized_policy_transaction(policy_revision, move |executor| {
+                .with_transaction(move |executor| {
                     let service = WorkItemService::with_ports(
                         db.clone(),
                         identity,
@@ -279,7 +277,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
         async move {
             let (version, data) = request.into_parts();
-            let policy_revision = self.finance_rule_update_revision(&id, version, &data).await?;
             let updated_by = actor.id().to_string();
             let audit = PreparedWorkflowAudit::resource(
                 actor,
@@ -293,9 +290,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             let audit_port = Arc::clone(&self.audit);
             let identity = self.identity.clone();
             let rule = self
-                .identity
+                .db
+                .client()
                 .clone()
-                .run_authorized_policy_transaction(policy_revision, move |executor| {
+                .with_transaction(move |executor| {
                     let service =
                         WorkItemService::with_ports(db, identity, rbac, facts, Arc::clone(&audit_port));
                     Box::pin(async move {
@@ -307,47 +305,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 })
                 .await?;
             self.single_finance_responsibility_view(rule).await
-        }
-    }
-
-    /// 校验更新请求，并取得事务必须重验的授权策略版本。
-    ///
-    /// # 错误
-    /// 规则不存在、版本冲突、资格校验或授权查询失败时返回错误。
-    async fn finance_rule_update_revision(
-        &self,
-        id: &str,
-        version: u64,
-        data: &FinanceResponsibilityRuleData,
-    ) -> Result<u64> {
-        let probe = self.validate_finance_rule_data(data, false, false, &mut NoTransaction).await?;
-        let current = self
-            .db
-            .finance_responsibility_rules()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("财务责任规则不存在".to_string()))?;
-        if current.base.version != version {
-            return Err(Error::ConflictError("财务责任规则版本已变化".to_string()));
-        }
-        let counterparty_must_be_eligible = probe.status.is_active()
-            || probe.operation != current.operation
-            || probe.scope != current.scope
-            || probe.counterparty_id != current.counterparty_id;
-        let owner_must_be_eligible = probe.status.is_active()
-            || probe.owner_user_ids != current.owner_user_ids
-            || probe.operation != current.operation;
-        self.validate_finance_rule_data(
-            data,
-            counterparty_must_be_eligible,
-            owner_must_be_eligible,
-            &mut NoTransaction,
-        )
-        .await?;
-        if owner_must_be_eligible {
-            self.authorize_finance_pool(probe.operation, &probe.owner_user_ids).await
-        } else {
-            Ok(self.identity.current_policy_revision().await?)
         }
     }
 
@@ -419,15 +376,14 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 continue;
             }
             let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-            let Some(qualified) =
-                self.identity.qualified_permissions(&actor, &requested, &mut NoTransaction).await?
+            let Some(qualified) = features(&self.db, &self.identity)
+                .permissions(&actor, &requested, &mut NoTransaction)
+                .await?
             else {
                 continue;
             };
-            let granted = qualified.permissions();
-            let covers = |required: &PermissionSet| granted.covers(required);
-            let supplier_payment_eligible = covers(&payment);
-            let sales_invoice_eligible = covers(&invoice);
+            let supplier_payment_eligible = qualified.same_role(&payment.clone().into_vec());
+            let sales_invoice_eligible = qualified.same_role(&invoice.clone().into_vec());
             if !supplier_payment_eligible && !sales_invoice_eligible {
                 continue;
             }
@@ -443,24 +399,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             left.display_name.cmp(&right.display_name).then_with(|| left.user_id.cmp(&right.user_id))
         });
         Ok(options)
-    }
-
-    async fn authorize_finance_pool(
-        &self,
-        operation: FinanceResponsibilityOperation,
-        owner_user_ids: &[String],
-    ) -> Result<u64> {
-        for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
-            let before = self.identity.current_policy_revision().await?;
-            for owner in owner_user_ids {
-                self.ensure_finance_owner_eligible(operation, owner, &mut NoTransaction).await?;
-            }
-            let after = self.identity.current_policy_revision().await?;
-            if before == after {
-                return Ok(before);
-            }
-        }
-        Err(Error::Rbac(format!("{}负责人授权策略持续变化，请重试", operation.label())))
     }
 
     /// 在任务创建事务内匹配负责人池、重验选中人员并推进一次轮次。
@@ -534,13 +472,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             AccountKind::Admin,
         );
         let requested = required.iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?;
-        let granted = self
-            .identity
-            .qualified_permissions(&actor, &requested, executor)
-            .await?
-            .map(|qualified| qualified.permissions())
-            .unwrap_or_default();
-        if !requested.iter().all(|permission| granted.covers_one(permission)) {
+        let qualified = features(&self.db, &self.identity).permissions(&actor, &requested, executor).await?;
+        if qualified.is_none_or(|qualified| !qualified.same_role(&requested)) {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少退货处理权限，请调整财务责任配置",
                 operation.label()
@@ -605,8 +538,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<()> {
         let required = required_finance_permissions(operation)?;
         let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-        let qualified =
-            self.identity.qualified_permissions(&actor, &required.clone().into_vec(), executor).await?;
+        let qualified = features(&self.db, &self.identity)
+            .permissions(&actor, &required.clone().into_vec(), executor)
+            .await?;
         let Some(qualified) = qualified else {
             // 仅拒绝路径读取目录以保留缺失与停用的既有提示，不重复读取成功账号。
             let exists = self.identity.directory().account(owner_user_id, executor).await?.is_some();
@@ -616,7 +550,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 operation.label()
             )));
         };
-        if !qualified.permissions().covers(&required) {
+        if !qualified.same_role(&required.into_vec()) {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少完整执行权限，请先调整财务角色或重新选择",
                 operation.label()

@@ -4,7 +4,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::sales_review;
 use crate::http::middleware::with_permission;
@@ -18,7 +18,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(draft_routes(rbac))
         .route(
@@ -79,7 +79,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验和上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由各处理器返回。
-fn draft_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-change-orders/{id}/draft",

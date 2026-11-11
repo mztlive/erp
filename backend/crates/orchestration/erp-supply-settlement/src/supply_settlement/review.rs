@@ -84,20 +84,17 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let statement =
             self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         validate_submission_command(&statement, &req, actor)?;
-        let policy_revision = self
-            .authorize_reviewer(&req.reviewer_user_id, actor.id(), &statement.business_org_unit_id)
-            .await?;
+        self.authorize_reviewer(&req.reviewer_user_id, actor.id(), &statement.business_org_unit_id).await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let operation_id = req.operation_id.clone();
         let prepared = PreparedSubmission { statement, work_item };
         let input = SubmissionCommit::new(self, req, actor, prepared, (&audit_id, &fingerprint));
         let transaction_result = self
-            .work_items
-            .identity
-            .run_authorized_policy_transaction(policy_revision, move |executor| {
-                Box::pin(input.persist(executor))
-            })
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| Box::pin(input.persist(executor)))
             .await;
         let (statement, work_item) = match transaction_result {
             Ok(result) => result,
@@ -319,6 +316,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             return Err(Error::Forbidden("仅原复核人可重放决定".into()));
         }
         reviewers::ensure_reviewer(
+            &self.db,
             &self.work_items.identity,
             actor.id(),
             &statement.prepared_by,
@@ -371,6 +369,7 @@ impl SubmissionCommit {
         }
         ensure_review_submission_ready(&context.db, &current, context.actor.id(), executor).await?;
         reviewers::ensure_reviewer(
+            &context.db,
             &self.identity,
             &self.request.reviewer_user_id,
             &current.prepared_by,

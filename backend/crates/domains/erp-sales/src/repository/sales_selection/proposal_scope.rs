@@ -1,14 +1,15 @@
 //! 方案查询沿当前所属册授权；方案内冻结责任字段不参与当前权限判定。
 
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result};
+use persistence_core::{Executor, PageResult, Pagination, QueryFilter, aggregate};
 use serde::Deserialize;
 
 use super::{BOOKLETS, PROPOSALS, SelectionProposalFilter};
+use crate::Result;
 use crate::entity::sales_selection::SalesSelectionProposal;
 use crate::repository::filter::push_undeleted;
+use crate::service::authorization_error::identity_error;
 
 /// 聚合分页结果；同一管道内先授权，再计数和分页。
 #[derive(Debug, Default, Deserialize)]
@@ -37,28 +38,19 @@ pub(super) async fn search(
     filter: &SelectionProposalFilter,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<SalesSelectionProposal>> {
-    let collection = db.collection::<Document>(PROPOSALS);
-    let pipeline = pipeline(filter);
-    let mut pages = if let Some(session) = executor.session() {
-        collection
-            .aggregate(pipeline)
-            .with_type::<ProposalPage>()
-            .session(&mut *session)
-            .await?
-            .stream(session)
-            .try_collect::<Vec<_>>()
-            .await?
-    } else {
-        collection.aggregate(pipeline).with_type::<ProposalPage>().await?.try_collect::<Vec<_>>().await?
-    };
+    filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
+    let collection = db.collection::<ProposalPage>(PROPOSALS);
+    let mut pages = aggregate::rows(&collection, pipeline(filter), executor).await?;
+    filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
     let page = pages.pop().unwrap_or_default();
     Ok(PageResult { items: page.items, total: page.total.first().map_or(0, |row| row.count) })
 }
 
 /// 先按方案业务筛选缩小集合，再通过有索引的父册 ID 连接授权事实。
 fn pipeline(filter: &SelectionProposalFilter) -> Vec<Document> {
-    vec![
-        doc! { "$match": filter.to_doc() },
+    let mut stages = vec![doc! { "$match": filter.to_doc() }];
+    stages.extend(filter.authorized_scope.stages());
+    stages.extend(vec![
         doc! { "$lookup": {
             "from": BOOKLETS,
             "localField": "booklet_id",
@@ -76,12 +68,13 @@ fn pipeline(filter: &SelectionProposalFilter) -> Vec<Document> {
             ],
             "total": [{ "$count": "count" }]
         } },
-    ]
+    ]);
+    stages
 }
 
 /// 负责人和组织筛选也按当前册解释，不读取方案提交时的冻结责任。
 fn booklet_condition(filter: &SelectionProposalFilter) -> Document {
-    let mut conditions = vec![filter.authorized_scope.document()];
+    let mut conditions = Vec::new();
     push_undeleted(&mut conditions);
     if let Some(owners) = &filter.owner_user_ids {
         conditions.push(doc! { "sales_owner_user_id": { "$in": owners } });
@@ -90,56 +83,4 @@ fn booklet_condition(filter: &SelectionProposalFilter) -> Document {
         conditions.push(doc! { "business_org_unit_id": { "$in": orgs } });
     }
     doc! { "$and": conditions }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::repository::sales_selection::{SelectionReadScope, SelectionScopeClause};
-
-    fn filter(scope: SelectionReadScope) -> SelectionProposalFilter {
-        SelectionProposalFilter {
-            authorized_customer_ids: None,
-            authorized_scope: scope,
-            owner_user_ids: Some(vec!["current-owner".into()]),
-            org_unit_ids: None,
-            customer_id: None,
-            booklet_id: None,
-            page: 1,
-            page_size: 20,
-        }
-    }
-
-    #[test]
-    fn responsibility_conditions_are_applied_to_current_booklet() {
-        let scope = SelectionReadScope {
-            roles: vec![SelectionScopeClause {
-                owner_user_id: Some("current-owner".into()),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let filter = filter(scope);
-        let stages = pipeline(&filter);
-        let lookup = stages[1].get_document("$lookup").unwrap();
-        assert_eq!(lookup.get_str("localField").unwrap(), "booklet_id");
-        assert_eq!(lookup.get_str("from").unwrap(), BOOKLETS);
-        assert_eq!(
-            lookup.get_array("pipeline").unwrap()[0].as_document().unwrap().get_document("$match").unwrap(),
-            &booklet_condition(&filter)
-        );
-        assert!(!filter.to_doc().get_array("$and").unwrap().iter().any(|condition| {
-            condition.as_document().is_some_and(|doc| doc.contains_key("sales_owner_user_id"))
-        }));
-        assert_eq!(stages[2], doc! { "$match": { "authorized_booklet.0": { "$exists": true } } });
-    }
-
-    #[test]
-    fn empty_scope_remains_denied_before_pagination() {
-        let filter = filter(SelectionReadScope::default());
-        let condition = booklet_condition(&filter);
-        assert_eq!(condition.get_array("$and").unwrap()[0].as_document(), Some(&doc! { "$expr": false }));
-        let stages = pipeline(&filter);
-        assert!(stages.last().unwrap().contains_key("$facet"));
-    }
 }

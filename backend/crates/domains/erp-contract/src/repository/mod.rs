@@ -4,7 +4,7 @@ pub mod contract;
 pub mod extensions;
 pub mod owned;
 pub mod prelude;
-pub mod responsibility;
+
 pub mod scope;
 pub mod templates;
 
@@ -14,7 +14,7 @@ pub use contract::{
 };
 pub use extensions::ContractExt;
 pub use owned::{ContractRepository, ContractRevisionRepository};
-pub use scope::{ContractReadScope, ContractRepositoryScopeExt, ContractScopeClause};
+pub use scope::{ContractReadScope, ContractRepositoryScopeExt};
 
 pub mod list_search;
 

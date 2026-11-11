@@ -16,10 +16,10 @@ use erp_customer::{
 use erp_identity::Permission;
 use erp_master_data::delete_customer;
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
+use persistence_core::NoTransaction;
 
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::{contract_access, customer_access, funds_access_with_rbac};
@@ -28,17 +28,16 @@ use crate::wiring::{contract_access, customer_access, funds_access_with_rbac};
 pub async fn customer_profile_create(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Json(req): Json<SaveCustomerProfileRequest>,
 ) -> Result<CustomerProfileMutationView> {
     if req.contacts.is_some() {
-        ensure_permission(&state, &subject, "party_contact:create").await?;
+        ensure_permission(&state, &actor, "party_contact:create").await?;
     }
     if req.addresses.is_some() {
-        ensure_permission(&state, &subject, "party_address:create").await?;
+        ensure_permission(&state, &actor, "party_address:create").await?;
     }
     if req.bank_accounts.is_some() {
-        ensure_permission(&state, &subject, "party_bank_account:create").await?;
+        ensure_permission(&state, &actor, "party_bank_account:create").await?;
     }
     crate::wiring::customer_access(state.application().db(), state.application().rbac())
         .ensure_create(&actor)
@@ -51,22 +50,21 @@ pub async fn customer_profile_create(
 pub async fn customer_profile_update(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
     Json(req): Json<SaveCustomerProfileRequest>,
 ) -> Result<CustomerProfileMutationView> {
     ensure_customer_access(&state, &actor, "update", &id).await?;
     if req.contacts.is_some() {
-        ensure_permission(&state, &subject, "party_contact:detail").await?;
-        ensure_permission(&state, &subject, "party_contact:update").await?;
+        ensure_permission(&state, &actor, "party_contact:detail").await?;
+        ensure_permission(&state, &actor, "party_contact:update").await?;
     }
     if req.addresses.is_some() {
-        ensure_permission(&state, &subject, "party_address:detail").await?;
-        ensure_permission(&state, &subject, "party_address:update").await?;
+        ensure_permission(&state, &actor, "party_address:detail").await?;
+        ensure_permission(&state, &actor, "party_address:update").await?;
     }
     if req.bank_accounts.is_some() {
-        ensure_permission(&state, &subject, "party_bank_account:detail").await?;
-        ensure_permission(&state, &subject, "party_bank_account:update").await?;
+        ensure_permission(&state, &actor, "party_bank_account:detail").await?;
+        ensure_permission(&state, &actor, "party_bank_account:update").await?;
     }
     let view = state.application().customer_profile_process().update(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -76,22 +74,21 @@ pub async fn customer_profile_update(
 pub async fn customer_profile_detail(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<CustomerProfileDetailView> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
     let mut view = state.application().customer_profile_process().detail(&id).await?;
-    view.allowed_actions = allowed_actions(&state, &subject, view.account.status.is_active()).await?;
-    let can_view_contact = has_permission(&state, &subject, "party_contact:detail").await?;
-    let can_view_address = has_permission(&state, &subject, "party_address:detail").await?;
-    let can_view_tax = has_permission(&state, &subject, "party_tax_profile:detail").await?;
-    let can_view_bank = has_permission(&state, &subject, "party_bank_account:detail").await?;
+    view.allowed_actions = allowed_actions(&state, &actor, view.account.status.is_active()).await?;
+    let can_view_contact = has_permission(&state, &actor, "party_contact:detail").await?;
+    let can_view_address = has_permission(&state, &actor, "party_address:detail").await?;
+    let can_view_tax = has_permission(&state, &actor, "party_tax_profile:detail").await?;
+    let can_view_bank = has_permission(&state, &actor, "party_bank_account:detail").await?;
     let can_reveal_contact =
-        can_view_contact && has_permission(&state, &subject, "party_contact:reveal").await?;
+        can_view_contact && has_permission(&state, &actor, "party_contact:reveal").await?;
     let can_reveal_address =
-        can_view_address && has_permission(&state, &subject, "party_address:reveal").await?;
+        can_view_address && has_permission(&state, &actor, "party_address:reveal").await?;
     let can_reveal_bank =
-        can_view_bank && has_permission(&state, &subject, "party_bank_account:reveal").await?;
+        can_view_bank && has_permission(&state, &actor, "party_bank_account:reveal").await?;
     view.sensitive_fields.retain(|field| match field.kind {
         SensitiveFieldKind::ContactMobile => can_reveal_contact,
         SensitiveFieldKind::Address => can_reveal_address,
@@ -116,12 +113,11 @@ pub async fn customer_profile_detail(
 pub async fn customer_center_related(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<CustomerCenterRelatedView> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
-    ensure_permission(&state, &subject, "contract:list").await?;
-    ensure_permission(&state, &subject, "sales_order:list").await?;
+    ensure_permission(&state, &actor, "contract:list").await?;
+    ensure_permission(&state, &actor, "sales_order:list").await?;
     let view = CustomerCenterReadService::new(
         state.application().db(),
         state.application().rbac(),
@@ -138,11 +134,10 @@ pub async fn customer_center_related(
 pub async fn customer_center_receivable(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<CustomerCenterReceivableView> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
-    ensure_permission(&state, &subject, "receivable_account:list").await?;
+    ensure_permission(&state, &actor, "receivable_account:list").await?;
     let view = CustomerCenterReadService::new(
         state.application().db(),
         state.application().rbac(),
@@ -174,7 +169,6 @@ pub async fn customer_profile_command_detail(
 pub async fn customer_sensitive_reveal(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Json(req): Json<RevealCustomerSensitiveRequest>,
 ) -> Result<CustomerSensitiveRevealView> {
     let now =
@@ -188,8 +182,8 @@ pub async fn customer_sensitive_reveal(
         },
     };
     ensure_customer_access(&state, &actor, "detail", &scope.supplier_id).await?;
-    ensure_permission(&state, &subject, detail_permission).await?;
-    ensure_permission(&state, &subject, reveal_permission).await?;
+    ensure_permission(&state, &actor, detail_permission).await?;
+    ensure_permission(&state, &actor, reveal_permission).await?;
     let view = state.application().customer_profile_process().reveal_sensitive(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -222,10 +216,9 @@ pub async fn customer_list(
 pub async fn customer_all_authorized_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
     Query(mut params): Query<CustomerListParams>,
 ) -> Result<CustomerListView> {
-    ensure_permission(&state, &subject, "customer:list").await?;
+    ensure_permission(&state, &actor, "customer:list").await?;
     params.scope = CustomerScope::AllAuthorized;
     let page = state.application().customer_service().customer_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -357,7 +350,7 @@ pub async fn customer_assignment_apply(
 /// 计算客户对象中心允许动作；RBAC 与客户停用状态在可信服务端合并。
 async fn allowed_actions(
     state: &HttpState,
-    subject: &RbacSubject,
+    actor: &AuditActor,
     customer_active: bool,
 ) -> std::result::Result<Vec<String>, Error> {
     let candidates = [
@@ -376,11 +369,11 @@ async fn allowed_actions(
             continue;
         }
         if let Some(prerequisite) = prerequisite
-            && !has_permission(state, subject, prerequisite).await?
+            && !has_permission(state, actor, prerequisite).await?
         {
             continue;
         }
-        if has_permission(state, subject, permission).await? {
+        if has_permission(state, actor, permission).await? {
             actions.push(action.to_string());
         }
     }
@@ -390,20 +383,25 @@ async fn allowed_actions(
 /// 判断当前 RBAC 主体是否覆盖给定权限。
 pub(crate) async fn has_permission(
     state: &HttpState,
-    subject: &RbacSubject,
+    actor: &AuditActor,
     permission: &str,
 ) -> std::result::Result<bool, Error> {
     let permission = Permission::parse(permission)?;
-    state.application().rbac().enforce(&subject.0, &permission).await.map_err(Into::into)
+    state
+        .application()
+        .authorization()
+        .has_permission(actor, &permission, &mut NoTransaction)
+        .await
+        .map_err(Into::into)
 }
 
 /// 强制当前 RBAC 主体覆盖字段级权限。
 async fn ensure_permission(
     state: &HttpState,
-    subject: &RbacSubject,
+    actor: &AuditActor,
     permission: &str,
 ) -> std::result::Result<(), Error> {
-    if has_permission(state, subject, permission).await? {
+    if has_permission(state, actor, permission).await? {
         return Ok(());
     }
     Err(Error::Forbidden("当前角色无权维护或查看该字段".to_string()))

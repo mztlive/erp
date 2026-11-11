@@ -4,6 +4,9 @@ use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::ProcurementResponsibilityRuleId;
+use erp_identity::{
+    AccessMode, AccessRegistration, AccessTarget, AuthorizationRegistry, AuthorizationService, Permission,
+};
 use erp_procurement::dto::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveLineView,
     ProcurementResponsibilityResolveRequest, ProcurementResponsibilityResolveView,
@@ -18,7 +21,7 @@ use erp_read_models::purchase_center::procurement_responsibility::dto::Procureme
 use erp_read_models::purchase_center::procurement_responsibility::{
     apply_rule_list_facts, load_procurement_rule_list_facts,
 };
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::ProcurementResponsibilityProcess;
 use super::adapter::ResponsibilityFactsAdapter;
@@ -44,7 +47,7 @@ impl ProcurementResponsibilityProcess {
     ) -> Result<ProcurementResponsibilityRuleView> {
         let data = request.into_data();
         self.validate_selector_reference(&data, &mut NoTransaction).await?;
-        let policy_revision = self.authorize_pool(&data).await?;
+        self.validate_pool(&data, &mut NoTransaction).await?;
         let id = ProcurementResponsibilityRuleId::new(id_generator::next_id());
         let rule = ProcurementResponsibilityRule::new(id, data.clone(), actor.id()).map_err(Error::Logic)?;
         let audit = actor.clone().resource_log(
@@ -52,7 +55,7 @@ impl ProcurementResponsibilityProcess {
             "procurement_responsibility_rule",
             rule.base.id.clone(),
         )?;
-        let rule = self.persist_created_rule(rule, data, audit, policy_revision).await?;
+        let rule = self.persist_created_rule(rule, data, audit, actor.clone()).await?;
         let facts =
             load_procurement_rule_list_facts(&self.db, std::slice::from_ref(&rule), &mut NoTransaction)
                 .await?;
@@ -81,13 +84,13 @@ impl ProcurementResponsibilityProcess {
     ) -> Result<ProcurementResponsibilityRuleView> {
         let (version, data) = request.into_parts();
         self.validate_selector_reference(&data, &mut NoTransaction).await?;
-        let policy_revision = self.authorize_pool(&data).await?;
+        self.validate_pool(&data, &mut NoTransaction).await?;
         let audit = actor.clone().resource_log(
             "procurement_responsibility_rule.update",
             "procurement_responsibility_rule",
             id.to_string(),
         )?;
-        let rule = self.persist_updated_rule(id, version, data, actor.id(), audit, policy_revision).await?;
+        let rule = self.persist_updated_rule(id, version, data, actor.clone(), audit).await?;
         let facts =
             load_procurement_rule_list_facts(&self.db, std::slice::from_ref(&rule), &mut NoTransaction)
                 .await?;
@@ -96,13 +99,12 @@ impl ProcurementResponsibilityProcess {
         Ok(view)
     }
 
-    /// 以负责人授权策略版本为提交栅栏创建规则与审计。
+    /// 在原事务内重验管理资格及负责人资格并创建规则与审计。
     ///
     /// # 参数
     /// * `rule` - 已完成实体校验的新规则
     /// * `data` - 用于事务内重验的完整规则数据
     /// * `audit` - 成功审计日志
-    /// * `policy_revision` - 负责人资格校验使用的策略版本
     ///
     /// # 返回
     /// 返回已原子提交的规则。
@@ -114,32 +116,33 @@ impl ProcurementResponsibilityProcess {
         rule: ProcurementResponsibilityRule,
         data: ProcurementResponsibilityRuleData,
         audit: AuditLog,
-        policy_revision: u64,
+        actor: AuditActor,
     ) -> Result<ProcurementResponsibilityRule> {
         let db = self.db.clone();
         let validation = Self::new(db.clone(), self.rbac.clone());
-        let rbac = self.rbac.clone();
-        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
-            Box::pin(async move {
-                validation.validate_selector_reference(&data, executor).await?;
-                validation.validate_pool(&data, executor).await?;
-                ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, executor).await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok(rule)
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    validation.require_management(&actor, executor).await?;
+                    validation.validate_selector_reference(&data, executor).await?;
+                    validation.validate_pool(&data, executor).await?;
+                    ProcurementResponsibilityService::new(db.clone()).create_rule(&rule, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
+                    Ok(rule)
+                })
             })
-        })
-        .await
+            .await
     }
 
-    /// 以负责人授权策略版本为提交栅栏整项更新规则与审计。
+    /// 在原事务内重验管理资格及负责人资格并整项更新规则与审计。
     ///
     /// # 参数
     /// * `id` - 待更新规则主键
     /// * `version` - 客户端期望乐观锁版本
     /// * `data` - 完整新规则数据
-    /// * `updated_by` - 更新操作人账号 ID
+    /// * `actor` - 当前管理操作人
     /// * `audit` - 成功审计日志
-    /// * `policy_revision` - 负责人资格校验使用的策略版本
     ///
     /// # 返回
     /// 返回事务内更新后的规则。
@@ -151,27 +154,44 @@ impl ProcurementResponsibilityProcess {
         id: &str,
         version: u64,
         data: ProcurementResponsibilityRuleData,
-        updated_by: &str,
+        actor: AuditActor,
         audit: AuditLog,
-        policy_revision: u64,
     ) -> Result<ProcurementResponsibilityRule> {
         let db = self.db.clone();
         let validation = Self::new(db.clone(), self.rbac.clone());
-        let rbac = self.rbac.clone();
         let id = id.to_string();
-        let updated_by = updated_by.to_string();
-        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
-            Box::pin(async move {
-                validation.validate_selector_reference(&data, executor).await?;
-                validation.validate_pool(&data, executor).await?;
-                let rule = ProcurementResponsibilityService::new(db.clone())
-                    .update_rule(&id, version, data, &updated_by, executor)
-                    .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok(rule)
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    validation.require_management(&actor, executor).await?;
+                    validation.validate_selector_reference(&data, executor).await?;
+                    validation.validate_pool(&data, executor).await?;
+                    let rule = ProcurementResponsibilityService::new(db.clone())
+                        .update_rule(&id, version, data, actor.id(), executor)
+                        .await?;
+                    persist_log(&db, &audit, executor).await?;
+                    Ok(rule)
+                })
             })
-        })
-        .await
+            .await
+    }
+
+    /// 在原事务证明责任配置管理的当前功能资格。
+    async fn require_management(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
+        let permission = Permission::parse("procurement_responsibility:manage")?;
+        let entry = AccessRegistration {
+            permission: permission.clone(),
+            required_permissions: vec![],
+            access: AccessMode::Operation,
+        };
+        let service = AuthorizationService::new(
+            self.db.clone(),
+            self.rbac.clone(),
+            AuthorizationRegistry::new(vec![entry])?,
+        );
+        service.require(actor, &permission, AccessTarget::Operation, executor).await?;
+        Ok(())
     }
 
     /// 逐行预览采购责任解析结果。

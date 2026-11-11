@@ -7,7 +7,9 @@ use erp_core::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, aggregate, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SalesReviewExt;
@@ -15,6 +17,7 @@ use crate::entity::sales_review::{
     SalesChangeOrder, SalesChangeOrderStatus, SalesChangeSubmission, SalesChangeSubmissionLine,
 };
 use crate::repository::owned::SalesChangeOrderRepository;
+use crate::repository::sales_order::scope::SalesReadScope;
 
 /// `sales_change_order` 集合名。
 const SALES_CHANGE_ORDERS: &str = <mongodb::Database as SalesReviewExt>::SALES_CHANGE_ORDERS;
@@ -50,8 +53,6 @@ pub struct SalesChangeOrderRow {
 pub struct SalesChangeOrderFilter {
     /// 原销售单；`None` 表示不筛选。
     pub sales_order_id: Option<SalesOrderId>,
-    /// 已证明可见的来源销售单；`None` 表示公司范围不限制。
-    pub authorized_sales_order_ids: Option<Vec<String>>,
     /// 变更状态；`None` 表示不筛选。
     pub status: Option<SalesChangeOrderStatus>,
     /// 页码（1 起）。
@@ -68,7 +69,6 @@ impl Default for SalesChangeOrderFilter {
     fn default() -> Self {
         Self {
             sales_order_id: None,
-            authorized_sales_order_ids: None,
             status: None,
             page: 1,
             page_size: 20,
@@ -81,7 +81,7 @@ impl Default for SalesChangeOrderFilter {
 impl QueryFilter for SalesChangeOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// 按原销售单、变更状态与已授权销售单求交。指定销售单不在授权集合内，或授权集合为空时，条件恒假。
+    /// 仅编译原销售单和变更状态；来源授权由仓储追加完整 identity 查询阶段。
     ///
     /// # 参数
     /// 无。
@@ -95,7 +95,6 @@ impl QueryFilter for SalesChangeOrderFilter {
         change_order_filter(
             self.sales_order_id.as_ref().map(ToString::to_string).as_deref(),
             self.status.map(|status| status.as_str()),
-            self.authorized_sales_order_ids.as_deref(),
         )
     }
 }
@@ -136,10 +135,25 @@ pub trait SalesChangeOrderRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SalesChangeOrderRow>>;
 
+    /// 按实际来源销售单的完整授权查询变更分页与总数。
+    /// # 参数
+    /// filter 为业务筛选，scope 为本次销售来源凭证，executor 为原读取事务。
+    /// # 返回
+    /// 仅包含来源存在且有权的变更单及匹配总数。
+    /// # 错误
+    /// 授权复验、查询或解码失败时拒绝。
+    async fn search_authorized_sales_change_orders(
+        &self,
+        filter: &SalesChangeOrderFilter,
+        scope: &SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<PageResult<SalesChangeOrderRow>>;
+
     /// 装载变更查询的有界身份与版本集合，用于跨页一致性校验。
     ///
     /// # 参数
-    /// * `filter` - 已包含授权来源限制的筛选
+    /// * `filter` - 变更业务筛选
+    /// * `scope` - 本次销售来源完整查询凭证
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -153,8 +167,9 @@ pub trait SalesChangeOrderRepositoryExt {
     async fn query_change_versions(
         &self,
         filter: &SalesChangeOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesChangeVersion>>;
+    ) -> crate::Result<Vec<SalesChangeVersion>>;
 
     /// 按「销售单 + 基准版本」查找进行中变更单。
     ///
@@ -214,22 +229,56 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
         Ok(PageResult { items, total: total as i64 })
     }
 
+    async fn search_authorized_sales_change_orders(
+        &self,
+        filter: &SalesChangeOrderFilter,
+        scope: &SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<PageResult<SalesChangeOrderRow>> {
+        scope.validate(executor).await?;
+        let stages = authorized_change_stages(filter, scope);
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(sales_change_order_projection())
+            .build();
+        let items = aggregate::find(
+            &self.collection().clone_with_type::<SalesChangeOrderRow>(),
+            doc! {},
+            options,
+            stages.clone(),
+            executor,
+        )
+        .await?;
+        let total = aggregate::count(&self.collection(), doc! {}, stages, executor).await?;
+        scope.validate(executor).await?;
+        let total =
+            i64::try_from(total).map_err(|_| crate::Error::ValidationError("销售变更记录数超限".into()))?;
+        Ok(PageResult { items, total })
+    }
+
     async fn query_change_versions(
         &self,
         filter: &SalesChangeOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesChangeVersion>> {
-        mongo_ops::find_many(
+    ) -> crate::Result<Vec<SalesChangeVersion>> {
+        scope.validate(executor).await?;
+        let versions = aggregate::find(
             &self.collection().clone_with_type::<SalesChangeVersion>(),
-            filter.to_doc(),
+            doc! {},
             FindOptions::builder()
                 .projection(doc! { "id": 1, "version": 1 })
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
+            authorized_change_stages(filter, scope),
             executor,
         )
-        .await
+        .await?;
+        scope.validate(executor).await?;
+        Ok(versions)
     }
 
     async fn find_in_progress_by_order_and_base(
@@ -581,51 +630,22 @@ pub struct SalesChangeVersion {
     pub version: u64,
 }
 
-/// 按来源销售单授权编译变更单查询条件。
-///
-/// # 参数
-/// * `sales_order_id` - 可选原销售单筛选
-/// * `status` - 可选状态代码
-/// * `authorized_sales_order_ids` - 已证明可见的来源销售单；`None` 表示公司范围
-///
-/// # 返回
-/// 返回未删除过滤与授权交集后的查询文档。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 授权空集与越界原单保持 `$expr:false`，不得查全量。
-fn change_order_filter(
-    sales_order_id: Option<&str>,
-    status: Option<&str>,
-    authorized_sales_order_ids: Option<&[String]>,
-) -> Document {
+/// 变更单业务筛选；来源授权在分页、计数和版本上限之前执行。
+fn change_order_filter(sales_order_id: Option<&str>, status: Option<&str>) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(status) = status {
         filter.insert("status", status);
     }
-    match (sales_order_id, authorized_sales_order_ids) {
-        (Some(sales_order_id), None) => {
-            filter.insert("sales_order_id", sales_order_id);
-        },
-        (Some(sales_order_id), Some(authorized)) => {
-            if authorized.iter().any(|id| id == sales_order_id) {
-                filter.insert("sales_order_id", sales_order_id);
-            } else {
-                filter.insert("$expr", false);
-            }
-        },
-        (None, Some(authorized)) => {
-            if authorized.is_empty() {
-                filter.insert("$expr", false);
-            } else {
-                filter.insert("sales_order_id", doc! { "$in": authorized });
-            }
-        },
-        (None, None) => {},
+    if let Some(id) = sales_order_id {
+        filter.insert("sales_order_id", id);
     }
     filter
+}
+
+fn authorized_change_stages(filter: &SalesChangeOrderFilter, scope: &SalesReadScope) -> Vec<Document> {
+    let mut stages = vec![doc! {"$match": filter.to_doc()}];
+    stages.extend(scope.related_stages("sales_order_id"));
+    stages
 }
 
 /// 销售变更单列表投影字段。
@@ -653,7 +673,6 @@ mod tests {
     fn sales_change_order_filter_applies_order_and_status() {
         let filter = SalesChangeOrderFilter {
             sales_order_id: Some(SalesOrderId::new("o-1")),
-            authorized_sales_order_ids: None,
             status: Some(SalesChangeOrderStatus::Draft),
             page: 1,
             page_size: 20,
@@ -667,19 +686,29 @@ mod tests {
     }
 
     #[test]
-    fn missing_authorized_source_ids_stay_empty() {
+    fn change_query_filters_actual_sources_before_full_authorization() {
+        let filter = SalesChangeOrderFilter {
+            sales_order_id: Some(SalesOrderId::new("so-1")),
+            status: Some(SalesChangeOrderStatus::Draft),
+            ..Default::default()
+        };
+        let pipeline = authorized_change_stages(&filter, &SalesReadScope::default());
         assert_eq!(
-            change_order_filter(None, None, Some(&[])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+            pipeline[0],
+            doc! {"$match": {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": "DRAFT", "sales_order_id": "so-1"
+            }}
         );
+        let lookup = pipeline[1].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! {"sales_source_id": "$sales_order_id"});
+        let source = lookup.get_array("pipeline").unwrap();
         assert_eq!(
-            change_order_filter(Some("so-1"), None, Some(&["so-2".into()])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+            source[0].as_document().unwrap(),
+            &doc! {"$match": {"$expr": {"$eq": ["$id", "$$sales_source_id"]}}}
         );
-        assert_eq!(
-            change_order_filter(Some("so-1"), None, Some(&["so-1".into()])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "sales_order_id": "so-1" }
-        );
+        assert_eq!(source[1].as_document().unwrap(), &doc! {"$match": {"$expr": false}});
+        assert_eq!(pipeline[2], doc! {"$match": {"__authorized_sales_source.0": {"$exists": true}}});
+        assert!(pipeline.iter().all(|stage| !stage.contains_key("$limit")));
     }
 
     #[test]

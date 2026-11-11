@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::{Permission, SharedRbacService, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_integration::entity::supplier_callback::SupplierCallbackReceipt;
 use erp_integration::repository::pending_catalog_callbacks;
 use erp_supply::connector_registry::SupplierConnectorRegistry;
@@ -99,7 +99,10 @@ impl SupplierCatalogCallbackProcess {
 
     async fn authorize(&self, actor: &AuditActor) -> Result<()> {
         let permission = Permission::parse("supplier_api_connection:catalog_sync")?;
-        if !self.rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
+        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+            .has_permission(actor, &permission, &mut NoTransaction)
+            .await?
+        {
             return Err(Error::Forbidden("商品采集授权人已无同步权限，请重新授权同步".into()));
         }
         Ok(())

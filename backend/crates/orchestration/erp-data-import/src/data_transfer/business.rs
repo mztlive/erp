@@ -5,7 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService, subject};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use erp_supplier_catalog::supply_governance::SupplierOfferingProcess;
 use mongodb::Database;
@@ -78,15 +78,22 @@ impl BusinessTransfers {
         if actor.kind() == AccountKind::Supplier && kind != TransferKind::PortalBatch {
             return Err(Error::Forbidden("此任务仅供管理端使用".into()));
         }
-        self.db
-            .accounts()
-            .find_by_id(actor.id(), &mut NoTransaction)
+        if kind == TransferKind::PortalBatch {
+            return self.portal_context_access(input, actor).await;
+        }
+        let permissions = permissions(kind, input)?
+            .into_iter()
+            .map(Permission::parse)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let authorization =
+            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
+        let qualification = authorization
+            .permissions(actor, &permissions, &mut NoTransaction)
             .await?
-            .filter(|account| account.kind == actor.kind() && account.can_login())
             .ok_or_else(|| Error::Forbidden("操作账号已停用或身份变化".into()))?;
-        for code in permissions(kind, input)? {
-            if !self.rbac.enforce(&subject(actor.kind(), actor.id()), &Permission::parse(code)?).await? {
-                return Err(Error::Forbidden(format!("当前账号无权执行此任务（{code}）")));
+        for permission in permissions {
+            if qualification.roles(&permission).is_empty() {
+                return Err(Error::Forbidden("当前账号无权执行此任务".into()));
             }
         }
         Ok(())
@@ -327,17 +334,17 @@ fn permissions(kind: TransferKind, input: &Value) -> Result<Vec<&'static str>> {
         }],
         InquiryPreview => vec!["sales_inquiry:import"],
         InquiryCreationPreview => vec!["sales_inquiry:create", "sales_inquiry:import", "sellable_sku:list"],
-        SupplyBatch => vec![match input["mode"].as_str() {
-            Some("revise") => "supplier_offering:update",
-            Some("availability") => "supplier_offering_availability:update",
-            _ => {
-                return Err(Error::ValidationError(
-                    "仅支持批量调价或更新可供情况，批量建档请使用商品导入".into(),
-                ));
-            },
-        }],
+        SupplyBatch => vec![supply_batch_permission(input)?],
         PortalBatch => vec![],
     })
+}
+
+fn supply_batch_permission(input: &Value) -> Result<&'static str> {
+    match input["mode"].as_str() {
+        Some("revise") => Ok("supplier_offering:update"),
+        Some("availability") => Ok("supplier_offering_availability:update"),
+        _ => Err(Error::ValidationError("仅支持批量调价或更新可供情况，批量建档请使用商品导入".into())),
+    }
 }
 
 #[cfg(test)]

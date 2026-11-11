@@ -5,7 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use bpm::engine::DefinitionGraph;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_support::FileAsset;
 use erp_workflow::WorkflowAuthorizationPort;
@@ -151,6 +151,7 @@ pub trait ApprovalRuntimePort: Send + Sync {
 
 /// 由应用装配原授权与审计提供者的审批共有运行能力。
 pub struct ApprovalRuntime<A> {
+    db: Database,
     pub(crate) identity: SharedRbacService,
     auth: A,
     audit: Arc<dyn WorkflowAuditPort>,
@@ -164,8 +165,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntime<A> {
     /// 返回可注入业务编排的运行能力。
     /// # 错误
     /// 不返回错误。
-    pub fn new(identity: SharedRbacService, auth: A, audit: Arc<dyn WorkflowAuditPort>) -> Self {
-        Self { identity, auth, audit }
+    pub fn new(
+        db: Database,
+        identity: SharedRbacService,
+        auth: A,
+        audit: Arc<dyn WorkflowAuditPort>,
+    ) -> Self {
+        Self { db, identity, auth, audit }
     }
 }
 
@@ -217,7 +223,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         files: &[FileAsset],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(authorize_material_transfer(&self.identity, actor, files, executor).await?)
+        Ok(authorize_material_transfer(&self.identity, &self.db, actor, files, executor).await?)
     }
     async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
         Ok(self.identity.directory().actor_is_active(actor, executor).await?)
@@ -230,8 +236,13 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let permission = Permission::parse(permission)?;
-        let qualified =
-            self.identity.qualified_permissions(actor, std::slice::from_ref(&permission), executor).await?;
+        let qualified = AuthorizationService::new(
+            self.db.clone(),
+            self.identity.clone(),
+            AuthorizationRegistry::new(vec![])?,
+        )
+        .permissions(actor, std::slice::from_ref(&permission), executor)
+        .await?;
         Ok(qualified
             .map(|value| value.roles(&permission).into_iter().map(|role| role.to_string()).collect())
             .unwrap_or_default())
@@ -254,6 +265,6 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         graph: &DefinitionGraph,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(revalidate_binding_graph(&self.identity, policy, context, graph, executor).await?)
+        Ok(revalidate_binding_graph(&self.db, &self.identity, policy, context, graph, executor).await?)
     }
 }

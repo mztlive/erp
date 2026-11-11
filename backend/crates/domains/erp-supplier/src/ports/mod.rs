@@ -7,10 +7,7 @@ mod party;
 mod sensitive;
 
 pub use account::{AccountFactPort, FailClosedAccountFactPort};
-pub use data_scope::{
-    FailClosedSupplierDataScopePort, SupplierDataScopePort, SupplierResolvedClause, SupplierResolvedScope,
-    SupplierScopeObject,
-};
+pub use data_scope::{FailClosedSupplierDataScopePort, SupplierDataScopePort, SupplierResolvedScope};
 pub use file_asset::{EmptyFileAssetFacts, FileAssetFact, FileAssetFactsPort};
 pub use party::{
     AddressTypeFact, EffectiveRecordStatusFact, EmptyPartyFacts, PartyAddressFact, PartyBankAccountFact,

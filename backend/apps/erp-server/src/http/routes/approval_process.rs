@@ -5,7 +5,7 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::approval_instance::approval_process;
 use crate::http::middleware::with_permission;
@@ -19,7 +19,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回目录、版本、详情、草稿、节点、发布、退役与定义期候选人路由。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/approval-processes/catalog",

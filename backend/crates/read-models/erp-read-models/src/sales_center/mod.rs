@@ -7,3 +7,5 @@ pub mod prices;
 pub(crate) mod purchase_visibility;
 pub mod review;
 pub mod selection_pricing;
+
+pub(crate) mod repository;

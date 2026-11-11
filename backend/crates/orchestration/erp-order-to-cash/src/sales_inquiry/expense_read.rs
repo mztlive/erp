@@ -11,7 +11,7 @@ use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use erp_supply::inquiry::{InquiryFeeBasis, InquirySupplyService};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::access::SalesInquiryAccess;
@@ -42,6 +42,7 @@ pub struct InquiryExpenseCandidates {
 }
 
 /// 复用费用采购来源授权，不恢复已经完成的询价任务。
+#[derive(Clone)]
 pub struct InquiryExpenseReadService {
     db: Database,
     rbac: SharedRbacService,
@@ -67,19 +68,48 @@ impl InquiryExpenseReadService {
     /// # 错误
     /// 当前账号、费用采购来源范围、询价链或期间版本失效时拒绝。
     pub async fn candidates(&self, sales_id: &str, actor: &AuditActor) -> Result<InquiryExpenseCandidates> {
+        let service = self.clone();
+        let sales_id = sales_id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.candidate_view(&sales_id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn candidate_view(
+        &self,
+        sales_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InquiryExpenseCandidates> {
         let access = SalesInquiryAccess::new(self.db.clone(), self.rbac.clone());
-        access.ensure_procurement_permission(actor, "convert_expenses", &mut NoTransaction).await?;
+        access.ensure_procurement_permission(actor, "convert_expenses", executor).await?;
         let sources = ExpenseSourceReadService::new(self.db.clone(), self.rbac.clone());
-        let order = sources.require_order(sales_id, actor, &mut NoTransaction).await?;
-        let Some(source) = inquiry_sources(&self.db).find_by_id(sales_id, &mut NoTransaction).await? else {
+        let order = sources.require_order(sales_id, actor, executor).await?;
+        let view = self.procurement_candidate_view(sales_id, order.customer_id.as_ref(), executor).await?;
+        sources.require_order(sales_id, actor, executor).await?;
+        access.ensure_procurement_permission(actor, "convert_expenses", executor).await?;
+        Ok(view)
+    }
+
+    async fn procurement_candidate_view(
+        &self,
+        sales_id: &str,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InquiryExpenseCandidates> {
+        let Some(source) = inquiry_sources(&self.db).find_by_id(sales_id, executor).await? else {
             return Ok(InquiryExpenseCandidates { items: vec![] });
         };
-        let inquiry =
-            SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, &mut NoTransaction).await?;
+        let inquiry = SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, executor).await?;
         if !source.consumed
             || source.released
-            || order.customer_id.as_ref() != inquiry.customer_id
-            || source.customer_id != order.customer_id
+            || inquiry.customer_id != customer_id
+            || source.customer_id.as_ref() != customer_id
         {
             return Err(Error::NotFound("询价费用来源不存在或不适用".into()));
         }
@@ -92,13 +122,10 @@ impl InquiryExpenseReadService {
             .find(|feedback| feedback.round == round)
             .ok_or_else(|| Error::Internal("询价接受结果缺少费用快照".into()))?;
         let bases = InquirySupplyService::new(self.db.clone())
-            .fee_bases(&inquiry.base.id, feedback.requirement_version, round, &mut NoTransaction)
+            .fee_bases(&inquiry.base.id, feedback.requirement_version, round, executor)
             .await?;
         let items = build_candidates(&inquiry, sales_id, round, &bases, Instant::now())?;
-        sources.require_order(sales_id, actor, &mut NoTransaction).await?;
-        access.ensure_procurement_permission(actor, "convert_expenses", &mut NoTransaction).await?;
-        let latest =
-            SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, &mut NoTransaction).await?;
+        let latest = SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, executor).await?;
         if latest.base.version != inquiry.base.version {
             return Err(Error::ConflictError("询价费用或可用余额已变化，请重新查询".into()));
         }
@@ -116,20 +143,47 @@ impl InquiryExpenseReadService {
         sales_id: &str,
         actor: &AuditActor,
     ) -> Result<FinancialInquiryExpenseCandidates> {
+        let service = self.clone();
+        let sales_id = sales_id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.financial_candidate_view(&sales_id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn financial_candidate_view(
+        &self,
+        sales_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<FinancialInquiryExpenseCandidates> {
         let access = SalesAccess::new(self.db.clone(), self.rbac.clone());
         let permissions = [Permission::parse("cost_entry:create")?];
-        let order =
-            access.require_object(actor, "detail", sales_id, &permissions, &mut NoTransaction).await?;
+        let order = access.require_object(actor, "detail", sales_id, &permissions, executor).await?;
         order.ensure_extra_cost_source()?;
-        let Some(source) = inquiry_sources(&self.db).find_by_id(sales_id, &mut NoTransaction).await? else {
+        let view = self.financial_candidate_items(sales_id, order.customer_id.as_ref(), executor).await?;
+        access.require_object(actor, "detail", sales_id, &permissions, executor).await?;
+        Ok(view)
+    }
+
+    async fn financial_candidate_items(
+        &self,
+        sales_id: &str,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<FinancialInquiryExpenseCandidates> {
+        let Some(source) = inquiry_sources(&self.db).find_by_id(sales_id, executor).await? else {
             return Ok(FinancialInquiryExpenseCandidates { items: vec![] });
         };
-        let inquiry =
-            SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, &mut NoTransaction).await?;
+        let inquiry = SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, executor).await?;
         if !source.consumed
             || source.released
-            || source.customer_id != order.customer_id
-            || inquiry.customer_id != order.customer_id.as_ref()
+            || source.customer_id.as_ref() != customer_id
+            || inquiry.customer_id != customer_id
         {
             return Err(Error::NotFound("询价费用来源不存在或不适用".into()));
         }
@@ -140,9 +194,7 @@ impl InquiryExpenseReadService {
             .into_iter()
             .map(FinancialInquiryExpenseCandidate::from)
             .collect();
-        access.require_object(actor, "detail", sales_id, &permissions, &mut NoTransaction).await?;
-        let latest =
-            SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, &mut NoTransaction).await?;
+        let latest = SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, executor).await?;
         if latest.base.version != inquiry.base.version {
             return Err(Error::ConflictError("询价费用或可用余额已变化，请重新查询".into()));
         }

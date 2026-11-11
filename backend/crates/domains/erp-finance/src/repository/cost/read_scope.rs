@@ -1,7 +1,7 @@
 //! 成本范围投影所需的有界候选事实；应用层在分页前裁剪全部分配。
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter, Result, aggregate, mongo_ops};
 use serde::Deserialize;
 
 use super::{CostEntryFilter, CostEntryRow, cost_entry_projection};
@@ -88,9 +88,41 @@ pub trait CostEntryReadScopeExt {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<CostEntryRow>>;
+
+    /// 在完整真实分配来源投影上执行统一授权阶段，只返回完整金额会员身份。
+    /// # 参数
+    /// ids 为服务端完整候选身份，stages 为 identity 完整视图编译结果，executor 为原事务。
+    /// # 返回
+    /// 当前获准读取整笔成本的身份和版本；空候选直接返回空集。
+    /// # 错误
+    /// 聚合或投影解码失败时保留仓储错误。
+    async fn scope_whole_ids(
+        &self,
+        ids: &[String],
+        stages: &[Document],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostEntryScopeVersion>>;
 }
 
 impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
+    async fn scope_whole_ids(
+        &self,
+        ids: &[String],
+        stages: &[Document],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CostEntryScopeVersion>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut pipeline = vec![doc! { "$match": { "deleted_at": 0, "id": { "$in": ids } } }];
+        pipeline.extend(whole_source_stages());
+        pipeline.extend_from_slice(stages);
+        pipeline.push(doc! { "$match": { "scope_whole": true } });
+        pipeline.push(doc! { "$project": { "_id": 0, "id": 1, "version": 1 } });
+        aggregate::rows(&self.collection().clone_with_type::<CostEntryScopeVersion>(), pipeline, executor)
+            .await
+    }
+
     async fn scope_candidates(
         &self,
         filter: &CostEntryFilter,
@@ -292,6 +324,29 @@ fn allocation_version_options() -> FindOptions {
         .sort(doc! { "id": 1 })
         .projection(doc! { "id": 1, "version": 1, "cost_entry_id": 1, "sales_order_id": 1 })
         .build()
+}
+
+/// 所有实际分配引用均保留；缺失引用不能被过滤后伪装成零来源成本。
+fn whole_source_stages() -> Vec<Document> {
+    vec![
+        doc! { "$lookup": {
+            "from": super::COST_ALLOCATIONS, "let": { "cost_id": "$id" }, "pipeline": [
+                { "$match": { "deleted_at": 0, "$expr": { "$eq": ["$cost_entry_id", "$$cost_id"] } } },
+                { "$project": { "_id": 0, "sales_order_id": 1 } }
+            ], "as": "__cost_whole_allocations"
+        } },
+        doc! { "$set": {
+            "__funds_sales_ids": { "$map": { "input": "$__cost_whole_allocations", "as": "line", "in": { "$ifNull": ["$$line.sales_order_id", null] } } },
+            "__funds_purchase_ids": [], "__funds_settlement_ids": [],
+            "__funds_sources_valid": { "$allElementsTrue": [{ "$map": {
+                "input": "$__cost_whole_allocations", "as": "line", "in": { "$and": [
+                    { "$ne": [{ "$ifNull": ["$$line.sales_order_id", null] }, null] },
+                    { "$ne": ["$$line.sales_order_id", ""] }
+                ] }
+            } }] }
+        } },
+        doc! { "$unset": "__cost_whole_allocations" },
+    ]
 }
 
 #[cfg(test)]

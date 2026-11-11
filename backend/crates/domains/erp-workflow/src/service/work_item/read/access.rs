@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::{CompiledAccess, Permission, PermissionSet};
+use erp_identity::{CompiledAccess, Permission};
 use persistence_core::Executor;
 
 use super::{WorkItemFilter, WorkItemReadService, WorkItemScope, dto};
@@ -63,8 +63,7 @@ impl QueueAccess {
     /// # 错误
     /// 无。
     pub(super) fn new(read: Arc<CompiledAccess>) -> Self {
-        let mut task = TaskAccess::new(read.actor().id().to_owned());
-        task.permissions = PermissionSet::new([read.permission().clone()]);
+        let task = TaskAccess::new(read.actor().id().to_owned());
         Self { task, manage: None, read }
     }
 

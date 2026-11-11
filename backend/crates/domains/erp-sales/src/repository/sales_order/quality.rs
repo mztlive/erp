@@ -1,8 +1,9 @@
 //! 客户经营质量双口径的有界销售单事实查询；授权范围在数据库过滤中交集执行。
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, aggregate};
+use persistence_core::{Executor, Repository, aggregate};
 
+use crate::Result;
 use crate::entity::sales_order::{CommercialStatus, SalesOrder};
 
 /// 双口径单次最多读取的销售单数；额外读取一条用于拒绝截断统计。
@@ -17,6 +18,17 @@ pub struct QualityOrderFilter {
 }
 
 impl QualityOrderFilter {
+    /// 返回期间、客户筛选与完整销售授权的查询前缀。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 不含排序及数量上限的阶段，供跨域读取继续求交来源授权。
+    /// # 错误
+    /// 无；执行方须在原执行器上复验授权凭证。
+    pub fn stages(&self) -> Vec<Document> {
+        self.authorized_scope.lookup_after(self.business_filter())
+    }
+
     /// 不接受客户端范围标识替代授权集合；空集合必定无结果。
     fn document(&self) -> Document {
         let mut filter = self.business_filter();
@@ -70,18 +82,21 @@ impl SalesOrderRepositoryQualityExt for Repository<'_, SalesOrder> {
         filter: &QualityOrderFilter,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesOrder>> {
+        filter.authorized_scope.validate(executor).await?;
         let options = FindOptions::builder()
             .limit((QUALITY_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
             .build();
-        aggregate::find(
+        let rows = aggregate::find(
             &self.collection().clone_with_type(),
             filter.document(),
             options,
-            filter.authorized_scope.lookup_after(filter.business_filter()),
+            filter.stages(),
             executor,
         )
-        .await
+        .await?;
+        filter.authorized_scope.validate(executor).await?;
+        Ok(rows)
     }
 }
 

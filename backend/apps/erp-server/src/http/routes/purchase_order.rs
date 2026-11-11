@@ -6,7 +6,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::purchase_order;
 use crate::http::middleware::with_permission;
@@ -20,7 +20,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     purchase_document_routes(rbac)
         .merge(purchase_detail_routes(rbac))
         .merge(payment_arrangement_routes(rbac))
@@ -32,7 +32,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 采购关联销售材料下载始终使用采购对象详情资格及其准确销售版本。
-fn purchase_sales_material_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_sales_material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/purchase-orders/{id}/sales-materials/{asset_id}/download",
         with_permission(
@@ -44,7 +44,7 @@ fn purchase_sales_material_routes(rbac: &SharedRbacService) -> Router<HttpState>
 }
 
 /// 采购单列表、创建与详情入口。
-fn purchase_document_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders",
@@ -81,7 +81,7 @@ fn purchase_document_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 采购单详情下的付款记录、交付安排范围和原单草稿保存入口。
-fn purchase_detail_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_detail_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/{id}/payments",
@@ -118,7 +118,7 @@ fn purchase_detail_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 采购单审批、作废、建单依据及发起变更入口。
-fn purchase_workflow_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/{id}/void",
@@ -171,7 +171,7 @@ fn purchase_workflow_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 采购变更详情和既有审批命令入口。
-fn purchase_change_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-change-orders",
@@ -216,7 +216,7 @@ fn purchase_change_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 采购改单草稿读取（复用提交权限）与作废入口。
-fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_change_draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-change-orders/{id}/draft",
@@ -244,7 +244,7 @@ fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(expense_source_routes(rbac))
         .route(
@@ -297,7 +297,7 @@ fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<HttpState>
         )
 }
 
-fn expense_source_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn expense_source_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/expense-sources",
@@ -318,7 +318,7 @@ fn expense_source_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 采购付款安排查询与当前负责人跟进日期登记。
-fn payment_arrangement_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn payment_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-orders/{id}/payment-arrangement",

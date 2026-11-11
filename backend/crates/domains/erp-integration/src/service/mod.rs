@@ -1,6 +1,7 @@
 //! 集成本域构造、决定规则与持久化服务。
 
 pub mod access;
+pub use crate::repository::authorization;
 pub mod error_task;
 pub mod evidence;
 pub mod inbox_message;

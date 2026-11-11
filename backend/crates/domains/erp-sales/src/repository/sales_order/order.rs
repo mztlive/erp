@@ -418,7 +418,7 @@ pub trait SalesOrderRepositoryExt {
         filter: &SalesOrderFilter,
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SalesOrderRow>>;
+    ) -> crate::Result<PageResult<SalesOrderRow>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
     ///
@@ -437,7 +437,7 @@ pub trait SalesOrderRepositoryExt {
         filter: &SalesOrderFilter,
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<super::scope::SalesVersion>>;
+    ) -> crate::Result<Vec<super::scope::SalesVersion>>;
 
     /// 按销售单号字面量匹配未删除单据身份。
     ///
@@ -528,7 +528,8 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         filter: &SalesOrderFilter,
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SalesOrderRow>> {
+    ) -> crate::Result<PageResult<SalesOrderRow>> {
+        scope.validate(executor).await?;
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -552,6 +553,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         )
         .await?;
 
+        scope.validate(executor).await?;
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -560,8 +562,9 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         filter: &SalesOrderFilter,
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<super::scope::SalesVersion>> {
-        aggregate::find(
+    ) -> crate::Result<Vec<super::scope::SalesVersion>> {
+        scope.validate(executor).await?;
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<super::scope::SalesVersion>(),
             doc! { "$and": [filter.to_doc(), scope.document()] },
             FindOptions::builder()
@@ -572,7 +575,9 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
             scope.lookup_after(filter.to_doc()),
             executor,
         )
-        .await
+        .await?;
+        scope.validate(executor).await?;
+        Ok(rows)
     }
 
     async fn matching_ids_by_number(

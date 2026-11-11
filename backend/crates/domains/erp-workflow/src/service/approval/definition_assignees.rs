@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_identity::{AccountSummary, SharedRbacService};
+use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
@@ -60,7 +61,7 @@ impl ApprovalDefinitionService {
             .await?;
         let mut items = Vec::new();
         for account in accounts {
-            let eligible = eligible_candidate(&self.identity, &account, query.copies).await?;
+            let eligible = eligible_candidate(&self.db, &self.identity, &account, query.copies).await?;
             if eligible {
                 items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
             }
@@ -79,6 +80,7 @@ impl ApprovalDefinitionService {
 /// # 错误
 /// 审批权限读取失败时拒绝。
 pub(super) async fn eligible_candidate(
+    db: &Database,
     identity_service: &SharedRbacService,
     account: &AccountSummary,
     copies: bool,
@@ -90,5 +92,5 @@ pub(super) async fn eligible_candidate(
         return Ok(true);
     }
     let candidate = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-    approval_participant_permissions_with_executor(identity_service, &candidate, &mut NoTransaction).await
+    approval_participant_permissions_with_executor(db, identity_service, &candidate, &mut NoTransaction).await
 }

@@ -3,7 +3,10 @@
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, PortalActor, PortalIdentityService, subject};
+use erp_identity::{
+    AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission, PortalActor,
+    PortalIdentityService,
+};
 use erp_supplier::{SupplierAccount, SupplierExt};
 use persistence_core::Executor;
 
@@ -180,11 +183,12 @@ impl SupplierPortalProcess {
         };
         let permission =
             Permission::parse(code).map_err(|error| Error::ValidationError(error.to_string()))?;
-        let revision = self.rbac.current_policy_revision().await?;
-        if !self.rbac.enforce(&subject(actor.kind(), actor.id()), &permission).await? {
+        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
+            .has_permission(actor, &permission, executor)
+            .await?
+        {
             return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
         }
-        self.rbac.ensure_policy_snapshot_with_executor(revision, executor).await?;
         Ok(())
     }
 

@@ -4,7 +4,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, PageView};
-use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_sales::dto::sales_order::SalesOrderListParams;
 use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
 use erp_sales::service::sales_order::SalesOrderService;
@@ -13,7 +12,7 @@ use serde::Serialize;
 
 use super::SalesOrderReadService;
 use super::dto::SalesOrderView;
-use crate::sales_center::access::SalesAccess;
+use crate::sales_center::access::{SalesAccess, SalesReadContext};
 use crate::{Error, Result};
 
 /// 查询直接复用领域 DTO，scope_version 与原有数值参数均在 URL 边界解码。
@@ -29,10 +28,6 @@ pub struct SalesListView {
     pub ownership_basis: &'static str,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
@@ -43,7 +38,7 @@ pub struct SalesListView {
 
 pub(super) struct SalesSnapshot {
     pub page: PageView<SalesOrderRow>,
-    pub context: AuthorizedDataScope,
+    pub context: SalesReadContext,
     pub no_scope: bool,
 }
 impl SalesOrderReadService {
@@ -81,6 +76,7 @@ impl SalesOrderReadService {
                         .list_versions(&params, search, &scope, org_ids, executor)
                         .await?;
                     let mut fingerprint = DefaultHasher::new();
+                    context.validate(executor).await?;
                     versions.hash(&mut fingerprint);
                     Ok(format!("{}:{:x}", context.scope_version, fingerprint.finish()))
                 })
@@ -127,8 +123,9 @@ impl SalesOrderReadService {
                         .list_rows(&params, search, &scope, org_ids, executor)
                         .await?;
                     let mut fingerprint = DefaultHasher::new();
+                    context.validate(executor).await?;
                     versions.hash(&mut fingerprint);
-                    context.map_read_version(|base| format!("{base}:{:x}", fingerprint.finish()));
+                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
                     let no_scope = scope.is_empty();
                     Ok(SalesSnapshot { no_scope, page, context })
                 })
@@ -246,8 +243,6 @@ mod tests {
             },
             ownership_basis: "document_sales_owner",
             scope_version: "scope-v1".to_string(),
-            policy_version: 3,
-            organization_version: 4,
             as_of: "2026-09-23T00:00:00Z".to_string(),
             empty_reason: None,
             scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",

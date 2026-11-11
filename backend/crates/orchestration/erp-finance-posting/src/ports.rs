@@ -76,7 +76,6 @@ type FreshTaskFactory = Arc<dyn Fn() -> Arc<dyn FinanceTaskPort> + Send + Sync>;
 #[derive(Clone)]
 pub struct FinancePostingPorts {
     pub(crate) identity: SharedRbacService,
-    pub(crate) transaction_identity: SharedRbacService,
     pub(crate) runtime: Arc<dyn ApprovalRuntimePort>,
     pub(crate) purchase: PurchaseAccess,
     pub(crate) funds: FundsAccess,
@@ -87,16 +86,15 @@ pub struct FinancePostingPorts {
 }
 
 impl FinancePostingPorts {
-    /// 注入所有实际提供者，并保持付款局部事务权限锁独立。
+    /// 注入身份、统一来源授权及财务任务事实提供者。
     /// # 参数
-    /// 各参数为应用共享身份、付款局部事务身份、审批运行、采购/资金访问、付款申请读取和任务能力。
+    /// 各参数为应用共享身份、审批运行、采购和资金访问、付款申请读取及任务能力。
     /// # 返回
     /// 返回无I/O的财务能力集合。
     /// # 错误
     /// 构造时不返回错误；业务校验仍在原调用位置执行。
     pub fn new(
         identity: SharedRbacService,
-        transaction_identity: SharedRbacService,
         runtime: Arc<dyn ApprovalRuntimePort>,
         purchase: PurchaseAccess,
         funds: FundsAccess,
@@ -105,7 +103,6 @@ impl FinancePostingPorts {
     ) -> Self {
         Self {
             identity,
-            transaction_identity,
             runtime,
             purchase,
             funds,

@@ -47,10 +47,7 @@ pub(crate) async fn check_create_scope(
     if owner.trim().is_empty() || org.trim().is_empty() {
         return Err(Error::ValidationError("销售负责人与业务组织必填".into()));
     }
-    let (resolved, scope) = access.resolve(actor, "sales_selection_booklet", "create", executor).await?;
-    if !access.allows_new(&resolved, &scope, owner, org)? {
-        return Err(Error::Forbidden("拟创建责任不在数据范围内".into()));
-    }
+    access.require_new(actor, owner, org, executor).await?;
     Ok(())
 }
 
@@ -93,13 +90,8 @@ pub(crate) async fn booklet_list_snapshot(
         executor,
     )
     .await?;
-    Ok(SelectionBookletListView {
-        page,
-        scope_version: resolved.scope_version,
-        policy_version: resolved.policy_version,
-        organization_version: resolved.organization_version,
-        no_scope: scope.is_empty(),
-    })
+    resolved.validate(executor).await?;
+    Ok(SelectionBookletListView { page, scope_version: resolved.scope_version, no_scope: scope.is_empty() })
 }
 
 /// 方案列表授权快照；方案沿所属册责任解释。
@@ -141,13 +133,8 @@ pub(crate) async fn proposal_list_snapshot(
         executor,
     )
     .await?;
-    Ok(SelectionProposalListView {
-        page,
-        scope_version: resolved.scope_version,
-        policy_version: resolved.policy_version,
-        organization_version: resolved.organization_version,
-        no_scope: scope.is_empty(),
-    })
+    resolved.validate(executor).await?;
+    Ok(SelectionProposalListView { page, scope_version: resolved.scope_version, no_scope: scope.is_empty() })
 }
 
 /// 按 ID 批量读取负责人显示名；缺失账号省略。
@@ -165,7 +152,7 @@ pub(crate) async fn owner_display_names(db: &Database, ids: &[String]) -> Result
     Ok(db.accounts().names_by_ids(ids, &mut NoTransaction).await?)
 }
 
-/// 授权后启动准备；授权与写入分两次事务，先鉴权后执行。
+/// 启动准备，并在实际写事务内重验统一授权。
 ///
 /// # 参数
 /// * `db` - 选品数据库
@@ -197,6 +184,7 @@ pub(crate) async fn start_prepare_checked(
     let actor_id = actor.id().to_string();
     let owned = db.clone();
     Ok(SalesSelectionService::new(owned)
+        .with_authorization(access, actor)
         .start_prepare(command, &actor_id, &catalog, &images, &FirstNonEmptyMemberImage)
         .await?)
 }
@@ -227,6 +215,7 @@ pub(crate) async fn delete_item_checked(
     require_action(db, &access, &actor, "maintain", &booklet_id).await?;
     let actor_id = actor.id().to_string();
     Ok(SalesSelectionService::new(db.clone())
+        .with_authorization(access, actor)
         .delete_display_item(&booklet_id, &item_id, req.expected_version, &actor_id)
         .await?)
 }
@@ -259,7 +248,10 @@ pub(crate) async fn publish_checked(
     require_action(db, &access, &actor, "publish", &id).await?;
     let catalog = CatalogAdapter { query: services.catalog.clone() };
     let actor_id = actor.id().to_string();
-    Ok(SalesSelectionService::new(db.clone()).publish(&id, req, &actor_id, &catalog, crypto).await?)
+    Ok(SalesSelectionService::new(db.clone())
+        .with_authorization(access, actor)
+        .publish(&id, req, &actor_id, &catalog, crypto)
+        .await?)
 }
 
 /// 授权后复制链接详情。
@@ -344,7 +336,10 @@ pub(crate) async fn rotate_link_checked(
 ) -> Result<SalesSelectionBookletView> {
     require_action(db, &access, &actor, "rotate_link", &id).await?;
     let actor_id = actor.id().to_string();
-    Ok(SalesSelectionService::new(db.clone()).rotate_link(&id, req, &actor_id, crypto).await?)
+    Ok(SalesSelectionService::new(db.clone())
+        .with_authorization(access, actor)
+        .rotate_link(&id, req, &actor_id, crypto)
+        .await?)
 }
 
 /// 授权后读取册图片对象键；同一执行器内重验。

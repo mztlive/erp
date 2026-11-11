@@ -2,7 +2,7 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::sales_inquiry;
 use crate::http::middleware::with_permission;
@@ -16,7 +16,7 @@ use crate::permissions;
 /// 返回销售与采购独立入口。
 /// # 错误
 /// 不执行 I/O，不返回错误。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(sales_reads(rbac))
         .merge(sales_drafts(rbac))
@@ -32,7 +32,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(procurement_fee_attachments(rbac))
 }
 
-fn procurement_fee_attachments(rbac: &SharedRbacService) -> Router<HttpState> {
+fn procurement_fee_attachments(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/procurement-inquiries/{id}/fee-bases/{basis_id}/attachments/{asset_id}",
         with_permission(
@@ -43,7 +43,7 @@ fn procurement_fee_attachments(rbac: &SharedRbacService) -> Router<HttpState> {
     )
 }
 
-fn sales_reads(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_reads(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-inquiries",
@@ -71,7 +71,7 @@ fn sales_reads(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn sales_drafts(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_drafts(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-inquiries",
@@ -99,7 +99,7 @@ fn sales_drafts(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn sales_feedback(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-inquiries/{id}/accept",
@@ -127,7 +127,7 @@ fn sales_feedback(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn sales_imports(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_imports(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-inquiries/imports/preview",
@@ -165,7 +165,7 @@ fn sales_imports(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn sales_conversion(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_conversion(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/inquiry-fees",
@@ -201,7 +201,7 @@ fn sales_conversion(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn sales_recovery(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_recovery(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-inquiries/receipts/{command_key}",
@@ -221,7 +221,7 @@ fn sales_recovery(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn procurement_reads(rbac: &SharedRbacService) -> Router<HttpState> {
+fn procurement_reads(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-inquiries",
@@ -249,7 +249,7 @@ fn procurement_reads(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn procurement_work(rbac: &SharedRbacService) -> Router<HttpState> {
+fn procurement_work(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-inquiries/{id}/supplement",
@@ -269,7 +269,7 @@ fn procurement_work(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn procurement_feedback(rbac: &SharedRbacService) -> Router<HttpState> {
+fn procurement_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-inquiries/{id}/renew",
@@ -297,7 +297,7 @@ fn procurement_feedback(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn procurement_quotes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn procurement_quotes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-inquiries/{id}/internal-quotes/import",
@@ -326,7 +326,7 @@ fn procurement_quotes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn procurement_fees(rbac: &SharedRbacService) -> Router<HttpState> {
+fn procurement_fees(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/procurement-inquiries/{id}/fee-bases",

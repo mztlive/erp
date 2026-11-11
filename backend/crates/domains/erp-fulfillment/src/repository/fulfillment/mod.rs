@@ -25,7 +25,7 @@
 //!
 //! 五个集合的筛选类型定义在各子模块，经本模块根 re-export 后由 `FulfillmentExt`
 //! 的关联类型对外暴露（`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs`
-//! 增加 re-export）；投影行只作为公开搜索方法的返回类型使用，不在此处 re-export。
+//! 增加 re-export）；跨域查询需要复用的投影行也从本模块公开。
 
 mod customer_acceptance;
 mod delivery;
@@ -39,7 +39,9 @@ mod writes;
 
 use std::collections::HashMap;
 
-pub use customer_acceptance::{CustomerAcceptanceFilter, CustomerAcceptanceRepositoryExt};
+pub use customer_acceptance::{
+    CustomerAcceptanceFilter, CustomerAcceptanceRepositoryExt, CustomerAcceptanceRow,
+};
 pub use delivery::{DeliveryFilter, DeliveryRepositoryExt};
 pub use electronic_delivery::{ElectronicDeliveryFilter, ElectronicDeliveryRepositoryExt};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId};

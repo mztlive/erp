@@ -9,7 +9,6 @@ mod invoice_rows;
 mod linked;
 mod party_names;
 mod payable;
-mod payable_source;
 mod payment;
 mod payment_guidance;
 mod receipt;
@@ -23,18 +22,17 @@ mod request;
 mod rows;
 mod source_authorization;
 mod source_read;
-
 pub use authorization::{
-    FundsAccess, FundsAuthorization, FundsLinkedCondition, FundsLinkedFacts, FundsScopedResult, ensure_page,
-    ensure_version, matches_linked_condition, restricted, scope_version, summarize_matched_shares,
-    whole_amount,
+    FundsAccess, FundsAuthorization, FundsLinkedCondition, FundsLinkedFacts, FundsReadContext,
+    FundsScopedResult, ensure_page, ensure_version, matches_linked_condition, restricted, scope_version,
+    summarize_matched_shares, whole_amount,
 };
+pub(crate) use repository::whole_access::WholeAccess;
 pub use rows::{
     FundsCandidate, FundsPersonShare, FundsScopedPage, FundsSummaryView, ScopedCustomerReceiptRow,
     ScopedInvoiceRequestRow, ScopedInvoiceRow, ScopedPayableAccountRow, ScopedPurchaseInvoiceAllocationRow,
     ScopedReceivableAccountRow, ScopedSupplierPaymentRow,
 };
-pub(crate) use source_authorization::ledger_readable;
 
 mod allocation_source;
 pub use allocation_source::{AllocationSource, AllocationSourceKind};

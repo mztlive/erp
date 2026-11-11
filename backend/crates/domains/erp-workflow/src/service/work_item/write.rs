@@ -5,8 +5,10 @@ use std::future::Future;
 use application_core::{AuditActor, CommandReceipt};
 use persistence_core::{Executor, NoTransaction, Transactional};
 
-use super::access::{detail_scope, ensure_generic_work_item_mutation};
-use super::{WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
+use super::access::ensure_generic_work_item_mutation;
+use super::{
+    WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemScope, WorkItemService,
+};
 use crate::dto::work_item::ViewAccess;
 use crate::entity::work_item::WorkItem;
 use crate::error::{Error, Result};
@@ -254,8 +256,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         let access = self.task_eligibility(actor, &item, executor).await?;
-        let scope = detail_scope(&item, actor.id(), &access)?;
-        self.require_business_read(&item, actor, &access, executor).await?;
+        let scope = WorkItemScope::for_task(&item, actor.id());
+        self.ensure_item_access_with_executor(&item, &access, executor).await?;
         let view_access = ViewAccess::from_fields(&item.clone().into(), scope, &access.task);
         self.authorization.require(actor, "detail", id, executor).await?;
         Ok(AuthorizedWorkItem {

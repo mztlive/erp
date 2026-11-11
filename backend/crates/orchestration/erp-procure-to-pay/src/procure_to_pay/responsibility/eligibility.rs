@@ -1,7 +1,6 @@
 //! 询价责任采购的账号、同角色权限与有效主属组织资格。
 
 use application_core::AuditActor;
-use erp_identity::service::account_permissions::ensure_actor_permissions;
 use erp_identity::service::business_ownership::required_business_org;
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use mongodb::Database;
@@ -79,7 +78,12 @@ impl ProcurementInquiryEligibility {
             .iter()
             .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(ensure_actor_permissions(&self.db, &self.rbac, actor, &permissions, executor).await?)
+        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+            .permissions(actor, &permissions, executor)
+            .await?
+            .filter(|value| value.same_role(&permissions))
+            .ok_or_else(|| Error::Forbidden("当前账号缺少完整询价操作资格".into()))?;
+        Ok(qualified.policy_revision())
     }
 }
 

@@ -116,7 +116,7 @@ impl SupplierFulfillmentProcess {
             if account.base.id == order.follow_up_user_id || !account.is_active_backoffice() {
                 continue;
             }
-            if !account_can_follow(&rbac, &account.base.id).await? {
+            if !account_can_follow(&self.db, &rbac, &account.base.id, &mut NoTransaction).await? {
                 continue;
             }
             candidates.push(FulfillmentHandoverCandidateView {
@@ -304,7 +304,7 @@ async fn ensure_target_qualified(
     let Some(account) = db.accounts().find_by_id(target, executor).await? else {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备供应商订单跟进资格".into()));
     };
-    if !account.is_active_backoffice() || !account_can_follow(rbac, target).await? {
+    if !account.is_active_backoffice() || !account_can_follow(db, rbac, target, executor).await? {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备供应商订单跟进资格".into()));
     }
     Ok(())
@@ -321,9 +321,18 @@ async fn ensure_org_enabled(
     Ok(ensure_identity_org_enabled(db, target_org, executor).await?)
 }
 
-async fn account_can_follow(rbac: &SharedRbacService, user_id: &str) -> Result<bool> {
+async fn account_can_follow(
+    db: &mongodb::Database,
+    rbac: &SharedRbacService,
+    user_id: &str,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<bool> {
     let permission = Permission::parse("supplier_fulfillment_order:handover").map_err(Error::from)?;
-    Ok(rbac.enforce(user_id, &permission).await?)
+    let actor =
+        application_core::AuditActor::new(user_id.into(), user_id.into(), erp_core::AccountKind::Admin);
+    Ok(crate::authorization::features(db.clone(), rbac.clone())
+        .has_permission(&actor, &permission, executor)
+        .await?)
 }
 
 fn handover_fingerprint(

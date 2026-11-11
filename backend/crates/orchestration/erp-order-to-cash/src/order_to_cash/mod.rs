@@ -32,6 +32,7 @@ use mongodb::Database;
 use crate::{Error, Result};
 
 /// Sales lifecycle commands combining sales writes, provider checks, workflow and audit.
+#[derive(Clone)]
 pub struct SalesOrderCommandProcess {
     services: Arc<SalesServices>,
     db: Database,

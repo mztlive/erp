@@ -7,33 +7,6 @@ use super::{WorkItem, WorkItemType};
 use crate::entity::work_item::required_execution_permissions;
 
 impl WorkItemType {
-    /// 判断转派候选人校验是否必须携带完整工作面执行权限快照。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 履约、客户验收、供应商付款、销项开票、卡券票款复核或供应商申请确认返回 `true`，其余返回 `false`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn requires_full_execution_permissions(self) -> bool {
-        matches!(
-            self,
-            Self::FulfillmentOperation
-                | Self::SalesInquiryProcessing
-                | Self::SupplierPortalReview
-                | Self::CustomerAcceptanceRegistration
-                | Self::PurchaseReturnRefund
-                | Self::PurchaseReturnInvoice
-                | Self::PurchasePaymentArrangement
-                | Self::SupplierPaymentExecution
-                | Self::SalesInvoiceExecution
-                | Self::CardFundsReview
-                | Self::CardFundsDeltaReview
-        )
-    }
-
     /// 返回具体履约对象在 W01 完整执行所需的权限集合。
     ///
     /// # 参数
@@ -205,36 +178,24 @@ impl WorkItemType {
             Some(&[])
         }
     }
+}
 
-    /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
-    ///
+impl WorkItem {
+    /// 收集当前任务办理所需的读取与执行权限。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 单据审批、供应商申请确认、导入确认、供给分配、采购依据更新、履约、客户验收、付款执行、销项开票或供应商结算复核返回 `true`，其余返回 `false`。
-    ///
+    /// 当前已登记任务的完整具体权限，由 identity 证明同一有效角色覆盖。
     /// # 错误
-    /// 不返回错误。
-    pub fn uses_explicit_owner_authorization(self) -> bool {
-        matches!(
-            self,
-            Self::DocumentApproval
-                | Self::ApprovalRework
-                | Self::SalesInquiryProcessing
-                | Self::SupplierPortalReview
-                | Self::ImportBusinessConfirmation
-                | Self::ProcurementOrderCreation
-                | Self::PurchaseSourceUpdate
-                | Self::PurchasePaymentArrangement
-                | Self::FulfillmentOperation
-                | Self::CustomerAcceptanceRegistration
-                | Self::PurchaseReturnRefund
-                | Self::PurchaseReturnInvoice
-                | Self::SupplierPaymentExecution
-                | Self::SalesInvoiceExecution
-                | Self::SupplierSettlementReview
-        )
+    /// 任务关系、执行权限未登记或权限格式错误时拒绝。
+    pub fn qualification_permissions(&self) -> Result<Vec<Permission>> {
+        let relation = self
+            .work_item_type
+            .brief_relation(&self.business_object_type)
+            .ok_or_else(|| Error::from("任务类型未注册责任策略"))?;
+        let execution = required_execution_permissions(self.work_item_type, &self.business_object_type)
+            .ok_or_else(|| Error::from("任务类型未注册完整执行权限"))?;
+        execution.into_iter().chain([relation.read_permission]).map(Permission::parse).collect()
     }
 }
 
@@ -312,42 +273,10 @@ mod tests {
                 "sales_order:detail",
             ] as &[&str])
         );
-        assert!(WorkItemType::CustomerAcceptanceRegistration.uses_explicit_owner_authorization());
-        assert!(WorkItemType::CustomerAcceptanceRegistration.requires_full_execution_permissions());
         assert!(
             WorkItemType::CustomerAcceptanceRegistration
                 .customer_acceptance_execution_permissions("unknown")
                 .is_none()
         );
-    }
-}
-
-#[cfg(test)]
-mod settlement_owner_tests {
-    use super::WorkItemType;
-
-    #[test]
-    fn settlement_review_requires_explicit_owner_participation() {
-        assert!(WorkItemType::SupplierSettlementReview.uses_explicit_owner_authorization());
-        assert!(!WorkItemType::BusinessException.uses_explicit_owner_authorization());
-    }
-}
-
-impl WorkItem {
-    /// 收集当前任务办理所需的读取与执行权限。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前已登记任务的具体权限，允许不同权限由不同角色授予。
-    /// # 错误
-    /// 任务关系、执行权限未登记或权限格式错误时拒绝。
-    pub fn qualification_permissions(&self) -> Result<Vec<Permission>> {
-        let relation = self
-            .work_item_type
-            .brief_relation(&self.business_object_type)
-            .ok_or_else(|| Error::from("任务类型未注册责任策略"))?;
-        let execution = required_execution_permissions(self.work_item_type, &self.business_object_type)
-            .ok_or_else(|| Error::from("任务类型未注册完整执行权限"))?;
-        execution.into_iter().chain([relation.read_permission]).map(Permission::parse).collect()
     }
 }

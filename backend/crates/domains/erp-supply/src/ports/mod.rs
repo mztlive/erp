@@ -10,18 +10,13 @@ pub mod supplier_api_gateway;
 pub mod supplier_gateway;
 pub mod supplier_reference_registry;
 
-pub use data_scope::{
-    FailClosedOfferingDataScopePort, OfferingDataScopePort, OfferingResolvedClause, OfferingResolvedScope,
-    OfferingScopeObject,
-};
+pub use data_scope::{FailClosedOfferingDataScopePort, OfferingDataScopePort, OfferingResolvedScope};
 pub use fulfillment_order_data_scope::{
     FailClosedFulfillmentExceptionHandlerPort, FailClosedFulfillmentOrderDataScopePort,
-    FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort, FulfillmentOrderResolvedClause,
-    FulfillmentOrderResolvedScope, FulfillmentOrderScopeObject,
+    FulfillmentExceptionHandlerPort, FulfillmentOrderDataScopePort, FulfillmentOrderResolvedScope,
 };
 pub use settlement_data_scope::{
-    FailClosedSettlementDataScopePort, SettlementDataScopePort, SettlementResolvedClause,
-    SettlementResolvedScope, SettlementScopeObject,
+    FailClosedSettlementDataScopePort, SettlementDataScopePort, SettlementResolvedScope,
 };
 
 pub mod jd_vop;

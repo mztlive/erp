@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::Result as CoreResult;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{Permission, QualifiedPermissions};
 use persistence_core::Executor;
 
 use super::WorkItemReadService;
@@ -43,14 +43,18 @@ impl WorkItemReadService {
         actor: &AuditActor,
         fields: &[WorkItemFields],
         executor: &mut dyn Executor,
-    ) -> Result<PermissionSet> {
+    ) -> Result<QualifiedPermissions> {
         let mut codes = BTreeSet::from([
             "work_item:list",
             "work_item:detail",
             "work_item:manage",
+            "approval_instance:read",
             "approval_instance:decide",
         ]);
         for field in fields {
+            if let Some(relation) = field.work_item_type.brief_relation(&field.business_object_type) {
+                codes.insert(relation.read_permission);
+            }
             if let Some(required) =
                 required_execution_permissions(field.work_item_type, &field.business_object_type)
             {
@@ -58,13 +62,11 @@ impl WorkItemReadService {
             }
         }
         let permissions = codes.into_iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?;
-        Ok(self
-            .authorization
+        self.authorization
             .service
             .permissions(actor, &permissions, executor)
             .await?
-            .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?
-            .permissions())
+            .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))
     }
 
     /// 只查询当前展示批次的管理资格，不装载全部可管理任务。
@@ -75,8 +77,27 @@ impl WorkItemReadService {
         executor: &mut dyn Executor,
     ) -> Result<super::access::QueueAccess> {
         let mut projected = access.clone();
-        projected.task.permissions =
-            self.task_permissions(access.read_access().actor(), fields, executor).await?;
+        let qualified = self.task_permissions(access.read_access().actor(), fields, executor).await?;
+        let decide =
+            [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+        for field in fields {
+            if let Some(relation) = field.work_item_type.brief_relation(&field.business_object_type)
+                && let Some(execution) =
+                    required_execution_permissions(field.work_item_type, &field.business_object_type)
+            {
+                let required = execution
+                    .into_iter()
+                    .chain([relation.read_permission])
+                    .map(Permission::parse)
+                    .collect::<CoreResult<Vec<_>>>()?;
+                if qualified.same_role(&required) {
+                    projected.task.executable_task_ids.insert(field.id.clone());
+                }
+            }
+            if qualified.same_role(&decide) {
+                projected.task.decidable_task_ids.insert(field.id.clone());
+            }
+        }
         let ids = fields.iter().map(|field| field.id.clone()).collect::<Vec<_>>();
         if let Some(manage) = &access.manage {
             self.authorization.service.validate(manage, executor).await?;

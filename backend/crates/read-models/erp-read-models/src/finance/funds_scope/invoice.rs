@@ -7,7 +7,6 @@ use std::hash::{Hash, Hasher};
 use application_core::AuditActor;
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::{InvoiceListParams, InvoiceListQuery, SalesInvoiceAllocationView};
-use erp_finance::entity::read_coverage::whole_document_readable;
 use erp_finance::entity::receivable::{InvoiceDirection, InvoiceKind, SalesInvoiceAllocation};
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
@@ -229,8 +228,6 @@ impl FundsAccess {
             page: query.paging.page,
             page_size: query.paging.page_size,
             scope_version: version,
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "发票按销售、采购或结算来源分配授权；完整票面另需财务整账职责及全部来源可见",
@@ -484,24 +481,21 @@ impl FundsAccess {
         let purchase_allowed = self.payable_targets(&authorization, &purchase_facts, executor).await?;
         let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
         let purchase_matched = matched_orders(&purchase_tuples, &purchase_allowed);
-        let whole = whole_invoice_readable(
-            authorization.ledger_read,
-            sales,
-            purchase,
-            &sales_matched,
-            &purchase_matched,
-        );
+        let whole = self
+            .whole_allowed(
+                &authorization,
+                &row.id,
+                &sales.iter().filter_map(|link| link.order.clone()).collect::<Vec<_>>(),
+                &purchase.iter().filter_map(|link| link.order.clone()).collect::<Vec<_>>(),
+                executor,
+            )
+            .await?;
         if !whole && sales_matched.is_empty() && purchase_matched.is_empty() {
             return Err(Error::NotFound("发票不存在".into()));
         }
         let data = Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
-        let mut parts = vec![format!("{}:{}", row.id, row.version)];
-        for order in sales_matched.iter().filter_map(|id| sales_facts.get(id)) {
-            parts.push(format!("{}:{}", order.owner_user_id, order.version));
-        }
-        for order in purchase_matched.iter().filter_map(|id| purchase_facts.get(id)) {
-            parts.push(format!("{}:{:?}:{}", id, order.owner_user_id, order.version));
-        }
+        let parts =
+            invoice_detail_parts(&row, &sales_matched, &purchase_matched, &sales_facts, &purchase_facts);
         Ok(invoice_detail_result(&authorization, data, &parts))
     }
 }
@@ -515,8 +509,6 @@ fn invoice_detail_result(
     FundsScopedResult {
         data,
         scope_version: scope_version(&authorization.context, parts),
-        policy_version: authorization.context.policy_version,
-        organization_version: authorization.context.organizations.version,
         as_of: authorization.context.as_of.as_utc().to_rfc3339(),
         empty_reason: None,
         scope_summary: "发票按销售、采购或结算来源分配授权；完整票面另需财务整账职责及全部来源可见",
@@ -670,35 +662,6 @@ pub(super) fn invoice_unallocated(row: &InvoiceRow, allocated: Amount) -> Amount
     }
 }
 
-/// 整张发票必须覆盖销项与进项实际分配，部分来源不授予完整票面。
-///
-/// # 参数
-/// * `ledger_read` - 是否具备财务整账读取职责。
-/// * `sales` - 销项分配关联。
-/// * `purchase` - 进项分配关联。
-/// * `sales_matched` - 获授权销售来源。
-/// * `purchase_matched` - 获授权采购或结算来源。
-///
-/// # 返回
-/// 两个方向的实际来源都可读时返回 true。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn whole_invoice_readable(
-    ledger_read: bool,
-    sales: &[SalesInvoiceLink],
-    purchase: &[PurchaseInvoiceLink],
-    sales_matched: &[String],
-    purchase_matched: &[String],
-) -> bool {
-    whole_document_readable(ledger_read, sales.iter().map(|link| link.order.as_deref()), sales_matched)
-        && whole_document_readable(
-            ledger_read,
-            purchase.iter().map(|link| link.order.as_deref()),
-            purchase_matched,
-        )
-}
-
 /// 指纹沿原完整结果顺序绑定全部匹配票和真实来源版本。
 fn invoice_scope_version(authorization: &FundsAuthorization, versions: &[InvoiceVersion]) -> String {
     let mut fingerprint = DefaultHasher::new();
@@ -707,6 +670,25 @@ fn invoice_scope_version(authorization: &FundsAuthorization, versions: &[Invoice
         row.hash_into(&mut fingerprint);
     }
     format!("{:x}", fingerprint.finish())
+}
+
+fn invoice_detail_parts(
+    row: &InvoiceRow,
+    sales_matched: &[String],
+    purchase_matched: &[String],
+    sales_facts: &HashMap<String, LinkedSalesFact>,
+    purchase_facts: &HashMap<String, LinkedPurchaseFact>,
+) -> Vec<String> {
+    let mut parts = vec![format!("{}:{}", row.id, row.version)];
+    for order in sales_matched.iter().filter_map(|id| sales_facts.get(id)) {
+        parts.push(format!("{}:{}", order.owner_user_id, order.version));
+    }
+    for (id, order) in
+        purchase_matched.iter().filter_map(|id| purchase_facts.get(id).map(|order| (id, order)))
+    {
+        parts.push(format!("{}:{:?}:{}", id, order.owner_user_id, order.version));
+    }
+    parts
 }
 
 #[cfg(test)]

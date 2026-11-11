@@ -3,8 +3,8 @@ mod scope;
 use mongodb::Database;
 use mongodb::bson::{Document, doc, serialize_to_vec};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Result, insert_literal_regex_filter, mongo_ops};
-pub use scope::{InquiryReadScope, InquiryScopeClause};
+use persistence_core::{Executor, PageResult, Result, aggregate, insert_literal_regex_filter, mongo_ops};
+pub use scope::InquiryReadScope;
 
 use crate::entity::sales_inquiry::{InquiryStatus, SalesInquiry};
 use crate::repository::SalesInquiryExt;
@@ -147,12 +147,13 @@ impl<'a> SalesInquiryRepository<'a> {
         &self,
         filter: &InquiryListFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SalesInquiry>> {
+    ) -> SalesResult<PageResult<SalesInquiry>> {
+        filter.access_scope.validate(executor).await?;
         let document = filter.document();
         let size = u64::from(filter.page_size.clamp(1, 100));
         let skip = filter.page.max(1).saturating_sub(1).saturating_mul(size);
         let collection = self.db.sales_inquiries().collection();
-        let items = mongo_ops::find_many(
+        let items = aggregate::find(
             &collection,
             document.clone(),
             FindOptions::builder()
@@ -160,10 +161,14 @@ impl<'a> SalesInquiryRepository<'a> {
                 .skip(skip)
                 .limit(i64::try_from(size).unwrap_or(100))
                 .build(),
+            filter.access_scope.lookup_after(doc! {}),
             executor,
         )
         .await?;
-        let total = mongo_ops::count_documents(&collection, document, executor).await?;
+        let total =
+            aggregate::count(&collection, document, filter.access_scope.lookup_after(doc! {}), executor)
+                .await?;
+        filter.access_scope.validate(executor).await?;
         Ok(PageResult { items, total: i64::try_from(total).unwrap_or(i64::MAX) })
     }
 
@@ -242,19 +247,8 @@ mod tests {
     #[test]
     fn default_scope_denies_and_search_stays_in_intersection() {
         let denied = InquiryListFilter::default().document();
-        assert_eq!(
-            denied.get_array("$and").unwrap()[0].as_document().unwrap(),
-            &doc! { "id": { "$in": [] } }
-        );
+        assert_eq!(denied.get_array("$and").unwrap()[0].as_document().unwrap(), &doc! { "$expr": false });
         let filter = InquiryListFilter {
-            access_scope: InquiryReadScope {
-                clauses: vec![InquiryScopeClause {
-                    owner_user_id: Some("u".into()),
-                    business_org_unit_ids: vec!["o".into()],
-                    company: false,
-                }],
-                limit: None,
-            },
             q: Some("SO.[1]".into()),
             customer_id: Some("c".into()),
             ..Default::default()

@@ -1,4 +1,6 @@
 //! 验收根流程使用的跨域履约进度事实读取，贯穿调用方 Executor。
+mod acceptance;
+pub(crate) use acceptance::acceptance_list;
 use erp_core::ids::SalesOrderId;
 use erp_fulfillment::entity::fulfillment::{AcceptanceProgress, FulfillmentFactType, ServiceFulfillment};
 use erp_fulfillment::repository::FulfillmentExt;

@@ -4,9 +4,10 @@
 //! 具体责任人执行。当前可验收交付全部登记后完成任务，冲正或后续新交付再
 //! 形成新的开放任务，历史终态保持不变。
 
+use application_core::AuditActor;
 use erp_core::ids::SalesOrderId;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
@@ -266,13 +267,15 @@ async fn ensure_customer_acceptance_owner_eligible(
     if !account.can_login() {
         return Err(Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()));
     }
-    let granted = rbac.permissions(account.kind, owner_user_id).await?;
-    let required = PermissionSet::new(
-        required_permissions
-            .iter()
-            .map(|code| Permission::parse(code).expect("固定客户验收操作权限必须合法")),
-    );
-    if granted.covers(&required) {
+    let required: Vec<_> = required_permissions
+        .iter()
+        .map(|code| Permission::parse(code).expect("固定客户验收操作权限必须合法"))
+        .collect();
+    let actor = AuditActor::new(owner_user_id.into(), account.secret.account().into(), account.kind);
+    let qualified = crate::authorization::features(db.clone(), rbac.clone())
+        .permissions(&actor, &required, executor)
+        .await?;
+    if qualified.is_some_and(|value| value.same_role(&required)) {
         return Ok(());
     }
     Err(Error::BusinessLogicError("销售责任人缺少客户验收完整操作权限，请先调整角色或责任配置".to_string()))

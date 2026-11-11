@@ -280,20 +280,6 @@ impl FormalizedSubmissionWrite {
     pub fn order_id(&self) -> &str {
         &self.order_id
     }
-
-    /// 本次冻结采购责任的授权版本，供流程保持原 CAS 事务栅栏。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 有采购责任计划时返回其授权版本；没有采购计划时返回 `None`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn policy_revision(&self) -> Option<u64> {
-        self.procurement.as_ref().map(|plan| plan.resolution.policy_revision)
-    }
 }
 
 /// 验证销售形式化事务的状态、仓储与供给任务合同。

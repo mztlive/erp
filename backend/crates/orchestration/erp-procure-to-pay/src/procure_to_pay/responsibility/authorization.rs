@@ -2,11 +2,13 @@
 
 use std::collections::HashSet;
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::{SharedRbacService, subject};
+use erp_identity::SharedRbacService;
 use erp_procurement::service::procurement_responsibility::CandidateResolution;
-use persistence_core::Executor;
+use mongodb::Database;
+use persistence_core::{Executor, NoTransaction};
 
 use super::resolver::{
     AuthorizedResolutionPlan, authorized_line, plan_identities, purchase_create_permission,
@@ -20,7 +22,7 @@ trait ResponsibilityPolicy: Send + Sync {
     async fn revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64>;
 }
 
-struct RbacPolicy<'a>(&'a SharedRbacService);
+struct RbacPolicy<'a>(&'a SharedRbacService, &'a Database);
 
 #[async_trait]
 impl ResponsibilityPolicy for RbacPolicy<'_> {
@@ -29,7 +31,10 @@ impl ResponsibilityPolicy for RbacPolicy<'_> {
     }
     async fn enforce_owner(&self, owner_id: &str) -> Result<bool> {
         let permission = purchase_create_permission()?;
-        Ok(self.0.enforce(&subject(AccountKind::Admin, owner_id), &permission).await?)
+        let actor = AuditActor::new(owner_id.into(), owner_id.into(), AccountKind::Admin);
+        Ok(crate::authorization::features(self.1.clone(), self.0.clone())
+            .has_permission(&actor, &permission, &mut NoTransaction)
+            .await?)
     }
     async fn revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
         Ok(self.0.policy_revision_with_executor(executor).await?)
@@ -48,10 +53,11 @@ impl ResponsibilityPolicy for RbacPolicy<'_> {
 /// # 错误
 /// 负责人缺少 `purchase_order:create`、策略版本在校验期间变化，或授权读取失败时返回错误。
 pub(super) async fn authorize_candidates(
+    db: &Database,
     rbac: &SharedRbacService,
     candidates: Vec<CandidateResolution>,
 ) -> Result<AuthorizedResolutionPlan> {
-    authorize(&RbacPolicy(rbac), candidates).await
+    authorize(&RbacPolicy(rbac, db), candidates).await
 }
 
 /// 在调用方事务内重验候选身份与已冻结的策略版本。
@@ -68,12 +74,13 @@ pub(super) async fn authorize_candidates(
 /// # 错误
 /// 候选身份与冻结计划不一致，或事务内策略版本已变化时返回冲突；策略读取失败时返回对应错误。
 pub(super) async fn revalidate_candidates(
+    db: &Database,
     rbac: &SharedRbacService,
     candidates: &[CandidateResolution],
     expected: &AuthorizedResolutionPlan,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    revalidate(&RbacPolicy(rbac), candidates, expected, executor).await
+    revalidate(&RbacPolicy(rbac, db), candidates, expected, executor).await
 }
 
 /// 按负责人去重校验建单权限，前后策略版本不一致则拒绝。

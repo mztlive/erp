@@ -7,7 +7,7 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::fulfillment;
 use crate::http::middleware::with_permission;
@@ -25,7 +25,7 @@ use crate::permissions;
 ///
 /// # 错误
 /// 无；业务错误由各处理器返回。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(address_arrangement_routes(rbac))
         .merge(purchase_receipt_routes(rbac))
@@ -37,7 +37,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(acceptance_evidence_routes(rbac))
 }
 
-fn address_arrangement_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn address_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/deliveries/{id}/delivery-arrangements",
@@ -57,7 +57,7 @@ fn address_arrangement_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn purchase_receipt_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn purchase_receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-receipts",
@@ -101,7 +101,7 @@ fn purchase_receipt_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn delivery_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn delivery_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/deliveries",
@@ -145,7 +145,7 @@ fn delivery_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn electronic_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn electronic_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/electronic-deliveries",
@@ -181,7 +181,7 @@ fn electronic_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn service_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn service_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/service-fulfillments",
@@ -220,7 +220,7 @@ fn service_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn acceptance_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn acceptance_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-acceptances",
@@ -248,7 +248,7 @@ fn acceptance_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn acceptance_command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn acceptance_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-acceptances/commit",
@@ -292,7 +292,7 @@ fn acceptance_command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验和上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由各处理器返回。
-fn acceptance_evidence_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn acceptance_evidence_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/customer-acceptances/{id}/evidence",
         with_permission(

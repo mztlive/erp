@@ -111,7 +111,7 @@ async fn bind_required_definition(
 ) -> Result<ApprovalDefinitionBinding> {
     let policy = require_process_required(command.document_type)?;
     let graph = load_published_graph(db, command.document_type, executor).await?;
-    revalidate_binding_graph(identity_service, &policy, &command.context, &graph, executor).await?;
+    revalidate_binding_graph(db, identity_service, &policy, &command.context, &graph, executor).await?;
     let binding = binding_from_published(
         ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         graph.definition.definition_version,

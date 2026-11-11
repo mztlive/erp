@@ -3,6 +3,7 @@
 //! 当前负责与历史贡献各自独立路由、独立授权重验；响应只含服务端投影，
 //! 不返回内部授权证明或不可见人员集合。
 
+use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::State;
 use erp_read_models::customer_quality::{
@@ -13,16 +14,15 @@ use erp_read_models::customer_quality::{
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query};
 use crate::http::handler::customer::has_permission;
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 /// 双口径共用的读取门槛：客户查询与销售单查询动作缺一不可。
-async fn ensure_list_access(state: &HttpState, subject: &RbacSubject) -> std::result::Result<(), Error> {
-    if !has_permission(state, subject, "customer:list").await? {
+async fn ensure_list_access(state: &HttpState, actor: &AuditActor) -> std::result::Result<(), Error> {
+    if !has_permission(state, actor, "customer:list").await? {
         return Err(Error::Forbidden("查看客户经营质量需要客户查询权限".into()));
     }
-    if !has_permission(state, subject, "sales_order:list").await? {
+    if !has_permission(state, actor, "sales_order:list").await? {
         return Err(Error::Forbidden("查看客户经营质量需要销售单查询权限".into()));
     }
     Ok(())
@@ -40,55 +40,50 @@ fn read_model(state: &HttpState) -> CustomerQualityReadModel {
 /// 当前负责客户的经营情况：现任主责分组与汇总。
 pub async fn quality_current(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(actor): Extension<application_core::AuditActor>,
+    Extension(actor): Extension<AuditActor>,
     Query(query): Query<CurrentQualityQuery>,
 ) -> Result<CurrentQualityView> {
-    ensure_list_access(&state, &subject).await?;
+    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).view_current(query, &actor).await?))
 }
 
 /// 历史负责订单的贡献：冻结归属分组与汇总，不用现任回填。
 pub async fn quality_history(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(actor): Extension<application_core::AuditActor>,
+    Extension(actor): Extension<AuditActor>,
     Query(query): Query<HistoryQualityQuery>,
 ) -> Result<HistoryQualityView> {
-    ensure_list_access(&state, &subject).await?;
+    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).view_history(query, &actor).await?))
 }
 
 /// 当前口径全量导出：版本绑定首个响应，返回前重验授权。
 pub async fn quality_current_export(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(actor): Extension<application_core::AuditActor>,
+    Extension(actor): Extension<AuditActor>,
     Json(query): Json<CurrentQualityQuery>,
 ) -> Result<QualityExport> {
-    ensure_list_access(&state, &subject).await?;
+    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).export_current(query, &actor).await?))
 }
 
 /// 历史口径全量导出：冻结归属列随行导出，不使用客户端金额。
 pub async fn quality_history_export(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(actor): Extension<application_core::AuditActor>,
+    Extension(actor): Extension<AuditActor>,
     Json(query): Json<HistoryQualityQuery>,
 ) -> Result<QualityExport> {
-    ensure_list_access(&state, &subject).await?;
+    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).export_history(query, &actor).await?))
 }
 
 /// 独立历史候选；只接受期间与客户上下文，不接受报表结果条件。
 pub async fn quality_history_directory(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(actor): Extension<application_core::AuditActor>,
+    Extension(actor): Extension<AuditActor>,
     Query(query): Query<erp_read_models::historical_directory::HistoricalDirectoryQuery>,
 ) -> Result<erp_read_models::historical_directory::HistoricalDirectoryView> {
-    ensure_list_access(&state, &subject).await?;
+    ensure_list_access(&state, &actor).await?;
     Ok(ApiResponse::ok_with_data(read_model(&state).history_directory(query, &actor).await?))
 }
 

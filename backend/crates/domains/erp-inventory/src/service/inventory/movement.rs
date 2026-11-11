@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
@@ -45,12 +45,10 @@ impl InventoryService {
     ) -> Result<InventoryListPage<StockMovementView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let (page, authorization) = self.search_stock_movements(&query, actor).await?;
+        let (page, authorization, source_document_nos) = self.search_stock_movements(&query, actor).await?;
         let meta = authorization.movement_list_meta();
         ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
         let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
-        let source_document_nos =
-            load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items).await?;
         self.hydrate_movement_warehouses(&mut items).await?;
         for item in &mut items {
             item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
@@ -69,10 +67,15 @@ impl InventoryService {
         &self,
         query: &StockMovementListQuery,
         actor: &AuditActor,
-    ) -> Result<(persistence_core::PageResult<StockMovementRow>, InventoryAuthorization)> {
+    ) -> Result<(
+        persistence_core::PageResult<StockMovementRow>,
+        InventoryAuthorization,
+        HashMap<String, String>,
+    )> {
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
         let catalog = std::sync::Arc::clone(&self.catalog_facts);
+        let fulfillment = self.fulfillment_facts.clone();
         let query = query.clone();
         let actor = actor.clone();
         self.db
@@ -93,7 +96,12 @@ impl InventoryService {
                     .await?;
                     let filter = movement_filter(query, &authorization, search);
                     let page = db.stock_movements().search_stock_movements(&filter, executor).await?;
-                    Ok::<_, Error>((page, authorization))
+                    let views = page.items.iter().cloned().map(movement_row_view).collect::<Vec<_>>();
+                    let numbers =
+                        load_movement_source_document_nos(&db, fulfillment.as_ref(), &views, executor)
+                            .await?;
+                    authorization.validate(executor).await?;
+                    Ok::<_, Error>((page, authorization, numbers))
                 })
             })
             .await
@@ -170,6 +178,7 @@ pub(super) async fn load_movement_source_document_nos(
     db: &Database,
     fulfillment: &dyn crate::ports::FulfillmentFactsPort,
     movements: &[StockMovementView],
+    executor: &mut dyn Executor,
 ) -> Result<HashMap<String, String>> {
     let mut document_nos = HashMap::new();
     let adjustment_ids: Vec<String> = movements
@@ -183,8 +192,7 @@ pub(super) async fn load_movement_source_document_nos(
         .map(|movement| movement.source_document_id.clone())
         .collect();
     if !adjustment_ids.is_empty() {
-        let adjustments =
-            db.inventory().stock_adjustments_by_ids(&adjustment_ids, &mut NoTransaction).await?;
+        let adjustments = db.inventory().stock_adjustments_by_ids(&adjustment_ids, executor).await?;
         for adjustment in adjustments {
             document_nos.insert(adjustment.base.id, adjustment.adjustment_no);
         }
@@ -195,7 +203,7 @@ pub(super) async fn load_movement_source_document_nos(
         .map(|movement| movement.source_document_id.clone())
         .collect();
     if !receipt_ids.is_empty() {
-        let receipts = fulfillment.receipt_nos_by_ids(&receipt_ids, &mut NoTransaction).await?;
+        let receipts = fulfillment.receipt_nos_by_ids(&receipt_ids, executor).await?;
         for (id, receipt) in receipts {
             document_nos.insert(id, receipt.receipt_no);
         }

@@ -1,20 +1,17 @@
 //! 采购对象读取与写入范围；当前采购负责人和单据业务组织分别解释。
 
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use futures_util::future::BoxFuture;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::entity::purchase_order::PurchaseOrder;
 use crate::error::{Error, Result};
-use crate::ports::{
-    PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope, PurchaseScopeObject,
-};
+use crate::ports::{PurchaseDataScopePort, PurchaseResolvedScope};
 use crate::repository::PurchaseOrderExt;
-use crate::repository::prelude::*;
-use crate::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
+use crate::repository::purchase_order::scope::PurchaseReadScope;
 
 /// 采购对象访问范围；列表、详情、候选、导出、变更／退货和写命令复用同一解析。
 #[derive(Clone)]
@@ -64,7 +61,7 @@ impl PurchaseAccess {
         executor: &mut dyn Executor,
     ) -> Result<(PurchaseResolvedScope, PurchaseReadScope)> {
         let access = self.scope.resolve(actor, action, executor).await?;
-        let scope = purchase_scope(&access, actor.id(), Vec::new());
+        let scope = PurchaseReadScope::from_compiled(access.compiled.clone(), access.authorization.clone());
         Ok((access, scope))
     }
 
@@ -92,18 +89,18 @@ impl PurchaseAccess {
         executor: &mut dyn Executor,
     ) -> Result<(PurchaseResolvedScope, PurchaseReadScope)> {
         let access = self.scope.resolve_permissions(actor, action, permissions, executor).await?;
-        let scope = purchase_scope(&access, actor.id(), Vec::new());
+        let scope = PurchaseReadScope::from_compiled(access.compiled.clone(), access.authorization.clone());
         Ok((access, scope))
     }
 
-    /// 在调用方事务内重验对象资格。
+    /// 按真实采购对象执行统一授权，不编译列表查询。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
     /// * `action` - 已注册的采购动作
     /// * `id` - 采购单主键
     /// * `permissions` - 同角色必须同时持有的额外权限码
-    /// * `executor` - 调用方执行器
+    /// * `executor` - 调用方执行器；只读预检可使用非事务执行器
     ///
     /// # 返回
     /// 对象在范围内时返回采购单。
@@ -112,7 +109,7 @@ impl PurchaseAccess {
     /// 读取或写动作对不可见对象均返回 NotFound，不泄露存在性。
     ///
     /// # 关键业务约束
-    /// 写命令必须在原领域事务内调用；历史参与不授予修改。
+    /// 写入前须在原领域事务内重验；历史参与不授予修改。
     pub async fn require_object(
         &self,
         actor: &AuditActor,
@@ -121,48 +118,29 @@ impl PurchaseAccess {
         permissions: &[String],
         executor: &mut dyn Executor,
     ) -> Result<PurchaseOrder> {
-        let (access, scope) = if permissions.is_empty() {
-            self.resolve(actor, action, executor).await?
-        } else {
-            self.resolve_permissions(actor, action, permissions, executor).await?
-        };
-        let order = self
-            .db
-            .purchase_orders()
-            .find_authorized(id, &scope, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))?;
-        if !matches!(action, "list" | "detail") && !self.allows(&access, &scope, &order)? {
-            return Err(Error::NotFound("采购单不存在或无权操作".into()));
-        }
-        Ok(order)
+        let db = self.db.clone();
+        let id = id.to_owned();
+        authorized_order(self.scope.as_ref(), actor, action, permissions, executor, move |executor| {
+            Box::pin(async move { Ok(db.purchase_orders().find_by_id(&id, executor).await?) })
+        })
+        .await
     }
 
-    /// 复用公共单对象判定检查已加载的采购单，供批量关联任务授权使用。
-    ///
+    /// 检查当前可信采购对象；供关联任务使用。
     /// # 参数
-    /// * `access` - 当前采购资源动作的已解析事实。
-    /// * `scope` - 同一次解析形成的采购责任条件。
-    /// * `order` - 调用方执行器中读取的采购单。
+    /// actor、action 为原入口，order 为当前业务事实，executor 为原事务。
     /// # 返回
-    /// 返回当前责任、业务组织和合法参与经公共解析后的判定。
+    /// 完整对象授权成立时成功。
     /// # 错误
-    /// 责任事实损坏或授权 Port 未装配时拒绝。
-    pub fn allows(
+    /// 身份、权限或对象资格失效时拒绝。
+    pub async fn require_loaded(
         &self,
-        access: &PurchaseResolvedScope,
-        scope: &PurchaseReadScope,
+        actor: &AuditActor,
+        action: &str,
         order: &PurchaseOrder,
-    ) -> Result<bool> {
-        self.scope.allows(
-            access,
-            &PurchaseScopeObject {
-                owned: order.current_owner_user_id()? == access.user_id,
-                org_unit_id: Some(order.business_org_unit_id.clone()),
-                historical_read_participant: scope.historical_order_ids.contains(&order.base.id),
-                collaborating: false,
-            },
-        )
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.scope.require(actor, action, order, &[], executor).await
     }
 
     /// 新单使用即将持久化的显式责任解释创建与提交范围。
@@ -188,164 +166,313 @@ impl PurchaseAccess {
     ) -> Result<()> {
         let submit = "purchase_order:submit".to_string();
         let create = "purchase_order:create".to_string();
-        let (create_access, _) =
-            self.resolve_permissions(actor, "create", std::slice::from_ref(&submit), executor).await?;
-        let (submit_access, _) =
-            self.resolve_permissions(actor, "submit", std::slice::from_ref(&create), executor).await?;
-        let object = PurchaseScopeObject {
-            owned: order.current_owner_user_id()? == actor.id(),
-            org_unit_id: Some(order.business_org_unit_id.clone()),
-            ..Default::default()
-        };
-        if !self.scope.allows(&create_access, &object)? || !self.scope.allows(&submit_access, &object)? {
-            return Err(Error::Forbidden("没有该业务责任范围的采购建单权限".into()));
-        }
+        self.scope.require(actor, "create", order, std::slice::from_ref(&submit), executor).await?;
+        self.scope.require(actor, "submit", order, std::slice::from_ref(&create), executor).await?;
         Ok(())
     }
 
-    /// 将已证明范围编译为来源采购单 ID 限制，供变更单和退货沿原单接入。
-    ///
+    /// 按固定业务入口检查本次完整来源集合。
     /// # 参数
-    /// * `scope` - 已证明的采购对象范围
-    /// * `executor` - 调用方执行器
-    ///
+    /// actor、entry 为当前入口，ids 为完整来源集合，executor 为原事务。
     /// # 返回
-    /// `None` 表示公司范围不限制来源单；`Some` 为必须命中的来源单集合，空集表示无可见对象。
-    ///
+    /// 来源全部有权时成功。
     /// # 错误
-    /// 超过查询上限时整体拒绝。
-    ///
-    /// # 关键业务约束
-    /// 不得把仓库 ID 与部门 ID 放入同一并集；缺范围保持空集。
-    pub async fn authorized_source_ids(
+    /// 未登记或来源无权时拒绝。
+    pub async fn require_source(
         &self,
-        scope: &PurchaseReadScope,
+        actor: &AuditActor,
+        entry: &erp_identity::Permission,
+        ids: &[String],
         executor: &mut dyn Executor,
-    ) -> Result<Option<Vec<String>>> {
-        if scope.is_empty() {
-            return Ok(Some(Vec::new()));
+    ) -> Result<()> {
+        self.require_source_permissions(actor, entry, ids, &[], executor).await
+    }
+
+    /// 在同一次统一对象授权内证明完整管理功能资格及采购来源。
+    /// # 参数
+    /// actor、entry 为真实身份与入口，ids 为完整来源，required 为服务端固定管理资格，executor 为原事务。
+    /// # 返回
+    /// 同角色完整资格与全部采购来源同时成立时成功。
+    /// # 错误
+    /// 未登记组合、无权或来源缺失时拒绝。
+    pub async fn require_source_permissions(
+        &self,
+        actor: &AuditActor,
+        entry: &erp_identity::Permission,
+        ids: &[String],
+        required: &[erp_identity::Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
         }
-        if scope.is_company() {
-            return Ok(None);
-        }
-        let ids = self.db.purchase_orders().list_authorized_ids(scope, executor).await?;
-        if ids.len() > 10_000 {
-            return Err(Error::ValidationError("采购单查询超过上限，请收窄组织或负责人条件".into()));
-        }
-        Ok(Some(ids))
+        self.scope.require_source_permissions(actor, entry, ids, required, executor).await
     }
 }
 
-/// 把合法历史参与附加到已解析的读取范围，并纳入跨页版本。
-///
-/// # 参数
-/// * `access` - 身份域已解析授权
-/// * `scope` - 本域对象条件
-/// * `history` - 合法历史参与采购单
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 历史参与只补充读取，且继续受个人上限约束；不得用于创建或状态迁移。
-pub fn attach_history(
-    access: &mut PurchaseResolvedScope,
-    scope: &mut PurchaseReadScope,
-    history: Vec<String>,
-) {
-    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-    history.hash(&mut fingerprint);
-    access.scope_version = format!("{}:{:x}", access.scope_version, fingerprint.finish());
-    scope.historical_order_ids = history;
-}
-
-/// 映射同角色正向范围和独立个人上限，保持两者的交集关系。
-///
-/// # 参数
-/// * `access` - Port 返回的已解析授权
-/// * `user` - 当前账号
-/// * `history` - 合法历史参与单据
-///
-/// # 返回
-/// 返回采购仓储条件。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 协作范围不映射为采购对象；本人负责解释当前采购负责人。
-pub fn purchase_scope(access: &PurchaseResolvedScope, user: &str, history: Vec<String>) -> PurchaseReadScope {
-    PurchaseReadScope {
-        required_scopes: vec![],
-        grant_lookup: access.grant_lookup.clone(),
-        historical_order_ids: history,
-        roles: access.role_clauses.iter().map(|clause| map_clause(clause, user)).collect(),
-        user_limit: access.user_limit.as_ref().map(|clause| map_clause(clause, user)),
-    }
-}
-
-/// 仅接受已解析的内部组织范围，不读取历史业绩或仓库作为授权。
-///
-/// # 参数
-/// * `scope` - Port 正向范围
-/// * `actor` - 当前账号
-///
-/// # 返回
-/// 返回采购责任条款。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得把仓库 ID 与部门 ID 放入同一并集；创建人不得充当负责人。
-fn map_clause(scope: &PurchaseResolvedClause, actor: &str) -> PurchaseScopeClause {
-    PurchaseScopeClause {
-        company: scope.company,
-        owner_user_id: scope.self_owned.then(|| actor.into()),
-        business_org_unit_ids: scope.org_unit_ids.clone(),
+/// 已加载对象的可见性由统一授权决定；不存在与对象拒绝使用相同错误。
+async fn authorized_order<F>(
+    scope: &dyn PurchaseDataScopePort,
+    actor: &AuditActor,
+    action: &str,
+    permissions: &[String],
+    executor: &mut dyn Executor,
+    load: F,
+) -> Result<PurchaseOrder>
+where
+    F: for<'a> FnOnce(&'a mut dyn Executor) -> BoxFuture<'a, Result<Option<PurchaseOrder>>>,
+{
+    scope.qualify(actor, action, permissions, executor).await?;
+    let order = load(executor).await?;
+    let order = order.ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))?;
+    match scope.require(actor, action, &order, permissions, executor).await {
+        Err(Error::Forbidden(_)) => Err(Error::NotFound("采购单不存在或无权操作".into())),
+        Err(error) => Err(error),
+        Ok(()) => Ok(order),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::BTreeSet;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
-    #[test]
-    fn self_owned_and_org_are_kept_and_collaborative_does_not_expand() {
-        let clause = map_clause(
-            &PurchaseResolvedClause {
-                self_owned: true,
-                collaborative: true,
-                org_unit_ids: vec!["org-a".into(), "org-b".into()],
-                ..PurchaseResolvedClause::default()
-            },
-            "buyer-a",
-        );
-        assert_eq!(clause.owner_user_id.as_deref(), Some("buyer-a"));
-        assert_eq!(clause.business_org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
+    use async_trait::async_trait;
+    use entity_core::BaseModel;
+    use erp_core::AccountKind;
+    use erp_core::common::stable::StableBase;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SupplierAccountId};
+    use mongodb::ClientSession;
+
+    use super::*;
+    use crate::entity::purchase_order::{
+        FulfillmentResponsibility, ProgressStatus, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
+    };
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct Call {
+        actor: String,
+        action: String,
+        order: PurchaseOrder,
+        permissions: Vec<String>,
     }
 
-    #[test]
-    fn attach_history_only_enriches_reads_and_updates_scope_version() {
-        let mut access = PurchaseResolvedScope {
-            grant_lookup: Vec::new(),
-            user_id: "buyer-a".into(),
-            resource: "purchase_order".into(),
-            action: "list".into(),
-            role_clauses: vec![],
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 1,
-            scope_version: "v1".into(),
-            as_of: erp_core::common::time::Instant::from_unix_secs(0),
-        };
-        let mut scope = PurchaseReadScope::default();
-        attach_history(&mut access, &mut scope, vec!["old-order".into()]);
-        assert_eq!(scope.historical_order_ids, vec!["old-order".to_string()]);
-        assert!(access.scope_version.starts_with("v1:"));
-        assert_ne!(access.scope_version, "v1");
+    enum Outcome {
+        Allowed,
+        Unqualified,
+        Denied,
+        Unavailable,
+    }
+
+    struct ObjectAccess {
+        outcome: Outcome,
+        calls: Mutex<Vec<Call>>,
+        stages: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl ObjectAccess {
+        fn new(outcome: Outcome) -> Self {
+            Self { outcome, calls: Mutex::new(Vec::new()), stages: Arc::default() }
+        }
+    }
+
+    #[async_trait]
+    impl PurchaseDataScopePort for ObjectAccess {
+        async fn qualify(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &[String],
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            assert!(executor.session().is_none());
+            self.stages.lock().unwrap().push("qualification");
+            match self.outcome {
+                Outcome::Unqualified => Err(Error::Forbidden("当前角色不具备完整功能资格".into())),
+                _ => Ok(()),
+            }
+        }
+
+        async fn require(
+            &self,
+            actor: &AuditActor,
+            action: &str,
+            order: &PurchaseOrder,
+            permissions: &[String],
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            assert!(executor.session().is_none());
+            self.stages.lock().unwrap().push("object");
+            self.calls.lock().unwrap().push(Call {
+                actor: actor.id().into(),
+                action: action.into(),
+                order: order.clone(),
+                permissions: permissions.into(),
+            });
+            match self.outcome {
+                Outcome::Allowed => Ok(()),
+                Outcome::Unqualified => panic!("功能资格未通过时不得进入对象授权"),
+                Outcome::Denied => Err(Error::Forbidden("对象未授权".into())),
+                Outcome::Unavailable => Err(Error::Internal("身份设施不可用".into())),
+            }
+        }
+
+        async fn resolve(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> Result<PurchaseResolvedScope> {
+            panic!("单对象预读不得编译列表授权")
+        }
+
+        async fn resolve_permissions(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> Result<PurchaseResolvedScope> {
+            panic!("单对象预读不得编译同角色列表授权")
+        }
+
+        async fn expand_org_units(
+            &self,
+            _: &[String],
+            _: bool,
+            _: &mut dyn Executor,
+        ) -> Result<BTreeSet<String>> {
+            panic!("单对象授权不自行展开组织")
+        }
+
+        async fn org_member_ids(
+            &self,
+            _: &BTreeSet<String>,
+            _: Instant,
+            _: &mut dyn Executor,
+        ) -> Result<Vec<String>> {
+            panic!("单对象授权不自行读取组织成员")
+        }
+
+        async fn own_org(&self, _: &str, _: Instant, _: &mut dyn Executor) -> Result<Option<String>> {
+            panic!("单对象授权不自行读取主属组织")
+        }
+    }
+
+    struct ObservedExecutor(Arc<AtomicUsize>);
+    impl Executor for ObservedExecutor {
+        fn session(&mut self) -> Option<&mut ClientSession> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            None
+        }
+    }
+
+    fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "操作者".into(), AccountKind::Admin)
+    }
+
+    fn order() -> PurchaseOrder {
+        PurchaseOrder {
+            base: BaseModel { id: "purchase-1".into(), version: 7, ..BaseModel::fake() },
+            stable: StableBase::new(PurchaseOrderStatus::Draft, "creator"),
+            business_org_unit_id: "business-org".into(),
+            purchase_no: "PO-1".into(),
+            sales_order_id: SalesOrderId::new("sales-1"),
+            sales_order_revision_id: SalesOrderRevisionId::new("sales-revision-1"),
+            creation_basis_id: "basis-1".into(),
+            supplier_id: SupplierAccountId::new("supplier-1"),
+            purchase_type: PurchaseType::Physical,
+            payment_term_code: "NET-30".into(),
+            fulfillment_responsibility: FulfillmentResponsibility::SupplierDirect,
+            owner_user_id: Some("buyer".into()),
+            target_warehouse_id: None,
+            review_status: PurchaseReviewStatus::Pending,
+            payment_progress: ProgressStatus::None,
+            invoice_progress: ProgressStatus::None,
+            fulfillment_progress: ProgressStatus::None,
+            current_submission_id: None,
+            approval_subject_version: 0,
+            sourcing_delivery: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn object_preflight_uses_real_facts_and_extra_permissions_without_query_compilation() {
+        for action in ["detail", "submit", "cancel_approval", "update"] {
+            let scope = ObjectAccess::new(Outcome::Allowed);
+            let calls = Arc::new(AtomicUsize::new(0));
+            let mut executor = ObservedExecutor(calls.clone());
+            let original = order();
+            let candidate = original.clone();
+            let stages = scope.stages.clone();
+            let required = ["purchase_order:create".to_owned()];
+            let loaded =
+                authorized_order(&scope, &actor(), action, &required, &mut executor, move |executor| {
+                    Box::pin(async move {
+                        assert!(executor.session().is_none());
+                        stages.lock().unwrap().push("load");
+                        Ok(Some(candidate))
+                    })
+                })
+                .await
+                .unwrap();
+            assert_eq!(loaded, original);
+            assert_eq!(calls.load(Ordering::SeqCst), 3);
+            assert_eq!(*scope.stages.lock().unwrap(), ["qualification", "load", "object"]);
+            assert_eq!(
+                *scope.calls.lock().unwrap(),
+                [Call {
+                    actor: "actor".into(),
+                    action: action.into(),
+                    order: original,
+                    permissions: required.into()
+                }],
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_function_qualification_is_forbidden_before_business_reading() {
+        let scope = ObjectAccess::new(Outcome::Unqualified);
+        let mut executor = ObservedExecutor(Arc::new(AtomicUsize::new(0)));
+        assert!(matches!(
+            authorized_order(&scope, &actor(), "submit", &[], &mut executor, |_| {
+                panic!("功能资格失败不得读取业务对象")
+            })
+            .await,
+            Err(Error::Forbidden(message)) if message == "当前角色不具备完整功能资格",
+        ));
+        assert_eq!(*scope.stages.lock().unwrap(), ["qualification"]);
+        assert!(scope.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn missing_or_denied_orders_keep_the_same_not_found_error() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut executor = ObservedExecutor(calls);
+        let denied = ObjectAccess::new(Outcome::Denied);
+        for candidate in [None, Some(order())] {
+            assert!(matches!(
+                authorized_order(&denied, &actor(), "submit", &[], &mut executor, move |_| {
+                    Box::pin(async move { Ok(candidate) })
+                }).await,
+                Err(Error::NotFound(message)) if message == "采购单不存在或无权操作",
+            ));
+        }
+        assert_eq!(denied.calls.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn identity_errors_are_preserved_instead_of_becoming_missing_objects() {
+        let scope = ObjectAccess::new(Outcome::Unavailable);
+        let mut executor = ObservedExecutor(Arc::new(AtomicUsize::new(0)));
+        assert!(matches!(
+            authorized_order(&scope, &actor(), "submit", &[], &mut executor, |_| {
+                Box::pin(async { Ok(Some(order())) })
+            }).await,
+            Err(Error::Internal(message)) if message == "身份设施不可用",
+        ));
     }
 }

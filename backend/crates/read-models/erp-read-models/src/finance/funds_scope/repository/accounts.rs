@@ -11,8 +11,6 @@ use erp_finance::repository::receivable::ReceivableAccountRow;
 use erp_finance::repository::{
     PayableAccountFilter, PayableAccountRow, PayableExt, ReceivableAccountFilter, ReceivableExt,
 };
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_supply::repository::SupplierSettlementExt;
@@ -22,9 +20,7 @@ use persistence_core::{Executor, QueryFilter};
 use serde::Deserialize;
 
 use super::super::{FundsAccess, FundsAuthorization, FundsLinkedCondition};
-use super::{
-    aggregate, linked_condition_document, page_facet, sort_document, source_scope_document, source_stages,
-};
+use super::{aggregate, linked_condition_document, page_facet, sort_document, source_stages};
 use crate::finance::search::keyword_ids;
 use crate::{Error, Result};
 
@@ -151,49 +147,56 @@ impl FundsAccess {
         include_page: bool,
         executor: &mut dyn Executor,
     ) -> Result<AccountListSnapshot<ReceivableAccountRow>> {
-        let filter = receivable_filter(
-            query,
-            keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable).await?,
-        );
-        let scope = doc! { "$and": [authorization.sales.document(),
-        linked_condition_document(condition, "sales_owner_user_id")] };
-        let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
-        if let Some(ids) = &condition.operator_user_ids {
-            pipeline.push(doc! { "$match": { "created_by": { "$in": ids } } });
+        authorization.validate(executor).await?;
+        let result: crate::Result<_> = async {
+            let filter = receivable_filter(
+                query,
+                keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable).await?,
+            );
+            let scope = doc! { "$and": [authorization.sales.document(),
+            linked_condition_document(condition, "sales_owner_user_id")] };
+            let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+            if let Some(ids) = &condition.operator_user_ids {
+                pipeline.push(doc! { "$match": { "created_by": { "$in": ids } } });
+            }
+            pipeline.extend(source_stages(
+                <Database as SalesOrderExt>::SALES_ORDERS,
+                Bson::String("$sales_order_id".into()),
+                "_source",
+                scope,
+                "sales_owner_user_id",
+                "order_no",
+                &authorization.sales.stages(),
+            ));
+            pipeline.push(doc! { "$match": { "_source_allowed": true } });
+            let sort = sort_document(
+                query.paging.sort_by,
+                filter.sort_ascending,
+                &[
+                    "account_seq",
+                    "gross_total",
+                    "settled_total",
+                    "open_total",
+                    "open_invoiceable_total",
+                    "created_at",
+                ],
+            );
+            self.account_snapshot(
+                <Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
+                pipeline,
+                sort,
+                query.paging.page,
+                query.paging.page_size,
+                "sales_order_id",
+                include_page,
+                executor,
+            )
+            .await
         }
-        pipeline.extend(source_stages(
-            <Database as SalesOrderExt>::SALES_ORDERS,
-            Bson::String("$sales_order_id".into()),
-            "_source",
-            scope,
-            "sales_owner_user_id",
-            "order_no",
-            &authorization.sales.grant_lookup,
-        ));
-        pipeline.push(doc! { "$match": { "_source_allowed": true } });
-        let sort = sort_document(
-            query.paging.sort_by,
-            filter.sort_ascending,
-            &[
-                "account_seq",
-                "gross_total",
-                "settled_total",
-                "open_total",
-                "open_invoiceable_total",
-                "created_at",
-            ],
-        );
-        self.account_snapshot(
-            <Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
-            pipeline,
-            sort,
-            query.paging.page,
-            query.paging.page_size,
-            "sales_order_id",
-            include_page,
-            executor,
-        )
-        .await
+        .await;
+        let result = result?;
+        authorization.validate(executor).await?;
+        Ok(result)
     }
 
     /// 应付按真实来源类型关联；采购与结算同名主键不能串权。
@@ -218,29 +221,36 @@ impl FundsAccess {
         include_page: bool,
         executor: &mut dyn Executor,
     ) -> Result<AccountListSnapshot<PayableAccountRow>> {
-        let filter = payable_filter(
-            query,
-            keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payable).await?,
-        );
-        let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
-        pipeline.extend(payable_source_stages(authorization, condition));
-        pipeline.push(doc! { "$match": { "_source_allowed": true } });
-        let sort = sort_document(
-            query.paging.sort_by,
-            filter.sort_ascending,
-            &["gross_total", "settled_total", "open_total", "open_invoiceable_total", "created_at"],
-        );
-        self.account_snapshot(
-            <Database as PayableExt>::PAYABLE_ACCOUNTS,
-            pipeline,
-            sort,
-            query.paging.page,
-            query.paging.page_size,
-            "source_document_id",
-            include_page,
-            executor,
-        )
-        .await
+        authorization.validate(executor).await?;
+        let result: crate::Result<_> = async {
+            let filter = payable_filter(
+                query,
+                keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payable).await?,
+            );
+            let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+            pipeline.extend(payable_source_stages(authorization, condition));
+            pipeline.push(doc! { "$match": { "_source_allowed": true } });
+            let sort = sort_document(
+                query.paging.sort_by,
+                filter.sort_ascending,
+                &["gross_total", "settled_total", "open_total", "open_invoiceable_total", "created_at"],
+            );
+            self.account_snapshot(
+                <Database as PayableExt>::PAYABLE_ACCOUNTS,
+                pipeline,
+                sort,
+                query.paging.page,
+                query.paging.page_size,
+                "source_document_id",
+                include_page,
+                executor,
+            )
+            .await
+        }
+        .await;
+        let result = result?;
+        authorization.validate(executor).await?;
+        Ok(result)
     }
 
     /// 一次最终条件生成页与完整轻量索引；重验仅保留版本分支。
@@ -340,12 +350,10 @@ fn payable_source_stages(
         doc! { "$and": [scope, linked_condition_document(condition, "owner_user_id")] },
         "owner_user_id",
         "purchase_no",
-        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.grant_lookup.as_slice()),
+        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.stages()),
     );
-    let settlement_scope = authorization
-        .settlement
-        .as_ref()
-        .map_or_else(|| doc! { "$expr": false }, |scope| source_scope_document(scope, "prepared_by"));
+    let settlement_scope =
+        authorization.settlement.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     stages.extend(source_stages(
         <Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
         Bson::String("$source_document_id".into()),
@@ -353,7 +361,7 @@ fn payable_source_stages(
         doc! { "$and": [settlement_scope, linked_condition_document(condition, "prepared_by")] },
         "prepared_by",
         "statement_no",
-        &[],
+        authorization.settlement.as_ref().map_or(&[], |scope| scope.stages()),
     ));
     stages.push(doc! { "$set": {
         "_source": { "$switch": { "branches": [
@@ -369,31 +377,25 @@ fn payable_source_stages(
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
-    use erp_identity::access_control::ResolvedScope;
-    use erp_identity::service::access_control::resolve::AuthorizedDataScope;
     use erp_sales::repository::sales_order::scope::SalesReadScope;
 
+    use super::super::super::FundsReadContext;
     use super::*;
 
     /// 构造已解析上下文；版本测试不访问持久化或静态资格。
     fn authorization() -> FundsAuthorization {
         FundsAuthorization {
+            whole: Default::default(),
             sales: SalesReadScope::default(),
             ledger_read: false,
             settlement: None,
             purchase_scope: None,
-            no_scope: false,
-            context: AuthorizedDataScope::test_fixture(DataScopeFacts {
-                user_id: "u".into(),
+
+            context: FundsReadContext {
                 resource: "receivable_account".into(),
-                action: "list".into(),
-                scope: ResolvedScope { role_clauses: Vec::new(), user_limit: None },
-                qualified_roles: Default::default(),
-                organizations: Default::default(),
-                policy_version: 1,
                 scope_version: "scope".into(),
                 as_of: Instant::from_unix_secs(1),
-            }),
+            },
         }
     }
 
@@ -432,7 +434,7 @@ mod tests {
         });
         assert_ne!(rows.version(&access).unwrap(), original);
         let mut changed = authorization();
-        changed.context.test_facts_mut().scope_version = "revoked".into();
+        changed.context.scope_version = "revoked".into();
         assert_ne!(snapshot().version(&changed).unwrap(), original);
     }
 

@@ -15,6 +15,7 @@ use super::dto::{
 use super::query::{BASIS_LABEL, PERIOD_BASIS};
 use super::source::{HistorySnapshot, QualityOrder, version};
 use crate::Result;
+use crate::sales_center::access::SalesReadContext;
 
 /// 同一快照产生的历史视图与请求问询；版本校验需要原查询。
 pub(super) struct HistorySnapshotOutput {
@@ -52,11 +53,13 @@ impl super::CustomerQualityReadModel {
             view.empty_reason = Some("no_scope".into());
             apply_context(&mut view, &sales_context);
             let expected = sales_context.scope_version.clone();
+            sales_context.validate(executor).await?;
             return Ok((HistorySnapshotOutput { view, query: query.clone() }, expected));
         }
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
         let filter = super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
         let sources = HistorySnapshot::load(&self.db, filter, executor).await?;
+        sales_context.validate(executor).await?;
         let expected = version(&sales_context.scope_version, &sources.orders);
         super::ensure_version(query.scope_version.as_deref(), &expected)?;
         let mut view = project_history(query, sources);
@@ -105,6 +108,7 @@ impl super::CustomerQualityReadModel {
                     let filter =
                         super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
                     let sources = HistorySnapshot::load(&this.db, filter, executor).await?;
+                    sales_context.validate(executor).await?;
                     Ok::<_, crate::Error>(version(&sales_context.scope_version, &sources.orders))
                 })
             })
@@ -337,8 +341,6 @@ fn assemble_history(
         empty_reason: None,
         scope_summary: "历史负责订单".into(),
         as_of: String::new(),
-        policy_version: 0,
-        organization_version: 0,
         scope_version: String::new(),
         scope: QualityScope::new("authorized".into(), "历史负责订单".into(), String::new()),
         period: QualityPeriod {
@@ -379,11 +381,6 @@ fn history_filter_summary(query: &HistoryQualityQuery) -> String {
 }
 
 /// 授权时点与版本随响应返回；不暴露完整角色证明或人员集合。
-fn apply_context(
-    view: &mut HistoryQualityView,
-    sales: &erp_identity::service::access_control::resolve::AuthorizedDataScope,
-) {
+fn apply_context(view: &mut HistoryQualityView, sales: &SalesReadContext) {
     view.as_of = sales.as_of.as_utc().to_rfc3339();
-    view.policy_version = sales.policy_version;
-    view.organization_version = sales.organizations.version;
 }

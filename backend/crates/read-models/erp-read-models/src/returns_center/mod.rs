@@ -7,7 +7,6 @@ mod payment_reversal;
 mod purchase_return;
 pub use purchase_return::PurchaseReturnListView;
 mod receipt_reversal;
-#[cfg(test)]
 mod repository;
 mod sales_return;
 mod supplier_refund;

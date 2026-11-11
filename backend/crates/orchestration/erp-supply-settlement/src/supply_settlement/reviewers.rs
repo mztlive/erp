@@ -3,12 +3,13 @@ use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{AccountSummary, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccountSummary, Permission, SharedRbacService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
-use super::{SETTLEMENT_REVIEW_OWNER_ROLE, SupplierSettlementProcess};
+use super::SupplierSettlementProcess;
 use crate::{Error, Result};
 
 /// 可执行当前结算复核的人员，协议只暴露选择所需信息。
@@ -22,42 +23,23 @@ pub struct SettlementReviewerOption {
     pub account: String,
 }
 
-/// 判断账号是否满足结算复核的岗位、权限与责任范围要求。
-fn eligible(
+/// 完整复核功能资格必须来自同一启用角色；岗位分离由业务检查。
+async fn qualified_reviewer(
+    db: &Database,
+    identity: &SharedRbacService,
     account: &AccountSummary,
-    preparer_id: &str,
-    permissions: &PermissionSet,
-    scopes: &[(String, Option<String>)],
-) -> bool {
-    account.id != preparer_id
-        && account.is_active_backoffice()
-        && [
-            "supplier_settlement_statement:detail",
-            "supplier_settlement_statement:confirm",
-            "work_item:detail",
-        ]
-        .iter()
-        .all(|required| permissions.covers_one(&Permission::parse(required).expect("固定复核权限合法")))
-        && scopes.iter().any(|(role, _)| role == SETTLEMENT_REVIEW_OWNER_ROLE)
-}
-
-/// 候选资格由同一启用财务角色提供完整动作；对象访问由指定复核任务证明。
-async fn reviewer_scopes(
-    identity_service: &SharedRbacService,
-    account: &AccountSummary,
-    preparer: &str,
-    org: &str,
     executor: &mut dyn Executor,
-) -> Result<Vec<(String, Option<String>)>> {
-    let _ = (preparer, org);
+) -> Result<bool> {
     let required =
-        ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"];
-    let required = required.into_iter().map(Permission::parse).collect::<StdResult<Vec<_>, _>>()?;
-    let snapshot = identity_service.role_permission_snapshot(account.kind, &account.id, &required).await?;
-    identity_service.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-    let roles =
-        identity_service.enabled_role_ids(&snapshot.granting_role_ids_for_all(&required), executor).await?;
-    Ok(roles.into_iter().map(|role| (role.to_string(), None)).collect())
+        ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"]
+            .into_iter()
+            .map(Permission::parse)
+            .collect::<StdResult<Vec<_>, _>>()?;
+    let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+    Ok(crate::authorization::features(db.clone(), identity.clone())
+        .permissions(&actor, &required, executor)
+        .await?
+        .is_some_and(|qualified| qualified.same_role(&required)))
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
@@ -91,16 +73,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             if account.id == actor.id() || !account.is_active_backoffice() {
                 continue;
             }
-            let permissions = self.work_items.identity.permissions(account.kind, &account.id).await?;
-            let scopes = reviewer_scopes(
-                &self.work_items.identity,
-                &account,
-                &statement.prepared_by,
-                &statement.business_org_unit_id,
-                &mut NoTransaction,
-            )
-            .await?;
-            if eligible(&account, actor.id(), &permissions, &scopes) {
+            if qualified_reviewer(&self.db, &self.work_items.identity, &account, &mut NoTransaction).await? {
                 options.push(SettlementReviewerOption {
                     user_id: account.id,
                     display_name: account.display_name,
@@ -112,33 +85,28 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(options)
     }
 
-    /// 在提交时重新验证人员资格并返回一致的授权版本；过期策略由提交事务拒绝。
-    ///
+    /// 提交前预检复核人资格；实际提交事务仍独立重验。
     /// # 参数
-    /// * `reviewer_id` - 拟指定的复核人。
-    /// * `preparer_id` - 当前经办人，须与复核人岗位分离。
-    /// * `org` - 结算单业务组织。
-    ///
+    /// reviewer_id 为复核人，preparer_id 为经办人，org 为业务组织。
     /// # 返回
-    /// 返回验证前后未变化的政策版本。
-    ///
+    /// 当前资格与岗位分离满足时成功。
     /// # 错误
-    /// 资格校验失败时返回对应错误。连续三次读到的政策版本不一致时返回 `ConflictError`。
+    /// 人员或资格失效时拒绝。
     pub(super) async fn authorize_reviewer(
         &self,
         reviewer_id: &str,
         preparer_id: &str,
         org: &str,
-    ) -> Result<u64> {
-        for _ in 0..3 {
-            let revision = self.work_items.identity.current_policy_revision().await?;
-            ensure_reviewer(&self.work_items.identity, reviewer_id, preparer_id, org, &mut NoTransaction)
-                .await?;
-            if revision == self.work_items.identity.current_policy_revision().await? {
-                return Ok(revision);
-            }
-        }
-        Err(Error::ConflictError("复核人权限已变化，请刷新后重试".into()))
+    ) -> Result<()> {
+        ensure_reviewer(
+            &self.db,
+            &self.work_items.identity,
+            reviewer_id,
+            preparer_id,
+            org,
+            &mut NoTransaction,
+        )
+        .await
     }
 }
 
@@ -158,10 +126,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// 复核人不存在时返回 `ValidationError`。资格、权限或财务角色不满足时返回 `Forbidden`。
 /// 账号或范围读取失败时返回对应错误。
 pub(super) async fn ensure_reviewer(
+    db: &Database,
     identity_service: &SharedRbacService,
     reviewer_id: &str,
     preparer_id: &str,
-    org: &str,
+    _org: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let account = identity_service
@@ -169,46 +138,8 @@ pub(super) async fn ensure_reviewer(
         .account(reviewer_id, executor)
         .await?
         .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
-    let permissions = identity_service.permissions(account.kind, reviewer_id).await?;
-    let scopes = reviewer_scopes(identity_service, &account, preparer_id, org, executor).await?;
-    if !eligible(&account, preparer_id, &permissions, &scopes) {
+    if reviewer_id == preparer_id || !qualified_reviewer(db, identity_service, &account, executor).await? {
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 岗位分离、停用账号、权限不完整及错误角色范围均不进入候选。
-    #[test]
-    fn reviewer_requires_available_separate_account_permissions_and_finance_scope() {
-        let account = AccountSummary::new("reviewer", AccountKind::Admin, true);
-        let permissions = PermissionSet::new(
-            ["supplier_settlement_statement:*", "work_item:detail"]
-                .map(|code| Permission::parse(code).unwrap()),
-        );
-        let scopes = vec![(SETTLEMENT_REVIEW_OWNER_ROLE.into(), None)];
-        assert!(eligible(&account, "preparer", &permissions, &scopes));
-        assert!(eligible(
-            &account,
-            "preparer",
-            &permissions,
-            &[(SETTLEMENT_REVIEW_OWNER_ROLE.into(), Some("team".into()))]
-        ));
-        assert!(!eligible(&account, "reviewer", &permissions, &scopes));
-        assert!(!eligible(
-            &AccountSummary::new("reviewer", AccountKind::Admin, false),
-            "preparer",
-            &permissions,
-            &scopes
-        ));
-        assert!(!eligible(
-            &account,
-            "preparer",
-            &PermissionSet::new([Permission::parse("supplier_settlement_statement:detail").unwrap()]),
-            &scopes
-        ));
-        assert!(!eligible(&account, "preparer", &permissions, &[("role-other".into(), None)]));
-    }
 }

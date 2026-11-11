@@ -16,23 +16,24 @@ use erp_workflow::service::approval::execution::{
     PlannedWrites, PreparedExecution, claim_and_persist_document_cancel_runtime, prepare_cancel,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::NoTransaction;
+use persistence_core::{NoTransaction, Transactional};
 
 use super::super::{ReceivableProcess, cancel_approval};
 use super::authorization::{MongoAccess, RequestAction, authorize};
 use super::*;
+use crate::FinancePostingPorts;
 
 impl ReceivableProcess {
-    /// 原申请人撤回审批；独立财务回执命中时只回读原申请。
+    /// 当前经办人按统一授权撤回审批；独立财务回执命中时只回读原申请。
     ///
     /// # 参数
     /// * `id` - 当前开票申请身份。
     /// * `req` - 精确版本、撤回原因与幂等键。
-    /// * `actor` - 已通过入口鉴权的当前申请人。
+    /// * `actor` - 具备撤回和完整来源资格的当前经办人。
     /// # 返回
     /// 返回首次撤回申请的当前视图。
     /// # 错误
-    /// 非原申请人、版本冲突、审批已完成或任务状态变化时拒绝；查证失败保留未知结果。
+    /// 操作无权、版本冲突、审批已完成或任务状态变化时拒绝；查证失败保留未知结果。
     pub async fn cancel_invoice_request(
         &self,
         id: &str,
@@ -43,59 +44,44 @@ impl ReceivableProcess {
         if let Some(view) = self.replay_invoice_request_command(&command, actor).await? {
             return Ok(view);
         }
-        let Some(prepared) = self.prepare_invoice_request_cancel(id, &req, actor).await? else {
+        let operation = InvoiceCancellation {
+            db: self.db.clone(),
+            rbac: self.rbac.clone(),
+            id: id.to_owned(),
+            request: req,
+            actor: actor.clone(),
+            command,
+        };
+        let read = operation.clone();
+        let authorized = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { read.authorized_request(executor).await })
+            })
+            .await?;
+        let Some(prepared) =
+            self.prepare_invoice_request_cancel(&authorized, &operation.request, actor).await?
+        else {
             return super::command::committed_result(
                 self.authorized_invoice_request_result(id, actor, RequestAction::Cancel).await,
             );
         };
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let response_actor = actor.clone();
-        let actor = actor.clone();
-        let id = id.to_string();
-        let recover = command.clone();
-        let revision = rbac.current_policy_revision().await?;
-        let result = rbac
-            .clone()
-            .run_authorized_policy_transaction(revision, move |executor| {
-                Box::pin(async move {
-                    let receipts = FinanceCommandReceiptService::new(db.clone());
-                    let access = MongoAccess { db: &db, rbac: &rbac };
-                    if access.replay(&actor, &command, executor).await?.is_some() {
-                        return Err(super::command::replay_requires_readback());
-                    }
-                    authorize(&access, &actor, &id, RequestAction::Cancel, executor).await?;
-                    claim_and_persist_document_cancel_runtime(
-                        &db,
-                        &prepared.writes,
-                        &prepared.closed,
-                        actor.id(),
-                        executor,
-                    )
-                    .await?;
-                    rbac.runtime.persist_cancel_copies(&db, &prepared.writes, executor).await?;
-                    let current = load(&db, &id, executor).await?;
-                    ensure_expected_version(current.base.version, req.expected_version)?;
-                    let event_id = cancel_and_record(&db, &id, &actor, Some(&command), executor).await?;
-                    receipts.save_resource(&command, id.clone(), event_id, executor).await?;
-                    Ok::<String, Error>(id)
-                })
-            })
-            .await;
-        self.finish_invoice_request_command(result, &recover, &response_actor).await
+        let recover = operation.command.clone();
+        let client = operation.db.client().clone();
+        let result =
+            client.with_transaction(move |executor| Box::pin(operation.persist(prepared, executor))).await;
+        self.finish_invoice_request_command(result, &recover, actor).await
     }
 
-    /// 保持申请人、版本、审批绑定与运行时的既有首错顺序。
+    /// 校验版本、审批绑定与运行时，实际撤回事务重验操作和完整来源资格。
     async fn prepare_invoice_request_cancel(
         &self,
-        id: &str,
+        request: &SalesInvoiceRequest,
         req: &CancelInvoiceRequest,
         actor: &AuditActor,
     ) -> Result<Option<PreparedInvoiceRequestCancel>> {
-        let request = load(&self.db, id, &mut NoTransaction).await?;
-        if request.created_by != actor.id() {
-            return Err(Error::Forbidden("只能撤回本人提交的开票申请".into()));
-        }
+        let id = request.base.id.as_str();
         ensure_expected_version(request.base.version, req.expected_version)?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
             .await?
@@ -124,6 +110,53 @@ impl ReceivableProcess {
         let closed =
             WorkItem::close_all_for_approval_cancellation(runtime.open_tasks, actor.id(), &req.reason, now)?;
         Ok(Some(PreparedInvoiceRequestCancel { writes, closed }))
+    }
+}
+
+/// 读取授权和实际撤回事务复用同一命令身份，不携带可复用的授权结论。
+#[derive(Clone)]
+struct InvoiceCancellation {
+    db: Database,
+    rbac: FinancePostingPorts,
+    id: String,
+    request: CancelInvoiceRequest,
+    actor: AuditActor,
+    command: CommandReceipt,
+}
+
+impl InvoiceCancellation {
+    async fn authorized_request(&self, executor: &mut dyn Executor) -> Result<SalesInvoiceRequest> {
+        let access = MongoAccess { db: &self.db, rbac: &self.rbac };
+        authorize(&access, &self.actor, &self.id, RequestAction::Cancel, executor).await?;
+        load(&self.db, &self.id, executor).await
+    }
+
+    async fn persist(
+        self,
+        prepared: PreparedInvoiceRequestCancel,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let receipts = FinanceCommandReceiptService::new(self.db.clone());
+        let access = MongoAccess { db: &self.db, rbac: &self.rbac };
+        if access.replay(&self.actor, &self.command, executor).await?.is_some() {
+            return Err(super::command::replay_requires_readback());
+        }
+        authorize(&access, &self.actor, &self.id, RequestAction::Cancel, executor).await?;
+        claim_and_persist_document_cancel_runtime(
+            &self.db,
+            &prepared.writes,
+            &prepared.closed,
+            self.actor.id(),
+            executor,
+        )
+        .await?;
+        self.rbac.runtime.persist_cancel_copies(&self.db, &prepared.writes, executor).await?;
+        let current = load(&self.db, &self.id, executor).await?;
+        ensure_expected_version(current.base.version, self.request.expected_version)?;
+        let event_id =
+            cancel_and_record(&self.db, &self.id, &self.actor, Some(&self.command), executor).await?;
+        receipts.save_resource(&self.command, self.id.clone(), event_id, executor).await?;
+        Ok(self.id)
     }
 }
 

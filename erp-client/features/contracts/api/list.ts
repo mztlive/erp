@@ -64,8 +64,8 @@ export type ContractListData = {
     metrics: import("../lib/filter-contracts").ContractMetrics
     emptyReason?: string | null
     scopeVersion: string
-    policyVersion: number
-    organizationVersion: number
+    policyVersion?: number
+    organizationVersion?: number
     scopeSummary: string
     asOf: string
     ownershipBasis: string
@@ -85,8 +85,8 @@ export async function fetchContracts(
             }
             empty_reason?: string | null
             scope_version: string
-            policy_version: number
-            organization_version: number
+            policy_version?: number
+            organization_version?: number
             scope_summary: string
             as_of: string
             ownership_basis: string

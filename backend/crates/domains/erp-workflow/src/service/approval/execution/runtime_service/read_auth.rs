@@ -9,6 +9,7 @@ use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStat
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_core::AccountKind;
 use erp_identity::SharedRbacService;
+use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::authorization::{AuthorizationFailure, converge_eligibility};
@@ -79,6 +80,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 /// # 关键业务约束
 /// 任一资格失败必须收敛为 blocker，不得回滚为空。
 pub(super) async fn revalidate_decision_approver(
+    db: &Database,
     identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
     input: RevalidateDecisionApproverInput<'_>,
@@ -99,7 +101,7 @@ pub(super) async fn revalidate_decision_approver(
         .cloned()
         .unwrap_or_else(|| AuditActor::new(assignee_id.into(), assignee_id.into(), AccountKind::Admin));
     let qualified = if actor.id() == assignee_id {
-        approver_qualification(identity_service, &actor, executor).await?
+        approver_qualification(db, identity_service, &actor, executor).await?
     } else {
         ApprovalQualification::Inactive
     };

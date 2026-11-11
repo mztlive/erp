@@ -133,6 +133,10 @@ impl ContractImportProcess {
         let (customer, owner) = customer_records(party_id, actor.id())?;
         self.db.customer_accounts().create(&customer, executor).await?;
         self.db.customer_assignments().create(&owner, executor).await?;
+        self.services
+            .customer_access
+            .require_with(actor.clone(), "create", &customer.base.id, executor)
+            .await?;
         persist_log(
             &self.db,
             &actor.clone().resource_log(

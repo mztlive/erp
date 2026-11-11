@@ -8,7 +8,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AccountSummary, Permission, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_support::content_fingerprint;
 use erp_warehouse::{
     AttachmentFingerprintPort, HandlerIdentityFact, IdentityFactPort, PreparedWarehouseAudit,
@@ -142,17 +142,18 @@ impl MongoWarehouseIdentity {
         &self,
         account: &erp_identity::AccountCore,
     ) -> erp_warehouse::Result<HandlerIdentityFact> {
-        let fact = AccountSummary::from(account);
-        let can_login = fact.can_login;
         let inbound = handler_permissions(required_fulfillment_permissions("purchase_receipt"));
         let outbound = handler_permissions(required_fulfillment_permissions("delivery"));
-        let permissions = self
-            .rbac
-            .permissions(account.kind, account.base.id.as_str())
+        let actor =
+            AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
+        let requested = inbound.iter().chain(&outbound).cloned().collect::<Vec<_>>();
+        let qualified = super::authorization::authorization_service(self.db.clone(), self.rbac.clone())
+            .permissions(&actor, &requested, &mut NoTransaction)
             .await
             .map_err(map_identity_error)?;
-        let inbound_eligible = inbound.iter().all(|required| permissions.covers_one(required));
-        let outbound_eligible = outbound.iter().all(|required| permissions.covers_one(required));
+        let can_login = qualified.is_some();
+        let inbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&inbound));
+        let outbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&outbound));
         Ok(HandlerIdentityFact {
             user_id: account.base.id.clone(),
             display_name: account.name.clone(),

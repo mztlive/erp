@@ -6,7 +6,7 @@
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::party;
 use crate::http::middleware::with_permission;
@@ -20,7 +20,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         // 上层 admin 路由统一认证；结算主体候选与回显不设置独立权限。
         .route("/settlement-parties", get(party::directory::list))
@@ -202,7 +202,7 @@ access_token = "test-token-123456"
     #[tokio::test]
     async fn authenticated_directory_reaches_validation_without_rbac_subject_or_roles() {
         let state = state();
-        let app = routes(&state.application().rbac())
+        let app = routes(&state.application().authorization())
             .layer(Extension(AuditActor::new("user".into(), "user".into(), AccountKind::Admin)))
             .with_state(state);
         for path in ["/settlement-parties?page=0", "/settlement-parties/selected"] {

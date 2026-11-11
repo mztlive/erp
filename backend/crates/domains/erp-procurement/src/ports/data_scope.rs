@@ -6,113 +6,93 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use mongodb::bson::Document;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// 身份域已解析的采购正向范围条款；不含身份域实体句柄。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PurchaseResolvedClause {
-    /// 公司范围覆盖该资源动作的全部采购单。
-    pub company: bool,
-    /// 当前采购负责人为操作人的单据。
-    pub self_owned: bool,
-    /// 协作维度已由公共解析器保留；采购对象不按协作客户展开。
-    pub collaborative: bool,
-    /// 已由公共解析器展开的内部组织。
-    pub org_unit_ids: Vec<String>,
-}
-
-impl PurchaseResolvedClause {
-    /// 判断条款是否构成有效采购范围规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、本人负责或组织目标时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 协作维度单独存在不构成采购对象规则；空条款保持空集且不得补公司。
-    pub fn has_scope_rules(&self) -> bool {
-        self.company || self.self_owned || !self.org_unit_ids.is_empty()
-    }
-}
-
-/// 已通过资格检查的采购范围事实。
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// 当前采购查询阶段凭证与分页元数据；不暴露权限规则。
+#[derive(Clone)]
 pub struct PurchaseResolvedScope {
-    /// 统一权限服务生成的指定记录关联阶段。
-    pub grant_lookup: Vec<Document>,
-    /// 已认证操作人。
+    pub compiled: Arc<erp_identity::CompiledAccess>,
+    pub authorization: erp_identity::AuthorizationService,
     pub user_id: String,
-    /// 固定为采购单资源。
     pub resource: String,
-    /// 本次解析的采购动作。
     pub action: String,
-    /// 同角色正向范围。
-    pub role_clauses: Vec<PurchaseResolvedClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<PurchaseResolvedClause>,
-    /// RBAC 策略版本。
     pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
-    /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
-    /// 授权解析时点。
     pub as_of: Instant,
-}
-
-impl PurchaseResolvedScope {
-    /// 判断角色正向范围是否含有效规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任一角色条款构成有效规则时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只看角色条款；个人上限不单独构成“有范围规则”。
-    pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses.iter().any(PurchaseResolvedClause::has_scope_rules)
-    }
-}
-
-/// 业务域提供的单对象责任事实；不包含原始授权规则。
-#[derive(Debug, Clone, Default)]
-pub struct PurchaseScopeObject {
-    /// 当前操作人是否为对象的权威负责人。
-    pub owned: bool,
-    /// 当前操作人是否具备有效协作事实。
-    pub collaborating: bool,
-    /// 当前操作人是否具备合法历史读取参与。
-    pub historical_read_participant: bool,
-    /// 按本资源口径取得的内部组织。
-    pub org_unit_id: Option<String>,
 }
 
 /// 采购域消费的窄授权 Port；adapter 调用身份域公共解析器。
 #[async_trait]
 pub trait PurchaseDataScopePort: Send + Sync {
-    /// 经生产 adapter 复用公共单对象范围判定。
-    ///
+    /// 证明账号及同角色完整功能资格，不编译查询或读取业务对象。
     /// # 参数
-    /// * `scope` - 当前动作已解析事实
-    /// * `object` - 本域提供的当前责任与合法参与事实
+    /// actor、action 为当前入口，permissions 为固定额外功能资格，executor 为原执行器。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
+    /// 账号有效且同一角色提供本次全部资格时成功。
     /// # 错误
-    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
-    fn allows(&self, _scope: &PurchaseResolvedScope, _object: &PurchaseScopeObject) -> Result<bool> {
+    /// 未接线、账号失效、无完整资格或身份设施失败时拒绝。
+    async fn qualify(
+        &self,
+        _actor: &AuditActor,
+        _action: &str,
+        _permissions: &[String],
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Err(unwired())
+    }
+
+    /// 以原事务可信对象执行统一权限检查。
+    /// # 参数
+    /// actor、action 为入口，order 为当前业务事实，permissions 为同角色额外资格，executor 为原事务。
+    /// # 返回
+    /// 完整对象资格成立时成功。
+    /// # 错误
+    /// 未接线、无权或身份失效时拒绝。
+    async fn require(
+        &self,
+        _actor: &AuditActor,
+        _action: &str,
+        _order: &crate::entity::purchase_order::PurchaseOrder,
+        _permissions: &[String],
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Err(unwired())
+    }
+
+    /// 按实际业务入口检查完整采购来源集合。
+    /// # 参数
+    /// actor、entry 为当前入口，ids 为完整来源，executor 为原事务。
+    /// # 返回
+    /// 全部来源可读时成功。
+    /// # 错误
+    /// 未接线或来源无权时拒绝。
+    async fn require_source(
+        &self,
+        actor: &AuditActor,
+        entry: &erp_identity::Permission,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.require_source_permissions(actor, entry, ids, &[], executor).await
+    }
+
+    /// 按固定管理入口完整资格检查采购来源集合。
+    /// # 参数
+    /// actor、entry 为真实身份和入口，ids 为完整来源，required 为服务端固定完整功能资格，executor 为原事务。
+    /// # 返回
+    /// 同一有效角色提供全部资格且所有来源有权时成功。
+    /// # 错误
+    /// 未接线、未登记组合或来源无权时拒绝。
+    async fn require_source_permissions(
+        &self,
+        _actor: &AuditActor,
+        _entry: &erp_identity::Permission,
+        _ids: &[String],
+        _required: &[erp_identity::Permission],
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
         Err(unwired())
     }
 
@@ -377,50 +357,4 @@ impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
 /// 禁止捕获后回退旧读取器或补 Company。
 fn unwired() -> Error {
     Error::Internal("采购范围端口未接线".into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!PurchaseResolvedClause::default().has_scope_rules());
-        assert!(
-            PurchaseResolvedClause { self_owned: true, ..PurchaseResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            !PurchaseResolvedClause { collaborative: true, ..PurchaseResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            PurchaseResolvedClause { company: true, ..PurchaseResolvedClause::default() }.has_scope_rules()
-        );
-        assert!(
-            PurchaseResolvedClause {
-                org_unit_ids: vec!["org-a".into()],
-                ..PurchaseResolvedClause::default()
-            }
-            .has_scope_rules()
-        );
-        assert!(
-            !PurchaseResolvedScope {
-                grant_lookup: Vec::new(),
-                user_id: "u1".into(),
-                resource: "purchase_order".into(),
-                action: "list".into(),
-                role_clauses: vec![],
-                user_limit: Some(PurchaseResolvedClause {
-                    self_owned: true,
-                    ..PurchaseResolvedClause::default()
-                }),
-                policy_version: 1,
-                organization_version: 1,
-                scope_version: "v1".into(),
-                as_of: Instant::from_unix_secs(0),
-            }
-            .has_scope_rules()
-        );
-    }
 }

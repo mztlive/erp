@@ -195,8 +195,6 @@ pub struct IntegrationErrorTaskFilter {
     pub operator_user_ids: Vec<String>,
     /// 请求组织收窄后的处理人组织；空表示不按组织收窄。
     pub owner_org_unit_ids: Vec<String>,
-    /// 已解析授权条件；`None` 表示公司范围不加额外条件。
-    pub scope_document: Option<Document>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -219,7 +217,6 @@ impl Default for IntegrationErrorTaskFilter {
             handler_user_ids: Vec::new(),
             operator_user_ids: Vec::new(),
             owner_org_unit_ids: Vec::new(),
-            scope_document: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -265,7 +262,7 @@ impl QueryFilter for IntegrationErrorTaskFilter {
             &["id", "business_object_id", "message_id", "last_attempt_summary", "error_class"],
         );
         error_label_filter(&mut filter, self.q.as_deref());
-        and_scope(filter, self.scope_document.as_ref())
+        filter
     }
 }
 
@@ -315,8 +312,6 @@ pub struct ReconciliationDifferenceFilter {
     pub operator_difference_ids: Option<Vec<String>>,
     /// 请求组织收窄后的处理人组织；空表示不按组织收窄。
     pub owner_org_unit_ids: Vec<String>,
-    /// 已解析授权条件；`None` 表示公司范围不加额外条件。
-    pub scope_document: Option<Document>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -339,7 +334,6 @@ impl Default for ReconciliationDifferenceFilter {
             handler_user_ids: Vec::new(),
             operator_difference_ids: None,
             owner_org_unit_ids: Vec::new(),
-            scope_document: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -391,7 +385,7 @@ impl QueryFilter for ReconciliationDifferenceFilter {
         if self.q.as_deref().is_some_and(|q| "对账差异".contains(q)) {
             filter.remove("$or");
         }
-        and_scope(filter, self.scope_document.as_ref())
+        filter
     }
 }
 
@@ -469,24 +463,6 @@ pub(crate) fn insert_time_range(filter: &mut Document, field: &str, from: Option
 pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: &[String]) {
     if !ids.is_empty() {
         filter.insert(field, doc! { "$in": ids });
-    }
-}
-
-/// 把已解析授权条件与业务筛选求交（空授权文档不加条件，公司范围不收窄）。
-///
-/// # 参数
-/// * `filter` - 业务筛选文档
-/// * `scope` - 已解析授权条件；`None` 或空文档表示公司范围
-///
-/// # 返回
-/// 返回求交后的查询文档。
-///
-/// # 错误
-/// 不返回错误。
-pub(crate) fn and_scope(filter: Document, scope: Option<&Document>) -> Document {
-    match scope {
-        Some(scope) if !scope.is_empty() => doc! { "$and": [filter, scope.clone()] },
-        _ => filter,
     }
 }
 
@@ -589,7 +565,6 @@ mod tests {
             handler_user_ids: vec!["u-1".to_string()],
             operator_user_ids: Vec::new(),
             owner_org_unit_ids: Vec::new(),
-            scope_document: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -618,7 +593,6 @@ mod tests {
             handler_user_ids: Vec::new(),
             operator_difference_ids: None,
             owner_org_unit_ids: Vec::new(),
-            scope_document: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -652,7 +626,6 @@ mod keyword_tests {
             handler_user_ids: vec!["alice".into()],
             operator_user_ids: Vec::new(),
             owner_org_unit_ids: Vec::new(),
-            scope_document: None,
             page: 3,
             page_size: 50,
             sort_by: None,
@@ -684,7 +657,6 @@ mod keyword_tests {
             handler_user_ids: vec!["handler-1".into()],
             operator_difference_ids: Some(vec!["diff-9".into()]),
             owner_org_unit_ids: vec!["org-a".into()],
-            scope_document: None,
             page: 1,
             page_size: 20,
             sort_by: None,

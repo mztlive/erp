@@ -1,106 +1,88 @@
-//! 履约订单范围授权 adapter：调用身份域公共解析器，转换成履约 Port 事实。
-
+//! 组合根只装配业务事实；权限检查及查询编译统一交给身份域。
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::access_control::{ScopeClause, ScopedObject};
-use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::SharedRbacService;
+use erp_supply::ports::FulfillmentExceptionHandlerPort;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
-use erp_supply::{
-    FulfillmentExceptionHandlerPort, FulfillmentOrderAccess, FulfillmentOrderDataScopePort,
-    FulfillmentOrderResolvedClause, FulfillmentOrderResolvedScope, FulfillmentOrderScopeObject,
-};
+use erp_supply::{FulfillmentOrderAccess, FulfillmentOrderDataScopePort, FulfillmentOrderResolvedScope};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemFilter, WorkItemRow, WorkItemStatus, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::identity_error::map_identity_error;
-use super::scope_support::{self, evaluate_registered, reject_unsupported_dimensions, scope_clause};
-
+use super::scope_support;
 map_identity_error!(erp_supply);
 
-/// 组合层履约订单范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
 pub struct MongoFulfillmentOrderDataScope {
     db: Database,
     rbac: SharedRbacService,
 }
-
 impl MongoFulfillmentOrderDataScope {
-    /// 绑定身份数据库及现有 RBAC 实例。
-    ///
+    /// 绑定身份设施。
     /// # 参数
-    /// * `db` - 身份与组织集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
-    ///
+    /// db、rbac 为应用共享设施。
     /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
+    /// 不执行I/O的adapter。
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
-
-    /// 包装为履约域可注入的共享 Port。
-    ///
+    /// 包装为领域授权端口。
     /// # 参数
-    /// * `db` - 身份与组织集合所在数据库。
-    /// * `rbac` - 现有 RBAC 快照服务。
-    ///
+    /// db、rbac 为共享身份设施。
     /// # 返回
-    /// 返回履约订单范围 Port。
-    ///
+    /// 已装配端口。
     /// # 错误
-    /// 不返回错误。
+    /// 不执行I/O。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn FulfillmentOrderDataScopePort> {
         Arc::new(Self::new(db, rbac))
     }
 }
-
 #[async_trait]
 impl FulfillmentOrderDataScopePort for MongoFulfillmentOrderDataScope {
-    fn allows(
-        &self,
-        scope: &FulfillmentOrderResolvedScope,
-        object: &FulfillmentOrderScopeObject,
-    ) -> erp_supply::Result<bool> {
-        evaluate_object(scope, object)
-    }
-
     async fn resolve(
         &self,
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
     ) -> erp_supply::Result<FulfillmentOrderResolvedScope> {
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(
-                actor,
-                &Permission::parse(format!("{}:{}", "supplier_fulfillment_order", action))?,
-                executor,
-            )
-            .await
-            .map_err(map_identity_error)?;
-        let access = access.into_facts();
-        Ok(FulfillmentOrderResolvedScope {
-            user_id: access.user_id,
-            resource: access.resource,
-            action: access.action,
-            role_clauses: map_clauses(&access.scope.role_clauses)?,
-            user_limit: access.scope.user_limit.as_ref().map(map_clause).transpose()?,
-            policy_version: access.policy_version,
-            organization_version: access.organizations.version,
-            scope_version: access.scope_version,
-            as_of: access.as_of,
-        })
+        erp_supply::authorization::resolve(
+            &self.db,
+            self.rbac.clone(),
+            actor,
+            "supplier_fulfillment_order",
+            action,
+            executor,
+        )
+        .await
+        .map_err(map_identity_error)
     }
-
+    async fn require(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_supply::Result<()> {
+        erp_supply::authorization::require(
+            &self.db,
+            self.rbac.clone(),
+            actor,
+            "supplier_fulfillment_order",
+            action,
+            id,
+            executor,
+        )
+        .await
+        .map_err(map_identity_error)
+    }
     async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
@@ -136,7 +118,6 @@ impl FulfillmentOrderDataScopePort for MongoFulfillmentOrderDataScope {
         scope_support::own_org(&self.db, user_id, at, executor, Into::into, map_identity_error).await
     }
 }
-
 /// 当前开放 W26 异常处理人 adapter。
 #[derive(Clone)]
 pub struct MongoFulfillmentExceptionHandlers {
@@ -271,49 +252,6 @@ fn w26_row_order_id(row: WorkItemRow) -> Option<String> {
         .filter(|id| !id.is_empty())
 }
 
-fn map_clauses(clauses: &[ScopeClause]) -> erp_supply::Result<Vec<FulfillmentOrderResolvedClause>> {
-    clauses.iter().map(map_clause).collect()
-}
-
-fn map_clause(clause: &ScopeClause) -> erp_supply::Result<FulfillmentOrderResolvedClause> {
-    reject_unsupported_dimensions(clause, "供应商履约订单范围不支持结算主体或仓库维度")
-        .map_err(erp_supply::Error::ValidationError)?;
-    Ok(FulfillmentOrderResolvedClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: clause.collaborative,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-    })
-}
-
-fn evaluate_object(
-    scope: &FulfillmentOrderResolvedScope,
-    object: &FulfillmentOrderScopeObject,
-) -> erp_supply::Result<bool> {
-    if scope.resource != "supplier_fulfillment_order" {
-        return Err(erp_supply::Error::ValidationError("范围资源与消费方不一致".into()));
-    }
-    evaluate_registered(
-        &scope.resource,
-        &scope.action,
-        scope.role_clauses.iter().map(public_clause),
-        scope.user_limit.as_ref().map(public_clause),
-        ScopedObject {
-            owned: object.owned,
-            collaborating: false,
-            historical_read_participant: false,
-            org_unit_id: object.org_unit_id.as_deref(),
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        map_identity_error,
-    )
-}
-
-fn public_clause(clause: &FulfillmentOrderResolvedClause) -> ScopeClause {
-    scope_clause(clause.company, clause.self_owned, clause.collaborative, &clause.org_unit_ids)
-}
-
 /// 构造绑定身份数据库的履约订单访问器。
 ///
 /// # 参数
@@ -345,119 +283,4 @@ pub fn scoped_fulfillment_service(db: Database, rbac: SharedRbacService) -> Supp
         MongoFulfillmentOrderDataScope::shared(db.clone(), rbac),
         MongoFulfillmentExceptionHandlers::shared(db),
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fulfillment_adapter_rejects_unsupported_scope_dimensions() {
-        let warehouse =
-            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
-        match map_clause(&warehouse) {
-            Err(erp_supply::Error::ValidationError(message)) => assert!(message.contains("仓库")),
-            other => panic!("expected validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn unwired_port_and_mismatched_resource_fail_closed() {
-        let mut scope = FulfillmentOrderResolvedScope {
-            user_id: "actor".into(),
-            resource: "supplier_fulfillment_order".into(),
-            action: "detail".into(),
-            role_clauses: vec![FulfillmentOrderResolvedClause {
-                company: true,
-                ..FulfillmentOrderResolvedClause::default()
-            }],
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 1,
-            scope_version: "v1".into(),
-            as_of: Instant::from_unix_secs(0),
-        };
-        let object = FulfillmentOrderScopeObject::default();
-        assert!(erp_supply::FailClosedFulfillmentOrderDataScopePort.allows(&scope, &object).is_err());
-        assert!(evaluate_object(&scope, &object).unwrap());
-        scope.resource = "work_item".into();
-        assert!(evaluate_object(&scope, &object).is_err());
-    }
-}
-
-#[cfg(test)]
-mod equivalence_tests {
-    use erp_supply::{FulfillmentOrderReadScope, FulfillmentOrderScopeClause, fulfillment_order_scope};
-    use serde_json::json;
-    use test_support::matches_filter as matches;
-
-    use super::*;
-
-    fn clause(mask: u8) -> FulfillmentOrderResolvedClause {
-        FulfillmentOrderResolvedClause {
-            company: mask & 1 != 0,
-            self_owned: mask & 2 != 0,
-            collaborative: mask & 4 != 0,
-            org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
-        }
-    }
-
-    fn scope_clause(mask: u8, actor: &str) -> FulfillmentOrderScopeClause {
-        FulfillmentOrderScopeClause {
-            company: mask & 1 != 0,
-            owner_user_id: (mask & 2 != 0).then(|| actor.to_string()),
-            business_org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
-        }
-    }
-
-    #[test]
-    fn public_object_decision_matches_compiled_conditions() {
-        let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
-        for action in ["list", "detail", "submit"] {
-            for role in 0..16 {
-                for second in [0, 2, 8] {
-                    for limit in -1..16 {
-                        let access = FulfillmentOrderResolvedScope {
-                            user_id: "actor".into(),
-                            resource: "supplier_fulfillment_order".into(),
-                            action: action.into(),
-                            role_clauses: vec![clause(role), clause(second)],
-                            user_limit: (limit >= 0).then(|| clause(limit as u8)),
-                            policy_version: 1,
-                            organization_version: 1,
-                            scope_version: "v1".into(),
-                            as_of: Instant::from_unix_secs(0),
-                        };
-                        let compiled = FulfillmentOrderReadScope {
-                            roles: vec![scope_clause(role, "actor"), scope_clause(second, "actor")],
-                            user_limit: (limit >= 0).then(|| scope_clause(limit as u8, "actor")),
-                        };
-                        assert_eq!(
-                            fulfillment_order_scope(&access, "actor"),
-                            compiled,
-                            "action={action}, role={role}, second={second}, limit={limit}"
-                        );
-                        for (index, id) in ids.iter().enumerate() {
-                            let object = FulfillmentOrderScopeObject {
-                                owned: index & 1 != 0,
-                                org_unit_id: Some(if index & 4 != 0 { "org-a" } else { "org-b" }.into()),
-                            };
-                            let owner = if object.owned { "actor" } else { "other" };
-                            let org = object.org_unit_id.as_deref().unwrap();
-                            let document = json!({
-                                "id": id,
-                                "follow_up_user_id": owner,
-                                "business_org_unit_id": org
-                            });
-                            assert_eq!(
-                                evaluate_object(&access, &object).unwrap(),
-                                matches(&compiled.document(), &document),
-                                "action={action}, role={role}, second={second}, limit={limit}, object={index}"
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

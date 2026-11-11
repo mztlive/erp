@@ -1,9 +1,9 @@
 //! 在基础写入前校验完整审批政策、岗位引用及岗位分离。
 use std::collections::HashSet;
 
+use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::repository::prelude::RoleRepositoryExt;
-use erp_identity::{AccessControlExt, Permission};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::policy::{
@@ -135,11 +135,15 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 .iter()
                 .map(Permission::parse)
                 .collect::<std::result::Result<Vec<_>, _>>()?;
-            let snapshot = self.rbac.role_permission_snapshot(AccountKind::Admin, user, &required).await?;
-            let enabled = self.db.roles().enabled_roles(snapshot.role_ids(), &mut NoTransaction).await?;
+            let actor = AuditActor::new(user.clone(), account.account.clone(), AccountKind::Admin);
+            let service = AuthorizationService::new(
+                self.db.clone(),
+                self.rbac.clone(),
+                AuthorizationRegistry::new(vec![])?,
+            );
+            let qualified = service.permissions(&actor, &required, &mut NoTransaction).await?;
             for permission in required {
-                let granting = snapshot.granting_role_ids(&permission);
-                if !enabled.iter().any(|role| granting.iter().any(|id| id.as_str() == role.base.id)) {
+                if qualified.as_ref().is_none_or(|value| !value.permissions().covers_one(&permission)) {
                     return Err(Error::Forbidden(format!(
                         "演示账号 {} 缺少操作权限 {permission}，请在角色配置中核定后重新生成",
                         account.account

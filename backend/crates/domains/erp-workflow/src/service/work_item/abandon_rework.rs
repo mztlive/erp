@@ -148,21 +148,18 @@ fn verify_abandon_replay(
 
 #[cfg(test)]
 mod tests {
-    use application_core::AuditActor;
     use bpm::ApprovalProcessInstanceId;
-    use erp_core::AccountKind;
     use erp_core::ids::WorkItemId;
-    use erp_identity::{Permission, PermissionSet};
 
     use super::*;
     use crate::entity::work_item::{
         AssignmentSource, WorkItemData, WorkItemPriority, WorkItemSubjectVersions,
     };
     use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
-    use crate::service::work_item::access::{TaskEligibility, has_item_access};
+    use crate::service::work_item::access::task_facts_current;
 
     #[test]
-    fn abandoned_v1_replays_after_v2_only_with_exact_history_and_current_object_permission() {
+    fn abandoned_v1_replays_after_v2_only_with_exact_history_and_matching_command() {
         let id = "approval-rework:instance-v1";
         let mut item = WorkItem::new_with_responsibility_key(
             WorkItemId::new(id),
@@ -210,40 +207,15 @@ mod tests {
         let mut fact = ObjectFact::new("request", "付款申请", "submitter");
         fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["2".into()]).unwrap();
         let key = (ObjectKind::PurchasePaymentRequest, "request".into());
-        let access = TaskEligibility::new(AuditActor::new(
-            "submitter".to_string(),
-            "submitter".to_string(),
-            AccountKind::Admin,
-        ))
-        .with_permissions(PermissionSet::new(
-            vec!["purchase_payment_request:detail".into(), "work_item:detail".into()]
-                .into_iter()
-                .map(|code: String| Permission::parse(code).unwrap()),
-        ));
-        assert!(!has_item_access(&item, &access, &ObjectFactMap::from([(key.clone(), fact.clone())])));
+        assert!(!task_facts_current(&item, "submitter", &ObjectFactMap::from([(key.clone(), fact.clone())])));
         fact.subject_versions.register_rework_history(&ApprovalProcessInstanceId::new("instance-v1"), 1);
         let facts = ObjectFactMap::from([(key, fact)]);
-        assert!(has_item_access(&item, &access, &facts));
+        assert!(task_facts_current(&item, "submitter", &facts));
         verify_abandon_replay(&item, &receipt, &command("不再办理"), "submitter").unwrap();
         assert!(verify_abandon_replay(&item, &receipt, &command("另一说明"), "submitter").is_err());
         assert!(verify_abandon_replay(&item, &receipt, &command("不再办理"), "other").is_err());
-        assert!(!has_item_access(
-            &item,
-            &TaskEligibility::new(AuditActor::new(
-                "submitter".into(),
-                "submitter".into(),
-                AccountKind::Admin
-            )),
-            &facts
-        ));
-        assert!(!has_item_access(
-            &item,
-            &TaskEligibility::new(AuditActor::new("other".into(), "other".into(), AccountKind::Admin))
-                .with_permissions(access.task.permissions.clone()),
-            &facts
-        ));
         item.status = WorkItemStatus::Open;
-        assert!(!has_item_access(&item, &access, &facts));
+        assert!(!task_facts_current(&item, "submitter", &facts));
         assert!(verify_abandon_replay(&item, &receipt, &command("不再办理"), "submitter").is_err());
     }
 }

@@ -58,7 +58,7 @@ pub use product::{
     ProductFilter, ProductRepositoryExt, ProductRevisionFilter, ProductRevisionMediaRepositoryExt,
     ProductRevisionRepositoryExt, ProductRevisionRow,
 };
-pub use scope::{CatalogReadScope, CatalogScopeClause};
+pub use scope::CatalogReadScope;
 pub use sellable::{SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField};
 pub use sellable_projection::{
     SELLABLE_SKU_PROJECTION_VERSION, SellableSkuProjectionState, SellableSkuProjectionStore,

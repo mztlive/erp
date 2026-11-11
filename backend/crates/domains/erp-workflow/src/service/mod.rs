@@ -3,3 +3,5 @@
 pub mod approval;
 pub mod document_registry;
 pub mod work_item;
+
+pub(crate) mod authorization;

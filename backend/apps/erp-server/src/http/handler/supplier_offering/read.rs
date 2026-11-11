@@ -11,7 +11,6 @@ use erp_supply::dto::offering_history::{OfferingHistoryPage, OfferingHistoryPara
 use super::can_view_costs;
 use crate::http::errors::Result;
 use crate::http::extractor::Query;
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::MongoOfferingDataScope;
@@ -31,7 +30,6 @@ use crate::wiring::MongoOfferingDataScope;
 /// 无动作权限返回 Forbidden；越权对象与缺失对象返回 NotFound。
 pub async fn detail(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SupplierOfferingView> {
@@ -42,7 +40,7 @@ pub async fn detail(
     )
     .detail(&id, &actor)
     .await?;
-    if !can_view_costs(&state, &subject).await? {
+    if !can_view_costs(&state, &actor).await? {
         view.redact_costs();
     }
     Ok(ApiResponse::ok_with_data(view))
@@ -64,7 +62,6 @@ pub async fn detail(
 /// 游标非法、权限不足、对象不可见或存储失败时返回统一错误。
 pub async fn history(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(params): Query<OfferingHistoryParams>,
@@ -73,7 +70,7 @@ pub async fn history(
         .with_data_scope(MongoOfferingDataScope::shared(state.application().db(), state.application().rbac()))
         .history(&id, params, &actor)
         .await?;
-    if !can_view_costs(&state, &subject).await? {
+    if !can_view_costs(&state, &actor).await? {
         for item in &mut page.items {
             item.redact_costs();
         }

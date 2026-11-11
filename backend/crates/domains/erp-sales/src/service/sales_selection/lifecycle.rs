@@ -34,7 +34,7 @@ impl SalesSelectionService {
         operation: IdempotencyOperation,
         crypto: Option<LinkTokenCrypto>,
     ) -> Result<SalesSelectionBookletView> {
-        let service = Self::new(self.db.clone());
+        let service = self.clone();
         let (id, actor) = (id.to_string(), actor.to_string());
         self.db
             .client()
@@ -56,6 +56,14 @@ impl SalesSelectionService {
         crypto: Option<LinkTokenCrypto>,
         tx: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
+        let action = match operation {
+            IdempotencyOperation::RotateLink => "rotate_link",
+            IdempotencyOperation::Close => "close",
+            IdempotencyOperation::RevokeAccess => "revoke",
+            IdempotencyOperation::Void => "void",
+            _ => return Err(Error::Internal("非法选品生命周期命令".into())),
+        };
+        self.authorize_booklet(id, action, tx).await?;
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash =
             request_hash(&serde_json::to_string(&(id, &req)).map_err(|e| Error::Internal(e.to_string()))?);

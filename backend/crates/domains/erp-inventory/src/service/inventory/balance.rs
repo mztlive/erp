@@ -3,19 +3,22 @@ use std::collections::{HashMap, HashSet};
 use application_core::AuditActor;
 use erp_core::money::Quantity;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
 use super::movement::load_movement_source_document_nos;
 use crate::dto::scope::{BALANCE_OWNERSHIP_BASIS, BALANCE_SCOPE_SUMMARY};
 use crate::dto::{
-    InventoryListPage, PageView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
-    StockMovementView, ensure_scope_version,
+    InventoryListPage, PageView, StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams,
+    StockBalanceListQuery, StockBalanceView, StockMovementView, StockReservationView, ensure_scope_version,
 };
 use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
-use crate::ports::{SkuFact, SkuRevisionFact, WarehouseFact, WarehouseRevisionFact};
+use crate::ports::{
+    CatalogFactsPort, FulfillmentFactsPort, InventoryAuthorization, SkuFact, SkuRevisionFact, WarehouseFact,
+    WarehouseFactsPort, WarehouseRevisionFact,
+};
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockBalanceFilter, StockBalanceRow, StockMovementFilter};
 
@@ -52,55 +55,8 @@ impl InventoryService {
         let page_no = query.paging.page;
         let page_size = query.paging.page_size;
         let scope_version = query.scope_version.clone();
-        let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let catalog = std::sync::Arc::clone(&self.catalog_facts);
-        let actor = actor.clone();
-        let client = db.client().clone();
-        let (page, authorization) = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
-                    if !authorization.actor_is_active() {
-                        return Err(Error::Forbidden("当前账号无库存读取权限".to_string()));
-                    }
-                    let search = super::search::sku_filter(
-                        catalog.as_ref(),
-                        query.q.as_deref(),
-                        query.sku_id.as_ref(),
-                        executor,
-                    )
-                    .await?;
-                    let search = db
-                        .inventory()
-                        .balance_search(search, query.balance_id.as_deref(), query.availability, executor)
-                        .await?;
-                    let (sort_by, sort_ascending) = query.paging.sort_selection();
-                    let filter = StockBalanceFilter {
-                        search,
-                        warehouse_ids: authorization
-                            .balance_list_scope()
-                            .repository_warehouse_ids(query.warehouse_id),
-                        sku_id: query.sku_id,
-                        page: query.paging.page,
-                        page_size: query.paging.page_size,
-                        sort_by,
-                        sort_ascending,
-                    };
-                    let page = db.stock_balances().search_stock_balances(&filter, executor).await?;
-                    Ok::<_, Error>((page, authorization))
-                })
-            })
-            .await?;
-        let warehouse_ids: Vec<String> = page.items.iter().map(|row| row.warehouse_id.to_string()).collect();
-        let sku_ids: Vec<String> = page.items.iter().map(|row| row.sku_id.to_string()).collect();
-        let movement_ids: Vec<String> = page
-            .items
-            .iter()
-            .filter_map(|row| row.last_movement_id.as_ref().map(ToString::to_string))
-            .collect();
-        let enrichments = self.load_enrichments(&warehouse_ids, &sku_ids, &movement_ids).await?;
-        let active_reservation_dims = active_reservation_dims(&self.db, &warehouse_ids, &sku_ids).await?;
+        let BalancePage { page, authorization, enrichments, active_reservation_dims } =
+            self.balance_page(query, actor).await?;
         let items = page
             .items
             .into_iter()
@@ -127,6 +83,37 @@ impl InventoryService {
         ))
     }
 
+    async fn balance_page(&self, query: StockBalanceListQuery, actor: &AuditActor) -> Result<BalancePage> {
+        let db = self.db.clone();
+        let authorization_port = std::sync::Arc::clone(&self.authorization);
+        let catalog = std::sync::Arc::clone(&self.catalog_facts);
+        let warehouse = self.warehouse_facts.clone();
+        let actor = actor.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let authorization = authorization_port.authorize(&actor, executor).await?;
+                    if !authorization.actor_is_active() {
+                        return Err(Error::Forbidden("当前账号无库存读取权限".into()));
+                    }
+                    let page =
+                        search_balance_rows(&db, catalog.as_ref(), &authorization, query, executor).await?;
+                    let (enrichments, active_reservation_dims) = balance_page_enrichments(
+                        &db,
+                        warehouse.as_ref(),
+                        catalog.as_ref(),
+                        &page.items,
+                        executor,
+                    )
+                    .await?;
+                    authorization.validate(executor).await?;
+                    Ok(BalancePage { page, authorization, enrichments, active_reservation_dims })
+                })
+            })
+            .await
+    }
+
     /// 查询库存余额详情（W10 详情：余额 + 最近流水 + 有效预占 + 未过账调整）。
     ///
     /// # 参数
@@ -147,10 +134,11 @@ impl InventoryService {
     pub async fn stock_balance_detail(&self, id: &str, actor: &AuditActor) -> Result<StockBalanceDetailView> {
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
+        let fulfillment = self.fulfillment_facts.clone();
         let actor = actor.clone();
         let id = id.to_string();
         let client = db.client().clone();
-        let (balance, authorization) = client
+        let (balance, authorization, details) = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let authorization = authorization_port.authorize(&actor, executor).await?;
@@ -164,91 +152,155 @@ impl InventoryService {
                     {
                         return Err(Error::NotFound("库存余额不存在".to_string()));
                     }
-                    Ok::<_, Error>((balance, authorization))
+                    let details =
+                        balance_details(&db, fulfillment.as_ref(), &balance, &authorization, executor)
+                            .await?;
+                    authorization.validate(executor).await?;
+                    Ok::<_, Error>((balance, authorization, details))
                 })
             })
             .await?;
-        let filter = StockMovementFilter {
-            warehouse_ids: Some(vec![balance.warehouse_id.clone()]),
-            sku_id: Some(balance.sku_id.clone()),
-            page_size: 8,
-            sort_by: Some("occurred_at".to_string()),
-            ..Default::default()
-        };
-        let movements = self.db.stock_movements().search_stock_movements(&filter, &mut NoTransaction).await?;
-        let reservations = self
-            .db
-            .inventory()
-            .operable_reservations_for_balance(&balance.warehouse_id, &balance.sku_id, &mut NoTransaction)
-            .await?;
-        let pending = if authorization.read_scope().covers(balance.warehouse_id.as_ref()) {
-            self.db
-                .inventory()
-                .pending_adjustments_for_warehouse(&balance.warehouse_id, &mut NoTransaction)
-                .await?
-        } else {
-            Vec::new()
-        };
-        let enrichments = self
-            .load_enrichments(&[balance.warehouse_id.to_string()], &[balance.sku_id.to_string()], &[])
-            .await?;
+        let enrichments = load_balance_enrichments(
+            &self.db,
+            self.warehouse_facts.as_ref(),
+            self.catalog_facts.as_ref(),
+            &[balance.warehouse_id.to_string()],
+            &[balance.sku_id.to_string()],
+            &[],
+            &mut NoTransaction,
+        )
+        .await?;
         let balance_view = enrich_balance_view(
             (&balance).into(),
             &enrichments,
-            !reservations.is_empty(),
+            !details.reservations.is_empty(),
             authorization.can_create(balance.warehouse_id.as_ref()),
         );
-        let mut recent_movements: Vec<StockMovementView> =
-            movements.items.into_iter().map(super::movement::movement_row_view).collect();
-        let source_document_nos =
-            load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &recent_movements)
-                .await?;
-        for movement in &mut recent_movements {
-            movement.source_document_no = source_document_nos.get(&movement.source_document_id).cloned();
-        }
         Ok(StockBalanceDetailView {
             balance: balance_view,
-            recent_movements,
-            active_reservations: reservations.into_iter().map(Into::into).collect(),
-            pending_adjustments: pending.into_iter().map(Into::into).collect(),
+            recent_movements: details.movements,
+            active_reservations: details.reservations,
+            pending_adjustments: details.adjustments,
         })
     }
+}
 
-    /// 批量加载余额列表/详情的基础信息投影（仓库/仓库修订/SKU/SKU修订/最后流水）。
-    ///
-    /// 全部按 `$in` 批量取回（禁止 N+1）。
-    ///
-    /// # 参数
-    /// * `warehouse_ids` - 仓库主键集合
-    /// * `sku_ids` - SKU 主键集合
-    /// * `movement_ids` - 流水主键集合（可为空）
-    ///
-    /// # 返回
-    /// 返回按主键索引的投影映射。
-    ///
-    /// # 错误
-    /// 任一批量查询失败时返回 `RepositoryError`。
-    async fn load_enrichments(
-        &self,
-        warehouse_ids: &[String],
-        sku_ids: &[String],
-        movement_ids: &[String],
-    ) -> Result<BalanceEnrichments> {
-        let warehouses = self.warehouse_facts.warehouses_by_ids(warehouse_ids, &mut NoTransaction).await?;
-        let skus = self.catalog_facts.skus_by_ids(sku_ids, &mut NoTransaction).await?;
-        let warehouse_revision_ids: Vec<String> =
-            warehouses.values().filter_map(|warehouse| warehouse.current_revision_id.clone()).collect();
-        let warehouse_revisions = self
-            .warehouse_facts
-            .warehouse_revisions_by_ids(&warehouse_revision_ids, &mut NoTransaction)
+struct BalancePage {
+    page: persistence_core::PageResult<StockBalanceRow>,
+    authorization: InventoryAuthorization,
+    enrichments: BalanceEnrichments,
+    active_reservation_dims: HashSet<(String, String)>,
+}
+
+async fn search_balance_rows(
+    db: &Database,
+    catalog: &dyn CatalogFactsPort,
+    authorization: &InventoryAuthorization,
+    query: StockBalanceListQuery,
+    executor: &mut dyn Executor,
+) -> Result<persistence_core::PageResult<StockBalanceRow>> {
+    let search =
+        super::search::sku_filter(catalog, query.q.as_deref(), query.sku_id.as_ref(), executor).await?;
+    let search = db
+        .inventory()
+        .balance_search(search, query.balance_id.as_deref(), query.availability, executor)
+        .await?;
+    let (sort_by, sort_ascending) = query.paging.sort_selection();
+    let filter = StockBalanceFilter {
+        search,
+        warehouse_ids: authorization.balance_list_scope().repository_warehouse_ids(query.warehouse_id),
+        sku_id: query.sku_id,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by,
+        sort_ascending,
+    };
+    let page = db.stock_balances().search_stock_balances(&filter, executor).await?;
+    Ok(page)
+}
+
+async fn load_balance_enrichments(
+    db: &Database,
+    warehouse: &dyn WarehouseFactsPort,
+    catalog: &dyn CatalogFactsPort,
+    warehouse_ids: &[String],
+    sku_ids: &[String],
+    movement_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<BalanceEnrichments> {
+    let warehouses = warehouse.warehouses_by_ids(warehouse_ids, executor).await?;
+    let skus = catalog.skus_by_ids(sku_ids, executor).await?;
+    let warehouse_revision_ids: Vec<String> =
+        warehouses.values().filter_map(|warehouse| warehouse.current_revision_id.clone()).collect();
+    let warehouse_revisions = warehouse.warehouse_revisions_by_ids(&warehouse_revision_ids, executor).await?;
+    let sku_revision_ids: Vec<String> =
+        skus.values().filter_map(|sku| sku.current_revision_id.clone()).collect();
+    let sku_revisions = catalog.sku_revisions_by_ids(&sku_revision_ids, executor).await?;
+    let movements = load_movements_by_ids(db, movement_ids, executor).await?;
+    Ok(BalanceEnrichments { warehouses, warehouse_revisions, skus, sku_revisions, movements })
+}
+
+async fn balance_page_enrichments(
+    db: &Database,
+    warehouse: &dyn WarehouseFactsPort,
+    catalog: &dyn CatalogFactsPort,
+    rows: &[StockBalanceRow],
+    executor: &mut dyn Executor,
+) -> Result<(BalanceEnrichments, HashSet<(String, String)>)> {
+    let warehouse_ids = rows.iter().map(|row| row.warehouse_id.to_string()).collect::<Vec<_>>();
+    let sku_ids = rows.iter().map(|row| row.sku_id.to_string()).collect::<Vec<_>>();
+    let movement_ids = rows
+        .iter()
+        .filter_map(|row| row.last_movement_id.as_ref().map(ToString::to_string))
+        .collect::<Vec<_>>();
+    let enriched =
+        load_balance_enrichments(db, warehouse, catalog, &warehouse_ids, &sku_ids, &movement_ids, executor)
             .await?;
-        let sku_revision_ids: Vec<String> =
-            skus.values().filter_map(|sku| sku.current_revision_id.clone()).collect();
-        let sku_revisions =
-            self.catalog_facts.sku_revisions_by_ids(&sku_revision_ids, &mut NoTransaction).await?;
-        let movements = load_movements_by_ids(&self.db, movement_ids).await?;
-        Ok(BalanceEnrichments { warehouses, warehouse_revisions, skus, sku_revisions, movements })
+    let active = active_reservation_dims(db, &warehouse_ids, &sku_ids, executor).await?;
+    Ok((enriched, active))
+}
+
+/// 余额详情的受限附属业务事实，全部在主读取事务内取证。
+struct BalanceDetails {
+    movements: Vec<StockMovementView>,
+    reservations: Vec<StockReservationView>,
+    adjustments: Vec<StockAdjustmentView>,
+}
+
+async fn balance_details(
+    db: &Database,
+    fulfillment: &dyn FulfillmentFactsPort,
+    balance: &StockBalance,
+    authorization: &InventoryAuthorization,
+    executor: &mut dyn Executor,
+) -> Result<BalanceDetails> {
+    let filter = StockMovementFilter {
+        warehouse_ids: Some(vec![balance.warehouse_id.clone()]),
+        sku_id: Some(balance.sku_id.clone()),
+        page_size: 8,
+        sort_by: Some("occurred_at".into()),
+        ..Default::default()
+    };
+    let page = db.stock_movements().search_stock_movements(&filter, executor).await?;
+    let reservations = db
+        .inventory()
+        .operable_reservations_for_balance(&balance.warehouse_id, &balance.sku_id, executor)
+        .await?;
+    let adjustments = if authorization.read_scope().covers(balance.warehouse_id.as_ref()) {
+        db.inventory().pending_adjustments_for_warehouse(&balance.warehouse_id, executor).await?
+    } else {
+        Vec::new()
+    };
+    let mut movements = page.items.into_iter().map(super::movement::movement_row_view).collect::<Vec<_>>();
+    let numbers = load_movement_source_document_nos(db, fulfillment, &movements, executor).await?;
+    for movement in &mut movements {
+        movement.source_document_no = numbers.get(&movement.source_document_id).cloned();
     }
+    Ok(BalanceDetails {
+        movements,
+        reservations: reservations.into_iter().map(Into::into).collect(),
+        adjustments: adjustments.into_iter().map(Into::into).collect(),
+    })
 }
 
 /// 余额列表/详情的基础信息投影映射。
@@ -281,14 +333,13 @@ async fn active_reservation_dims(
     db: &Database,
     warehouse_ids: &[String],
     sku_ids: &[String],
+    executor: &mut dyn Executor,
 ) -> Result<HashSet<(String, String)>> {
     if warehouse_ids.is_empty() || sku_ids.is_empty() {
         return Ok(HashSet::new());
     }
-    let reservations = db
-        .inventory()
-        .operable_reservations_for_dimensions(warehouse_ids, sku_ids, &mut NoTransaction)
-        .await?;
+    let reservations =
+        db.inventory().operable_reservations_for_dimensions(warehouse_ids, sku_ids, executor).await?;
     Ok(reservations
         .into_iter()
         .map(|reservation| (reservation.warehouse_id.to_string(), reservation.sku_id.to_string()))
@@ -306,11 +357,15 @@ async fn active_reservation_dims(
 ///
 /// # 错误
 /// 查询失败时返回 `RepositoryError`。
-async fn load_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, StockMovement>> {
+async fn load_movements_by_ids(
+    db: &Database,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, StockMovement>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let movements = db.inventory().movements_by_ids(ids, &mut NoTransaction).await?;
+    let movements = db.inventory().movements_by_ids(ids, executor).await?;
     Ok(movements.into_iter().map(|movement| (movement.base.id.clone(), movement)).collect())
 }
 

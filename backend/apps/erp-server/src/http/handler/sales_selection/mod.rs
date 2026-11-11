@@ -31,7 +31,6 @@ use serde::Deserialize;
 use crate::http::errors::{Error, Result};
 use crate::http::extractor::{Json, Query, UserID};
 use crate::http::handler::customer::ensure_customer_access;
-use crate::http::middleware::RbacSubject;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
@@ -55,12 +54,11 @@ fn process(state: &HttpState) -> SalesSelectionProcess {
 /// 返回分页。
 pub async fn booklet_list(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
     Extension(actor): Extension<AuditActor>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(mut params): Query<SalesSelectionBookletListParams>,
 ) -> Result<SelectionBookletListView> {
-    params.authorized_customer_ids = access::customer_ids(&state, &subject, &user_id).await?;
+    params.authorized_customer_ids = access::customer_ids(&state, &actor, &user_id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params, actor).await?))
 }
 
@@ -321,12 +319,11 @@ pub async fn booklet_void(
 /// 返回分页。
 pub async fn proposal_list(
     State(state): State<HttpState>,
-    Extension(subject): Extension<RbacSubject>,
     Extension(actor): Extension<AuditActor>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(mut params): Query<SalesSelectionProposalListParams>,
 ) -> Result<SelectionProposalListView> {
-    params.authorized_customer_ids = access::customer_ids(&state, &subject, &user_id).await?;
+    params.authorized_customer_ids = access::customer_ids(&state, &actor, &user_id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params, actor).await?))
 }
 

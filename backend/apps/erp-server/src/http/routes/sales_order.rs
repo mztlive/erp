@@ -5,7 +5,7 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::fulfillment::address_arrangement;
 use crate::http::handler::sales_order;
@@ -20,7 +20,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/delivery-arrangements",
@@ -40,7 +40,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 查询、方案预填与创建入口，各自保留资源动作权限。
-fn read_create_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn read_create_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/timeline",
@@ -73,7 +73,7 @@ fn read_create_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 已有销售单的编辑、提交、撤回、作废和交接入口。
-fn lifecycle_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/working-copy",
@@ -125,7 +125,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 /// 返回逐操作保留权限校验和上传限制的路由集合。
 /// # 错误
 /// 无；业务错误由各处理器返回。
-fn evidence_contract_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn evidence_contract_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/contract-check",

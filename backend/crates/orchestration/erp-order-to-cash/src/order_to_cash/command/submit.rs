@@ -5,7 +5,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
 };
-use erp_sales::dto::sales_order::{SubmissionView, SubmitSalesOrderRequest};
+use erp_sales::dto::sales_order::{SalesOrderDraftRequest, SubmissionView, SubmitSalesOrderRequest};
 use erp_sales::entity::command_receipt::SalesCommandResult;
 use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
@@ -49,6 +49,29 @@ use crate::order_to_cash::command_event::{
 };
 use crate::order_to_cash::subject_ref_for_sales_business;
 use crate::{Error, Result};
+
+/// 原提交命令的幂等身份，在预读和实际提交之间保持一致。
+struct SubmissionIdentity {
+    idempotency_key: String,
+    audit_id: String,
+    fingerprint: String,
+    key_hash: CommandFingerprint,
+}
+
+impl SubmissionIdentity {
+    fn new(id: &str, req: &SubmitSalesOrderRequest, actor: &AuditActor) -> Result<Self> {
+        let idempotency_key = req.idempotency_key.trim().to_string();
+        if idempotency_key.is_empty() {
+            return Err(Error::ValidationError("幂等键不能为空".to_string()));
+        }
+        Ok(Self {
+            audit_id: sales_submission_audit_id(actor.id(), id, &idempotency_key),
+            fingerprint: sales_submission_fingerprint(actor.id(), id, req)?,
+            key_hash: CommandFingerprint::from_parts([idempotency_key.clone()]),
+            idempotency_key,
+        })
+    }
+}
 
 /// 销售提交启动恢复入参。
 struct RecoverSalesSubmissionStartInput<'a> {
@@ -199,21 +222,49 @@ impl SalesOrderCommandProcess {
         req.validate()?;
         let access = self.command_access(actor, "submit")?;
         let authorized_order = access.current(id, &mut NoTransaction).await?;
-        let idempotency_key = req.idempotency_key.trim().to_string();
-        if idempotency_key.is_empty() {
-            return Err(Error::ValidationError("幂等键不能为空".to_string()));
-        }
-        let audit_id = sales_submission_audit_id(actor.id(), id, &idempotency_key);
-        let fingerprint = sales_submission_fingerprint(actor.id(), id, &req)?;
-        let expected_key_hash = CommandFingerprint::from_parts([idempotency_key.clone()]);
-        if let Some(existing) =
-            self.replay_sales_submission(&audit_id, &fingerprint, &expected_key_hash, id, actor).await?
+        let identity = SubmissionIdentity::new(id, &req, actor)?;
+        if let Some(existing) = self
+            .replay_sales_submission(&identity.audit_id, &identity.fingerprint, &identity.key_hash, id, actor)
+            .await?
         {
             return Ok(existing);
         }
+        let this = self.clone();
+        let read_access = access.clone();
+        let read_actor = actor.clone();
+        let request = req.clone();
+        let draft = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.prepare_sales_edit(
+                        &read_access,
+                        authorized_order,
+                        (request.contract_id, request.customer_id, request.draft),
+                        &read_actor,
+                        true,
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await?;
+        self.submit_prepared_draft(id, req, actor, draft, identity).await
+    }
+
+    /// 原读取事务确认关系后，完成目录预检、冻结副本及现有提交写入流程。
+    async fn submit_prepared_draft(
+        &self,
+        id: &str,
+        req: SubmitSalesOrderRequest,
+        actor: &AuditActor,
+        draft: (SalesOrder, SalesOrderDraftRequest),
+        identity: SubmissionIdentity,
+    ) -> Result<SubmissionView> {
         let resubmission_reason = req.resubmission_reason.clone();
         let PreparedSubmissionCopy { order, mut working_copy, copy_lines, working_copy_plan } =
-            self.prepare_submission_copy(req, actor, &access, authorized_order).await?;
+            self.prepare_submission_copy(req, actor, draft).await?;
         if let Some(existing) = self.submission_for_copy(&working_copy).await? {
             return Ok(existing);
         }
@@ -235,9 +286,9 @@ impl SalesOrderCommandProcess {
                 working_copy_plan,
             },
             actor,
-            &idempotency_key,
-            audit_id,
-            fingerprint,
+            &identity.idempotency_key,
+            identity.audit_id,
+            identity.fingerprint,
         )
         .await
     }
@@ -260,19 +311,9 @@ impl SalesOrderCommandProcess {
         &self,
         req: SubmitSalesOrderRequest,
         actor: &AuditActor,
-        access: &SalesCommandAccess,
-        authorized_order: SalesOrder,
+        draft: (SalesOrder, SalesOrderDraftRequest),
     ) -> Result<PreparedSubmissionCopy> {
-        let (order, draft) = self
-            .prepare_sales_edit(
-                access,
-                authorized_order,
-                (req.contract_id, req.customer_id),
-                req.draft,
-                actor,
-                true,
-            )
-            .await?;
+        let (order, draft) = draft;
         self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
         let order_id = SalesOrderId::new(order.base.id.clone());
         let active_working_copy = self
@@ -694,5 +735,40 @@ impl SalesStartRecovery {
             executor,
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use erp_core::AccountKind;
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn submission_identity_keeps_the_original_payload_for_replay_after_preflight() {
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        let mut request: SubmitSalesOrderRequest = serde_json::from_value(json!({
+            "version": 1, "idempotency_key": " request-key ",
+            "draft": {"editor_user_id": "actor", "lines": []}
+        }))
+        .unwrap();
+        let identity = SubmissionIdentity::new("sales-1", &request, &actor).unwrap();
+        assert_eq!(identity.idempotency_key, "request-key");
+        assert_eq!(request.idempotency_key, " request-key ");
+        assert_eq!(
+            identity.fingerprint,
+            sales_submission_fingerprint(actor.id(), "sales-1", &request).unwrap()
+        );
+        let prepared = request.clone();
+        assert_eq!(
+            identity.fingerprint,
+            sales_submission_fingerprint(actor.id(), "sales-1", &prepared).unwrap()
+        );
+        request.idempotency_key = " ".into();
+        assert!(matches!(
+            SubmissionIdentity::new("sales-1", &request, &actor),
+            Err(Error::ValidationError(_))
+        ));
     }
 }

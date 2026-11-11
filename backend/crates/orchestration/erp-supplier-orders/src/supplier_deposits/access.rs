@@ -5,14 +5,12 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_finance::entity::supplier_deposit::{DepositAccountIdentity, SupplierDepositAccount};
 use erp_finance::repository::SupplierDepositExt;
-use erp_identity::access_control::ScopedObject;
-use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::{Permission, SharedRbacService};
-use erp_party::PartyExt;
-use erp_supplier::SupplierExt;
+use erp_identity::{AccessSubject, AccessTarget, Permission, ResourceTargets, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
+use sha2::{Digest, Sha256};
 
+use super::repository::authorization::authorization;
 use crate::{Error, Result};
 
 pub(super) async fn account_access(
@@ -28,7 +26,15 @@ pub(super) async fn account_access(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("预存款账户不存在".into()))?;
-    identity_access(db, rbac, &account.identity, actor, action, executor).await?;
+    let (authorization, _) = authorization(db, rbac, None);
+    authorization
+        .require(
+            actor,
+            &Permission::parse(format!("supplier_deposit:{action}"))?,
+            AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+            executor,
+        )
+        .await?;
     Ok(account)
 }
 
@@ -59,33 +65,17 @@ pub(super) async fn identity_access(
     action: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let payer = db
-        .parties()
-        .find_by_id(&identity.payer_party_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("我方付款主体不存在".into()))?;
-    if !payer.is_active() || payer.company_profile.is_none() {
-        return Err(Error::BusinessLogicError("预存款付款主体必须是有效的我方公司".into()));
-    }
-    let supplier = db
-        .supplier_accounts()
-        .find_by_id(&identity.supplier_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("供应商不存在".into()))?;
-    let access = DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, &Permission::parse(format!("{}:{}", "supplier_deposit", action))?, executor)
+    let payload = serde_json::to_vec(identity).map_err(|error| Error::Internal(error.to_string()))?;
+    let target = hex::encode(Sha256::digest(payload));
+    let (authorization, _) = authorization(db, rbac, Some((target.clone(), identity.clone())));
+    authorization
+        .require(
+            actor,
+            &Permission::parse(format!("supplier_deposit:{action}"))?,
+            AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[&target])? },
+            executor,
+        )
         .await?;
-    let object = ScopedObject {
-        owned: false,
-        collaborating: false,
-        historical_read_participant: false,
-        org_unit_id: Some(&supplier.business_org_unit_id),
-        settlement_party_id: Some(&identity.payer_party_id),
-        warehouse_id: None,
-    };
-    if !access.scope.allows(&object, false) {
-        return Err(Error::Forbidden("预存款账户不在当前付款主体和供应商组织权限范围内".into()));
-    }
     Ok(())
 }
 

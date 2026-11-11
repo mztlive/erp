@@ -2,6 +2,7 @@
 
 mod access;
 mod replacement;
+mod repository;
 pub use replacement::prepare_execution_funds_replacement;
 mod automatic;
 pub use automatic::prepare_automatic_execution_funds;

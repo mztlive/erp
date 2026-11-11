@@ -2,7 +2,7 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::supplier_api;
 use crate::http::middleware::with_permission;
@@ -10,7 +10,7 @@ use crate::http::state::HttpState;
 use crate::permissions;
 
 /// 返回本域管理端路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     connection_routes(rbac)
         .merge(governance_routes(rbac))
         .merge(dangaoshushu_routes(rbac))
@@ -20,7 +20,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(adoption_batch_routes(rbac))
 }
 
-fn jd_vop_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn jd_vop_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/jd-vop-tokens",
@@ -45,14 +45,14 @@ fn jd_vop_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn adoption_batch_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn adoption_batch_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     adoption_batch_query_routes(rbac)
         .merge(adoption_batch_command_routes(rbac))
         .merge(adoption_preparation_routes(rbac))
 }
 
 /// 注册准备摘要、轻量选择及任务控制入口。
-fn adoption_preparation_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn adoption_preparation_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/adoption-batches/{batch}/selection",
@@ -77,7 +77,7 @@ fn adoption_preparation_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn adoption_batch_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/adoption-batches/{batch}/submission-result",
@@ -113,7 +113,7 @@ fn adoption_batch_query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn adoption_batch_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/adoption-batches/{batch}/work",
@@ -157,7 +157,7 @@ fn adoption_batch_command_routes(rbac: &SharedRbacService) -> Router<HttpState> 
         )
 }
 
-fn adoption_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn adoption_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/catalog/adoptions/preview",
@@ -185,7 +185,7 @@ fn adoption_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn dangaoshushu_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/reference-options",
@@ -213,7 +213,7 @@ fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn connection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn connection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connector-types",
@@ -258,7 +258,7 @@ fn connection_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn governance_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn governance_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/supplier-api-connections/{id}/jobs/{job_id}",
         with_permission(
@@ -269,7 +269,7 @@ fn governance_routes(rbac: &SharedRbacService) -> Router<HttpState> {
     )
 }
 
-fn catalog_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn catalog_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-api-connections/{id}/catalog/{item}/identity-review",

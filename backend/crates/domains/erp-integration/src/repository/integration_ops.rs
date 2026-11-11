@@ -16,10 +16,14 @@
 //! 筛选/行类型定义在 `filters` 子模块，经本模块再导出给 `IntegrationOpsExt`。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_identity::CompiledAccess;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
+use persistence_core::{
+    Error as PersistenceError, Executor, PageResult, Pagination, QueryFilter, Repository, Result, aggregate,
+    mongo_ops,
+};
 
 use super::IntegrationOpsExt;
 use crate::entity::integration_ops::{
@@ -218,6 +222,7 @@ pub trait IntegrationErrorTaskRepositoryExt {
     async fn search_error_tasks(
         &self,
         filter: &IntegrationErrorTaskFilter,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<IntegrationErrorTaskRow>>;
 }
@@ -234,8 +239,12 @@ impl IntegrationErrorTaskRepositoryExt for Repository<'_, IntegrationErrorTask> 
     async fn search_error_tasks(
         &self,
         filter: &IntegrationErrorTaskFilter,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<IntegrationErrorTaskRow>> {
+        if access.model().resource != "integration_error_task" {
+            return Err(PersistenceError::EntityMetadataOutOfRange("集成授权模型与仓储不匹配"));
+        }
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, ERROR_TASK_SORT_FIELDS))
             .skip(filter.skip())
@@ -243,8 +252,11 @@ impl IntegrationErrorTaskRepositoryExt for Repository<'_, IntegrationErrorTask> 
             .projection(integration_error_task_projection())
             .build();
         let collection = self.collection().clone_with_type::<IntegrationErrorTaskRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items =
+            aggregate::find(&collection, filter.to_doc(), options, access.stages().to_vec(), executor)
+                .await?;
+        let total =
+            aggregate::count(&self.collection(), filter.to_doc(), access.stages().to_vec(), executor).await?;
 
         Ok(PageResult { items, total: total as i64 })
     }
@@ -292,6 +304,7 @@ pub trait ReconciliationDifferenceRepositoryExt {
     async fn search_differences(
         &self,
         filter: &ReconciliationDifferenceFilter,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ReconciliationDifferenceRow>>;
 }
@@ -308,8 +321,12 @@ impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDiff
     async fn search_differences(
         &self,
         filter: &ReconciliationDifferenceFilter,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ReconciliationDifferenceRow>> {
+        if access.model().resource != "reconciliation_difference" {
+            return Err(PersistenceError::EntityMetadataOutOfRange("集成授权模型与仓储不匹配"));
+        }
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, DIFFERENCE_SORT_FIELDS))
             .skip(filter.skip())
@@ -317,8 +334,11 @@ impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDiff
             .projection(reconciliation_difference_projection())
             .build();
         let collection = self.collection().clone_with_type::<ReconciliationDifferenceRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items =
+            aggregate::find(&collection, filter.to_doc(), options, access.stages().to_vec(), executor)
+                .await?;
+        let total =
+            aggregate::count(&self.collection(), filter.to_doc(), access.stages().to_vec(), executor).await?;
 
         Ok(PageResult { items, total: total as i64 })
     }

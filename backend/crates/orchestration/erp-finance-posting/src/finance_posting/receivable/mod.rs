@@ -38,6 +38,7 @@ mod invoice_commit;
 mod invoice_evidence;
 mod invoice_posting;
 pub mod invoice_request;
+mod invoice_result;
 
 mod invoice_task;
 pub use invoice_task::{SalesInvoiceTaskChange, sync_sales_invoice_task};

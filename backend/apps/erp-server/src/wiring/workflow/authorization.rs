@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use erp_approval_runtime::resource_grants::append_assignments;
-use erp_identity::SharedRbacService;
+use erp_identity::{Permission, SharedRbacService};
 use erp_supplier_catalog::supplier_portal::authorization::request_readable as portal_request_readable;
 use erp_supplier_catalog::supplier_portal::request_reviewable as portal_request_reviewable;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -109,6 +109,28 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         super::approval_source::readable(&self.db, &self.rbac, actor, document_type, document_id, executor)
             .await
             .map_err(map_service)
+    }
+
+    async fn require_approval_management(
+        &self,
+        actor: &AuditActor,
+        entry: &Permission,
+        required: &[Permission],
+        document_type: DocumentType,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()> {
+        super::approval_source::require_management(
+            &self.db,
+            &self.rbac,
+            actor,
+            (entry, required),
+            document_type,
+            document_id,
+            executor,
+        )
+        .await
+        .map_err(map_service)
     }
 
     /// 在提交原执行器中复用合同详情授权，来源客户责任由合同领域解释。

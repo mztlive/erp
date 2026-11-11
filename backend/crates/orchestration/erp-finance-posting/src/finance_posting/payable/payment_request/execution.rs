@@ -9,7 +9,7 @@ use erp_finance::entity::payable::{
     PayableAccount, PayableEntry, PaymentRequestAllocation, PendingPaymentAllocation, SupplierPayment,
 };
 use erp_finance::repository::PurchasePaymentRequestSnapshotExt;
-use erp_identity::{AccessControlExt, Permission, RoleRepositoryExt};
+use erp_identity::{AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission};
 use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
@@ -146,28 +146,29 @@ pub(super) fn can_read_payment_result_task(task: &WorkItem, request_id: &str, ac
         && task.owner_user_id.as_deref() == Some(actor_id)
 }
 
+/// 在原读取事务证明结果入口及付款功能由同一有效角色授予。
+/// # 参数
+/// db、rbac 为当前流程设施，actor 为原命令操作人，executor 为原读取执行器。
+/// # 返回
+/// identity 已核验账号及完整功能资格时成功。
+/// # 错误
+/// 账号失效、权限撤销或身份设施取证失败时返回对应错误。
 pub(super) async fn require_result_permissions(
     db: &Database,
     rbac: &FinancePostingPorts,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    db.accounts()
-        .find_by_id(actor.id(), executor)
-        .await?
-        .filter(|account| account.is_active_backoffice() && account.kind == actor.kind())
-        .ok_or_else(|| Error::Forbidden("付款结果读取账号已失效".into()))?;
     let required = [
         Permission::parse("purchase_payment_request:detail")?,
         Permission::parse("purchase_payment_request:pay")?,
     ];
-    let snapshot = rbac.role_permission_snapshot(actor.kind(), actor.id(), &required).await?;
-    for permission in required {
-        if db.roles().enabled_roles(&snapshot.granting_role_ids(&permission), executor).await?.is_empty() {
-            return Err(Error::Forbidden("付款结果读取权限已撤销".into()));
-        }
+    let authorization =
+        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
+    let qualified = authorization.permissions(actor, &required, executor).await?;
+    if !qualified.is_some_and(|qualified| qualified.same_role(&required)) {
+        return Err(Error::Forbidden("付款结果读取权限已撤销".into()));
     }
-    rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
     Ok(())
 }
 

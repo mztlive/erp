@@ -167,7 +167,7 @@ impl SalesSelectionProcess {
 
     /// 列表。
     ///
-    /// 纯读快照不开启事务会话，直接用无事务执行器读取，避免读流量占用事务资源。
+    /// 授权、计数与分页使用同一读取事务。
     ///
     /// # 参数
     /// * `params` - 筛选
@@ -184,8 +184,14 @@ impl SalesSelectionProcess {
         actor: AuditActor,
     ) -> Result<SelectionBookletListView> {
         let access = self.selection_access()?;
-        let mut executor = NoTransaction;
-        booklet_list_snapshot(&access, &self.db, &params, &actor, &mut executor).await
+        let db = self.db.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { booklet_list_snapshot(&access, &db, &params, &actor, executor).await })
+            })
+            .await
     }
 
     /// 详情。
@@ -427,7 +433,7 @@ impl SalesSelectionProcess {
 
     /// 方案列表。
     ///
-    /// 纯读快照不开启事务会话，直接用无事务执行器读取。
+    /// 授权、计数与分页使用同一读取事务。
     ///
     /// # 参数
     /// * `params` - 筛选
@@ -444,8 +450,14 @@ impl SalesSelectionProcess {
         actor: AuditActor,
     ) -> Result<SelectionProposalListView> {
         let access = self.selection_access()?;
-        let mut executor = NoTransaction;
-        proposal_list_snapshot(&access, &self.db, &params, &actor, &mut executor).await
+        let db = self.db.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { proposal_list_snapshot(&access, &db, &params, &actor, executor).await })
+            })
+            .await
     }
 
     /// 方案详情。
@@ -597,8 +609,8 @@ impl SalesSelectionProcess {
         let action = kind.action();
         let mut executor = NoTransaction;
         access.require_booklet(&actor, action, &id, &mut executor).await?;
-        let service = SalesSelectionService::new(self.db.clone());
         let actor_id = actor.id().to_string();
+        let service = SalesSelectionService::new(self.db.clone()).with_authorization(access, actor);
         match kind {
             CommandKind::Close => service.close_booklet(&id, req, &actor_id).await,
             CommandKind::Revoke => service.revoke_access(&id, req, &actor_id).await,
@@ -637,10 +649,6 @@ pub struct SelectionBookletListView {
     pub page: application_core::PageView<SelectionBookletListRow>,
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 无范围时为 true，前端据此区分空结果。
     pub no_scope: bool,
 }
@@ -652,10 +660,6 @@ pub struct SelectionProposalListView {
     pub page: application_core::PageView<SelectionProposalListRow>,
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 无范围时为 true，前端据此区分空结果。
     pub no_scope: bool,
 }

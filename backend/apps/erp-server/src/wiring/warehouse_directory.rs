@@ -2,31 +2,23 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use application_core::directory::DirectoryScope;
 use async_trait::async_trait;
-use erp_identity::access_control::ScopeDimension;
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Permission, SharedRbacService};
 use erp_warehouse::Result;
+use erp_warehouse::authorization::{WarehouseAuthorization, WarehouseQuery};
 use erp_warehouse::ports::WarehouseDirectoryAccess;
 use erp_warehouse::service::directory::WarehouseDirectoryService;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::directory_scope::directory_scope;
 use super::identity_error::map_identity_error;
 map_identity_error!(erp_warehouse);
 
-struct Access(DataScopeService);
+struct Access(WarehouseAuthorization);
 #[async_trait]
 impl WarehouseDirectoryAccess for Access {
-    async fn resolve(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<DirectoryScope> {
-        let access = self
-            .0
-            .resolve(actor, &Permission::parse("warehouse:list")?, executor)
-            .await
-            .map_err(map_identity_error)?;
-        directory_scope(access, ScopeDimension::Warehouse).map_err(map_identity_error)
+    async fn resolve(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<WarehouseQuery> {
+        self.0.query(actor, executor).await.map_err(map_identity_error)
     }
 }
 
@@ -38,5 +30,16 @@ impl WarehouseDirectoryAccess for Access {
 /// # 错误
 /// 无；授权失败由读取入口返回。
 pub fn warehouse_directory(db: Database, rbac: SharedRbacService) -> WarehouseDirectoryService {
-    WarehouseDirectoryService::new(db.clone(), Arc::new(Access(DataScopeService::new(db, rbac))))
+    WarehouseDirectoryService::new(
+        db.clone(),
+        Arc::new(Access(
+            WarehouseAuthorization::new(
+                db,
+                rbac,
+                Permission::parse("warehouse:list").expect("固定权限"),
+                Vec::new(),
+            )
+            .expect("仓库目录登记完整"),
+        )),
+    )
 }

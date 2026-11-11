@@ -26,12 +26,12 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::service::sales_order::extra_cost::ensure_attributable_line;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
 use super::adapters::payment_term::parse;
-use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::authorization::PurchaseOrderAuthorization;
 use super::create_submit::{CreatedDraftBundle, submit_created_draft};
 use super::creation_basis::create::{PreparedDraftWrite, replay_creation, write_prepared_draft};
 use super::creation_basis::supplier::CreationBasisSupplierAdapter;
@@ -105,23 +105,26 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 在授权快照事务中执行建单与提交。
+    /// 在原业务事务内重验授权并执行建单与提交。
     async fn expense_transaction(
         &self,
         command: ExpenseCommand,
         authorization: PurchaseOrderAuthorization,
     ) -> Result<CreatePurchaseOrderResult> {
         let ports = self.ports.clone();
-        let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
+        let rbac = authorization.rbac.clone();
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
 
-        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
-            Box::pin(async move {
-                apply_expense_create(&db, ports.as_ref(), &binding_rbac, &command, executor).await
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization.require(&command.actor, executor).await?;
+                    apply_expense_create(&db, ports.as_ref(), &binding_rbac, &command, executor).await
+                })
             })
-        })
-        .await
+            .await
     }
 }
 
@@ -138,7 +141,6 @@ async fn apply_expense_create(
     {
         return Ok(result);
     }
-    ensure_purchase_order_actor_account(db, &command.actor, executor).await?;
     let sales_order = load_expense_source(db, rbac, command, executor).await?;
     let (order, submission, lines) =
         prepare_expense_draft(db, ports, rbac, &sales_order, command, executor).await?;

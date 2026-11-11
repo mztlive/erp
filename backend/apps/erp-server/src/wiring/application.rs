@@ -8,7 +8,7 @@ use erp_contract_recognition::{AliyunContractOcr, OpenAiContractExtractor};
 use erp_data_import::contract_import::{ContractImportProcess, ContractImportServices, RecognitionProviders};
 use erp_data_import::product_import::ProductImportServices;
 use erp_data_import::sales_inquiry_import::SalesInquiryImportProcess;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_notification::NotificationService;
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
@@ -42,9 +42,7 @@ use crate::wiring::catalog_supply_query::MongoCatalogSupplyQuery;
 use crate::wiring::identity::shared_rbac_service;
 use crate::wiring::supplier_api::UnavailableSupplierApiGateway;
 use crate::wiring::supplier_fulfillment_gateway::UnavailableSupplierGateway;
-use crate::wiring::workflow::{
-    WorkflowAuth, work_item_service, workflow_audit, workflow_auth, workflow_object_facts,
-};
+use crate::wiring::workflow::{WorkflowAuth, work_item_service, workflow_audit, workflow_auth};
 use crate::wiring::{contract_template_service, supplier_access};
 
 mod demo_data;
@@ -147,6 +145,17 @@ pub struct Application {
 }
 
 impl Application {
+    /// 返回统一权限入口，使用服务端固定登记。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 账号与功能资格服务；对象及查询由所属领域登记。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn authorization(&self) -> AuthorizationService {
+        super::authorization::authorization_service(self.db(), self.rbac())
+    }
+
     /// 返回启动时装配的蛋糕叔叔连接，缺省配置保持关闭。
     /// # 参数
     /// 无。

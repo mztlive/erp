@@ -238,30 +238,37 @@ pub(in crate::finance::funds_scope) async fn invoice_snapshot(
     materialize: bool,
     executor: &mut dyn Executor,
 ) -> Result<InvoiceSnapshot> {
-    let sort = sort_document(
-        query.paging.sort_by,
-        query.paging.sort_dir == SortDir::Asc,
-        &["invoice_date", "gross_amount", "net_amount", "created_at"],
-    );
-    let base = invoice_pipeline(filter, query, authorization, condition);
-    let mut pipeline = base.clone();
-    pipeline.extend([
-        doc! { "$sort": sort.clone() },
-        doc! { "$limit": 10000 },
-        doc! { "$project": version_projection(materialize) },
-    ]);
-    let versions =
-        aggregate(db.collection::<Document>(<Database as ReceivableExt>::INVOICES), pipeline, executor)
-            .await?;
-    let mut snapshot = InvoiceSnapshot { versions, ..Default::default() };
-    snapshot.ensure_bounded()?;
-    if materialize {
-        let page = invoice_page(db, base, query, sort, executor).await?;
-        snapshot.items = page.items;
-        snapshot.total = page.total;
-        snapshot.summary = summary_rows(db, &snapshot.versions, executor).await?;
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let sort = sort_document(
+            query.paging.sort_by,
+            query.paging.sort_dir == SortDir::Asc,
+            &["invoice_date", "gross_amount", "net_amount", "created_at"],
+        );
+        let base = invoice_pipeline(filter, query, authorization, condition);
+        let mut pipeline = base.clone();
+        pipeline.extend([
+            doc! { "$sort": sort.clone() },
+            doc! { "$limit": 10000 },
+            doc! { "$project": version_projection(materialize) },
+        ]);
+        let versions =
+            aggregate(db.collection::<Document>(<Database as ReceivableExt>::INVOICES), pipeline, executor)
+                .await?;
+        let mut snapshot = InvoiceSnapshot { versions, ..Default::default() };
+        snapshot.ensure_bounded()?;
+        if materialize {
+            let page = invoice_page(db, base, query, sort, executor).await?;
+            snapshot.items = page.items;
+            snapshot.total = page.total;
+            snapshot.summary = summary_rows(db, &snapshot.versions, executor).await?;
+        }
+        Ok(snapshot)
     }
-    Ok(snapshot)
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 页面聚合只有有界实体页和计数，完整版本与金额流独立游标读取。
@@ -304,12 +311,9 @@ fn invoice_pipeline(
     pipeline.push(doc! { "$match": { "$expr": { "$allElementsTrue": [{ "$map": {
         "input": { "$concatArrays": ["$_sales", "$_purchase"] }, "as": "link", "in": "$$link.source_exists",
     } }] } } });
-    pipeline.push(doc! { "$set": {
-        "_sales_sources": matched_sources("$_sales"), "_purchase_sources": matched_sources("$_purchase"),
-        "_whole": { "$and": [authorization.ledger_read, { "$allElementsTrue": [{ "$map": {
-            "input": { "$concatArrays": ["$_sales", "$_purchase"] }, "as": "link", "in": "$$link.matched",
-        } }] }] },
-    } });
+    pipeline.push(super::whole_facts::fields("$_sales.order".into(), "$_purchase.order".into(), true.into()));
+    pipeline.extend(authorization.whole.stages());
+    pipeline.push(doc! { "$set": { "_sales_sources": matched_sources("$_sales"), "_purchase_sources": matched_sources("$_purchase"), "_whole": "$scope_whole" } });
     pipeline.push(doc! { "$match": final_match(query, condition) });
     pipeline
 }

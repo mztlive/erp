@@ -18,6 +18,7 @@ use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
+use crate::service::authorization::features;
 
 /// 只在当前批次和调用方执行器中复用的运行事实。
 struct RuntimeBatchFacts {
@@ -63,16 +64,15 @@ pub async fn approval_tasks_readable_with_executor(
     }
     let required =
         [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
-    let Some(qualified) = identity_service.qualified_permissions(actor, &required, executor).await? else {
+    let Some(qualified) = features(db, identity_service).permissions(actor, &required, executor).await?
+    else {
         return Ok(vec![false; items.len()]);
     };
     if !qualified.permissions().covers_one(&required[0]) {
         return Ok(vec![false; items.len()]);
     }
-    let result =
-        read_tasks(identity_service, db, auth, actor, items, qualified.same_role(&required), executor)
-            .await?;
-    let current = identity_service.qualified_permissions(actor, &required, executor).await?;
+    let result = read_tasks(db, auth, actor, items, qualified.same_role(&required), executor).await?;
+    let current = features(db, identity_service).permissions(actor, &required, executor).await?;
     if current.as_ref().is_none_or(|current| current.version() != qualified.version()) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：审批读取资格已改变".into()));
     }
@@ -81,7 +81,6 @@ pub async fn approval_tasks_readable_with_executor(
 
 /// 在已证明的账号资格内批量读取责任链；逐任务错误按输入顺序返回。
 async fn read_tasks(
-    identity_service: &SharedRbacService,
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -125,7 +124,7 @@ async fn read_tasks(
         {
             true
         } else {
-            manager_can_read(identity_service, auth, actor, &subject, executor).await?
+            manager_can_read(auth, actor, &subject, executor).await?
         };
         result.push(readable);
     }

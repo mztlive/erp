@@ -1,4 +1,4 @@
-//! 合同合法单据参与 Port：只提供已记录的参与单据 ID。
+//! 合同合法单据参与 Port：只查询本次目标与账号参与修订。
 
 use std::sync::Arc;
 
@@ -10,21 +10,36 @@ use crate::error::{Error, Result};
 /// 合同域消费的合法参与事实；adapter 读取工作流参与记录。
 #[async_trait]
 pub trait ContractParticipantPort: Send + Sync {
-    /// 读取账号作为参与人的业务单据 ID。
+    /// 读取本次合同目标中的历史参与身份，不枚举账号的其他单据。
     ///
     /// # 参数
     /// * `user_id` - 当前账号
+    /// * `ids` - 当前授权所检查的合同身份
     /// * `executor` - 与授权相同的执行器
     ///
     /// # 返回
-    /// 返回去重后的单据 ID；调用方必须再与本域合同 ID 求交。
+    /// 返回目标集合中去重后的参与单据 ID；空目标返回空集合。
     ///
     /// # 错误
     /// 未装配或读取失败时拒绝。
     ///
     /// # 关键业务约束
     /// 历史参与必须来自有效业务参与事实，不得由签约经办或业绩快照推导。
-    async fn document_ids_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<String>>;
+    async fn document_ids_in(
+        &self,
+        user_id: &str,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
+    /// 点查账号历史参与集合的真实修订号。
+    /// # 参数
+    /// user_id 为当前账号，executor 为原授权执行器。
+    /// # 返回
+    /// 追加参与记录时原子推进的修订号；尚无修订记录时为零。
+    /// # 错误
+    /// 未接线、修订损坏或读取失败时拒绝。
+    async fn revision(&self, user_id: &str, executor: &mut dyn Executor) -> Result<i64>;
 }
 
 /// 未接线时失败关闭，不得把参与集合解释为空成功。
@@ -52,11 +67,16 @@ impl FailClosedContractParticipantPort {
 
 #[async_trait]
 impl ContractParticipantPort for FailClosedContractParticipantPort {
-    async fn document_ids_by_user(
+    async fn document_ids_in(
         &self,
         _user_id: &str,
+        _ids: &[String],
         _executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
+        Err(Error::Internal("合同参与端口未接线".into()))
+    }
+
+    async fn revision(&self, _: &str, _: &mut dyn Executor) -> Result<i64> {
         Err(Error::Internal("合同参与端口未接线".into()))
     }
 }
@@ -67,12 +87,17 @@ pub struct EmptyContractParticipants;
 
 #[async_trait]
 impl ContractParticipantPort for EmptyContractParticipants {
-    async fn document_ids_by_user(
+    async fn document_ids_in(
         &self,
         _user_id: &str,
+        _ids: &[String],
         _executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         Ok(Vec::new())
+    }
+
+    async fn revision(&self, _: &str, _: &mut dyn Executor) -> Result<i64> {
+        Ok(0)
     }
 }
 
@@ -88,7 +113,7 @@ mod tests {
         let runtime = Builder::new_current_thread().build().expect("runtime");
         runtime.block_on(async {
             let err = FailClosedContractParticipantPort
-                .document_ids_by_user("user-1", &mut NoTransaction)
+                .document_ids_in("user-1", &["contract-1".into()], &mut NoTransaction)
                 .await
                 .expect_err("must fail closed");
             match err {

@@ -316,7 +316,7 @@ pub trait SupplierSettlementStatementRepositoryExt {
         id: &str,
         scope: &super::SettlementReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierSettlementStatement>>;
+    ) -> crate::Result<Option<SupplierSettlementStatement>>;
 
     /// 按结算单 ID 集合批量读取结算单。
     ///
@@ -374,7 +374,7 @@ pub trait SupplierSettlementStatementRepositoryExt {
         &self,
         filter: &SupplierSettlementStatementFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierSettlementStatementRow>>;
+    ) -> crate::Result<PageResult<SupplierSettlementStatementRow>>;
 
     /// 按 ERP 结算单号查找唯一结算单。
     ///
@@ -438,7 +438,7 @@ pub trait SupplierSettlementStatementRepositoryExt {
         &self,
         filter: &SupplierSettlementStatementFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierSettlementStatementStatsRow>>;
+    ) -> crate::Result<Option<SupplierSettlementStatementStatsRow>>;
 
     /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
     ///
@@ -464,8 +464,13 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         id: &str,
         scope: &super::SettlementReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierSettlementStatement>> {
-        self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await
+    ) -> crate::Result<Option<SupplierSettlementStatement>> {
+        scope.validate(executor).await?;
+        let result =
+            async { self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await }.await;
+        let result = result?;
+        scope.validate(executor).await?;
+        Ok(result)
     }
 
     async fn find_statements_by_ids(
@@ -515,7 +520,11 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         &self,
         filter: &SupplierSettlementStatementFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierSettlementStatementRow>> {
+    ) -> crate::Result<PageResult<SupplierSettlementStatementRow>> {
+        if let Some(scope) = &filter.authorized_scope {
+            scope.validate(executor).await?;
+        }
+
         let options = FindOptions::builder()
             .sort(statement_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -526,6 +535,9 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
+        if let Some(scope) = &filter.authorized_scope {
+            scope.validate(executor).await?;
+        }
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -549,54 +561,41 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         &self,
         filter: &SupplierSettlementStatementFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Option<SupplierSettlementStatementStatsRow>> {
-        let pipeline = vec![
-            doc! { "$match": filter.to_doc() },
-            doc! {
-                "$group": {
-                    "_id": mongodb::bson::Bson::Null,
-                    "pending_reconciliation_count": {
-                        "$sum": { "$cond": [{ "$eq": ["$status", "PENDING_RECONCILIATION"] }, 1, 0] }
-                    },
-                    "has_difference_count": {
-                        "$sum": { "$cond": [{ "$eq": ["$status", "HAS_DIFFERENCE"] }, 1, 0] }
-                    },
-                    "pending_review_count": {
-                        "$sum": { "$cond": [{ "$eq": ["$status", "PENDING_REVIEW"] }, 1, 0] }
-                    },
-                    "confirmed_amount": {
-                        "$sum": {
-                            "$toDecimal": {
-                                "$cond": [{ "$eq": ["$status", "CONFIRMED"] }, "$erp_amount", "0.00"]
-                            }
-                        }
-                    }
-                }
-            },
-            doc! { "$project": { "_id": 0 } },
-        ];
-        let collection = self.collection();
-        let rows = match executor.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<SupplierSettlementStatementStatsRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<SupplierSettlementStatementStatsRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
-        Ok(rows.into_iter().next())
+    ) -> crate::Result<Option<SupplierSettlementStatementStatsRow>> {
+        if let Some(scope) = &filter.authorized_scope {
+            scope.validate(executor).await?;
+        }
+        let result: persistence_core::Result<_> = async {
+            let pipeline = statement_stats_pipeline(filter);
+            let collection = self.collection();
+            let rows = match executor.session() {
+                Some(session) => {
+                    collection
+                        .aggregate(pipeline)
+                        .with_type::<SupplierSettlementStatementStatsRow>()
+                        .session(&mut *session)
+                        .await?
+                        .stream(session)
+                        .try_collect::<Vec<_>>()
+                        .await?
+                },
+                None => {
+                    collection
+                        .aggregate(pipeline)
+                        .with_type::<SupplierSettlementStatementStatsRow>()
+                        .await?
+                        .try_collect::<Vec<_>>()
+                        .await?
+                },
+            };
+            Ok(rows.into_iter().next())
+        }
+        .await;
+        let result = result?;
+        if let Some(scope) = &filter.authorized_scope {
+            scope.validate(executor).await?;
+        }
+        Ok(result)
     }
 
     async fn matching_ids_by_number(
@@ -790,6 +789,35 @@ impl SupplierSettlementSourceEvidenceRepositoryExt for SupplierSettlementSourceE
         )
         .await
     }
+}
+
+/// 固定结算统计管道，授权过滤已经由identity编译。
+fn statement_stats_pipeline(filter: &SupplierSettlementStatementFilter) -> Vec<Document> {
+    vec![
+        doc! { "$match": filter.to_doc() },
+        doc! {
+            "$group": {
+                "_id": mongodb::bson::Bson::Null,
+                "pending_reconciliation_count": {
+                    "$sum": { "$cond": [{ "$eq": ["$status", "PENDING_RECONCILIATION"] }, 1, 0] }
+                },
+                "has_difference_count": {
+                    "$sum": { "$cond": [{ "$eq": ["$status", "HAS_DIFFERENCE"] }, 1, 0] }
+                },
+                "pending_review_count": {
+                    "$sum": { "$cond": [{ "$eq": ["$status", "PENDING_REVIEW"] }, 1, 0] }
+                },
+                "confirmed_amount": {
+                    "$sum": {
+                        "$toDecimal": {
+                            "$cond": [{ "$eq": ["$status", "CONFIRMED"] }, "$erp_amount", "0.00"]
+                        }
+                    }
+                }
+            }
+        },
+        doc! { "$project": { "_id": 0 } },
+    ]
 }
 
 #[cfg(test)]

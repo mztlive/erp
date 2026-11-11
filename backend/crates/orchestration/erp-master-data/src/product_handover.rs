@@ -11,7 +11,6 @@ use erp_catalog::repository::handover_receipt::ProductHandoverReceiptExt;
 use erp_catalog::{
     CatalogAccess, CatalogService, HandoverCandidateView, HandoverProductRequest, HandoverProductView,
 };
-use erp_identity::service::account_permissions::{account_has_permission, permission_candidates};
 use erp_identity::service::organization_access::ensure_org_enabled;
 use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
@@ -19,7 +18,8 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use crate::handover_common::{
-    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, trimmed_idempotency_key,
+    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, qualified_candidates,
+    target_qualified, trimmed_idempotency_key,
 };
 use crate::{Error, Result};
 
@@ -129,7 +129,7 @@ pub async fn handover_candidates(
     actor: &AuditActor,
 ) -> Result<Vec<HandoverCandidateView>> {
     let product = ports.access.require_product(actor, "update", id, &mut NoTransaction).await?;
-    Ok(permission_candidates(
+    Ok(qualified_candidates(
         &db,
         &rbac,
         &product.maintainer_user_id,
@@ -253,7 +253,7 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if account_has_permission(db, rbac, target, &Permission::parse("product:update")?, executor).await? {
+    if target_qualified(db, rbac, target, &Permission::parse("product:update")?, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()))

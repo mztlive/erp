@@ -12,7 +12,7 @@ pub use owned::{
     SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationRepository,
 };
-pub use scope::{SupplierAccountRepositoryScopeExt, SupplierReadScope, SupplierScopeClause, SupplierVersion};
+pub use scope::{SupplierAccountRepositoryScopeExt, SupplierReadScope, SupplierVersion};
 pub use supplier::{
     SupplierAccountFilter, SupplierAccountRepositoryExt, SupplierAccountRow, SupplierCapabilityFilter,
     SupplierCapabilityRepositoryExt, SupplierCommercialProfileFilter,

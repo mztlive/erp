@@ -2,7 +2,7 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::purchase_payment_request;
 use crate::http::middleware::with_permission;
@@ -17,11 +17,11 @@ use crate::permissions;
 /// 经 JWT 与逐动作权限保护的路由集合。
 /// # 错误
 /// 不执行 I/O，不返回错误。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     query_routes(rbac).merge(candidate_routes(rbac)).merge(command_routes(rbac)).merge(material_routes(rbac))
 }
 
-fn query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests",
@@ -65,7 +65,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn candidate_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn candidate_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/candidates/page",
@@ -85,11 +85,11 @@ fn candidate_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     draft_routes(rbac).merge(lifecycle_routes(rbac)).merge(payment_routes(rbac))
 }
 
-fn draft_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/batch",
@@ -117,7 +117,7 @@ fn draft_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn lifecycle_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/{id}/submit",
@@ -145,7 +145,7 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn payment_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(deposit_routes(rbac))
         .route(
@@ -185,7 +185,7 @@ fn payment_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn deposit_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn deposit_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/purchase-payment-requests/{id}/deposit-executions",
         with_permission(
@@ -196,7 +196,7 @@ fn deposit_routes(rbac: &SharedRbacService) -> Router<HttpState> {
     )
 }
 
-fn material_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/purchase-payment-requests/{id}/materials/{file_asset_id}/download",

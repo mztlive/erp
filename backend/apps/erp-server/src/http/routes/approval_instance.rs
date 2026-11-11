@@ -5,7 +5,7 @@
 
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::approval_instance;
 use crate::http::middleware::with_permission;
@@ -23,7 +23,7 @@ mod approval_process;
 ///
 /// # 返回
 /// 返回合同 §3 运行 API 与定义管理 API。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(approval_process::routes(rbac))
         .merge(material_routes(rbac))
@@ -34,7 +34,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 提交资料和冻结附件读取路由。
-fn material_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/approval-instances/{id}/invoice-review",
@@ -71,7 +71,7 @@ fn material_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 审批实例列表、详情、历史与恢复选项。
-fn query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/approval-instances/{id}/timeline",
@@ -116,7 +116,7 @@ fn query_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 审批决定及管理写命令。
-fn command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/approval-decisions",
@@ -152,7 +152,7 @@ fn command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn copy_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn copy_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/approval-instances/{id}/copies",
         with_permission(
@@ -164,7 +164,7 @@ fn copy_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 发起人个人提醒复用实例读取权限，并在服务层校验本人身份。
-fn progress_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn progress_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/approval-instances/started-unread-count",

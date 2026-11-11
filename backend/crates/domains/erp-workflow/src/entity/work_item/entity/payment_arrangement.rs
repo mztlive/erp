@@ -119,6 +119,5 @@ mod tests {
             ] as &[&str])
         );
         assert!(item.work_item_type.required_execution_permissions("sales_order").is_none());
-        assert!(item.work_item_type.uses_explicit_owner_authorization());
     }
 }

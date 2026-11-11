@@ -50,12 +50,15 @@ impl SalesSelectionService {
         _images: &dyn SelectionImagePort,
         _generator: &dyn PackageImageGenerator,
     ) -> Result<SalesSelectionBookletView> {
-        let service = Self::new(self.db.clone());
+        let service = self.clone();
         let actor = actor_id.to_string();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.enqueue_prepare(req, &actor, executor).await })
+                Box::pin(async move {
+                    service.authorize_booklet(&req.booklet_id, "prepare", executor).await?;
+                    service.enqueue_prepare(req, &actor, executor).await
+                })
             })
             .await
     }

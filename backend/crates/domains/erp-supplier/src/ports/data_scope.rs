@@ -10,106 +10,25 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// 身份域已解析的供应商正向范围条款；不含身份域实体句柄。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SupplierResolvedClause {
-    /// 公司范围覆盖该资源动作的全部供应商。
-    pub company: bool,
-    /// 当前整体维护人为操作人的供应商。
-    pub self_owned: bool,
-    /// 协作维度保留；供应商不按协作展开。
-    pub collaborative: bool,
-    /// 已由公共解析器展开的内部组织。
-    pub org_unit_ids: Vec<String>,
-}
+/// 身份域编译的授权阶段凭证。
+pub type SupplierResolvedScope = crate::authorization::CompiledScope;
 
-impl SupplierResolvedClause {
-    /// 判断条款是否构成有效供应商范围规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 含公司、本人负责或组织目标时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 协作单独存在不构成供应商对象规则；空条款保持空集且不得补公司。
-    pub fn has_scope_rules(&self) -> bool {
-        self.company || self.self_owned || !self.org_unit_ids.is_empty()
-    }
-}
-
-/// 已通过资格检查的供应商范围事实。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SupplierResolvedScope {
-    /// 已认证操作人。
-    pub user_id: String,
-    /// 固定为供应商资源。
-    pub resource: String,
-    /// 本次解析的供应商动作。
-    pub action: String,
-    /// 同角色正向范围。
-    pub role_clauses: Vec<SupplierResolvedClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<SupplierResolvedClause>,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
-    /// 跨页与导出必须原样回传的范围版本。
-    pub scope_version: String,
-    /// 授权解析时点。
-    pub as_of: Instant,
-}
-
-impl SupplierResolvedScope {
-    /// 判断角色正向范围是否含有效规则。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 任一角色条款构成有效规则时为 true。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只看角色条款；个人上限不单独构成“有范围规则”。
-    pub fn has_scope_rules(&self) -> bool {
-        self.role_clauses.iter().any(SupplierResolvedClause::has_scope_rules)
-    }
-}
-
-/// 业务域提供的单对象责任事实；不包含原始授权规则。
-#[derive(Debug, Clone, Default)]
-pub struct SupplierScopeObject {
-    /// 当前操作人是否为对象的整体维护人。
-    pub owned: bool,
-    /// 当前操作人是否具备合法历史读取参与。
-    pub historical_read_participant: bool,
-    /// 按本资源口径取得的业务组织。
-    pub org_unit_id: Option<String>,
-}
-
-/// 供应商域消费的窄授权 Port；adapter 调用身份域公共解析器。
 #[async_trait]
 pub trait SupplierDataScopePort: Send + Sync {
-    /// 经生产 adapter 复用公共单对象范围判定。
-    ///
+    /// 统一检查完整对象操作。
     /// # 参数
-    /// * `scope` - 当前动作已解析事实
-    /// * `object` - 本域提供的当前责任事实
-    ///
+    /// actor、action 为当前入口；id 为完整目标；executor 为原执行器。
     /// # 返回
-    /// 返回角色范围和个人上限共同允许的判定。
-    ///
+    /// identity 允许时成功。
     /// # 错误
-    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
-    fn allows(&self, _scope: &SupplierResolvedScope, _object: &SupplierScopeObject) -> Result<bool> {
+    /// 未装配或无权时拒绝。
+    async fn require(
+        &self,
+        _actor: &AuditActor,
+        _action: &str,
+        _id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
         Err(unwired())
     }
 
@@ -245,49 +164,4 @@ impl SupplierDataScopePort for FailClosedSupplierDataScopePort {
 /// 禁止捕获后回退旧读取器或补 Company。
 fn unwired() -> Error {
     Error::Internal("供应商范围端口未接线".into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!SupplierResolvedClause::default().has_scope_rules());
-        assert!(
-            SupplierResolvedClause { self_owned: true, ..SupplierResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            !SupplierResolvedClause { collaborative: true, ..SupplierResolvedClause::default() }
-                .has_scope_rules()
-        );
-        assert!(
-            SupplierResolvedClause { company: true, ..SupplierResolvedClause::default() }.has_scope_rules()
-        );
-        assert!(
-            SupplierResolvedClause {
-                org_unit_ids: vec!["org-a".into()],
-                ..SupplierResolvedClause::default()
-            }
-            .has_scope_rules()
-        );
-        assert!(
-            !SupplierResolvedScope {
-                user_id: "u1".into(),
-                resource: "supplier".into(),
-                action: "list".into(),
-                role_clauses: vec![],
-                user_limit: Some(SupplierResolvedClause {
-                    self_owned: true,
-                    ..SupplierResolvedClause::default()
-                }),
-                policy_version: 1,
-                organization_version: 1,
-                scope_version: "v1".into(),
-                as_of: Instant::from_unix_secs(0),
-            }
-            .has_scope_rules()
-        );
-    }
 }

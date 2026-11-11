@@ -23,8 +23,6 @@ pub struct CostReadResult<T> {
     #[serde(flatten)]
     pub data: T,
     pub scope_version: String,
-    pub policy_version: u64,
-    pub organization_version: u64,
     pub as_of: String,
     pub empty_reason: Option<&'static str>,
     pub scope_summary: &'static str,

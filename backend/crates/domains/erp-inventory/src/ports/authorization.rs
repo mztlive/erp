@@ -1,6 +1,8 @@
 //! 按仓库范围计算库存授权事实的消费端口。
 
 use std::collections::BTreeSet;
+use std::fmt;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
@@ -45,35 +47,33 @@ impl AuthorizationPort for FailClosedAuthorizationPort {
     }
 }
 
-/// Local warehouse coverage used by inventory filters; not an identity aggregate.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum WarehouseCoverage {
-    All,
-    Targets(Vec<String>),
+/// identity 查询返回的完整仓库身份结果；不保存或解释角色条款。
+#[derive(Clone)]
+pub struct WarehouseScope(Vec<String>, Option<Arc<dyn InventoryReadProof>>);
+
+/// 由统一权限入口生成的原阶段复验能力。
+#[async_trait]
+pub trait InventoryReadProof: Send + Sync {
+    /// 在原执行器复验读取凭证。
+    /// # 参数
+    /// executor 为业务原事务。
+    /// # 返回
+    /// 当前授权仍有效时成功。
+    /// # 错误
+    /// 权限、版本或有效期变化返回错误。
+    async fn validate(&self, executor: &mut dyn Executor) -> Result<()>;
 }
-
-impl WarehouseCoverage {
-    fn from_targets(targets: impl IntoIterator<Item = String>) -> Option<Self> {
-        let targets = targets.into_iter().collect::<BTreeSet<_>>();
-        if targets.contains("*") {
-            return Some(Self::All);
-        }
-        (!targets.is_empty()).then(|| Self::Targets(targets.into_iter().collect()))
-    }
-
-    fn covers(&self, warehouse_id: &str) -> bool {
-        match self {
-            Self::All => true,
-            Self::Targets(targets) => {
-                targets.binary_search_by(|target| target.as_str().cmp(warehouse_id)).is_ok()
-            },
-        }
+impl fmt::Debug for WarehouseScope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
     }
 }
-
-/// 已由同一授权快照证明的仓库范围。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WarehouseScope(Option<WarehouseCoverage>);
+impl PartialEq for WarehouseScope {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl Eq for WarehouseScope {}
 
 /// 列表动作的授权指纹；不含内部证明或全量人员集合。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,6 +189,33 @@ impl InventoryScopeMeta {
 }
 
 impl WarehouseScope {
+    /// 绑定统一授权查询产生的精确身份及原凭证。
+    /// # 参数
+    /// ids 为查询结果，proof 为本次读取的复验能力。
+    /// # 返回
+    /// 只在当前事务内使用的读取快照。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn from_authorized(ids: Vec<String>, proof: Arc<dyn InventoryReadProof>) -> Self {
+        Self(ids.into_iter().collect::<BTreeSet<_>>().into_iter().collect(), Some(proof))
+    }
+    /// 在实际业务仓储读取前后复验原授权。
+    /// # 参数
+    /// executor 为本次读取事务。
+    /// # 返回
+    /// 凭证仍有效时成功；已拒绝的空结果保持空。
+    /// # 错误
+    /// 非空结果缺凭证、授权变化或身份设施失败返回错误。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
+        match &self.1 {
+            Some(proof) => proof.validate(executor).await,
+            None if self.0.is_empty() => Ok(()),
+            None => Err(Error::Forbidden("仓库结果缺少统一授权读取凭证".into())),
+        }
+    }
+}
+
+impl WarehouseScope {
     /// 判断目标仓库是否落在已证明范围内。
     ///
     /// # 参数
@@ -200,7 +227,7 @@ impl WarehouseScope {
     /// # 错误
     /// 不返回错误。
     pub fn covers(&self, warehouse_id: &str) -> bool {
-        self.0.as_ref().is_some_and(|coverage| coverage.covers(warehouse_id))
+        self.0.binary_search_by(|id| id.as_str().cmp(warehouse_id)).is_ok()
     }
 
     /// 缺仓库维或空目标时不贡献对象。
@@ -214,33 +241,28 @@ impl WarehouseScope {
     /// # 错误
     /// 不返回错误。
     pub fn is_empty(&self) -> bool {
-        self.0.is_none()
+        self.0.is_empty()
     }
 
     /// 把调用方精确筛选与授权范围求交，形成 Repository 查询过滤。
     ///
-    /// `None` 仅表示公司级且调用方未指定仓库；`Some([])` 必须由 Repository
-    /// 解释为空结果，禁止退化为全量查询。
+    /// 返回值始终为精确身份集合；空集合不得退化为全量查询。
     ///
     /// # 参数
     /// * `requested` - 调用方指定的仓库；未指定时为 `None`。
     ///
     /// # 返回
-    /// 公司级且未指定仓库时返回 `None`。有限目标且未指定仓库时返回允许的仓库。
-    /// 指定仓库落在范围内时返回该仓库。范围为空，或指定仓库不在有限目标内时，返回空列表。
+    /// 未指定仓库时返回本次 identity 查询结果；指定仓库时仅收窄结果。
+    /// 指定仓库不在查询结果内时返回空列表。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn repository_warehouse_ids(&self, requested: Option<WarehouseId>) -> Option<Vec<WarehouseId>> {
-        match (&self.0, requested) {
-            (Some(WarehouseCoverage::All), None) => None,
-            (Some(coverage), Some(id)) if coverage.covers(id.as_ref()) => Some(vec![id]),
-            (Some(WarehouseCoverage::Targets(allowed)), None) => {
-                Some(allowed.iter().cloned().map(WarehouseId::new).collect())
-            },
-            (Some(WarehouseCoverage::All), Some(id)) => Some(vec![id]),
-            (None, _) | (Some(WarehouseCoverage::Targets(_)), Some(_)) => Some(Vec::new()),
-        }
+        Some(match requested {
+            Some(id) if self.covers(id.as_ref()) => vec![id],
+            Some(_) => Vec::new(),
+            None => self.0.iter().cloned().map(WarehouseId::new).collect(),
+        })
     }
 
     /// 不覆盖任何仓库的空范围。
@@ -249,34 +271,20 @@ impl WarehouseScope {
     /// 无。
     ///
     /// # 返回
-    /// 返回内部覆盖为 `None` 的范围。
+    /// 返回空仓库身份集合。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn empty() -> Self {
-        Self(None)
-    }
-
-    /// 公司级范围。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回覆盖全部仓库的范围。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn company() -> Self {
-        Self(Some(WarehouseCoverage::All))
+        Self(Vec::new(), None)
     }
 
     /// 由仓库标识目标构造范围；空输入失败关闭。
     ///
-    /// 目标含 `*` 时为公司级。空集合时不覆盖任何仓库。
+    /// 输入必须是 identity 查询返回的真实仓库 ID；空集合保持空。
     ///
     /// # 参数
-    /// * `targets` - 仓库标识；`*` 表示全部仓库。
+    /// * `targets` - 真实仓库标识。
     ///
     /// # 返回
     /// 返回去重后的仓库范围。
@@ -284,7 +292,7 @@ impl WarehouseScope {
     /// # 错误
     /// 不返回错误。
     pub fn from_targets(targets: Vec<String>) -> Self {
-        Self(WarehouseCoverage::from_targets(targets))
+        Self(targets.into_iter().collect::<BTreeSet<_>>().into_iter().collect(), None)
     }
 }
 
@@ -326,6 +334,31 @@ pub struct InventoryScopeSet {
     pub create_scope: WarehouseScope,
     /// 调整更新范围。
     pub update_scope: WarehouseScope,
+}
+
+impl InventoryAuthorization {
+    /// 在原业务事务内复验本阶段全部读取凭证。
+    /// # 参数
+    /// executor 为授权和实际仓储读取共用的事务。
+    /// # 返回
+    /// 各已授权结果仍有效时成功。
+    /// # 错误
+    /// 身份、策略、映射版本或有效期变化拒绝。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
+        for scope in [
+            &self.balance_list_scope,
+            &self.balance_detail_scope,
+            &self.movement_list_scope,
+            &self.reservation_list_scope,
+            &self.adjustment_list_scope,
+            &self.read_scope,
+            &self.create_scope,
+            &self.update_scope,
+        ] {
+            scope.validate(executor).await?;
+        }
+        Ok(())
+    }
 }
 
 impl InventoryAuthorization {
@@ -628,14 +661,7 @@ mod tests {
     use super::{InventoryAuthorization, WarehouseScope};
 
     #[test]
-    fn company_and_single_warehouse_scopes_form_repository_filters() {
-        let company = WarehouseScope::company();
-        assert_eq!(company.repository_warehouse_ids(None), None);
-        assert_eq!(
-            company.repository_warehouse_ids(Some(WarehouseId::new("warehouse-1"))),
-            Some(vec![WarehouseId::new("warehouse-1")])
-        );
-
+    fn authorized_warehouse_results_only_narrow_repository_filters() {
         let single = WarehouseScope::from_targets(vec!["warehouse-1".to_string()]);
         assert_eq!(single.repository_warehouse_ids(None), Some(vec![WarehouseId::new("warehouse-1")]));
         assert_eq!(single.repository_warehouse_ids(Some(WarehouseId::new("warehouse-2"))), Some(Vec::new()));
@@ -704,5 +730,32 @@ mod tests {
         assert!(!empty.covers("warehouse-1"));
         assert_eq!(empty.repository_warehouse_ids(None), Some(Vec::new()));
         assert_eq!(empty.repository_warehouse_ids(Some(WarehouseId::new("warehouse-1"))), Some(Vec::new()));
+    }
+}
+
+#[cfg(test)]
+mod exact_result_tests {
+    use super::WarehouseScope;
+    #[test]
+    fn warehouse_result_never_interprets_wildcard_as_company_authorization() {
+        let result = WarehouseScope::from_targets(vec!["*".into()]);
+        assert!(!result.covers("another-warehouse"));
+    }
+    struct Proof(bool);
+    #[async_trait::async_trait]
+    impl super::InventoryReadProof for Proof {
+        async fn validate(&self, _: &mut dyn persistence_core::Executor) -> crate::Result<()> {
+            if self.0 { Ok(()) } else { Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED".into())) }
+        }
+    }
+    #[tokio::test]
+    async fn authorized_warehouse_results_revalidate_original_proof_and_reject_fabrication() {
+        let mut executor = persistence_core::NoTransaction;
+        let valid = WarehouseScope::from_authorized(vec!["wh".into()], std::sync::Arc::new(Proof(true)));
+        assert!(valid.validate(&mut executor).await.is_ok());
+        let expired = WarehouseScope::from_authorized(vec!["wh".into()], std::sync::Arc::new(Proof(false)));
+        assert!(matches!(expired.validate(&mut executor).await, Err(crate::Error::ConflictError(_))));
+        let unproved = WarehouseScope::from_targets(vec!["wh".into()]);
+        assert!(matches!(unproved.validate(&mut executor).await, Err(crate::Error::Forbidden(_))));
     }
 }

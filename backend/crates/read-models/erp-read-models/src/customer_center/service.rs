@@ -121,22 +121,22 @@ impl CustomerCenterReadService {
                     this.customers.require_with(actor.clone(), "detail", &customer_id, executor).await?;
                     let (contract_context, contracts) =
                         this.contracts.resolve(&actor, "list", executor).await?;
-                    let (_, sales) = SalesAccess::new(this.db.clone(), this.rbac.clone())
+                    let (sales_context, sales) = SalesAccess::new(this.db.clone(), this.rbac.clone())
                         .resolve(&actor, "list", &[], executor)
                         .await?;
-                    if !contract_context.has_scope_rules() || sales.is_empty() {
-                        return Err(Error::Forbidden("当前没有可查看的合同或销售业务范围".into()));
-                    }
-                    super::repository::CustomerCenterRepository::new(&this.db)
+                    let result = super::repository::CustomerCenterRepository::new(&this.db)
                         .customer_center_related(
                             &customer_id,
                             RECENT_RELATED_LIMIT,
-                            &contracts.document(),
-                            &sales.document(),
+                            &contracts.stages(),
+                            &sales.stages(),
                             executor,
                         )
                         .await?
-                        .ok_or_else(|| Error::NotFound("客户不存在".into()))
+                        .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
+                    sales_context.validate(executor).await?;
+                    contract_context.validate(executor).await?;
+                    Ok::<_, Error>(result)
                 })
             })
             .await?;

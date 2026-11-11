@@ -35,7 +35,7 @@ pub trait ProcurementOfferingRepositoryExt {
         &self,
         filter: &SupplierOfferingFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
+    ) -> crate::Result<Vec<String>>;
 
     /// 批量读取候选供给的 SKU 引用。
     ///
@@ -60,7 +60,11 @@ impl ProcurementOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         &self,
         filter: &SupplierOfferingFilter,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<String>> {
+    ) -> crate::Result<Vec<String>> {
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
+
         #[derive(Deserialize)]
         struct CandidateId {
             id: String,
@@ -72,6 +76,9 @@ impl ProcurementOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             executor,
         )
         .await?;
+        if let Some(scope) = &filter.scope {
+            scope.validate(executor).await?;
+        }
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 

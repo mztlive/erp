@@ -11,16 +11,15 @@ use application_core::AuditActor;
 use erp_catalog::CatalogService;
 use erp_catalog::dto::BrandImportJobRequest;
 use erp_core::AccountKind;
-use erp_identity::service::account_permissions::ensure_actor_permissions;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_party::SensitiveDataCodec;
 use erp_support::BackgroundJob;
 use mongodb::Database;
 use persistence_core::Executor;
 use storage::S3Storage;
 
-use crate::Result;
 use crate::background::import_source::ImportSourceCache;
+use crate::{Error, Result};
 
 /// 持久化的品牌导入任务类型。
 pub const BRAND_IMPORT_DOMAIN: &str = "BRAND_IMPORT";
@@ -67,14 +66,12 @@ impl BrandImportProcess {
 
     /// 每次提交、执行和下载都重验当前账号及品牌创建权限，不缓存授权结论。
     async fn authorize(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        ensure_actor_permissions(
-            &self.db,
-            &self.rbac,
-            actor,
-            &[Permission::parse("product_brand:create")?],
-            executor,
-        )
-        .await?;
+        let authorization =
+            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
+        if !authorization.has_permission(actor, &Permission::parse("product_brand:create")?, executor).await?
+        {
+            return Err(Error::Forbidden("当前账号无权导入品牌".into()));
+        }
         Ok(())
     }
 }

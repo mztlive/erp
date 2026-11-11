@@ -144,7 +144,7 @@ async fn direct_materials(
         .ok_or_else(|| Error::Forbidden("审批材料原提交账号不存在或已失效".into()))?;
     let actor = AuditActor::new(account.id, account.login_account, account.kind)
         .with_actor_name_snapshot(Some(account.display_name))?;
-    authorize_material_transfer(identity_service, &actor, &files, executor).await?;
+    authorize_material_transfer(identity_service, db, &actor, &files, executor).await?;
     Ok((files.iter().map(material_from_asset).collect(), actor))
 }
 

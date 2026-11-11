@@ -11,8 +11,6 @@ export function SummaryStrip({
     orderCount,
     grossTotal,
     unpricedCount,
-    policyVersion,
-    organizationVersion,
     scopeVersion,
 }: {
     scopeSummary: string
@@ -23,8 +21,6 @@ export function SummaryStrip({
     orderCount: number
     grossTotal: string
     unpricedCount: number
-    policyVersion: number
-    organizationVersion: number
     scopeVersion: string
 }) {
     return (
@@ -63,8 +59,7 @@ export function SummaryStrip({
                 <dd className="break-all">{filterSummary}</dd>
             </div>
             <div className="col-span-2 min-w-0 text-xs text-muted-foreground sm:col-span-4">
-                授权时点 {asOf || "—"} · 权限版本 {policyVersion} · 组织版本{" "}
-                {organizationVersion} · 范围版本{" "}
+                授权时点 {asOf || "—"} · 范围版本{" "}
                 <span className="num break-all">{scopeVersion || "—"}</span>
             </div>
         </dl>

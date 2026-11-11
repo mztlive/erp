@@ -183,6 +183,18 @@ pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     }
 }
 
+impl From<erp_identity::Error> for Error {
+    fn from(error: erp_identity::Error) -> Self {
+        match error {
+            erp_identity::Error::Forbidden(message) => Self::Forbidden(message),
+            erp_identity::Error::ConflictError(message) => Self::ConflictError(message),
+            erp_identity::Error::ValidationError(message) => Self::ValidationError(message),
+            erp_identity::Error::RepositoryError(error) => Self::from(error),
+            other => Self::Internal(other.to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;

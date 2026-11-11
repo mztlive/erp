@@ -6,15 +6,13 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_customer::repository::scope::CustomerReadScope;
 use erp_customer::{CustomerAccess, CustomerDataScopePort, CustomerResolvedScope};
-use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
-use crate::sales_center::access::SalesAccess;
+use crate::sales_center::access::{SalesAccess, SalesReadContext};
 
 /// 双口径授权解析器；不缓存任何授权结论。
 #[derive(Clone)]
@@ -63,12 +61,12 @@ impl QualityAccess {
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<(CustomerResolvedScope, CustomerReadScope, AuthorizedDataScope, SalesReadScope)> {
+    ) -> Result<(CustomerResolvedScope, SalesReadContext, SalesReadScope)> {
         let customer = CustomerAccess::new(self.db.clone(), Arc::clone(&self.customer_scope));
-        let (customer_context, customer_scope) = customer.resolve(actor, "list", executor).await?;
+        let (customer_context, _) = customer.query(actor, "list", executor).await?;
         let sales = SalesAccess::new(self.db.clone(), self.rbac.clone());
         let (sales_context, sales_scope) = sales.resolve(actor, "list", &[], executor).await?;
-        Ok((customer_context, customer_scope, sales_context, sales_scope))
+        Ok((customer_context, sales_context, sales_scope))
     }
 
     /// 在调用方事务内证明历史口径的销售读取范围。
@@ -86,22 +84,7 @@ impl QualityAccess {
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<(AuthorizedDataScope, SalesReadScope)> {
+    ) -> Result<(SalesReadContext, SalesReadScope)> {
         SalesAccess::new(self.db.clone(), self.rbac.clone()).resolve(actor, "list", &[], executor).await
     }
-}
-
-/// 现任口径无范围：客户侧既无角色规则，历史参与也不补充现任客户集合。
-///
-/// # 参数
-/// * `customer` - 已解析的客户范围事实
-/// * `scope` - 客户读取条件
-///
-/// # 返回
-/// 两者都为空时返回 `true`。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn no_current_scope(customer: &CustomerResolvedScope, scope: &CustomerReadScope) -> bool {
-    !customer.has_scope_rules() && scope.is_empty()
 }

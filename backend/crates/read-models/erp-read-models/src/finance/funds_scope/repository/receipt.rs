@@ -38,26 +38,33 @@ pub(in crate::finance::funds_scope) async fn page(
     condition: &FundsLinkedCondition,
     executor: &mut dyn Executor,
 ) -> Result<FlowPage<CustomerReceiptRow>> {
-    let mut stages = pipeline(query, filter, authorization, condition, false);
-    stages.push(flow::facet(query.paging.page, query.paging.page_size, projection(), sort(query))?);
-    let mut rows = aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await?;
-    let mut snapshot = rows.pop().unwrap_or_else(|| FlowPage {
-        items: vec![],
-        versions: vec![],
-        total: vec![],
-        summary: vec![],
-    });
-    snapshot
-        .count()
-        .map_err(|_| Error::ValidationError("回款查询超过上限，请收窄组织或负责人条件".into()))?;
-    let mut stages = pipeline(query, filter, authorization, condition, false);
-    stages.extend(flow::header_stages(sort(query)));
-    let headers: Vec<FlowHeader> =
-        aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await?;
-    let ids = headers.iter().map(|header| header.version.id.clone()).collect::<Vec<_>>();
-    let links = FundsSummaryRepository::new(db).receipt_links(&ids, executor).await?;
-    (snapshot.versions, snapshot.summary) = flow::summaries(headers, links);
-    Ok(snapshot)
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let mut stages = pipeline(query, filter, authorization, condition, false);
+        stages.push(flow::facet(query.paging.page, query.paging.page_size, projection(), sort(query))?);
+        let mut rows = aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await?;
+        let mut snapshot = rows.pop().unwrap_or_else(|| FlowPage {
+            items: vec![],
+            versions: vec![],
+            total: vec![],
+            summary: vec![],
+        });
+        snapshot
+            .count()
+            .map_err(|_| Error::ValidationError("回款查询超过上限，请收窄组织或负责人条件".into()))?;
+        let mut stages = pipeline(query, filter, authorization, condition, false);
+        stages.extend(flow::header_stages(sort(query)));
+        let headers: Vec<FlowHeader> =
+            aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await?;
+        let ids = headers.iter().map(|header| header.version.id.clone()).collect::<Vec<_>>();
+        let links = FundsSummaryRepository::new(db).receipt_links(&ids, executor).await?;
+        (snapshot.versions, snapshot.summary) = flow::summaries(headers, links);
+        Ok(snapshot)
+    }
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 二次授权只装载完整匹配责任版本，禁止复算页面金额和分配视图。
@@ -83,9 +90,16 @@ pub(in crate::finance::funds_scope) async fn versions(
     condition: &FundsLinkedCondition,
     executor: &mut dyn Executor,
 ) -> Result<Vec<FlowVersion>> {
-    let mut stages = pipeline(query, filter, authorization, condition, false);
-    stages.extend(flow::recheck_stages(sort(query)));
-    aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await
+    authorization.validate(executor).await?;
+    let result: crate::Result<_> = async {
+        let mut stages = pipeline(query, filter, authorization, condition, false);
+        stages.extend(flow::recheck_stages(sort(query)));
+        aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await
+    }
+    .await;
+    let result = result?;
+    authorization.validate(executor).await?;
+    Ok(result)
 }
 
 /// 全部业务和来源条件先形成最终集合，再由页面或版本分支消费。
@@ -106,10 +120,10 @@ fn pipeline(
             { "$gt": [{ "$size": "$scope_pending" }, 0] }
         ] } } });
     }
-    stages.extend(flow::visibility(
-        authorization.ledger_read,
-        condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some(),
-    ));
+    stages.push(super::whole_facts::fields("$scope_links.order".into(), Bson::Array(vec![]),
+        doc! { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }.into()));
+    stages.extend(authorization.whole.stages());
+    stages.extend(flow::visibility(condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()));
     stages
 }
 
@@ -149,7 +163,7 @@ fn allocation_lookup(
         scope,
         "sales_owner_user_id",
         "order_no",
-        &authorization.sales.grant_lookup,
+        &authorization.sales.stages(),
     ));
     let mut project = doc! { "_id": 0, "id": 1, "order": "$scope_order_id", "owner": "$scope_source.owner_user_id", "source_version": "$scope_source.version",
     "exists": { "$ne": [{ "$ifNull": ["$scope_source.id", Bson::Null] }, Bson::Null] },

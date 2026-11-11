@@ -10,6 +10,7 @@ use crate::entity::approval_progress::ViewedApprovalProgress;
 use crate::error::Result;
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::BpmExt;
+use crate::service::authorization::features;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 查询当前有效账号发起的未读审批数量。
@@ -56,9 +57,8 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         version: u64,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if self
-            .identity
-            .qualified_permissions(actor, &[Permission::parse("approval_instance:read")?], executor)
+        if features(&self.db, &self.identity)
+            .permissions(actor, &[Permission::parse("approval_instance:read")?], executor)
             .await?
             .is_none_or(|qualified| qualified.permissions().is_empty())
         {

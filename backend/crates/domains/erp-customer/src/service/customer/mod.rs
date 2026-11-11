@@ -148,6 +148,9 @@ impl CustomerService {
                 Box::pin(async move {
                     access.require_create(&actor_for_tx, executor).await?;
                     persist_new_account(&db, &account_for_tx, &assignment_for_tx, executor).await?;
+                    access
+                        .require_with(actor_for_tx.clone(), "create", &account_for_tx.base.id, executor)
+                        .await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
                 })

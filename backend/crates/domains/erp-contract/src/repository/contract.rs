@@ -5,8 +5,6 @@
 //! 本文件只补充域特有查询与跨集合多步骤写入入口；集合名常量统一取
 //! `ContractExt` 关联常量（单一权威来源，conventions §4.3）。
 
-use std::mem;
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -61,16 +59,14 @@ struct ContractRevisionNoRow {
 /// 合同列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ContractFilter {
+    /// identity编译的完整授权阶段。
+    pub access: Option<super::scope::ContractReadScope>,
     /// 合同编号（字面量正则，忽略大小写）；`None` 表示不筛选。
     pub contract_no: Option<String>,
     /// 单个客户；`None` 表示不按单客户筛选。
     pub customer_id: Option<String>,
     /// 授权客户集合；`None` 表示公司范围，空向量匹配不到任何客户合同。
     pub customer_ids: Option<Vec<String>>,
-    /// 合法历史参与合同；与授权客户按并集读取。
-    pub historical_contract_ids: Vec<String>,
-    /// 已证明合同身份的强制交集，不得由共同客户替代。
-    pub authorized_contract_ids: Option<Vec<String>>,
     /// 目录“我负责”按合同负责或明确共享人员收窄。
     pub assigned_user_id: Option<String>,
     /// 请求中的负责销售组织条件，始终只收窄授权合同。
@@ -88,6 +84,17 @@ pub struct ContractFilter {
 }
 
 impl ContractFilter {
+    /// 返回identity完整授权阶段。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前查询阶段。
+    /// # 错误
+    /// 不执行I/O。
+    pub fn stages(&self) -> Vec<Document> {
+        self.access.as_ref().map_or_else(Vec::new, |scope| scope.stages())
+    }
+
     /// 将已授权候选客户与仍存在的来源客户求交，历史参与不得扩张来源边界。
     ///
     /// # 参数
@@ -103,7 +110,6 @@ impl ContractFilter {
                 .filter(|id| self.customer_ids.as_ref().is_none_or(|allowed| allowed.contains(id)))
                 .collect(),
         );
-        self.historical_contract_ids.clear();
     }
 }
 
@@ -120,11 +126,10 @@ impl Default for ContractFilter {
     /// 无。
     fn default() -> Self {
         Self {
+            access: None,
             contract_no: None,
             customer_id: None,
             customer_ids: None,
-            historical_contract_ids: Vec::new(),
-            authorized_contract_ids: None,
             assigned_user_id: None,
             owner_user_ids: None,
             status: None,
@@ -153,19 +158,25 @@ impl QueryFilter for ContractFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", self.contract_no.as_deref());
-        insert_authorization_filter(
-            &mut filter,
-            self.customer_id.as_deref(),
-            self.customer_ids.as_deref(),
-            &self.historical_contract_ids,
-        );
+        match (&self.customer_id, &self.customer_ids) {
+            (Some(id), Some(ids)) => {
+                filter.insert(
+                    "customer_id",
+                    doc! {"$in":ids.iter().filter(|value|*value==id).cloned().collect::<Vec<_>>()},
+                );
+            },
+            (Some(id), None) => {
+                filter.insert("customer_id", id);
+            },
+            (None, Some(ids)) => {
+                filter.insert("customer_id", doc! {"$in":ids});
+            },
+            (None, None) => {},
+        }
         if let Some(user) = &self.assigned_user_id {
             filter = doc! { "$and": [filter, { "$or": [
                 { "sales_owner_user_id": user }, { "shared_sales_user_ids": user }
             ] }] };
-        }
-        if let Some(ids) = &self.authorized_contract_ids {
-            filter.insert("id", doc! { "$in": ids });
         }
         if let Some(ids) = &self.owner_user_ids {
             filter.insert("sales_owner_user_id", doc! { "$in": ids });
@@ -216,7 +227,7 @@ pub trait ContractRepositoryExt {
         &self,
         filter: &ContractFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ContractRow>>;
+    ) -> crate::Result<PageResult<ContractRow>>;
 
     /// 查找当前客户范围内指向指定结算主体的生效合同。
     ///
@@ -260,18 +271,42 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
         &self,
         filter: &ContractFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<ContractRow>> {
-        let options = FindOptions::builder()
-            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(contract_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<ContractRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+    ) -> crate::Result<PageResult<ContractRow>> {
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
+        }
+        let result: persistence_core::Result<_> = async {
+            let options = FindOptions::builder()
+                .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+                .skip(filter.skip())
+                .limit(filter.limit())
+                .projection(contract_projection())
+                .build();
+            let collection = self.collection().clone_with_type::<ContractRow>();
+            let items = persistence_core::aggregate::find(
+                &collection,
+                filter.to_doc(),
+                options,
+                filter.stages(),
+                executor,
+            )
+            .await?;
+            let total = persistence_core::aggregate::count(
+                &self.collection(),
+                filter.to_doc(),
+                filter.stages(),
+                executor,
+            )
+            .await?;
 
-        Ok(PageResult { items, total: total as i64 })
+            Ok(PageResult { items, total: total as i64 })
+        }
+        .await;
+        let result = result?;
+        if let Some(scope) = &filter.access {
+            scope.validate(executor).await?;
+        }
+        Ok(result)
     }
 
     async fn find_effective_for_settlement_party(
@@ -525,46 +560,6 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     doc! { sort_by.unwrap_or("created_at"): direction }
 }
 
-/// 写入已证明的客户集合、请求客户与历史参与合同条件。
-///
-/// 交集收窄唯一由 [`crate::repository::scope::narrow_authorized_customers`] 产生，
-/// 本函数只做文档拼接；`None`/空集/历史三态语义见两侧真值表注释。
-///
-/// # 参数
-/// * `filter` - 正在组装的查询文档
-/// * `customer_id` - 调用方显式指定的单个客户；`None` 表示未指定
-/// * `customer_ids` - 授权客户集合；`None` 表示公司范围
-/// * `historical_contract_ids` - 合法历史参与合同
-///
-/// # 返回
-/// 无。条件直接写入 `filter`。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 请求客户不在授权集合内时保持空结果；空授权不得退回全量合同。
-fn insert_authorization_filter(
-    filter: &mut Document,
-    customer_id: Option<&str>,
-    customer_ids: Option<&[String]>,
-    historical_contract_ids: &[String],
-) {
-    let narrowed = crate::repository::scope::narrow_authorized_customers(customer_id, customer_ids);
-    let auth = crate::repository::scope::authorization_document(narrowed.as_deref(), historical_contract_ids);
-    if auth.is_empty() {
-        return;
-    }
-    if auth.get("$expr").is_some() || auth.get("$or").is_some() {
-        let existing = mem::take(filter);
-        *filter = doc! { "$and": [existing, auth] };
-        return;
-    }
-    for (key, value) in auth {
-        filter.insert(key, value);
-    }
-}
-
 /// 合同列表投影字段。
 ///
 /// # 返回
@@ -629,7 +624,7 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_document("contract_no").unwrap().get_str("$regex").unwrap(), r"HT\-2026");
-        assert_eq!(document.get_document("customer_id").unwrap(), &doc! { "$in": ["cust-1"] });
+        assert_eq!(document.get_str("customer_id").unwrap(), "cust-1");
         assert_eq!(document.get_str("status").unwrap(), "EFFECTIVE");
     }
 
@@ -663,19 +658,15 @@ mod tests {
             customer_ids: Some(vec!["cust-1".to_string()]),
             ..in_scope.clone()
         };
-        assert_eq!(miss.to_doc(), doc! { "$and": [{ "deleted_at": 0_i64 }, { "$expr": false }] });
-
-        let history = ContractFilter { historical_contract_ids: vec!["ht-old".to_string()], ..in_scope };
-        assert_eq!(
-            history.to_doc().get_array("$and").unwrap()[1],
-            doc! {
-                "$or": [
-                    { "customer_id": { "$in": ["cust-1", "cust-2"] } },
-                    { "id": { "$in": ["ht-old"] } },
-                ]
-            }
-            .into()
-        );
+        let miss = miss.to_doc();
+        assert!(miss.get_document("customer_id").unwrap().get_array("$in").unwrap().is_empty());
+        let empty_candidates = ContractFilter {
+            customer_id: Some("cust-1".into()),
+            customer_ids: Some(Vec::new()),
+            ..Default::default()
+        }
+        .to_doc();
+        assert!(empty_candidates.get_document("customer_id").unwrap().get_array("$in").unwrap().is_empty());
     }
 
     #[test]
@@ -771,11 +762,9 @@ mod tests {
 
     #[test]
     fn source_existence_limits_company_without_requiring_an_owner() {
-        let mut company =
-            ContractFilter { historical_contract_ids: vec!["orphan-contract".into()], ..Default::default() };
+        let mut company = ContractFilter::default();
         company.require_existing_customers(vec!["existing-unassigned-customer".into()]);
         assert_eq!(company.customer_ids, Some(vec!["existing-unassigned-customer".into()]));
-        assert!(company.historical_contract_ids.is_empty());
         let mut restricted =
             ContractFilter { customer_ids: Some(vec!["allowed".into()]), ..Default::default() };
         restricted.require_existing_customers(vec!["outside".into()]);
@@ -783,42 +772,5 @@ mod tests {
         let mut missing = ContractFilter::default();
         missing.require_existing_customers(Vec::new());
         assert_eq!(missing.customer_ids, Some(Vec::new()));
-    }
-}
-
-#[cfg(test)]
-mod shared_sales_scope_tests {
-    use mongodb::bson::doc;
-    use persistence_core::QueryFilter;
-
-    use super::ContractFilter;
-
-    #[test]
-    fn existing_customer_hydration_does_not_expand_contract_identity_scope() {
-        let mut filter = ContractFilter {
-            authorized_contract_ids: Some(vec!["contract-a".into()]),
-            assigned_user_id: Some("sales-a".into()),
-            ..Default::default()
-        };
-        filter.require_existing_customers(vec!["shared-customer".into()]);
-        let document = filter.to_doc();
-        assert_eq!(document.get_document("id").unwrap(), &doc! { "$in": ["contract-a"] });
-        let assigned = document.get_array("$and").unwrap().last().unwrap().as_document().unwrap();
-        assert_eq!(
-            assigned,
-            &doc! { "$or": [
-                { "sales_owner_user_id": "sales-a" }, { "shared_sales_user_ids": "sales-a" }
-            ] }
-        );
-    }
-
-    #[test]
-    fn empty_contract_scope_stays_empty_despite_shared_customer() {
-        let filter = ContractFilter {
-            customer_ids: Some(vec!["shared-customer".into()]),
-            authorized_contract_ids: Some(Vec::new()),
-            ..Default::default()
-        };
-        assert!(filter.to_doc().get_document("id").unwrap().get_array("$in").unwrap().is_empty());
     }
 }

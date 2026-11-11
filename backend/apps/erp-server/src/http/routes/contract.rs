@@ -5,7 +5,7 @@
 
 use axum::Router;
 use axum::routing::{get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::contract;
 use crate::http::middleware::with_permission;
@@ -20,7 +20,7 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     archived_routes(rbac)
         .merge(sales_access_routes(rbac))
         .merge(template_routes(rbac))
@@ -28,7 +28,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(import_routes(rbac))
 }
 
-fn sales_access_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn sales_access_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/contracts/{id}/sales-access",
         with_permission(
@@ -39,7 +39,7 @@ fn sales_access_routes(rbac: &SharedRbacService) -> Router<HttpState> {
     )
 }
 
-fn archived_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn archived_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(file_routes(rbac))
         .route("/contracts", with_permission(get(contract::contract_list), rbac, permissions::contract::LIST))
@@ -77,7 +77,7 @@ fn archived_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// Word 模板及本人申请接口的独立权限边界。
-fn template_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn template_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contract-templates",
@@ -120,7 +120,7 @@ fn template_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn application_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contract-applications",
@@ -144,7 +144,7 @@ fn application_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn file_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn file_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contracts/{id}/files/{file_id}",
@@ -156,7 +156,7 @@ fn file_routes(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn import_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn import_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contract-imports",

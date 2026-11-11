@@ -1,7 +1,7 @@
 //! 财务文件按业务单据或任务详情权限受控下载。
 use axum::Router;
 use axum::routing::get;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::financial_files;
 use crate::http::middleware::with_permission;
@@ -15,7 +15,7 @@ use crate::permissions;
 /// 绑定现有业务详情权限的路由集合。
 /// # 错误
 /// 无。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     invoice_routes(rbac)
         .merge(receipt_routes(rbac))
         .route(
@@ -61,7 +61,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 按整票读取权限挂载发票文件清单与下载。
-fn invoice_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn invoice_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/invoices/{id}/files",
@@ -82,7 +82,7 @@ fn invoice_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 回款凭证查看与草稿编辑下载。
-fn receipt_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-receipts/{id}/files",

@@ -13,6 +13,7 @@ use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::profit_loss::{
     PROFIT_LOSS_ORDER_LIMIT, ProfitLossOrder, ProfitLossOrderFilter,
 };
+use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -55,7 +56,7 @@ impl Sources {
         db: &Database,
         query: &ProfitLossQuery,
         bounds: PeriodBounds,
-        authorized_scope: erp_sales::repository::sales_order::scope::SalesReadScope,
+        authorized_scope: SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Self> {
         let orders = authorized_orders(db, query, bounds, authorized_scope, executor).await?;
@@ -139,7 +140,7 @@ pub(super) async fn authorized_orders(
     db: &Database,
     query: &ProfitLossQuery,
     bounds: PeriodBounds,
-    authorized_scope: erp_sales::repository::sales_order::scope::SalesReadScope,
+    authorized_scope: SalesReadScope,
     executor: &mut dyn Executor,
 ) -> Result<Vec<ProfitLossOrder>> {
     let filter = ProfitLossOrderFilter {

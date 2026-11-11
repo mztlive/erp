@@ -339,6 +339,7 @@ async fn revalidate_decision_eligibilities(
         .map(|person| person.name)
         .unwrap_or_default();
     let current_eligibility = revalidate_decision_approver(
+        db,
         identity_service,
         rbac,
         RevalidateDecisionApproverInput {
@@ -360,7 +361,9 @@ async fn revalidate_decision_eligibilities(
         .map_err(map_runtime_graph_error)?;
     let next_eligibility = match decision_target {
         Some(node_key) => match graph.node(&node_key) {
-            Some(node) => revalidate_node_eligibility(identity_service, rbac, loaded, node, executor).await?,
+            Some(node) => {
+                revalidate_node_eligibility(db, identity_service, rbac, loaded, node, executor).await?
+            },
             None => return Err(Error::ConflictError("审批定义缺少目标节点".to_string())),
         },
         None => current_eligibility.clone(),
@@ -369,6 +372,7 @@ async fn revalidate_decision_eligibilities(
 }
 
 async fn revalidate_node_eligibility(
+    db: &Database,
     identity_service: &SharedRbacService,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
     loaded: &OpenDecisionRuntime,
@@ -379,6 +383,7 @@ async fn revalidate_node_eligibility(
     for person in node.participants() {
         members.push(
             revalidate_decision_approver(
+                db,
                 identity_service,
                 rbac,
                 RevalidateDecisionApproverInput {

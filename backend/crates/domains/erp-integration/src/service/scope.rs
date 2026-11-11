@@ -1,19 +1,15 @@
 //! 集成列表范围版本与空集口径。
 
 use application_core::{EmptyScopeVersion, ScopeVersion};
+use erp_core::common::time::Instant;
+use erp_identity::CompiledAccess;
 
 use crate::error::{Error, Result};
-use crate::ports::IntegrationResolvedScope;
-use crate::repository::IntegrationReadScope;
 
 /// 集成列表公共范围元数据。
 pub struct ScopedIntegrationList {
     /// 跨页必须原样回传的范围版本。
     pub scope_version: String,
-    /// RBAC 策略版本。
-    pub policy_version: u64,
-    /// 组织配置版本。
-    pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
     /// 角色无有效范围时为 `no_scope`。
@@ -36,13 +32,11 @@ impl ScopedIntegrationList {
     ///
     /// # 错误
     /// 无。
-    pub fn from_access(access: &IntegrationResolvedScope, read_scope: &IntegrationReadScope) -> Self {
+    pub fn from_access(access: &CompiledAccess) -> Self {
         Self {
-            scope_version: access.scope_version.clone(),
-            policy_version: access.policy_version,
-            organization_version: access.organization_version,
-            as_of: access.as_of.unix_secs().to_string(),
-            empty_reason: (!access.has_scope_rules() || read_scope.is_empty()).then_some("no_scope"),
+            scope_version: access.version(),
+            as_of: Instant::now().unix_secs().to_string(),
+            empty_reason: None,
             scope_summary: "集成当前处理人所属内部组织范围",
             ownership_basis: "current_handler",
         }
@@ -100,9 +94,8 @@ pub fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> 
 /// 列表授权解析结果（两类范围列表共用）。
 pub struct ResolvedListScope {
     /// 已解析范围事实。
-    pub context: IntegrationResolvedScope,
     /// 仓储读取条件。
-    pub read_scope: IntegrationReadScope,
+    pub read_scope: CompiledAccess,
     /// 展开后的组织 ID。
     pub owner_org_unit_ids: Vec<String>,
     /// 范围元数据。
@@ -136,11 +129,11 @@ pub async fn resolve_list_scope(
     scope_version: Option<&str>,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ResolvedListScope> {
-    let (context, read_scope) = access.resolve(actor, resource, "list", executor).await?;
+    let read_scope = access.resolve(actor, resource, "list", executor).await?;
     let owner_org_unit_ids = expand_org_filter(access, org_unit_ids, include_descendants, executor).await?;
-    let meta = ScopedIntegrationList::from_access(&context, &read_scope);
+    let meta = ScopedIntegrationList::from_access(&read_scope);
     ensure_scope_version(scope_version, &meta.scope_version)?;
-    Ok(ResolvedListScope { context, read_scope, owner_org_unit_ids, meta })
+    Ok(ResolvedListScope { read_scope, owner_org_unit_ids, meta })
 }
 
 /// 展开请求组织筛选；空列表表示不按组织收窄。
@@ -170,43 +163,12 @@ pub async fn expand_org_filter(
 
 #[cfg(test)]
 mod tests {
-    use erp_core::common::time::Instant;
-
     use super::*;
-    use crate::ports::IntegrationResolvedClause;
-    use crate::repository::IntegrationReadScope;
-
-    fn access(has_rule: bool) -> IntegrationResolvedScope {
-        IntegrationResolvedScope {
-            user_id: "actor".into(),
-            resource: "integration_error_task".into(),
-            action: "list".into(),
-            role_clauses: if has_rule {
-                vec![IntegrationResolvedClause { self_owned: true, ..Default::default() }]
-            } else {
-                vec![]
-            },
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 2,
-            scope_version: "v1".into(),
-            as_of: Instant::from_unix_secs(10),
-        }
-    }
-
     #[test]
-    fn empty_scope_is_labeled_no_scope() {
-        let read = IntegrationReadScope::default();
-        let meta = ScopedIntegrationList::from_access(&access(false), &read);
-        assert_eq!(meta.empty_reason, Some("no_scope"));
-        assert!(ensure_page(2, None).unwrap_err().to_string().contains("DATA_SCOPE_CHANGED"));
+    fn later_pages_require_the_same_authorization_version() {
+        assert!(ensure_page(2, None).is_err());
+        assert!(ensure_page(1, None).is_ok());
         assert!(ensure_scope_version(Some("v2"), "v1").is_err());
-        assert!(ensure_scope_version(None, "v1").is_ok());
-        assert!(ensure_scope_version(Some(""), "v1").is_ok());
         assert!(ensure_scope_version(Some("v1"), "v1").is_ok());
-        assert_eq!(
-            ensure_page(2, Some("")).unwrap_err().to_string(),
-            "数据冲突: DATA_SCOPE_CHANGED：请从第一页刷新后继续查询"
-        );
     }
 }

@@ -127,7 +127,7 @@ impl<'a> SupplierRepository<'a> {
         &self,
         input: &SupplierListSearchInput,
         executor: &mut dyn Executor,
-    ) -> Result<SupplierListBundle> {
+    ) -> crate::Result<SupplierListBundle> {
         let party_ids = input.keyword_party_ids.clone();
         let (supplier_ids, excluded_supplier_ids) = self
             .list_filter_id_constraints(
@@ -158,7 +158,7 @@ impl<'a> SupplierRepository<'a> {
         let page = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .search_supplier_accounts(&filter, executor)
             .await?;
-        self.hydrate_supplier_list_page(page, executor).await
+        self.hydrate_supplier_list_page(page, executor).await.map_err(Into::into)
     }
 
     /// 为当前页批量装载列表展示所需的商务资料、能力与资质。

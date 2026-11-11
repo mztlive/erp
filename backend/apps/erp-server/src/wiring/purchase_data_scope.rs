@@ -1,496 +1,512 @@
-//! 采购范围授权 adapter：调用身份域公共解析器，转换成采购 Port 事实。
-
+//! 采购授权组合根；事实和字段归拥有域，全部权限规则由 identity 执行。
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::access_control::{ScopeClause, ScopedObject};
-use erp_identity::entity::resource_access::ResourceKind;
-use erp_identity::repository::resource_grants::lookup_stages;
-#[cfg(test)]
-use erp_identity::service::access_control::resolve::DataScopeFacts;
-use erp_identity::service::access_control::resolve::DataScopeService;
-use erp_identity::service::resource_access::ResourceAccessService;
-use erp_identity::{Permission, SharedRbacService};
-use erp_procurement::ports::PurchaseScopeObject;
-use erp_procurement::{PurchaseAccess, PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope};
+use erp_identity::entity::authorization::{
+    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, ReadAccess,
+    RelationKey,
+};
+use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
+use erp_identity::{
+    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget, AuthorizationRegistry,
+    AuthorizationService, DataAccess, Permission, ResourceTargets, SharedRbacService,
+};
+use erp_procurement::authorization::{PurchaseFacts, PurchaseMapping};
+use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_procurement::{PurchaseAccess, PurchaseDataScopePort, PurchaseResolvedScope};
+use erp_workflow::DocumentRegistryExt;
+use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use mongodb::Database;
+use mongodb::bson::{Bson, doc};
 use persistence_core::Executor;
 
-use super::identity_error::map_identity_error;
-use super::scope_support::{self, evaluate_registered, reject_unsupported_dimensions, scope_clause};
+use super::scope_support;
 
-map_identity_error!(erp_procurement);
-
-/// 组合层采购范围 adapter，持有身份域解析所需依赖。
 #[derive(Clone)]
 pub struct MongoPurchaseDataScope {
     db: Database,
     rbac: SharedRbacService,
 }
-
 impl MongoPurchaseDataScope {
-    /// 绑定身份数据库及现有 RBAC 实例。
-    ///
+    /// 绑定数据库及身份服务。
     /// # 参数
-    /// * `db` - 身份与组织集合所在数据库
-    /// * `rbac` - 现有 RBAC 快照服务
-    ///
+    /// db 为原业务库，rbac 为共享身份服务。
     /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
+    /// 无缓存权限适配器。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在构造时补公司范围或自行解释原始范围规则。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
-
-    /// 包装为采购域可注入的共享 Port。
-    ///
+    /// 创建采购窄端口。
     /// # 参数
-    /// * `db` - 身份与组织集合所在数据库
-    /// * `rbac` - 现有 RBAC 快照服务
-    ///
+    /// db、rbac 为组合根能力。
     /// # 返回
-    /// 返回采购范围 Port。
-    ///
+    /// 可注入领域服务的共享端口。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 解析必须调用 DataScopeService；不得把身份实体交给采购域。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn PurchaseDataScopePort> {
         Arc::new(Self::new(db, rbac))
     }
+
+    fn authorization(
+        &self,
+        action: &str,
+        permissions: &[String],
+        candidate: Option<PurchaseOrder>,
+    ) -> erp_procurement::Result<(AuthorizationService, Arc<dyn AccessMapping>, Permission)> {
+        let mapping: Arc<dyn AccessMapping> = Arc::new(PurchaseHistoryMapping {
+            inner: PurchaseMapping::new("purchase_order")?,
+            model: purchase_model()?,
+        });
+        let object = candidate.is_some();
+        let facts = Arc::new(PurchaseObjectFacts { db: self.db.clone(), candidate });
+        let entry = purchase_registration(action, permissions, mapping.clone(), facts, object)?;
+        let permission = entry.permission.clone();
+        Ok((
+            AuthorizationService::new(
+                self.db.clone(),
+                self.rbac.clone(),
+                AuthorizationRegistry::new(vec![entry])?,
+            ),
+            mapping,
+            permission,
+        ))
+    }
 }
 
+fn purchase_registration(
+    action: &str,
+    required: &[String],
+    mapping: Arc<dyn AccessMapping>,
+    facts: Arc<dyn AccessFactsPort>,
+    object: bool,
+) -> erp_procurement::Result<AccessRegistration> {
+    let permission = Permission::parse(format!("purchase_order:{action}"))?;
+    let data = DataAccess {
+        subject: AccessSubject::Direct,
+        required_facts: [FactKind::Owner, FactKind::Organization].into(),
+        policy: AccessPolicy::Scope {
+            permission: permission.clone(),
+            read: ReadAccess {
+                history: matches!(action, "list" | "detail"),
+                records: matches!(action, "list" | "detail"),
+            },
+        },
+    };
+    Ok(AccessRegistration {
+        permission,
+        required_permissions: required.iter().map(Permission::parse).collect::<erp_core::Result<Vec<_>>>()?,
+        access: if object {
+            AccessMode::Object { data, facts }
+        } else {
+            AccessMode::QueryAndObject { data, mapping, facts }
+        },
+    })
+}
+
+fn purchase_model() -> erp_identity::Result<QueryModel> {
+    let mut model = PurchaseMapping::new("purchase_order")?.model().clone();
+    model.facts.extend([FactKind::HistoryParticipants, FactKind::Collaborators]);
+    Ok(model)
+}
+struct PurchaseHistoryMapping {
+    inner: PurchaseMapping,
+    model: QueryModel,
+}
+#[async_trait]
+impl AccessMapping for PurchaseHistoryMapping {
+    fn model(&self) -> &QueryModel {
+        &self.model
+    }
+    fn key(&self, c: &AccessContext, f: &MappingFacts) -> erp_identity::Result<Bson> {
+        self.inner.key(c, f)
+    }
+    async fn prepare(&self, c: &AccessContext, e: &mut dyn Executor) -> erp_identity::Result<MappingFacts> {
+        self.inner.prepare(c, e).await
+    }
+    fn records(&self, c: &AccessContext, f: &MappingFacts) -> erp_identity::Result<QueryFragment> {
+        self.inner.records(c, f)
+    }
+    fn predicate(
+        &self,
+        fact: &AccessFact,
+        c: &AccessContext,
+        f: &MappingFacts,
+    ) -> erp_identity::Result<QueryFragment> {
+        match fact {
+            AccessFact::HistoryParticipant => Ok(QueryFragment::Exists {
+                collection: Database::DOCUMENT_PARTICIPANTS.into(),
+                bindings: doc! { "document": "$id" },
+                pipeline: vec![
+                    doc! { "$match": { "participant_user_id": c.actor.id(), "deleted_at": 0_i64, "$expr": { "$eq": ["$document_id", "$$document"] } } },
+                ],
+            }),
+            AccessFact::Collaborating => Ok(QueryFragment::Match(doc! { "id": { "$in": [] } })),
+            _ => self.inner.predicate(fact, c, f),
+        }
+    }
+    fn relation(
+        &self,
+        r: &RelationKey,
+        c: &AccessContext,
+        f: &MappingFacts,
+    ) -> erp_identity::Result<RelationMapping> {
+        self.inner.relation(r, c, f)
+    }
+}
+struct PurchaseObjectFacts {
+    db: Database,
+    candidate: Option<PurchaseOrder>,
+}
+#[async_trait]
+impl AccessFactsPort for PurchaseObjectFacts {
+    async fn load(
+        &self,
+        c: &AccessContext,
+        ids: &ResourceTargets,
+        e: &mut dyn Executor,
+    ) -> erp_identity::Result<Vec<ObjectFacts>> {
+        let mut rows = if let Some(order) = &self.candidate {
+            if ids.ids().iter().any(|id| id == &order.base.id) {
+                vec![PurchaseFacts::object(order, "purchase_order")]
+            } else {
+                vec![]
+            }
+        } else {
+            PurchaseFacts::new(self.db.clone()).load(c, ids, e).await?
+        };
+        let targets = ids.ids().iter().cloned().collect::<Vec<_>>();
+        let participants = self.db.document_participants().document_ids_in(c.actor.id(), &targets, e).await?;
+        for row in &mut rows {
+            row.collaborators = FactValue::Known(BTreeSet::new());
+            row.history_participants = FactValue::Known(if participants.contains(&row.id) {
+                [c.actor.id().into()].into()
+            } else {
+                BTreeSet::new()
+            });
+            for source in row.relations.values_mut().flat_map(|relation| relation.objects.iter_mut()) {
+                source.collaborators = FactValue::Known(BTreeSet::new());
+                source.history_participants = FactValue::Known(if participants.contains(&source.id) {
+                    [c.actor.id().into()].into()
+                } else {
+                    BTreeSet::new()
+                });
+            }
+        }
+        Ok(rows)
+    }
+}
 #[async_trait]
 impl PurchaseDataScopePort for MongoPurchaseDataScope {
-    fn allows(
+    async fn qualify(
         &self,
-        scope: &PurchaseResolvedScope,
-        object: &PurchaseScopeObject,
-    ) -> erp_procurement::Result<bool> {
-        evaluate_object(scope, object)
+        actor: &AuditActor,
+        action: &str,
+        required: &[String],
+        executor: &mut dyn Executor,
+    ) -> erp_procurement::Result<()> {
+        let (service, _, permission) = self.authorization(action, required, None)?;
+        let mut permissions = required.iter().map(Permission::parse).collect::<erp_core::Result<Vec<_>>>()?;
+        permissions.push(permission);
+        if !service
+            .permissions(actor, &permissions, executor)
+            .await?
+            .is_some_and(|qualified| qualified.same_role(&permissions))
+        {
+            return Err(erp_procurement::Error::Forbidden("账号或有效角色不具备本操作的完整权限".into()));
+        }
+        Ok(())
     }
 
+    async fn require(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        order: &PurchaseOrder,
+        permissions: &[String],
+        e: &mut dyn Executor,
+    ) -> erp_procurement::Result<()> {
+        let (service, _, permission) = self.authorization(action, permissions, Some(order.clone()))?;
+        service
+            .require(
+                actor,
+                &permission,
+                AccessTarget::Records {
+                    subject: AccessSubject::Direct,
+                    ids: ResourceTargets::new(&[order.base.id.as_str()])?,
+                },
+                e,
+            )
+            .await?;
+        Ok(())
+    }
+    async fn require_source_permissions(
+        &self,
+        actor: &AuditActor,
+        entry: &Permission,
+        ids: &[String],
+        required: &[Permission],
+        e: &mut dyn Executor,
+    ) -> erp_procurement::Result<()> {
+        if !matches!(
+            (entry.resource(), entry.action()),
+            ("work_item", "detail" | "manage")
+                | ("purchase_payment_request", "submit")
+                | (
+                    "approval_instance",
+                    "read" | "decide" | "resume" | "cancel" | "cancel_blocked" | "upgrade_binding"
+                )
+        ) {
+            return Err(erp_procurement::Error::ValidationError("未登记采购来源入口".into()));
+        }
+        source_permissions(entry, required)?;
+        let relation = RelationKey::parse("self_purchase")?;
+        let subject = AccessSubject::Source(relation.clone());
+        let policy = AccessPolicy::Related {
+            relation,
+            resource: "purchase_order".into(),
+            mode: erp_identity::entity::authorization::RelationMatch::AllNonEmpty,
+            required_facts: [FactKind::Owner, FactKind::Organization].into(),
+            policy: Box::new(AccessPolicy::Scope {
+                permission: Permission::parse("purchase_order:detail")?,
+                read: ReadAccess { history: true, records: true },
+            }),
+        };
+        let registration = AccessRegistration {
+            permission: entry.clone(),
+            required_permissions: required.to_vec(),
+            access: AccessMode::Object {
+                data: DataAccess { subject: subject.clone(), required_facts: BTreeSet::new(), policy },
+                facts: Arc::new(PurchaseObjectFacts { db: self.db.clone(), candidate: None }),
+            },
+        };
+        let service = AuthorizationService::new(
+            self.db.clone(),
+            self.rbac.clone(),
+            AuthorizationRegistry::new(vec![registration])?,
+        );
+        service
+            .require(
+                actor,
+                entry,
+                AccessTarget::Records {
+                    subject,
+                    ids: ResourceTargets::new(&ids.iter().map(String::as_str).collect::<Vec<_>>())?,
+                },
+                e,
+            )
+            .await?;
+        Ok(())
+    }
     async fn resolve(
         &self,
         actor: &AuditActor,
         action: &str,
-        executor: &mut dyn Executor,
+        e: &mut dyn Executor,
     ) -> erp_procurement::Result<PurchaseResolvedScope> {
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, &Permission::parse(format!("{}:{}", "purchase_order", action))?, executor)
-            .await
-            .map_err(map_identity_error)?;
-        let mut mapped = map_access(access)?;
-        if matches!(action, "list" | "detail") {
-            let entry = Permission::parse(format!("purchase_order:{action}"))?;
-            let query = ResourceAccessService::new(self.db.clone(), self.rbac.clone())
-                .resolve(actor, &entry, ResourceKind::PurchaseOrder, executor)
-                .await
-                .map_err(map_identity_error)?;
-            mapped.scope_version = format!("{}:{}", mapped.scope_version, query.constraints().3);
-            mapped.grant_lookup = lookup_stages(&query);
-        }
-        Ok(mapped)
+        self.resolve_permissions(actor, action, &[], e).await
     }
-
     async fn resolve_permissions(
         &self,
         actor: &AuditActor,
         action: &str,
-        permissions: &[String],
-        executor: &mut dyn Executor,
+        extra: &[String],
+        e: &mut dyn Executor,
     ) -> erp_procurement::Result<PurchaseResolvedScope> {
-        let extra = permissions
-            .iter()
-            .map(|code| Permission::parse(code).map_err(erp_procurement::Error::from))
-            .collect::<erp_procurement::Result<Vec<_>>>()?;
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(
-                actor,
-                &Permission::parse(format!("{}:{}", "purchase_order", action))?,
-                &extra,
-                executor,
-            )
-            .await
-            .map_err(map_identity_error)?;
-        let mut mapped = map_access(access)?;
-        if matches!(action, "list" | "detail") {
-            let entry = Permission::parse(format!("purchase_order:{action}"))?;
-            let query = ResourceAccessService::new(self.db.clone(), self.rbac.clone())
-                .resolve(actor, &entry, ResourceKind::PurchaseOrder, executor)
-                .await
-                .map_err(map_identity_error)?;
-            mapped.scope_version = format!("{}:{}", mapped.scope_version, query.constraints().3);
-            mapped.grant_lookup = lookup_stages(&query);
-        }
-        Ok(mapped)
+        let (service, mapping, permission) = self.authorization(action, extra, None)?;
+        let query = service.query(actor, &permission, AccessSubject::Direct, e).await?;
+        let compiled = Arc::new(query.compile(mapping.as_ref(), e).await?);
+        service.validate(&compiled, e).await?;
+        let qualification = service
+            .permissions(actor, std::slice::from_ref(&permission), e)
+            .await?
+            .ok_or_else(|| erp_procurement::Error::Forbidden("账号已失效".into()))?;
+        Ok(PurchaseResolvedScope {
+            scope_version: compiled.version(),
+            compiled,
+            authorization: service,
+            user_id: actor.id().into(),
+            resource: "purchase_order".into(),
+            action: action.into(),
+            policy_version: qualification.policy_revision(),
+            as_of: Instant::now(),
+        })
     }
-
     async fn expand_org_units(
         &self,
-        org_unit_ids: &[String],
-        include_descendants: bool,
-        executor: &mut dyn Executor,
+        ids: &[String],
+        descendants: bool,
+        e: &mut dyn Executor,
     ) -> erp_procurement::Result<BTreeSet<String>> {
-        scope_support::expand_org_units(
-            &self.db,
-            org_unit_ids,
-            include_descendants,
-            executor,
-            Into::into,
-            map_identity_error,
-        )
-        .await
+        scope_support::expand_org_units(&self.db, ids, descendants, e, Into::into, Into::into).await
     }
-
     async fn org_member_ids(
         &self,
-        org_unit_ids: &BTreeSet<String>,
+        ids: &BTreeSet<String>,
         at: Instant,
-        executor: &mut dyn Executor,
+        e: &mut dyn Executor,
     ) -> erp_procurement::Result<Vec<String>> {
-        scope_support::org_member_ids(&self.db, org_unit_ids, at, executor, Into::into).await
+        scope_support::org_member_ids(&self.db, ids, at, e, Into::into).await
     }
-
     async fn own_org(
         &self,
-        user_id: &str,
+        user: &str,
         at: Instant,
-        executor: &mut dyn Executor,
+        e: &mut dyn Executor,
     ) -> erp_procurement::Result<Option<String>> {
-        scope_support::own_org(&self.db, user_id, at, executor, Into::into, map_identity_error).await
+        scope_support::own_org(&self.db, user, at, e, Into::into, Into::into).await
     }
 }
-
-/// 将身份域已解析授权转换为采购 Port 事实。
-///
+/// 装配采购对象访问器。
 /// # 参数
-/// * `access` - 身份域公共解析结果
-///
+/// db、rbac 为共享应用能力。
 /// # 返回
-/// 返回采购适用维度。
-///
-/// # 错误
-/// 出现结算主体或仓库维度时拒绝。
-///
-/// # 关键业务约束
-/// 不支持的维度必须拒绝，不得静默丢弃或与部门 ID 求并。
-fn map_access(
-    access: erp_identity::service::access_control::resolve::AuthorizedDataScope,
-) -> erp_procurement::Result<PurchaseResolvedScope> {
-    let access = access.into_facts();
-    Ok(PurchaseResolvedScope {
-        grant_lookup: Vec::new(),
-        user_id: access.user_id,
-        resource: access.resource,
-        action: access.action,
-        role_clauses: map_clauses(&access.scope.role_clauses)?,
-        user_limit: access.scope.user_limit.as_ref().map(map_clause).transpose()?,
-        policy_version: access.policy_version,
-        organization_version: access.organizations.version,
-        scope_version: access.scope_version,
-        as_of: access.as_of,
-    })
-}
-
-/// 转换全部角色条款；任一不支持维度即失败。
-///
-/// # 参数
-/// * `clauses` - 身份域正向范围
-///
-/// # 返回
-/// 返回采购域条款。
-///
-/// # 错误
-/// 出现结算主体或仓库维度时拒绝。
-///
-/// # 关键业务约束
-/// 不支持的维度必须拒绝，不得静默丢弃。
-fn map_clauses(clauses: &[ScopeClause]) -> erp_procurement::Result<Vec<PurchaseResolvedClause>> {
-    clauses.iter().map(map_clause).collect()
-}
-
-/// 将身份域条款转为采购已解析条款。
-///
-/// # 参数
-/// * `clause` - 身份域正向范围
-///
-/// # 返回
-/// 返回采购适用维度。
-///
-/// # 错误
-/// 结算主体或仓库目标非空时拒绝。
-///
-/// # 关键业务约束
-/// 必须保留公司、本人负责、协作和组织维度；不得改变语义。
-fn map_clause(clause: &ScopeClause) -> erp_procurement::Result<PurchaseResolvedClause> {
-    reject_unsupported_dimensions(clause, "采购范围不支持结算主体或仓库维度")
-        .map_err(erp_procurement::Error::ValidationError)?;
-    Ok(PurchaseResolvedClause {
-        company: clause.company,
-        self_owned: clause.self_owned,
-        collaborative: clause.collaborative,
-        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
-    })
-}
-
-/// 构造绑定身份数据库的采购访问器。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 当前 RBAC 快照
-///
-/// # 返回
-/// 返回已注入本 adapter 的采购访问器。
-///
+/// 使用统一授权的采购服务。
 /// # 错误
 /// 无。
-///
-/// # 关键业务约束
-/// HTTP 与命名 Process 必须经此入口，不得把 RBAC 直接交给采购域。
 pub fn purchase_access(db: Database, rbac: SharedRbacService) -> PurchaseAccess {
     PurchaseAccess::new(db.clone(), MongoPurchaseDataScope::shared(db, rbac))
 }
 
-/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
-fn evaluate_object(
-    scope: &PurchaseResolvedScope,
-    object: &PurchaseScopeObject,
-) -> erp_procurement::Result<bool> {
-    if scope.resource != "purchase_order" {
-        return Err(erp_procurement::Error::ValidationError("范围资源与消费方不一致".into()));
+/// 来源入口只接收审批政策中固定的完整功能资格组合。
+fn source_permissions(entry: &Permission, required: &[Permission]) -> erp_procurement::Result<()> {
+    if required.is_empty() {
+        if entry.resource() == "approval_instance" && entry.action() != "read" {
+            return Err(erp_procurement::Error::ValidationError(
+                "审批管理及决定来源必须携带完整功能资格".into(),
+            ));
+        }
+        return Ok(());
     }
-    evaluate_registered(
-        &scope.resource,
-        &scope.action,
-        scope.role_clauses.iter().map(public_clause),
-        scope.user_limit.as_ref().map(public_clause),
-        ScopedObject {
-            owned: object.owned,
-            collaborating: object.collaborating,
-            historical_read_participant: object.historical_read_participant,
-            org_unit_id: object.org_unit_id.as_deref(),
-            settlement_party_id: None,
-            warehouse_id: None,
-        },
-        map_identity_error,
-    )
-}
-
-/// 转换已解析条款，保留本人、协作、组织及空集。
-fn public_clause(clause: &PurchaseResolvedClause) -> ScopeClause {
-    scope_clause(clause.company, clause.self_owned, clause.collaborative, &clause.org_unit_ids)
+    if entry.resource() != "approval_instance" {
+        return Err(erp_procurement::Error::ValidationError("采购来源入口不支持附加资格".into()));
+    }
+    let provided = required
+        .iter()
+        .filter(|permission| *permission != entry)
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    if entry.action() == "decide" && provided == ["approval_instance:read".to_string()].into() {
+        return Ok(());
+    }
+    for document_type in ALL_DOCUMENT_TYPES {
+        let policy =
+            policy_of(document_type).map_err(|error| erp_procurement::Error::Internal(error.to_string()))?;
+        let DocumentApprovalPolicy::ProcessRequired(policy) = policy else {
+            continue;
+        };
+        let admin = match entry.action() {
+            "read" => {
+                for permission in [&policy.runtime_admin_permission, &policy.definition_admin_permission] {
+                    if provided == [permission.clone()].into() {
+                        return Ok(());
+                    }
+                }
+                continue;
+            },
+            "resume" | "cancel" | "cancel_blocked" => &policy.runtime_admin_permission,
+            "upgrade_binding" => &policy.definition_admin_permission,
+            _ => continue,
+        };
+        let expected = ["approval_instance:read".to_string(), admin.clone()].into();
+        if provided == expected {
+            return Ok(());
+        }
+    }
+    Err(erp_procurement::Error::ValidationError("未登记的采购来源完整资格组合".into()))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::slice;
 
     use super::*;
 
-    #[test]
-    fn purchase_adapter_rejects_unsupported_scope_dimensions() {
-        let warehouse =
-            ScopeClause { warehouse_ids: BTreeSet::from(["wh-1".into()]), ..ScopeClause::default() };
-        match map_clause(&warehouse) {
-            Err(erp_procurement::Error::ValidationError(message)) => {
-                assert!(message.contains("仓库"));
-            },
-            other => panic!("expected validation error, got {other:?}"),
-        }
-        let settlement = ScopeClause {
-            settlement_party_ids: BTreeSet::from(["party-1".into()]),
-            ..ScopeClause::default()
-        };
-        assert!(matches!(map_clause(&settlement), Err(erp_procurement::Error::ValidationError(_))));
-    }
+    struct UnusedFacts;
 
-    #[test]
-    fn purchase_adapter_keeps_owner_collab_and_org_dimensions() {
-        let clause = ScopeClause {
-            company: false,
-            self_owned: true,
-            collaborative: true,
-            org_unit_ids: BTreeSet::from(["org-b".into(), "org-a".into()]),
-            ..ScopeClause::default()
-        };
-        let mapped = map_clause(&clause).unwrap();
-        assert!(mapped.self_owned);
-        assert!(mapped.collaborative);
-        assert_eq!(mapped.org_unit_ids, vec!["org-a".to_string(), "org-b".to_string()]);
-    }
-}
-
-#[cfg(test)]
-mod equivalence_tests {
-    use erp_procurement::service::purchase_order::access::purchase_scope;
-    use serde_json::json;
-    use test_support::matches_filter as matches;
-
-    use super::*;
-
-    fn clause(mask: u8) -> PurchaseResolvedClause {
-        PurchaseResolvedClause {
-            company: mask & 1 != 0,
-            self_owned: mask & 2 != 0,
-            collaborative: mask & 4 != 0,
-            org_unit_ids: if mask & 8 != 0 { vec!["org-a".into()] } else { vec![] },
+    #[async_trait]
+    impl AccessFactsPort for UnusedFacts {
+        async fn load(
+            &self,
+            _: &AccessContext,
+            _: &ResourceTargets,
+            _: &mut dyn Executor,
+        ) -> erp_identity::Result<Vec<ObjectFacts>> {
+            panic!("登记校验不读取业务对象")
         }
     }
 
-    #[test]
-    fn unwired_port_and_mismatched_resource_fail_closed() {
-        use erp_procurement::ports::FailClosedPurchaseDataScopePort;
-        let mut scope = PurchaseResolvedScope {
-            grant_lookup: Vec::new(),
-            user_id: "actor".into(),
-            resource: "purchase_order".into(),
-            action: "detail".into(),
-            role_clauses: vec![clause(1)],
-            user_limit: None,
-            policy_version: 1,
-            organization_version: 1,
-            scope_version: "v1".into(),
-            as_of: Instant::from_unix_secs(0),
-        };
-        let object = PurchaseScopeObject::default();
-        assert!(FailClosedPurchaseDataScopePort.allows(&scope, &object).is_err());
-        assert!(evaluate_object(&scope, &object).unwrap());
-        scope.resource = "work_item".into();
-        assert!(evaluate_object(&scope, &object).is_err());
+    fn object_registration(action: &str, required: &[String]) -> AccessRegistration {
+        let mapping = Arc::new(PurchaseHistoryMapping {
+            inner: PurchaseMapping::new("purchase_order").unwrap(),
+            model: purchase_model().unwrap(),
+        });
+        purchase_registration(action, required, mapping, Arc::new(UnusedFacts), true).unwrap()
     }
 
     #[test]
-    fn explicit_person_choices_match_list_filters_without_extra_history() {
-        use entity_core::BaseModel;
-        use erp_identity::access_control::{DataScopeType, ScopeDimension, ScopeTargetMode};
-        use erp_identity::entity::access_control::person_scope::{
-            PersonDataScope, PersonScopeExpression, PersonScopeTerm,
-        };
-        use erp_identity::entity::organization::{OrgUnit, OrgUnitKind};
-        use erp_identity::entity::organization_change::OrganizationState;
-        use erp_identity::service::access_control::resolve::AuthorizedDataScope;
-        let state = OrganizationState {
-            units: vec![
-                OrgUnit::new(
-                    "org-a".into(),
-                    "Sales".into(),
-                    None,
-                    OrgUnitKind::Department,
-                    "admin".into(),
-                    "test".into(),
-                )
-                .unwrap(),
-            ],
-            ..Default::default()
-        };
-        for kind in [DataScopeType::SelfOwned, DataScopeType::Organization, DataScopeType::Company] {
-            let explicit = kind == DataScopeType::Organization;
-            let config = PersonDataScope {
-                base: BaseModel::fake(),
-                user_id: "actor".into(),
-                resource: "purchase_order".into(),
-                action: "detail".into(),
-                expression: PersonScopeExpression {
-                    additive: false,
-                    history_read: false,
-                    condition: None,
-                    alternatives: vec![vec![PersonScopeTerm {
-                        scope_type: kind,
-                        target_dimension: ScopeDimension::InternalOrg,
-                        target_mode: explicit.then_some(ScopeTargetMode::Explicit),
-                        include_descendants: explicit.then_some(false),
-                        scope_targets: if explicit { vec!["org-a".into()] } else { vec![] },
-                    }]],
-                },
+    fn object_preflight_registration_keeps_complete_permissions_and_current_action_scope() {
+        let required = ["purchase_order:create".to_string()];
+        for action in ["detail", "update", "submit", "cancel_approval", "delete"] {
+            let registration = object_registration(action, &required);
+            assert_eq!(
+                registration.permission,
+                Permission::parse(format!("purchase_order:{action}")).unwrap()
+            );
+            assert_eq!(registration.required_permissions, [Permission::parse(&required[0]).unwrap()]);
+            let AccessMode::Object { data, .. } = &registration.access else {
+                panic!("单对象预读不能依赖查询映射");
             };
-            let scope = config.resolve(&state, Instant::now()).unwrap();
-            let access = map_access(AuthorizedDataScope::test_fixture(DataScopeFacts {
-                user_id: "actor".into(),
-                resource: "purchase_order".into(),
-                action: "detail".into(),
-                scope,
-                qualified_roles: Default::default(),
-                organizations: state.clone(),
-                policy_version: 1,
-                scope_version: "v1".into(),
-                as_of: Instant::now(),
-            }))
-            .unwrap();
-            let query = purchase_scope(&access, "actor", vec!["history".into()]);
-            for (id, owned, department) in
-                [("owned", true, "org-b"), ("department", false, "org-a"), ("history", false, "org-b")]
-            {
-                let object = PurchaseScopeObject {
-                    owned,
-                    collaborating: false,
-                    historical_read_participant: id == "history",
-                    org_unit_id: Some(department.into()),
-                };
-                let document = json!({"id": id, "customer_id": id, "owner_user_id": if owned {"actor"} else {"other"}, "business_org_unit_id": department});
-                assert_eq!(evaluate_object(&access, &object).unwrap(), matches(&query.document(), &document));
-                if id == "history" {
-                    assert_eq!(evaluate_object(&access, &object).unwrap(), kind == DataScopeType::Company);
-                }
-            }
+            assert_eq!(data.required_facts, [FactKind::Owner, FactKind::Organization].into());
+            let AccessPolicy::Scope { permission, read } = &data.policy else {
+                panic!("采购对象必须走实际动作的完整范围");
+            };
+            assert_eq!(permission, &registration.permission);
+            assert_eq!(*read, ReadAccess { history: action == "detail", records: action == "detail" });
+            AuthorizationRegistry::new(vec![registration]).unwrap();
         }
     }
 
     #[test]
-    fn public_object_decision_matches_compiled_conditions() {
-        let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
-        let selected = |bit| {
-            ids.iter().enumerate().filter(|(i, _)| i & bit != 0).map(|(_, id)| id.clone()).collect::<Vec<_>>()
+    fn object_preflight_registration_cannot_use_read_supplements_to_authorize_writes() {
+        let mut registration = object_registration("submit", &[]);
+        let AccessMode::Object { data, .. } = &mut registration.access else {
+            panic!("本测试需要对象登记");
         };
-        for action in ["detail", "create", "update"] {
-            for role in 0..16 {
-                for second in [0, 2, 8] {
-                    for limit in -1..16 {
-                        let access = PurchaseResolvedScope {
-                            grant_lookup: Vec::new(),
-                            user_id: "actor".into(),
-                            resource: "purchase_order".into(),
-                            action: action.into(),
-                            role_clauses: vec![clause(role), clause(second)],
-                            user_limit: (limit >= 0).then(|| clause(limit as u8)),
-                            policy_version: 1,
-                            organization_version: 1,
-                            scope_version: "v1".into(),
-                            as_of: Instant::from_unix_secs(0),
-                        };
-                        let mut history = Vec::new();
-                        if action == "detail" {
-                            history = selected(8);
-                        }
-                        let compiled = purchase_scope(&access, "actor", history);
-                        for (index, id) in ids.iter().enumerate() {
-                            let object = PurchaseScopeObject {
-                                owned: index & 1 != 0,
-                                collaborating: false,
-                                historical_read_participant: index & 8 != 0,
-                                org_unit_id: Some(if index & 4 != 0 { "org-a" } else { "org-b" }.into()),
-                            };
-                            let document = json!({ "id": id, "customer_id": id,
-                            "owner_user_id": if object.owned { "actor" } else { "other" },
-                            "business_org_unit_id": object.org_unit_id.as_deref().unwrap() });
-                            assert_eq!(
-                                evaluate_object(&access, &object).unwrap(),
-                                matches(&compiled.document(), &document),
-                                "action={action}, role={role}, second={second}, limit={limit}, object={index}"
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        let AccessPolicy::Scope { read, .. } = &mut data.policy else {
+            panic!("本测试需要采购动作范围");
+        };
+        read.records = true;
+        assert!(matches!(
+            AuthorizationRegistry::new(vec![registration]),
+            Err(erp_identity::Error::ValidationError(_))
+        ));
+    }
+
+    #[test]
+    fn management_source_requires_the_registered_complete_permission_set() {
+        let resume = Permission::parse("approval_instance:resume").unwrap();
+        let read = Permission::parse("approval_instance:read").unwrap();
+        let runtime = Permission::parse("purchase_order:approval_runtime_admin").unwrap();
+        let definition = Permission::parse("purchase_order:approval_definition_admin").unwrap();
+        assert!(source_permissions(&resume, &[]).is_err());
+        assert!(source_permissions(&resume, &[read.clone(), runtime.clone()]).is_ok());
+        assert!(source_permissions(&resume, &[resume.clone(), read.clone(), runtime.clone()]).is_ok());
+        assert!(source_permissions(&resume, &[read.clone(), definition.clone()]).is_err());
+        let upgrade = Permission::parse("approval_instance:upgrade_binding").unwrap();
+        assert!(source_permissions(&upgrade, &[read.clone(), definition]).is_ok());
+        assert!(source_permissions(&upgrade, &[read.clone(), runtime]).is_err());
+        let decide = Permission::parse("approval_instance:decide").unwrap();
+        assert!(source_permissions(&decide, &[]).is_err());
+        assert!(source_permissions(&decide, slice::from_ref(&read)).is_ok());
+        assert!(source_permissions(&read, &[]).is_ok());
+        let payment = Permission::parse("purchase_payment_request:submit").unwrap();
+        assert!(source_permissions(&payment, &[]).is_ok());
+        assert!(source_permissions(&payment, &[read]).is_err());
     }
 }

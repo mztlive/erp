@@ -12,7 +12,7 @@ use erp_sales::service::sales_order::command::identity::{
     sales_order_create_audit_id, sales_order_create_fingerprint,
 };
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
@@ -31,6 +31,22 @@ struct CreationIdentity {
     audit_id: String,
     fingerprint: String,
     key_hash: CommandFingerprint,
+}
+
+impl CreationIdentity {
+    fn new(req: &mut CreateSalesOrderRequest, actor: &AuditActor) -> Result<Self> {
+        let idempotency_key = req.idempotency_key.trim().to_string();
+        if idempotency_key.is_empty() {
+            return Err(Error::ValidationError("幂等键不能为空".to_string()));
+        }
+        req.idempotency_key.clone_from(&idempotency_key);
+        Ok(Self {
+            audit_id: sales_order_create_audit_id(actor.id(), &idempotency_key),
+            fingerprint: sales_order_create_fingerprint(actor.id(), req)?,
+            key_hash: CommandFingerprint::from_parts([idempotency_key.clone()]),
+            idempotency_key,
+        })
+    }
 }
 
 impl SalesOrderCommandProcess {
@@ -61,15 +77,16 @@ impl SalesOrderCommandProcess {
         customer_id: &Option<CustomerAccountId>,
     ) -> Result<CustomerAccountId> {
         let access = self.command_access(actor, "detail")?;
-        if let Some(contract_id) = contract_id {
-            let contract = access.load_contract(contract_id.as_ref(), &mut NoTransaction).await?;
-            ensure_contract_customer(&contract.customer_id, customer_id.as_ref())?;
-            return Ok(contract.customer_id);
-        }
-        let customer_id =
-            customer_id.as_ref().ok_or_else(|| Error::ValidationError("无合同销售单必须选择客户".into()))?;
-        let customer = access.load_customer(customer_id.as_ref(), &mut NoTransaction).await?;
-        Ok(CustomerAccountId::new(customer.base.id))
+        let contract_id = contract_id.clone();
+        let customer_id = customer_id.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { command_customer_id(&access, contract_id, customer_id, executor).await },
+                )
+            })
+            .await
     }
 
     /// 按当前有效合同修订补齐不可由客户端声明的销售草稿快照。
@@ -79,7 +96,7 @@ impl SalesOrderCommandProcess {
     /// * `contract_id` - 合同稳定身份
     /// * `customer_id` - 客户端已选择的客户；提供时必须与合同一致
     /// * `editable` - 客户端可编辑字段与行
-    /// * `executor` - 调用方执行器；预装载可用 `NoTransaction`，不得代替写入事务重验
+    /// * `executor` - 调用方读取或写入事务执行器；预装载不得代替写入事务重验
     ///
     /// # 返回
     /// 返回合同所属客户、结算主体与完整内部草稿。
@@ -200,17 +217,7 @@ impl SalesOrderCommandProcess {
         let access = self
             .command_access(actor, "create")?
             .require_submit(req.intent == SalesOrderCreateIntent::Submit)?;
-        let idempotency_key = req.idempotency_key.trim().to_string();
-        if idempotency_key.is_empty() {
-            return Err(Error::ValidationError("幂等键不能为空".to_string()));
-        }
-        req.idempotency_key.clone_from(&idempotency_key);
-        let identity = CreationIdentity {
-            audit_id: sales_order_create_audit_id(actor.id(), &idempotency_key),
-            fingerprint: sales_order_create_fingerprint(actor.id(), &req)?,
-            key_hash: CommandFingerprint::from_parts([idempotency_key.clone()]),
-            idempotency_key,
-        };
+        let identity = CreationIdentity::new(&mut req, actor)?;
         if let Some(order_id) = self
             .replay_sales_order_creation(
                 &identity.audit_id,
@@ -223,7 +230,19 @@ impl SalesOrderCommandProcess {
         {
             return Ok(self.read_model().sales_order_detail(&order_id, None).await?);
         }
-        let creation = self.prepare_sales_creation(&req, actor, &access).await?;
+        let this = self.clone();
+        let request = req.clone();
+        let reader = access.clone();
+        let read_actor = actor.clone();
+        let creation = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.prepare_sales_creation(&request, &read_actor, &reader, executor).await
+                })
+            })
+            .await?;
         let plan = self.prepare_creation_plan(creation, req.intent, &identity, actor).await?;
         let detail_id = plan.order().base.id.clone();
         let context = self.creation_write_context(&plan, actor, &access, req.inquiry_source.clone())?;
@@ -309,6 +328,23 @@ impl SalesOrderCommandProcess {
     }
 }
 
+/// 在同一读取事务内核验所选关系，并解析目标客户身份。
+async fn command_customer_id(
+    access: &SalesCommandAccess,
+    contract_id: Option<ContractId>,
+    customer_id: Option<CustomerAccountId>,
+    executor: &mut dyn Executor,
+) -> Result<CustomerAccountId> {
+    if let Some(contract_id) = contract_id {
+        let contract = access.load_contract(contract_id.as_ref(), executor).await?;
+        ensure_contract_customer(&contract.customer_id, customer_id.as_ref())?;
+        return Ok(contract.customer_id);
+    }
+    let customer_id = customer_id.ok_or_else(|| Error::ValidationError("无合同销售单必须选择客户".into()))?;
+    let customer = access.load_customer(customer_id.as_ref(), executor).await?;
+    Ok(CustomerAccountId::new(customer.base.id))
+}
+
 /// 从已构造的创建事件读取原命令身份，同执行器查证原结果。
 async fn replay_creation_event(
     db: &Database,
@@ -371,7 +407,30 @@ fn validate_creation_fact(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
+    use erp_sales::entity::sales_order::BusinessType;
+    use serde_json::json;
+
     use super::*;
+
+    #[test]
+    fn creation_identity_preserves_normalized_request_across_read_and_write_phases() {
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        let mut request: CreateSalesOrderRequest = serde_json::from_value(json!({
+            "order_no": "SO-1", "business_type": BusinessType::GoodsService,
+            "idempotency_key": " request-key ", "intent": SalesOrderCreateIntent::SaveDraft,
+            "draft": {"editor_user_id": "actor", "lines": []}
+        }))
+        .unwrap();
+        let identity = CreationIdentity::new(&mut request, &actor).unwrap();
+        assert_eq!(identity.idempotency_key, "request-key");
+        assert_eq!(request.idempotency_key, "request-key");
+        assert_eq!(identity.fingerprint, sales_order_create_fingerprint(actor.id(), &request).unwrap());
+        let prepared = request.clone();
+        assert_eq!(identity.fingerprint, sales_order_create_fingerprint(actor.id(), &prepared).unwrap());
+        request.idempotency_key = " ".into();
+        assert!(matches!(CreationIdentity::new(&mut request, &actor), Err(Error::ValidationError(_))));
+    }
 
     /// 生产交叉验证拒绝错销售单或被责任交接替换的创建人。
     #[test]

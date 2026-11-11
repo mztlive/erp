@@ -99,13 +99,6 @@ fn business_org(request: &PurchasePaymentRequest) -> Result<&str> {
         .ok_or_else(|| Error::ConflictError("付款申请缺少真实业务归属部门".into()))
 }
 
-fn ensure_creator(request: &PurchasePaymentRequest, actor: &AuditActor) -> Result<()> {
-    if request.created_by != actor.id() {
-        return Err(Error::Forbidden("只能修改或撤回本人付款申请".into()));
-    }
-    Ok(())
-}
-
 async fn release_remaining(
     db: &Database,
     request: &PurchasePaymentRequest,

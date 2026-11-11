@@ -24,7 +24,7 @@ impl ApprovalDefinitionService {
     /// # 错误
     /// 政策或仓储读取失败时返回错误。
     pub async fn definition_catalog(&self, actor: &AuditActor) -> Result<Vec<DefinitionCatalogItem>> {
-        let visibility = definition_management_visibility(&self.identity, actor).await?;
+        let visibility = definition_management_visibility(&self.db, &self.identity, actor).await?;
         let mut required_kinds = Vec::new();
         let mut policies = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
@@ -59,7 +59,7 @@ impl ApprovalDefinitionService {
         document_type: DocumentType,
         actor: &AuditActor,
     ) -> Result<Vec<DefinitionVersionItem>> {
-        let visibility = definition_management_visibility(&self.identity, actor).await?;
+        let visibility = definition_management_visibility(&self.db, &self.identity, actor).await?;
         require_process_required(document_type)?;
         ensure_can_read_detail(&visibility, document_type)?;
         let versions = self
@@ -86,7 +86,7 @@ impl ApprovalDefinitionService {
         definition_id: &str,
         actor: &AuditActor,
     ) -> Result<DefinitionDetailView> {
-        let visibility = definition_management_visibility(&self.identity, actor).await?;
+        let visibility = definition_management_visibility(&self.db, &self.identity, actor).await?;
         let graph = self
             .db
             .bpm_workflow()

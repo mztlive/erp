@@ -1,7 +1,7 @@
 //! 预存款管理路由；逐动作JWT/RBAC与Process对象范围共同执行。
 use axum::Router;
 use axum::routing::{get, post};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::supplier_deposit;
 use crate::http::middleware::with_permission;
@@ -14,7 +14,7 @@ use crate::permissions;
 /// 返回逐动作权限保护的路由。
 /// # 错误
 /// 不执行I/O，不返回错误。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     reads(rbac)
         .merge(recharge(rbac))
         .merge(authorizations(rbac))
@@ -22,7 +22,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
         .merge(resolution(rbac))
 }
 
-fn resolution(rbac: &SharedRbacService) -> Router<HttpState> {
+fn resolution(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/reconciliations/{reconciliation}/resolve",
@@ -42,7 +42,7 @@ fn resolution(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn reads(rbac: &SharedRbacService) -> Router<HttpState> {
+fn reads(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts",
@@ -58,7 +58,7 @@ fn reads(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn recharge(rbac: &SharedRbacService) -> Router<HttpState> {
+fn recharge(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/recharge-requests",
@@ -94,7 +94,7 @@ fn recharge(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn authorizations(rbac: &SharedRbacService) -> Router<HttpState> {
+fn authorizations(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/authorizations",
@@ -118,7 +118,7 @@ fn authorizations(rbac: &SharedRbacService) -> Router<HttpState> {
         )
 }
 
-fn execution(rbac: &SharedRbacService) -> Router<HttpState> {
+fn execution(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-deposits/accounts/{id}/reservations",

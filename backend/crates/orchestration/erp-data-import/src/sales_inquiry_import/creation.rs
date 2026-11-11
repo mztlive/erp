@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use erp_order_to_cash::sales_inquiry::dto::CreateInquiryCommand;
 use erp_sales::entity::sales_inquiry_import::InquiryImportResult;
 use erp_sales::repository::extensions::SalesInquiryImportExt;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::{CreateInquiryImportCommand, SalesInquiryImportProcess};
 use crate::{Error, Result};
@@ -30,10 +30,11 @@ impl SalesInquiryImportProcess {
         let actor_copy = actor.clone();
         let request = command.clone();
         let identity = receipt.clone();
-        let revision = self.rbac.current_policy_revision().await?;
         let result = self
-            .rbac
-            .run_authorized_policy_transaction(revision, move |executor| {
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
                 Box::pin(async move { this.create_command(&actor_copy, &request, &identity, executor).await })
             })
             .await;

@@ -1,62 +1,9 @@
 //! 复用已解析的领域来源条件，保留来源存在与来源授权的区别。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_identity::access_control::ScopeClause;
-use erp_identity::service::access_control::resolve::AuthorizedDataScope;
-use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
 use mongodb::bson::{Bson, Document, doc};
 
 use super::super::FundsLinkedCondition;
-
-/// 将已解析范围的当前责任事实映射到来源仓储字段。
-///
-/// # 参数
-/// * `scope` - 已通过资源动作资格校验的范围。
-/// * `owner_field` - 来源负责人字段名。
-///
-/// # 返回
-/// 角色并集与个人上限的独立交集条件；缺范围保持恒假。负责人字段会改成 `owner_field`。
-///
-/// # 错误
-/// 不返回错误。
-pub(crate) fn source_scope_document(scope: &AuthorizedDataScope, owner_field: &str) -> Document {
-    let clause = |item: &ScopeClause| PurchaseScopeClause {
-        company: item.company,
-        owner_user_id: item.self_owned.then(|| scope.user_id.clone()),
-        business_org_unit_ids: item.org_unit_ids.iter().cloned().collect(),
-    };
-    let document = PurchaseReadScope {
-        roles: scope.scope.role_clauses.iter().map(clause).collect(),
-        user_limit: scope.scope.user_limit.as_ref().map(clause),
-        ..Default::default()
-    }
-    .document();
-    rename_owner(document, owner_field)
-}
-
-/// 递归映射领域固定负责人字段，保留 `$and/$or` 分支和空范围。
-fn rename_owner(document: Document, owner_field: &str) -> Document {
-    document
-        .into_iter()
-        .map(|(key, value)| {
-            let key = if key == "owner_user_id" { owner_field.to_owned() } else { key };
-            let value = match value {
-                Bson::Document(document) => Bson::Document(rename_owner(document, owner_field)),
-                Bson::Array(values) => Bson::Array(
-                    values
-                        .into_iter()
-                        .map(|value| match value {
-                            Bson::Document(document) => Bson::Document(rename_owner(document, owner_field)),
-                            other => other,
-                        })
-                        .collect(),
-                ),
-                other => other,
-            };
-            (key, value)
-        })
-        .collect()
-}
 
 /// 关联一个真实来源并分别保留最小责任事实与授权布尔值。
 ///

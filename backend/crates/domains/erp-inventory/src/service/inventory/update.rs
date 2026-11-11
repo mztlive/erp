@@ -1,14 +1,16 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::StockAdjustmentId;
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
 use super::mapping::build_adjustment_line_updates;
 use crate::dto::{StockAdjustmentView, UpdateStockAdjustmentRequest};
-use crate::entity::inventory::{StockAdjustment, StockAdjustmentUpdate};
+use crate::entity::inventory::{StockAdjustment, StockAdjustmentLineUpdate, StockAdjustmentUpdate};
 use crate::error::{Error, Result};
+use crate::ports::{AuthorizationPort, InventoryAuditPort, InventoryAuthorization, PreparedInventoryAudit};
 use crate::repository::InventoryExt;
 
 impl InventoryService {
@@ -41,64 +43,110 @@ impl InventoryService {
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
         let line_updates = build_adjustment_line_updates(req.lines.as_deref().unwrap_or_default())?;
-        let requires_line_validation = req.reason_type.is_some() || !line_updates.is_empty();
         let audit = self.audit.resource_log(
             actor.clone(),
             "stock_adjustment.update",
             "stock_adjustment",
             id.to_string(),
         )?;
+        let command = UpdateCommand {
+            actor: actor.clone(),
+            id: StockAdjustmentId::new(id.to_string()),
+            req,
+            line_updates,
+            audit,
+        };
         let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let audit_port = std::sync::Arc::clone(&self.audit);
-        let client = db.client().clone();
-        let adjustment_id = StockAdjustmentId::new(id.to_string());
-        let actor = actor.clone();
-        let updated = client
+        let authorization = self.authorization.clone();
+        let audit = self.audit.clone();
+        let updated = self
+            .db
+            .client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port.authorize(&actor, executor).await?;
-                    let mut adjustment = db
-                        .inventory()
-                        .stock_adjustment(adjustment_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                    if !authorization.actor_is_active()
-                        || !authorization.can_update(adjustment.warehouse_id.as_ref())
-                    {
-                        return Err(Error::NotFound("库存调整单不存在".to_string()));
-                    }
-                    if !adjustment.matches_version(req.version) {
-                        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
-                    }
-                    adjustment.update(StockAdjustmentUpdate {
-                        reason_type: req.reason_type,
-                        reviewed_by: None,
-                        finance_reviewed_by: None,
-                        note: req.note,
-                        occurred_at: req.occurred_at.map(Instant::from_unix_secs),
-                    })?;
-                    if requires_line_validation {
-                        let mut existing = db
-                            .inventory()
-                            .adjustment_lines_by_adjustment_ids(
-                                std::slice::from_ref(&adjustment_id),
-                                executor,
-                            )
-                            .await?;
-                        let changed = adjustment.apply_line_updates(&mut existing, &line_updates, false)?;
-                        for line in &changed {
-                            if !db.inventory().persist_adjustment_line(line, executor).await? {
-                                return Err(Error::NotFound("调整明细不存在".to_string()));
-                            }
-                        }
-                    }
-                    db.stock_adjustments().update(&mut adjustment, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<StockAdjustment, crate::error::Error>(adjustment)
+                    persist_update(&db, authorization.as_ref(), audit.as_ref(), command, executor).await
                 })
             })
             .await?;
         Ok(updated.into())
     }
+}
+
+/// 在原事务持久化已由调整单实体校验的明细变化。
+async fn update_adjustment_lines(
+    db: &Database,
+    id: &StockAdjustmentId,
+    adjustment: &mut StockAdjustment,
+    updates: &[StockAdjustmentLineUpdate],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut existing =
+        db.inventory().adjustment_lines_by_adjustment_ids(std::slice::from_ref(id), executor).await?;
+    let changed = adjustment.apply_line_updates(&mut existing, updates, false)?;
+    for line in &changed {
+        if !db.inventory().persist_adjustment_line(line, executor).await? {
+            return Err(Error::NotFound("调整明细不存在".into()));
+        }
+    }
+    Ok(())
+}
+
+/// 在原更新事务加载并验证目标与期望业务版本。
+async fn adjustment_for_update(
+    db: &Database,
+    authorization_port: &dyn AuthorizationPort,
+    actor: &AuditActor,
+    id: &StockAdjustmentId,
+    version: u64,
+    executor: &mut dyn Executor,
+) -> Result<(StockAdjustment, InventoryAuthorization)> {
+    let authorization = authorization_port.authorize(actor, executor).await?;
+    let adjustment = db
+        .inventory()
+        .stock_adjustment(id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
+    if !authorization.actor_is_active() || !authorization.can_update(adjustment.warehouse_id.as_ref()) {
+        return Err(Error::NotFound("库存调整单不存在".into()));
+    }
+    if !adjustment.matches_version(version) {
+        return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".into()));
+    }
+    Ok((adjustment, authorization))
+}
+
+struct UpdateCommand {
+    actor: AuditActor,
+    id: StockAdjustmentId,
+    req: UpdateStockAdjustmentRequest,
+    line_updates: Vec<StockAdjustmentLineUpdate>,
+    audit: PreparedInventoryAudit,
+}
+
+/// 更新步骤加入调用方事务，实体状态和版本检查保持原顺序。
+async fn persist_update(
+    db: &Database,
+    authorization: &dyn AuthorizationPort,
+    audit_port: &dyn InventoryAuditPort,
+    command: UpdateCommand,
+    executor: &mut dyn Executor,
+) -> Result<StockAdjustment> {
+    let UpdateCommand { actor, id, req, line_updates, audit } = command;
+    let (mut adjustment, authorization) =
+        adjustment_for_update(db, authorization, &actor, &id, req.version, executor).await?;
+    adjustment.update(StockAdjustmentUpdate {
+        reason_type: req.reason_type,
+        reviewed_by: None,
+        finance_reviewed_by: None,
+        note: req.note,
+        occurred_at: req.occurred_at.map(Instant::from_unix_secs),
+    })?;
+    if req.reason_type.is_some() || !line_updates.is_empty() {
+        update_adjustment_lines(db, &id, &mut adjustment, &line_updates, executor).await?;
+    }
+    db.stock_adjustments().update(&mut adjustment, executor).await?;
+    audit_port.persist(&audit, executor).await?;
+    authorization.validate(executor).await?;
+    Ok(adjustment)
 }

@@ -2,7 +2,7 @@
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 
 use crate::http::handler::supplier_offering;
 use crate::http::middleware::with_permission;
@@ -19,7 +19,7 @@ use crate::permissions;
 ///
 /// # 错误
 /// 无。
-pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
+pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(read_routes(rbac))
         .merge(batch_routes(rbac))
@@ -28,7 +28,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 注册供应商配送模板维护与供给指定入口。
-fn delivery_template_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn delivery_template_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/suppliers/{supplier_id}/delivery-templates",
@@ -73,7 +73,7 @@ fn delivery_template_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 注册供给列表、单条资料和历史条款的读取入口。
-fn read_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn read_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-offerings/{id}",
@@ -106,7 +106,7 @@ fn read_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 注册独立的批量条款修订和可供更新命令。
-fn batch_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn batch_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-offerings/batch/revise",
@@ -127,7 +127,7 @@ fn batch_routes(rbac: &SharedRbacService) -> Router<HttpState> {
 }
 
 /// 注册单条供给维护与任务处置命令。
-fn command_routes(rbac: &SharedRbacService) -> Router<HttpState> {
+fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/supplier-offerings",

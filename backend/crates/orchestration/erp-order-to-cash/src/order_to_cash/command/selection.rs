@@ -6,7 +6,7 @@ use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::repository::SalesSelectionExt;
 use erp_sales::repository::sales_selection::SalesSelectionProposalSkuLineRepositoryExt;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 
 use super::super::SalesOrderCommandProcess;
 use crate::Result;
@@ -20,14 +20,29 @@ impl SalesOrderCommandProcess {
     /// # 错误
     /// 方案或客户不可访问、模式不支持或明细不完整时拒绝。
     pub async fn selection_order_basis(&self, id: &str, actor: &AuditActor) -> Result<SelectionOrderBasis> {
-        let mut executor = NoTransaction;
+        let this = self.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.selection_basis(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一读取事务内核验方案与客户后返回开单预填。
+    async fn selection_basis(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SelectionOrderBasis> {
         self.require_rbac()?;
         let access = self.services.selections.clone();
-        let proposal = access.require_proposal(actor, "get", id, &mut executor).await?;
-        self.command_access(actor, "create")?
-            .load_customer(proposal.customer_id.as_ref(), &mut executor)
-            .await?;
-        let lines = self.db.sales_selection_proposal_sku_lines().list_by_proposal(id, &mut executor).await?;
+        let proposal = access.require_proposal(actor, "get", id, executor).await?;
+        self.command_access(actor, "create")?.load_customer(proposal.customer_id.as_ref(), executor).await?;
+        let lines = self.db.sales_selection_proposal_sku_lines().list_by_proposal(id, executor).await?;
         Ok(SelectionOrderBasis::from_proposal(&proposal, lines)?)
     }
 

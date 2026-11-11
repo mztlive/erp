@@ -3,14 +3,11 @@
 use application_core::AuditActor;
 use erp_finance::repository::ReceivableExt;
 use erp_identity::Permission;
-use erp_identity::access_control::ScopedObject;
-use erp_identity::entity::resource_access::ResourceKind;
-use erp_identity::entity::resource_access::query::ResourceTargets;
-use erp_identity::service::resource_access::ResourceAccessService;
 use erp_sales::repository::{SalesOrderExt, SalesOrderRepositoryScopeExt};
 use persistence_core::Executor;
 
 use super::authorization::*;
+use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
 impl FundsAccess {
@@ -75,36 +72,8 @@ impl FundsAccess {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if ids.is_empty() {
-            return Err(Error::Forbidden("操作缺少真实销售来源".into()));
-        }
-        let service = ResourceAccessService::new(self.db.clone(), self.rbac.clone());
-        let entry = Permission::parse(permission)?;
-        for batch in ids.chunks(500) {
-            let targets = ResourceTargets::new(&batch.iter().map(String::as_str).collect::<Vec<_>>())?;
-            let access =
-                service.resolve_targets(actor, &entry, ResourceKind::SalesOrder, targets, executor).await?;
-            let orders = self.db.sales_orders().list_active_by_ids(batch, executor).await?;
-            for id in batch {
-                let order = orders
-                    .iter()
-                    .find(|order| &order.base.id == id)
-                    .ok_or_else(|| Error::NotFound("销售来源不存在或不可访问".into()))?;
-                if !access.allows(
-                    id,
-                    &ScopedObject {
-                        owned: order.sales_owner_user_id == actor.id(),
-                        collaborating: false,
-                        historical_read_participant: false,
-                        org_unit_id: Some(&order.business_org_unit_id),
-                        settlement_party_id: None,
-                        warehouse_id: None,
-                    },
-                ) {
-                    return Err(Error::Forbidden("操作包含不可访问的销售来源".into()));
-                }
-            }
-        }
-        Ok(())
+        SalesAccess::new(self.db.clone(), self.rbac.clone())
+            .require_source(actor, &Permission::parse(permission)?, ids, executor)
+            .await
     }
 }

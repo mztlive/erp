@@ -9,7 +9,7 @@ use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 
 use super::super::{FundsAuthorization, FundsLinkedCondition};
-use super::{source_scope_document, source_stages};
+use super::source_stages;
 
 /// 从分配引用读取必要的子账字段；缺失引用保持空事实。
 ///
@@ -59,7 +59,7 @@ pub(super) fn sales_stages(
         authorization.sales.document(),
         "sales_owner_user_id",
         "order_no",
-        &authorization.sales.grant_lookup,
+        &authorization.sales.stages(),
     ));
     stages.push(doc! { "$set": { "order": "$_account.sales_order_id",
         "source_exists": { "$eq": [{ "$type": "$_source" }, "object"] },
@@ -110,11 +110,8 @@ fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
         .as_ref()
         .map(|scope| scope.document())
         .unwrap_or_else(|| doc! { "$expr": false });
-    let settlement = authorization
-        .settlement
-        .as_ref()
-        .map(|scope| source_scope_document(scope, "prepared_by"))
-        .unwrap_or_else(|| doc! { "$expr": false });
+    let settlement =
+        authorization.settlement.as_ref().map(|_| doc! {}).unwrap_or_else(|| doc! { "$expr": false });
     let mut stages = source_stages(
         <Database as PurchaseOrderExt>::PURCHASE_ORDERS,
         typed_reference("purchase_order"),
@@ -122,7 +119,7 @@ fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
         purchase,
         "owner_user_id",
         "purchase_no",
-        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.grant_lookup.as_slice()),
+        authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.stages()),
     );
     stages.extend(source_stages(
         <Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_STATEMENTS,
@@ -131,7 +128,7 @@ fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
         settlement,
         "prepared_by",
         "statement_no",
-        &[],
+        authorization.settlement.as_ref().map_or(&[], |scope| scope.stages()),
     ));
     stages
 }

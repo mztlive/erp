@@ -4,7 +4,6 @@ use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::AuditAction;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
-use erp_identity::service::account_permissions::{account_has_permission, permission_candidates};
 use erp_identity::service::organization_access::ensure_org_enabled;
 use erp_identity::{Permission, SharedRbacService};
 use erp_supply::entity::handover_receipt::{
@@ -20,7 +19,8 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use crate::handover_common::{
-    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, trimmed_idempotency_key,
+    HANDOVER_AUDIT_FIELDS, HandoverEventFacts, handover_content, handover_context, qualified_candidates,
+    target_qualified, trimmed_idempotency_key,
 };
 use crate::{Error, Result};
 
@@ -129,7 +129,7 @@ pub async fn handover_candidates(
     actor: &AuditActor,
 ) -> Result<Vec<HandoverCandidateView>> {
     let offering = ports.access.require_offering(actor, "update", id, &mut NoTransaction).await?;
-    Ok(permission_candidates(
+    Ok(qualified_candidates(
         &db,
         &rbac,
         &offering.maintainer_user_id,
@@ -253,9 +253,7 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if account_has_permission(db, rbac, target, &Permission::parse("supplier_offering:update")?, executor)
-        .await?
-    {
+    if target_qualified(db, rbac, target, &Permission::parse("supplier_offering:update")?, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备供给维护资格".into()))

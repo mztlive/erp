@@ -50,16 +50,8 @@ impl IntegrationCenterReadService {
         IntegrationAccess::new(self.data_scope.clone())
     }
 
-    async fn require_visible(
-        &self,
-        actor: &AuditActor,
-        resource: &str,
-        owner_user_id: &str,
-        owner_org_unit_id: &str,
-    ) -> Result<()> {
-        self.access()
-            .require_handler(actor, resource, "detail", owner_user_id, owner_org_unit_id, &mut NoTransaction)
-            .await?;
+    async fn require_visible(&self, actor: &AuditActor, resource: &str, id: &str) -> Result<()> {
+        self.access().require_handler(actor, resource, "detail", id, &mut NoTransaction).await?;
         Ok(())
     }
 }

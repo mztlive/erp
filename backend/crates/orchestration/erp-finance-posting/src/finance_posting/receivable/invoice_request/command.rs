@@ -94,7 +94,6 @@ impl ReceivableProcess {
         let rbac = self.rbac.clone();
         let actor = actor.clone();
         let command = command.clone();
-        let revision = rbac.current_policy_revision().await?;
         let evidence = ReplayEvidence::default();
         let observed = evidence.clone();
         let result = db
@@ -102,40 +101,18 @@ impl ReceivableProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.ensure_policy_snapshot_with_executor(revision, executor).await?;
                     let view =
                         MongoAccess { db: &db, rbac: &rbac }.replay(&actor, &command, executor).await?;
                     observed.observe(&view);
-                    let policy = rbac
-                        .ensure_policy_snapshot_with_executor(revision, executor)
-                        .await
-                        .map_err(Error::from);
-                    if view.is_some() {
-                        committed_result(policy)?;
-                    } else {
-                        policy?;
-                    }
                     Ok::<_, Error>(view)
                 })
             })
             .await;
         let view = evidence.finish(result)?;
-        let policy = self.rbac.current_policy_revision().await.map_err(Error::from).and_then(|current| {
-            if current == revision {
-                Ok(())
-            } else {
-                Err(Error::ConflictError("权限范围已变化，请使用原操作号重试".into()))
-            }
-        });
-        if view.is_some() {
-            committed_result(policy)?;
-        } else {
-            policy?;
-        }
         Ok(view)
     }
 
-    /// 已完成命令的响应仍须证明当前申请人、动作资格和完整来源读取权。
+    /// 已完成命令的响应仍须证明当前操作人、动作资格和完整来源读取权。
     pub(super) async fn authorized_invoice_request_result(
         &self,
         id: &str,
@@ -146,23 +123,17 @@ impl ReceivableProcess {
         let rbac = self.rbac.clone();
         let actor = actor.clone();
         let id = id.to_owned();
-        let revision = rbac.current_policy_revision().await?;
         let view = db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.ensure_policy_snapshot_with_executor(revision, executor).await?;
                     let view =
                         MongoAccess { db: &db, rbac: &rbac }.result(&actor, &id, action, executor).await?;
-                    rbac.ensure_policy_snapshot_with_executor(revision, executor).await?;
                     Ok::<_, Error>(view)
                 })
             })
             .await?;
-        if self.rbac.current_policy_revision().await? != revision {
-            return Err(Error::ConflictError("权限范围已变化，请使用原操作号重试".into()));
-        }
         Ok(view)
     }
 }

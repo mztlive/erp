@@ -19,8 +19,9 @@ use erp_customer::repository::prelude::*;
 use erp_customer::{AssignmentRole, CustomerExt};
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, SharedRbacService};
-use erp_workflow::DocumentRegistryExt;
+use erp_workflow::repository::document_registry::participant_access;
 use erp_workflow::repository::prelude::*;
+use erp_workflow::{DocumentRegistryExt, Error as WorkflowError};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -301,16 +302,21 @@ impl MongoContractParticipants {
 
 #[async_trait]
 impl ContractParticipantPort for MongoContractParticipants {
-    async fn document_ids_by_user(
+    async fn document_ids_in(
         &self,
         user_id: &str,
+        ids: &[String],
         executor: &mut dyn Executor,
     ) -> erp_contract::Result<Vec<String>> {
         self.db
             .document_participants()
-            .document_ids_by_user(user_id, executor)
+            .document_ids_in(user_id, ids, executor)
             .await
             .map_err(map_customer_to_contract)
+    }
+
+    async fn revision(&self, user_id: &str, executor: &mut dyn Executor) -> erp_contract::Result<i64> {
+        participant_access::revision(&self.db, user_id, executor).await.map_err(map_participation_to_contract)
     }
 }
 
@@ -420,7 +426,7 @@ pub fn contract_service(db: Database) -> ContractService {
 /// 无。
 ///
 /// # 关键业务约束
-/// adapter 必须调用 DataScopeService；合同域不得直接依赖身份域。
+/// adapter 必须调用 identity 统一授权服务，不解释范围条款。
 pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> ContractService {
     ContractService::new(
         db.clone(),
@@ -477,6 +483,14 @@ fn map_customer_to_contract(error: persistence_core::Error) -> erp_contract::Err
 
 fn map_identity_to_contract(error: persistence_core::Error) -> erp_contract::Error {
     erp_contract::Error::from(error)
+}
+
+fn map_participation_to_contract(error: WorkflowError) -> ContractError {
+    match error {
+        WorkflowError::RepositoryError(error) => ContractError::from(error),
+        WorkflowError::Internal(message) => ContractError::Internal(message),
+        error => ContractError::Internal(error.to_string()),
+    }
 }
 
 #[cfg(test)]

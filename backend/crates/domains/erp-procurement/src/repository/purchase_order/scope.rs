@@ -1,210 +1,143 @@
-//! 采购单当前责任范围查询；输入必须由应用层完成资源动作授权。
+//! 采购单读取仅消费 identity 生成的完整查询凭证。
 
+use std::sync::Arc;
+
+use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{QueryFilter, aggregate};
+use persistence_core::{Executor, QueryFilter, aggregate};
 
-/// 一个已经通过同角色权限证明的采购责任范围。
-#[derive(Debug, Clone, Default)]
-pub struct PurchaseScopeClause {
-    /// 公司范围覆盖该资源动作的全部采购单。
-    pub company: bool,
-    /// 当前采购负责人为该账号的单据。
-    pub owner_user_id: Option<String>,
-    /// 单据业务组织必须属于的内部组织。
-    pub business_org_unit_ids: Vec<String>,
-}
+use super::PURCHASE_ORDERS;
 
-/// 角色并集与个人上限保留为独立条件，筛选不得覆盖授权。
-#[derive(Debug, Clone, Default)]
+/// 当前读取阶段的统一授权凭证，未装配时保持空集。
+#[derive(Clone, Default)]
 pub struct PurchaseReadScope {
-    /// 由统一授权接口生成的关联阶段，必须在范围条件和分页之前执行。
-    pub grant_lookup: Vec<Document>,
-    /// 其他资源动作的独立范围，全部必须同时满足。
-    pub required_scopes: Vec<PurchaseReadScope>,
-    /// 同角色正向范围。
-    pub roles: Vec<PurchaseScopeClause>,
-    /// 用户个人上限；缺省表示不附加个人限制。
-    pub user_limit: Option<PurchaseScopeClause>,
-    /// 已证明合法读取参与的单据 ID，不得由历史归属快照构造。
-    pub historical_order_ids: Vec<String>,
+    access: Option<Arc<CompiledAccess>>,
+    authorization: Option<AuthorizationService>,
 }
 
-impl PurchaseScopeClause {
-    /// 按与仓储条件相同的当前责任事实判断对象，不使用审计创建人。
-    ///
-    /// # 参数
-    /// * `owner` - 当前或拟写入的采购负责人
-    /// * `org` - 单据业务组织
-    ///
-    /// # 返回
-    /// 公司、本人负责或业务组织任一命中即覆盖。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得把仓库 ID 与部门 ID 放入同一并集；创建人不得充当负责人。
-    #[cfg(test)]
-    fn allows(&self, owner: &str, org: &str) -> bool {
-        self.company
-            || self.owner_user_id.as_deref() == Some(owner)
-            || self.business_org_unit_ids.iter().any(|id| id == org)
-    }
-
-    /// 没有任何可匹配责任条件时，范围确定为空。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 非公司且没有负责人或组织条件时为空。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 空条款必须保持空集，不得补公司范围。
-    fn is_empty(&self) -> bool {
-        !self.company && self.owner_user_id.is_none() && self.business_org_unit_ids.is_empty()
-    }
-
-    /// 将当前采购责任转换为固定字段条件；空范围明确无结果。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回仓储读取条件。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 只解释 `owner_user_id` 与 `business_org_unit_id`，不得并入仓库字段。
-    fn document(&self) -> Document {
-        if self.company {
-            return doc! {};
-        }
-        let mut conditions = Vec::new();
-        if let Some(user) = &self.owner_user_id {
-            conditions.push(doc! { "owner_user_id": user });
-        }
-        if !self.business_org_unit_ids.is_empty() {
-            conditions.push(doc! { "business_org_unit_id": { "$in": &self.business_org_unit_ids } });
-        }
-        union(conditions)
+impl std::fmt::Debug for PurchaseReadScope {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("PurchaseReadScope").field("access", &self.access).finish()
     }
 }
 
 impl PurchaseReadScope {
-    /// 先用本次业务筛选收窄集合，再关联有效读取来源。
+    /// 绑定统一授权服务及本阶段编译结果。
     /// # 参数
-    /// filter 为不含授权临时字段的业务条件。
+    /// access 是 identity 编译结果；authorization 是生成它的服务。
     /// # 返回
-    /// 授权判定前的查询阶段；不得在这些阶段中分页。
+    /// 不缓存跨请求授权的仓储读取凭证。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
+        Self { access: Some(access), authorization: Some(authorization) }
+    }
+
+    /// 读取当前授权与业务映射版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已编译版本；无凭证时为空。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn version(&self) -> Option<String> {
+        self.access.as_ref().map(|access| access.version())
+    }
+
+    /// 返回完整授权阶段。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前阶段的只读聚合条件。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn stages(&self) -> &[Document] {
+        self.access.as_ref().map_or(&[], |access| access.stages())
+    }
+
+    /// 在原执行器复验凭证。
+    /// # 参数
+    /// executor 是本次读取的执行器。
+    /// # 返回
+    /// 身份、授权与业务依赖未变时成功。
+    /// # 错误
+    /// 失效授权、事实版本变化或设施失败时返回错误。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+        if let (Some(access), Some(service)) = (&self.access, &self.authorization) {
+            service.validate(access, executor).await?;
+        }
+        Ok(())
+    }
+
+    /// 将业务筛选放在完整授权阶段之前。
+    /// # 参数
+    /// filter 只包含业务筛选。
+    /// # 返回
+    /// 没有分页的候选与授权阶段。
     /// # 错误
     /// 不执行 I/O。
     pub fn lookup_after(&self, filter: Document) -> Vec<Document> {
         let mut stages = vec![doc! { "$match": filter }];
-        stages.extend(self.grant_lookup.clone());
+        stages.extend_from_slice(self.stages());
         stages
     }
 
-    /// 校验尚未持久化的单据责任；只使用正向角色范围与个人上限。
+    /// 沿关联单据的实际来源采购单执行完整授权。
     ///
     /// # 参数
-    /// * `owner` - 拟写入的采购负责人
-    /// * `org` - 拟写入的业务组织
-    ///
+    /// `filter` 是关联单据业务筛选；`source_id` 是仓储固定的来源 ID 字段表达式。
     /// # 返回
-    /// 全部独立资源范围同时覆盖责任事实时返回 true，历史参与不授予创建权。
-    ///
+    /// 只保留来源存在且通过统一授权的关联单据，不展开或复制根记录。
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 创建固定以当前采购负责人和业务组织解释，不得回退创建人。
-    #[cfg(test)]
-    pub fn allows_creation(&self, owner: &str, org: &str) -> bool {
-        self.roles.iter().any(|clause| clause.allows(owner, org))
-            && self.user_limit.as_ref().is_none_or(|clause| clause.allows(owner, org))
-            && self.required_scopes.iter().all(|scope| scope.allows_creation(owner, org))
+    /// 不执行 I/O；缺少凭证时返回空集条件。
+    pub fn related_stages(&self, filter: Document, source_id: &str) -> Vec<Document> {
+        related_pipeline(filter, source_id, self.access.as_ref().map(|access| access.stages()))
     }
 
-    /// 判断完整采购集合是否已获授权，个人上限仍须允许公司范围。
-    ///
+    /// 未取得统一授权凭证时保持空集。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 仅在角色公司授权且未被个人上限收窄时返回 true。
-    ///
+    /// 缺少凭证时为 true。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 公司范围仍受个人上限约束，不得用其补齐缺范围角色。
-    pub fn is_company(&self) -> bool {
-        self.required_scopes.iter().all(Self::is_company)
-            && self.roles.iter().any(|clause| clause.company)
-            && self.user_limit.as_ref().is_none_or(|clause| clause.company)
-    }
-
-    /// 判断授权规则是否确定不产生可见对象。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 仅证明空授权；非空规则仍可能因业务筛选而没有记录。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 缺范围保持空集，不得退化为全量查询。
     pub fn is_empty(&self) -> bool {
-        if !self.grant_lookup.is_empty() {
-            return self.required_scopes.iter().any(Self::is_empty);
-        }
-        self.required_scopes.iter().any(Self::is_empty)
-            || (self.roles.iter().all(PurchaseScopeClause::is_empty) && self.historical_order_ids.is_empty())
-            || self.user_limit.as_ref().is_some_and(PurchaseScopeClause::is_empty)
+        self.access.is_none()
     }
 
-    /// 生成角色并集与个人上限交集，仓库字段不参与授权。
-    ///
+    /// 凭证已在阶段中执行；缺少凭证时拒绝全部记录。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 返回仓储读取条件，空角色集不产生全量授权。
-    ///
+    /// 仓储最终候选条件。
     /// # 错误
     /// 无。
-    ///
-    /// # 关键业务约束
-    /// 历史参与只补充读取，且继续受个人上限约束。
     pub fn document(&self) -> Document {
-        let mut grants = self.roles.iter().map(PurchaseScopeClause::document).collect::<Vec<_>>();
-        if !self.historical_order_ids.is_empty() {
-            grants.push(doc! { "id": { "$in": &self.historical_order_ids } });
+        if self.access.is_some() {
+            doc! {}
+        } else {
+            doc! { "$expr": false }
         }
-        let mut roles = union(grants);
-        if let Some(limit) = &self.user_limit {
-            roles = doc! { "$and": [roles, limit.document()] };
-        }
-        if !self.grant_lookup.is_empty() {
-            roles = doc! { "$or": [roles, { "__resource_grant.0": { "$exists": true } }] };
-        }
-        if !self.required_scopes.is_empty() {
-            let mut required = self.required_scopes.iter().map(Self::document).collect::<Vec<_>>();
-            required.push(roles);
-            roles = doc! { "$and": required };
-        }
-        roles
     }
+}
+
+/// 授权在单条实际来源连接内执行，不枚举账号全部可见采购单。
+fn related_pipeline(filter: Document, source_id: &str, access: Option<&[Document]>) -> Vec<Document> {
+    let mut stages = vec![doc! { "$match": filter }];
+    let Some(access) = access else {
+        stages.push(doc! { "$match": { "$expr": false } });
+        return stages;
+    };
+    let mut source = vec![doc! { "$match": { "deleted_at": 0, "$expr": { "$eq": ["$id", "$$source_id"] } } }];
+    source.extend_from_slice(access);
+    source.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": 1 } }]);
+    stages.extend([
+        doc! { "$lookup": { "from": PURCHASE_ORDERS, "let": { "source_id": source_id }, "pipeline": source, "as": "__authorized_purchase_source" } },
+        doc! { "$match": { "__authorized_purchase_source.0": { "$exists": true } } },
+        doc! { "$unset": "__authorized_purchase_source" },
+    ]);
+    stages
 }
 
 /// 采购主表授权范围查询。
@@ -230,27 +163,7 @@ pub trait PurchaseOrderRepositoryScopeExt {
         id: &str,
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>>;
-
-    /// 读取范围内采购单主键，供变更单和退货沿来源单过滤。
-    ///
-    /// # 参数
-    /// * `scope` - 已证明的对象范围
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 最多 10001 个主键；调用方必须整体拒绝超限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
-    async fn list_authorized_ids(
-        &self,
-        scope: &PurchaseReadScope,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<String>>;
+    ) -> crate::Result<Option<crate::entity::purchase_order::PurchaseOrder>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
     ///
@@ -272,7 +185,7 @@ pub trait PurchaseOrderRepositoryScopeExt {
         filter: &super::PurchaseOrderFilter,
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<PurchaseVersion>>;
+    ) -> crate::Result<Vec<PurchaseVersion>>;
 }
 
 impl PurchaseOrderRepositoryScopeExt
@@ -283,39 +196,18 @@ impl PurchaseOrderRepositoryScopeExt
         id: &str,
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
-        aggregate::find(
+    ) -> crate::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
+        scope.validate(executor).await?;
+        let rows = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": 0, "$and": [{ "id": id }, scope.document()] },
             FindOptions::builder().limit(1).build(),
             scope.lookup_after(doc! { "deleted_at": 0, "id": id }),
             executor,
         )
-        .await
-        .map(|rows| rows.into_iter().next())
-    }
-
-    async fn list_authorized_ids(
-        &self,
-        scope: &PurchaseReadScope,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<String>> {
-        let versions = aggregate::find(
-            &self.collection().clone_with_type::<PurchaseVersion>(),
-            doc! {
-                "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
-                "$and": [scope.document()]
-            },
-            mongodb::options::FindOptions::builder()
-                .projection(doc! { "id": 1, "version": 1 })
-                .sort(doc! { "id": 1 })
-                .limit(10001)
-                .build(),
-            scope.lookup_after(doc! { "deleted_at": 0 }),
-            executor,
-        )
         .await?;
-        Ok(versions.into_iter().map(|row| row.id).collect())
+        scope.validate(executor).await?;
+        Ok(rows.into_iter().next())
     }
 
     async fn query_versions(
@@ -323,8 +215,9 @@ impl PurchaseOrderRepositoryScopeExt
         filter: &super::PurchaseOrderFilter,
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
-    ) -> persistence_core::Result<Vec<PurchaseVersion>> {
-        aggregate::find(
+    ) -> crate::Result<Vec<PurchaseVersion>> {
+        scope.validate(executor).await?;
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<PurchaseVersion>(),
             doc! { "$and": [filter.to_doc(), scope.document()] },
             mongodb::options::FindOptions::builder()
@@ -335,32 +228,10 @@ impl PurchaseOrderRepositoryScopeExt
             scope.lookup_after(filter.to_doc()),
             executor,
         )
-        .await
+        .await?;
+        scope.validate(executor).await?;
+        Ok(rows)
     }
-}
-
-/// MongoDB 不接受空 $or；用恒假表达式保持缺范围拒绝语义。
-///
-/// # 参数
-/// * `conditions` - 角色或条款并集
-///
-/// # 返回
-/// 空集合返回恒假条件；恰好一条时直接返回该条件；不少于两条时返回 `$or`。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 缺范围不得解释为匹配全部单据。
-fn union(conditions: Vec<Document>) -> Document {
-    let mut conditions = conditions;
-    if conditions.is_empty() {
-        return doc! { "$expr": false };
-    }
-    if conditions.len() == 1 {
-        return conditions.pop().unwrap_or_else(|| doc! { "$expr": false });
-    }
-    doc! { "$or": conditions }
 }
 
 /// 跨页校验使用的业务身份和版本，不包含金额及其他展示字段。
@@ -374,98 +245,41 @@ pub struct PurchaseVersion {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use mongodb::bson::{Bson, doc};
+
+    use super::{PurchaseReadScope, related_pipeline};
 
     #[test]
-    fn creation_requires_role_scope_and_every_action_and_personal_limit() {
-        let mut scope = PurchaseReadScope {
-            roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
-            required_scopes: vec![PurchaseReadScope {
-                roles: vec![PurchaseScopeClause {
-                    owner_user_id: Some("buyer-a".into()),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        assert!(scope.allows_creation("buyer-a", "org-a"));
-        assert!(!scope.allows_creation("buyer-b", "org-a"));
-        scope.user_limit =
-            Some(PurchaseScopeClause { business_org_unit_ids: vec!["org-b".into()], ..Default::default() });
-        assert!(!scope.allows_creation("buyer-a", "org-a"));
-        assert!(scope.allows_creation("buyer-a", "org-b"));
-        scope.roles.clear();
-        scope.historical_order_ids.push("old-order".into());
-        assert!(!scope.allows_creation("buyer-a", "org-b"));
-    }
-
-    #[test]
-    fn missing_scope_and_company_with_empty_personal_limit_stay_restricted() {
-        assert_eq!(PurchaseReadScope::default().document(), doc! { "$expr": false });
-        assert!(PurchaseReadScope::default().is_empty());
-        let scope = PurchaseReadScope {
-            required_scopes: vec![],
-            roles: vec![PurchaseScopeClause { company: true, ..Default::default() }],
-            user_limit: Some(PurchaseScopeClause::default()),
-            grant_lookup: Vec::new(),
-            historical_order_ids: vec![],
-        };
-        assert_eq!(scope.document(), doc! { "$and": [{}, { "$expr": false }] });
-        assert!(scope.is_empty());
-    }
-
-    #[test]
-    fn historical_participation_adds_reads_without_bypassing_personal_limit() {
-        let mut scope =
-            PurchaseReadScope { historical_order_ids: vec!["old-order".into()], ..Default::default() };
-        assert!(!scope.is_empty());
-        assert_eq!(scope.document(), doc! { "id": { "$in": ["old-order"] } });
-        scope.user_limit = Some(PurchaseScopeClause::default());
-        assert!(scope.is_empty());
+    fn related_query_keeps_business_filter_and_complete_correlated_authorization() {
+        let filter = doc! { "deleted_at": 0, "purchase_order_id": "po-requested", "status": "draft" };
+        let access = vec![
+            doc! { "$lookup": { "from": "resource_grants", "as": "grant", "pipeline": [] } },
+            doc! { "$match": { "$or": [{ "current_owner_user_id": "owner-1" }, { "grant.0": { "$exists": true } }] } },
+            doc! { "$unset": "grant" },
+        ];
+        let stages = related_pipeline(filter.clone(), "$purchase_order_id", Some(&access));
+        assert_eq!(stages[0], doc! { "$match": filter });
+        let lookup = stages[1].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! { "source_id": "$purchase_order_id" });
+        let source = lookup.get_array("pipeline").unwrap();
         assert_eq!(
-            scope.document(),
-            doc! { "$and": [
-                { "id": { "$in": ["old-order"] } }, { "$expr": false }
-            ] }
+            source[0],
+            Bson::Document(
+                doc! { "$match": { "deleted_at": 0, "$expr": { "$eq": ["$id", "$$source_id"] } } }
+            )
         );
+        assert_eq!(&source[1..=access.len()], access.iter().cloned().map(Bson::Document).collect::<Vec<_>>());
+        assert_eq!(source[access.len() + 1], Bson::Document(doc! { "$limit": 1 }));
+        assert_eq!(stages[2], doc! { "$match": { "__authorized_purchase_source.0": { "$exists": true } } });
+        assert_eq!(stages[3], doc! { "$unset": "__authorized_purchase_source" });
     }
 
     #[test]
-    fn responsibility_uses_current_order_facts_and_keeps_role_alternatives() {
-        let scope = PurchaseReadScope {
-            required_scopes: vec![],
-            roles: vec![PurchaseScopeClause {
-                owner_user_id: Some("buyer-a".into()),
-                business_org_unit_ids: vec!["org-a".into()],
-                ..Default::default()
-            }],
-            user_limit: None,
-            grant_lookup: Vec::new(),
-            historical_order_ids: vec![],
-        };
-        assert!(!scope.is_empty());
+    fn related_query_without_authorization_proof_is_empty() {
+        let scope = PurchaseReadScope::default();
         assert_eq!(
-            scope.document(),
-            doc! { "$or": [
-                { "owner_user_id": "buyer-a" },
-                { "business_org_unit_id": { "$in": ["org-a"] } }
-            ] }
+            scope.related_stages(doc! { "purchase_order_id": "po-1" }, "$purchase_order_id"),
+            vec![doc! { "$match": { "purchase_order_id": "po-1" } }, doc! { "$match": { "$expr": false } },]
         );
-    }
-
-    #[test]
-    fn warehouse_ids_are_not_unioned_with_business_org_conditions() {
-        let document = PurchaseScopeClause {
-            owner_user_id: Some("buyer-a".into()),
-            business_org_unit_ids: vec!["org-a".into()],
-            ..Default::default()
-        }
-        .document();
-        let encoded = document.to_string();
-        assert!(!encoded.contains("target_warehouse_id"));
-        assert!(!encoded.contains("warehouse"));
-        assert!(encoded.contains("business_org_unit_id"));
-        assert!(encoded.contains("owner_user_id"));
     }
 }

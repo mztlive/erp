@@ -7,7 +7,7 @@ use erp_core::AccountKind;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, Permission, PermissionSet, SharedRbacService};
+use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_settlement::{
@@ -392,9 +392,12 @@ async fn ensure_target_qualified(
     if !account.is_active_backoffice() {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
     }
-    let granted = rbac.permissions(account.kind, target).await?;
-    let required = Permission::parse("supplier_settlement_statement:update")?;
-    if !granted.covers(&PermissionSet::new(vec![required])) {
+    let required = [Permission::parse("supplier_settlement_statement:update")?];
+    let actor = AuditActor::new(target.into(), account.secret.account().into(), account.kind);
+    let qualified = crate::authorization::features(db.clone(), rbac.clone())
+        .permissions(&actor, &required, executor)
+        .await?;
+    if qualified.is_none_or(|value| !value.same_role(&required)) {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
     }
     Ok(())
@@ -412,11 +415,12 @@ async fn list_candidates(
         if account.base.id == current || !account.is_active_backoffice() {
             continue;
         }
-        let granted = rbac.permissions(account.kind, &account.base.id).await?;
-        let Ok(required) = Permission::parse("supplier_settlement_statement:update") else {
-            continue;
-        };
-        if !granted.covers(&PermissionSet::new(vec![required])) {
+        let required = [Permission::parse("supplier_settlement_statement:update")?];
+        let actor = AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind);
+        let qualified = crate::authorization::features(db.clone(), rbac.clone())
+            .permissions(&actor, &required, executor)
+            .await?;
+        if qualified.is_none_or(|value| !value.same_role(&required)) {
             continue;
         }
         candidates.push(HandoverCandidateView {

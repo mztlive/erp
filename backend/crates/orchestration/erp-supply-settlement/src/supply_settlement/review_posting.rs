@@ -129,6 +129,7 @@ async fn authorize_posting<A: WorkflowAuthorizationPort>(
 ) -> Result<()> {
     input.work_items.ensure_domain_decision_access(input.actor, input.work_item, ex).await?;
     super::reviewers::ensure_reviewer(
+        input.db,
         &input.work_items.identity,
         input.actor_id,
         &input.statement.prepared_by,

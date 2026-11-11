@@ -32,13 +32,13 @@ use erp_workflow::service::approval::business_adapter::BindingRevalidationContex
 use erp_workflow::service::document_registry::new_registered_document;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
 use super::super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::super::adapters::payment_term::parse;
-use super::super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::super::authorization::PurchaseOrderAuthorization;
 use super::super::create_submit::{CreatedDraftBundle, submit_created_draft};
 use super::super::inquiry_supply::reserve_selected_quotes;
 use super::super::payment_subject::load_payment_subject;
@@ -124,7 +124,7 @@ impl PurchaseOrderProcess {
     /// 剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 操作人授权版本通过 policy CAS 与提交绑定；事务内再以销售单 CAS guard 串行化并重算剩余量。
+    /// 操作人在原业务事务中重新核验统一授权；事务内再以销售单 CAS guard 串行化并重算剩余量。
     /// 创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_basis(
         &self,
@@ -172,14 +172,14 @@ impl PurchaseOrderProcess {
         }
     }
 
-    /// 保留授权事务的原克隆、账号复验和实际业务写入顺序。
+    /// 在原业务事务中先重验授权，再执行实际业务写入。
     async fn basis_transaction(
         &self,
         input: BasisTransactionInput<'_>,
         authorization: PurchaseOrderAuthorization,
     ) -> Result<CreatePurchaseOrderResult> {
         let ports = self.ports.clone();
-        let PurchaseOrderAuthorization { rbac, policy_revision } = authorization;
+        let rbac = authorization.rbac.clone();
         let BasisTransactionInput {
             req,
             requested_lines,
@@ -195,23 +195,25 @@ impl PurchaseOrderProcess {
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.to_string();
         let transaction_receipt_identity = receipt_identity.clone();
-        rbac.run_authorized_policy_transaction(policy_revision, move |executor| {
-            Box::pin(async move {
-                ensure_purchase_order_actor_account(&db, &transaction_actor, executor).await?;
-                let command = CreateBasisCommand {
-                    sales_order_id: &sales_order_id,
-                    req: &transaction_req,
-                    requested_lines: &requested_lines,
-                    receipt_identity: &transaction_receipt_identity,
-                    audit_command_id: transaction_receipt_identity.receipt_id(),
-                    audit_event_sequence: PurchaseCreationEventSequence::standalone(),
-                    request_fingerprint: &transaction_fingerprint,
-                    actor: &transaction_actor,
-                };
-                create_from_basis_apply(&db, ports.as_ref(), &binding_rbac, &command, executor).await
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization.require(&transaction_actor, executor).await?;
+                    let command = CreateBasisCommand {
+                        sales_order_id: &sales_order_id,
+                        req: &transaction_req,
+                        requested_lines: &requested_lines,
+                        receipt_identity: &transaction_receipt_identity,
+                        audit_command_id: transaction_receipt_identity.receipt_id(),
+                        audit_event_sequence: PurchaseCreationEventSequence::standalone(),
+                        request_fingerprint: &transaction_fingerprint,
+                        actor: &transaction_actor,
+                    };
+                    create_from_basis_apply(&db, ports.as_ref(), &binding_rbac, &command, executor).await
+                })
             })
-        })
-        .await
+            .await
     }
 }
 

@@ -1,5 +1,6 @@
 //! 客户领域：客户角色、归属与资料命令事实。
 
+pub mod authorization;
 pub mod dto;
 pub mod entity;
 mod error;
@@ -29,9 +30,9 @@ pub use entity::{
 };
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
-    AccountFactPort, CustomerAuditPort, CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope,
-    CustomerScopeObject, FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort,
-    FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit, ValidatedAuditSnapshot,
+    AccountFactPort, CustomerAuditPort, CustomerDataScopePort, CustomerResolvedScope,
+    FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort, FailClosedPartyFactPort,
+    PartyFactPort, PartyIdentityFact, PreparedCustomerAudit, ValidatedAuditSnapshot,
 };
 pub use repository::{
     CustomerAccountFilter, CustomerAccountRepository, CustomerAccountRow, CustomerAssignmentFilter,
