@@ -118,9 +118,6 @@ impl SelectionAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBooklet> {
-        if action != "get" {
-            self.require_object(actor, "sales_selection_booklet", "get", id, executor).await?;
-        }
         self.require_object(actor, "sales_selection_booklet", action, id, executor).await?;
         let book = self
             .db
@@ -166,7 +163,7 @@ impl SelectionAccess {
         Ok(proposal)
     }
 
-    /// 同一执行器内证明当前选品动作；客户资格由拥有领域独立解释。
+    /// 同一执行器内证明当前选品动作及读取前提；客户详情保留独立拒绝合同。
     async fn require_object(
         &self,
         actor: &AuditActor,

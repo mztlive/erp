@@ -316,9 +316,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
         let (_, authorization) = self.resolve(actor, "customer_receipt", "list", executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "回款无可见范围"));
-        }
         let condition = self.receipt_condition(query, executor).await?;
         let filter = self.receipt_filter(query).await?;
         let snapshot =
@@ -368,9 +365,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (_, authorization) =
                         this.resolve(&actor, "customer_receipt", "list", executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version.clone());
-                    }
                     let condition = this.receipt_condition(&query, executor).await?;
                     let filter = this.receipt_filter(&query).await?;
                     let versions = receipt_repository::versions(

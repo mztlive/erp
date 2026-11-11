@@ -20,8 +20,7 @@ impl FundsAccess {
         authorization.validate(executor).await?;
         let result: crate::Result<_> = async {
         let condition = self.request_condition(query, executor).await?;
-        let filter = doc! { "$and": [authorization.sales.document(),
-        super::linked_condition_document(&condition, "sales_owner_user_id")] };
+        let filter = super::linked_condition_document(&condition, "sales_owner_user_id");
         let mut stages = super::source_stages(
             <Database as SalesOrderExt>::SALES_ORDERS,
             "$sales_order_id".into(),
@@ -29,7 +28,7 @@ impl FundsAccess {
             filter,
             "sales_owner_user_id",
             "order_no",
-            &authorization.sales.stages(),
+            &authorization.sales_stages(),
         );
         stages.push(doc! { "$match": { "_source_allowed": true } });
         if let Some(ids) = condition.operator_user_ids {

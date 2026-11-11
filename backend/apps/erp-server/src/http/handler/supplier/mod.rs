@@ -30,7 +30,7 @@ use crate::http::handler::file_asset::{
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 use crate::wiring::identity::shared_rbac_service;
-use crate::wiring::{supplier_access, supplier_service};
+use crate::wiring::supplier_access;
 
 /// 原子创建完整供应商资料。
 pub async fn supplier_profile_create(
@@ -195,7 +195,7 @@ pub async fn supplier_delete(
 ) -> Result<()> {
     delete_supplier(
         state.application().db(),
-        supplier_service(state.application().db()),
+        state.application().supplier_service(),
         supplier_access(state.application().db(), shared_rbac_service(state.application().db())),
         id,
         actor,

@@ -82,6 +82,16 @@ fn policy(resource: &str, action: &str) -> Result<AccessPolicy> {
     if action == "list" {
         return Ok(AccessPolicy::All(vec![scope, customer_list_policy()?]));
     }
+    if resource == "sales_selection_booklet" && action != "get" && action != "create" {
+        let get = Permission::parse("sales_selection_booklet:get")?;
+        return Ok(AccessPolicy::All(vec![
+            scope,
+            AccessPolicy::Independent {
+                permission: get.clone(),
+                policy: Box::new(AccessPolicy::Scope { permission: get, read: ReadAccess::default() }),
+            },
+        ]));
+    }
     Ok(scope)
 }
 
@@ -103,4 +113,40 @@ fn customer_list_policy() -> Result<AccessPolicy> {
             ]),
         ])),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_actions_preserve_a_separately_qualified_get_scope() {
+        for action in
+            BOOKLET_ACTIONS.iter().copied().filter(|action| !matches!(*action, "list" | "get" | "create"))
+        {
+            let AccessPolicy::All(policies) = policy("sales_selection_booklet", action).unwrap() else {
+                panic!("册写动作须保留动作范围及独立读取前提")
+            };
+            assert!(matches!(&policies[0], AccessPolicy::Scope { permission, .. }
+                if permission.action() == action));
+            let AccessPolicy::Independent { permission, policy } = &policies[1] else {
+                panic!("读取前提按独立入口取有资格角色")
+            };
+            assert_eq!(permission.to_string(), "sales_selection_booklet:get");
+            assert!(matches!(policy.as_ref(), AccessPolicy::Scope { permission, read }
+                if permission.action() == "get" && *read == ReadAccess::default()));
+        }
+    }
+
+    #[test]
+    fn get_and_create_do_not_acquire_an_additional_get_requirement() {
+        for (resource, action) in [
+            ("sales_selection_booklet", "get"),
+            ("sales_selection_booklet", "create"),
+            ("sales_selection_proposal", "get"),
+        ] {
+            assert!(matches!(policy(resource, action).unwrap(), AccessPolicy::Scope { permission, .. }
+                if permission.resource() == resource && permission.action() == action));
+        }
+    }
 }

@@ -78,9 +78,13 @@ pub struct ObjectFacts {
     pub version: String,
     pub valid_until: Option<Instant>,
     pub owner_id: FactValue<Option<String>>,
+    /// 多负责人资源的完整当前负责人集合；与 owner_id 二选一。
+    pub owner_ids: FactValue<BTreeSet<String>>,
     pub collaborators: FactValue<BTreeSet<String>>,
     pub history_participants: FactValue<BTreeSet<String>>,
     pub org_unit_id: FactValue<Option<String>>,
+    /// 多负责人资源的完整归属组织集合；与 org_unit_id 二选一。
+    pub org_unit_ids: FactValue<BTreeSet<String>>,
     pub settlement_party_id: FactValue<Option<String>>,
     pub warehouse_id: FactValue<Option<String>>,
     pub assignee_id: FactValue<Option<String>>,

@@ -132,9 +132,8 @@ impl SupplierPortalProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FileAsset> {
-        self.internal_actor(actor, executor).await?;
         self.internal_permission(actor, "supplier_portal.application_detail", executor).await?;
-        if !request_readable(&self.db, &self.services, actor, request_id, executor).await? {
+        if !request_readable(&self.db, &self.rbac, actor, request_id, executor).await? {
             return Err(Error::NotFound("申请不存在或无权查看".into()));
         }
         let draft = self.catalog_portal().load(request_id, executor).await?;

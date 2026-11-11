@@ -1,0 +1,202 @@
+//! 客户完整对象事实；多名负责人及其组织均按原执行器读取。
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use erp_core::common::time::Instant;
+use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts, ResourceTargets};
+use erp_identity::{AccessFactsPort, Error, OrganizationDirectoryService, Result};
+use mongodb::Database;
+use mongodb::bson::doc;
+use persistence_core::Executor;
+
+use crate::entity::customer::{AssignmentRole, CustomerAccount, CustomerAssignment};
+use crate::repository::CustomerExt;
+use crate::service::customer::access::business_date;
+
+/// 客户拥有领域提供的完整客户及多负责人事实。
+pub struct CustomerFacts(Database);
+
+impl CustomerFacts {
+    /// 绑定拥有领域的客户和归属集合。
+    pub(super) fn new(db: Database) -> Self {
+        Self(db)
+    }
+
+    /// 创建可供跨域来源授权复用的客户事实端口。
+    /// # 参数
+    /// db 为客户集合所在数据库。
+    /// # 返回
+    /// 仅装载完整业务事实、不组合权限政策的共享端口。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn shared(db: Database) -> Arc<dyn AccessFactsPort> {
+        Arc::new(Self::new(db))
+    }
+
+    /// 读取当前负责人组织；缺失主属组织保持已知空值，重叠主属关系返回错误。
+    async fn owner_organizations(
+        &self,
+        owners: &BTreeSet<String>,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<(BTreeSet<String>, Instant)> {
+        let directory = OrganizationDirectoryService::new(self.0.clone());
+        let mut organizations = BTreeSet::new();
+        let mut valid_until = super::next_day(at);
+        for owner in owners {
+            let (organization, boundary) = directory.own_org_with_validity(owner, at, executor).await?;
+            if let Some(org) = organization {
+                organizations.insert(org);
+            }
+            if let Some(boundary) = boundary {
+                valid_until = valid_until.min(boundary);
+            }
+        }
+        Ok((organizations, valid_until))
+    }
+}
+
+#[async_trait]
+impl AccessFactsPort for CustomerFacts {
+    async fn load(
+        &self,
+        context: &AccessContext,
+        ids: &ResourceTargets,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ObjectFacts>> {
+        let assignments = self.0.customer_assignments().find_many(
+            doc! {"customer_id": {"$in": ids.ids().iter().collect::<Vec<_>>()}, "assignment_role": "OWNER"},
+            executor,
+        ).await?;
+        let mut objects = Vec::new();
+        for id in ids.ids() {
+            let Some(account) = self.0.customer_accounts().find_by_id(id, executor).await? else {
+                continue;
+            };
+            let rows = assignments.iter().filter(|row| row.customer_id.as_ref() == id).collect::<Vec<_>>();
+            let (owners, history) = responsibility(&rows, context)?;
+            let (organizations, valid_until) =
+                self.owner_organizations(&owners, context.as_of, executor).await?;
+            objects.push(object(&account, &rows, owners, organizations, history, valid_until));
+        }
+        Ok(objects)
+    }
+}
+
+/// 当前读写取有效负责人；创建检查已写入的拟生效归属，历史参与保留全部 OWNER。
+fn responsibility(
+    rows: &[&CustomerAssignment],
+    context: &AccessContext,
+) -> Result<(BTreeSet<String>, BTreeSet<String>)> {
+    let date = business_date(context.as_of).map_err(|error| Error::ValidationError(error.to_string()))?;
+    let owners = rows
+        .iter()
+        .filter(|row| {
+            !row.base.is_deleted()
+                && row.assignment_role == AssignmentRole::Owner
+                && ((context.permission.resource() == "customer" && context.permission.action() == "create")
+                    || row.is_active_on(date))
+        })
+        .map(|row| row.user_id.clone())
+        .collect();
+    let history = rows
+        .iter()
+        .filter(|row| !row.base.is_deleted() && row.assignment_role == AssignmentRole::Owner)
+        .map(|row| row.user_id.clone())
+        .collect();
+    Ok((owners, history))
+}
+
+/// 完整归属版本参与事实复验；日期边界使到期关系不能跨日继续使用。
+fn object(
+    account: &CustomerAccount,
+    assignments: &[&CustomerAssignment],
+    owners: BTreeSet<String>,
+    organizations: BTreeSet<String>,
+    history: BTreeSet<String>,
+    valid_until: Instant,
+) -> ObjectFacts {
+    let mut revisions = assignments.iter().map(|row| (&row.base.id, row.base.version)).collect::<Vec<_>>();
+    revisions.sort_unstable();
+    ObjectFacts {
+        resource: "customer".into(),
+        id: account.base.id.clone(),
+        version: format!("{}:{revisions:?}", account.base.version),
+        valid_until: Some(valid_until),
+        owner_ids: FactValue::Known(owners),
+        org_unit_ids: FactValue::Known(organizations),
+        history_participants: FactValue::Known(history),
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use application_core::AuditActor;
+    use entity_core::BaseModel;
+    use erp_core::AccountKind;
+    use erp_core::ids::CustomerAccountId;
+    use erp_identity::Permission;
+
+    use super::*;
+
+    fn assignment(user: &str, from: &str, to: Option<&str>) -> CustomerAssignment {
+        CustomerAssignment {
+            base: BaseModel::fake(),
+            customer_id: CustomerAccountId::new("customer"),
+            user_id: user.into(),
+            assignment_role: AssignmentRole::Owner,
+            valid_from: from.parse().unwrap(),
+            valid_to: to.map(|value| value.parse().unwrap()),
+            change_reason: "test".into(),
+        }
+    }
+
+    fn context(action: &str) -> AccessContext {
+        AccessContext {
+            actor: AuditActor::new("a".into(), "a".into(), AccountKind::Admin),
+            permission: Permission::parse(format!("customer:{action}")).unwrap(),
+            resource: "customer".into(),
+            model: None,
+            as_of: Instant::from_unix_secs(86400),
+        }
+    }
+
+    #[test]
+    fn responsibility_preserves_every_current_owner_and_read_only_history() {
+        let rows = [
+            assignment("current-a", "1970-01-01", None),
+            assignment("current-b", "1970-01-02", None),
+            assignment("past", "1970-01-01", Some("1970-01-02")),
+            assignment("future", "1970-01-03", None),
+        ];
+        let references = rows.iter().collect::<Vec<_>>();
+        let (owners, history) = responsibility(&references, &context("detail")).unwrap();
+        assert_eq!(owners, ["current-a".into(), "current-b".into()].into());
+        assert_eq!(history, rows.iter().map(|row| row.user_id.clone()).collect());
+        let (proposed, _) = responsibility(&references, &context("create")).unwrap();
+        assert_eq!(proposed, history);
+    }
+
+    #[test]
+    fn deleted_and_collaborator_rows_cannot_supply_owner_facts() {
+        let mut deleted = assignment("deleted", "1970-01-01", None);
+        deleted.base.deleted_at = 1;
+        let mut collaborator = assignment("collaborator", "1970-01-01", None);
+        collaborator.assignment_role = AssignmentRole::Collaborator;
+        let (owners, history) = responsibility(&[&deleted, &collaborator], &context("detail")).unwrap();
+        assert!(owners.is_empty());
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn cross_domain_create_keeps_customer_current_owner_window() {
+        let ended = assignment("past", "1970-01-01", Some("1970-01-02"));
+        let mut source = context("detail");
+        source.permission = Permission::parse("sales_selection_booklet:create").unwrap();
+        let (owners, history) = responsibility(&[&ended], &source).unwrap();
+        assert!(owners.is_empty());
+        assert_eq!(history, ["past".into()].into());
+    }
+}

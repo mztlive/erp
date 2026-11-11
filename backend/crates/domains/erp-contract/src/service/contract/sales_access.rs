@@ -27,7 +27,7 @@ impl ContractService {
     ) -> Result<ContractDetailView> {
         request.validate()?;
         let db = self.db.clone();
-        let access = self.access();
+        let access = self.data_scope.clone();
         let audit = self.audit.resource_log(actor.clone(), "contract.share", "contract", id.to_string())?;
         let accounts = self.accounts.clone();
         let actor_id = actor.id().to_string();

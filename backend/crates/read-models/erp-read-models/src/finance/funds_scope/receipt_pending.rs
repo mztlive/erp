@@ -78,8 +78,11 @@ impl FundsAccess {
             .collect::<Vec<_>>();
         let mut visible_orders = HashSet::new();
         for chunk in order_ids.chunks(500) {
-            let orders =
-                self.db.sales_orders().scope_order_versions(chunk, &authorization.sales, executor).await?;
+            let orders = self
+                .db
+                .sales_orders()
+                .scope_order_versions(chunk, authorization.sales_scope()?, executor)
+                .await?;
             visible_orders.extend(orders.into_iter().map(|order| order.id));
         }
         let visible_accounts = accounts

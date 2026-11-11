@@ -5,6 +5,7 @@
 use persistence_core::aggregate;
 
 use super::*;
+use crate::CompiledScope;
 use crate::ports::connector::order::OrderKey;
 
 /// 供应商履约订单列表投影行。
@@ -67,7 +68,7 @@ pub struct SupplierFulfillmentOrderFilter {
     /// 售后待处理快捷筛选。
     pub aftersale_pending: bool,
     /// 已证明的跟进人授权条件；`None` 表示调用方尚未注入范围。
-    pub scope: Option<crate::repository::supplier_fulfillment_scope::FulfillmentOrderReadScope>,
+    pub scope: Option<CompiledScope>,
     /// 跟进人筛选，只收窄授权结果。
     pub follow_up_user_ids: Option<Vec<String>>,
     /// 业务组织筛选，只收窄授权结果。

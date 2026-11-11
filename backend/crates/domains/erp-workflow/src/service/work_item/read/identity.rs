@@ -42,9 +42,10 @@ impl WorkItemReadService {
         &self,
         actor: &AuditActor,
         fields: &[WorkItemFields],
+        decide: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<QualifiedPermissions> {
-        let mut codes = BTreeSet::from(["approval_instance:read", "approval_instance:decide"]);
+        let mut codes = BTreeSet::new();
         for field in fields {
             if let Some(relation) = field.work_item_type.brief_relation(&field.business_object_type) {
                 codes.insert(relation.read_permission);
@@ -55,7 +56,8 @@ impl WorkItemReadService {
                 codes.extend(required);
             }
         }
-        let permissions = codes.into_iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?;
+        let mut permissions = codes.into_iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?;
+        permissions.extend_from_slice(decide);
         self.authorization
             .service
             .permissions(actor, &permissions, executor)
@@ -71,9 +73,10 @@ impl WorkItemReadService {
         executor: &mut dyn Executor,
     ) -> Result<super::access::QueueAccess> {
         let mut projected = access.clone();
-        let qualified = self.task_permissions(access.read_access().actor(), fields, executor).await?;
         let decide =
             [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+        let qualified =
+            self.task_permissions(access.read_access().actor(), fields, &decide, executor).await?;
         for field in fields {
             if let Some(relation) = field.work_item_type.brief_relation(&field.business_object_type)
                 && let Some(execution) =

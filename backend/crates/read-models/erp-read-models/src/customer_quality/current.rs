@@ -53,10 +53,11 @@ impl super::CustomerQualityReadModel {
         let (customer_context, sales_context, sales_scope) = access.resolve_current(actor, executor).await?;
         let expanded = expand_requested_orgs(&self.customer_scope, query, executor).await?;
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
-        let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
+        let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids);
         let raw_orders = super::source::CurrentSources::load_current_orders(
             &self.db,
             order_filter,
+            &sales_scope,
             &customer_context,
             &self.customer_scope,
             executor,

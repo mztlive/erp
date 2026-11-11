@@ -30,7 +30,7 @@ pub struct SalesListView {
     pub scope_version: String,
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
+    /// 预留空结果原因；完整授权查询当前返回 `None`。
     pub empty_reason: Option<&'static str>,
     /// 当前销售范围口径摘要，不含内部授权证明。
     pub scope_summary: &'static str,
@@ -39,7 +39,6 @@ pub struct SalesListView {
 pub(super) struct SalesSnapshot {
     pub page: PageView<SalesOrderRow>,
     pub context: SalesReadContext,
-    pub no_scope: bool,
 }
 impl SalesOrderReadService {
     /// 在独立授权快照中只重验匹配版本，组织展开与首次列表读取共用同一入口。
@@ -126,8 +125,7 @@ impl SalesOrderReadService {
                     context.validate(executor).await?;
                     versions.hash(&mut fingerprint);
                     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    let no_scope = scope.is_empty();
-                    Ok(SalesSnapshot { no_scope, page, context })
+                    Ok(SalesSnapshot { page, context })
                 })
             })
             .await

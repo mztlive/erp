@@ -34,13 +34,15 @@ impl ProcurementResponsibilityProcess {
                     .assignment_owner(owner, executor)
                     .await?;
             } else {
-                load_owner_account(&self.db, owner, executor).await?;
                 let actor = AuditActor::new(owner.clone(), owner.clone(), AccountKind::Admin);
                 let permission = Permission::parse("purchase_order:create")?;
-                if !crate::authorization::features(self.db.clone(), self.rbac.clone())
-                    .has_permission(&actor, &permission, executor)
-                    .await?
-                {
+                let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+                    .permissions(&actor, std::slice::from_ref(&permission), executor)
+                    .await?;
+                if qualified.is_none() {
+                    load_owner_account(&self.db, owner, executor).await?;
+                }
+                if !qualified.is_some_and(|value| value.same_role(std::slice::from_ref(&permission))) {
                     return Err(Error::BusinessLogicError(format!(
                         "采购负责人 {owner} 缺少 purchase_order:create 权限"
                     )));

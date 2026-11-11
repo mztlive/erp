@@ -31,7 +31,7 @@ pub struct CustomerListView {
     pub scope_version: String,
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
+    /// 保留响应合同；空结果由完整授权查询产生。
     pub empty_reason: Option<&'static str>,
     /// 当前客户范围口径摘要，不含内部授权证明。
     pub scope_summary: &'static str,
@@ -49,8 +49,6 @@ pub(super) struct CustomerSnapshot {
     pub page_size: u32,
     /// 身份授权上下文。
     pub context: CustomerResolvedScope,
-    /// 授权集合本身为空。
-    pub no_scope: bool,
 }
 
 /// 列表事务共用的只读依赖（erp-customer-003）。
@@ -163,7 +161,7 @@ async fn run_list_snapshot(
     hydrate: bool,
     executor: &mut dyn Executor,
 ) -> Result<CustomerSnapshot> {
-    let (mut context, authorized, as_of, no_scope) = resolve_list_authorized(&deps, executor).await?;
+    let (mut context, authorized, as_of) = resolve_list_authorized(&deps, executor).await?;
     let filter = build_account_filter(&deps, authorized).await?;
     let versions = authorized_versions(&deps.db, &filter, &context, &deps.access, executor).await?;
     ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
@@ -175,7 +173,6 @@ async fn run_list_snapshot(
             page: filter.page,
             page_size: filter.page_size,
             context,
-            no_scope,
         });
     }
     let page = authorized_page(&deps.db, &filter, &context, &deps.access, executor).await?;
@@ -190,14 +187,7 @@ async fn run_list_snapshot(
     )
     .await?;
     deps.access.validate(&context, executor).await?;
-    Ok(CustomerSnapshot {
-        no_scope,
-        items,
-        total: page.total,
-        page: filter.page,
-        page_size: filter.page_size,
-        context,
-    })
+    Ok(CustomerSnapshot { items, total: page.total, page: filter.page, page_size: filter.page_size, context })
 }
 
 /// 解析授权并与业务筛选求交（erp-customer-003）。
@@ -207,20 +197,19 @@ async fn run_list_snapshot(
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回授权上下文、授权客户集合、归属时点与空范围标记。
+/// 返回授权上下文、授权客户集合与归属时点。
 ///
 /// # 错误
 /// 授权或组织筛选失败时拒绝。
 async fn resolve_list_authorized(
     deps: &ListTxDeps,
     executor: &mut dyn Executor,
-) -> Result<(CustomerResolvedScope, Option<Vec<String>>, BusinessDate, bool)> {
+) -> Result<(CustomerResolvedScope, Option<Vec<String>>, BusinessDate)> {
     let (context, scope) = deps.access.query(&deps.actor, "list", executor).await?;
-    let no_scope = false;
     let authorized =
         apply_list_filters(&deps.db, &deps.access, &context, &scope, &deps.query, executor).await?;
     let as_of = super::access::business_date(context.as_of)?;
-    Ok((context, authorized, as_of, no_scope))
+    Ok((context, authorized, as_of))
 }
 
 /// 装配关键词过滤后的仓储筛选（erp-customer-003）。

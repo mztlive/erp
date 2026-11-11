@@ -42,7 +42,7 @@ pub struct PurchaseListView {
     /// 组织配置版本。
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
+    /// 预留空结果原因；完整授权查询当前返回 `None`。
     pub empty_reason: Option<&'static str>,
     /// 当前采购范围口径摘要，不含内部授权证明。
     pub scope_summary: &'static str,
@@ -60,8 +60,6 @@ pub(super) struct PurchaseSnapshot {
     pub page_size: u32,
     /// 身份授权上下文。
     pub context: PurchaseResolvedScope,
-    /// 授权集合本身为空。
-    pub no_scope: bool,
 }
 
 impl PurchaseOrderReadService {
@@ -98,9 +96,7 @@ impl PurchaseOrderReadService {
                     let (page, facts) = load_purchase_order_list_page(&db, &filter, &scope, executor).await?;
                     let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
                     context.scope_version = list_scope_version(&context.scope_version, &versions)?;
-                    let no_scope = scope.is_empty();
                     Ok(PurchaseSnapshot {
-                        no_scope,
                         page,
                         facts,
                         page_no: filter.page,

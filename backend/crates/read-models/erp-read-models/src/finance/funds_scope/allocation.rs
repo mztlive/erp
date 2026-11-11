@@ -222,9 +222,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPurchaseInvoiceAllocationRow>> {
         let (authorization, snapshot) = self.allocation_projection(query, actor, true, executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "进项发票分配无可见范围"));
-        }
         let version = allocation_scope_version(&authorization, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary = snapshot.summary(&version)?;
@@ -253,9 +250,6 @@ impl FundsAccess {
     ) -> Result<(FundsAuthorization, AllocationSnapshot)> {
         let (_, authorization) =
             self.resolve_with_purchase(actor, "purchase_invoice_allocation", "list", executor).await?;
-        if authorization.empty() {
-            return Ok((authorization, AllocationSnapshot::default()));
-        }
         let condition = self.purchase_invoice_condition(query, executor).await?;
         let snapshot =
             allocation_snapshot(&self.db, query, &authorization, &condition, materialize, executor).await?;
@@ -278,9 +272,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (authorization, snapshot) =
                         this.allocation_projection(&query, &actor, false, executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version.clone());
-                    }
                     Ok(allocation_scope_version(&authorization, &snapshot.versions))
                 })
             })

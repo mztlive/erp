@@ -41,7 +41,7 @@ pub struct PurchaseReturnListView {
     /// 组织配置版本。
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`。
+    /// 预留空结果原因；完整授权查询当前返回 `None`。
     pub empty_reason: Option<&'static str>,
     /// 当前采购退货范围口径摘要。
     pub scope_summary: &'static str,
@@ -139,8 +139,7 @@ impl ReturnsReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope, filter, no_scope) =
-                        list_query(&access, &params, &actor, executor).await?;
+                    let (mut context, scope, filter) = list_query(&access, &params, &actor, executor).await?;
                     let page = authorized_returns::search(&db, &filter, &scope, executor).await?;
                     let versions = authorized_returns::versions(&db, &filter, &scope, executor).await?;
                     context.scope_version = list_scope_version(&context.scope_version, &versions)?;
@@ -163,7 +162,7 @@ impl ReturnsReadService {
                         scope_version: context.scope_version,
                         policy_version: context.policy_version,
                         as_of: context.as_of.as_utc().to_rfc3339(),
-                        empty_reason: no_scope.then_some("no_scope"),
+                        empty_reason: None,
                         scope_summary: "采购退货单沿来源采购单当前负责人及单据业务组织范围",
                     })
                 })
@@ -199,7 +198,7 @@ impl ReturnsReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (context, scope, filter, _) = list_query(&access, &params, &actor, executor).await?;
+                    let (context, scope, filter) = list_query(&access, &params, &actor, executor).await?;
                     let versions = authorized_returns::versions(&db, &filter, &scope, executor).await?;
                     list_scope_version(&context.scope_version, &versions)
                 })
@@ -265,7 +264,7 @@ impl ReturnsReadService {
 /// * `executor` - 当前快照执行器
 ///
 /// # 返回
-/// 返回授权上下文、列表筛选和无有效范围标志。
+/// 返回完整授权上下文和列表业务筛选。
 ///
 /// # 错误
 /// 授权、来源查询或筛选归一化失败时拒绝。
@@ -274,9 +273,8 @@ async fn list_query(
     params: &PurchaseReturnOrderListParams,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseReturnOrderFilter, bool)> {
+) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseReturnOrderFilter)> {
     let (context, scope) = access.resolve(actor, "list", executor).await?;
-    let no_scope = scope.is_empty();
     let query = params.normalized()?;
     let filter = PurchaseReturnOrderFilter {
         purchase_return_no: query.purchase_return_no,
@@ -287,7 +285,7 @@ async fn list_query(
         sort_by: Some(query.paging.sort_by.to_string()),
         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
     };
-    Ok((context, scope, filter, no_scope))
+    Ok((context, scope, filter))
 }
 
 /// 对完整匹配退货身份版本绑定授权版本，保持原哈希协议和上限。

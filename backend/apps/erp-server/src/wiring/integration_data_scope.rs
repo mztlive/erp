@@ -11,5 +11,5 @@ use mongodb::Database;
 /// # 错误
 /// 构造不执行 I/O。
 pub fn scoped_integration_ops_service(db: Database, rbac: SharedRbacService) -> IntegrationOpsService {
-    IntegrationOpsService::with_scope(db.clone(), IntegrationAccess::new(db, rbac))
+    IntegrationOpsService::new(db.clone(), IntegrationAccess::new(db, rbac))
 }

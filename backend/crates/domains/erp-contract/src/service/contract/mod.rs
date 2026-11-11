@@ -5,7 +5,7 @@
 //!   `persistence_core::Transactional::with_transaction`（仓储方法
 //!   `create_contract_with_revision` 声明「必须收到事务执行器」）；
 //! - 追加版本 / 终止：跨集合（版本 + 主表 CAS + 审计）→ 同一事务模板；
-//! - 列表 / 详情：单集合无跨步骤原子性要求 → `&mut NoTransaction`。
+//! - 列表 / 详情：授权与业务读取使用同一事务快照，交付前重新核验。
 //!
 //! 客户、归属与附件事实走消费方 Port；账号目录使用 identity 公开 API。
 //! 文件资产写入与跨域根事务由 `erp-processes` 持有，本模块提供事务内接口。
@@ -19,7 +19,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::authorization::ContractAuthorization;
+pub use crate::authorization::ContractAccess;
 use crate::dto::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractRevisionView, ContractView,
     CreateContractRequest, TerminateContractRequest, UploadContractRequest,
@@ -32,14 +32,13 @@ use crate::ports::{
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
 
-pub mod access;
 mod archive;
 mod company;
+mod fingerprint;
 mod query;
 mod sales_access;
 mod scope;
 
-pub use access::ContractAccess;
 pub use archive::{PlannedContractArchive, plan_first_archive, plan_upload_archive};
 pub(crate) use archive::{conflict_if_stale_version, customer_eligibility, plan_next_revision};
 use company::{require_signing_company, required_settlement};
@@ -47,13 +46,14 @@ use company::{require_signing_company, required_settlement};
 /// 合同服务。
 ///
 /// 提供合同归档、版本追加、终止与查询编排。
+#[derive(Clone)]
 pub struct ContractService {
     db: Database,
     audit: Arc<dyn ContractAuditPort>,
     customers: Arc<dyn CustomerFactsPort>,
     accounts: AccountDirectoryService,
     companies: Arc<dyn SigningCompanyPort>,
-    data_scope: ContractAuthorization,
+    data_scope: ContractAccess,
 }
 
 impl ContractService {
@@ -79,7 +79,7 @@ impl ContractService {
         audit: Arc<dyn ContractAuditPort>,
         customers: Arc<dyn CustomerFactsPort>,
         companies: Arc<dyn SigningCompanyPort>,
-        authorization: ContractAuthorization,
+        authorization: ContractAccess,
     ) -> Self {
         Self {
             accounts: AccountDirectoryService::new(db.clone()),
@@ -89,23 +89,6 @@ impl ContractService {
             companies,
             data_scope: authorization,
         }
-    }
-
-    /// 构造复用本服务授权能力 的合同访问器。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库与授权能力 的访问器。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得在此回退构造身份域 Service。
-    fn access(&self) -> access::ContractAccess {
-        access::ContractAccess::new(self.db.clone(), self.data_scope.clone())
     }
 
     /// 首次归档合同（合同身份 + 首个不可变版本 + PDF 关联原子形成，数据模型 §6.4）。
@@ -146,7 +129,7 @@ impl ContractService {
 
         let db = self.db.clone();
         let audit_port = self.audit.clone();
-        let access = self.access();
+        let access = self.data_scope.clone();
         let companies = self.companies.clone();
         let actor_for_tx = actor.clone();
         let mut contract_for_tx = planned.contract.clone();
@@ -234,6 +217,7 @@ impl ContractService {
     ///
     /// # 参数
     /// * `id` - 合同 ID
+    /// * `executor` - 原授权读取事务
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
@@ -246,11 +230,21 @@ impl ContractService {
     /// # 关键业务约束
     /// 详情必须独立重验当前权限；历史参与只补充读取。
     pub async fn contract_detail(&self, id: &str, actor: &AuditActor) -> Result<ContractDetailView> {
-        let expected = self.access().require(actor, "detail", id).await?;
-        let view = self.load_contract_detail(id).await?;
-        let current = self.access().require(actor, "detail", id).await?;
-        scope::ensure_stable_snapshot(&expected.scope_version, &current.scope_version)?;
-        Ok(view)
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.data_scope.require_with(actor.clone(), "detail", &id, executor).await?;
+                    let view = service.load_contract_detail(&id, executor).await?;
+                    service.data_scope.require_with(actor.clone(), "detail", &id, executor).await?;
+                    Ok(view)
+                })
+            })
+            .await
     }
 
     /// 装载详情展示字段，不解释数据范围。
@@ -266,22 +260,23 @@ impl ContractService {
     ///
     /// # 关键业务约束
     /// 本方法不解释权限；HTTP 详情入口必须先调用 `contract_detail`。
-    pub async fn load_contract_detail(&self, id: &str) -> Result<ContractDetailView> {
+    async fn load_contract_detail(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ContractDetailView> {
         let contract = self
             .db
             .contracts()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("合同不存在或无权查看".to_string()))?;
-        let revisions = self
-            .db
-            .contract_revisions()
-            .list_by_contract(&contract.base.id.clone().into(), &mut NoTransaction)
-            .await?;
+        let revisions =
+            self.db.contract_revisions().list_by_contract(&contract.base.id.clone().into(), executor).await?;
         let shared_sales_user_ids = contract.shared_sales_user_ids.clone();
         let view: ContractView = contract.into();
         let names = match &view.owner_user_id {
-            Some(id) => self.accounts.names(std::slice::from_ref(id), &mut NoTransaction).await?,
+            Some(id) => self.accounts.names(std::slice::from_ref(id), executor).await?,
             None => Default::default(),
         };
         Ok(ContractDetailView {
@@ -347,7 +342,7 @@ impl ContractService {
 
         let db = self.db.clone();
         let audit_port = self.audit.clone();
-        let access = self.access();
+        let access = self.data_scope.clone();
         let actor_for_tx = actor.clone();
         let contract_id = id.to_string();
         let mut contract_for_tx = planned.contract;
@@ -413,7 +408,7 @@ impl ContractService {
 
         let db = self.db.clone();
         let audit_port = self.audit.clone();
-        let access = self.access();
+        let access = self.data_scope.clone();
         let actor_for_tx = actor.clone();
         let contract_id = id.to_string();
         execute_authorized_transaction(
@@ -456,7 +451,7 @@ impl ContractService {
         customer_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.access().require_create(actor, customer_id, executor).await?;
+        self.data_scope.clone().require_create(actor, customer_id, executor).await?;
         Ok(())
     }
 
@@ -481,8 +476,7 @@ impl ContractService {
         contract_id: &str,
         file_id: &str,
     ) -> Result<()> {
-        self.access().require(actor, "detail", contract_id).await?;
-        let detail = self.load_contract_detail(contract_id).await?;
+        let detail = self.contract_detail(contract_id, actor).await?;
         if !detail.revisions.iter().any(|revision| revision.contract_pdf_file_id == file_id) {
             return Err(Error::NotFound("合同附件不存在或无权查看".into()));
         }
@@ -549,7 +543,7 @@ async fn execute_authorized_transaction(
     audit_port: &Arc<dyn ContractAuditPort>,
     audit: &PreparedContractAudit,
     authorization: TxAuthorization,
-    access: access::ContractAccess,
+    access: ContractAccess,
     actor: AuditActor,
     action: TxAction,
 ) -> Result<()> {

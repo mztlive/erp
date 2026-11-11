@@ -211,10 +211,10 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 
 fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
     SupplierListView {
+        policy_version: snapshot.context.policy_version(),
+        organization_version: snapshot.context.organization_version(),
+        as_of: snapshot.context.as_of().as_utc().to_rfc3339(),
         scope_version: snapshot.context.scope_version,
-        policy_version: snapshot.context.policy_version,
-        organization_version: snapshot.context.organization_version,
-        as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
         empty_reason: None,
         scope_summary: "供应商按岗位权限共享；维护人及能力负责人筛选为额外收窄",
 

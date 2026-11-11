@@ -5,6 +5,7 @@
 //! 形成新的开放任务，历史终态保持不变。
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_core::ids::SalesOrderId;
 use erp_identity::{AccountSummary, Permission, SharedRbacService};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
@@ -259,21 +260,22 @@ async fn ensure_customer_acceptance_owner_eligible(
     let required_permissions = WorkItemType::CustomerAcceptanceRegistration
         .customer_acceptance_execution_permissions(OBJECT_TYPE)
         .expect("客户验收登记对象权限合同必须存在");
-    let account =
-        rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
-            Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string())
-        })?;
-    if !account.can_login {
-        return Err(Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()));
-    }
     let required: Vec<_> = required_permissions
         .iter()
         .map(|code| Permission::parse(code).expect("固定客户验收操作权限必须合法"))
         .collect();
-    let actor = AuditActor::new(owner_user_id.into(), account.login_account.clone(), account.kind);
+    let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
     let qualified = crate::authorization::features(db.clone(), rbac.clone())
         .permissions(&actor, &required, executor)
         .await?;
+    if qualified.is_none() {
+        let account = rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
+            Error::BusinessLogicError("销售责任人账号不存在，无法形成客户验收任务".to_string())
+        })?;
+        if !account.can_login {
+            return Err(Error::BusinessLogicError("销售责任人账号不可用，无法形成客户验收任务".to_string()));
+        }
+    }
     if let Some(qualified) = qualified.filter(|value| value.same_role(&required)) {
         return Ok(qualified.account().clone());
     }

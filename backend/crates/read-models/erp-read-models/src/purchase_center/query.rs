@@ -68,7 +68,7 @@ impl PurchaseOrderReadService {
             scope_version: snapshot.context.scope_version,
             policy_version: snapshot.context.policy_version,
             as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
-            empty_reason: snapshot.no_scope.then_some("no_scope"),
+            empty_reason: None,
             scope_summary: "采购单当前负责人及单据业务组织范围",
             ownership_basis: "current_procurement_owner",
             data: PageView {

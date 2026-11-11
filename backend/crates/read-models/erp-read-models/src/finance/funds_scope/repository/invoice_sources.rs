@@ -56,10 +56,10 @@ pub(super) fn sales_stages(
         <Database as SalesOrderExt>::SALES_ORDERS,
         Bson::String("$_account.sales_order_id".into()),
         "_source",
-        authorization.sales.document(),
+        doc! {},
         "sales_owner_user_id",
         "order_no",
-        &authorization.sales.stages(),
+        &authorization.sales_stages(),
     ));
     stages.push(doc! { "$set": { "order": "$_account.sales_order_id",
         "source_exists": { "$eq": [{ "$type": "$_source" }, "object"] },
@@ -105,11 +105,8 @@ pub(super) fn purchase_stages(
 
 /// 两个来源分别使用已经证明的领域范围，错误类型不会命中任一集合。
 fn purchase_source_stages(authorization: &FundsAuthorization) -> Vec<Document> {
-    let purchase = authorization
-        .purchase_scope
-        .as_ref()
-        .map(|scope| scope.document())
-        .unwrap_or_else(|| doc! { "$expr": false });
+    let purchase =
+        authorization.purchase_scope.as_ref().map(|_| doc! {}).unwrap_or_else(|| doc! { "$expr": false });
     let settlement =
         authorization.settlement.as_ref().map(|_| doc! {}).unwrap_or_else(|| doc! { "$expr": false });
     let mut stages = source_stages(

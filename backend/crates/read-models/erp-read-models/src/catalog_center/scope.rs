@@ -132,10 +132,10 @@ async fn build_snapshot(
     Ok(ProductSnapshot {
         page: view,
 
+        policy_version: context.policy_version(),
+        organization_version: context.organization_version(),
+        as_of: context.as_of().as_utc().to_rfc3339(),
         scope_version: context.scope_version,
-        policy_version: context.policy_version,
-        organization_version: context.organization_version,
-        as_of: context.as_of.as_utc().to_rfc3339(),
     })
 }
 

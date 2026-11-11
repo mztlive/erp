@@ -12,8 +12,6 @@ pub struct ScopedIntegrationList {
     pub scope_version: String,
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`。
-    pub empty_reason: Option<&'static str>,
     /// 当前范围口径摘要。
     pub scope_summary: &'static str,
     /// 当前处理人权威来源。
@@ -25,7 +23,6 @@ impl ScopedIntegrationList {
     ///
     /// # 参数
     /// * `access` - 当前动作已解析事实
-    /// * `read_scope` - 已映射仓储条件
     ///
     /// # 返回
     /// 返回不含内部授权证明的范围摘要。
@@ -36,7 +33,6 @@ impl ScopedIntegrationList {
         Self {
             scope_version: access.version(),
             as_of: Instant::now().unix_secs().to_string(),
-            empty_reason: None,
             scope_summary: "集成当前处理人所属内部组织范围",
             ownership_basis: "current_handler",
         }
@@ -104,7 +100,7 @@ pub struct ResolvedListScope {
 
 /// 解析列表授权、展开组织筛选并校验范围版本（错误任务与差异列表共用）。
 ///
-/// 顺序为授权解析、组织展开、元数据、版本校验。空范围只写入 `meta.empty_reason`，不在此返回空页。
+/// 按授权解析、组织展开、元数据和版本校验的顺序执行。
 ///
 /// # 参数
 /// * `access` - 当前列表访问器
@@ -148,7 +144,7 @@ pub async fn resolve_list_scope(
 /// 返回展开后的组织 ID；请求为空时返回空列表。
 ///
 /// # 错误
-/// 未知组织或未装配时拒绝。
+/// 未知组织时拒绝。
 pub async fn expand_org_filter(
     access: &super::IntegrationAccess,
     org_unit_ids: &[String],

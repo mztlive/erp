@@ -10,7 +10,6 @@ use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
 use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_procurement::authorization::PurchaseMapping;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
-use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -46,13 +45,13 @@ impl FundsAccess {
                 .resolve_source(actor, &entry, executor)
                 .await?;
             versions.push(context.scope_version);
-            scope
+            Some(scope)
         } else {
-            SalesReadScope::default()
+            None
         };
         let (purchase_scope, settlement) = self.purchase_sources(actor, &entry, purchase, executor).await?;
         if let Some(scope) = &purchase_scope {
-            versions.push(scope.version().unwrap_or_default());
+            versions.push(scope.version());
         }
         if let Some(scope) = &settlement {
             versions.push(scope.access.version());
@@ -83,6 +82,33 @@ impl FundsAccess {
         authorization.validate(executor).await?;
         Ok((context, authorization))
     }
+    /// 为固定资金入口只编译真实采购来源。
+    /// # 参数
+    /// actor 为真实账号，resource/action 为固定入口，executor 为原执行器。
+    /// # 返回
+    /// 不包含结算或整账能力的完整采购来源凭证。
+    /// # 错误
+    /// 入口、账号、来源映射或授权失效时返回原错误。
+    pub(crate) async fn purchase_source(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseReadScope> {
+        let entry = Permission::parse(format!("{resource}:{action}"))?;
+        let access = source_query(
+            &self.db,
+            &self.rbac,
+            actor,
+            &entry,
+            Arc::new(PurchaseMapping::new("purchase_order")?),
+            executor,
+        )
+        .await?;
+        Ok(PurchaseReadScope::from_compiled(access.access, access.service))
+    }
+
     async fn purchase_sources(
         &self,
         actor: &AuditActor,
@@ -91,16 +117,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<(Option<PurchaseReadScope>, Option<SourceQuery>)> {
         if purchase {
-            let access = source_query(
-                &self.db,
-                &self.rbac,
-                actor,
-                entry,
-                Arc::new(PurchaseMapping::new("purchase_order")?),
-                executor,
-            )
-            .await?;
-            let scope = PurchaseReadScope::from_compiled(access.access, access.service);
+            let scope = self.purchase_source(actor, entry.resource(), entry.action(), executor).await?;
             let settlement = source_query(
                 &self.db,
                 &self.rbac,
@@ -127,8 +144,8 @@ impl FundsAuthorization {
     /// 账号、权限、有效期、映射或身份设施失效时失败。
     pub(super) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
         self.whole.validate(executor).await?;
-        if !self.sales.is_empty() {
-            self.sales.validate(executor).await?;
+        if let Some(scope) = &self.sales {
+            scope.validate(executor).await?;
         }
         if let Some(scope) = &self.purchase_scope {
             scope.validate(executor).await?;

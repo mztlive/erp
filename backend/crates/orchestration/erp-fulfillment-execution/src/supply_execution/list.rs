@@ -99,10 +99,10 @@ async fn build_snapshot(
             page_size: page.page_size,
         },
 
+        policy_version: context.policy_version(),
+        organization_version: context.organization_version(),
+        as_of: context.as_of().as_utc().to_rfc3339(),
         scope_version: context.scope_version,
-        policy_version: context.policy_version,
-        organization_version: context.organization_version,
-        as_of: context.as_of.as_utc().to_rfc3339(),
     })
 }
 

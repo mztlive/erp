@@ -34,7 +34,7 @@ impl super::CustomerQualityReadModel {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回历史视图、原查询，以及销售范围与订单集合合成的版本指纹。销售范围为空时仍成功，视图 `empty_reason` 为 `no_scope`。
+    /// 返回历史视图、原查询，以及销售授权与订单集合合成的版本指纹。
     ///
     /// # 错误
     /// 销售授权解析失败、订单或展示名读取失败，或已带的范围版本与本次快照不一致时返回错误。超限时由装载返回 `ValidationError`。
@@ -48,17 +48,10 @@ impl super::CustomerQualityReadModel {
     ) -> Result<(HistorySnapshotOutput, String)> {
         let access = QualityAccess::new(self.db.clone(), self.rbac.clone(), self.customer_scope.clone());
         let (sales_context, sales_scope) = access.resolve_history(actor, executor).await?;
-        if sales_scope.is_empty() {
-            let mut view = assemble_history(query, Vec::new(), totals_for(&[]));
-            view.empty_reason = Some("no_scope".into());
-            apply_context(&mut view, &sales_context);
-            let expected = sales_context.scope_version.clone();
-            sales_context.validate(executor).await?;
-            return Ok((HistorySnapshotOutput { view, query: query.clone() }, expected));
-        }
+
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
-        let filter = super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
-        let sources = HistorySnapshot::load(&self.db, filter, executor).await?;
+        let filter = super::source::quality_order_filter(&bounds, order_customer_ids);
+        let sources = HistorySnapshot::load(&self.db, filter, &sales_scope, executor).await?;
         sales_context.validate(executor).await?;
         let expected = version(&sales_context.scope_version, &sources.orders);
         super::ensure_version(query.scope_version.as_deref(), &expected)?;
@@ -105,9 +98,8 @@ impl super::CustomerQualityReadModel {
                     let (sales_context, sales_scope) = access.resolve_history(&actor, executor).await?;
                     let bounds = query.validate()?;
                     let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
-                    let filter =
-                        super::source::quality_order_filter(&bounds, order_customer_ids, &sales_scope);
-                    let sources = HistorySnapshot::load(&this.db, filter, executor).await?;
+                    let filter = super::source::quality_order_filter(&bounds, order_customer_ids);
+                    let sources = HistorySnapshot::load(&this.db, filter, &sales_scope, executor).await?;
                     sales_context.validate(executor).await?;
                     Ok::<_, crate::Error>(version(&sales_context.scope_version, &sources.orders))
                 })

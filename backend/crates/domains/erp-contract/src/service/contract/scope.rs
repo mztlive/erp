@@ -6,7 +6,7 @@ use persistence_core::Transactional;
 use serde_json::to_vec;
 
 use super::ContractService;
-use crate::authorization::ContractAuthorization;
+use crate::authorization::ContractAccess;
 use crate::dto::contract::{ContractListQuery, ContractListScope, ContractListView, PageView};
 use crate::error::{Error, Result};
 use crate::ports::ContractResolvedScope;
@@ -43,7 +43,7 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractSnapshot> {
         let db = self.db.clone();
-        let access = self.access();
+        let access = self.data_scope.clone();
         let data_scope = self.data_scope.clone();
         let accounts = self.accounts.clone();
         let customers = self.customers.clone();
@@ -86,7 +86,7 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<String> {
         let db = self.db.clone();
-        let access = self.access();
+        let access = self.data_scope.clone();
         let data_scope = self.data_scope.clone();
         let accounts = self.accounts.clone();
         let customers = self.customers.clone();
@@ -107,7 +107,7 @@ impl ContractService {
                         executor,
                     )
                     .await?;
-                    fingerprint_context(&mut context, &versions, &search)?;
+                    context.scope_version = fingerprint_version(&context.scope_version, &versions, &search)?;
                     context.validate(executor).await?;
                     Ok(context.scope_version)
                 })
@@ -135,7 +135,7 @@ impl ContractService {
 #[allow(clippy::too_many_arguments)]
 async fn load_list_filter_and_search(
     db: &mongodb::Database,
-    data_scope: &ContractAuthorization,
+    data_scope: &ContractAccess,
     customers: &dyn crate::ports::CustomerFactsPort,
     accounts: &AccountDirectoryService,
     context: &ContractResolvedScope,
@@ -145,7 +145,8 @@ async fn load_list_filter_and_search(
     let customer_ids = query.customer_id.clone().map(|id| vec![id]);
     let mut filter = list_filter(query, customer_ids);
     filter.access = Some(context.clone());
-    filter.assigned_user_id = (query.scope == ContractListScope::Assigned).then(|| context.user_id.clone());
+    filter.assigned_user_id =
+        (query.scope == ContractListScope::Assigned).then(|| context.user_id().to_owned());
     filter.owner_user_ids = requested_contract_owners(data_scope, context, query, executor).await?;
     let versions = db.contract().query_versions(&filter, executor).await?;
     if versions.len() > 10_000 {
@@ -193,7 +194,7 @@ async fn finish_list_snapshot(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(ContractListView, ContractResolvedScope)> {
     let result = db.contract().search_list(&filter, &search, executor).await?;
-    fingerprint_context(&mut context, &versions, &search)?;
+    context.scope_version = fingerprint_version(&context.scope_version, &versions, &search)?;
     let total = result.total();
     let items =
         super::query::contract_rows(db, result.items, &search.customers, &search.owners, executor).await?;
@@ -213,12 +214,12 @@ async fn finish_list_snapshot(
 }
 
 /// 把授权及列表业务事实绑定到同一个跨页版本。
-fn fingerprint_context(
-    context: &mut ContractResolvedScope,
+fn fingerprint_version(
+    authorization_version: &str,
     versions: &[ContractVersion],
     search: &ContractSearch,
-) -> Result<()> {
-    let mut fingerprint = super::access::version_fingerprint_input(versions);
+) -> Result<String> {
+    let mut fingerprint = super::fingerprint::version_fingerprint_input(versions);
     let mut customers = search
         .customers
         .iter()
@@ -226,9 +227,7 @@ fn fingerprint_context(
         .collect::<Vec<_>>();
     customers.sort_unstable();
     fingerprint.extend(to_vec(&customers).map_err(|error| Error::Internal(error.to_string()))?);
-    context.scope_version =
-        format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
-    Ok(())
+    Ok(format!("{}:{:x}", authorization_version, super::fingerprint::stable_fingerprint(&fingerprint)))
 }
 
 /// 将内部快照转换为对外列表视图。
@@ -246,10 +245,10 @@ fn fingerprint_context(
 /// 不把内部授权证明或全量人员集合返回给客户端。
 pub(super) fn to_list_view(snapshot: ContractSnapshot) -> ContractListView {
     let mut view = snapshot.view;
+    view.policy_version = snapshot.context.policy_version();
+    view.organization_version = snapshot.context.organization_version();
+    view.as_of = snapshot.context.as_of().as_utc().to_rfc3339();
     view.scope_version = snapshot.context.scope_version;
-    view.policy_version = snapshot.context.policy_version;
-    view.organization_version = snapshot.context.organization_version;
-    view.as_of = snapshot.context.as_of.as_utc().to_rfc3339();
     view
 }
 
@@ -361,7 +360,7 @@ fn list_filter(query: &ContractListQuery, customer_ids: Option<Vec<String>>) -> 
 }
 /// 请求组织只按合同独立负责销售收窄，不按客户负责名单解释。
 async fn requested_contract_owners(
-    data_scope: &ContractAuthorization,
+    data_scope: &ContractAccess,
     context: &ContractResolvedScope,
     query: &ContractListQuery,
     executor: &mut dyn persistence_core::Executor,
@@ -375,7 +374,7 @@ async fn requested_contract_owners(
     let expanded = data_scope
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
-    let members = data_scope.org_member_ids(&expanded, context.as_of, executor).await?;
+    let members = data_scope.org_member_ids(&expanded, context.as_of(), executor).await?;
     if members.len() > 10_000 {
         return Err(Error::ValidationError("组织成员超过查询上限，请收窄组织筛选".into()));
     }
@@ -400,13 +399,11 @@ mod tests {
             ..Default::default()
         };
         let version = |versions: &[ContractVersion], search: &ContractSearch| {
-            let mut context = ContractResolvedScope::default();
-            context.scope_version = "authorization-v1".into();
-            fingerprint_context(&mut context, versions, search).unwrap();
-            context.scope_version
+            fingerprint_version("authorization-v1", versions, search).unwrap()
         };
         let initial = version(&versions, &search);
         assert_eq!(initial, version(&versions, &search));
+        assert_ne!(initial, fingerprint_version("authorization-v2", &versions, &search).unwrap());
         search.customers[0].number = "C-2".into();
         assert_ne!(initial, version(&versions, &search));
         let changed = [ContractVersion { id: "contract-a".into(), version: 2 }];

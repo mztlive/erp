@@ -5,6 +5,7 @@ use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, aggregate};
 use serde::Deserialize;
 
+use super::scope::SalesReadScope;
 use crate::Result;
 use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution, SalesOrder};
 
@@ -31,17 +32,8 @@ pub struct ProfitLossOrderFilter {
     pub until: i64,
     pub customer_id: Option<String>,
     pub sales_order_id: Option<String>,
-    pub authorized_scope: super::scope::SalesReadScope,
 }
 impl ProfitLossOrderFilter {
-    /// 不接受客户端范围标识替代授权集合；空集合必定无结果。
-    fn document(&self) -> Document {
-        let mut filter = self.business_filter();
-        let mut conditions = filter.get_array("$and").cloned().unwrap_or_default();
-        conditions.insert(0, self.authorized_scope.document().into());
-        filter.insert("$and", conditions);
-        filter
-    }
     /// 期间与业务筛选先于授权关联，不能把用户条件作为授权依据。
     fn business_filter(&self) -> Document {
         let mut filter = doc! { "deleted_at": 0_i64, "business_type": "GOODS_SERVICE",
@@ -66,7 +58,8 @@ pub trait SalesOrderRepositoryProfitLossExt {
     /// 有界读取正式非卡券销售单；调用方必须对超限结果整体拒绝。
     ///
     /// # 参数
-    /// * `filter` - 生效区间、客户、销售单与授权范围。
+    /// * `filter` - 生效区间、客户与销售单筛选。
+    /// * `scope` - 当前读取阶段的完整销售授权。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -77,6 +70,7 @@ pub trait SalesOrderRepositoryProfitLossExt {
     async fn profit_loss_orders(
         &self,
         filter: &ProfitLossOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProfitLossOrder>>;
 }
@@ -85,9 +79,10 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
     async fn profit_loss_orders(
         &self,
         filter: &ProfitLossOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProfitLossOrder>> {
-        filter.authorized_scope.validate(executor).await?;
+        scope.validate(executor).await?;
         let options = FindOptions::builder()
             .limit((PROFIT_LOSS_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
@@ -96,13 +91,13 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
             .build();
         let rows = aggregate::find(
             &self.collection().clone_with_type(),
-            filter.document(),
+            filter.business_filter(),
             options,
-            filter.authorized_scope.lookup_after(filter.business_filter()),
+            scope.lookup_after(filter.business_filter()),
             executor,
         )
         .await?;
-        filter.authorized_scope.validate(executor).await?;
+        scope.validate(executor).await?;
         Ok(rows)
     }
 }
@@ -111,17 +106,19 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
 mod tests {
     use super::*;
     #[test]
-    fn explicit_customer_never_overrides_empty_authorization() {
+    fn explicit_customer_restricts_business_filter() {
         let filter = ProfitLossOrderFilter {
             from: 1,
             until: 2,
             customer_id: Some("other".into()),
             sales_order_id: None,
-            authorized_scope: super::super::scope::SalesReadScope::default(),
         }
-        .document();
-        assert_eq!(filter.get_array("$and").unwrap().len(), 2);
-        assert_eq!(filter.get_array("$and").unwrap()[0].as_document().unwrap(), &doc! { "$expr": false });
+        .business_filter();
+        assert_eq!(filter.get_array("$and").unwrap().len(), 1);
+        assert_eq!(
+            filter.get_array("$and").unwrap()[0].as_document().unwrap(),
+            &doc! { "customer_id": "other" }
+        );
         assert_eq!(filter.get_str("business_type").unwrap(), "GOODS_SERVICE");
     }
 }

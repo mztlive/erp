@@ -534,11 +534,13 @@ impl BulkJobService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.background_jobs()
-                        .find_by_id(&job_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
-                    authorization.require("background_job_item:list", &job_id, &actor, executor).await?;
+                    authorization
+                        .require("background_job_item:list", &job_id, &actor, executor)
+                        .await
+                        .map_err(|error| match error {
+                            Error::NotFound(_) => Error::NotFound("后台任务不存在".into()),
+                            error => error,
+                        })?;
                     let result = db
                         .background_job_items()
                         .search_job_items(

@@ -13,11 +13,11 @@ use crate::Result;
 use crate::repository::SalesOrderExt;
 use crate::service::authorization_error::identity_error;
 
-/// 不可构造权限条件的仓储读取载体；缺凭证始终为空。
-#[derive(Clone, Default)]
+/// 必须持有完整授权凭证的仓储读取载体。
+#[derive(Clone)]
 pub struct SalesReadScope {
-    access: Option<Arc<CompiledAccess>>,
-    authorization: Option<AuthorizationService>,
+    access: Arc<CompiledAccess>,
+    authorization: AuthorizationService,
 }
 impl std::fmt::Debug for SalesReadScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -33,7 +33,7 @@ impl SalesReadScope {
     /// # 错误
     /// 无；执行前后须复验。
     pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
-        Self { access: Some(access), authorization: Some(authorization) }
+        Self { access, authorization }
     }
     /// 返回完整授权阶段。
     /// # 参数
@@ -41,12 +41,9 @@ impl SalesReadScope {
     /// # 返回
     /// identity 生成的完整阶段。
     /// # 错误
-    /// 无凭证时返回恒假阶段。
+    /// 不执行 I/O。
     pub fn stages(&self) -> Vec<Document> {
-        self.access
-            .as_ref()
-            .map(|a| a.stages().to_vec())
-            .unwrap_or_else(|| vec![doc! {"$match": {"$expr": false}}])
+        self.access.stages().to_vec()
     }
     /// 将业务筛选和完整授权前置于分页。
     /// # 参数
@@ -70,30 +67,6 @@ impl SalesReadScope {
     pub fn related_stages(&self, source_field: &str) -> Vec<Document> {
         related_sales_stages(source_field, self.stages())
     }
-    /// 只表示是否缺少凭证，不推断权限规则。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 无凭证为 true。
-    /// # 错误
-    /// 无。
-    pub fn is_empty(&self) -> bool {
-        self.access.is_none()
-    }
-    /// 业务匹配不重复解释已经执行的授权阶段。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 有凭证为空条件，缺凭证恒假。
-    /// # 错误
-    /// 无。
-    pub fn document(&self) -> Document {
-        if self.access.is_some() {
-            doc! {}
-        } else {
-            doc! {"$expr": false}
-        }
-    }
     /// 在原执行器复验 identity 凭证。
     /// # 参数
     /// executor 为生成凭证时的执行器。
@@ -102,17 +75,12 @@ impl SalesReadScope {
     /// # 错误
     /// 身份、映射、版本或会话变化返回原始错误。
     pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
-        match (&self.access, &self.authorization) {
-            (Some(access), Some(service)) => {
-                if access.model().collection != Database::SALES_ORDERS
-                    || access.model().output != QueryOutput::Object
-                {
-                    return Err(crate::Error::ValidationError("销售授权查询模型不匹配".into()));
-                }
-                service.validate(access, executor).await.map_err(identity_error)
-            },
-            _ => Err(crate::Error::Forbidden("缺少销售授权凭证".into())),
+        if self.access.model().collection != Database::SALES_ORDERS
+            || self.access.model().output != QueryOutput::Object
+        {
+            return Err(crate::Error::ValidationError("销售授权查询模型不匹配".into()));
         }
+        self.authorization.validate(&self.access, executor).await.map_err(identity_error)
     }
 }
 
@@ -188,7 +156,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         let result = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
-                { "id": { "$in": ids } }, scope.document()
+                { "id": { "$in": ids } }
             ] },
             FindOptions::builder().projection(doc! { "id": 1, "version": 1 }).sort(doc! { "id": 1 }).build(),
             scope.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } }),
@@ -208,7 +176,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         scope.validate(executor).await?;
         let rows = aggregate::find(
             &self.collection(),
-            doc! { "deleted_at": 0, "$and": [{ "id": id }, scope.document()] },
+            doc! { "deleted_at": 0, "id": id },
             FindOptions::builder().limit(1).build(),
             scope.lookup_after(doc! { "deleted_at": 0, "id": id }),
             executor,
@@ -229,16 +197,6 @@ pub struct SalesVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn absent_identity_credential_cannot_expose_sales_rows() {
-        let scope = SalesReadScope::default();
-        assert!(scope.is_empty());
-        assert_eq!(scope.stages(), vec![doc! {"$match":{"$expr":false}}]);
-        assert_eq!(
-            scope.lookup_after(doc! {"customer_id":"c"}),
-            vec![doc! {"$match":{"customer_id":"c"}}, doc! {"$match":{"$expr":false}}]
-        );
-    }
 
     #[test]
     fn related_query_correlates_one_source_then_preserves_every_authorization_stage() {

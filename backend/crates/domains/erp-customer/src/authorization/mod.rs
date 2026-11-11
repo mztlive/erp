@@ -1,5 +1,6 @@
 //! 客户事实映射；角色、范围、读取补充由 identity 统一编译。
 mod context;
+mod facts;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -10,12 +11,13 @@ use erp_identity::entity::authorization::{
     AccessContext, AccessFact, AccessSubject, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput,
     ReadAccess, RelationKey,
 };
-use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
+use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
 use erp_identity::{
     AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService, DataAccess,
     Error as IdentityError, Permission, Result as IdentityResult, SharedRbacService,
 };
+pub use facts::CustomerFacts;
 use mongodb::Database;
 use mongodb::bson::{Bson, doc};
 use persistence_core::Executor;
@@ -70,18 +72,25 @@ pub fn service(
 ) -> AuthorizationService {
     let entries = ["list", "detail", "create", "update", "delete"]
         .into_iter()
-        .map(|action| registration(action, mapping.clone(), history))
+        .map(|action| {
+            registration(action, mapping.clone(), Arc::new(CustomerFacts::new(db.clone())), history)
+        })
         .collect();
     let registry = AuthorizationRegistry::new(entries).expect("客户固定目录完整");
     AuthorizationService::new(db, rbac, registry)
 }
 
-fn registration(action: &str, mapping: Arc<dyn AccessMapping>, history: bool) -> AccessRegistration {
+fn registration(
+    action: &str,
+    mapping: Arc<dyn AccessMapping>,
+    facts: Arc<dyn AccessFactsPort>,
+    history: bool,
+) -> AccessRegistration {
     let permission = Permission::parse(format!("customer:{action}")).expect("固定权限");
     AccessRegistration {
         permission: permission.clone(),
         required_permissions: vec![],
-        access: AccessMode::Query {
+        access: AccessMode::QueryAndObject {
             data: DataAccess {
                 subject: AccessSubject::Direct,
                 required_facts: [FactKind::Owner, FactKind::Organization].into(),
@@ -94,6 +103,7 @@ fn registration(action: &str, mapping: Arc<dyn AccessMapping>, history: bool) ->
                 },
             },
             mapping,
+            facts,
         },
     }
 }
@@ -110,9 +120,7 @@ impl AccessMapping for CustomerMapping {
 
     async fn prepare(&self, context: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
         // 归属读取仅使用原事务快照；跨页完整成员版本由客户仓储指纹校验。
-        let now = context.as_of.unix_secs();
-        let midnight = ((now + 8 * 3600) / 86400 + 1) * 86400 - 8 * 3600;
-        Ok(MappingFacts { version: None, valid_until: Some(Instant::from_unix_secs(midnight)) })
+        Ok(MappingFacts { version: None, valid_until: Some(next_day(context.as_of)) })
     }
 
     fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
@@ -132,7 +140,9 @@ impl AccessMapping for CustomerMapping {
             "assignment_role": "OWNER",
             "$expr": {"$eq": ["$customer_id", "$$customer"]},
         };
-        if context.permission.action() != "create" && !matches!(fact, AccessFact::HistoryParticipant) {
+        if (context.permission.resource() != "customer" || context.permission.action() != "create")
+            && !matches!(fact, AccessFact::HistoryParticipant)
+        {
             filter = active_window_filter(&date, Some(filter));
         }
         let mut pipeline = Vec::new();
@@ -169,13 +179,34 @@ impl AccessMapping for CustomerMapping {
     }
 }
 
+/// 归属按上海自然日解释，授权在下一日边界失效。
+fn next_day(at: Instant) -> Instant {
+    let midnight = ((at.unix_secs() + 8 * 3600) / 86400 + 1) * 86400 - 8 * 3600;
+    Instant::from_unix_secs(midnight)
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
+    use erp_identity::ResourceTargets;
+    use erp_identity::entity::authorization::ObjectFacts;
     use persistence_core::NoTransaction;
 
     use super::*;
+
+    struct UnusedFacts;
+    #[async_trait]
+    impl AccessFactsPort for UnusedFacts {
+        async fn load(
+            &self,
+            _: &AccessContext,
+            _: &ResourceTargets,
+            _: &mut dyn Executor,
+        ) -> IdentityResult<Vec<ObjectFacts>> {
+            unreachable!("登记检查不读取客户事实")
+        }
+    }
 
     fn context(action: &str, at: i64) -> AccessContext {
         AccessContext {
@@ -233,9 +264,9 @@ mod tests {
             ("update", true, false),
             ("delete", true, false),
         ] {
-            let entry = registration(action, mapping.clone(), history);
-            let AccessMode::Query { data, .. } = &entry.access else {
-                panic!("客户使用完整对象查询模型")
+            let entry = registration(action, mapping.clone(), Arc::new(UnusedFacts), history);
+            let AccessMode::QueryAndObject { data, .. } = &entry.access else {
+                panic!("客户共用完整对象及查询政策")
             };
             let AccessPolicy::Scope { read, .. } = &data.policy else {
                 panic!("客户使用标准范围政策")

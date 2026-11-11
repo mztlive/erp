@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use erp_core::common::time::Instant;
 
-use super::{AccessContext, AccessFact, AccessRule, ObjectFacts, RelationMatch};
+use super::{AccessContext, AccessFact, AccessRule, ObjectFacts, RelatedObjects, RelationMatch};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Result};
 
@@ -36,6 +36,10 @@ impl AccessRule {
                 object.require_facts(facts)?;
                 rule.allows_object(context, object, grants)
             },
+            Self::Independent { permission, rule } => {
+                let context = AccessContext { permission: permission.clone(), ..context.clone() };
+                rule.allows_object(&context, object, grants)
+            },
             Self::RecordReadGrant(resource) => {
                 Ok(object.resource == resource.code() && grants.contains(&(*resource, object.id.clone())))
             },
@@ -44,27 +48,37 @@ impl AccessRule {
                     .relations
                     .get(relation)
                     .ok_or_else(|| Error::ValidationError("缺少必要来源关系".into()))?;
-                let mut seen = BTreeSet::new();
-                let mut allowed = BTreeSet::new();
-                for child in &related.objects {
-                    if child.resource != *resource
-                        || !related.expected_ids.contains(&child.id)
-                        || !seen.insert(child.id.clone())
-                    {
-                        return Err(Error::ValidationError("来源身份错配或重复".into()));
-                    }
-                    if rule.allows_object(context, child, grants)? {
-                        allowed.insert(child.id.clone());
-                    }
-                }
-                Ok(match mode {
-                    RelationMatch::Any => !allowed.is_empty(),
-                    RelationMatch::AllNonEmpty => {
-                        !related.expected_ids.is_empty() && allowed == related.expected_ids
-                    },
-                })
+                rule.allows_related(context, related, resource, *mode, grants)
             },
         }
+    }
+
+    /// 校验完整引用与实际来源身份，再按登记模式判断来源覆盖。
+    fn allows_related(
+        &self,
+        context: &AccessContext,
+        related: &RelatedObjects,
+        resource: &str,
+        mode: RelationMatch,
+        grants: &Grants,
+    ) -> Result<bool> {
+        let mut seen = BTreeSet::new();
+        let mut allowed = BTreeSet::new();
+        for child in &related.objects {
+            if child.resource != resource
+                || !related.expected_ids.contains(&child.id)
+                || !seen.insert(child.id.clone())
+            {
+                return Err(Error::ValidationError("来源身份错配或重复".into()));
+            }
+            if self.allows_object(context, child, grants)? {
+                allowed.insert(child.id.clone());
+            }
+        }
+        Ok(match mode {
+            RelationMatch::Any => !allowed.is_empty(),
+            RelationMatch::AllNonEmpty => !related.expected_ids.is_empty() && allowed == related.expected_ids,
+        })
     }
 
     /// 只查询规则实际使用的读取授权资源。
@@ -78,7 +92,9 @@ impl AccessRule {
                     rule.grant_resources(resources);
                 }
             },
-            Self::Related { rule, .. } | Self::Required { rule, .. } => rule.grant_resources(resources),
+            Self::Related { rule, .. } | Self::Required { rule, .. } | Self::Independent { rule, .. } => {
+                rule.grant_resources(resources)
+            },
             _ => {},
         }
     }
@@ -88,10 +104,10 @@ impl AccessFact {
     /// 归属和参与事实均相对于已冻结账号解释。
     fn matches_object(&self, actor: &str, object: &ObjectFacts) -> Result<bool> {
         Ok(match self {
-            Self::Owned => object.owner_id.get()?.as_deref() == Some(actor),
+            Self::Owned => object.owner_id.any(&object.owner_ids, |id| id == actor)?,
             Self::Collaborating => object.collaborators.get()?.contains(actor),
             Self::OrganizationIn(ids) => {
-                object.org_unit_id.get()?.as_ref().is_some_and(|id| ids.contains(id))
+                object.org_unit_id.any(&object.org_unit_ids, |id| ids.contains(id))?
             },
             Self::SettlementPartyIn(ids) => {
                 object.settlement_party_id.get()?.as_ref().is_some_and(|id| ids.contains(id))

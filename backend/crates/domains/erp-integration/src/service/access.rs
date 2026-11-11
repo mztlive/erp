@@ -1,53 +1,46 @@
-//! 集成读取和对象授权委托给 identity，不解释权限条款。
+//! 集成授权、查询编译与业务组织事实入口。
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{CompiledAccess, OrganizationDirectoryService, SharedRbacService};
+use erp_core::common::time::Instant;
+use erp_identity::{
+    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, CompiledAccess,
+    OrganizationDirectoryService, Permission, ResourceTargets, SharedRbacService,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::repository::authorization::IntegrationAuthorization;
+use crate::repository::authorization::registration;
 use crate::{Error, Result};
 
-/// 直接消费固定登记的集成授权能力。
+/// 固定登记的集成授权设施；查询凭证绑定本实例。
 #[derive(Clone)]
 pub struct IntegrationAccess {
     db: Database,
-    authorization: Option<IntegrationAuthorization>,
+    service: AuthorizationService,
+    mappings: BTreeMap<String, Arc<dyn AccessMapping>>,
 }
 impl IntegrationAccess {
-    /// 绑定共享身份设施和本域登记。
+    /// 绑定共享身份设施和本域固定目录。
     /// # 参数
     /// db、rbac 为组合根共享身份设施。
     /// # 返回
-    /// 不缓存授权的业务入口。
+    /// 不缓存授权结果的访问器。
     /// # 错误
-    /// 不执行 I/O。
+    /// 固定目录非法时启动失败；构造不执行 I/O。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { authorization: Some(IntegrationAuthorization::new(db.clone(), rbac)), db }
+        let (registry, mappings) = registration(&db);
+        Self { service: AuthorizationService::new(db.clone(), rbac, registry), db, mappings }
     }
 
-    /// 创建未接线的访问器，授权调用明确拒绝。
+    /// 查询并编译固定资源的完整授权条件。
     /// # 参数
-    /// db 为业务数据库。
+    /// actor、resource、action 指定服务端入口，executor 为原执行器。
     /// # 返回
-    /// 未注入身份设施的访问器。
+    /// identity 生成的不可伪造查询凭证。
     /// # 错误
-    /// 构造不执行 I/O。
-    pub fn unwired(db: Database) -> Self {
-        Self { db, authorization: None }
-    }
-
-    /// 取得固定登记的授权能力，未装配时失败关闭。
-    fn authorization(&self) -> Result<&IntegrationAuthorization> {
-        self.authorization.as_ref().ok_or_else(|| Error::Internal("集成授权未接线".into()))
-    }
-
-    /// 取得本次读取的完整授权凭证。
-    /// # 参数
-    /// actor、resource、action 为真实身份与入口，executor 为原执行器。
-    /// # 返回
-    /// identity 编译的完整授权计划。
-    /// # 错误
-    /// 未装配、无权或版本变化时拒绝。
+    /// 未登记入口、无权、映射或事实失败时拒绝。
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -55,27 +48,39 @@ impl IntegrationAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledAccess> {
-        Ok(self.authorization()?.query(actor, resource, action, executor).await?)
+        let mapping =
+            self.mappings.get(resource).ok_or_else(|| Error::ValidationError("集成资源未登记".into()))?;
+        Ok(self
+            .service
+            .query(
+                actor,
+                &Permission::parse(format!("{resource}:{action}"))?,
+                AccessSubject::Direct,
+                executor,
+            )
+            .await?
+            .compile(mapping.as_ref(), executor)
+            .await?)
     }
 
-    /// 在交付结果前后复验本次读取凭证。
+    /// 复验同一服务生成的读取凭证。
     /// # 参数
-    /// access 为凭证，executor 为原执行器。
+    /// access、executor 为本次凭证及原执行器。
     /// # 返回
     /// 仍有效时成功。
     /// # 错误
-    /// 未装配或授权变化时拒绝。
+    /// 身份、权限、映射或版本变化时拒绝。
     pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
-        Ok(self.authorization()?.validate(access, executor).await?)
+        Ok(self.service.validate(access, executor).await?)
     }
 
-    /// 按实际记录身份重验完整对象资格。
+    /// 按真实记录身份执行完整对象授权。
     /// # 参数
-    /// actor、resource、action 指定入口，id 为实际记录，executor 为原执行器。
+    /// actor、resource、action 为固定入口，id 为实际根记录，executor 为原执行器。
     /// # 返回
-    /// identity 完成对象授权后成功。
+    /// 全部对象事实及身份检查通过时成功。
     /// # 错误
-    /// 对象缺失、无权或版本变化时拒绝。
+    /// 对象缺失、无权或版本变化拒绝。
     pub async fn require_handler(
         &self,
         actor: &AuditActor,
@@ -84,7 +89,15 @@ impl IntegrationAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self.authorization()?.require(actor, resource, action, id, executor).await?)
+        let target = if action == "create" {
+            AccessTarget::Operation
+        } else {
+            AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? }
+        };
+        Ok(self
+            .service
+            .require(actor, &Permission::parse(format!("{resource}:{action}"))?, target, executor)
+            .await?)
     }
     /// 查询处理人在解析时点的唯一主属组织。
     ///
@@ -97,17 +110,16 @@ impl IntegrationAccess {
     /// 存在唯一主属组织时返回其 ID。
     ///
     /// # 错误
-    /// 处理人 ID 为 `me` 时返回 `ValidationError`；未装配、组织关系非法或缺少有效内部组织时拒绝。
+    /// 处理人 ID 为 `me` 时返回 `ValidationError`；组织关系非法或缺少有效内部组织时拒绝。
     pub async fn require_handler_org(
         &self,
         user_id: &str,
-        at: erp_core::common::time::Instant,
+        at: Instant,
         executor: &mut dyn Executor,
     ) -> Result<String> {
         if user_id.trim().eq_ignore_ascii_case("me") {
             return Err(Error::ValidationError("处理人不得使用 me 作为人员 ID".into()));
         }
-        self.authorization()?;
         OrganizationDirectoryService::new(self.db.clone())
             .own_org(user_id, at, executor)
             .await?
@@ -126,14 +138,13 @@ impl IntegrationAccess {
     /// 返回启用节点的组织 ID 集合。
     ///
     /// # 错误
-    /// 未知组织或未装配时拒绝。
+    /// 未知组织时拒绝。
     pub async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
         include_descendants: bool,
         executor: &mut dyn Executor,
-    ) -> Result<std::collections::BTreeSet<String>> {
-        self.authorization()?;
+    ) -> Result<BTreeSet<String>> {
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)

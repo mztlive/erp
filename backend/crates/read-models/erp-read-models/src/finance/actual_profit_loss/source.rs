@@ -148,9 +148,8 @@ pub(super) async fn authorized_orders(
         until: bounds.until,
         customer_id: query.customer_id.clone(),
         sales_order_id: query.sales_order_id.clone(),
-        authorized_scope,
     };
-    let orders = db.sales_orders().profit_loss_orders(&filter, executor).await?;
+    let orders = db.sales_orders().profit_loss_orders(&filter, &authorized_scope, executor).await?;
     if orders.len() > PROFIT_LOSS_ORDER_LIMIT {
         return Err(Error::ValidationError("匹配销售单超过 10000 单，请缩小期间或指定客户".into()));
     }

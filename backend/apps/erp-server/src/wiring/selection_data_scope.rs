@@ -42,9 +42,8 @@ impl SelectionCustomerAccessPort for SelectionCustomers {
             self.0.require_with(actor.clone(), "detail", customer_id, executor).await
         } else {
             // 纯读入口沿用客户领域公开查询快照；写命令始终走上面的原事务分支。
-            self.0.require(actor, "detail", customer_id).await
+            self.0.require(actor, "detail", customer_id).await.map(|_| ())
         }
-        .map(|_| ())
         .map_err(customer_error)
     }
 }

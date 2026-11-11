@@ -11,6 +11,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::projection::{statement_sort_doc, supplier_settlement_statement_projection};
+use crate::CompiledScope;
 use crate::entity::supplier_settlement::{
     SettlementReviewResult, SettlementStatus, SupplierSettlementSourceEvidence, SupplierSettlementStatement,
 };
@@ -119,7 +120,7 @@ pub struct SupplierSettlementStatementFilter {
     /// 结算期间结束上界（含）。
     pub period_to: Option<BusinessDate>,
     /// 已证明的授权条件；`None` 表示调用方尚未接入范围。
-    pub authorized_scope: Option<super::SettlementReadScope>,
+    pub authorized_scope: Option<CompiledScope>,
     /// 对账负责人筛选，只收窄授权结果。
     pub owner_user_ids: Option<Vec<String>>,
     /// 差异处理人筛选，只收窄授权结果。
@@ -310,7 +311,7 @@ pub trait SupplierSettlementStatementRepositoryExt {
     async fn find_authorized(
         &self,
         id: &str,
-        scope: &super::SettlementReadScope,
+        scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierSettlementStatement>>;
 
@@ -458,7 +459,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
     async fn find_authorized(
         &self,
         id: &str,
-        scope: &super::SettlementReadScope,
+        scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierSettlementStatement>> {
         scope.validate(executor).await?;

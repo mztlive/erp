@@ -5,7 +5,7 @@ use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, Authorization, OfferingResolvedScope};
+use crate::authorization::{self, Authorization, CompiledScope};
 use crate::entity::supplier_offering::SupplierOffering;
 use crate::error::{Error, Result};
 use crate::repository::SupplierOfferingExt;
@@ -73,7 +73,7 @@ impl OfferingAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<OfferingResolvedScope> {
+    ) -> Result<CompiledScope> {
         Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 

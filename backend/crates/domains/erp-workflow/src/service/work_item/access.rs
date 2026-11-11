@@ -2,7 +2,6 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
-use erp_core::Result as CoreResult;
 use erp_identity::Permission;
 use persistence_core::Executor;
 
@@ -31,23 +30,19 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<TaskAccess> {
-        let mut required = item.qualification_permissions()?;
-        required.extend(
-            ["approval_instance:read", "approval_instance:decide"]
-                .into_iter()
-                .map(Permission::parse)
-                .collect::<CoreResult<Vec<_>>>()?,
-        );
+        let execution = item.qualification_permissions()?;
+        let decide =
+            [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
+        let mut required = execution.clone();
+        required.extend(decide.iter().cloned());
         let qualified = features(&self.db, &self.identity)
             .permissions(actor, &required, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?;
         let mut access = TaskAccess::new(actor.id().to_owned());
-        if qualified.same_role(&item.qualification_permissions()?) {
+        if qualified.same_role(&execution) {
             access.executable_task_ids.insert(item.base.id.clone());
         }
-        let decide =
-            [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
         if qualified.same_role(&decide) {
             access.decidable_task_ids.insert(item.base.id.clone());
         }

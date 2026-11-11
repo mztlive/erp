@@ -3,69 +3,35 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_catalog::portal::{CatalogPortalExt, NewProductDraft};
+use erp_catalog::portal::NewProductDraft;
+use erp_core::AccountKind;
 use erp_identity::{PortalActor, SharedRbacService};
-use erp_supplier::portal::CooperationRepository;
-use erp_supply::portal::{OfferingApplication, PortalSupplyExt};
+use erp_supply::portal::OfferingApplication;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::SupplierPortalProcess;
+use super::request_access::{RequestAction, RequestTarget, require_request};
 use crate::wiring::CatalogServices;
 use crate::{Error, Result};
 
 impl SupplierPortalProcess {
-    /// 重验内部处理人对供给申请的供应商范围，以及更新既有供给或创建新供给的资格。
-    ///
-    /// # 参数
-    /// * `actor` - 内部处理人。
-    /// * `app` - 供给申请。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 对象范围和供给动作均通过时无返回值。
-    ///
-    /// # 错误
-    /// 供应商不可见、已停用，或既有供给不可更新、新供给不可创建时返回对应错误。
-    pub(super) async fn offering_reviewer_access(
+    /// 执行固定申请审核政策，拒绝时补查身份以保留原认证错误。
+    async fn require_request_review(
         &self,
         actor: &AuditActor,
-        app: &OfferingApplication,
+        target: RequestTarget,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.internal_supplier(actor, "detail", &app.supplier_id, executor).await?;
-        let access = &self.services.offering_access;
-        if let Some((id, _, _)) = app.snapshot.target() {
-            access.require_offering(actor, "update", id, executor).await?;
-        } else {
-            self.active_supplier(&app.supplier_id, executor).await?;
-            access.ensure_writable(actor, "create", executor).await?;
+        if actor.kind() != AccountKind::Admin {
+            return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
         }
-        Ok(())
-    }
-
-    /// 重验内部处理人可查看供应商，并可在其维护组织上创建商品和供给。
-    ///
-    /// # 参数
-    /// * `actor` - 内部处理人。
-    /// * `draft` - 新品草稿。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 目录创建和供给创建资格都通过时无返回值。
-    ///
-    /// # 错误
-    /// 供应商不可见、已停用，或商品、供给创建资格不足时返回对应错误。
-    pub(super) async fn new_product_reviewer_access(
-        &self,
-        actor: &AuditActor,
-        draft: &NewProductDraft,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.internal_supplier(actor, "detail", &draft.supplier_id, executor).await?;
-        self.services.catalog_access.ensure_writable(actor, "create", executor).await?;
-        self.services.offering_access.ensure_writable(actor, "create", executor).await?;
-        Ok(())
+        let result =
+            require_request(&self.db, &self.rbac, actor, target, RequestAction::Review, executor).await;
+        if matches!(&result, Err(Error::Forbidden(_))) {
+            self.internal_actor(actor, executor).await?;
+        }
+        result
     }
 
     /// 用申请维护人充当批量供给审核人，并重验其审核与查看权限。
@@ -87,10 +53,14 @@ impl SupplierPortalProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let (owner, _) = self.application_owner(app, actor, executor).await?;
-        let reviewer = self.reviewer_actor(&owner, executor).await?;
-        self.internal_permission(&reviewer, "supplier_portal.application_approve", executor).await?;
-        self.internal_permission(&reviewer, "supplier_portal.application_detail", executor).await?;
-        self.offering_reviewer_access(&reviewer, app, executor).await
+        let reviewer = self
+            .reviewer_actor(
+                &owner,
+                &["supplier_portal.application_approve", "supplier_portal.application_detail"],
+                executor,
+            )
+            .await?;
+        self.require_request_review(&reviewer, RequestTarget::offering(app), executor).await
     }
 
     /// 用供应商当前维护人充当批量新品审核人，并重验其审核与查看权限。
@@ -110,10 +80,14 @@ impl SupplierPortalProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let supplier = self.active_supplier(&draft.supplier_id, executor).await?;
-        let reviewer = self.reviewer_actor(&supplier.maintainer_user_id, executor).await?;
-        self.internal_permission(&reviewer, "supplier_portal.new_product_approve", executor).await?;
-        self.internal_permission(&reviewer, "supplier_portal.application_detail", executor).await?;
-        self.new_product_reviewer_access(&reviewer, draft, executor).await
+        let reviewer = self
+            .reviewer_actor(
+                &supplier.maintainer_user_id,
+                &["supplier_portal.new_product_approve", "supplier_portal.application_detail"],
+                executor,
+            )
+            .await?;
+        self.require_request_review(&reviewer, RequestTarget::new_product(draft), executor).await
     }
 
     /// 在供给维护人资格之外，再证明其可更新商品目录。
@@ -135,7 +109,7 @@ impl SupplierPortalProcess {
         executor: &mut dyn Executor,
     ) -> Result<(String, String)> {
         let (owner, org) = self.offering_maintainer(owner, actor, executor).await?;
-        let maintainer = self.reviewer_actor(&owner, executor).await?;
+        let maintainer = self.reviewer_actor(&owner, &[], executor).await?;
         let catalog = &self.services.catalog_access;
         catalog.ensure_writable(&maintainer, "update", executor).await?;
         Ok((owner, org))
@@ -159,7 +133,7 @@ impl SupplierPortalProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(String, String)> {
-        let maintainer = self.reviewer_actor(owner, executor).await?;
+        let maintainer = self.reviewer_actor(owner, &[], executor).await?;
         let access = &self.services.offering_access;
         let (owner, org) = access.maintainer_org(Some(owner), actor, executor).await?;
         access.ensure_writable(&maintainer, "update", executor).await?;
@@ -184,16 +158,10 @@ pub async fn request_reviewable(
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     let process = SupplierPortalProcess::new(db.clone(), rbac.clone(), services);
-    let result = if let Some(app) = db.portal_applications().find_by_id(id, executor).await? {
-        process.offering_reviewer_access(actor, &app, executor).await
-    } else if let Some(draft) = db.new_product_drafts().find_by_id(id, executor).await? {
-        process.new_product_reviewer_access(actor, &draft, executor).await
-    } else if let Some(app) = CooperationRepository::new(db).find_any(id, executor).await? {
-        process.internal_supplier(actor, "update", &app.supplier_id, executor).await.map(|_| ())
-    } else {
+    let Some(target) = RequestTarget::load(db, id, executor).await? else {
         return Ok(false);
     };
-    decision_access_result(result)
+    decision_access_result(process.require_request_review(actor, target, executor).await)
 }
 
 fn decision_access_result(result: Result<()>) -> Result<bool> {

@@ -47,7 +47,7 @@ impl FundsAccess {
         if self
             .db
             .sales_orders()
-            .find_authorized(&order.base.id, &authorization.sales, executor)
+            .find_authorized(&order.base.id, authorization.sales_scope()?, executor)
             .await?
             .is_none()
         {

@@ -101,7 +101,7 @@ impl ActualProfitLossReadModel {
         actor: &AuditActor,
         export: bool,
     ) -> Result<ProfitLossView> {
-        let (sources, query, context, no_scope) = self.snapshot(query, actor).await?;
+        let (sources, query, context) = self.snapshot(query, actor).await?;
         let as_of = context.as_of.as_utc();
         let orders = calculation::calculate(&sources, as_of.timestamp(), access.can_drill_cost)?;
         let mut view = projection::project(
@@ -114,9 +114,6 @@ impl ActualProfitLossReadModel {
         self.recheck(&query, actor, &context.scope_version).await?;
         view.scope.permission_version = context.scope_version.clone();
         view.scope_version = context.scope_version.clone();
-        if no_scope {
-            view.empty_reason = Some("no_scope".into());
-        }
         Ok(view)
     }
 
@@ -149,7 +146,7 @@ impl ActualProfitLossReadModel {
         &self,
         query: ProfitLossQuery,
         actor: &AuditActor,
-    ) -> Result<(source::Sources, ProfitLossQuery, SalesReadContext, bool)> {
+    ) -> Result<(source::Sources, ProfitLossQuery, SalesReadContext)> {
         let bounds = query.validate()?;
         let this = self.clone();
         let actor = actor.clone();
@@ -160,12 +157,11 @@ impl ActualProfitLossReadModel {
                 Box::pin(async move {
                     let (mut context, scope) = this.authorized_scope(&actor, executor).await?;
                     context.validate(executor).await?;
-                    let no_scope = scope.is_empty();
                     let sources = source::Sources::load(&this.db, &query, bounds, scope, executor).await?;
                     context.validate(executor).await?;
                     context.map_read_version(|base| source::version(base, &sources.orders));
                     ensure_version(query.scope_version.as_deref(), &context.scope_version)?;
-                    Ok((sources, query, context, no_scope))
+                    Ok((sources, query, context))
                 })
             })
             .await

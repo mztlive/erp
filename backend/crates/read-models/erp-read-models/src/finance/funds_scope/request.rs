@@ -143,9 +143,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
         let (_, authorization) = self.resolve(actor, "sales_invoice_request", "list", executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "开票申请无可见范围"));
-        }
         if let Some(task_id) = &query.work_item_id
             && let Some(request) = self.db.sales_invoice_requests().find_for_task(task_id, executor).await?
         {
@@ -201,9 +198,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (_, authorization) =
                         this.resolve(&actor, "sales_invoice_request", "list", executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version);
-                    }
                     let rows = this.request_candidates(&query, &authorization, executor).await?;
                     let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
                     let (facts, _) = this.request_sales_context(&order_ids, executor).await?;

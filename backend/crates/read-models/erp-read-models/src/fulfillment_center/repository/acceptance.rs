@@ -26,7 +26,7 @@ pub(crate) async fn acceptance_list(
 ) -> Result<PageView<CustomerAcceptanceView>> {
     let filter = acceptance_filter(params)?;
     scope.validate(executor).await?;
-    let prefix = acceptance_prefix(&filter, scope);
+    let prefix = acceptance_prefix(&filter, scope.related_stages("sales_order_id"));
     let collection = db.collection::<CustomerAcceptanceRow>(Database::CUSTOMER_ACCEPTANCES);
     let rows = aggregate::rows(&collection, page_pipeline(prefix.clone(), &filter)?, executor).await?;
     let total = aggregate::count(&collection, doc! {}, prefix, executor).await?;
@@ -59,9 +59,9 @@ fn acceptance_filter(params: &CustomerAcceptanceListParams) -> Result<CustomerAc
     })
 }
 
-fn acceptance_prefix(filter: &CustomerAcceptanceFilter, scope: &SalesReadScope) -> Vec<Document> {
+fn acceptance_prefix(filter: &CustomerAcceptanceFilter, authorization: Vec<Document>) -> Vec<Document> {
     let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
-    pipeline.extend(scope.related_stages("sales_order_id"));
+    pipeline.extend(authorization);
     pipeline
 }
 
@@ -114,21 +114,13 @@ mod tests {
     #[test]
     fn acceptance_query_filters_actual_source_before_authorization_and_pagination() {
         let filter = acceptance_filter(&params()).unwrap();
-        let scope = SalesReadScope::default();
-        let prefix = acceptance_prefix(&filter, &scope);
+        let authorization = vec![doc! {"$match": {"authorized_source": true}}];
+        let prefix = acceptance_prefix(&filter, authorization.clone());
         assert_eq!(
             prefix[0],
             doc! { "$match": { "deleted_at": 0_i64, "sales_order_id": "sales-one", "status": "POSTED" } }
         );
-        let source = prefix[1].get_document("$lookup").unwrap();
-        assert_eq!(
-            source.get_document("let").unwrap().get_str("sales_source_id").unwrap(),
-            "$sales_order_id"
-        );
-        let stages = source.get_array("pipeline").unwrap();
-        assert!(
-            stages.iter().any(|stage| stage.as_document() == Some(&doc! { "$match": { "$expr": false } }))
-        );
+        assert_eq!(&prefix[1..], authorization.as_slice());
         let page = page_pipeline(prefix.clone(), &filter).unwrap();
         assert_eq!(&page[..prefix.len()], prefix.as_slice());
         assert_eq!(page[page.len() - 3], doc! { "$skip": 20_i64 });

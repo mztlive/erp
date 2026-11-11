@@ -24,9 +24,6 @@ pub struct CompiledScope {
     compiled: Arc<CompiledAccess>,
     authorization: AuthorizationService,
     pub scope_version: String,
-    pub policy_version: u64,
-    pub organization_version: u64,
-    pub as_of: Instant,
 }
 impl std::fmt::Debug for CompiledScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -44,6 +41,39 @@ impl CompiledScope {
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
+    /// 返回当前凭证的权限策略版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 绑定的策略版本。
+    /// # 错误
+    /// 无。
+    pub fn policy_version(&self) -> u64 {
+        self.compiled.policy_version()
+    }
+
+    /// 返回当前凭证的组织版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 绑定的组织版本。
+    /// # 错误
+    /// 无。
+    pub fn organization_version(&self) -> u64 {
+        self.compiled.organization_version()
+    }
+
+    /// 返回当前凭证的授权时点。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 冻结的授权时点。
+    /// # 错误
+    /// 无。
+    pub fn as_of(&self) -> Instant {
+        self.compiled.as_of()
+    }
+
     /// 复验账号、权限、版本和有效期。
     /// # 参数
     /// executor 必须为原执行器。
@@ -55,13 +85,6 @@ impl CompiledScope {
         self.authorization.validate(&self.compiled, executor).await
     }
 }
-
-/// 供给查询当前阶段凭证。
-pub type OfferingResolvedScope = CompiledScope;
-/// 履约订单查询当前阶段凭证。
-pub type FulfillmentOrderResolvedScope = CompiledScope;
-/// 结算查询当前阶段凭证。
-pub type SettlementResolvedScope = CompiledScope;
 
 struct Mapping {
     model: QueryModel,
@@ -209,14 +232,7 @@ impl Authorization {
         let query = self.service.query(actor, &permission, AccessSubject::Direct, executor).await?;
         let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
         self.service.validate(&compiled, executor).await?;
-        Ok(CompiledScope {
-            scope_version: compiled.version(),
-            policy_version: compiled.policy_version(),
-            organization_version: compiled.organization_version(),
-            as_of: compiled.as_of(),
-            compiled,
-            authorization: self.service.clone(),
-        })
+        Ok(CompiledScope { scope_version: compiled.version(), compiled, authorization: self.service.clone() })
     }
 
     /// 在原事务内检查完整对象访问。

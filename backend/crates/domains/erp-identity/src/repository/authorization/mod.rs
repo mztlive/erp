@@ -140,6 +140,10 @@ impl Compiler<'_> {
                     }
                     self.node(rule, mapping, context, facts, depth + 1).await
                 },
+                AccessRule::Independent { permission, rule } => {
+                    let context = AccessContext { permission: permission.clone(), ..context.clone() };
+                    self.model(rule, mapping, &context, depth + 1).await
+                },
                 AccessRule::Fact(fact) => {
                     if !mapping.model().facts.contains(&fact.kind()) {
                         return Err(Error::ValidationError("Mapping 未声明所需事实维度".into()));
@@ -289,6 +293,7 @@ mod tests {
         revision: AtomicU64,
         live_only: bool,
         key_expression: Option<Bson>,
+        action_sensitive: bool,
     }
 
     #[async_trait]
@@ -299,14 +304,28 @@ mod tests {
         fn key(&self, _: &AccessContext, _: &MappingFacts) -> Result<Bson> {
             Ok(self.key_expression.clone().unwrap_or_else(|| format!("${}", self.model.id_field).into()))
         }
-        async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
+        async fn prepare(&self, context: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
             Ok(MappingFacts {
-                version: self.versioned.then(|| format!("facts-v{}", self.revision.load(Ordering::Relaxed))),
-                ..Default::default()
+                version: self.versioned.then(|| {
+                    if self.action_sensitive {
+                        format!(
+                            "facts-{}-v{}",
+                            context.permission.action(),
+                            self.revision.load(Ordering::Relaxed)
+                        )
+                    } else {
+                        format!("facts-v{}", self.revision.load(Ordering::Relaxed))
+                    }
+                }),
+                valid_until: self
+                    .action_sensitive
+                    .then(|| Instant::from_unix_secs(context.as_of.unix_secs() + 3600)),
             })
         }
-        fn records(&self, _: &AccessContext, _: &MappingFacts) -> Result<QueryFragment> {
-            Ok(QueryFragment::Match(if self.live_only {
+        fn records(&self, context: &AccessContext, _: &MappingFacts) -> Result<QueryFragment> {
+            Ok(QueryFragment::Match(if self.action_sensitive {
+                doc! { "record_action": context.permission.action() }
+            } else if self.live_only {
                 doc! { "deleted_at": 0 }
             } else {
                 doc! {}
@@ -320,7 +339,11 @@ mod tests {
         ) -> Result<QueryFragment> {
             match fact {
                 AccessFact::Owned => {
-                    Ok(QueryFragment::Match(doc! { "sales_owner_user_id": context.actor.id() }))
+                    let mut filter = doc! { "sales_owner_user_id": context.actor.id() };
+                    if self.action_sensitive {
+                        filter.insert("owner_action", context.permission.action());
+                    }
+                    Ok(QueryFragment::Match(filter))
                 },
                 AccessFact::HistoryParticipant => Ok(QueryFragment::Exists {
                     collection: "participants".into(),
@@ -360,6 +383,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: false,
             key_expression: None,
+            action_sensitive: false,
         })
     }
 
@@ -378,6 +402,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: false,
             key_expression: None,
+            action_sensitive: false,
         })
     }
 
@@ -518,6 +543,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: false,
             key_expression: None,
+            action_sensitive: false,
         });
         assert!(
             query(AccessRule::Allow, mapping.clone())
@@ -557,6 +583,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: false,
             key_expression: None,
+            action_sensitive: false,
         });
         let plan = query(rule, share.clone()).compile(share.as_ref(), &mut NoTransaction).await.unwrap();
         assert_eq!(
@@ -582,6 +609,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: false,
             key_expression: None,
+            action_sensitive: false,
         });
         let query = query(AccessRule::Allow, live.clone());
         let plan = query.compile(live.as_ref(), &mut NoTransaction).await.unwrap();
@@ -613,6 +641,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn independent_scope_compiles_and_revalidates_its_own_action_context() {
+        let mapping = Arc::new(Mapping {
+            model: mapping("sales_order", None).model().clone(),
+            child: None,
+            versioned: true,
+            revision: AtomicU64::new(1),
+            live_only: false,
+            key_expression: None,
+            action_sensitive: true,
+        });
+        let rule = AccessRule::Independent {
+            permission: Permission::parse("sales_order:detail").unwrap(),
+            rule: Box::new(AccessRule::Fact(AccessFact::Owned)),
+        };
+        let query = query(rule, mapping.clone());
+        let plan = query.compile(mapping.as_ref(), &mut NoTransaction).await.unwrap();
+        assert_eq!(plan.dependencies.len(), 2);
+        assert_eq!(plan.dependencies[0].context.permission.action(), "list");
+        assert_eq!(plan.dependencies[1].context.permission.action(), "detail");
+        assert_eq!(plan.dependencies[1].facts.version.as_deref(), Some("facts-detail-v1"));
+        assert!(plan.dependencies[1].facts.valid_until.is_some());
+        assert_eq!(
+            plan.stages,
+            vec![doc! { "$match": { "$and": [
+                { "record_action": "list" },
+                { "$and": [
+                    { "record_action": "detail" },
+                    { "sales_owner_user_id": "u", "owner_action": "detail" }
+                ] }
+            ] } }]
+        );
+        assert!(plan.dependencies[1].validate(&mut NoTransaction).await.is_ok());
+        mapping.revision.store(2, Ordering::Relaxed);
+        assert!(matches!(
+            plan.dependencies[1].validate(&mut NoTransaction).await,
+            Err(Error::ConflictError(_))
+        ));
+    }
+
+    #[tokio::test]
     async fn related_shared_scope_still_requires_live_source_record() {
         let child: Arc<dyn AccessMapping> = Arc::new(Mapping {
             model: mapping("purchase_order", None).model().clone(),
@@ -621,6 +689,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: true,
             key_expression: None,
+            action_sensitive: false,
         });
         let root = mapping("invoice", Some(child));
         let rule = AccessRule::Related {
@@ -646,6 +715,7 @@ mod tests {
             revision: AtomicU64::new(1),
             live_only: false,
             key_expression: Some(expression.clone().into()),
+            action_sensitive: false,
         });
         let grant = query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), calculated.clone());
         let compiled = grant.compile(calculated.as_ref(), &mut NoTransaction).await.unwrap();

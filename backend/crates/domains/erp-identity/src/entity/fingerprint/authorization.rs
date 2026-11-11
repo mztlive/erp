@@ -37,6 +37,12 @@ impl Fingerprint {
                 self.unordered(facts, Self::kind);
                 self.rule(rule);
             },
+            AccessRule::Independent { permission, rule } => {
+                self.text("independent");
+                self.text(permission.resource());
+                self.text(permission.action());
+                self.rule(rule);
+            },
             AccessRule::RecordReadGrant(resource) => {
                 self.text("record_read_grant");
                 self.text(resource.code());
@@ -228,5 +234,18 @@ mod tests {
         for changed in changed_facts {
             assert_ne!(original, hash(&model, &changed));
         }
+    }
+
+    #[test]
+    fn independent_permission_is_bound_even_when_resolved_scope_is_identical() {
+        let version = |action| {
+            let mut hash = Fingerprint::new("independent-test-v1");
+            hash.rule(&AccessRule::Independent {
+                permission: crate::Permission::parse(format!("sales_order:{action}")).unwrap(),
+                rule: Box::new(AccessRule::Allow),
+            });
+            hash.finish()
+        };
+        assert_ne!(version("detail"), version("list"));
     }
 }

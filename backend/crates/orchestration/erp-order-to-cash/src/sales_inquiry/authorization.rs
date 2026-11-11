@@ -15,36 +15,13 @@ use persistence_core::Executor;
 use crate::repository::sales_inquiry_access::{InquiryFacts, InquiryMapping, TaskFacts, TaskInquiryMapping};
 use crate::{Error, Result};
 
-pub(super) fn service(
-    db: Database,
-    rbac: SharedRbacService,
-    action: &str,
-    extra: &[Permission],
-    candidate: Option<SalesInquiry>,
-) -> Result<(AuthorizationService, Arc<dyn AccessMapping>, Permission)> {
-    let permission = permission(action)?;
-    let mapping: Arc<dyn AccessMapping> = Arc::new(InquiryMapping(QueryModel {
-        key: QueryModelKey::parse("sales_inquiries")?,
-        resource: "sales_inquiry".into(),
-        collection: "sales_inquiries".into(),
-        id_field: "id".into(),
-        output: QueryOutput::Object,
-        facts: [FactKind::Owner, FactKind::Organization, FactKind::Collaborators].into(),
-    }));
-    let entry = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: extra.to_vec(),
-        access: AccessMode::QueryAndObject {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
-            },
-            mapping: mapping.clone(),
-            facts: Arc::new(InquiryFacts { db: db.clone(), candidate }),
-        },
-    };
-    Ok((AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?), mapping, permission))
+/// 查询和对象检查复用同一固定范围政策，各自只装配实际消费的能力。
+fn data(permission: &Permission) -> DataAccess {
+    DataAccess {
+        subject: AccessSubject::Direct,
+        required_facts: [FactKind::Owner, FactKind::Organization].into(),
+        policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
+    }
 }
 
 fn permission(action: &str) -> Result<Permission> {
@@ -67,6 +44,13 @@ fn permission(action: &str) -> Result<Permission> {
     Ok(Permission::parse(format!("sales_inquiry:{action}"))?)
 }
 
+/// 使用可信完整询价事实检查当前对象动作，不构造查询模型。
+/// # 参数
+/// db、rbac 为身份设施；actor、action 为真实入口；inquiry 为原事务事实，extra 为同角色附加资格。
+/// # 返回
+/// 账号、完整功能资格与对象范围成立时成功。
+/// # 错误
+/// 动作未登记、事实缺失、无权或授权变化时拒绝。
 pub(super) async fn require(
     db: Database,
     rbac: SharedRbacService,
@@ -76,7 +60,16 @@ pub(super) async fn require(
     extra: &[Permission],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let (authorization, _, permission) = service(db, rbac, action, extra, Some(inquiry.clone()))?;
+    let permission = permission(action)?;
+    let entry = AccessRegistration {
+        permission: permission.clone(),
+        required_permissions: extra.to_vec(),
+        access: AccessMode::Object {
+            data: data(&permission),
+            facts: Arc::new(InquiryFacts { db: db.clone(), candidate: Some(inquiry.clone()) }),
+        },
+    };
+    let authorization = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
     authorization
         .require(
             actor,
@@ -91,6 +84,13 @@ pub(super) async fn require(
     Ok(())
 }
 
+/// 编译询价列表本阶段的完整授权条件。
+/// # 参数
+/// db、rbac 为身份设施；actor、action 为真实入口，executor 为原执行器。
+/// # 返回
+/// 本阶段凭证及用于读取前后复验的同一授权服务。
+/// # 错误
+/// 动作未登记、无权、模型错误或授权变化时拒绝。
 pub(super) async fn query(
     db: Database,
     rbac: SharedRbacService,
@@ -98,7 +98,21 @@ pub(super) async fn query(
     action: &str,
     executor: &mut dyn Executor,
 ) -> Result<(Arc<CompiledAccess>, AuthorizationService)> {
-    let (authorization, mapping, permission) = service(db, rbac, action, &[], None)?;
+    let permission = permission(action)?;
+    let mapping: Arc<dyn AccessMapping> = Arc::new(InquiryMapping(QueryModel {
+        key: QueryModelKey::parse("sales_inquiries")?,
+        resource: "sales_inquiry".into(),
+        collection: "sales_inquiries".into(),
+        id_field: "id".into(),
+        output: QueryOutput::Object,
+        facts: [FactKind::Owner, FactKind::Organization, FactKind::Collaborators].into(),
+    }));
+    let entry = AccessRegistration {
+        permission: permission.clone(),
+        required_permissions: vec![],
+        access: AccessMode::Query { data: data(&permission), mapping: mapping.clone() },
+    };
+    let authorization = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
     let query = authorization.query(actor, &permission, AccessSubject::Direct, executor).await?;
     let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
     authorization.validate(&compiled, executor).await?;

@@ -42,13 +42,12 @@ impl HistoricalDirectoryView {
     /// # 参数
     /// `rows` 是完整授权期间订单的归属；`scope_version` 绑定该来源快照。
     /// # 返回
-    /// 稳定身份排序的完整候选，空授权单独标识。
+    /// 稳定身份排序的完整候选，无历史数据时标记 `no_data`。
     /// # 错误
     /// 任一候选维度超过 10000 项整体拒绝，不截断。
     pub(crate) fn from_attributions<'a>(
         rows: impl Iterator<Item = &'a SalesAttribution>,
         scope_version: String,
-        no_scope: bool,
     ) -> Result<Self> {
         let mut users = BTreeMap::<String, BTreeSet<String>>::new();
         let mut orgs = BTreeMap::<String, BTreeSet<String>>::new();
@@ -62,13 +61,7 @@ impl HistoricalDirectoryView {
         if users.len() > 10_000 || orgs.len() > 10_000 {
             return Err(Error::ValidationError("历史候选超过 10000 项，请缩小期间或指定客户".into()));
         }
-        let empty_reason = if no_scope {
-            Some("no_scope".into())
-        } else if users.is_empty() && orgs.is_empty() {
-            Some("no_data".into())
-        } else {
-            None
-        };
+        let empty_reason = if users.is_empty() && orgs.is_empty() { Some("no_data".into()) } else { None };
         Ok(Self {
             attribution_user_options: labels(users),
             attribution_org_options: labels(orgs),
@@ -119,7 +112,7 @@ mod tests {
         let mut second = first.clone();
         second.attribution_user_id = "former-b".into();
         let rows = [first, second];
-        let view = HistoricalDirectoryView::from_attributions(rows.iter(), "v1".into(), false).unwrap();
+        let view = HistoricalDirectoryView::from_attributions(rows.iter(), "v1".into()).unwrap();
         assert_eq!(view.attribution_user_options.len(), 2);
         assert_ne!(view.attribution_user_options[0].label, view.attribution_user_options[1].label);
         assert!(
@@ -127,19 +120,18 @@ mod tests {
                 .iter()
                 .any(|option| option.value == "old-parent" && option.label.contains("原部门"))
         );
-        let reversed =
-            HistoricalDirectoryView::from_attributions(rows.iter().rev(), "v1".into(), false).unwrap();
+        let reversed = HistoricalDirectoryView::from_attributions(rows.iter().rev(), "v1".into()).unwrap();
         assert_eq!(serde_json::to_value(view).unwrap(), serde_json::to_value(reversed).unwrap());
     }
     #[test]
-    fn candidate_request_rejects_report_filters_and_empty_scope_remains_empty() {
+    fn candidate_request_rejects_report_filters_and_empty_data_remains_empty() {
         for extra in ["page", "q", "attribution_user_ids", "org_unit_ids", "coverage"] {
             let mut value = serde_json::json!({"from":"2026-09-01", "to":"2026-09-23"});
             value[extra] = serde_json::json!("narrowed");
             assert!(serde_json::from_value::<HistoricalDirectoryQuery>(value).is_err());
         }
-        let empty = HistoricalDirectoryView::from_attributions([].iter(), "v2".into(), true).unwrap();
-        assert_eq!(empty.empty_reason.as_deref(), Some("no_scope"));
+        let empty = HistoricalDirectoryView::from_attributions([].iter(), "v2".into()).unwrap();
+        assert_eq!(empty.empty_reason.as_deref(), Some("no_data"));
         assert!(empty.attribution_user_options.is_empty());
     }
 }

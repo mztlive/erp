@@ -22,35 +22,14 @@ pub struct IntegrationOpsService {
 }
 
 impl IntegrationOpsService {
-    /// 使用调用方数据库句柄创建本域服务；授权访问器 失败关闭。
-    ///
+    /// 绑定本域数据库及完整授权能力。
     /// # 参数
-    /// * `db` - 本域集合所在数据库
-    ///
+    /// db 为本域数据库，data_scope 为组合根构造的授权访问器。
     /// # 返回
-    /// 返回未接线范围解析的服务。
-    ///
+    /// 授权依赖完整的集成服务。
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 列表、详情和写命令必须改用 [`Self::with_scope`]。
-    pub fn new(db: Database) -> Self {
-        Self { db: db.clone(), data_scope: IntegrationAccess::unwired(db) }
-    }
-
-    /// 绑定已接入统一授权服务的授权访问器。
-    ///
-    /// # 参数
-    /// * `db` - 本域集合所在数据库
-    /// * `data_scope` - 组合层注入的集成授权访问器
-    ///
-    /// # 返回
-    /// 返回可解析范围的服务。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_scope(db: Database, data_scope: IntegrationAccess) -> Self {
+    /// 构造不执行 I/O。
+    pub fn new(db: Database, data_scope: IntegrationAccess) -> Self {
         Self { db, data_scope }
     }
 

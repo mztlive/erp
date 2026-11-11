@@ -268,6 +268,7 @@ pub async fn impacts(
         purchase_access(state.application().db(), state.application().rbac()),
         Arc::new(PortalReadAuthorization::new(
             state.application().db(),
+            state.application().rbac(),
             crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
         )),
         WorkItemReadService::new(state.application().db(), state.application().rbac()),
@@ -279,6 +280,7 @@ fn reads(state: &HttpState) -> SupplierPortalReadService {
     SupplierPortalReadService::new(state.application().db()).with_authorization(Arc::new(
         PortalReadAuthorization::new(
             state.application().db(),
+            state.application().rbac(),
             crate::wiring::catalog_services(state.application().db(), state.application().rbac()),
         ),
     ))

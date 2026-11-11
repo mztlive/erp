@@ -92,8 +92,8 @@ mod tests {
     /// 只构造惰性客户端；输入校验必须在任何数据库或对象存储读取前返回。
     async fn service() -> SupplierProfileProcess {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let access = SupplierAccess::unwired(db.clone());
         let rbac = erp_identity::shared_rbac_service(db.clone(), Arc::new(UnusedIdentityAudit));
+        let access = SupplierAccess::new(db.clone(), rbac.clone());
         SupplierProfileProcess::new(
             db,
             Arc::new(SensitiveDataCodec::from_secret(b"supplier-assets-unit-test")),

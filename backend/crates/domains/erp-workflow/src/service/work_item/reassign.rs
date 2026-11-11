@@ -424,7 +424,6 @@ const SYSTEM_OBJECT_OWNER: &str = "__system__";
 /// * `service` - 工作项服务
 /// * `tasks` - 待校验的开放履约任务
 /// * `target_user_id` - 目标账号 ID
-/// * `permissions` - 目标账号权限
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
@@ -439,19 +438,15 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let actor = AuditActor::new(target_user_id.into(), target_user_id.into(), AccountKind::Admin);
-    let required = tasks
-        .iter()
-        .map(WorkItem::qualification_permissions)
-        .collect::<CoreResult<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+    let qualifications =
+        tasks.iter().map(WorkItem::qualification_permissions).collect::<CoreResult<Vec<_>>>()?;
+    let required = qualifications.iter().flatten().cloned().collect::<Vec<_>>();
     let qualified = features(&service.db, &service.identity)
         .permissions(&actor, &required, executor)
         .await?
         .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-    for task in tasks {
-        if !qualified.same_role(&task.qualification_permissions()?) {
+    for (task, required) in tasks.iter().zip(&qualifications) {
+        if !qualified.same_role(required) {
             return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
         }
         service.ensure_assignment_candidate_access_with_executor(task, &actor, executor).await?;

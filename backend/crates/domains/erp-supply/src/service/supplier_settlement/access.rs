@@ -5,7 +5,7 @@ use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{Authorization, SettlementResolvedScope};
+use crate::authorization::{Authorization, CompiledScope};
 use crate::entity::supplier_settlement::SupplierSettlementStatement;
 use crate::error::{Error, Result};
 use crate::repository::SupplierSettlementExt;
@@ -71,7 +71,7 @@ impl SettlementAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<SettlementResolvedScope> {
+    ) -> Result<CompiledScope> {
         Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
@@ -123,10 +123,10 @@ impl SettlementAccess {
         actor: &AuditActor,
         owner_user_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(SettlementResolvedScope, String)> {
+    ) -> Result<(CompiledScope, String)> {
         let access = self.resolve(actor, "create", executor).await?;
         let owner_org = OrganizationDirectoryService::new(self.db.clone())
-            .own_org(owner_user_id, access.as_of, executor)
+            .own_org(owner_user_id, access.as_of(), executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护对账负责人的有效主属组织".into()))?;
         if owner_org == "company" {

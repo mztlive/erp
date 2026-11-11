@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use super::{FactKind, RelationKey, RelationMatch};
+use crate::Permission;
 use crate::entity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
 use crate::entity::resource_access::ResourceKind;
 
@@ -26,6 +27,7 @@ pub(crate) enum AccessRule {
     Any(Vec<Self>),
     Fact(AccessFact),
     Required { facts: BTreeSet<FactKind>, rule: Box<Self> },
+    Independent { permission: Permission, rule: Box<Self> },
     RecordReadGrant(ResourceKind),
     Related { relation: RelationKey, resource: String, mode: RelationMatch, rule: Box<Self> },
 }
@@ -62,7 +64,7 @@ impl AccessRule {
         match self {
             Self::Required { facts, rule } => !facts.is_empty() || rule.has_requirements(),
             Self::All(items) | Self::Any(items) => items.iter().any(Self::has_requirements),
-            Self::Related { rule, .. } => rule.has_requirements(),
+            Self::Related { rule, .. } | Self::Independent { rule, .. } => rule.has_requirements(),
             _ => false,
         }
     }
@@ -131,6 +133,7 @@ impl AccessRule {
             Self::Any(rules) => rules.iter().any(|rule| rule.evaluate(object, granted)),
             Self::Fact(fact) => fact.matches_scope(object),
             Self::RecordReadGrant(resource) => granted(*resource),
+            Self::Independent { rule, .. } => rule.evaluate(object, granted),
             Self::Related { .. } | Self::Required { .. } => false,
         }
     }

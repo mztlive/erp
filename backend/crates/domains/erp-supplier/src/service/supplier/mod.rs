@@ -12,7 +12,7 @@ use erp_core::ids::SupplierCapabilityId;
 use erp_identity::AccountDirectoryService;
 use list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use crate::dto::supplier::{
     CommercialProfileView, SupplierCapabilityView, SupplierDetailView, SupplierQualificationView,
@@ -46,6 +46,7 @@ pub use scope::SupplierListView;
 /// 供应商服务。
 ///
 /// 提供供应商列表、完整详情与单域读取；所有资料创建和修订统一走根级资料流程。
+#[derive(Clone)]
 pub struct SupplierService {
     db: Database,
     party: Arc<dyn PartyFactsPort>,
@@ -60,18 +61,19 @@ impl SupplierService {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `party` - 主体只读事实端口
+    /// * `data_scope` - 已装配的供应商授权能力
     ///
     /// # 返回
     /// 返回服务实例。
     ///
     /// # 错误
-    /// 无；未注入的范围能力默认拒绝访问。
-    pub fn new(db: Database, party: Arc<dyn PartyFactsPort>) -> Self {
+    /// 无；授权依赖由构造参数提供。
+    pub fn new(db: Database, party: Arc<dyn PartyFactsPort>, data_scope: SupplierAccess) -> Self {
         Self {
             db: db.clone(),
             party,
             sensitive_data: None,
-            data_scope: SupplierAccess::unwired(db.clone()),
+            data_scope,
             accounts: AccountDirectoryService::new(db),
         }
     }
@@ -81,10 +83,11 @@ impl SupplierService {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `party` - 主体只读事实端口
+    /// * `data_scope` - 已装配的供应商授权能力
     /// * `sensitive_data` - 敏感字段令牌签发端口
     ///
     /// # 返回
-    /// 返回具备令牌签发能力的服务；范围能力仍须通过 `with_scope` 注入。
+    /// 返回具备令牌签发和完整授权能力的服务。
     ///
     /// # 错误
     /// 无；构造过程不读取业务事实。
@@ -92,29 +95,15 @@ impl SupplierService {
         db: Database,
         party: Arc<dyn PartyFactsPort>,
         sensitive_data: Arc<dyn SensitiveTokenPort>,
+        data_scope: SupplierAccess,
     ) -> Self {
         Self {
             db: db.clone(),
             party,
             sensitive_data: Some(sensitive_data),
-            data_scope: SupplierAccess::unwired(db.clone()),
+            data_scope,
             accounts: AccountDirectoryService::new(db),
         }
-    }
-
-    /// 注入供应商授权能力。
-    ///
-    /// # 参数
-    /// * `data_scope` - 已接线供应商授权能力
-    ///
-    /// # 返回
-    /// 返回可解析范围的服务。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_scope(mut self, data_scope: SupplierAccess) -> Self {
-        self.data_scope = data_scope;
-        self
     }
 
     /// 构造供应商对象访问器。
@@ -145,25 +134,40 @@ impl SupplierService {
     /// * `Forbidden` - 操作人无权访问供应商
     /// * 范围版本变化或关联事实读取失败时传播相应错误。
     pub async fn supplier_detail(&self, id: &str, actor: &AuditActor) -> Result<SupplierDetailView> {
-        let expected = self.access().require(actor, "detail", id).await?;
-        let view = self.load_supplier_detail(id).await?;
-        let current = self.access().require(actor, "detail", id).await?;
-        scope::ensure_stable_snapshot(&expected.scope_version, &current.scope_version)?;
-        Ok(view)
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.data_scope.require_with(&actor, "detail", &id, executor).await?;
+                    let view = service.load_supplier_detail(&id, executor).await?;
+                    service.data_scope.require_with(&actor, "detail", &id, executor).await?;
+                    Ok(view)
+                })
+            })
+            .await
     }
 
     /// 装载详情展示字段，不解释数据范围。
     ///
     /// # 参数
     /// * `id` - 供应商角色 ID；调用方须自行完成对象授权
+    /// * `executor` - 原授权读取事务
     ///
     /// # 返回
     /// 返回账户、主体、商务资料、能力、资质与评级组成的详情视图。
     ///
     /// # 错误
     /// 供应商或关联主体缺失时返回 `NotFound`，其余事实读取或令牌签发错误向上传播。
-    pub async fn load_supplier_detail(&self, id: &str) -> Result<SupplierDetailView> {
-        let loaded = self.load_detail_facts(id).await?;
+    async fn load_supplier_detail(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierDetailView> {
+        let loaded = self.load_detail_facts(id, executor).await?;
         let current_id = loaded.bundle.supplier.current_commercial_profile_revision_id.as_deref();
         let current_profiles = loaded
             .bundle
@@ -173,7 +177,7 @@ impl SupplierService {
             .cloned()
             .into_iter()
             .collect();
-        let account = self.assemble_detail_account(&loaded, current_profiles).await?;
+        let account = self.assemble_detail_account(&loaded, current_profiles, executor).await?;
         self.finish_detail_view(loaded, account).await
     }
 
@@ -187,27 +191,25 @@ impl SupplierService {
     ///
     /// # 错误
     /// 供应商或关联主体缺失时返回 `NotFound`；事实束或主体查询失败时返回对应错误。
-    async fn load_detail_facts(&self, id: &str) -> Result<LoadedSupplierDetail> {
+    async fn load_detail_facts(&self, id: &str, executor: &mut dyn Executor) -> Result<LoadedSupplierDetail> {
         let supplier_id = SupplierAccountId::new(id);
         let bundle = self
             .db
             .supplier()
-            .load_supplier_detail_bundle(&supplier_id, &mut NoTransaction)
+            .load_supplier_detail_bundle(&supplier_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         let (party, party_revision) = self
             .party
-            .find_with_current_revision(&bundle.party_id, &mut NoTransaction)
+            .find_with_current_revision(&bundle.party_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商关联的企业主体不存在".to_string()))?;
-        let contacts = self.party.list_contacts(&bundle.party_id, &mut NoTransaction).await?;
-        let addresses = self.party.list_addresses(&bundle.party_id, &mut NoTransaction).await?;
-        let tax_profiles = self.party.list_tax_profiles(&bundle.party_id, &mut NoTransaction).await?;
-        let bank_accounts = self.party.list_bank_accounts(&bundle.party_id, &mut NoTransaction).await?;
-        let commercial_party_names = self
-            .party
-            .current_legal_names_by_party_ids(&bundle.commercial_party_ids, &mut NoTransaction)
-            .await?;
+        let contacts = self.party.list_contacts(&bundle.party_id, executor).await?;
+        let addresses = self.party.list_addresses(&bundle.party_id, executor).await?;
+        let tax_profiles = self.party.list_tax_profiles(&bundle.party_id, executor).await?;
+        let bank_accounts = self.party.list_bank_accounts(&bundle.party_id, executor).await?;
+        let commercial_party_names =
+            self.party.current_legal_names_by_party_ids(&bundle.commercial_party_ids, executor).await?;
         Ok(LoadedSupplierDetail {
             id: id.to_string(),
             bundle,
@@ -236,11 +238,12 @@ impl SupplierService {
         &self,
         loaded: &LoadedSupplierDetail,
         current_profiles: Vec<SupplierCommercialProfileRevision>,
+        executor: &mut dyn Executor,
     ) -> Result<SupplierView> {
         let row = SupplierAccountRow::from_account(&loaded.bundle.supplier);
         let maintainer_names = self
             .accounts
-            .names(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id), &mut NoTransaction)
+            .names(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id), executor)
             .await?;
         assemble_supplier_views(SupplierViewAssembleInput {
             rows: vec![row],

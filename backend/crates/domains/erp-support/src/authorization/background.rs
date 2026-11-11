@@ -144,7 +144,7 @@ fn registry(
             policy: AccessPolicy::Any(vec![AccessPolicy::Owned, administrators()]),
         };
         let access = if code == "background_job:list" {
-            AccessMode::QueryAndObject { data, mapping: mapping.clone(), facts: facts.clone() }
+            AccessMode::Query { data, mapping: mapping.clone() }
         } else {
             AccessMode::Object { data, facts: facts.clone() }
         };

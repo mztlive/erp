@@ -236,7 +236,7 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SalesChangeOrderRow>> {
         scope.validate(executor).await?;
-        let stages = authorized_change_stages(filter, scope);
+        let stages = authorized_change_stages(filter, scope.related_stages("sales_order_id"));
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -273,7 +273,7 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
                 .sort(doc! { "id": 1 })
                 .limit(10001)
                 .build(),
-            authorized_change_stages(filter, scope),
+            authorized_change_stages(filter, scope.related_stages("sales_order_id")),
             executor,
         )
         .await?;
@@ -642,9 +642,9 @@ fn change_order_filter(sales_order_id: Option<&str>, status: Option<&str>) -> Do
     filter
 }
 
-fn authorized_change_stages(filter: &SalesChangeOrderFilter, scope: &SalesReadScope) -> Vec<Document> {
+fn authorized_change_stages(filter: &SalesChangeOrderFilter, authorization: Vec<Document>) -> Vec<Document> {
     let mut stages = vec![doc! {"$match": filter.to_doc()}];
-    stages.extend(scope.related_stages("sales_order_id"));
+    stages.extend(authorization);
     stages
 }
 
@@ -692,22 +692,14 @@ mod tests {
             status: Some(SalesChangeOrderStatus::Draft),
             ..Default::default()
         };
-        let pipeline = authorized_change_stages(&filter, &SalesReadScope::default());
+        let pipeline = authorized_change_stages(&filter, vec![doc! {"$match": {"authorized_source": true}}]);
         assert_eq!(
             pipeline[0],
             doc! {"$match": {
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": "DRAFT", "sales_order_id": "so-1"
             }}
         );
-        let lookup = pipeline[1].get_document("$lookup").unwrap();
-        assert_eq!(lookup.get_document("let").unwrap(), &doc! {"sales_source_id": "$sales_order_id"});
-        let source = lookup.get_array("pipeline").unwrap();
-        assert_eq!(
-            source[0].as_document().unwrap(),
-            &doc! {"$match": {"$expr": {"$eq": ["$id", "$$sales_source_id"]}}}
-        );
-        assert_eq!(source[1].as_document().unwrap(), &doc! {"$match": {"$expr": false}});
-        assert_eq!(pipeline[2], doc! {"$match": {"__authorized_sales_source.0": {"$exists": true}}});
+        assert_eq!(pipeline[1], doc! {"$match": {"authorized_source": true}});
         assert!(pipeline.iter().all(|stage| !stage.contains_key("$limit")));
     }
 

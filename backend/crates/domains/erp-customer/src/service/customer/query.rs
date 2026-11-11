@@ -2,8 +2,8 @@
 
 use std::slice;
 
-use application_core::AuditActor;
-use erp_core::common::time::BusinessDate;
+use application_core::{AuditActor, PageView};
+use erp_core::common::time::{BusinessDate, Instant};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -137,18 +137,27 @@ impl CustomerService {
 /// # 关键业务约束
 /// 不把内部授权证明或全量人员集合返回给客户端。
 fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
-    CustomerListView {
-        scope_version: snapshot.context.scope_version,
-        as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
-        empty_reason: snapshot.no_scope.then_some("no_scope"),
-        scope_summary: "客户当前主负责人及负责人所属组织范围",
-        ownership_basis: "current_customer_owner",
-        data: application_core::PageView {
+    list_view(
+        PageView {
             items: snapshot.items,
             total: snapshot.total,
             page: snapshot.page,
             page_size: snapshot.page_size,
         },
+        snapshot.context.scope_version,
+        snapshot.context.as_of,
+    )
+}
+
+/// 用同一次授权查询的分页及版本元信息生成响应。
+fn list_view(page: PageView<CustomerView>, scope_version: String, as_of: Instant) -> CustomerListView {
+    CustomerListView {
+        scope_version,
+        as_of: as_of.as_utc().to_rfc3339(),
+        empty_reason: None,
+        scope_summary: "客户当前主负责人及负责人所属组织范围",
+        ownership_basis: "current_customer_owner",
+        data: page,
     }
 }
 
@@ -184,45 +193,40 @@ mod tests {
     /// 常规列表与全部有权客户共用该视图：不返回负责销售候选，已授权行仍带负责人姓名。
     #[test]
     fn customer_list_omits_owner_candidates_and_keeps_row_owner_name() {
+        use application_core::PageView;
         use erp_core::common::time::Instant;
 
-        use super::super::scope::CustomerSnapshot;
-        use super::to_list_view;
-        use crate::CustomerResolvedScope;
+        use super::list_view;
         use crate::dto::customer::{CustomerScope, CustomerView};
         use crate::entity::customer::CustomerAccountStatus;
 
-        let view = to_list_view(CustomerSnapshot {
-            items: vec![CustomerView {
-                id: "cust-1".to_string(),
-                party_id: "party-1".to_string(),
-                party_no: Some("P-1".to_string()),
-                legal_name: Some("示例客户".to_string()),
-                short_name: None,
-                customer_no: "C-1".to_string(),
-                default_payment_term_id: None,
-                status: CustomerAccountStatus::Active,
-                owner_user_id: Some("sales-1".to_string()),
-                owner_user_name: Some("张三".to_string()),
-                owners: Vec::new(),
-                collaborator_count: 0,
-                scope_tags: vec![CustomerScope::AllAuthorized],
-                version: 1,
-                created_at: 1,
-                updated_at: 1,
-            }],
-            total: 1,
-            page: 1,
-            page_size: 20,
-            context: CustomerResolvedScope {
-                user_id: "actor-1".to_string(),
-                compiled: None,
-                current: false,
-                scope_version: "scope-v1".to_string(),
-                as_of: Instant::from_unix_secs(0),
+        let view = list_view(
+            PageView {
+                items: vec![CustomerView {
+                    id: "cust-1".to_string(),
+                    party_id: "party-1".to_string(),
+                    party_no: Some("P-1".to_string()),
+                    legal_name: Some("示例客户".to_string()),
+                    short_name: None,
+                    customer_no: "C-1".to_string(),
+                    default_payment_term_id: None,
+                    status: CustomerAccountStatus::Active,
+                    owner_user_id: Some("sales-1".to_string()),
+                    owner_user_name: Some("张三".to_string()),
+                    owners: Vec::new(),
+                    collaborator_count: 0,
+                    scope_tags: vec![CustomerScope::AllAuthorized],
+                    version: 1,
+                    created_at: 1,
+                    updated_at: 1,
+                }],
+                total: 1,
+                page: 1,
+                page_size: 20,
             },
-            no_scope: false,
-        });
+            "scope-v1".into(),
+            Instant::from_unix_secs(0),
+        );
         let json = serde_json::to_value(&view).unwrap();
         assert!(json.get("owner_options").is_none());
         assert_eq!(json["ownership_basis"], "current_customer_owner");

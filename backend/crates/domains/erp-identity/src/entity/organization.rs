@@ -112,6 +112,23 @@ pub struct OrgMembership {
 }
 
 impl OrgMembership {
+    /// 返回指定账号在解释时点之后最近的主属关系变化边界。
+    /// # 参数
+    /// memberships 为当前关系和最近未来关系，user_id 为账号，at 为解释时点。
+    /// # 返回
+    /// 最近未来的生效或失效时点；没有未来边界时为 None。
+    /// # 错误
+    /// 不返回错误；重叠当前关系由 primary_org 校验。
+    pub fn next_boundary(memberships: &[Self], user_id: &str, at: Instant) -> Option<Instant> {
+        memberships
+            .iter()
+            .filter(|membership| !membership.base.is_deleted() && membership.user_id == user_id)
+            .flat_map(|membership| [Some(membership.validity.valid_from), membership.validity.valid_to])
+            .flatten()
+            .filter(|boundary| *boundary > at)
+            .min()
+    }
+
     /// 从成员事实中解析指定时点的唯一主属组织。
     ///
     /// # 参数
@@ -362,6 +379,30 @@ mod tests {
             OrgMembership::primary_org(&rows, "user", Instant::from_unix_secs(10)),
             Err(Error::ConflictError(message)) if message == "用户存在重叠主属组织关系"
         ));
+    }
+
+    #[test]
+    fn membership_boundary_includes_future_starts_and_current_ends_only() {
+        let mut rows = vec![
+            membership("user", "current", 10, Some(30)),
+            membership("user", "future", 20, None),
+            membership("other", "ignored", 11, Some(12)),
+        ];
+        assert_eq!(
+            OrgMembership::next_boundary(&rows, "user", Instant::from_unix_secs(10)),
+            Some(Instant::from_unix_secs(20))
+        );
+        rows[1].base.deleted_at = 11;
+        assert_eq!(
+            OrgMembership::next_boundary(&rows, "user", Instant::from_unix_secs(10)),
+            Some(Instant::from_unix_secs(30))
+        );
+        assert_eq!(OrgMembership::next_boundary(&rows, "user", Instant::from_unix_secs(30)), None);
+        assert_eq!(OrgMembership::next_boundary(&rows, "missing", Instant::from_unix_secs(10)), None);
+        assert_eq!(
+            OrgMembership::next_boundary(&rows, "user", Instant::from_unix_secs(5)),
+            Some(Instant::from_unix_secs(10))
+        );
     }
 
     fn unit(id: &str, parent: Option<&str>) -> OrgUnit {

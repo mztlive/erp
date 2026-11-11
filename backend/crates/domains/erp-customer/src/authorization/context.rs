@@ -11,5 +11,5 @@ pub struct CustomerResolvedScope {
     pub current: bool,
     pub scope_version: String,
     pub as_of: Instant,
-    pub compiled: Option<Arc<CompiledAccess>>,
+    pub compiled: Arc<CompiledAccess>,
 }

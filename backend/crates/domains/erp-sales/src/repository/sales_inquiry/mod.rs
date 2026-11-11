@@ -10,10 +10,9 @@ use crate::entity::sales_inquiry::{InquiryStatus, SalesInquiry};
 use crate::repository::SalesInquiryExt;
 use crate::{Error, Result as SalesResult};
 
-/// 授权范围须由调用方解析，默认不返回任何询价。
+/// 询价业务筛选；授权凭证由仓储入口独立接收。
 #[derive(Debug, Clone)]
 pub struct InquiryListFilter {
-    pub access_scope: InquiryReadScope,
     pub owner_user_ids: Option<Vec<String>>,
     pub business_org_unit_ids: Option<Vec<String>>,
     pub inquiry_ids: Option<Vec<String>>,
@@ -27,7 +26,6 @@ pub struct InquiryListFilter {
 impl Default for InquiryListFilter {
     fn default() -> Self {
         Self {
-            access_scope: InquiryReadScope::default(),
             owner_user_ids: None,
             business_org_unit_ids: None,
             inquiry_ids: None,
@@ -49,7 +47,7 @@ impl InquiryListFilter {
     /// # 错误
     /// 无。
     pub fn document(&self) -> Document {
-        let mut parts = vec![self.access_scope.document(), doc! { "deleted_at": 0_i64 }];
+        let mut parts = vec![doc! { "deleted_at": 0_i64 }];
         if let Some(ids) = &self.owner_user_ids {
             parts.push(doc! { "sales_owner_user_id": { "$in": ids } });
         }
@@ -146,9 +144,10 @@ impl<'a> SalesInquiryRepository<'a> {
     pub async fn inquiry_list(
         &self,
         filter: &InquiryListFilter,
+        access_scope: &InquiryReadScope,
         executor: &mut dyn Executor,
     ) -> SalesResult<PageResult<SalesInquiry>> {
-        filter.access_scope.validate(executor).await?;
+        access_scope.validate(executor).await?;
         let document = filter.document();
         let size = u64::from(filter.page_size.clamp(1, 100));
         let skip = filter.page.max(1).saturating_sub(1).saturating_mul(size);
@@ -161,14 +160,13 @@ impl<'a> SalesInquiryRepository<'a> {
                 .skip(skip)
                 .limit(i64::try_from(size).unwrap_or(100))
                 .build(),
-            filter.access_scope.lookup_after(doc! {}),
+            access_scope.lookup_after(doc! {}),
             executor,
         )
         .await?;
         let total =
-            aggregate::count(&collection, document, filter.access_scope.lookup_after(doc! {}), executor)
-                .await?;
-        filter.access_scope.validate(executor).await?;
+            aggregate::count(&collection, document, access_scope.lookup_after(doc! {}), executor).await?;
+        access_scope.validate(executor).await?;
         Ok(PageResult { items, total: i64::try_from(total).unwrap_or(i64::MAX) })
     }
 
@@ -230,7 +228,6 @@ mod tests {
             let filter = InquiryListFilter { status: Some(status), ..Default::default() };
             let query = filter.document();
             let parts = query.get_array("$and").unwrap();
-            assert_eq!(parts[0].as_document().unwrap(), &filter.access_scope.document());
             assert_eq!(
                 parts.last().unwrap().as_document().unwrap(),
                 &doc! { "status": { "$in": ["awaiting_procurement", "procurement_processing"] } }
@@ -245,9 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn default_scope_denies_and_search_stays_in_intersection() {
-        let denied = InquiryListFilter::default().document();
-        assert_eq!(denied.get_array("$and").unwrap()[0].as_document().unwrap(), &doc! { "$expr": false });
+    fn search_stays_in_business_intersection() {
         let filter = InquiryListFilter {
             q: Some("SO.[1]".into()),
             customer_id: Some("c".into()),
@@ -255,9 +250,8 @@ mod tests {
         };
         let query = filter.document();
         let parts = query.get_array("$and").unwrap();
-        assert_eq!(parts[0].as_document().unwrap(), &filter.access_scope.document());
-        assert_eq!(parts[2].as_document().unwrap().get_str("customer_id").unwrap(), "c");
-        let search = parts[3].as_document().unwrap().get_array("$or").unwrap();
+        assert_eq!(parts[1].as_document().unwrap().get_str("customer_id").unwrap(), "c");
+        let search = parts[2].as_document().unwrap().get_array("$or").unwrap();
         assert_eq!(
             search[0].as_document().unwrap().get_document("inquiry_no").unwrap().get_str("$regex").unwrap(),
             r"SO\.\[1\]"

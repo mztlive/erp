@@ -44,16 +44,13 @@ impl CustomerQualityReadModel {
                     let access =
                         QualityAccess::new(this.db.clone(), this.rbac.clone(), this.customer_scope.clone());
                     let (context, scope) = access.resolve_history(&tx_actor, executor).await?;
-                    let no_scope = scope.is_empty();
-                    let filter =
-                        quality_order_filter(&bounds, tx_query.customer_id.map(|id| vec![id]), &scope);
-                    let orders = CurrentSources::load_orders(&this.db, filter, executor).await?;
+                    let filter = quality_order_filter(&bounds, tx_query.customer_id.map(|id| vec![id]));
+                    let orders = CurrentSources::load_orders(&this.db, filter, &scope, executor).await?;
                     let expected = version(&context.scope_version, &orders);
                     super::ensure_version(input.scope_version.as_deref(), &expected)?;
                     HistoricalDirectoryView::from_attributions(
                         orders.iter().filter_map(|row| row.attribution.as_ref()),
                         expected,
-                        no_scope,
                     )
                 })
             })

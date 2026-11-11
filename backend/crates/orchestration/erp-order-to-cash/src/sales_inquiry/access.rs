@@ -235,25 +235,15 @@ impl SalesInquiryAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        self.ensure_procurement_permissions(actor, &[action], executor).await
-    }
-
-    async fn ensure_procurement_permissions(
-        &self,
-        actor: &AuditActor,
-        actions: &[&str],
-        executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        let permissions = actions
-            .iter()
-            .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
-            .permissions(actor, &permissions, executor)
-            .await?
-            .filter(|qualified| qualified.same_role(&permissions))
-            .ok_or_else(|| Error::Forbidden("当前账号缺少完整询价操作权限".into()))?;
-        Ok(qualified.policy_revision())
+        ProcurementInquiryEligibility::new(self.db.clone(), self.rbac.clone())
+            .ensure_permission(actor, action, executor)
+            .await
+            .map_err(|error| match error {
+                erp_procure_to_pay::Error::Forbidden(_) => {
+                    Error::Forbidden("当前账号缺少完整询价操作权限".into())
+                },
+                other => other.into(),
+            })
     }
 }
 

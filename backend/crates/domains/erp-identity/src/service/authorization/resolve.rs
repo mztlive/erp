@@ -165,6 +165,9 @@ impl AuthorizationService {
                 AccessPolicy::Scope { permission, read } => {
                     self.scope(permission, *read, entry, context, resolution, executor).await
                 },
+                AccessPolicy::Independent { permission, policy } => {
+                    self.independent(permission, policy, context, resolution, executor).await
+                },
                 AccessPolicy::All(policies) | AccessPolicy::Any(policies) => {
                     let mut rules = Vec::new();
                     for policy in policies {
@@ -191,6 +194,35 @@ impl AuthorizationService {
                 },
             }
         })
+    }
+
+    /// 独立入口在原时点证明自身资格，范围只使用授予该入口的有效角色。
+    async fn independent(
+        &self,
+        permission: &Permission,
+        policy: &AccessPolicy,
+        context: &AccessContext,
+        resolution: &mut Resolution,
+        executor: &mut dyn Executor,
+    ) -> Result<AccessRule> {
+        let qualified = self
+            .rbac
+            .qualified_permissions(&context.actor, slice::from_ref(permission), executor)
+            .await?
+            .ok_or_else(|| Error::Forbidden("授权账号已失效".into()))?;
+        resolution.versions.push(qualified.version().to_owned());
+        let rule = if qualified.same_role(slice::from_ref(permission)) {
+            let entry = AccessRegistration {
+                permission: permission.clone(),
+                required_permissions: vec![],
+                access: AccessMode::Operation,
+            };
+            let context = AccessContext { permission: permission.clone(), ..context.clone() };
+            self.policy(policy, &entry, &context, resolution, executor).await?
+        } else {
+            AccessRule::Deny
+        };
+        Ok(AccessRule::Independent { permission: permission.clone(), rule: Box::new(rule) })
     }
 
     /// 固定功能或角色分支只使用启用角色，并绑定同次身份版本。

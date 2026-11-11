@@ -213,9 +213,9 @@ impl InquiryReadService {
         let version = access.version().to_string();
         validate_page(params, &version)?;
         let mut filter = list_filter(params);
-        filter.access_scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
+        let scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
         filter.inquiry_ids = None;
-        let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, executor).await?;
+        let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &scope, executor).await?;
         authorization.validate(&access, executor).await?;
         let items = page.items.iter().map(InquirySalesView::from_inquiry).collect();
         Ok(list_view(items, page.total, params, version, false))
@@ -269,9 +269,9 @@ impl InquiryReadService {
         let version = access.version();
         validate_page(params, &version)?;
         let mut filter = list_filter(params);
-        filter.access_scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
+        let scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
         filter.inquiry_ids = Some(tasks.iter().map(|task| task.business_object_id.clone()).collect());
-        let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, executor).await?;
+        let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &scope, executor).await?;
         let mut items = Vec::with_capacity(page.items.len());
         for inquiry in page.items {
             let task = tasks

@@ -34,7 +34,7 @@ pub struct FundsReadContext {
 pub struct FundsAuthorization {
     pub(super) whole: super::repository::whole_access::WholeAccess,
     /// 关联销售单的已解析范围。
-    pub sales: SalesReadScope,
+    pub sales: Option<SalesReadScope>,
     /// 明确的财务整账读取职责，不授予来源业务动作。
     pub ledger_read: bool,
     /// 结算来源范围，必须按实际来源类型选择。
@@ -46,21 +46,15 @@ pub struct FundsAuthorization {
 }
 
 impl FundsAuthorization {
-    /// 判断销售、采购、结算与整账职责是否都没有可见规则。
-    ///
+    /// 读取本次已登记的销售来源凭证。
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 没有整账读取，且销售范围为空、采购范围缺失或为空、结算角色条款为空时返回 true。
-    ///
+    /// 当前读取阶段的完整销售授权。
     /// # 错误
-    /// 不返回错误。
-    pub fn empty(&self) -> bool {
-        !self.ledger_read
-            && self.sales.is_empty()
-            && self.purchase_scope.as_ref().is_none_or(PurchaseReadScope::is_empty)
-            && self.settlement.is_none()
+    /// 当前入口未登记销售来源时拒绝。
+    pub(super) fn sales_scope(&self) -> Result<&SalesReadScope> {
+        self.sales.as_ref().ok_or_else(|| Error::Forbidden("缺少销售授权凭证".into()))
     }
 }
 
@@ -215,10 +209,12 @@ impl FundsAccess {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
+        let Some(scope) = &authorization.sales else {
+            return Ok(Vec::new());
+        };
         let mut allowed = Vec::new();
         for batch in ids.chunks(500) {
-            let rows =
-                self.db.sales_orders().scope_order_versions(batch, &authorization.sales, executor).await?;
+            let rows = self.db.sales_orders().scope_order_versions(batch, scope, executor).await?;
             allowed.extend(rows.into_iter().map(|row| row.id));
         }
         Ok(allowed)
@@ -401,46 +397,6 @@ pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
 pub fn whole_amount(whole: bool, amount: Amount) -> Option<Amount> {
     whole.then_some(amount)
 }
-/// 空范围保持空集且版本可跨页回传，不得补公司范围。
-///
-/// # 参数
-/// * `authorization` - 已解析授权，用于回传范围版本与策略版本。
-/// * `reason` - 空结果原因。
-/// * `summary` - 面向客户端的范围摘要。
-///
-/// # 返回
-/// 第 1 页、页大小 20、总数 0 的空页；汇总标记权限受限且整单金额为空。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn empty_page<T>(
-    authorization: &FundsAuthorization,
-    reason: &'static str,
-    summary: &'static str,
-) -> FundsScopedPage<T> {
-    FundsScopedPage {
-        items: Vec::new(),
-        total: 0,
-        summary: FundsSummaryView {
-            grouped: Vec::new(),
-            unassigned: erp_finance::service::receivable::mapping::zero_amount(),
-            whole_total: None,
-            balance_total: None,
-            overdue_total: None,
-            permission_limited: true,
-            scope_version: authorization.context.scope_version.clone(),
-        },
-        page: 1,
-        page_size: 20,
-        scope_version: authorization.context.scope_version.clone(),
-
-        as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-        empty_reason: Some(reason),
-        scope_summary: summary,
-        ownership_basis: "current_linked_responsibility",
-    }
-}
-
 /// 首次返回页面，第二次只重新解析资格并读取完整匹配集合的版本材料。
 ///
 /// # 参数

@@ -37,7 +37,6 @@ impl SalesSelectionService {
     ) -> Result<crate::dto::sales_selection::SalesSelectionProposalPage> {
         use application_core::{page_or_default, page_size_or_default};
         let filter = crate::repository::sales_selection::SelectionProposalFilter {
-            authorized_scope: authorized_scope.clone(),
             owner_user_ids: params.owner_user_ids.clone(),
             org_unit_ids: params.org_unit_ids.clone(),
             customer_id: params.customer_id.clone(),
@@ -46,7 +45,7 @@ impl SalesSelectionService {
             page_size: page_size_or_default(params.page_size),
         };
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let result = domain.search_proposals(&filter, executor).await?;
+        let result = domain.search_proposals(&filter, authorized_scope, executor).await?;
         Ok(crate::dto::sales_selection::SalesSelectionProposalPage {
             items: result.items.iter().map(Self::proposal_list_item).collect(),
             total: result.total,
@@ -75,9 +74,9 @@ impl SalesSelectionService {
         authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletPage> {
-        let filter = booklet_filter(params, authorized_scope)?;
+        let filter = booklet_filter(params)?;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let result = domain.search_booklets(&filter, executor).await?;
+        let result = domain.search_booklets(&filter, authorized_scope, executor).await?;
         let ids = result.items.iter().map(|book| book.base.id.clone()).collect::<Vec<_>>();
         let summaries = domain.booklet_summaries(&ids, executor).await?;
         let items = result
@@ -323,14 +322,10 @@ impl SalesSelectionService {
 ///
 /// # 错误
 /// 排序字段非法时拒绝。
-fn booklet_filter(
-    params: &SalesSelectionBookletListParams,
-    authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
-) -> Result<SelectionBookFilter> {
+fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionBookFilter> {
     use application_core::{page_or_default, page_size_or_default};
     let (sort_by, ascending) = validate_book_sort(None, false)?;
     Ok(SelectionBookFilter {
-        authorized_scope: authorized_scope.clone(),
         owner_user_ids: params.owner_user_ids.clone(),
         org_unit_ids: params.org_unit_ids.clone(),
         customer_id: params.customer_id.clone(),
@@ -381,8 +376,7 @@ mod tests {
             page: None,
             page_size: None,
         };
-        let scope = crate::repository::sales_selection::SelectionReadScope::default();
-        let filter = booklet_filter(&params, &scope).unwrap();
+        let filter = booklet_filter(&params).unwrap();
         assert_eq!(filter.customer_id.as_deref(), Some("cust-1"));
         assert_eq!(filter.page, 1);
         assert_eq!(filter.sort_by.as_deref(), Some("created_at"));

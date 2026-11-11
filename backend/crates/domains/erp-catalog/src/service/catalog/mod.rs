@@ -83,9 +83,10 @@ impl CatalogService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `file_assets` - 媒体/Logo 文件存在性端口
+    /// * `data_scope` - 已装配的商品授权能力
     ///
     /// # 返回
-    /// 返回服务实例；授权能力 缺省失败关闭。
+    /// 返回已装配授权能力的服务实例。
     ///
     /// # 错误
     /// 不返回错误。
@@ -93,26 +94,9 @@ impl CatalogService {
         db: Database,
         audit: Arc<dyn CatalogAuditPort>,
         file_assets: Arc<dyn FileAssetFactsPort>,
+        data_scope: CatalogAccess,
     ) -> Self {
-        Self { data_scope: CatalogAccess::unwired(db.clone()), db, audit, file_assets }
-    }
-
-    /// 注入商品授权能力。
-    ///
-    /// # 参数
-    /// * `data_scope` - 组合层装配的领域统一授权能力
-    ///
-    /// # 返回
-    /// 返回绑定授权能力 的服务。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// HTTP 与写命令必须注入生产 adapter，不得保留失败关闭端口。
-    pub fn with_data_scope(mut self, data_scope: CatalogAccess) -> Self {
-        self.data_scope = data_scope;
-        self
+        Self { data_scope, db, audit, file_assets }
     }
 
     /// 构造本域范围访问器。

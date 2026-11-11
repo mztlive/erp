@@ -10,7 +10,6 @@ pub mod sku_delivery_coverage;
 pub mod supplier_api;
 pub mod supplier_catalog;
 pub mod supplier_fulfillment;
-pub mod supplier_fulfillment_scope;
 pub mod supplier_offering;
 pub mod supplier_settlement;
 
@@ -29,5 +28,4 @@ pub use prelude::{
     SupplierSettlementSourceEvidenceRepositoryExt, SupplierSettlementStatementRepositoryExt,
 };
 pub use sku_delivery_coverage::SkuDeliveryCoverageStore;
-pub use supplier_fulfillment_scope::FulfillmentOrderReadScope;
-pub use supplier_offering::{OfferingReadScope, SupplierOfferingFilter, SupplierOfferingRow};
+pub use supplier_offering::{SupplierOfferingFilter, SupplierOfferingRow};

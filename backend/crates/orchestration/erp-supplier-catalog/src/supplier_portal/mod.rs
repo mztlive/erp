@@ -17,6 +17,7 @@ mod grants;
 mod new_products;
 mod offerings;
 mod qualification;
+mod request_access;
 mod tasks;
 
 pub use assets::{PortalAssetKind, PortalAssetView, PortalCatalogAssetAccess, PreparedPortalAsset};

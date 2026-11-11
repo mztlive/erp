@@ -2,7 +2,6 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
@@ -11,8 +10,8 @@ use erp_identity::entity::authorization::{
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
     AccessFactsPort, AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject,
-    AccessTarget, AuthorizationRegistry, AuthorizationService, CompiledAccess, DataAccess,
-    Error as IdentityError, Permission, ResourceTargets, Result as IdentityResult, SharedRbacService,
+    AuthorizationRegistry, DataAccess, Error as IdentityError, Permission, ResourceTargets,
+    Result as IdentityResult,
 };
 use mongodb::Database;
 use mongodb::bson::{Bson, doc};
@@ -20,121 +19,47 @@ use persistence_core::Executor;
 
 use crate::repository::IntegrationOpsExt;
 
-/// 固定登记的集成授权设施；查询凭证绑定本实例。
-#[derive(Clone)]
-pub struct IntegrationAuthorization {
-    service: AuthorizationService,
-    mappings: BTreeMap<String, Arc<dyn AccessMapping>>,
-}
-impl IntegrationAuthorization {
-    /// 登记集成列表、详情、创建与差异决定的明确入口。
-    /// # 参数
-    /// db、rbac 为组合根共享身份设施。
-    /// # 返回
-    /// 固定完整登记的授权设施。
-    /// # 错误
-    /// 构造不执行 I/O。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let mut entries = Vec::new();
-        let mut mappings = BTreeMap::new();
-        for (resource, collection) in [
-            ("integration_error_task", Database::INTEGRATION_ERROR_TASKS),
-            ("reconciliation_difference", Database::RECONCILIATION_DIFFERENCES),
-        ] {
-            let mapping: Arc<dyn AccessMapping> = Arc::new(IntegrationMapping::new(resource, collection));
-            let facts: Arc<dyn AccessFactsPort> = Arc::new(IntegrationFacts { db: db.clone() });
-            for action in ["list", "detail"] {
-                let permission = Permission::parse(format!("{resource}:{action}")).expect("固定集成权限");
-                entries.push(AccessRegistration {
-                    permission: permission.clone(),
-                    required_permissions: vec![],
-                    access: AccessMode::QueryAndObject {
-                        data: DataAccess {
-                            subject: AccessSubject::Direct,
-                            required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                            policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
-                        },
-                        mapping: mapping.clone(),
-                        facts: facts.clone(),
-                    },
-                });
-            }
-            entries.push(AccessRegistration {
-                permission: Permission::parse(format!("{resource}:create")).expect("固定集成创建权限"),
-                required_permissions: vec![],
-                access: AccessMode::Operation,
-            });
-            mappings.insert(resource.into(), mapping);
+/// 构造本域固定授权目录与查询映射。
+/// # 参数
+/// db 为事实仓储所在数据库。
+/// # 返回
+/// 完整目录和按资源登记的列表映射。
+/// # 错误
+/// 固定登记非法时启动失败；构造不执行 I/O。
+pub(crate) fn registration(
+    db: &Database,
+) -> (AuthorizationRegistry, BTreeMap<String, Arc<dyn AccessMapping>>) {
+    let mut entries = Vec::new();
+    let mut mappings = BTreeMap::new();
+    for (resource, collection) in [
+        ("integration_error_task", Database::INTEGRATION_ERROR_TASKS),
+        ("reconciliation_difference", Database::RECONCILIATION_DIFFERENCES),
+    ] {
+        let mapping: Arc<dyn AccessMapping> = Arc::new(IntegrationMapping::new(resource, collection));
+        let facts: Arc<dyn AccessFactsPort> = Arc::new(IntegrationFacts { db: db.clone() });
+        for action in ["list", "detail"] {
+            let permission = Permission::parse(format!("{resource}:{action}")).expect("固定集成权限");
+            let data = DataAccess {
+                subject: AccessSubject::Direct,
+                required_facts: [FactKind::Owner, FactKind::Organization].into(),
+                policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
+            };
+            let access = if action == "list" {
+                AccessMode::Query { data, mapping: mapping.clone() }
+            } else {
+                AccessMode::Object { data, facts: facts.clone() }
+            };
+            entries.push(AccessRegistration { permission, required_permissions: vec![], access });
         }
-        let registry = AuthorizationRegistry::new(entries).expect("固定集成登记完整");
-        Self { service: AuthorizationService::new(db, rbac, registry), mappings }
+        entries.push(AccessRegistration {
+            permission: Permission::parse(format!("{resource}:create")).expect("固定集成创建权限"),
+            required_permissions: vec![],
+            access: AccessMode::Operation,
+        });
+        mappings.insert(resource.into(), mapping);
     }
-
-    /// 查询并编译固定资源的完整授权条件。
-    /// # 参数
-    /// actor、resource、action 指定服务端入口，executor 为原执行器。
-    /// # 返回
-    /// identity 生成的不可伪造查询凭证。
-    /// # 错误
-    /// 未登记入口、无权、映射或事实失败时拒绝。
-    pub async fn query(
-        &self,
-        actor: &AuditActor,
-        resource: &str,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> IdentityResult<CompiledAccess> {
-        let mapping = self
-            .mappings
-            .get(resource)
-            .ok_or_else(|| IdentityError::ValidationError("集成资源未登记".into()))?;
-        self.service
-            .query(
-                actor,
-                &Permission::parse(format!("{resource}:{action}"))?,
-                AccessSubject::Direct,
-                executor,
-            )
-            .await?
-            .compile(mapping.as_ref(), executor)
-            .await
-    }
-
-    /// 复验同一服务生成的读取凭证。
-    /// # 参数
-    /// access、executor 为本次凭证及原执行器。
-    /// # 返回
-    /// 仍有效时成功。
-    /// # 错误
-    /// 身份、权限、映射或版本变化时拒绝。
-    pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> IdentityResult<()> {
-        self.service.validate(access, executor).await
-    }
-
-    /// 按真实记录身份执行完整对象授权。
-    /// # 参数
-    /// actor、resource、action 为固定入口，id 为实际根记录，executor 为原执行器。
-    /// # 返回
-    /// 全部对象事实及身份检查通过时成功。
-    /// # 错误
-    /// 对象缺失、无权或版本变化拒绝。
-    pub async fn require(
-        &self,
-        actor: &AuditActor,
-        resource: &str,
-        action: &str,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> IdentityResult<()> {
-        let target = if action == "create" {
-            AccessTarget::Operation
-        } else {
-            AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? }
-        };
-        self.service
-            .require(actor, &Permission::parse(format!("{resource}:{action}"))?, target, executor)
-            .await
-    }
+    let registry = AuthorizationRegistry::new(entries).expect("固定集成登记完整");
+    (registry, mappings)
 }
 
 struct IntegrationFacts {
@@ -240,27 +165,7 @@ impl AccessMapping for IntegrationMapping {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::Client;
-    use mongodb::options::ClientOptions;
-    use persistence_core::NoTransaction;
-
-    use crate::Error;
-    use crate::service::IntegrationAccess;
-
-    /// 未接线对象授权必须在任何数据库读取前拒绝。
-    #[tokio::test]
-    async fn unwired_record_authorization_fails_closed() {
-        let db = Client::with_options(ClientOptions::default()).unwrap().database("test");
-        let access = IntegrationAccess::unwired(db);
-        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
-        assert!(matches!(
-            access
-                .require_handler(&actor, "integration_error_task", "detail", "record", &mut NoTransaction)
-                .await,
-            Err(Error::Internal(_))
-        ));
-    }
-
+    use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
 

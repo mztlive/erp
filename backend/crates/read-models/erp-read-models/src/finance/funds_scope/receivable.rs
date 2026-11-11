@@ -41,9 +41,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<CustomerCenterReceivableRow> {
         let (_, authorization) = self.resolve(actor, "receivable_account", "list", executor).await?;
-        if authorization.empty() {
-            return Err(Error::Forbidden("当前没有可查看的应收范围".into()));
-        }
         let params = ReceivableAccountListParams {
             customer_id: Some(CustomerAccountId::new(customer_id)),
             ..Default::default()
@@ -146,7 +143,7 @@ impl FundsAccess {
         if self
             .db
             .sales_orders()
-            .find_authorized(&order.base.id, &authorization.sales, executor)
+            .find_authorized(&order.base.id, authorization.sales_scope()?, executor)
             .await?
             .is_none()
         {
@@ -284,9 +281,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedReceivableAccountRow>> {
         let (_access, authorization) = self.resolve(actor, "receivable_account", "list", executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "应收子账无可见范围"));
-        }
         let condition = self.receivable_condition(query, executor).await?;
         let snapshot =
             self.receivable_database_snapshot(query, &authorization, &condition, true, executor).await?;
@@ -329,9 +323,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (_, authorization) =
                         this.resolve(&actor, "receivable_account", "list", executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version.clone());
-                    }
                     let condition = this.receivable_condition(&query, executor).await?;
                     this.receivable_database_snapshot(&query, &authorization, &condition, false, executor)
                         .await?

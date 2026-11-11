@@ -49,8 +49,6 @@ pub const BOOK_SORT_FIELDS: &[&str] = &["created_at", "status"];
 /// 选品册列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SelectionBookFilter {
-    /// 已证明的选品责任范围；仓储只执行条件，不推断权限。
-    pub authorized_scope: SelectionReadScope,
     /// 负责人筛选；`None` 表示不筛选。
     pub owner_user_ids: Option<Vec<String>>,
     /// 业务组织筛选；`None` 表示不筛选。
@@ -78,7 +76,6 @@ pub struct SelectionBookFilter {
 impl Default for SelectionBookFilter {
     fn default() -> Self {
         Self {
-            authorized_scope: SelectionReadScope::default(),
             owner_user_ids: None,
             org_unit_ids: None,
             customer_id: None,
@@ -97,7 +94,7 @@ impl Default for SelectionBookFilter {
 impl QueryFilter for SelectionBookFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// 未删除条件与 `authorized_scope` 始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
+    /// 未删除条件始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
     ///
     /// # 参数
     /// 无。
@@ -155,8 +152,6 @@ impl Pagination for SelectionBookFilter {
 /// 方案列表筛选条件；方案沿所属册责任解释，不读提交人。
 #[derive(Debug, Clone)]
 pub struct SelectionProposalFilter {
-    /// 已证明的方案责任范围；仓储只执行条件，不推断权限。
-    pub authorized_scope: SelectionReadScope,
     /// 负责人筛选；`None` 表示不筛选。
     pub owner_user_ids: Option<Vec<String>>,
     /// 业务组织筛选；`None` 表示不筛选。
@@ -174,7 +169,7 @@ pub struct SelectionProposalFilter {
 impl QueryFilter for SelectionProposalFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// 写入未删除条件；授权客户有值时按 `customer_id` 的 `$in` 追加，客户与选品册有值时按等值追加。`authorized_scope`、`owner_user_ids`、`org_unit_ids` 不进入文档。
+    /// 写入未删除条件；授权客户有值时按 `customer_id` 的 `$in` 追加，客户与选品册有值时按等值追加。`owner_user_ids`、`org_unit_ids` 不进入文档。
     ///
     /// # 参数
     /// 无。
@@ -272,6 +267,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     pub async fn search_booklets(
         &self,
         filter: &SelectionBookFilter,
+        authorized_scope: &SelectionReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SalesSelectionBooklet>> {
         let sort_field = filter.sort_by.as_deref().unwrap_or("created_at");
@@ -282,8 +278,8 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .limit(filter.limit())
             .build();
         let condition = filter.to_doc();
-        filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
-        let stages = filter.authorized_scope.lookup_after(condition.clone());
+        authorized_scope.validate(executor).await.map_err(identity_error)?;
+        let stages = authorized_scope.lookup_after(condition.clone());
         let items = aggregate::find(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
             condition.clone(),
@@ -299,7 +295,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             executor,
         )
         .await?;
-        filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
+        authorized_scope.validate(executor).await.map_err(identity_error)?;
         Ok(PageResult {
             items,
             total: i64::try_from(total).map_err(|_| crate::Error::Internal("选品计数超限".into()))?,
@@ -320,9 +316,10 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     pub async fn search_proposals(
         &self,
         filter: &SelectionProposalFilter,
+        authorized_scope: &SelectionReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SalesSelectionProposal>> {
-        proposal_scope::search(self.db, filter, executor).await
+        proposal_scope::search(self.db, filter, authorized_scope, executor).await
     }
 
     /// 列出某批次当前有效陈列。
@@ -566,7 +563,6 @@ mod tests {
 
     fn filter() -> SelectionBookFilter {
         SelectionBookFilter {
-            authorized_scope: super::SelectionReadScope::default(),
             owner_user_ids: None,
             org_unit_ids: None,
             customer_id: Some("cust-1".into()),

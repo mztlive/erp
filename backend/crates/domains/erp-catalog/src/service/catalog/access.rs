@@ -14,7 +14,7 @@ use crate::repository::CatalogExt;
 #[derive(Clone)]
 pub struct CatalogAccess {
     db: Database,
-    authorization: Option<Authorization>,
+    authorization: Authorization,
 }
 
 impl CatalogAccess {
@@ -34,23 +34,7 @@ impl CatalogAccess {
     /// 目录由本域固定登记，不能由业务请求替换。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         let authorization = Authorization::new(&db, rbac, "product").expect("固定资源授权目录有效");
-        Self { db, authorization: Some(authorization) }
-    }
-
-    /// 构造未装配身份设施的访问器。
-    /// # 参数
-    /// db 为业务数据库。
-    /// # 返回
-    /// 所有授权入口保持失败关闭的访问器。
-    /// # 错误
-    /// 构造不执行 I/O。
-    pub fn unwired(db: Database) -> Self {
-        Self { db, authorization: None }
-    }
-
-    /// 读取已装配身份设施，缺失时拒绝授权。
-    fn authorization(&self) -> Result<&Authorization> {
-        self.authorization.as_ref().ok_or_else(|| Error::Internal("商品身份设施未接线".into()))
+        Self { db, authorization }
     }
 
     /// 在调用方事务内证明资源动作并映射商品责任条件。
@@ -74,7 +58,7 @@ impl CatalogAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(self.authorization()?.resolve(actor, action, executor).await?)
+        Ok(self.authorization.resolve(actor, action, executor).await?)
     }
 
     /// 在调用方事务内重验商品对象资格。
@@ -122,7 +106,7 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self.authorization()?.require(actor, action, id, executor).await?)
+        Ok(self.authorization.require(actor, action, id, executor).await?)
     }
 
     /// 在创建事务内检查拟写入商品的完整授权。
@@ -138,7 +122,7 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self.authorization()?.require_create(actor, id, executor).await?)
+        Ok(self.authorization.require_create(actor, id, executor).await?)
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。
@@ -234,38 +218,9 @@ impl CatalogAccess {
             return Err(Error::ValidationError("未登记商品写动作".into()));
         }
         let permission = Permission::parse(format!("product:{action}"))?;
-        if !self.authorization()?.has_permission(actor, &permission, executor).await? {
+        if !self.authorization.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有商品写入权限".into()));
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use erp_core::AccountKind;
-    use persistence_core::NoTransaction;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn unwired_access_rejects_reads_and_writes_before_database_commands() {
-        let db = mongodb::Client::with_options(Default::default()).unwrap().database("unused");
-        let access = CatalogAccess::unwired(db);
-        let actor = AuditActor::new("actor".into(), "Actor".into(), AccountKind::Admin);
-        let mut executor = NoTransaction;
-        assert!(matches!(access.resolve(&actor, "list", &mut executor).await, Err(Error::Internal(_))));
-        assert!(matches!(
-            access.require_product(&actor, "detail", "product-a", &mut executor).await,
-            Err(Error::Internal(_))
-        ));
-        assert!(matches!(
-            access.ensure_writable(&actor, "create", &mut executor).await,
-            Err(Error::Internal(_))
-        ));
-        assert!(matches!(
-            access.ensure_writable(&actor, "delete", &mut executor).await,
-            Err(Error::ValidationError(_))
-        ));
     }
 }

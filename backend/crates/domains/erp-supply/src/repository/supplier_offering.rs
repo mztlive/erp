@@ -20,6 +20,7 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::extensions::SupplierOfferingExt;
+use crate::CompiledScope;
 use crate::entity::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingCommand, SupplierOfferingRevision,
@@ -32,11 +33,9 @@ use crate::repository::owned::{
 #[cfg(test)]
 mod command_tests;
 mod query;
-mod scope;
 pub(crate) mod write;
 
 pub use query::{SupplierOfferingRepositoryQueryExt, SupplierOfferingRevisionRepositoryQueryExt};
-pub use scope::OfferingReadScope;
 
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
@@ -130,7 +129,7 @@ pub struct SupplierOfferingFilter {
     /// 按 SPU 编号 / SKU 编号命中的公司 SKU 主键（AND 条件；空集合表示无匹配）。
     pub sku_ids: Option<Vec<SkuId>>,
     /// 已证明的维护人授权条件；`None` 表示调用方尚未注入范围。
-    pub scope: Option<OfferingReadScope>,
+    pub scope: Option<CompiledScope>,
     /// 维护人筛选，只收窄授权结果。
     pub maintainer_user_ids: Option<Vec<String>>,
     /// 页码。
@@ -325,7 +324,7 @@ pub trait SupplierOfferingRepositoryExt {
     /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
     async fn list_authorized_ids(
         &self,
-        scope: &OfferingReadScope,
+        scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>>;
 
@@ -411,7 +410,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
 
     async fn list_authorized_ids(
         &self,
-        scope: &OfferingReadScope,
+        scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
         scope.validate(executor).await?;

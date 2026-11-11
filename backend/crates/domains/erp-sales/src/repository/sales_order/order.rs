@@ -539,7 +539,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         let collection = self.collection().clone_with_type::<SalesOrderRow>();
         let items = aggregate::find(
             &collection,
-            doc! { "$and": [filter.to_doc(), scope.document()] },
+            filter.to_doc(),
             options,
             scope.lookup_after(filter.to_doc()),
             executor,
@@ -547,7 +547,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         .await?;
         let total = aggregate::count(
             &self.collection(),
-            doc! { "$and": [filter.to_doc(), scope.document()] },
+            filter.to_doc(),
             scope.lookup_after(filter.to_doc()),
             executor,
         )
@@ -566,7 +566,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         scope.validate(executor).await?;
         let rows = aggregate::find(
             &self.collection().clone_with_type::<super::scope::SalesVersion>(),
-            doc! { "$and": [filter.to_doc(), scope.document()] },
+            filter.to_doc(),
             FindOptions::builder()
                 .projection(doc! { "id": 1, "version": 1 })
                 .sort(doc! { "id": 1 })

@@ -44,7 +44,6 @@ impl ActualProfitLossReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (context, scope) = this.authorized_scope(&tx_actor, executor).await?;
-                    let no_scope = scope.is_empty();
                     let orders =
                         source::authorized_orders(&this.db, &tx_query, bounds, scope, executor).await?;
                     let expected = source::version(&context.scope_version, &orders);
@@ -52,7 +51,6 @@ impl ActualProfitLossReadModel {
                     HistoricalDirectoryView::from_attributions(
                         orders.iter().filter_map(|row| row.attribution.as_ref()),
                         expected,
-                        no_scope,
                     )
                 })
             })

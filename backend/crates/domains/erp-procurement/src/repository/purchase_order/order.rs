@@ -384,7 +384,7 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
         let collection = self.collection().clone_with_type::<PurchaseOrderRow>();
         let items = aggregate::find(
             &collection,
-            doc! { "$and": [filter.to_doc(), scope.document()] },
+            filter.to_doc(),
             options,
             scope.lookup_after(filter.to_doc()),
             executor,
@@ -392,7 +392,7 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
         .await?;
         let total = aggregate::count(
             &self.collection(),
-            doc! { "$and": [filter.to_doc(), scope.document()] },
+            filter.to_doc(),
             scope.lookup_after(filter.to_doc()),
             executor,
         )

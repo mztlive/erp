@@ -179,9 +179,6 @@ impl FundsAccess {
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         let (_, authorization) =
             self.resolve_with_purchase(actor, "supplier_payment", "list", executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "供应商付款无可见范围"));
-        }
         let condition = self.payment_condition(query, executor).await?;
         let filter = self.payment_filter(query).await?;
         let snapshot =
@@ -239,9 +236,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (_, authorization) =
                         this.resolve_with_purchase(&actor, "supplier_payment", "list", executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version.clone());
-                    }
                     let condition = this.payment_condition(&query, executor).await?;
                     let filter = this.payment_filter(&query).await?;
                     let versions = payment_repository::versions(

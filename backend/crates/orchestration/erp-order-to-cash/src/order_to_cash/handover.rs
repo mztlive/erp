@@ -6,10 +6,11 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandFingerprint};
+use erp_core::AccountKind;
 use erp_core::ids::SalesOrderId;
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{AccessControlExt, AccountSummary, Permission, SharedRbacService};
 use erp_sales::dto::sales_order::{HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView};
 use erp_sales::entity::command_receipt::SalesCommandResult;
 use erp_sales::repository::SalesOrderExt;
@@ -162,7 +163,6 @@ impl SalesOrderCommandProcess {
         let mut candidates = Vec::new();
         for account in accounts {
             if account.base.id == order.sales_owner_user_id
-                || !account.is_active_backoffice()
                 || ensure_separation_of_duties(
                     policy.separation_of_duties_policy,
                     &account.base.id,
@@ -172,11 +172,11 @@ impl SalesOrderCommandProcess {
             {
                 continue;
             }
-            if !account_qualified_for_acceptance(&self.db, &rbac, &account.base.id, &mut NoTransaction)
-                .await?
-            {
+            let Some(qualified) =
+                acceptance_qualification(&self.db, &rbac, &account.base.id, &mut NoTransaction).await?
+            else {
                 continue;
-            }
+            };
             let mut planned = order.clone();
             planned.sales_owner_user_id = account.base.id.clone();
             if !target_can_read_order(&self.db, &rbac, &account.base.id, &planned, &mut NoTransaction).await?
@@ -184,9 +184,9 @@ impl SalesOrderCommandProcess {
                 continue;
             }
             candidates.push(HandoverCandidateView {
-                user_id: account.base.id.clone(),
-                display_name: account.name.clone(),
-                account: account.secret.account().to_string(),
+                user_id: qualified.id,
+                display_name: qualified.display_name,
+                account: qualified.login_account,
             });
         }
         candidates.sort_by(|left, right| {
@@ -466,7 +466,7 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    if account_qualified_for_acceptance(db, rbac, target, executor).await? {
+    if acceptance_qualification(db, rbac, target, executor).await?.is_some() {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备销售验收读取与执行资格".to_string()))
@@ -501,36 +501,24 @@ async fn ensure_handover_separation(
     Ok(())
 }
 
-/// 事务外判断账号是否具备验收执行资格。
-async fn account_qualified_for_acceptance(
+/// 沿原执行器取得验收完整资格与同次读取的目标账号摘要。
+async fn acceptance_qualification(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
     target: &str,
     executor: &mut dyn persistence_core::Executor,
-) -> Result<bool> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Ok(false);
-    };
-    if !account.is_active_backoffice() {
-        return Ok(false);
-    }
-    let Some(required_codes) = WorkItemType::CustomerAcceptanceRegistration
+) -> Result<Option<AccountSummary>> {
+    let required_codes = WorkItemType::CustomerAcceptanceRegistration
         .customer_acceptance_execution_permissions(ACCEPTANCE_OBJECT_TYPE)
-    else {
-        return Ok(false);
-    };
-    let mut required = Vec::new();
-    for code in required_codes {
-        let Ok(permission) = Permission::parse(code) else {
-            return Ok(false);
-        };
-        required.push(permission);
-    }
-    let actor = AuditActor::new(target.into(), account.secret.account().into(), account.kind);
+        .ok_or_else(|| Error::Internal("客户验收任务缺少固定执行权限配置".into()))?;
+    let required =
+        required_codes.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
+    let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
     Ok(crate::authorization::features(db.clone(), rbac.clone())
         .permissions(&actor, &required, executor)
         .await?
-        .is_some_and(|qualified| qualified.same_role(&required)))
+        .filter(|qualified| qualified.same_role(&required))
+        .map(|qualified| qualified.account().clone()))
 }
 
 /// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
@@ -541,10 +529,7 @@ async fn target_can_read_order(
     planned: &erp_sales::entity::sales_order::SalesOrder,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<bool> {
-    let Some(account) = db.accounts().find_by_id(target, executor).await? else {
-        return Ok(false);
-    };
-    let actor = AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
+    let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
     let access = erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone());
     match access.require_loaded(&actor, "detail", planned, &[], executor).await {
         Ok(()) => Ok(true),

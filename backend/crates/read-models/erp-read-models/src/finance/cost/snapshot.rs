@@ -57,7 +57,6 @@ impl CostSelection {
 pub(super) struct Snapshot {
     pub rows: Vec<ScopedCostEntryView>,
     pub allocation_created_at: HashMap<String, u64>,
-    no_scope: bool,
     version: String,
     as_of: String,
 }
@@ -69,14 +68,9 @@ struct CostAuthorization {
     fingerprint: DefaultHasher,
 }
 impl CostAuthorization {
-    /// 无销售来源范围且无整账职责时无需访问业务集合。
-    fn empty(&self) -> bool {
-        self.whole.is_empty() && self.sales.is_empty()
-    }
-
     /// 部分来源范围禁止探测整笔来源引用，初读与返回前重验使用相同规则。
     fn require_filter(&self, filter: &CostEntryFilter) -> Result<()> {
-        if !self.empty() && self.whole.is_empty() && filter.source_document_id.is_some() {
+        if self.whole.is_empty() && filter.source_document_id.is_some() {
             return Err(Error::ValidationError("当前只能读取成本分配，不能按整笔来源单据筛选".into()));
         }
         Ok(())
@@ -88,7 +82,6 @@ impl Snapshot {
         Self {
             rows: vec![],
             allocation_created_at: HashMap::new(),
-            no_scope: access.empty(),
             version: String::new(),
             as_of: access.context.as_of.as_utc().to_rfc3339(),
         }
@@ -106,7 +99,7 @@ impl Snapshot {
             data,
             scope_version: self.version,
             as_of: self.as_of,
-            empty_reason: self.no_scope.then_some("no_scope"),
+            empty_reason: None,
             scope_summary: "按关联销售范围读取成本份额；整笔及未分配成本另需财务整账读取资格",
             ownership_basis: "current_sales_allocation",
         }
@@ -221,15 +214,12 @@ impl CostReadModel {
         access.whole.validate(executor).await?;
         let mut snapshot = Snapshot::new(&access);
         access.require_filter(filter)?;
-        if !access.empty() {
-            let (candidates, allocations, versions) =
-                self.candidate_facts(filter, selection, executor).await?;
-            let orders = self.authorized_orders(&versions, &mut access, executor).await?;
-            let whole_ids = self.whole_orders(&versions, &access.whole, executor).await?;
-            whole_ids.hash(&mut access.fingerprint);
-            versions.hash(&mut access.fingerprint);
-            snapshot.project(candidates, allocations, &orders, &whole_ids)?;
-        }
+        let (candidates, allocations, versions) = self.candidate_facts(filter, selection, executor).await?;
+        let orders = self.authorized_orders(&versions, &mut access, executor).await?;
+        let whole_ids = self.whole_orders(&versions, &access.whole, executor).await?;
+        whole_ids.hash(&mut access.fingerprint);
+        versions.hash(&mut access.fingerprint);
+        snapshot.project(candidates, allocations, &orders, &whole_ids)?;
         access.context.validate(executor).await?;
         access.whole.validate(executor).await?;
         snapshot.version = format!("{:x}", access.fingerprint.finish());
@@ -379,7 +369,6 @@ mod tests {
         Snapshot {
             rows: vec![],
             allocation_created_at: HashMap::new(),
-            no_scope: false,
             version: String::new(),
             as_of: String::new(),
         }

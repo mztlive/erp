@@ -155,9 +155,6 @@ impl FundsAccess {
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         let (_access, authorization) =
             self.resolve_with_purchase(actor, "payable_account", "list", executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "应付子账无可见范围"));
-        }
         let condition = self.payable_account_condition(query, executor).await?;
         let snapshot =
             self.payable_database_snapshot(query, &authorization, &condition, true, executor).await?;
@@ -195,9 +192,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (_, authorization) =
                         this.resolve_with_purchase(&actor, "payable_account", "list", executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version.clone());
-                    }
                     let condition = this.payable_account_condition(&query, executor).await?;
                     this.payable_database_snapshot(&query, &authorization, &condition, false, executor)
                         .await?

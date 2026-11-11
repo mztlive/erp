@@ -4,8 +4,8 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_identity::{
-    AccessMapping, AccessSubject, AuthorizationService, OrganizationDirectoryService, Permission,
-    SharedRbacService,
+    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, Error as IdentityError,
+    OrganizationDirectoryService, Permission, ResourceTargets, SharedRbacService,
 };
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -14,7 +14,7 @@ use crate::authorization::{CustomerMapping, CustomerResolvedScope, service};
 use crate::entity::customer::AssignmentRole;
 use crate::repository::CustomerExt;
 use crate::repository::prelude::*;
-use crate::repository::scope::{CustomerReadScope, authorized_ids};
+use crate::repository::scope::CustomerReadScope;
 use crate::{Error, Result};
 
 /// 客户查询与命令共用的统一授权接入。
@@ -62,9 +62,8 @@ impl CustomerAccess {
     /// # 错误
     /// 身份、映射、会话或有效期变化时拒绝。
     pub async fn validate(&self, access: &CustomerResolvedScope, executor: &mut dyn Executor) -> Result<()> {
-        let compiled = access.compiled.as_ref().ok_or_else(|| Error::Internal("客户查询缺少凭证".into()))?;
         let service = if access.current { &self.current } else { &self.service };
-        Ok(service.validate(compiled, executor).await?)
+        Ok(service.validate(&access.compiled, executor).await?)
     }
 
     /// 在固定客户目录编译本阶段完整查询条件。
@@ -85,7 +84,7 @@ impl CustomerAccess {
             current,
             scope_version: compiled.version(),
             as_of: compiled.as_of(),
-            compiled: Some(Arc::new(compiled)),
+            compiled: Arc::new(compiled),
         })
     }
 
@@ -136,15 +135,18 @@ impl CustomerAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.require_with(actor, &action, &id, executor).await })
+                Box::pin(async move {
+                    this.require_with(actor.clone(), &action, &id, executor).await?;
+                    this.query_context(&actor, &action, executor).await
+                })
             })
             .await
     }
-    /// 在原业务事务使用 identity 完整查询约束检查目标成员资格。
+    /// 在原业务事务使用 identity 检查完整客户及全部负责人事实。
     /// # 参数
     /// actor、action、customer_id 为真实入口和目标，executor 为原事务。
     /// # 返回
-    /// 成功时返回授权上下文。
+    /// 完整对象授权通过时成功，不生成查询凭证。
     /// # 错误
     /// 缺失、无权、版本变化或接入失败时拒绝。
     pub async fn require_with(
@@ -153,29 +155,28 @@ impl CustomerAccess {
         action: &str,
         customer_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<CustomerResolvedScope> {
-        let context = self.query_context(&actor, action, executor).await?;
-        let compiled = context.compiled.as_ref().ok_or_else(|| Error::Internal("客户查询缺少凭证".into()))?;
-        let ids = authorized_ids(&self.db, compiled, Some(customer_id), executor).await?;
-        self.validate(&context, executor).await?;
-        if ids.is_empty() {
-            return Err(deny_object(action));
+    ) -> Result<()> {
+        let current = action == "current";
+        let service = if current { &self.current } else { &self.service };
+        let permission = Permission::parse(format!("customer:{}", if current { "detail" } else { action }))?;
+        if !service.has_permission(&actor, &permission, executor).await? {
+            return Err(Error::Forbidden("账号或有效角色不具备本操作的完整权限".into()));
         }
-        self.ensure_owner_facts(customer_id, context.as_of, executor).await?;
-        self.validate(&context, executor).await?;
-        Ok(context)
-    }
-    /// 完整对象读取校验全部实际负责人组织关系，避免其他授权分支掩盖异常事实。
-    async fn ensure_owner_facts(&self, id: &str, at: Instant, executor: &mut dyn Executor) -> Result<()> {
-        let owners = self
-            .db
-            .customer_assignments()
-            .current_owners(Some(&[id.to_string()]), None, business_date(at)?, executor)
-            .await?;
-        for owner in owners {
-            self.organization().own_org(&owner.user_id, at, executor).await?;
-        }
-        Ok(())
+        service
+            .require(
+                &actor,
+                &permission,
+                AccessTarget::Records {
+                    subject: AccessSubject::Direct,
+                    ids: ResourceTargets::new(&[customer_id])?,
+                },
+                executor,
+            )
+            .await
+            .map_err(|error| match error {
+                IdentityError::NotFound(_) | IdentityError::Forbidden(_) => deny_object(action),
+                error => error.into(),
+            })
     }
     /// 当前业务资格使用关闭历史读取补充的独立入口。
     /// # 参数
@@ -189,7 +190,7 @@ impl CustomerAccess {
         actor: &AuditActor,
         customer_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<CustomerResolvedScope> {
+    ) -> Result<()> {
         self.require_with(actor.clone(), "current", customer_id, executor).await
     }
     /// 检查创建按钮的功能资格。
@@ -199,7 +200,7 @@ impl CustomerAccess {
     /// 当前创建功能资格。
     /// # 错误
     /// 身份或功能资格无效时拒绝。
-    pub async fn ensure_create(&self, actor: &AuditActor) -> Result<CustomerResolvedScope> {
+    pub async fn ensure_create(&self, actor: &AuditActor) -> Result<()> {
         let this = self.clone();
         let actor = actor.clone();
         self.db
@@ -217,11 +218,7 @@ impl CustomerAccess {
     /// 当前功能资格元信息。
     /// # 错误
     /// 账号或权限无效时拒绝。
-    pub async fn require_create(
-        &self,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<CustomerResolvedScope> {
+    pub async fn require_create(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
         let permission = Permission::parse("customer:create")?;
         if !self.service.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有创建客户权限".into()));
@@ -231,13 +228,7 @@ impl CustomerAccess {
             .own_org(actor.id(), at, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
-        Ok(CustomerResolvedScope {
-            user_id: actor.id().into(),
-            current: false,
-            scope_version: String::new(),
-            as_of: at,
-            compiled: None,
-        })
+        Ok(())
     }
 }
 pub(crate) fn business_date(at: Instant) -> Result<BusinessDate> {

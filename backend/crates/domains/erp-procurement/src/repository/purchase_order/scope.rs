@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use erp_identity::entity::authorization::QueryOutput;
 use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -9,11 +10,11 @@ use persistence_core::{Executor, QueryFilter, aggregate};
 
 use super::PURCHASE_ORDERS;
 
-/// 当前读取阶段的统一授权凭证，未装配时保持空集。
-#[derive(Clone, Default)]
+/// 当前读取阶段的完整统一授权凭证。
+#[derive(Clone)]
 pub struct PurchaseReadScope {
-    access: Option<Arc<CompiledAccess>>,
-    authorization: Option<AuthorizationService>,
+    access: Arc<CompiledAccess>,
+    authorization: AuthorizationService,
 }
 
 impl std::fmt::Debug for PurchaseReadScope {
@@ -31,18 +32,18 @@ impl PurchaseReadScope {
     /// # 错误
     /// 不执行 I/O。
     pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
-        Self { access: Some(access), authorization: Some(authorization) }
+        Self { access, authorization }
     }
 
     /// 读取当前授权与业务映射版本。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 已编译版本；无凭证时为空。
+    /// 当前完整凭证版本。
     /// # 错误
     /// 不执行 I/O。
-    pub fn version(&self) -> Option<String> {
-        self.access.as_ref().map(|access| access.version())
+    pub fn version(&self) -> String {
+        self.access.version()
     }
 
     /// 返回完整授权阶段。
@@ -53,7 +54,7 @@ impl PurchaseReadScope {
     /// # 错误
     /// 不执行 I/O。
     pub fn stages(&self) -> &[Document] {
-        self.access.as_ref().map_or(&[], |access| access.stages())
+        self.access.stages()
     }
 
     /// 在原执行器复验凭证。
@@ -64,9 +65,12 @@ impl PurchaseReadScope {
     /// # 错误
     /// 失效授权、事实版本变化或设施失败时返回错误。
     pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
-        if let (Some(access), Some(service)) = (&self.access, &self.authorization) {
-            service.validate(access, executor).await?;
+        if self.access.model().collection != PURCHASE_ORDERS
+            || self.access.model().output != QueryOutput::Object
+        {
+            return Err(crate::Error::ValidationError("采购授权查询模型不匹配".into()));
         }
+        self.authorization.validate(&self.access, executor).await?;
         Ok(())
     }
 
@@ -92,43 +96,14 @@ impl PurchaseReadScope {
     /// # 错误
     /// 不执行 I/O；缺少凭证时返回空集条件。
     pub fn related_stages(&self, filter: Document, source_id: &str) -> Vec<Document> {
-        related_pipeline(filter, source_id, self.access.as_ref().map(|access| access.stages()))
-    }
-
-    /// 未取得统一授权凭证时保持空集。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 缺少凭证时为 true。
-    /// # 错误
-    /// 无。
-    pub fn is_empty(&self) -> bool {
-        self.access.is_none()
-    }
-
-    /// 凭证已在阶段中执行；缺少凭证时拒绝全部记录。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 仓储最终候选条件。
-    /// # 错误
-    /// 无。
-    pub fn document(&self) -> Document {
-        if self.access.is_some() {
-            doc! {}
-        } else {
-            doc! { "$expr": false }
-        }
+        related_pipeline(filter, source_id, self.access.stages())
     }
 }
 
 /// 授权在单条实际来源连接内执行，不枚举账号全部可见采购单。
-fn related_pipeline(filter: Document, source_id: &str, access: Option<&[Document]>) -> Vec<Document> {
+fn related_pipeline(filter: Document, source_id: &str, access: &[Document]) -> Vec<Document> {
     let mut stages = vec![doc! { "$match": filter }];
-    let Some(access) = access else {
-        stages.push(doc! { "$match": { "$expr": false } });
-        return stages;
-    };
+
     let mut source = vec![doc! { "$match": { "deleted_at": 0, "$expr": { "$eq": ["$id", "$$source_id"] } } }];
     source.extend_from_slice(access);
     source.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": 1 } }]);
@@ -165,6 +140,20 @@ pub trait PurchaseOrderRepositoryScopeExt {
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Option<crate::entity::purchase_order::PurchaseOrder>>;
 
+    /// 一次读取本批目标内全部已授权采购单，保持调用方事务。
+    /// # 参数
+    /// ids 为本次实际采购身份，scope 为完整采购凭证，executor 为原执行器。
+    /// # 返回
+    /// 存在且完整授权的采购单；调用方校验全部目标是否覆盖。
+    /// # 错误
+    /// 授权失效、模型不符或数据库读取失败时返回错误。
+    async fn find_authorized_many(
+        &self,
+        ids: &[String],
+        scope: &PurchaseReadScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Vec<crate::entity::purchase_order::PurchaseOrder>>;
+
     /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
     ///
     /// # 参数
@@ -200,7 +189,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope.validate(executor).await?;
         let rows = aggregate::find(
             &self.collection(),
-            doc! { "deleted_at": 0, "$and": [{ "id": id }, scope.document()] },
+            doc! { "deleted_at": 0, "id": id },
             FindOptions::builder().limit(1).build(),
             scope.lookup_after(doc! { "deleted_at": 0, "id": id }),
             executor,
@@ -208,6 +197,29 @@ impl PurchaseOrderRepositoryScopeExt
         .await?;
         scope.validate(executor).await?;
         Ok(rows.into_iter().next())
+    }
+
+    async fn find_authorized_many(
+        &self,
+        ids: &[String],
+        scope: &PurchaseReadScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Vec<crate::entity::purchase_order::PurchaseOrder>> {
+        scope.validate(executor).await?;
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = doc! { "deleted_at": 0, "id": { "$in": ids } };
+        let rows = aggregate::find(
+            &self.collection(),
+            filter.clone(),
+            FindOptions::builder().build(),
+            scope.lookup_after(filter),
+            executor,
+        )
+        .await?;
+        scope.validate(executor).await?;
+        Ok(rows)
     }
 
     async fn query_versions(
@@ -219,7 +231,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope.validate(executor).await?;
         let rows = aggregate::find(
             &self.collection().clone_with_type::<PurchaseVersion>(),
-            doc! { "$and": [filter.to_doc(), scope.document()] },
+            filter.to_doc(),
             mongodb::options::FindOptions::builder()
                 .projection(doc! { "id": 1, "version": 1 })
                 .sort(doc! { "id": 1 })
@@ -247,7 +259,7 @@ pub struct PurchaseVersion {
 mod tests {
     use mongodb::bson::{Bson, doc};
 
-    use super::{PurchaseReadScope, related_pipeline};
+    use super::related_pipeline;
 
     #[test]
     fn related_query_keeps_business_filter_and_complete_correlated_authorization() {
@@ -257,7 +269,7 @@ mod tests {
             doc! { "$match": { "$or": [{ "current_owner_user_id": "owner-1" }, { "grant.0": { "$exists": true } }] } },
             doc! { "$unset": "grant" },
         ];
-        let stages = related_pipeline(filter.clone(), "$purchase_order_id", Some(&access));
+        let stages = related_pipeline(filter.clone(), "$purchase_order_id", &access);
         assert_eq!(stages[0], doc! { "$match": filter });
         let lookup = stages[1].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_document("let").unwrap(), &doc! { "source_id": "$purchase_order_id" });
@@ -272,14 +284,5 @@ mod tests {
         assert_eq!(source[access.len() + 1], Bson::Document(doc! { "$limit": 1 }));
         assert_eq!(stages[2], doc! { "$match": { "__authorized_purchase_source.0": { "$exists": true } } });
         assert_eq!(stages[3], doc! { "$unset": "__authorized_purchase_source" });
-    }
-
-    #[test]
-    fn related_query_without_authorization_proof_is_empty() {
-        let scope = PurchaseReadScope::default();
-        assert_eq!(
-            scope.related_stages(doc! { "purchase_order_id": "po-1" }, "$purchase_order_id"),
-            vec![doc! { "$match": { "purchase_order_id": "po-1" } }, doc! { "$match": { "$expr": false } },]
-        );
     }
 }

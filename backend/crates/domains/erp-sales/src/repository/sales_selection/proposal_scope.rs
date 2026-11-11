@@ -5,7 +5,7 @@ use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, aggregate};
 use serde::Deserialize;
 
-use super::{BOOKLETS, PROPOSALS, SelectionProposalFilter};
+use super::{BOOKLETS, PROPOSALS, SelectionProposalFilter, SelectionReadScope};
 use crate::Result;
 use crate::entity::sales_selection::SalesSelectionProposal;
 use crate::repository::filter::push_undeleted;
@@ -36,20 +36,22 @@ struct ProposalCount {
 pub(super) async fn search(
     db: &Database,
     filter: &SelectionProposalFilter,
+    authorized_scope: &SelectionReadScope,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<SalesSelectionProposal>> {
-    filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
+    authorized_scope.validate(executor).await.map_err(identity_error)?;
     let collection = db.collection::<ProposalPage>(PROPOSALS);
-    let mut pages = aggregate::rows(&collection, pipeline(filter), executor).await?;
-    filter.authorized_scope.validate(executor).await.map_err(identity_error)?;
+    let mut pages =
+        aggregate::rows(&collection, pipeline(filter, authorized_scope.stages()), executor).await?;
+    authorized_scope.validate(executor).await.map_err(identity_error)?;
     let page = pages.pop().unwrap_or_default();
     Ok(PageResult { items: page.items, total: page.total.first().map_or(0, |row| row.count) })
 }
 
 /// 先按方案业务筛选缩小集合，再通过有索引的父册 ID 连接授权事实。
-fn pipeline(filter: &SelectionProposalFilter) -> Vec<Document> {
+fn pipeline(filter: &SelectionProposalFilter, authorization: Vec<Document>) -> Vec<Document> {
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
-    stages.extend(filter.authorized_scope.stages());
+    stages.extend(authorization);
     stages.extend(vec![
         doc! { "$lookup": {
             "from": BOOKLETS,

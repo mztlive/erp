@@ -134,7 +134,7 @@ fn allocation_lookup(
     condition: &FundsLinkedCondition,
     summary: bool,
 ) -> Document {
-    let scope = doc! { "$and": [authorization.sales.document(), linked_condition_document(condition, "sales_owner_user_id")] };
+    let scope = linked_condition_document(condition, "sales_owner_user_id");
     let mut stages = vec![
         doc! { "$match": { "deleted_at": 0_i64, "$expr": { "$eq": ["$customer_receipt_id", "$$receipt"] } } },
         lookup(
@@ -163,7 +163,7 @@ fn allocation_lookup(
         scope,
         "sales_owner_user_id",
         "order_no",
-        &authorization.sales.stages(),
+        &authorization.sales_stages(),
     ));
     let mut project = doc! { "_id": 0, "id": 1, "order": "$scope_order_id", "owner": "$scope_source.owner_user_id", "source_version": "$scope_source.version",
     "exists": { "$ne": [{ "$ifNull": ["$scope_source.id", Bson::Null] }, Bson::Null] },

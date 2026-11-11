@@ -1,9 +1,25 @@
 //! 复用已解析的领域来源条件，保留来源存在与来源授权的区别。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::bson::{Bson, Document, doc};
 
-use super::super::FundsLinkedCondition;
+use super::super::{FundsAuthorization, FundsLinkedCondition};
+
+impl FundsAuthorization {
+    /// 为实际销售来源生成完整授权阶段。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 有销售来源时返回其阶段；未登记该来源时拒绝全部销售份额。
+    /// # 错误
+    /// 无；使用前后仍须复验整个授权。
+    pub(super) fn sales_stages(&self) -> Vec<Document> {
+        self.sales
+            .as_ref()
+            .map_or_else(|| vec![doc! { "$match": { "$expr": false } }], SalesReadScope::stages)
+    }
+}
 
 /// 关联一个真实来源并分别保留最小责任事实与授权布尔值。
 ///

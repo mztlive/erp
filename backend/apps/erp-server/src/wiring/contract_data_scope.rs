@@ -1,26 +1,26 @@
 //! 合同责任事实和来源接线；统一授权服务决定所有范围组合。
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_contract::ContractParticipantPort;
-use erp_contract::authorization::{ContractAuthorization, ContractModels, scope};
+use erp_contract::authorization::{ContractAccess, ContractModels, scope};
 use erp_contract::ports::ContractCreationPort;
 use erp_contract::repository::ContractExt;
+use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
     QueryOutput, ReadAccess, RelationKey, RelationMatch,
 };
-use erp_identity::entity::organization::OrgMembership;
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::repository::organization::primary_membership_query;
 use erp_identity::{
     AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry, AuthorizationService,
-    DataAccess, Error as IdentityError, Permission, ResourceTargets, Result as IdentityResult,
-    SharedRbacService,
+    DataAccess, Error as IdentityError, OrganizationDirectoryService, Permission, ResourceTargets,
+    Result as IdentityResult, SharedRbacService,
 };
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
@@ -145,7 +145,7 @@ impl ContractModelsBuilder {
 /// 领域可直接消费的统一授权能力。
 /// # 错误
 /// 固定目录非法时启动失败。
-pub fn contract_authorization(db: Database, rbac: SharedRbacService) -> ContractAuthorization {
+pub fn contract_authorization(db: Database, rbac: SharedRbacService) -> ContractAccess {
     let builder = ContractModelsBuilder::new(db.clone(), rbac.clone());
     let models = ContractModels {
         read: builder.service("detail").expect("固定合同读取目录有效"),
@@ -155,7 +155,7 @@ pub fn contract_authorization(db: Database, rbac: SharedRbacService) -> Contract
             model: builder.creation().expect("固定合同客户来源目录有效"),
         }),
     };
-    ContractAuthorization::new(db, models)
+    ContractAccess::new(db, models)
 }
 
 struct CreationAccess {
@@ -340,10 +340,23 @@ impl AccessFactsPort for ContractFacts {
         let targets = ids.ids().iter().cloned().collect::<Vec<_>>();
         let history =
             self.responsibility.history(self.participants.as_ref(), context, &targets, executor).await?;
-        let state = OrganizationRepository::new(&self.db).state(executor).await?;
-        rows.into_iter()
-            .map(|row| contract_object(row, context, &state.memberships, &history, self.responsibility))
-            .collect()
+        let directory = OrganizationDirectoryService::new(self.db.clone());
+        let mut organizations = BTreeMap::new();
+        let mut objects = Vec::with_capacity(rows.len());
+        for row in rows {
+            let owner = row.get_str("sales_owner_user_id").ok().filter(|owner| !owner.is_empty());
+            let organization = if let Some(owner) = owner {
+                if !organizations.contains_key(owner) {
+                    let fact = directory.own_org_with_validity(owner, context.as_of, executor).await?;
+                    organizations.insert(owner.to_owned(), fact);
+                }
+                organizations.get(owner).cloned().expect("负责人组织事实已写入")
+            } else {
+                (None, None)
+            };
+            objects.push(contract_object(row, context, organization, &history, self.responsibility)?);
+        }
+        Ok(objects)
     }
 }
 struct CreationMapping {
@@ -400,7 +413,7 @@ fn creation_mapping(db: Database) -> erp_identity::Result<Arc<dyn AccessMapping>
 fn contract_object(
     row: Document,
     context: &AccessContext,
-    memberships: &[OrgMembership],
+    organization: (Option<String>, Option<Instant>),
     history: &[String],
     responsibility: ContractResponsibility,
 ) -> erp_identity::Result<ObjectFacts> {
@@ -422,10 +435,7 @@ fn contract_object(
     } else {
         owner.clone()
     };
-    let org = match owner.as_deref() {
-        Some(owner) => OrgMembership::primary_org(memberships, owner, context.as_of)?.map(str::to_owned),
-        None => None,
-    };
+    let (org, valid_until) = organization;
     Ok(ObjectFacts {
         resource: "contract".into(),
         id: id.clone(),
@@ -435,6 +445,7 @@ fn contract_object(
             .to_string(),
         owner_id: FactValue::Known(owned),
         org_unit_id: FactValue::Known(org),
+        valid_until,
         collaborators: FactValue::Known(if read { shared } else { BTreeSet::new() }),
         history_participants: FactValue::Known(if read && history.contains(&id) {
             [context.actor.id().into()].into()
@@ -503,8 +514,10 @@ mod tests {
     fn fixed_responsibility_models_preserve_shared_reads_and_independent_writes() {
         let row = doc! {"id":"contract-a","version":1_i64,"sales_owner_user_id":"sales-b","shared_sales_user_ids":["sales-a"]};
         let reading =
-            contract_object(row.clone(), &context(), &[], &[], ContractResponsibility::Read).unwrap();
-        let writing = contract_object(row, &context(), &[], &[], ContractResponsibility::Write).unwrap();
+            contract_object(row.clone(), &context(), (None, None), &[], ContractResponsibility::Read)
+                .unwrap();
+        let writing =
+            contract_object(row, &context(), (None, None), &[], ContractResponsibility::Write).unwrap();
         assert_eq!(reading.owner_id.get().unwrap().as_deref(), Some("sales-a"));
         assert!(reading.collaborators.get().unwrap().contains("sales-a"));
         assert_eq!(writing.owner_id.get().unwrap().as_deref(), Some("sales-b"));
@@ -516,9 +529,36 @@ mod tests {
     fn incomplete_contract_facts_fail_before_authorization() {
         let row = doc! {"id":"contract-a","sales_owner_user_id":"sales-a"};
         assert!(matches!(
-            contract_object(row, &context(), &[], &[], ContractResponsibility::Read),
+            contract_object(row, &context(), (None, None), &[], ContractResponsibility::Read),
             Err(erp_identity::Error::ValidationError(_))
         ));
+    }
+
+    #[test]
+    fn object_facts_preserve_owner_organization_and_its_next_time_boundary() {
+        let boundary = Instant::from_unix_secs(100);
+        for responsibility in [ContractResponsibility::Read, ContractResponsibility::Write] {
+            let object = contract_object(
+                doc! {"id":"contract-a","version":1_i64,"sales_owner_user_id":"sales-b"},
+                &context(),
+                (Some("org-b".into()), Some(boundary)),
+                &[],
+                responsibility,
+            )
+            .unwrap();
+            assert_eq!(object.org_unit_id.get().unwrap().as_deref(), Some("org-b"));
+            assert_eq!(object.valid_until, Some(boundary));
+        }
+        let future = contract_object(
+            doc! {"id":"contract-a","version":1_i64,"sales_owner_user_id":"sales-b"},
+            &context(),
+            (None, Some(boundary)),
+            &[],
+            ContractResponsibility::Read,
+        )
+        .unwrap();
+        assert!(future.org_unit_id.get().unwrap().is_none());
+        assert_eq!(future.valid_until, Some(boundary));
     }
 
     #[test]
@@ -588,7 +628,7 @@ mod tests {
         let object = contract_object(
             doc! {"id":"contract-a","version":1_i64,"sales_owner_user_id":"sales-b"},
             &context(),
-            &[],
+            (None, None),
             &targets,
             facts,
         )

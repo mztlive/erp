@@ -1,6 +1,5 @@
 //! 客户业务归属筛选与 identity 授权查询执行。
 #![allow(async_fn_in_trait)]
-use erp_identity::CompiledAccess;
 use mongodb::Database;
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
@@ -26,33 +25,6 @@ pub struct CustomerVersion {
     pub version: u64,
 }
 
-/// 执行 identity 的完整查询阶段，返回有界客户主键。
-/// # 参数
-/// db 为客户仓储，access 为本阶段凭证，id 可收窄单一目标，executor 为原事务。
-/// # 返回
-/// 已授权且实际存在的客户主键。
-/// # 错误
-/// 超限或数据库读取失败时拒绝，不截断授权集合。
-pub async fn authorized_ids(
-    db: &Database,
-    access: &CompiledAccess,
-    id: Option<&str>,
-    executor: &mut dyn Executor,
-) -> Result<Vec<String>> {
-    let mut pipeline = Vec::new();
-    if let Some(id) = id {
-        pipeline.push(doc! {"$match": {"id": id}});
-    }
-    pipeline.extend_from_slice(access.stages());
-    pipeline.extend([doc! {"$project": {"id": 1, "version": 1}}, doc! {"$limit": 10001}]);
-    let collection = db.customer_accounts().collection().clone_with_type::<CustomerVersion>();
-    let rows = aggregate::rows(&collection, pipeline, executor).await?;
-    if rows.len() > 10000 {
-        return Err(Error::ValidationError("客户查询超过上限，请收窄授权范围".into()));
-    }
-    Ok(rows.into_iter().map(|row| row.id).collect())
-}
-
 /// 在相同完整授权管道内执行客户分页与计数。
 /// # 参数
 /// db、filter 为客户仓储及业务筛选，context、port 为本阶段授权，executor 为原事务。
@@ -67,7 +39,7 @@ pub async fn authorized_page(
     port: &CustomerAccess,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<CustomerAccountRow>> {
-    let compiled = compiled(context)?;
+    let compiled = &context.compiled;
     port.validate(context, executor).await?;
     let collection = db.customer_accounts().collection().clone_with_type::<CustomerAccountRow>();
     let options = page_options(filter);
@@ -106,7 +78,7 @@ pub async fn authorized_versions(
     port: &CustomerAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CustomerVersion>> {
-    let compiled = compiled(context)?;
+    let compiled = &context.compiled;
     port.validate(context, executor).await?;
     let mut stages = vec![doc! {"$match": filter.to_doc()}];
     stages.extend_from_slice(compiled.stages());
@@ -121,27 +93,9 @@ pub async fn authorized_versions(
     Ok(rows)
 }
 
-fn compiled(context: &CustomerResolvedScope) -> Result<&CompiledAccess> {
-    context.compiled.as_deref().ok_or_else(|| Error::Internal("客户查询缺少凭证".into()))
-}
-
 #[cfg(test)]
 mod tests {
-    use erp_core::common::time::Instant;
-
     use super::*;
-
-    #[test]
-    fn missing_compiled_access_is_an_explicit_error() {
-        let context = CustomerResolvedScope {
-            user_id: "sales".into(),
-            current: false,
-            scope_version: String::new(),
-            as_of: Instant::from_unix_secs(0),
-            compiled: None,
-        };
-        assert!(matches!(compiled(&context), Err(Error::Internal(_))));
-    }
 
     #[test]
     fn authorized_page_uses_bounded_paging_and_stable_sort_fallback() {

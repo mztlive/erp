@@ -62,9 +62,8 @@ impl PurchaseOrderDomainRepository<'_> {
         if limit == 0 || limit > 10_000 {
             return Err(Error::ValidationError("采购供给影响查询上限必须在1至10000之间".into()));
         }
-        if scope.is_empty() {
-            return Ok(Vec::new());
-        }
+
+        scope.validate(executor).await?;
         let mut rows = self.offering_usage_rows(offering_id, scope, true, limit, executor).await?;
         rows.extend(self.offering_usage_rows(offering_id, scope, false, limit, executor).await?);
         if rows.len() > usize::try_from(limit).unwrap_or(10_000) {
@@ -79,6 +78,7 @@ impl PurchaseOrderDomainRepository<'_> {
                 .lines
                 .push(row.line);
         }
+        scope.validate(executor).await?;
         Ok(grouped.into_values().collect())
     }
 
@@ -191,6 +191,5 @@ fn order_lookup(scope: &PurchaseReadScope) -> Document {
         doc! { "$match": { "$expr": { "$eq": ["$id", "$$order_id"] }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "status": { "$nin": ["COMPLETED", "VOIDED"] } } },
     ];
     pipeline.extend_from_slice(scope.stages());
-    pipeline.push(doc! { "$match": scope.document() });
     doc! { "$lookup": { "from": PURCHASE_ORDERS, "let": { "order_id": "$header.purchase_order_id" }, "pipeline": pipeline, "as": "order" } }
 }

@@ -5,11 +5,11 @@ use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::bson::{Document, doc};
 use persistence_core::Executor;
 
-/// 不可构造权限条件的仓储读取载体；缺凭证始终为空。
-#[derive(Clone, Default)]
+/// 必须持有完整授权凭证的仓储读取载体。
+#[derive(Clone)]
 pub struct SelectionReadScope {
-    access: Option<Arc<CompiledAccess>>,
-    authorization: Option<AuthorizationService>,
+    access: Arc<CompiledAccess>,
+    authorization: AuthorizationService,
 }
 impl std::fmt::Debug for SelectionReadScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -25,17 +25,17 @@ impl SelectionReadScope {
     /// # 错误
     /// 无；执行前后须复验。
     pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
-        Self { access: Some(access), authorization: Some(authorization) }
+        Self { access, authorization }
     }
     /// 返回绑定身份和业务映射的跨页版本。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 当前凭证版本；缺少凭证时为空字符串。
+    /// 当前凭证版本。
     /// # 错误
     /// 不执行 I/O。
     pub fn version(&self) -> String {
-        self.access.as_ref().map(|access| access.version()).unwrap_or_default()
+        self.access.version()
     }
 
     /// 返回完整授权阶段。
@@ -44,12 +44,9 @@ impl SelectionReadScope {
     /// # 返回
     /// identity 生成的完整阶段。
     /// # 错误
-    /// 无凭证时返回恒假阶段。
+    /// 不执行 I/O。
     pub fn stages(&self) -> Vec<Document> {
-        self.access
-            .as_ref()
-            .map(|a| a.stages().to_vec())
-            .unwrap_or_else(|| vec![doc! {"$match": {"$expr": false}}])
+        self.access.stages().to_vec()
     }
     /// 将业务筛选和完整授权前置于分页。
     /// # 参数
@@ -63,16 +60,6 @@ impl SelectionReadScope {
         stages.extend(self.stages());
         stages
     }
-    /// 只表示是否缺少凭证，不推断权限规则。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 无凭证为 true。
-    /// # 错误
-    /// 无。
-    pub fn is_empty(&self) -> bool {
-        self.access.is_none()
-    }
     /// 在原执行器复验 identity 凭证。
     /// # 参数
     /// executor 为生成凭证时的执行器。
@@ -81,25 +68,6 @@ impl SelectionReadScope {
     /// # 错误
     /// 身份、映射、版本或会话变化返回原始错误。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
-        match (&self.access, &self.authorization) {
-            (Some(access), Some(service)) => service.validate(access, executor).await,
-            _ => Err(erp_identity::Error::Forbidden("缺少选品授权凭证".into())),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use persistence_core::NoTransaction;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn missing_proof_never_becomes_an_unrestricted_selection_query() {
-        let access = SelectionReadScope::default();
-        assert!(access.is_empty());
-        assert!(access.version().is_empty());
-        assert_eq!(access.stages(), vec![doc! {"$match": {"$expr": false}}]);
-        assert!(matches!(access.validate(&mut NoTransaction).await, Err(erp_identity::Error::Forbidden(_))));
+        self.authorization.validate(&self.access, executor).await
     }
 }

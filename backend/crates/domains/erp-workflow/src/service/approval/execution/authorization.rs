@@ -11,12 +11,8 @@ use crate::error::{Error, Result};
 pub enum AuthorizationFailure {
     /// 账号停用。
     AccountInactive,
-    /// 任职失效。
-    EmploymentInvalid,
     /// 不再具备审批资格。
     NotEligible,
-    /// 超出 DataScopeFact。
-    OutOfDataScope,
     /// 不能读取被审对象。
     CannotReadSubject,
     /// 岗位分离冲突。
@@ -37,9 +33,7 @@ impl AuthorizationFailure {
     pub fn blocker_code(self) -> ApprovalBlockerCode {
         match self {
             Self::AccountInactive => ApprovalBlockerCode::ApproverAccountInactive,
-            Self::EmploymentInvalid => ApprovalBlockerCode::ApproverEmploymentInvalid,
             Self::NotEligible => ApprovalBlockerCode::ApproverNotEligible,
-            Self::OutOfDataScope => ApprovalBlockerCode::ApproverOutOfAuthorizedScope,
             Self::CannotReadSubject => ApprovalBlockerCode::ApproverCannotReadSubject,
             Self::SeparationOfDuties => ApprovalBlockerCode::SeparationOfDutiesViolation,
         }
@@ -170,9 +164,9 @@ mod tests {
     #[test]
     fn execution_auth_converges_assignee_recovery_blocker() {
         let eligibility =
-            converge_eligibility("u1", "张三", Some(AuthorizationFailure::OutOfDataScope)).unwrap();
-        assert_eq!(eligibility.blocked_code(), Some(ApprovalBlockerCode::ApproverOutOfAuthorizedScope));
-        assert!(ApprovalBlockerCode::ApproverOutOfAuthorizedScope.allows_assignee_recovery());
+            converge_eligibility("u1", "张三", Some(AuthorizationFailure::NotEligible)).unwrap();
+        assert_eq!(eligibility.blocked_code(), Some(ApprovalBlockerCode::ApproverNotEligible));
+        assert!(ApprovalBlockerCode::ApproverNotEligible.allows_assignee_recovery());
         assert!(requires_blocked_cancel(ApprovalBlockerCode::OpenTaskConflict));
     }
 

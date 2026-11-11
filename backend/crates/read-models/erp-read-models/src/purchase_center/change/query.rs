@@ -33,7 +33,7 @@ pub struct PurchaseChangeListView {
     /// 组织配置版本。
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`。
+    /// 预留空结果原因；完整授权查询当前返回 `None`。
     pub empty_reason: Option<&'static str>,
     /// 当前采购变更范围口径摘要。
     pub scope_summary: &'static str,
@@ -159,7 +159,6 @@ async fn read_change_list(
     executor: &mut dyn Executor,
 ) -> Result<PurchaseChangeListView> {
     let (mut context, scope) = access.resolve(actor, "list", executor).await?;
-    let no_scope = scope.is_empty();
     let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
     let page = params.page.unwrap_or(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
@@ -190,7 +189,7 @@ async fn read_change_list(
         scope_version: context.scope_version,
         policy_version: context.policy_version,
         as_of: context.as_of.as_utc().to_rfc3339(),
-        empty_reason: no_scope.then_some("no_scope"),
+        empty_reason: None,
         scope_summary: "采购变更单沿来源采购单当前负责人及单据业务组织范围",
     })
 }

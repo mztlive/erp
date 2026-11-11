@@ -39,6 +39,6 @@ pub fn scoped_catalog_service(db: Database, rbac: SharedRbacService) -> CatalogS
         db.clone(),
         MongoCatalogAudit::shared(db.clone()),
         MongoCatalogFileAssets::shared(db.clone()),
+        CatalogAccess::new(db, rbac),
     )
-    .with_data_scope(CatalogAccess::new(db, rbac))
 }

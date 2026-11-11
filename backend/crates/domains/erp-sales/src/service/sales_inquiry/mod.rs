@@ -5,7 +5,7 @@ use persistence_core::{Error as PersistenceError, Executor, PageResult};
 use crate::dto::sales_inquiry::{InquiryProcurementView, InquirySalesView};
 use crate::entity::sales_inquiry::{InquiryCommandReceipt, InquiryCreateData, SalesInquiry};
 use crate::repository::SalesInquiryExt;
-use crate::repository::sales_inquiry::{InquiryListFilter, SalesInquiryRepository};
+use crate::repository::sales_inquiry::{InquiryListFilter, InquiryReadScope, SalesInquiryRepository};
 use crate::{Error, Result};
 
 pub struct SalesInquiryService {
@@ -80,9 +80,10 @@ impl SalesInquiryService {
     pub async fn inquiry_list(
         &self,
         filter: &InquiryListFilter,
+        access_scope: &InquiryReadScope,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SalesInquiry>> {
-        SalesInquiryRepository::new(&self.db).inquiry_list(filter, executor).await
+        SalesInquiryRepository::new(&self.db).inquiry_list(filter, access_scope, executor).await
     }
 
     /// 取得不含采购工作草稿及内部资料的销售投影。

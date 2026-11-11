@@ -153,8 +153,7 @@ impl FundsAccess {
                 query,
                 keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable).await?,
             );
-            let scope = doc! { "$and": [authorization.sales.document(),
-            linked_condition_document(condition, "sales_owner_user_id")] };
+            let scope = linked_condition_document(condition, "sales_owner_user_id");
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
             if let Some(ids) = &condition.operator_user_ids {
                 pipeline.push(doc! { "$match": { "created_by": { "$in": ids } } });
@@ -166,7 +165,7 @@ impl FundsAccess {
                 scope,
                 "sales_owner_user_id",
                 "order_no",
-                &authorization.sales.stages(),
+                &authorization.sales_stages(),
             ));
             pipeline.push(doc! { "$match": { "_source_allowed": true } });
             let sort = sort_document(
@@ -339,10 +338,7 @@ fn payable_source_stages(
     authorization: &FundsAuthorization,
     condition: &FundsLinkedCondition,
 ) -> Vec<Document> {
-    let scope = authorization
-        .purchase_scope
-        .as_ref()
-        .map_or_else(|| doc! { "$expr": false }, |scope| scope.document());
+    let scope = authorization.purchase_scope.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     let mut stages = source_stages(
         <Database as PurchaseOrderExt>::PURCHASE_ORDERS,
         Bson::String("$source_document_id".into()),
@@ -377,7 +373,6 @@ fn payable_source_stages(
 #[cfg(test)]
 mod tests {
     use erp_core::common::time::Instant;
-    use erp_sales::repository::sales_order::scope::SalesReadScope;
 
     use super::super::super::FundsReadContext;
     use super::*;
@@ -386,7 +381,7 @@ mod tests {
     fn authorization() -> FundsAuthorization {
         FundsAuthorization {
             whole: Default::default(),
-            sales: SalesReadScope::default(),
+            sales: None,
             ledger_read: false,
             settlement: None,
             purchase_scope: None,

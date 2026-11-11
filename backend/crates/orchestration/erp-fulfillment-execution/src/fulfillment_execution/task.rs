@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
@@ -376,7 +377,6 @@ async fn purchase_order_owner(
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `identity_factory` - 当前任务资格核验时创建独立身份的工厂。
 /// * `rbac` - 与调用事务授权版本一致的 RBAC 服务
 /// * `owner_user_id` - 待验证的具体责任账号
 /// * `business_object_type` - 已登记权限合同的履约对象类型
@@ -397,24 +397,26 @@ pub async fn ensure_fulfillment_owner_eligible(
     let required_permissions = WorkItemType::FulfillmentOperation
         .fulfillment_execution_permissions(business_object_type)
         .ok_or_else(|| Error::Internal("履约对象未登记完整执行权限，请联系管理员修复后重试".to_string()))?;
-    let account = rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
-        Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
-    })?;
-    if !account.can_login {
-        return Err(Error::BusinessLogicError(
-            "履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string(),
-        ));
-    }
     let required: Vec<_> = required_permissions
         .iter()
         .map(|code| Permission::parse(code).expect("固定履约操作权限必须合法"))
         .collect();
-    let actor = AuditActor::new(owner_user_id.into(), account.login_account.clone(), account.kind);
+    let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
     let qualified = crate::authorization::features(db.clone(), rbac.clone())
         .permissions(&actor, &required, executor)
         .await?;
-    if qualified.is_some_and(|value| value.same_role(&required)) {
+    if qualified.as_ref().is_some_and(|value| value.same_role(&required)) {
         return Ok(());
+    }
+    if qualified.is_none() {
+        let account = rbac.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
+            Error::BusinessLogicError("履约责任人账号不存在，请先调整采购单或仓库责任配置".to_string())
+        })?;
+        if !account.can_login {
+            return Err(Error::BusinessLogicError(
+                "履约责任人账号不可用，请先调整采购单或仓库责任配置".to_string(),
+            ));
+        }
     }
     Err(Error::BusinessLogicError("履约责任人缺少完成当前操作所需权限，请先调整角色或责任配置".to_string()))
 }

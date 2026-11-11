@@ -32,7 +32,7 @@ pub struct SalesChangeListView {
     /// 组织配置版本。
     /// 授权解析时点。
     pub as_of: String,
-    /// 角色无有效范围时为 `no_scope`。
+    /// 预留空结果原因；完整授权查询当前返回 `None`。
     pub empty_reason: Option<&'static str>,
     /// 当前销售变更范围口径摘要。
     pub scope_summary: &'static str,

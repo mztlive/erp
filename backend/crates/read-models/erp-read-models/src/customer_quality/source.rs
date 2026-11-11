@@ -74,11 +74,12 @@ impl CurrentSources {
     pub async fn load_current_orders(
         db: &Database,
         filter: QualityOrderFilter,
+        scope: &SalesReadScope,
         customer: &CustomerResolvedScope,
         port: &CustomerAccess,
         executor: &mut dyn Executor,
     ) -> Result<Vec<QualityOrder>> {
-        let rows = super::repository::current_orders(db, &filter, customer, port, executor).await?;
+        let rows = super::repository::current_orders(db, &filter, scope, customer, port, executor).await?;
         quality_orders(rows)
     }
 
@@ -97,9 +98,10 @@ impl CurrentSources {
     pub async fn load_orders(
         db: &Database,
         filter: QualityOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<QualityOrder>> {
-        load_orders(db, filter, executor).await
+        load_orders(db, filter, scope, executor).await
     }
 
     /// 按明确客户集合批量读取现任归属，并附带订单金额与展示名。
@@ -145,9 +147,10 @@ impl HistorySnapshot {
     pub async fn load(
         db: &Database,
         order_filter: QualityOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<HistorySnapshot> {
-        let orders = load_orders(db, order_filter, executor).await?;
+        let orders = load_orders(db, order_filter, scope, executor).await?;
         let revision_gross = load_revision_gross(db, &orders, executor).await?;
         let customer_names = load_customer_names(
             db,
@@ -352,9 +355,10 @@ async fn owner_orgs(
 async fn load_orders(
     db: &Database,
     filter: QualityOrderFilter,
+    scope: &SalesReadScope,
     executor: &mut dyn Executor,
 ) -> Result<Vec<QualityOrder>> {
-    let rows = db.sales_orders().quality_orders(&filter, executor).await?;
+    let rows = db.sales_orders().quality_orders(&filter, scope, executor).await?;
     quality_orders(rows)
 }
 
@@ -411,14 +415,8 @@ async fn load_revision_gross(
 pub(super) fn quality_order_filter(
     bounds: &super::query::PeriodBounds,
     customer_ids: Option<Vec<String>>,
-    scope: &SalesReadScope,
 ) -> QualityOrderFilter {
-    QualityOrderFilter {
-        from: bounds.from,
-        until: bounds.until,
-        customer_ids,
-        authorized_scope: scope.clone(),
-    }
+    QualityOrderFilter { from: bounds.from, until: bounds.until, customer_ids }
 }
 
 /// 查询版本包含完整订单集合及责任版本，不返回订单身份集合。

@@ -180,9 +180,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRow>> {
         let (authorization, snapshot) = self.invoice_projection(query, actor, true, executor).await?;
-        if authorization.empty() {
-            return Ok(empty_page(&authorization, "no_scope", "发票无可见范围"));
-        }
         let version = invoice_scope_version(&authorization, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary = snapshot.summary(&version)?.with_balance_access(authorization.ledger_read);
@@ -224,9 +221,6 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<(FundsAuthorization, InvoiceSnapshot)> {
         let (_, authorization) = self.resolve_dual(actor, "invoice", "list", executor).await?;
-        if authorization.empty() {
-            return Ok((authorization, InvoiceSnapshot::default()));
-        }
         let target = match query.invoice_direction {
             Some(InvoiceDirection::Purchase) => FinanceSearchTarget::PurchaseInvoice,
             _ => FinanceSearchTarget::SalesInvoice,
@@ -264,9 +258,6 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (authorization, snapshot) =
                         this.invoice_projection(&query, &actor, false, executor).await?;
-                    if authorization.empty() {
-                        return Ok(authorization.context.scope_version.clone());
-                    }
                     Ok(invoice_scope_version(&authorization, &snapshot.versions))
                 })
             })

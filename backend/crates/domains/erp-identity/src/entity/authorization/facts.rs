@@ -32,6 +32,31 @@ impl<T> FactValue<T> {
     }
 }
 
+impl FactValue<Option<String>> {
+    /// 单值与多值表示必须二选一，避免不完整事实被另一种表示掩盖。
+    fn loaded_with(&self, values: &FactValue<BTreeSet<String>>) -> Result<bool> {
+        if self.loaded() && values.loaded() {
+            return Err(Error::ValidationError("单值和多值授权事实不能同时提供".into()));
+        }
+        Ok(self.loaded() || values.loaded())
+    }
+
+    /// 在完整单值或多值事实中判断任一成员是否匹配。
+    pub(crate) fn any(
+        &self,
+        values: &FactValue<BTreeSet<String>>,
+        matches: impl Fn(&str) -> bool,
+    ) -> Result<bool> {
+        if !self.loaded_with(values)? {
+            return Err(Error::ValidationError("缺少必要授权事实".into()));
+        }
+        match self {
+            Self::Known(value) => Ok(value.as_deref().is_some_and(matches)),
+            Self::Missing => Ok(values.get()?.iter().any(|value| matches(value))),
+        }
+    }
+}
+
 /// 可登记的事实维度；取值由对象端口或 Mapping 提供。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FactKind {
@@ -66,9 +91,9 @@ impl ObjectFacts {
     pub(crate) fn require_facts(&self, required: &BTreeSet<FactKind>) -> Result<()> {
         for kind in required {
             let loaded = match kind {
-                FactKind::Owner => self.owner_id.loaded(),
+                FactKind::Owner => self.owner_id.loaded_with(&self.owner_ids)?,
                 FactKind::Collaborators => self.collaborators.loaded(),
-                FactKind::Organization => self.org_unit_id.loaded(),
+                FactKind::Organization => self.org_unit_id.loaded_with(&self.org_unit_ids)?,
                 FactKind::SettlementParty => self.settlement_party_id.loaded(),
                 FactKind::Warehouse => self.warehouse_id.loaded(),
                 FactKind::HistoryParticipants => self.history_participants.loaded(),
@@ -129,5 +154,49 @@ mod tests {
         assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).is_err());
         object.warehouse_id = FactValue::Known(None);
         assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
+    }
+
+    #[test]
+    fn multiple_owners_and_organizations_match_any_complete_member() {
+        let object = ObjectFacts {
+            owner_ids: FactValue::Known(["other".into(), "u".into()].into()),
+            org_unit_ids: FactValue::Known(["org-a".into(), "org-b".into()].into()),
+            ..Default::default()
+        };
+        let rule = AccessRule::all(vec![
+            AccessRule::Fact(AccessFact::Owned),
+            AccessRule::Fact(AccessFact::OrganizationIn(["org-b".into()].into())),
+        ])
+        .requiring(&[FactKind::Owner, FactKind::Organization].into());
+        assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
+        let denied =
+            ObjectFacts { org_unit_ids: FactValue::Known(["org-c".into()].into()), ..object.clone() };
+        assert!(!rule.allows_object(&context(), &denied, &BTreeSet::new()).unwrap());
+        let non_owner = ObjectFacts { owner_ids: FactValue::Known(["other".into()].into()), ..object };
+        assert!(!rule.allows_object(&context(), &non_owner, &BTreeSet::new()).unwrap());
+    }
+
+    #[test]
+    fn empty_multi_value_facts_are_known_but_ambiguous_representations_fail() {
+        let required = [FactKind::Owner, FactKind::Organization].into();
+        let mut object = ObjectFacts {
+            owner_ids: FactValue::Known(BTreeSet::new()),
+            org_unit_ids: FactValue::Known(BTreeSet::new()),
+            ..Default::default()
+        };
+        assert!(object.require_facts(&required).is_ok());
+        assert!(
+            !AccessRule::Fact(AccessFact::Owned)
+                .allows_object(&context(), &object, &BTreeSet::new())
+                .unwrap()
+        );
+        object.owner_id = FactValue::Known(None);
+        assert!(matches!(object.require_facts(&required), Err(Error::ValidationError(_))));
+        object.owner_id = FactValue::Missing;
+        object.org_unit_id = FactValue::Known(None);
+        assert!(matches!(object.require_facts(&required), Err(Error::ValidationError(_))));
+        object.org_unit_id = FactValue::Missing;
+        object.org_unit_ids = FactValue::Missing;
+        assert!(matches!(object.require_facts(&required), Err(Error::ValidationError(_))));
     }
 }

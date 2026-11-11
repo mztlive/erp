@@ -63,7 +63,7 @@ impl SalesOrderReadService {
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         validator::Validate::validate(params)?;
         let search = self.keyword_search(params.q.as_deref()).await?;
-        let super::scope::SalesSnapshot { page, context, no_scope } =
+        let super::scope::SalesSnapshot { page, context } =
             self.list_snapshot(params, search.clone(), actor).await?;
         if expected.is_some_and(|value| value != context.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
@@ -84,7 +84,7 @@ impl SalesOrderReadService {
         Ok(super::SalesListView {
             scope_version: context.scope_version.clone(),
             as_of: context.as_of.as_utc().to_rfc3339(),
-            empty_reason: no_scope.then_some("no_scope"),
+            empty_reason: None,
             scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
             ownership_basis: "document_sales_owner",
             data: PageView { items, total: page.total, page: page.page, page_size: page.page_size },

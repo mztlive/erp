@@ -67,11 +67,10 @@ pub trait SelectionCustomerPort: Send + Sync {
     async fn customer_fact(&self, customer_id: &str) -> Result<SelectionCustomerFact>;
 }
 
-/// 客户对象授权端口；由客户拥有领域执行完整客户检查。
+/// 客户对象授权端口；由客户拥有领域执行完整客户检查并保留拒绝类别。
 #[async_trait]
 pub trait SelectionCustomerAccessPort: Send + Sync {
     /// 证明选品实际客户的详情资格。
-    ///
     /// # 参数
     /// actor 为真实账号，customer_id 为册或创建命令的客户，executor 为原执行器。
     /// # 返回

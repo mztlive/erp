@@ -140,7 +140,6 @@ pub(super) async fn load_bound_work_item(
         .ok_or_else(|| Error::NotFound("正式任务不存在".to_string()))?;
     ensure_work_item_version(&item, target.task_version, &target.subject_version)?;
     ensure_work_item_responsibility(&item, actor_id)?;
-    ensure_actor_eligible(db, &item, actor_id, executor).await?;
     ensure_work_item_association(db, &item, action, executor).await?;
     Ok(item)
 }
@@ -160,19 +159,6 @@ fn ensure_work_item_responsibility(item: &WorkItem, actor_id: &str) -> Result<()
     if !item.is_owned_by(actor_id) {
         return Err(Error::Forbidden("当前账号不是任务的当前责任人".to_string()));
     }
-    if false {
-        return Err(Error::BusinessLogicError("W29 只接受独立异常任务".to_string()));
-    }
-    Ok(())
-}
-
-async fn ensure_actor_eligible(
-    db: &Database,
-    item: &WorkItem,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let _ = (db, item, actor_id, executor);
     Ok(())
 }
 

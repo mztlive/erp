@@ -1,5 +1,7 @@
 //! 付款申请自身动作沿每张真实采购来源授权，部分可见不得交付整单。
 
+use std::collections::{HashMap, HashSet};
+
 use application_core::AuditActor;
 use erp_finance::entity::payable::{PayableSourceType, PurchasePaymentRequest};
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestSnapshotExt};
@@ -61,17 +63,14 @@ impl PurchasePaymentRequestReadService {
             return Err(Error::ValidationError("付款申请须包含 1 至 100 张采购单".into()));
         }
         let scope = self.source_scope(actor, action, executor).await?;
-        let mut orders = Vec::with_capacity(ids.len());
-        for id in ids {
-            let order = self
-                .db
-                .purchase_orders()
-                .find_authorized(id, &scope, executor)
-                .await?
-                .ok_or_else(|| Error::NotFound("付款申请来源不存在或无权处理".into()))?;
-            orders.push(order);
-        }
-        Ok(orders)
+        let orders = self.db.purchase_orders().find_authorized_many(ids, &scope, executor).await?;
+        let orders =
+            orders.into_iter().map(|order| (order.base.id.clone(), order)).collect::<HashMap<_, _>>();
+        ids.iter()
+            .map(|id| {
+                orders.get(id).cloned().ok_or_else(|| Error::NotFound("付款申请来源不存在或无权处理".into()))
+            })
+            .collect()
     }
 
     pub(super) async fn source_scope(
@@ -80,11 +79,7 @@ impl PurchasePaymentRequestReadService {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<PurchaseReadScope> {
-        let (_, authorization) = self
-            .funds_access()
-            .resolve_with_purchase(actor, "purchase_payment_request", action, executor)
-            .await?;
-        authorization.purchase_scope.ok_or_else(|| Error::Forbidden("付款申请采购来源范围不可用".into()))
+        self.funds_access().purchase_source(actor, "purchase_payment_request", action, executor).await
     }
 
     pub(super) async fn readable(
@@ -97,12 +92,9 @@ impl PurchasePaymentRequestReadService {
         if ids.is_empty() {
             return Ok(false);
         }
-        for id in ids {
-            if self.db.purchase_orders().find_authorized(&id, scope, executor).await?.is_none() {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        let orders = self.db.purchase_orders().find_authorized_many(&ids, scope, executor).await?;
+        let allowed = orders.iter().map(|order| order.base.id.as_str()).collect::<HashSet<_>>();
+        Ok(ids.iter().all(|id| allowed.contains(id.as_str())))
     }
 
     async fn request_source_ids(

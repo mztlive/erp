@@ -16,7 +16,6 @@ use erp_integration::dto::{
     IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, PageView, RegisterInboxMessageRequest,
     WriteBackInboxResultRequest,
 };
-use erp_integration::service::IntegrationOpsService;
 use erp_read_models::integration_center::IntegrationErrorDetailView;
 
 use crate::http::errors::Result;
@@ -36,7 +35,10 @@ pub async fn inbox_message_list(
     State(state): State<HttpState>,
     Query(params): Query<InboxMessageListParams>,
 ) -> Result<PageView<InboxMessageListView>> {
-    let page = IntegrationOpsService::new(state.application().db()).inbox_message_list(&params).await?;
+    let page =
+        crate::wiring::scoped_integration_ops_service(state.application().db(), state.application().rbac())
+            .inbox_message_list(&params)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -53,7 +55,10 @@ pub async fn inbox_message_detail(
     State(state): State<HttpState>,
     Path(id): Path<String>,
 ) -> Result<InboxMessageView> {
-    let view = IntegrationOpsService::new(state.application().db()).inbox_message_detail(&id).await?;
+    let view =
+        crate::wiring::scoped_integration_ops_service(state.application().db(), state.application().rbac())
+            .inbox_message_detail(&id)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

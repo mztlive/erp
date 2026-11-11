@@ -149,7 +149,7 @@ impl ExpenseSourceReadService {
             page,
             page_size: 20,
             scope_version: version,
-            empty_reason: scope.is_empty().then_some("no_scope"),
+            empty_reason: None,
         })
     }
 

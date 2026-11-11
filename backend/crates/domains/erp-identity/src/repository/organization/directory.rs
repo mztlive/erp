@@ -43,6 +43,32 @@ impl OrganizationRepository<'_> {
         .await
     }
 
+    /// 读取账号当前主属关系及最近一条未来生效关系。
+    /// # 参数
+    /// user_id 为明确账号，at 为解释时点，executor 为调用方原执行器。
+    /// # 返回
+    /// 至多两条当前关系及一条最近未来关系，用于完整性和到期边界判断。
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    pub async fn primary_membership_context(
+        &self,
+        user_id: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> RepositoryResult<Vec<OrgMembership>> {
+        let mut memberships = self.primary_memberships(user_id, at, executor).await?;
+        let future = mongo_ops::find_many(
+            &self.db.collection::<OrgMembership>(ORG_MEMBERSHIPS),
+            doc! {"user_id": user_id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            "valid_from": {"$gt": at.unix_secs()}},
+            FindOptions::builder().sort(doc! {"valid_from": 1}).limit(1).build(),
+            executor,
+        )
+        .await?;
+        memberships.extend(future);
+        Ok(memberships)
+    }
+
     /// 读取有界组织树，供路径启用检查使用。
     /// # 参数
     /// executor 为调用方执行器。

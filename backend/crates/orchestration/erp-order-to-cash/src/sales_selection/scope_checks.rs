@@ -92,7 +92,7 @@ pub(crate) async fn booklet_list_snapshot(
     )
     .await?;
     scope.validate(executor).await?;
-    Ok(SelectionBookletListView { page, scope_version: scope.version(), no_scope: scope.is_empty() })
+    Ok(SelectionBookletListView { page, scope_version: scope.version(), no_scope: false })
 }
 
 /// 方案列表授权快照；方案沿所属册责任解释。
@@ -135,7 +135,7 @@ pub(crate) async fn proposal_list_snapshot(
     )
     .await?;
     scope.validate(executor).await?;
-    Ok(SelectionProposalListView { page, scope_version: scope.version(), no_scope: scope.is_empty() })
+    Ok(SelectionProposalListView { page, scope_version: scope.version(), no_scope: false })
 }
 
 /// 按 ID 批量读取负责人显示名；缺失账号省略。

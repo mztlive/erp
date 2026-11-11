@@ -89,14 +89,10 @@ impl CostReadModel {
                     access.context.validate(executor).await?;
                     access.whole.validate(executor).await?;
                     access.require_filter(&filter)?;
-                    if !access.empty() {
-                        let facts = this.candidate_versions(&filter, id.as_deref(), executor).await?;
-                        this.authorized_orders(&facts, &mut access, executor).await?;
-                        this.whole_orders(&facts, &access.whole, executor)
-                            .await?
-                            .hash(&mut access.fingerprint);
-                        facts.hash(&mut access.fingerprint);
-                    }
+                    let facts = this.candidate_versions(&filter, id.as_deref(), executor).await?;
+                    this.authorized_orders(&facts, &mut access, executor).await?;
+                    this.whole_orders(&facts, &access.whole, executor).await?.hash(&mut access.fingerprint);
+                    facts.hash(&mut access.fingerprint);
                     access.context.validate(executor).await?;
                     access.whole.validate(executor).await?;
                     Ok(format!("{:x}", access.fingerprint.finish()))

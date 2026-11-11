@@ -61,6 +61,6 @@ impl IntegrationResolutionProcess {
         Self { db, evidence, data_scope, identity_factory, work_items_factory }
     }
     fn domain(&self) -> IntegrationOpsService {
-        IntegrationOpsService::with_scope(self.db.clone(), self.data_scope.clone())
+        IntegrationOpsService::new(self.db.clone(), self.data_scope.clone())
     }
 }

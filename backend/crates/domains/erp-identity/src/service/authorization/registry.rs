@@ -25,6 +25,11 @@ pub enum AccessPolicy {
         permission: Permission,
         read: ReadAccess,
     },
+    /// 子树使用独立入口的资格及范围角色；不得替代根入口的当前动作范围。
+    Independent {
+        permission: Permission,
+        policy: Box<Self>,
+    },
     Assigned,
     Participant,
     All(Vec<Self>),
@@ -62,7 +67,7 @@ impl AccessPolicy {
             Self::Related { mode, policy, .. } => {
                 *mode == RelationMatch::Any || policy.has_partial_relation()
             },
-            Self::Account { policy } => policy.has_partial_relation(),
+            Self::Account { policy } | Self::Independent { policy, .. } => policy.has_partial_relation(),
             Self::All(items) | Self::Any(items) => items.iter().any(Self::has_partial_relation),
             _ => false,
         }
@@ -72,13 +77,52 @@ impl AccessPolicy {
     fn has_relation(&self, key: &RelationKey) -> bool {
         match self {
             Self::Related { relation, .. } => relation == key,
-            Self::Account { policy } => policy.has_relation(key),
+            Self::Account { policy } | Self::Independent { policy, .. } => policy.has_relation(key),
             Self::All(items) | Self::Any(items) => items.iter().any(|item| item.has_relation(key)),
             _ => false,
         }
     }
     /// 同资源必须证明当前动作的范围，不能登记读取范围放行修改。
     fn validate_entry(&self, entry: &Permission) -> Result<()> {
+        if self.has_independent() && self.declares_scope(entry) && !self.proves_scope(entry) {
+            return Err(Error::ValidationError("独立入口不能替代当前操作的范围".into()));
+        }
+        self.validate_entry_scopes(entry, self.proves_scope(entry))
+    }
+
+    /// 找出根对象明确声明的当前动作范围，不将来源对象范围当作根范围。
+    fn declares_scope(&self, entry: &Permission) -> bool {
+        match self {
+            Self::Scope { permission, .. } => permission == entry,
+            Self::All(items) | Self::Any(items) => items.iter().any(|policy| policy.declares_scope(entry)),
+            Self::Account { policy } => policy.declares_scope(entry),
+            _ => false,
+        }
+    }
+
+    /// 独立来源资格也必须受已经声明的根范围约束。
+    fn has_independent(&self) -> bool {
+        match self {
+            Self::Independent { .. } => true,
+            Self::All(items) | Self::Any(items) => items.iter().any(Self::has_independent),
+            Self::Related { policy, .. } | Self::Account { policy } => policy.has_independent(),
+            _ => false,
+        }
+    }
+
+    /// 每个放行分支都必须保留当前入口的直接范围；独立入口只增加限制。
+    fn proves_scope(&self, entry: &Permission) -> bool {
+        match self {
+            Self::Scope { permission, .. } => permission == entry,
+            Self::All(items) => items.iter().any(|policy| policy.proves_scope(entry)),
+            Self::Any(items) => !items.is_empty() && items.iter().all(|policy| policy.proves_scope(entry)),
+            Self::Account { policy } => policy.proves_scope(entry),
+            _ => false,
+        }
+    }
+
+    /// 独立的同资源读取不能成为修改动作唯一的数据范围。
+    fn validate_entry_scopes(&self, entry: &Permission, current_scope: bool) -> Result<()> {
         match self {
             Self::Scope { permission, .. }
                 if permission.resource() == entry.resource() && permission != entry =>
@@ -87,12 +131,19 @@ impl AccessPolicy {
             },
             Self::All(items) | Self::Any(items) => {
                 for item in items {
-                    item.validate_entry(entry)?;
+                    item.validate_entry_scopes(entry, current_scope)?;
                 }
                 Ok(())
             },
-            Self::Related { policy, .. } => policy.validate_entry(entry),
-            Self::Account { policy } => policy.validate_entry(entry),
+            Self::Independent { permission, policy } => {
+                if permission.resource() == entry.resource() && !current_scope {
+                    return Err(Error::ValidationError("独立入口不能替代当前操作的范围".into()));
+                }
+                policy.validate_entry(permission)
+            },
+            Self::Related { policy, .. } | Self::Account { policy } => {
+                policy.validate_entry_scopes(entry, current_scope)
+            },
             _ => Ok(()),
         }
     }
@@ -120,6 +171,16 @@ impl AccessPolicy {
             Self::Scope { permission, read } => {
                 let consumer = registration(permission.resource(), permission.action())?;
                 read.validate(permission, consumer.allows_history())
+            },
+            Self::Independent { permission, policy } => {
+                if permission.resource().contains('*') || permission.action().contains('*') {
+                    return Err(Error::ValidationError("独立入口必须指定具体权限".into()));
+                }
+                if !policy.proves_scope(permission) {
+                    return Err(Error::ValidationError("独立入口必须保留自身操作的范围".into()));
+                }
+                policy.validate(depth + 1)?;
+                policy.validate_entry(permission)
             },
             Self::All(items) | Self::Any(items) => {
                 if items.is_empty() || items.len() > 32 {
@@ -541,6 +602,85 @@ mod tests {
         entry.permission = Permission::parse("sales_order:update").unwrap();
         rejects(AuthorizationRegistry::new(vec![entry]), "同资源授权必须使用当前操作的范围");
         assert!(data().policy.validate_entry(&Permission::parse("invoice:create").unwrap()).is_ok());
+    }
+
+    #[test]
+    fn independent_read_scope_adds_to_but_cannot_replace_current_write_scope() {
+        let update = Permission::parse("sales_order:update").unwrap();
+        let independent = AccessPolicy::Independent {
+            permission: Permission::parse("sales_order:detail").unwrap(),
+            policy: Box::new(data().policy),
+        };
+        let register = |policy| {
+            AuthorizationRegistry::new(vec![AccessRegistration {
+                permission: update.clone(),
+                required_permissions: vec![],
+                access: AccessMode::Object { data: DataAccess { policy, ..data() }, facts: Arc::new(Facts) },
+            }])
+        };
+        rejects(register(independent.clone()), "独立入口不能替代当前操作的范围");
+        let current = AccessPolicy::Scope { permission: update.clone(), read: ReadAccess::default() };
+        assert!(register(AccessPolicy::All(vec![current.clone(), independent.clone()])).is_ok());
+        rejects(register(AccessPolicy::Any(vec![current, independent])), "独立入口不能替代当前操作的范围");
+    }
+
+    #[test]
+    fn independent_sources_preserve_complete_relations_and_their_own_action() {
+        let permission = Permission::parse("customer:detail").unwrap();
+        let independent = AccessPolicy::Independent {
+            permission: permission.clone(),
+            policy: Box::new(AccessPolicy::Scope { permission, read: ReadAccess::default() }),
+        };
+        let relation = |mode, policy| AccessPolicy::Related {
+            relation: RelationKey::parse("customer").unwrap(),
+            resource: "customer".into(),
+            mode,
+            required_facts: [FactKind::Owner, FactKind::Organization].into(),
+            policy: Box::new(policy),
+        };
+        let register = |policy| {
+            AuthorizationRegistry::new(vec![entry(AccessMode::Object {
+                data: DataAccess { policy, ..data() },
+                facts: Arc::new(Facts),
+            })])
+        };
+        assert!(register(relation(RelationMatch::AllNonEmpty, independent.clone())).is_ok());
+        rejects(register(relation(RelationMatch::Any, independent)), "任一来源政策不能用于完整对象事实检查");
+        let invalid = AccessPolicy::Independent {
+            permission: Permission::parse("customer:update").unwrap(),
+            policy: Box::new(AccessPolicy::Scope {
+                permission: Permission::parse("customer:detail").unwrap(),
+                read: ReadAccess::default(),
+            }),
+        };
+        rejects(register(invalid), "独立入口必须保留自身操作的范围");
+    }
+
+    #[test]
+    fn independent_cross_resource_branch_cannot_bypass_declared_root_scope() {
+        let root = data().policy;
+        let source = AccessPolicy::Related {
+            relation: RelationKey::parse("customer").unwrap(),
+            resource: "customer".into(),
+            mode: RelationMatch::AllNonEmpty,
+            required_facts: [FactKind::Owner, FactKind::Organization].into(),
+            policy: Box::new(AccessPolicy::Independent {
+                permission: Permission::parse("customer:detail").unwrap(),
+                policy: Box::new(AccessPolicy::Scope {
+                    permission: Permission::parse("customer:detail").unwrap(),
+                    read: ReadAccess::default(),
+                }),
+            }),
+        };
+        let register = |policy| {
+            AuthorizationRegistry::new(vec![entry(AccessMode::Object {
+                data: DataAccess { policy, ..data() },
+                facts: Arc::new(Facts),
+            })])
+        };
+        assert!(register(source.clone()).is_ok());
+        assert!(register(AccessPolicy::All(vec![root.clone(), source.clone()])).is_ok());
+        rejects(register(AccessPolicy::Any(vec![root, source])), "独立入口不能替代当前操作的范围");
     }
 
     #[test]

@@ -33,7 +33,7 @@ impl Application {
     /// 无。
     pub fn product_import_process(&self) -> erp_data_import::ProductImportProcess {
         let services = ProductImportServices {
-            catalog: catalog_service(self.db()),
+            catalog: self.catalog_service(),
             scoped_catalog: scoped_catalog_service(self.db(), self.rbac()),
             catalog_access: catalog_access(self.db(), self.rbac()),
             offerings: Arc::new(scoped_offering_service(self.db(), self.rbac())),
@@ -130,6 +130,6 @@ impl Application {
 
 use crate::wiring::workflow::work_item_service;
 use crate::wiring::{
-    catalog_access, catalog_service, contract_access, customer_access, offering_access,
-    scoped_catalog_service, scoped_offering_service,
+    catalog_access, contract_access, customer_access, offering_access, scoped_catalog_service,
+    scoped_offering_service,
 };

@@ -4,16 +4,15 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_catalog::portal::CatalogPortalExt;
+use erp_identity::SharedRbacService;
 use erp_read_models::supplier_portal::PortalReadAuthorizationPort;
 use erp_read_models::{Error as ReadError, Result as ReadResult};
 use erp_supplier::Error as SupplierError;
-use erp_supplier::portal::CooperationRepository;
 use erp_supply::Error as SupplyError;
-use erp_supply::portal::PortalSupplyExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::request_access::{RequestAction, RequestTarget, require_request};
 use crate::wiring::CatalogServices;
 use crate::{Error, Result};
 
@@ -21,6 +20,7 @@ use crate::{Error, Result};
 pub struct PortalReadAuthorization {
     services: Arc<CatalogServices>,
     db: Database,
+    rbac: SharedRbacService,
 }
 impl PortalReadAuthorization {
     /// 装配内部门户申请读权限。
@@ -30,8 +30,8 @@ impl PortalReadAuthorization {
     /// 返回未缓存对象授权的适配器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, services: Arc<CatalogServices>) -> Self {
-        Self { db, services }
+    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<CatalogServices>) -> Self {
+        Self { db, rbac, services }
     }
 }
 #[async_trait]
@@ -54,7 +54,7 @@ impl PortalReadAuthorizationPort for PortalReadAuthorization {
         request_id: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        request_readable(&self.db, &self.services, actor, request_id, executor).await.map_err(map_read_error)
+        request_readable(&self.db, &self.rbac, actor, request_id, executor).await.map_err(map_read_error)
     }
     async fn supplier_readable(
         &self,
@@ -99,31 +99,15 @@ fn map_read_error(error: Error) -> ReadError {
 /// 授权漂移、配置或基础设施错误保持失败关闭。
 pub async fn request_readable(
     db: &Database,
-    services: &CatalogServices,
+    rbac: &SharedRbacService,
     actor: &AuditActor,
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let target = if let Some(app) = db.portal_applications().find_by_id(id, executor).await? {
-        let offering = app.snapshot.target().map(|(id, _, _)| id.to_string());
-        Some((app.supplier_id, offering))
-    } else if let Some(app) = db.new_product_drafts().find_by_id(id, executor).await? {
-        Some((app.supplier_id, None))
-    } else {
-        CooperationRepository::new(db).find_any(id, executor).await?.map(|app| (app.supplier_id, None))
-    };
-    let Some((supplier_id, offering_id)) = target else {
+    let Some(target) = RequestTarget::load(db, id, executor).await? else {
         return Ok(false);
     };
-    let result: Result<()> = async {
-        services.suppliers.require_with(actor, "detail", &supplier_id, executor).await?;
-        if let Some(id) = offering_id {
-            services.offering_access.require_offering(actor, "list", &id, executor).await?;
-        }
-        Ok(())
-    }
-    .await;
-    match result {
+    match require_request(db, rbac, actor, target, RequestAction::Read, executor).await {
         Ok(()) => Ok(true),
         Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(false),
         Err(error) => Err(error),

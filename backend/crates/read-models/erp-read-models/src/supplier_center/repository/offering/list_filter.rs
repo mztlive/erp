@@ -52,7 +52,7 @@ pub struct SupplierOfferingListQuery {
     /// 是否升序。
     pub sort_ascending: bool,
     /// 已证明的维护人授权条件。
-    pub scope: Option<erp_supply::OfferingReadScope>,
+    pub scope: Option<erp_supply::CompiledScope>,
     /// 维护人筛选，只收窄授权结果。
     pub maintainer_user_ids: Option<Vec<String>>,
     /// 采购负责人命中的供给主键；与可供状态求交。

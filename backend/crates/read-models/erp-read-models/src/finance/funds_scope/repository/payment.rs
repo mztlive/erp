@@ -222,10 +222,7 @@ fn allocation_lookup(authorization: &FundsAuthorization, condition: &FundsLinked
 
 /// 采购与结算分别采用各自已经解析的来源范围及负责人字段。
 fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCondition) -> Vec<Document> {
-    let purchase = authorization
-        .purchase_scope
-        .as_ref()
-        .map_or_else(|| doc! { "$expr": false }, |scope| scope.document());
+    let purchase = authorization.purchase_scope.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     let settlement = authorization.settlement.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     let mut stages = source_stages(
         Database::PURCHASE_ORDERS,

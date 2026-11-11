@@ -92,4 +92,23 @@ impl OrganizationDirectoryService {
             OrganizationRepository::new(&self.db).primary_memberships(user, at, executor).await?;
         Ok(OrgMembership::primary_org(&memberships, user, at)?.map(str::to_owned))
     }
+
+    /// 查询账号当前唯一主属组织及下一次关系变化边界。
+    /// # 参数
+    /// user 为明确账号，at 为授权解释时点，executor 为原执行器。
+    /// # 返回
+    /// 当前组织及最近未来生效或失效时点；无关系时组织为 None。
+    /// # 错误
+    /// 查询失败或当前存在重叠主属关系时返回错误。
+    pub async fn own_org_with_validity(
+        &self,
+        user: &str,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<(Option<String>, Option<Instant>)> {
+        let memberships =
+            OrganizationRepository::new(&self.db).primary_membership_context(user, at, executor).await?;
+        let organization = OrgMembership::primary_org(&memberships, user, at)?.map(str::to_owned);
+        Ok((organization, OrgMembership::next_boundary(&memberships, user, at)))
+    }
 }

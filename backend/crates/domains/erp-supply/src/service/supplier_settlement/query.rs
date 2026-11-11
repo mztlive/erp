@@ -3,7 +3,7 @@ use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::{SupplierSettlementService, dto, zero_amount};
-use crate::authorization::SettlementResolvedScope;
+use crate::authorization::CompiledScope;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::dto::supplier_settlement::{
     StatementListQuery, SupplierSettlementItemView, SupplierSettlementStatementListParams,
@@ -120,7 +120,7 @@ impl SupplierSettlementService {
     async fn load_statement_page(
         &self,
         filter: &StatementFilter,
-        context: Option<&SettlementResolvedScope>,
+        context: Option<&CompiledScope>,
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatementListView> {
         let page = self
@@ -186,7 +186,7 @@ fn list_view(
     total: i64,
     filter: &StatementFilter,
     stats: Option<crate::repository::supplier_settlement::SupplierSettlementStatementStatsRow>,
-    context: Option<&SettlementResolvedScope>,
+    context: Option<&CompiledScope>,
 ) -> SupplierSettlementStatementListView {
     let stats = stats.map_or_else(
         || dto::SettlementStatementListStatsView {
@@ -210,9 +210,9 @@ fn list_view(
         stats,
         processing_state: if total == 0 { "EMPTY" } else { "READY" }.to_string(),
         scope_version: context.map(|ctx| ctx.scope_version.clone()).unwrap_or_default(),
-        policy_version: context.map(|ctx| ctx.policy_version).unwrap_or_default(),
-        organization_version: context.map(|ctx| ctx.organization_version).unwrap_or_default(),
-        as_of: context.map(|ctx| ctx.as_of.as_utc().to_rfc3339()).unwrap_or_default(),
+        policy_version: context.map(|ctx| ctx.policy_version()).unwrap_or_default(),
+        organization_version: context.map(|ctx| ctx.organization_version()).unwrap_or_default(),
+        as_of: context.map(|ctx| ctx.as_of().as_utc().to_rfc3339()).unwrap_or_default(),
         empty_reason: None,
         scope_summary: "结算单按岗位权限共享；负责人筛选为额外收窄",
         ownership_basis: "settlement_prepared_by",

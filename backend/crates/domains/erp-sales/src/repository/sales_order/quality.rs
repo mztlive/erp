@@ -3,6 +3,7 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, aggregate};
 
+use super::scope::SalesReadScope;
 use crate::Result;
 use crate::entity::sales_order::{CommercialStatus, SalesOrder};
 
@@ -14,29 +15,20 @@ pub struct QualityOrderFilter {
     pub from: i64,
     pub until: i64,
     pub customer_ids: Option<Vec<String>>,
-    pub authorized_scope: super::scope::SalesReadScope,
 }
 
 impl QualityOrderFilter {
-    /// 返回期间、客户筛选与完整销售授权的查询前缀。
+    /// 将期间与业务筛选前置于完整销售授权。
     /// # 参数
-    /// 无。
+    /// scope 为本阶段不可缺失的完整授权凭证。
     /// # 返回
-    /// 不含排序及数量上限的阶段，供跨域读取继续求交来源授权。
+    /// 未分页的业务筛选与授权阶段。
     /// # 错误
-    /// 无；执行方须在原执行器上复验授权凭证。
-    pub fn stages(&self) -> Vec<Document> {
-        self.authorized_scope.lookup_after(self.business_filter())
+    /// 不执行 I/O；仓储须在执行前后复验。
+    pub fn stages(&self, scope: &SalesReadScope) -> Vec<Document> {
+        scope.lookup_after(self.business_filter())
     }
 
-    /// 不接受客户端范围标识替代授权集合；空集合必定无结果。
-    fn document(&self) -> Document {
-        let mut filter = self.business_filter();
-        let mut conditions = filter.get_array("$and").cloned().unwrap_or_default();
-        conditions.insert(0, self.authorized_scope.document().into());
-        filter.insert("$and", conditions);
-        filter
-    }
     /// 期间与业务筛选先于授权关联，不能把用户条件作为授权依据。
     fn business_filter(&self) -> Document {
         let mut filter = doc! { "deleted_at": 0_i64,
@@ -61,7 +53,8 @@ pub trait SalesOrderRepositoryQualityExt {
     /// 有界读取期间正式销售单；调用方必须对超限结果整体拒绝。
     ///
     /// # 参数
-    /// * `filter` - 生效区间、客户集合与授权范围。
+    /// * `filter` - 生效区间与客户集合。
+    /// * `scope` - 当前读取阶段的完整销售授权。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -72,6 +65,7 @@ pub trait SalesOrderRepositoryQualityExt {
     async fn quality_orders(
         &self,
         filter: &QualityOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesOrder>>;
 }
@@ -80,22 +74,23 @@ impl SalesOrderRepositoryQualityExt for Repository<'_, SalesOrder> {
     async fn quality_orders(
         &self,
         filter: &QualityOrderFilter,
+        scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesOrder>> {
-        filter.authorized_scope.validate(executor).await?;
+        scope.validate(executor).await?;
         let options = FindOptions::builder()
             .limit((QUALITY_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
             .build();
         let rows = aggregate::find(
             &self.collection().clone_with_type(),
-            filter.document(),
+            filter.business_filter(),
             options,
-            filter.stages(),
+            scope.lookup_after(filter.business_filter()),
             executor,
         )
         .await?;
-        filter.authorized_scope.validate(executor).await?;
+        scope.validate(executor).await?;
         Ok(rows)
     }
 }
@@ -105,32 +100,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_authorization_or_customer_set_matches_nothing() {
-        let filter = QualityOrderFilter {
-            from: 1,
-            until: 2,
-            customer_ids: Some(Vec::new()),
-            authorized_scope: super::super::scope::SalesReadScope::default(),
-        }
-        .document();
+    fn empty_customer_set_matches_nothing() {
+        let filter =
+            QualityOrderFilter { from: 1, until: 2, customer_ids: Some(Vec::new()) }.business_filter();
         let and = filter.get_array("$and").unwrap();
-        assert_eq!(and.len(), 2);
+        assert_eq!(and.len(), 1);
         assert_eq!(and[0].as_document().unwrap(), &doc! { "$expr": false });
-        assert_eq!(and[1].as_document().unwrap(), &doc! { "$expr": false });
     }
 
     #[test]
     fn explicit_customers_intersect_authorization() {
-        let filter = QualityOrderFilter {
-            from: 1,
-            until: 2,
-            customer_ids: Some(vec!["c-1".into()]),
-            authorized_scope: super::super::scope::SalesReadScope::default(),
-        }
-        .document();
+        let filter = QualityOrderFilter { from: 1, until: 2, customer_ids: Some(vec!["c-1".into()]) }
+            .business_filter();
         let and = filter.get_array("$and").unwrap();
-        assert_eq!(and.len(), 2);
-        assert_eq!(and[1].as_document().unwrap(), &doc! { "customer_id": { "$in": ["c-1"] } });
+        assert_eq!(and.len(), 1);
+        assert_eq!(and[0].as_document().unwrap(), &doc! { "customer_id": { "$in": ["c-1"] } });
         assert_eq!(filter.get_str("commercial_status").unwrap(), CommercialStatus::Effective.as_str());
     }
 }

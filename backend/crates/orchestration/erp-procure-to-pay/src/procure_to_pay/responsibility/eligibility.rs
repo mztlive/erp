@@ -1,8 +1,9 @@
 //! 询价责任采购的账号、同角色权限与有效主属组织资格。
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_identity::service::business_ownership::required_business_org;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -36,18 +37,22 @@ impl ProcurementInquiryEligibility {
     /// # 错误
     /// 账号、组织或必要执行权限失效时拒绝，不以销售权限代替。
     pub async fn assignment_owner(&self, owner: &str, executor: &mut dyn Executor) -> Result<String> {
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(owner, executor)
+        let actor = AuditActor::new(owner.into(), owner.into(), AccountKind::Admin);
+        let permissions = ["detail", "save_feedback", "publish"]
+            .into_iter()
+            .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+            .permissions(&actor, &permissions, executor)
             .await?
-            .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::BusinessLogicError("询价责任采购账号已失效".into()))?;
-        let actor =
-            AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
-        self.ensure_procurement_permissions(&actor, &["detail", "save_feedback", "publish"], executor)
-            .await
-            .map_err(|error| assignment_permission_error(error, &account.name, account.secret.account()))?;
+        if !qualified.same_role(&permissions) {
+            let account = qualified.account();
+            return Err(Error::BusinessLogicError(format!(
+                "责任采购「{}（{}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试",
+                account.display_name, account.login_account
+            )));
+        }
         required_business_org(&self.db, owner, executor).await.map_err(Error::from)
     }
 
@@ -65,64 +70,12 @@ impl ProcurementInquiryEligibility {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        self.ensure_procurement_permissions(actor, &[action], executor).await
-    }
-
-    async fn ensure_procurement_permissions(
-        &self,
-        actor: &AuditActor,
-        actions: &[&str],
-        executor: &mut dyn Executor,
-    ) -> Result<u64> {
-        let permissions = actions
-            .iter()
-            .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let permissions = [Permission::parse(format!("procurement_inquiry:{action}"))?];
         let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
             .permissions(actor, &permissions, executor)
             .await?
             .filter(|value| value.same_role(&permissions))
             .ok_or_else(|| Error::Forbidden("当前账号缺少完整询价操作资格".into()))?;
         Ok(qualified.policy_revision())
-    }
-}
-
-/// 分派目标的授权失败属于责任配置问题，不得误报为提交人的权限不足。
-fn assignment_permission_error(error: Error, name: &str, account: &str) -> Error {
-    match error {
-        Error::Forbidden(_) => Error::BusinessLogicError(format!(
-            "责任采购「{name}（{account}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试"
-        )),
-        other => other,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn assignment_denial_identifies_target_buyer_and_required_actions() {
-        let error = assignment_permission_error(
-            Error::Forbidden("当前账号缺少 procurement_inquiry:detail 权限".into()),
-            "陈国平",
-            "caigou",
-        );
-        let Error::BusinessLogicError(message) = error else {
-            panic!("目标采购权限缺失必须表现为责任配置错误");
-        };
-        assert_eq!(
-            message,
-            "责任采购「陈国平（caigou）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试"
-        );
-    }
-
-    #[test]
-    fn assignment_preserves_policy_conflict_and_internal_failure() {
-        let conflict =
-            assignment_permission_error(Error::ConflictError("授权策略已变化".into()), "采购", "buyer");
-        assert!(matches!(conflict, Error::ConflictError(message) if message == "授权策略已变化"));
-        let internal = assignment_permission_error(Error::Internal("授权源暂不可用".into()), "采购", "buyer");
-        assert!(matches!(internal, Error::Internal(message) if message == "授权源暂不可用"));
     }
 }

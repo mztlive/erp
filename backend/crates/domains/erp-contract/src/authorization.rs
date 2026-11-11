@@ -9,8 +9,8 @@ use erp_identity::{
     Permission, ResourceTargets,
 };
 use mongodb::Database;
-use mongodb::bson::{Document, doc};
-use persistence_core::Executor;
+use mongodb::bson::Document;
+use persistence_core::{Executor, Transactional};
 
 use crate::ports::ContractCreationPort;
 use crate::{Error, Result};
@@ -28,12 +28,12 @@ pub struct ContractModels {
 
 /// 合同授权设施；事实由组合根装配，范围规则由 identity 执行。
 #[derive(Clone)]
-pub struct ContractAuthorization {
+pub struct ContractAccess {
     db: Database,
-    models: Option<ContractModels>,
+    models: ContractModels,
 }
 
-impl ContractAuthorization {
+impl ContractAccess {
     /// 绑定完整固定模型和共享身份设施。
     /// # 参数
     /// db 为组织事实数据库，models 为可信组合根登记的完整授权模型。
@@ -42,23 +42,12 @@ impl ContractAuthorization {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn new(db: Database, models: ContractModels) -> Self {
-        Self { db, models: Some(models) }
-    }
-
-    /// 构造未接线的失败关闭能力。
-    /// # 参数
-    /// db 为业务数据库。
-    /// # 返回
-    /// 所有授权入口拒绝的能力。
-    /// # 错误
-    /// 构造不执行 I/O。
-    pub fn unwired(db: Database) -> Self {
-        Self { db, models: None }
+        Self { db, models }
     }
 
     /// 按固定动作选择已登记模型。
     fn model(&self, action: &str) -> Result<&(AuthorizationService, Arc<dyn AccessMapping>)> {
-        let models = self.models.as_ref().ok_or_else(|| Error::Internal("合同身份设施未接线".into()))?;
+        let models = &self.models;
         match action {
             "list" | "detail" => Ok(&models.read),
             "update" => Ok(&models.write),
@@ -87,6 +76,27 @@ impl ContractAuthorization {
         Ok(scope(compiled, service.clone()))
     }
 
+    /// 在独立事务中检查完整合同对象。
+    /// # 参数
+    /// actor 为当前账号，action/id 为实际入口和合同身份。
+    /// # 返回
+    /// 完整对象资格成立时成功，不编译列表查询。
+    /// # 错误
+    /// 对象缺失、无权、身份或业务事实失效时拒绝。
+    pub async fn require(&self, actor: &AuditActor, action: &str, id: &str) -> Result<()> {
+        let access = self.clone();
+        let actor = actor.clone();
+        let action = action.to_owned();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { access.require_with(actor, &action, &id, executor).await })
+            })
+            .await
+    }
+
     /// 在原业务事务内检查完整合同对象。
     /// # 参数
     /// actor、action、id 为可信入口及目标，executor 为原执行器。
@@ -94,9 +104,9 @@ impl ContractAuthorization {
     /// 对象授权通过时成功。
     /// # 错误
     /// 缺少对象、功能或来源资格时拒绝。
-    pub async fn require(
+    pub async fn require_with(
         &self,
-        actor: &AuditActor,
+        actor: AuditActor,
         action: &str,
         id: &str,
         executor: &mut dyn Executor,
@@ -104,7 +114,7 @@ impl ContractAuthorization {
         let (service, _) = self.model(action)?;
         Ok(service
             .require(
-                actor,
+                &actor,
                 &Permission::parse(format!("contract:{action}"))?,
                 AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
                 executor,
@@ -125,7 +135,7 @@ impl ContractAuthorization {
         customer_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        let models = self.models.as_ref().ok_or_else(|| Error::Internal("合同身份设施未接线".into()))?;
+        let models = &self.models;
         models.creation.require_create(actor, customer_id, executor).await
     }
 
@@ -162,63 +172,83 @@ impl ContractAuthorization {
     }
 }
 
-/// 身份域编译的当前阶段凭证；不含可由业务组合的权限条款。
+/// 身份域编译的当前阶段凭证；业务分页版本可追加查询事实指纹。
 #[derive(Clone)]
 pub struct CompiledScope {
-    proof: Option<(Arc<CompiledAccess>, AuthorizationService)>,
-    pub user_id: String,
-    pub resource: String,
-    pub action: String,
+    compiled: Arc<CompiledAccess>,
+    authorization: AuthorizationService,
     pub scope_version: String,
-    pub policy_version: u64,
-    pub organization_version: u64,
-    pub as_of: Instant,
-}
-impl Default for CompiledScope {
-    fn default() -> Self {
-        Self {
-            proof: None,
-            user_id: String::new(),
-            resource: String::new(),
-            action: String::new(),
-            scope_version: String::new(),
-            policy_version: 0,
-            organization_version: 0,
-            as_of: Instant::from_unix_secs(0),
-        }
-    }
 }
 impl std::fmt::Debug for CompiledScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CompiledScope")
-            .field("compiled", &self.proof.as_ref().map(|(access, _)| access))
-            .finish()
+        f.debug_struct("CompiledScope").field("compiled", &self.compiled).finish()
     }
 }
 impl CompiledScope {
+    /// 读取本次授权账号。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 绑定的实际账号身份。
+    /// # 错误
+    /// 无。
+    pub fn user_id(&self) -> &str {
+        self.compiled.actor().id()
+    }
+
+    /// 读取当前凭证的策略版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 绑定的策略版本。
+    /// # 错误
+    /// 无。
+    pub fn policy_version(&self) -> u64 {
+        self.compiled.policy_version()
+    }
+
+    /// 读取当前凭证的组织版本。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 绑定的组织版本。
+    /// # 错误
+    /// 无。
+    pub fn organization_version(&self) -> u64 {
+        self.compiled.organization_version()
+    }
+
+    /// 读取本次授权时点。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// identity 绑定的授权时点。
+    /// # 错误
+    /// 无。
+    pub fn as_of(&self) -> Instant {
+        self.compiled.as_of()
+    }
+
     /// 读取身份域完整编译阶段。
     /// # 参数
     /// 无。
     /// # 返回
     /// 在分页与统计前执行的阶段。
     /// # 错误
-    /// 未接线时返回恒假阶段。
+    /// 无。
     pub fn stages(&self) -> Vec<Document> {
-        self.proof
-            .as_ref()
-            .map_or_else(|| vec![doc! {"$match":{"$expr":false}}], |(compiled, _)| compiled.stages().to_vec())
+        self.compiled.stages().to_vec()
     }
+
     /// 复验账号、权限、版本和有效期。
     /// # 参数
     /// executor 必须为原执行器。
     /// # 返回
     /// 凭证仍有效时成功。
     /// # 错误
-    /// 未接线、撤权或版本变化拒绝。
+    /// 撤权、到期或版本变化拒绝。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
-        let (compiled, service) =
-            self.proof.as_ref().ok_or_else(|| erp_identity::Error::Forbidden("授权凭证未接线".into()))?;
-        service.validate(compiled, executor).await
+        self.authorization.validate(&self.compiled, executor).await
     }
 }
 
@@ -228,52 +258,7 @@ impl CompiledScope {
 /// # 返回
 /// 本阶段载体。
 /// # 错误
-/// 构造不执行I/O。
+/// 构造不执行 I/O。
 pub fn scope(compiled: CompiledAccess, service: AuthorizationService) -> CompiledScope {
-    let actor = compiled.actor().id().to_owned();
-    let permission = compiled.permission().clone();
-    CompiledScope {
-        scope_version: compiled.version(),
-        user_id: actor,
-        resource: permission.resource().into(),
-        action: permission.action().into(),
-        policy_version: compiled.policy_version(),
-        organization_version: compiled.organization_version(),
-        as_of: compiled.as_of(),
-        proof: Some((Arc::new(compiled), service)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[tokio::test]
-    async fn unwired_models_reject_queries_objects_and_creation() {
-        let db = mongodb::Client::with_options(Default::default()).unwrap().database("unused");
-        let authorization = ContractAuthorization::unwired(db);
-        let actor = AuditActor::new("actor".into(), "Actor".into(), erp_core::AccountKind::Admin);
-        let mut executor = persistence_core::NoTransaction;
-        assert!(matches!(
-            authorization.resolve(&actor, "list", &mut executor).await,
-            Err(Error::Internal(_))
-        ));
-        assert!(matches!(
-            authorization.require(&actor, "update", "contract-a", &mut executor).await,
-            Err(Error::Internal(_))
-        ));
-        assert!(matches!(
-            authorization.require_create(&actor, "customer-a", &mut executor).await,
-            Err(Error::Internal(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn missing_identity_proof_rejects_execution() {
-        let scope = CompiledScope::default();
-        assert_eq!(scope.stages(), vec![doc! {"$match":{"$expr":false}}]);
-        assert!(matches!(
-            scope.validate(&mut persistence_core::NoTransaction).await,
-            Err(erp_identity::Error::Forbidden(_))
-        ));
-    }
+    CompiledScope { scope_version: compiled.version(), compiled: Arc::new(compiled), authorization: service }
 }

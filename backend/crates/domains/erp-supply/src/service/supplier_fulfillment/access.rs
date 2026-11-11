@@ -5,7 +5,7 @@ use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, Authorization, FulfillmentOrderResolvedScope};
+use crate::authorization::{self, Authorization, CompiledScope};
 use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use crate::error::{Error, Result};
 use crate::repository::SupplierFulfillmentExt;
@@ -68,7 +68,7 @@ impl FulfillmentOrderAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<FulfillmentOrderResolvedScope> {
+    ) -> Result<CompiledScope> {
         Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
@@ -122,28 +122,6 @@ impl FulfillmentOrderAccess {
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)
-    }
-
-    /// 查询账号在解析时点的唯一主属组织。
-    ///
-    /// # 参数
-    /// * `user_id` - 账号身份。
-    /// * `at` - 解析时点。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回授权设施 给出的主属组织。`None` 表示该时点没有返回主属组织。
-    ///
-    /// # 错误
-    /// 授权设施 查询失败时返回对应错误。
-    pub async fn own_org(
-        &self,
-        user_id: &str,
-        at: erp_core::common::time::Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<String>> {
-        self.authorization()?;
-        Ok(OrganizationDirectoryService::new(self.db.clone()).own_org(user_id, at, executor).await?)
     }
 
     /// 检查共享资料当前动作的功能资格；对象操作另行检查完整目标。

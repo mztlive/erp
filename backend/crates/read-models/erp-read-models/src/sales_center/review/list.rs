@@ -56,7 +56,7 @@ impl SalesChangeReadService {
                     context.validate(executor).await?;
                     let version = change_scope_version(&context.scope_version, &versions)?;
                     context.scope_version = version;
-                    Ok(change_list_view(page, context, scope.is_empty(), &filter))
+                    Ok(change_list_view(page, context, &filter))
                 })
             })
             .await
@@ -141,7 +141,6 @@ fn change_scope_version(base: &str, versions: &[SalesChangeVersion]) -> Result<S
 fn change_list_view(
     page: PageResult<SalesChangeOrderRow>,
     context: SalesReadContext,
-    no_scope: bool,
     filter: &SalesChangeOrderFilter,
 ) -> SalesChangeListView {
     let items = page
@@ -162,7 +161,7 @@ fn change_list_view(
         page: PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
         scope_version: context.scope_version.clone(),
         as_of: context.as_of.as_utc().to_rfc3339(),
-        empty_reason: no_scope.then_some("no_scope"),
+        empty_reason: None,
         scope_summary: "销售变更单沿来源销售单当前负责人及单据业务组织范围",
     }
 }

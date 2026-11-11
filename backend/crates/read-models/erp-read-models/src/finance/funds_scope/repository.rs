@@ -32,7 +32,7 @@ pub(super) mod tests {
     pub(super) fn authorization() -> FundsAuthorization {
         FundsAuthorization {
             whole: Default::default(),
-            sales: Default::default(),
+            sales: None,
             ledger_read: false,
             settlement: None,
             purchase_scope: None,
@@ -43,5 +43,33 @@ pub(super) mod tests {
                 as_of: Instant::from_unix_secs(1),
             },
         }
+    }
+
+    /// 未登记销售来源时保留真实来源事实，但不得交付销售授权份额。
+    #[test]
+    fn missing_sales_source_preserves_facts_and_denies_shares() {
+        use mongodb::bson::{Bson, doc};
+
+        let authorization = authorization();
+        assert!(matches!(authorization.sales_scope(), Err(crate::Error::Forbidden(_))));
+        let stages = super::source_stages(
+            "sales_orders",
+            Bson::String("$sales_order_id".into()),
+            "source",
+            doc! {},
+            "sales_owner_user_id",
+            "order_no",
+            &authorization.sales_stages(),
+        );
+        let lookup = stages[0].get_document("$lookup").unwrap();
+        let pipeline = lookup.get_array("pipeline").unwrap();
+        let facet = pipeline[1].as_document().unwrap().get_document("$facet").unwrap();
+        let allowed = facet.get_array("allowed").unwrap();
+        assert_eq!(allowed[0], Bson::Document(doc! { "$match": { "$expr": false } }));
+        let facts = facet.get_array("facts").unwrap();
+        assert_eq!(
+            facts[0].as_document().unwrap().get_document("$project").unwrap().get_i32("id").unwrap(),
+            1
+        );
     }
 }

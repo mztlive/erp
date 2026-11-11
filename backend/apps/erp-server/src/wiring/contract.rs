@@ -6,7 +6,6 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_contract::authorization::ContractAuthorization;
 use erp_contract::{
     ContractAuditPort, ContractParticipantPort, ContractService, CustomerAccountFact, CustomerFactsPort,
     Error as ContractError, PreparedContractAudit,
@@ -215,29 +214,6 @@ impl ContractParticipantPort for MongoContractParticipants {
     }
 }
 
-/// 构造只装载合同事实的服务；授权能力 失败关闭。
-///
-/// # 参数
-/// * `db` - 合同集合所在数据库
-///
-/// # 返回
-/// 返回未接线范围解析的合同服务。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不得用于列表、详情或写命令；解析范围必须调用 [`scoped_contract_service`]。
-pub fn contract_service(db: Database) -> ContractService {
-    ContractService::new(
-        db.clone(),
-        MongoContractAudit::shared(db.clone()),
-        MongoContractCustomers::shared(db.clone()),
-        Arc::new(MongoSigningCompanies(db.clone())),
-        ContractAuthorization::unwired(db),
-    )
-}
-
 /// 构造已接入身份域公共解析器的合同服务。
 ///
 /// # 参数
@@ -277,7 +253,7 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
 /// # 关键业务约束
 /// HTTP 与命名 Process 复用固定模型和完整事实适配。
 pub fn contract_access(db: Database, rbac: SharedRbacService) -> erp_contract::ContractAccess {
-    erp_contract::ContractAccess::new(db.clone(), contract_authorization(db, rbac))
+    contract_authorization(db, rbac)
 }
 
 fn customer_account_fact(account: erp_customer::CustomerAccount) -> CustomerAccountFact {

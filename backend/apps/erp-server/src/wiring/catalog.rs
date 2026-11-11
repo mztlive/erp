@@ -6,9 +6,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_catalog::{
-    CatalogAuditPort, CatalogService, FileAssetFact, FileAssetFactsPort, PreparedCatalogAudit,
-};
+use erp_catalog::{CatalogAuditPort, FileAssetFact, FileAssetFactsPort, PreparedCatalogAudit};
 use erp_core::common::time::Instant;
 use erp_core::ids::FileAssetId;
 use erp_support::FileAssetExt;
@@ -162,20 +160,6 @@ impl FileAssetFactsPort for MongoCatalogFileAssets {
             .await
             .map_err(erp_catalog::Error::from)
     }
-}
-
-/// 装配带审计与文件资产 adapter 的商品服务。
-///
-/// # 参数
-/// * `db` - 商品集合所在数据库。
-///
-/// # 返回
-/// 返回已注入审计与文件资产 Port 的商品服务。
-///
-/// # 错误
-/// 不返回错误。
-pub fn catalog_service(db: Database) -> CatalogService {
-    CatalogService::new(db.clone(), MongoCatalogAudit::shared(db.clone()), MongoCatalogFileAssets::shared(db))
 }
 
 map_audit_error!(fn map_audit_to_catalog -> erp_catalog);

@@ -33,8 +33,8 @@ mod supplier_fulfillment_identity;
 mod warehouse;
 use std::sync::Arc;
 
-pub use catalog::{MongoCatalogAudit, MongoCatalogFileAssets, catalog_service};
-pub use contract::{contract_access, contract_service, scoped_contract_service};
+pub use catalog::{MongoCatalogAudit, MongoCatalogFileAssets};
+pub use contract::{contract_access, scoped_contract_service};
 pub use contract_data_scope::contract_authorization;
 pub use contract_template::contract_template_service;
 pub use customer::{MongoCustomerAudit, MongoCustomerPartyFacts};
@@ -45,7 +45,6 @@ use erp_party::{
     PartyAddressService, PartyBankAccountService, PartyContactService, PartyService, PartyTaxProfileService,
     SensitiveDataCodec,
 };
-use erp_supplier::SupplierService;
 pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
 pub use import::{MongoImportBulkJobs, legacy_import_service};
 pub use integration_data_scope::scoped_integration_ops_service;
@@ -202,20 +201,6 @@ pub fn scoped_customer_assignment_service(
         MongoCustomerAudit::shared(db.clone()),
         customer_access(db, rbac),
     )
-}
-
-/// 装配带主体事实 Port 的供应商列表与详情服务。
-///
-/// # 参数
-/// * `db` - 供应商与主体集合所在数据库。
-///
-/// # 返回
-/// 返回供应商服务。
-///
-/// # 错误
-/// 不返回错误。
-pub fn supplier_service(db: Database) -> SupplierService {
-    SupplierService::new(db.clone(), MongoSupplierPartyFacts::shared(db))
 }
 
 pub mod catalog_supply_query;

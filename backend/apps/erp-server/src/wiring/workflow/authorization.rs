@@ -89,15 +89,9 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         request_id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<bool> {
-        portal_request_readable(
-            &self.db,
-            &crate::wiring::catalog_services(self.db.clone(), self.rbac.clone()),
-            actor,
-            request_id,
-            executor,
-        )
-        .await
-        .map_err(|error| map_service(error.into()))
+        portal_request_readable(&self.db, &self.rbac, actor, request_id, executor)
+            .await
+            .map_err(|error| map_service(error.into()))
     }
     async fn approval_source_readable(
         &self,
@@ -176,23 +170,30 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         action: TaskReadAction,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        let result = super::resource_access::readable(
-            &self.db,
-            &self.rbac,
-            actor,
-            source,
-            action.permission(),
-            executor,
+        let permission = Permission::parse(action.permission())?;
+        task_read_result(
+            super::resource_access::require_source_operation(
+                &self.db,
+                &self.rbac,
+                actor,
+                source,
+                &permission,
+                &[],
+                executor,
+            )
+            .await,
         )
-        .await;
-        let readable = match (action, result) {
-            (TaskReadAction::List, Err(Error::Forbidden(_) | Error::NotFound(_))) => false,
-            (_, result) => result.map_err(map_service)?,
-        };
-        if !readable {
-            return Err(WorkflowError::Forbidden("没有任务来源的读取资格".into()));
-        }
-        Ok(())
+    }
+}
+
+/// 任务来源拒绝统一隐藏存在性，设施和版本错误保留原类别。
+fn task_read_result(result: Result<()>) -> WorkflowResult<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(Error::Forbidden(_) | Error::NotFound(_)) => {
+            Err(WorkflowError::Forbidden("没有任务来源的读取资格".into()))
+        },
+        Err(error) => Err(map_service(error)),
     }
 }
 
@@ -210,6 +211,25 @@ mod tests {
     use erp_workflow::ErrorCode;
 
     use super::*;
+
+    #[test]
+    fn task_source_authorization_hides_denial_and_preserves_operational_errors() {
+        assert!(task_read_result(Ok(())).is_ok());
+        for error in [Error::Forbidden("revoked".into()), Error::NotFound("missing".into())] {
+            assert!(matches!(
+                task_read_result(Err(error)),
+                Err(WorkflowError::Forbidden(message)) if message == "没有任务来源的读取资格"
+            ));
+        }
+        assert!(matches!(
+            task_read_result(Err(Error::ConflictError("DATA_SCOPE_CHANGED".into()))),
+            Err(WorkflowError::ConflictError(message)) if message == "DATA_SCOPE_CHANGED"
+        ));
+        assert!(matches!(
+            task_read_result(Err(Error::Internal("unwired source".into()))),
+            Err(WorkflowError::Internal(message)) if message == "unwired source"
+        ));
+    }
 
     #[test]
     fn contract_material_authorization_preserves_denial_and_operational_errors() {
