@@ -22,7 +22,6 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
-use super::authorization::PurchaseOrderAuthorization;
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::procure_to_pay::inquiry_expense::release_purchase;
@@ -78,7 +77,7 @@ impl PurchaseOrderProcess {
     ) -> Result<VoidPurchaseOrderResult> {
         let ports = self.ports.clone();
         req.validate()?;
-        let authorization = self.authorize_actor_permission(actor, VOID_PERMISSION).await?;
+        self.authorize_actor_permission(actor, VOID_PERMISSION).await?;
         let fingerprint = req.request_fingerprint(id)?;
         let receipt_identity = PurchaseCommandReceipt::<VoidDraftReceipt>::identity(
             VOID_RECEIPT_PREFIX,
@@ -100,7 +99,6 @@ impl PurchaseOrderProcess {
             receipt_id,
             fingerprint,
             actor,
-            authorization,
         )
         .await
     }
@@ -115,7 +113,6 @@ impl PurchaseOrderProcess {
 /// * `receipt_id` - 稳定命令收据 ID
 /// * `fingerprint` - 请求载荷指纹
 /// * `actor` - 已认证审计操作人
-/// * `authorization` - 当前命令的统一授权入口
 ///
 /// # 返回
 /// 返回首次事务结果或提交成功后回读到的原结果。
@@ -133,7 +130,6 @@ async fn execute_void_draft_transaction(
     receipt_id: PurchaseCommandReceiptIdentity,
     fingerprint: String,
     actor: &AuditActor,
-    authorization: PurchaseOrderAuthorization,
 ) -> Result<VoidPurchaseOrderResult> {
     let DraftVoidServices { service, ports } = context;
     let db = service.db.clone();
@@ -148,7 +144,6 @@ async fn execute_void_draft_transaction(
         .clone()
         .with_transaction(move |executor| {
             Box::pin(async move {
-                authorization.require(&transaction_actor, executor).await?;
                 object_scope
                     .revalidate(&transaction_order_id, request.expected_lock_version, executor)
                     .await?;

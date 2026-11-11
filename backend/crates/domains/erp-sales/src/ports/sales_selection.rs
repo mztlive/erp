@@ -1,8 +1,10 @@
 //! 选品册所需的跨域事实，不依赖提供方领域。
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
+use persistence_core::Executor;
 
 use crate::Result;
 use crate::entity::sales_selection::{
@@ -63,6 +65,25 @@ pub trait SelectionCustomerPort: Send + Sync {
     /// # 错误
     /// 不存在或停用时由调用方拒绝。
     async fn customer_fact(&self, customer_id: &str) -> Result<SelectionCustomerFact>;
+}
+
+/// 客户对象授权端口；由客户拥有领域执行完整客户检查。
+#[async_trait]
+pub trait SelectionCustomerAccessPort: Send + Sync {
+    /// 证明选品实际客户的详情资格。
+    ///
+    /// # 参数
+    /// actor 为真实账号，customer_id 为册或创建命令的客户，executor 为原执行器。
+    /// # 返回
+    /// 客户存在且详情功能、范围和完整负责人事实均满足时成功。
+    /// # 错误
+    /// 客户不可见、事实不完整或授权设施失败时保留原错误。
+    async fn require_detail(
+        &self,
+        actor: &AuditActor,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
 }
 
 /// 商品池事实端口。

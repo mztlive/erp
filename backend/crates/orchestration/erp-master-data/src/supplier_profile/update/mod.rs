@@ -72,7 +72,7 @@ impl SupplierProfileProcess {
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        let rbac = self.require_authorization()?.clone();
+        let rbac = self.authorization.clone();
         req.validate_contract()?;
         let request_fingerprint = req.fingerprint()?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {

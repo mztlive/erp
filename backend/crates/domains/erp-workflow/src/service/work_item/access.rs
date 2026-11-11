@@ -6,11 +6,11 @@ use erp_core::Result as CoreResult;
 use erp_identity::Permission;
 use persistence_core::Executor;
 
-use super::WorkItemService;
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
     task_read_error,
 };
+use super::{WorkItemAuthorization, WorkItemService};
 use crate::entity::work_item::{TaskAccess, WorkItem, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
@@ -171,6 +171,23 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.ensure_decision_access(actor, item, &self.authorization, executor).await
+    }
+
+    /// 在原执行器核验完整办理资格、指定任务事实和真实业务来源。
+    /// # 参数
+    /// actor、item 为账号与任务；authorization 提供已有或拟保存任务的事实；executor 为原事务。
+    /// # 返回
+    /// 同角色资格、任务范围、冻结事实和业务确认资格均成立时成功。
+    /// # 错误
+    /// 身份失效、范围或真实来源无权、版本变化时拒绝。
+    pub(super) async fn ensure_decision_access(
+        &self,
+        actor: &AuditActor,
+        item: &WorkItem,
+        authorization: &WorkItemAuthorization,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let policy = item
             .work_item_type
             .brief_relation(&item.business_object_type)
@@ -183,7 +200,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if !qualified.same_role(&required) {
             return Err(Error::Forbidden("当前账号不具备同角色完整执行资格".into()));
         }
-        self.ensure_item_access_with_executor(item, actor, executor).await.map_err(task_read_error)?;
+        authorization.require(actor, "detail", &item.base.id, executor).await.map_err(task_read_error)?;
+        self.ensure_task_facts(item, actor, executor).await.map_err(task_read_error)?;
         require_supplier_portal_task_review(
             &self.auth,
             actor,

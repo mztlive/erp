@@ -9,6 +9,10 @@ mod receipt_reversal;
 mod reversal_submit;
 mod supplier_refund;
 
+pub(super) use authorization::{
+    ensure_replay_authorized as ensure_return_start_replay_authorized, ensure_source_authorized,
+    ensure_submit_permission,
+};
 pub(super) use common::ReverseStartInput;
 pub(super) use customer_refund::{
     CustomerRefundStartPersistInput, build_customer_refund_start_input, load_start_receipt,
@@ -18,10 +22,7 @@ pub(super) use payment_reversal::{
     PaymentReversalStartPersistInput, build_payment_reversal_start_input,
     load_payment_reversal_start_receipt, persist_payment_reversal_runtime, persist_payment_reversal_start,
 };
-pub(super) use prepare::{
-    ensure_return_start_actor_active, ensure_return_start_replay_authorized,
-    load_bound_definition_graph_with_executor, load_start_graph,
-};
+pub(super) use prepare::{load_bound_definition_graph_with_executor, load_start_graph};
 pub(super) use receipt_reversal::{
     ReceiptReversalStartPersistInput, build_receipt_reversal_start_input,
     load_receipt_reversal_start_receipt, persist_receipt_reversal_runtime, persist_receipt_reversal_start,

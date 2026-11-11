@@ -15,9 +15,6 @@ use crate::error::{Error, Result};
 pub struct PurchaseResolvedScope {
     pub compiled: Arc<erp_identity::CompiledAccess>,
     pub authorization: erp_identity::AuthorizationService,
-    pub user_id: String,
-    pub resource: String,
-    pub action: String,
     pub policy_version: u64,
     pub scope_version: String,
     pub as_of: Instant,

@@ -179,12 +179,15 @@ async fn validate_creation_source(
     persist: &CreatedAdjustmentPersist,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let authorization =
-        persist.inventory.authorize(&persist.actor, &[InventoryAction::Create], executor).await?;
-    if !authorization.actor_is_active() || !authorization.can_create(persist.adjustment.warehouse_id.as_ref())
-    {
-        return Err(Error::Forbidden("无权在该仓库创建库存调整单".to_string()));
-    }
+    persist
+        .inventory
+        .require_warehouse(
+            &persist.actor,
+            InventoryAction::Create,
+            persist.adjustment.warehouse_id.as_ref(),
+            executor,
+        )
+        .await?;
     db.warehouse()
         .warehouse(persist.adjustment.warehouse_id.as_ref(), executor)
         .await?
@@ -203,7 +206,6 @@ async fn validate_creation_source(
     if !balance.matches_adjustment_dimensions(&persist.adjustment, &persist.lines) {
         return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
     }
-    authorization.validate(executor).await?;
     Ok(())
 }
 

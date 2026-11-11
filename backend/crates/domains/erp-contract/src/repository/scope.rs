@@ -2,7 +2,7 @@
 
 use mongodb::bson::doc;
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, QueryFilter, Result, mongo_ops};
+use persistence_core::{Executor, QueryFilter};
 use serde::Deserialize;
 
 use super::contract::{ContractDomainRepository, ContractFilter};
@@ -18,15 +18,6 @@ pub struct ContractVersion {
     pub id: String,
     /// 合同乐观锁版本。
     pub version: u64,
-}
-
-/// 历史参与合同的客户映射，供个人上限与筛选收窄。
-#[derive(Debug, Deserialize)]
-pub struct ContractCustomerRef {
-    /// 合同稳定主键。
-    pub id: String,
-    /// 合同所属客户。
-    pub customer_id: String,
 }
 
 #[allow(async_fn_in_trait)]
@@ -52,26 +43,6 @@ pub trait ContractRepositoryScopeExt {
         scope: &ContractReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<Contract>>;
-
-    /// 装载指定合同的身份与所属客户，供历史参与收窄。
-    ///
-    /// # 参数
-    /// * `ids` - 候选合同 ID
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 仅返回仍然存在的合同及其客户。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// 不得把其他单据类型的参与 ID 当作合同。
-    async fn customer_refs_by_ids(
-        &self,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ContractCustomerRef>>;
 }
 
 impl ContractRepositoryScopeExt for persistence_core::Repository<'_, Contract> {
@@ -95,27 +66,6 @@ impl ContractRepositoryScopeExt for persistence_core::Repository<'_, Contract> {
         let result = result?;
         scope.validate(executor).await?;
         Ok(result)
-    }
-
-    async fn customer_refs_by_ids(
-        &self,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ContractCustomerRef>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        mongo_ops::find_many(
-            &self.collection().clone_with_type::<ContractCustomerRef>(),
-            doc! { "id": { "$in": ids } },
-            FindOptions::builder()
-                .projection(doc! { "id": 1, "customer_id": 1 })
-                .sort(doc! { "id": 1 })
-                .limit(10_001)
-                .build(),
-            executor,
-        )
-        .await
     }
 }
 

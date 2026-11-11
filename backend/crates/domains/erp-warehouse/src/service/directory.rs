@@ -1,7 +1,6 @@
 //! Warehouse 独立目录：资格、授权、搜索与回显采用同一事务路径。
 use application_core::directory::{DirectoryPage, DirectoryQuery, DirectoryScope, ScopedPage};
 use application_core::{AuditActor, PageView};
-use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
@@ -45,7 +44,6 @@ impl WarehouseDirectoryService {
                     let read = access.query(&actor, executor).await.map_err(map_identity_error)?;
                     let rows = snapshot(&db, &read, &query, executor).await?;
                     let scope = directory_scope(&read, rows.iter().map(|row| row.id.clone()).collect());
-                    read.validate(executor).await.map_err(map_identity_error)?;
                     let page = DirectoryPage::from_snapshot(rows, &query, scope)?;
                     if query.scope_version.as_ref().is_some_and(|v| v != &page.scope_version) {
                         return Err(Error::ConflictError(
@@ -97,7 +95,6 @@ impl WarehouseDirectoryService {
                         page: filter.page,
                         page_size: filter.page_size,
                     };
-                    read.validate(executor).await.map_err(map_identity_error)?;
                     Ok(ScopedPage::new(page, scope))
                 })
             })
@@ -107,12 +104,13 @@ impl WarehouseDirectoryService {
 
 /// 响应元信息只记录本次已授权结果身份，不参与仓储授权条件。
 fn directory_scope(read: &WarehouseQuery, ids: Vec<String>) -> DirectoryScope {
+    let (policy_version, organization_version, as_of) = read.metadata();
     DirectoryScope {
         ids: Some(ids),
         scope_version: read.version(),
-        policy_version: 0,
-        organization_version: 0,
-        as_of: Instant::now().as_utc().to_rfc3339(),
+        policy_version,
+        organization_version,
+        as_of: as_of.as_utc().to_rfc3339(),
         no_scope: read.is_empty(),
     }
 }

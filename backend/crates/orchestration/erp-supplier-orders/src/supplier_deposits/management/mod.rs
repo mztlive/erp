@@ -43,18 +43,6 @@ impl SupplierDepositManagementProcess {
     ) -> Self {
         Self { rbac, db, codec, payment_tasks }
     }
-
-    /// 复用应用共享权限服务，不创建另一个身份缓存。
-    /// # 参数
-    /// * `rbac` - 当前权限实例。
-    /// # 返回
-    /// 返回装配后的流程。
-    /// # 错误
-    /// 无。
-    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
-        self.rbac = rbac;
-        self
-    }
 }
 
 struct DepositManagementContext {

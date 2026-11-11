@@ -135,7 +135,7 @@ impl SupplierFulfillmentProcess {
     /// 返回当前动作可见的订单。
     ///
     /// # 错误
-    /// 开放处理人查询失败，或订单不在该动作范围内时返回对应错误。
+    /// 订单不在该动作范围内或授权查询失败时返回对应错误。
     pub async fn require_scoped_order(
         &self,
         id: &str,
@@ -143,9 +143,6 @@ impl SupplierFulfillmentProcess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrder> {
-        let handlers =
-            self.handlers.open_handler_user_ids(std::slice::from_ref(&id.to_string()), executor).await?;
-        let handler = handlers.get(id).map(String::as_str);
-        Ok(self.domain().access().require_order(actor, action, id, handler, executor).await?)
+        Ok(self.domain().access().require_order(actor, action, id, executor).await?)
     }
 }

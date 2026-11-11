@@ -73,7 +73,7 @@ impl SupplierProfileProcess {
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        let rbac = self.require_authorization()?.clone();
+        let rbac = self.authorization.clone();
         req.validate_contract()?;
         if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
             return Err(Error::ValidationError("创建供应商时不能提交清空既有资料的意图".to_string()));

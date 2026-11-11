@@ -1,7 +1,5 @@
 //! 导入与识别业务所消费服务的应用装配。
 
-use erp_data_import::import_apply::{ImportWorkItemAccess, ImportWorkItems};
-
 use super::{
     AliyunContractOcr, Application, Arc, ContractImportProcess, ContractImportServices,
     MongoCatalogSupplyQuery, OpenAiContractExtractor, ProductImportServices, RecognitionProviders,
@@ -99,7 +97,7 @@ impl Application {
         ContractImportProcess::new(self.db(), services, providers)
     }
 
-    /// 装配导入确认查询和每次独立身份的完成、重放资格重验。
+    /// 装配导入确认查询及每次完成、重放时的当前资格重验。
     /// # 参数
     /// 无。
     /// # 返回
@@ -107,14 +105,10 @@ impl Application {
     /// # 错误
     /// 不执行 I/O，不返回错误。
     pub fn import_apply_process(&self) -> erp_data_import::ImportApplyProcess {
-        let decision_db = self.db();
-        let work_items = ImportWorkItemAccess::new(
+        erp_data_import::ImportApplyProcess::new(
+            self.db(),
             Arc::new(work_item_service(self.db(), self.rbac())),
-            Arc::new(move || -> Arc<dyn ImportWorkItems> {
-                Arc::new(work_item_service(decision_db.clone(), shared_rbac_service(decision_db.clone())))
-            }),
-        );
-        erp_data_import::ImportApplyProcess::new(self.db(), Arc::new(work_items))
+        )
     }
 
     /// 装配询价文件导入，沿用实时身份及精确可售 SKU 查询能力。
@@ -134,7 +128,6 @@ impl Application {
     }
 }
 
-use crate::wiring::identity::shared_rbac_service;
 use crate::wiring::workflow::work_item_service;
 use crate::wiring::{
     catalog_access, catalog_service, contract_access, customer_access, offering_access,

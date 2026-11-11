@@ -73,12 +73,14 @@ pub(super) async fn ensure_receipt_edit_authorized(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !rbac.identity.directory().actor_is_active(actor, executor).await? {
-        return Err(Error::Forbidden("当前账号不可编辑客户回款单".into()));
-    }
     let authorization =
         AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
-    if !authorization.has_permission(actor, &Permission::parse("customer_receipt:submit")?, executor).await? {
+    let required = [Permission::parse("customer_receipt:submit")?];
+    let qualified = authorization
+        .permissions(actor, &required, executor)
+        .await?
+        .ok_or_else(|| Error::Forbidden("当前账号不可编辑客户回款单".into()))?;
+    if !qualified.same_role(&required) {
         return Err(Error::Forbidden("当前账号缺少回款提交权限".into()));
     }
     if !rbac.runtime.source_readable(actor, DocumentType::CustomerReceipt, id, executor).await? {

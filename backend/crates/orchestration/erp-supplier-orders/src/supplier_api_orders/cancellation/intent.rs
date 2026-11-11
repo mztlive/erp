@@ -46,7 +46,7 @@ impl SupplierApiOrderProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let mut order =
-                        access.require_order(&actor, "cancel", &execution.base.id, None, executor).await?;
+                        access.require_order(&actor, "cancel", &execution.base.id, executor).await?;
                     execution.ensure_cancellation_order(&order)?;
                     if order.cancel_status == CancelStatus::None {
                         order.advance_cancel(CancelStatus::CancelPending)?;

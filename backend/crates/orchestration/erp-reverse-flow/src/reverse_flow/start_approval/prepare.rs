@@ -1,4 +1,3 @@
-use application_core::AuditActor;
 use bpm::engine::DefinitionGraph;
 use bpm::model::{ApprovalCommandReceipt, SubjectRef};
 use erp_approval_runtime::approver_directory::resolve_start_approvers;
@@ -8,66 +7,7 @@ use erp_workflow::service::approval::read;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::{Error, Result, ReverseFlowPorts};
-
-/// 在读取具体退款/冲正资源前先重验认证主体仍有效。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 共享 RBAC。
-/// * `actor` - 待重验的操作人。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 账号仍有效时无返回值。
-///
-/// # 错误
-/// 账号失效时返回 `Forbidden`。授权查询失败时返回对应错误。
-pub async fn ensure_return_start_actor_active(
-    db: &Database,
-    rbac: &ReverseFlowPorts,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    super::authorization::ensure_actor_active(db, rbac, actor, executor).await
-}
-
-/// 重放前在同一事务内重验账号、提交动作和精确资金来源。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 共享 RBAC。
-/// * `actor` - 待重验的操作人。
-/// * `document_type` - 退款或冲正单据类型。
-/// * `submit_permission` - 提交动作权限码。
-/// * `document_id` - 单据主键。
-/// * `executor` - 调用方事务执行器。
-///
-/// # 返回
-/// 授权通过时无返回值。
-///
-/// # 错误
-/// 账号失效、缺少提交权限、无权读取资金来源、经办人不符或仓储失败时返回对应错误。
-pub async fn ensure_return_start_replay_authorized(
-    db: &Database,
-    rbac: &ReverseFlowPorts,
-    actor: &AuditActor,
-    document_type: DocumentType,
-    submit_permission: &str,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    super::authorization::ensure_replay_authorized(
-        db,
-        rbac,
-        actor,
-        document_type,
-        submit_permission,
-        document_id,
-        executor,
-    )
-    .await
-}
+use crate::{Error, Result};
 
 /// 加载绑定定义并解析新申请负责人；收据回放恢复原实例指派。
 ///

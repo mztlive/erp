@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use persistence_core::Executor;
 
-use super::WorkItemService;
+use super::{WorkItemAuthorization, WorkItemService};
 use crate::entity::work_item::{
     SupplierPortalReviewIdentity, SupplierPortalReviewTaskData, WorkItem, WorkItemStatus,
 };
@@ -35,7 +35,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let task = WorkItem::new_supplier_portal_review(task_id, data)?;
         let actor =
             self.supplier_portal_reviewer(task.owner_user_id.as_deref().unwrap_or(""), executor).await?;
-        self.ensure_domain_decision_access(&actor, &task, executor).await?;
+        let authorization = WorkItemAuthorization::proposed(self.db.clone(), self.identity.clone(), &task);
+        self.ensure_decision_access(&actor, &task, &authorization, executor).await?;
         self.db.work_items().create(&task, executor).await?;
         Ok(task)
     }

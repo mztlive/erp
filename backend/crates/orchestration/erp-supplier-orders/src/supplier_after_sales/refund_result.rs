@@ -40,7 +40,7 @@ impl SupplierAfterSalesProcess {
         actor: &AuditActor,
         access: &FulfillmentOrderAccess,
     ) -> Result<Option<SupplierRefundFactView>> {
-        access.require_order(actor, "refund", id, None, &mut NoTransaction).await?;
+        access.require_order(actor, "refund", id, &mut NoTransaction).await?;
         if self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?.is_none() {
             return Ok(None);
         }
@@ -68,7 +68,7 @@ impl SupplierAfterSalesProcess {
         access: &FulfillmentOrderAccess,
         executor: &mut dyn Executor,
     ) -> Result<SupplierRefundFactView> {
-        let mut order = access.require_order(actor, "refund", id, None, executor).await?;
+        let mut order = access.require_order(actor, "refund", id, executor).await?;
         let rows = refunds_for_order(&self.db, id, executor).await?;
         if rows.len() > 1000 {
             return Err(Error::BusinessLogicError("退款记录超出核对上限".into()));

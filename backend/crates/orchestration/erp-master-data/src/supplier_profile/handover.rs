@@ -73,7 +73,7 @@ impl SupplierProfileProcess {
             &req.idempotency_key,
             [fingerprint],
         )?;
-        let rbac = self.require_authorization()?.clone();
+        let rbac = self.authorization.clone();
         if let Some(view) = replay_supplier(&self.db, &rbac, &command, id, actor, &mut NoTransaction).await? {
             return Ok(view);
         }
@@ -125,7 +125,7 @@ impl SupplierProfileProcess {
             &req.idempotency_key,
             [supplier_id.to_string(), fingerprint],
         )?;
-        let rbac = self.require_authorization()?.clone();
+        let rbac = self.authorization.clone();
         if let Some(view) = replay_capability(
             &self.db,
             &rbac,
@@ -175,24 +175,18 @@ impl SupplierProfileProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<HandoverCandidateView>> {
-        self.require_authorization()?.access.clone().require(actor, "update", id).await?;
+        self.authorization.access.clone().require(actor, "update", id).await?;
         let current = self
             .db
             .supplier()
             .account(&SupplierAccountId::new(id), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        list_candidates(
-            &self.db,
-            self.require_authorization()?,
-            &current.maintainer_user_id,
-            &mut NoTransaction,
-        )
-        .await
+        list_candidates(&self.db, &self.authorization, &current.maintainer_user_id, &mut NoTransaction).await
     }
 
     async fn ensure_target_qualified(&self, target: &str, executor: &mut dyn Executor) -> Result<()> {
-        ensure_target_qualified(&self.db, self.require_authorization()?, target, executor).await
+        ensure_target_qualified(&self.db, &self.authorization, target, executor).await
     }
 
     async fn ensure_org_enabled(&self, target_org: Option<&str>, executor: &mut dyn Executor) -> Result<()> {
@@ -490,19 +484,10 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if account_can_maintain(db, rbac, target, executor).await? {
+    if target_qualified(db, &rbac.rbac, target, &Permission::parse("supplier:update")?, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备供应商维护资格".into()))
-}
-
-async fn account_can_maintain(
-    db: &mongodb::Database,
-    rbac: &SupplierProfileAuthorization,
-    target: &str,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    target_qualified(db, rbac, target, &Permission::parse("supplier:update")?, executor).await
 }
 
 async fn list_candidates(
@@ -511,7 +496,7 @@ async fn list_candidates(
     current: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    Ok(qualified_candidates(db, rbac, current, &Permission::parse("supplier:update")?, executor)
+    Ok(qualified_candidates(db, &rbac.rbac, current, &Permission::parse("supplier:update")?, executor)
         .await?
         .into_iter()
         .map(|account| HandoverCandidateView {

@@ -171,11 +171,11 @@ async fn product_projection_preserves_optional_fields_counts_and_page() {
 #[tokio::test]
 async fn sellable_query_keeps_normalized_filters_explicit_date_and_default_page() {
     let query = Arc::new(RecordingQuery::default());
-    let service = CatalogCenterReadService::for_query(query.clone());
     let params =
         serde_json::from_value(json!({"q":" 茶礼 ","supplier_id":" ","eligibility_as_of":"2026-09-07"}))
             .unwrap();
-    let page = service.sellable_sku_list(&params).await.unwrap();
+    let (page, supplier_ids) = sellable_sku_page(query.as_ref(), &params).await.unwrap();
+    assert!(supplier_ids.is_empty());
     assert_eq!((page.page, page.page_size, page.total), (1, 20, 9));
     assert_eq!(*query.calls.lock().unwrap(), vec!["sellable"]);
 }

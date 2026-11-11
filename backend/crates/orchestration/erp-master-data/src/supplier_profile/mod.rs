@@ -14,7 +14,6 @@ mod validation;
 
 pub mod import;
 
-use std::ops::Deref;
 use std::sync::Arc;
 
 use erp_identity::SharedRbacService;
@@ -25,13 +24,13 @@ use erp_supplier::{
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
-use crate::{Error, Result};
+use crate::Result;
 
 /// 完整供应商资料的跨域写入与事务编排。
 pub struct SupplierProfileProcess {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
-    authorization: Option<SupplierProfileAuthorization>,
+    authorization: SupplierProfileAuthorization,
 }
 
 /// 同一启动期装配的身份资格与供应商范围服务，不包含具体跨域 adapter。
@@ -40,13 +39,6 @@ struct SupplierProfileAuthorization {
     rbac: SharedRbacService,
     access: SupplierAccess,
 }
-impl Deref for SupplierProfileAuthorization {
-    type Target = SharedRbacService;
-    fn deref(&self) -> &Self::Target {
-        &self.rbac
-    }
-}
-
 /// 携带文件资产的供应商根命令执行结果。
 pub struct SupplierProfileWithAssetsResult {
     /// 稳定业务结果。
@@ -56,49 +48,21 @@ pub struct SupplierProfileWithAssetsResult {
 }
 
 impl SupplierProfileProcess {
-    /// 创建供应商资料 Process。不在构造时注入 RBAC。
+    /// 创建具备完整授权能力的供应商资料服务。
     ///
     /// # 参数
-    /// * `db` - 数据库。
-    /// * `sensitive_data` - 敏感字段编解码器。
-    ///
+    /// db 为业务数据库，sensitive_data 为敏感数据编解码器；rbac 与 access 为同次装配的身份及供应商授权能力。
     /// # 返回
-    /// 未注入授权源的资料 Process。
-    ///
+    /// 在业务事务中执行授权重验的资料服务。
     /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
-        Self { db, sensitive_data, authorization: None }
-    }
-
-    /// 注入当前 RBAC 快照，供资料写入在事务内重验 DataScope。
-    ///
-    /// # 参数
-    /// * `rbac` - 共享 RBAC 服务
-    /// * `access` - 使用同一授权源的供应商范围服务。
-    ///
-    /// # 返回
-    /// 返回可在同一写入事务证明供应商范围的资料 Process。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn with_authorization(mut self, rbac: SharedRbacService, access: SupplierAccess) -> Self {
-        self.authorization = Some(SupplierProfileAuthorization { rbac, access });
-        self
-    }
-
-    /// 取得资料写入所需的授权源。未注入时失败关闭。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 构造后注入的 RBAC。
-    ///
-    /// # 错误
-    /// 未注入授权源时返回内部错误。
-    fn require_authorization(&self) -> Result<&SupplierProfileAuthorization> {
-        self.authorization.as_ref().ok_or_else(|| Error::Internal("供应商资料写入需要授权源".into()))
+    /// 构造不执行 I/O。
+    pub fn new(
+        db: Database,
+        sensitive_data: Arc<SensitiveDataCodec>,
+        rbac: SharedRbacService,
+        access: SupplierAccess,
+    ) -> Self {
+        Self { db, sensitive_data, authorization: SupplierProfileAuthorization { rbac, access } }
     }
 
     /// 按幂等键查询已成功的根级命令结果。

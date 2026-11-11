@@ -9,20 +9,23 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_catalog::CatalogExt;
 use erp_catalog::repository::prelude::*;
-use erp_core::common::time::Instant;
 use erp_core::ids::SkuId;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment_execution::inventory_adjustment::InventoryAdjustmentProcess;
 use erp_fulfillment_execution::workflow::FulfillmentWorkflowServices;
-use erp_identity::{Error as IdentityError, Permission, SharedRbacService};
+use erp_identity::entity::authorization::{FactKind, ReadAccess, RelationKey, RelationMatch};
+use erp_identity::{
+    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry, AuthorizationService,
+    DataAccess, Error as IdentityError, Permission, SharedRbacService,
+};
+use erp_inventory::repository::inventory::authorization::InventoryMapping;
 use erp_inventory::{
     AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAction, InventoryAuditPort,
-    InventoryAuthorization, InventoryReadProof, InventoryScopeMeta, InventoryScopeSet, InventoryService,
-    PreparedInventoryAudit, ReceiptNoFact, SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort,
-    WarehouseRevisionFact, WarehouseScope,
+    InventoryAuthorization, InventoryQuery, InventoryService, PreparedInventoryAudit, ReceiptNoFact, SkuFact,
+    SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact,
 };
 use erp_warehouse::WarehouseExt;
-use erp_warehouse::authorization::{WarehouseAuthorization, WarehouseRead};
+use erp_warehouse::authorization::{WarehouseAuthorization, WarehouseMapping};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -85,6 +88,31 @@ impl AuthorizationPort for MongoInventoryAuthorization {
     ) -> erp_inventory::Result<InventoryAuthorization> {
         authorize_inventory(&self.db, &self.rbac, actor, actions, executor).await
     }
+    async fn require_warehouse(
+        &self,
+        actor: &AuditActor,
+        action: InventoryAction,
+        warehouse: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<()> {
+        warehouse_authorization(&self.db, &self.rbac, action)?
+            .require(actor, warehouse, executor)
+            .await
+            .map_err(|error| map_svc(error.into()))
+    }
+    async fn allowed_warehouses(
+        &self,
+        actor: &AuditActor,
+        action: InventoryAction,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<BTreeSet<String>> {
+        match warehouse_authorization(&self.db, &self.rbac, action)?.ids_in(actor, ids, executor).await {
+            Ok(ids) => Ok(ids.into_iter().collect()),
+            Err(IdentityError::Forbidden(_)) => Ok(BTreeSet::new()),
+            Err(error) => Err(map_svc(error.into())),
+        }
+    }
 }
 
 /// 在调用方执行器上仅计算当前用例需要的动作范围。
@@ -117,77 +145,93 @@ pub async fn authorize_inventory(
     {
         return Ok(InventoryAuthorization::inactive());
     }
-    let mut scopes = BTreeMap::new();
+    let mut queries = BTreeMap::new();
     for action in actions {
-        scopes.insert(action, inventory_scope(db, rbac, actor, action, executor).await?);
+        if matches!(
+            action,
+            InventoryAction::BalanceList
+                | InventoryAction::MovementList
+                | InventoryAction::ReservationList
+                | InventoryAction::AdjustmentList
+        ) && let Some(query) = inventory_query(db, rbac, actor, action, executor).await?
+        {
+            queries.insert(action, query);
+        }
     }
-    Ok(inventory_snapshot(scopes))
+    Ok(InventoryAuthorization::new(true, queries))
 }
 
-/// 对单个固定入口执行 identity 查询；无该项权限只清空该项范围。
-async fn inventory_scope(
+/// 固定仓库入口与其同角色附加功能资格。
+fn warehouse_authorization(
+    db: &Database,
+    rbac: &SharedRbacService,
+    action: InventoryAction,
+) -> erp_inventory::Result<WarehouseAuthorization> {
+    WarehouseAuthorization::new(
+        db.clone(),
+        rbac.clone(),
+        Permission::parse(action.permission())?,
+        required_permissions(action),
+    )
+    .map_err(|error| map_svc(error.into()))
+}
+fn required_permissions(action: InventoryAction) -> Vec<Permission> {
+    action
+        .requires_adjustment_detail()
+        .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定库存权限"))
+        .into_iter()
+        .collect()
+}
+
+/// 库存行通过完整真实仓库来源执行统一授权，不预装授权 ID。
+async fn inventory_query(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
     action: InventoryAction,
     executor: &mut dyn Executor,
-) -> erp_inventory::Result<(WarehouseScope, InventoryScopeMeta)> {
-    let extra = action
-        .requires_adjustment_detail()
-        .then(|| Permission::parse(DETAIL_PERMISSION).expect("固定库存权限"))
-        .into_iter()
-        .collect();
-    let service =
-        WarehouseAuthorization::new(db.clone(), rbac.clone(), Permission::parse(action.permission())?, extra)
-            .map_err(|error| map_svc(error.into()))?;
-    match service.ids(actor, executor).await {
-        Ok(read) => Ok((
-            WarehouseScope::from_authorized(
-                read.ids().to_vec(),
-                Arc::new(InventoryWarehouseProof(read.clone())),
-            ),
-            InventoryScopeMeta::new(read.version(), 0, 0, Instant::now().as_utc().to_rfc3339()),
-        )),
-        Err(IdentityError::Forbidden(_)) => Ok((WarehouseScope::empty(), InventoryScopeMeta::empty())),
-        Err(error) => Err(map_svc(error.into())),
-    }
-}
-
-/// 按动作填入已取证的范围；未请求的动作不持有身份或复验证明。
-fn inventory_snapshot(
-    mut scopes: BTreeMap<InventoryAction, (WarehouseScope, InventoryScopeMeta)>,
-) -> InventoryAuthorization {
-    let mut take = |action| {
-        scopes.remove(&action).unwrap_or_else(|| (WarehouseScope::empty(), InventoryScopeMeta::empty()))
+) -> erp_inventory::Result<Option<InventoryQuery>> {
+    let permission = Permission::parse(action.permission())?;
+    let mapping = InventoryMapping::shared(
+        action,
+        WarehouseMapping::shared(permission.resource()).map_err(|error| map_svc(error.into()))?,
+    )
+    .map_err(|error| map_svc(error.into()))?;
+    let registration = AccessRegistration {
+        permission: permission.clone(),
+        required_permissions: required_permissions(action),
+        access: AccessMode::Query {
+            data: DataAccess {
+                subject: AccessSubject::Direct,
+                required_facts: BTreeSet::new(),
+                policy: AccessPolicy::Related {
+                    relation: RelationKey::parse("warehouse").map_err(|error| map_svc(error.into()))?,
+                    resource: permission.resource().into(),
+                    mode: RelationMatch::AllNonEmpty,
+                    required_facts: [FactKind::Warehouse].into(),
+                    policy: Box::new(AccessPolicy::Scope {
+                        permission: permission.clone(),
+                        read: ReadAccess::default(),
+                    }),
+                },
+            },
+            mapping: mapping.clone(),
+        },
     };
-    let (balance_list_scope, balance) = take(InventoryAction::BalanceList);
-    let (balance_detail_scope, _) = take(InventoryAction::BalanceDetail);
-    let (movement_list_scope, movement) = take(InventoryAction::MovementList);
-    let (reservation_list_scope, _) = take(InventoryAction::ReservationList);
-    let (adjustment_list_scope, adjustment) = take(InventoryAction::AdjustmentList);
-    let (read_scope, _) = take(InventoryAction::AdjustmentDetail);
-    let (create_scope, _) = take(InventoryAction::Create);
-    let (update_scope, _) = take(InventoryAction::Update);
-    InventoryAuthorization::from_scope_set(InventoryScopeSet {
-        actor_active: true,
-        balance_list_scope,
-        balance_detail_scope,
-        movement_list_scope,
-        reservation_list_scope,
-        adjustment_list_scope,
-        read_scope,
-        create_scope,
-        update_scope,
-    })
-    .with_list_meta(balance, movement, adjustment)
-}
-
-struct InventoryWarehouseProof(WarehouseRead);
-#[async_trait]
-impl InventoryReadProof for InventoryWarehouseProof {
-    async fn validate(&self, executor: &mut dyn Executor) -> erp_inventory::Result<()> {
-        self.0.validate(executor).await.map_err(|error| map_svc(error.into()))
-    }
+    let registry = AuthorizationRegistry::new(vec![registration]).map_err(|error| map_svc(error.into()))?;
+    let service = AuthorizationService::new(db.clone(), rbac.clone(), registry);
+    let query = match service.query(actor, &permission, AccessSubject::Direct, executor).await {
+        Ok(query) => query,
+        Err(IdentityError::Forbidden(_)) => return Ok(None),
+        Err(error) => return Err(map_svc(error.into())),
+    };
+    let compiled = query.compile(mapping.as_ref(), executor).await.map_err(|error| map_svc(error.into()))?;
+    service.validate(&compiled, executor).await.map_err(|error| map_svc(error.into()))?;
+    let warehouses = warehouse_authorization(db, rbac, action)?
+        .query(actor, executor)
+        .await
+        .map_err(|error| map_svc(error.into()))?;
+    Ok(Some(InventoryQuery::new(service, compiled, warehouses.is_empty())))
 }
 
 /// 把库存审计事实写入 `erp-audit` 的 Mongo adapter。

@@ -1,13 +1,11 @@
 //! 供应商履约订单对象读取与写入范围；跟进人和业务组织分别解释。
 
 use application_core::AuditActor;
-use erp_identity::{
-    AuthorizationRegistry, AuthorizationService, OrganizationDirectoryService, SharedRbacService,
-};
+use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, FulfillmentOrderResolvedScope};
+use crate::authorization::{self, Authorization, FulfillmentOrderResolvedScope};
 use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use crate::error::{Error, Result};
 use crate::repository::SupplierFulfillmentExt;
@@ -16,7 +14,7 @@ use crate::repository::SupplierFulfillmentExt;
 #[derive(Clone)]
 pub struct FulfillmentOrderAccess {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    authorization: Option<Authorization>,
 }
 
 impl FulfillmentOrderAccess {
@@ -32,7 +30,9 @@ impl FulfillmentOrderAccess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        let authorization =
+            Authorization::new(&db, rbac, "supplier_fulfillment_order").expect("固定资源授权目录有效");
+        Self { db, authorization: Some(authorization) }
     }
 
     /// 创建尚未接线的访问器，授权调用保持失败关闭。
@@ -43,12 +43,12 @@ impl FulfillmentOrderAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self { db, authorization: None }
     }
 
     /// 取得已注入的身份设施，禁止默认扩大范围。
-    fn rbac(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
+    fn authorization(&self) -> Result<&Authorization> {
+        self.authorization.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射跟进责任条件。
@@ -69,15 +69,7 @@ impl FulfillmentOrderAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<FulfillmentOrderResolvedScope> {
-        Ok(authorization::resolve(
-            &self.db,
-            self.rbac()?,
-            actor,
-            "supplier_fulfillment_order",
-            action,
-            executor,
-        )
-        .await?)
+        Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
     /// 在调用方事务内重验订单对象资格。
@@ -86,7 +78,6 @@ impl FulfillmentOrderAccess {
     /// * `actor` - 已认证操作人
     /// * `action` - 已注册动作
     /// * `id` - 订单主键
-    /// * `handler_user_id` - 调用方携带的任务处理人；普通对象访问不以此授予权限
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -99,19 +90,9 @@ impl FulfillmentOrderAccess {
         actor: &AuditActor,
         action: &str,
         id: &str,
-        _handler_user_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrder> {
-        authorization::require(
-            &self.db,
-            self.rbac()?,
-            actor,
-            "supplier_fulfillment_order",
-            action,
-            id,
-            executor,
-        )
-        .await?;
+        self.authorization()?.require(actor, action, id, executor).await?;
         self.db
             .supplier_fulfillment_orders()
             .find_by_id(id, executor)
@@ -137,7 +118,7 @@ impl FulfillmentOrderAccess {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> Result<std::collections::BTreeSet<String>> {
-        self.rbac()?;
+        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)
@@ -161,7 +142,7 @@ impl FulfillmentOrderAccess {
         at: erp_core::common::time::Instant,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        self.rbac()?;
+        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone()).own_org(user_id, at, executor).await?)
     }
 
@@ -184,9 +165,7 @@ impl FulfillmentOrderAccess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let permission = authorization::action_permission("supplier_fulfillment_order", action)?;
-        let service =
-            AuthorizationService::new(self.db.clone(), self.rbac()?, AuthorizationRegistry::default());
-        if !service.has_permission(actor, &permission, executor).await? {
+        if !self.authorization()?.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有该操作权限".into()));
         }
         Ok(())

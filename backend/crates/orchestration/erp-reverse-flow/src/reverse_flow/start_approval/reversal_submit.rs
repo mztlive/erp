@@ -18,7 +18,7 @@ use persistence_core::{Error as PersistenceError, Executor, Transactional};
 use super::super::ReturnsProcess;
 use super::super::customer_refund::authorized_customer_refund;
 use super::super::supplier_refund::authorized_supplier_refund;
-use super::prepare::ensure_return_start_replay_authorized;
+use super::ensure_return_start_replay_authorized;
 use crate::{Error, Result, ReverseFlowPorts};
 
 /// 退款及冲正提交回读使用的完整命令身份和授权上下文。

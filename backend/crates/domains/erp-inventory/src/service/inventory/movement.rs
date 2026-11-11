@@ -46,7 +46,7 @@ impl InventoryService {
         params.validate()?;
         let query = params.normalized()?;
         let (page, authorization, source_document_nos) = self.search_stock_movements(&query, actor).await?;
-        let meta = authorization.movement_list_meta();
+        let meta = authorization.meta(InventoryAction::MovementList);
         ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
         let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
         self.hydrate_movement_warehouses(&mut items).await?;
@@ -56,7 +56,7 @@ impl InventoryService {
         Ok(InventoryListPage::from_page(
             PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
             meta,
-            authorization.movement_list_scope().is_empty(),
+            authorization.no_scope(InventoryAction::MovementList),
             MOVEMENT_SCOPE_SUMMARY,
             MOVEMENT_OWNERSHIP_BASIS,
         ))
@@ -96,8 +96,15 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
-                    let filter = movement_filter(query, &authorization, search);
-                    let page = db.stock_movements().search_stock_movements(&filter, executor).await?;
+                    let filter = movement_filter(query, search);
+                    let page = db
+                        .stock_movements()
+                        .search_authorized_stock_movements(
+                            &filter,
+                            authorization.query(InventoryAction::MovementList),
+                            executor,
+                        )
+                        .await?;
                     let views = page.items.iter().cloned().map(movement_row_view).collect::<Vec<_>>();
                     let numbers =
                         load_movement_source_document_nos(&db, fulfillment.as_ref(), &views, executor)
@@ -113,13 +120,12 @@ impl InventoryService {
 /// 将已规范化的查询字段移动到库存流水筛选条件。
 fn movement_filter(
     query: StockMovementListQuery,
-    authorization: &InventoryAuthorization,
     search: crate::repository::InventorySearch,
 ) -> StockMovementFilter {
     let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockMovementFilter {
         search,
-        warehouse_ids: authorization.movement_list_scope().repository_warehouse_ids(query.warehouse_id),
+        warehouse_ids: query.warehouse_id.map(|id| vec![id]),
         sku_id: query.sku_id,
         movement_type: query.movement_type,
         direction: query.direction,

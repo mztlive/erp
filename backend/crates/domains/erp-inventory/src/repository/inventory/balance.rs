@@ -9,11 +9,13 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, both_dec, both_inc, cross_inc, ids_to_strings, paged_projection_search,
+    active_entity_by_id, authorized_projection_search, both_dec, both_inc, cross_inc, ids_to_strings,
     scoped_base_filter, sort_doc, to_decimal128, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
+use crate::Result as InventoryResult;
 use crate::entity::inventory::StockBalance;
+use crate::ports::InventoryQuery;
 
 /// 库存余额列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,7 +43,7 @@ pub struct StockBalanceRow {
 pub struct StockBalanceFilter {
     /// Service 解析的搜索条件；只允许服务端构造。
     pub search: super::InventorySearch,
-    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    /// 业务仓库筛选；`None` 不收窄候选，授权由独立凭证限定。
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
     pub sku_id: Option<SkuId>,
@@ -138,11 +140,19 @@ pub trait StockBalanceRepositoryExt {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    async fn search_stock_balances(
+    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
+    /// # 参数
+    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// # 返回
+    /// 完整授权条件下的页与总数；缺资格返回空页。
+    /// # 错误
+    /// 模型错配、复验或数据库失败返回错误。
+    async fn search_authorized_stock_balances(
         &self,
         filter: &StockBalanceFilter,
+        access: Option<&InventoryQuery>,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockBalanceRow>>;
+    ) -> InventoryResult<PageResult<StockBalanceRow>>;
 
     /// 按库存维度查找余额（`(warehouse_id, sku_id)` 全局唯一）。
     ///
@@ -289,18 +299,19 @@ impl StockBalanceRepositoryExt for Repository<'_, StockBalance> {
             db.operation.name = "search"
         )
     )]
-    async fn search_stock_balances(
+    async fn search_authorized_stock_balances(
         &self,
         filter: &StockBalanceFilter,
+        access: Option<&InventoryQuery>,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockBalanceRow>> {
+    ) -> InventoryResult<PageResult<StockBalanceRow>> {
         let options = FindOptions::builder()
             .sort(stock_balance_sort(filter))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(stock_balance_projection())
             .build();
-        paged_projection_search(&self.collection(), filter.to_doc(), options, executor).await
+        authorized_projection_search(&self.collection(), filter.to_doc(), options, access, executor).await
     }
 
     async fn find_by_dimensions(

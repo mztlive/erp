@@ -5,7 +5,7 @@ use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, SettlementResolvedScope};
+use crate::authorization::{Authorization, SettlementResolvedScope};
 use crate::entity::supplier_settlement::SupplierSettlementStatement;
 use crate::error::{Error, Result};
 use crate::repository::SupplierSettlementExt;
@@ -14,7 +14,7 @@ use crate::repository::SupplierSettlementExt;
 #[derive(Clone)]
 pub struct SettlementAccess {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    authorization: Option<Authorization>,
 }
 
 impl SettlementAccess {
@@ -30,7 +30,9 @@ impl SettlementAccess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        let authorization =
+            Authorization::new(&db, rbac, "supplier_settlement_statement").expect("固定资源授权目录有效");
+        Self { db, authorization: Some(authorization) }
     }
 
     /// 创建尚未接线的访问器，授权调用保持失败关闭。
@@ -41,12 +43,12 @@ impl SettlementAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self { db, authorization: None }
     }
 
     /// 取得已注入的身份设施，禁止默认扩大范围。
-    fn rbac(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
+    fn authorization(&self) -> Result<&Authorization> {
+        self.authorization.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射结算责任条件。
@@ -70,15 +72,7 @@ impl SettlementAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<SettlementResolvedScope> {
-        Ok(authorization::resolve(
-            &self.db,
-            self.rbac()?,
-            actor,
-            "supplier_settlement_statement",
-            action,
-            executor,
-        )
-        .await?)
+        Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
     /// 在调用方事务内重验结算对象资格。
@@ -101,16 +95,7 @@ impl SettlementAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatement> {
-        authorization::require(
-            &self.db,
-            self.rbac()?,
-            actor,
-            "supplier_settlement_statement",
-            action,
-            id,
-            executor,
-        )
-        .await?;
+        self.authorization()?.require(actor, action, id, executor).await?;
         self.db
             .supplier_settlement_statements()
             .find_by_id(id, executor)
@@ -168,7 +153,7 @@ impl SettlementAccess {
         include_descendants: bool,
         executor: &mut dyn Executor,
     ) -> Result<std::collections::BTreeSet<String>> {
-        self.rbac()?;
+        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)

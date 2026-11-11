@@ -21,32 +21,13 @@ use persistence_core::{Executor, mongo_ops};
 /// 身份域编译的当前阶段凭证；不含可由业务组合的权限条款。
 #[derive(Clone)]
 pub struct CompiledScope {
-    compiled: Option<Arc<CompiledAccess>>,
-    authorization: Option<AuthorizationService>,
+    compiled: Arc<CompiledAccess>,
+    authorization: AuthorizationService,
     filter: Document,
-    pub user_id: String,
-    pub resource: String,
-    pub action: String,
     pub scope_version: String,
     pub policy_version: u64,
     pub organization_version: u64,
     pub as_of: Instant,
-}
-impl Default for CompiledScope {
-    fn default() -> Self {
-        Self {
-            compiled: None,
-            authorization: None,
-            filter: Document::new(),
-            user_id: String::new(),
-            resource: String::new(),
-            action: String::new(),
-            scope_version: String::new(),
-            policy_version: 0,
-            organization_version: 0,
-            as_of: Instant::from_unix_secs(0),
-        }
-    }
 }
 impl std::fmt::Debug for CompiledScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -54,7 +35,7 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
-    /// 返回身份域已编译的条件，未接线凭证保持失败关闭。
+    /// 返回身份域已编译的完整授权条件。
     /// # 参数
     /// 无。
     /// # 返回
@@ -62,11 +43,7 @@ impl CompiledScope {
     /// # 错误
     /// 不执行 I/O。
     pub fn document(&self) -> Document {
-        if self.compiled.is_some() {
-            self.filter.clone()
-        } else {
-            doc! {"$expr":false}
-        }
+        self.filter.clone()
     }
     /// 复验账号、权限、版本和有效期。
     /// # 参数
@@ -76,21 +53,7 @@ impl CompiledScope {
     /// # 错误
     /// 未接线、撤权或版本变化拒绝。
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
-        let service = self
-            .authorization
-            .as_ref()
-            .ok_or_else(|| erp_identity::Error::Forbidden("授权凭证未接线".into()))?;
-        service.validate(self.compiled.as_ref().expect("服务和编译凭证同时构造"), executor).await
-    }
-    /// 判断是否缺少身份域查询凭证。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 未装配时为真。
-    /// # 错误
-    /// 不执行 I/O。
-    pub fn is_empty(&self) -> bool {
-        self.compiled.is_none()
+        self.authorization.validate(&self.compiled, executor).await
     }
 }
 
@@ -167,129 +130,137 @@ impl AccessFactsPort for Facts {
     }
 }
 
-fn setup(
-    db: &Database,
-    rbac: SharedRbacService,
-    resource: &str,
-) -> erp_identity::Result<(AuthorizationService, Arc<dyn AccessMapping>)> {
-    let (collection, actions): (&str, &[&str]) = match resource {
-        "product" => ("products", &["list", "detail", "create", "update"]),
-        _ => return Err(erp_identity::Error::ValidationError("未登记本域授权资源".into())),
-    };
-    let mapping: Arc<dyn AccessMapping> = Arc::new(Mapping {
-        model: QueryModel {
-            key: QueryModelKey::parse(resource)?,
-            resource: resource.into(),
-            collection: collection.into(),
-            id_field: "id".into(),
-            output: QueryOutput::Object,
-            facts: Default::default(),
-        },
-    });
-    let facts: Arc<dyn AccessFactsPort> =
-        Arc::new(Facts { db: db.clone(), resource: resource.into(), collection: collection.into() });
-    let mut entries = Vec::new();
-    for action in actions {
-        let permission = Permission::parse(format!("{resource}:{action}"))?;
-        entries.push(AccessRegistration {
-            permission: permission.clone(),
-            required_permissions: vec![],
-            access: AccessMode::QueryAndObject {
-                data: DataAccess {
-                    subject: AccessSubject::Direct,
-                    required_facts: Default::default(),
-                    policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
-                },
-                mapping: mapping.clone(),
-                facts: facts.clone(),
+/// 固定资源目录及事实映射；每次调用独立读取当前授权。
+#[derive(Clone)]
+pub(crate) struct Authorization {
+    service: AuthorizationService,
+    mapping: Arc<dyn AccessMapping>,
+    resource: String,
+}
+
+impl Authorization {
+    /// 构造固定资源的服务及映射，不读取账号权限。
+    /// # 参数
+    /// db、rbac 为共享设施，resource 为本域固定资源。
+    /// # 返回
+    /// 可复用的固定授权目录。
+    /// # 错误
+    /// 固定目录或模型无效时返回接入错误。
+    pub(crate) fn new(db: &Database, rbac: SharedRbacService, resource: &str) -> erp_identity::Result<Self> {
+        let (collection, actions): (&str, &[&str]) = match resource {
+            "product" => ("products", &["list", "detail", "create", "update"]),
+            _ => return Err(erp_identity::Error::ValidationError("未登记本域授权资源".into())),
+        };
+        let mapping: Arc<dyn AccessMapping> = Arc::new(Mapping {
+            model: QueryModel {
+                key: QueryModelKey::parse(resource)?,
+                resource: resource.into(),
+                collection: collection.into(),
+                id_field: "id".into(),
+                output: QueryOutput::Object,
+                facts: Default::default(),
             },
         });
+        let facts: Arc<dyn AccessFactsPort> =
+            Arc::new(Facts { db: db.clone(), resource: resource.into(), collection: collection.into() });
+        let mut entries = Vec::new();
+        for action in actions {
+            let permission = Permission::parse(format!("{resource}:{action}"))?;
+            entries.push(AccessRegistration {
+                permission: permission.clone(),
+                required_permissions: vec![],
+                access: AccessMode::QueryAndObject {
+                    data: DataAccess {
+                        subject: AccessSubject::Direct,
+                        required_facts: Default::default(),
+                        policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
+                    },
+                    mapping: mapping.clone(),
+                    facts: facts.clone(),
+                },
+            });
+        }
+        Ok(Self {
+            service: AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::new(entries)?),
+            mapping,
+            resource: resource.into(),
+        })
     }
-    Ok((AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::new(entries)?), mapping))
 }
 
-/// 编译当前资源动作的完整共享资料授权。
-/// # 参数
-/// db、rbac 为身份设施；resource/action 为服务端固定入口；executor 为原执行器。
-/// # 返回
-/// 本阶段不可伪造的编译凭证。
-/// # 错误
-/// 账号、功能权限、登记、编译或版本校验失败返回错误。
-pub async fn resolve(
-    db: &Database,
-    rbac: SharedRbacService,
-    actor: &AuditActor,
-    resource: &str,
-    action: &str,
-    executor: &mut dyn Executor,
-) -> erp_identity::Result<CompiledScope> {
-    let policy_version = rbac.policy_revision_with_executor(executor).await?;
-    let (service, mapping) = setup(db, rbac, resource)?;
-    let permission = Permission::parse(format!("{resource}:{action}"))?;
-    let query = service.query(actor, &permission, AccessSubject::Direct, executor).await?;
-    let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
-    service.validate(&compiled, executor).await?;
-    let [stage] = compiled.stages() else {
-        return Err(erp_identity::Error::ValidationError("共享资料查询产生未支持的关联阶段".into()));
-    };
-    let filter = stage
-        .get_document("$match")
-        .map_err(|_| erp_identity::Error::ValidationError("共享资料查询缺少授权条件".into()))?
-        .clone();
-    Ok(CompiledScope {
-        scope_version: compiled.version(),
-        compiled: Some(compiled),
-        authorization: Some(service),
-        filter,
-        user_id: actor.id().into(),
-        resource: resource.into(),
-        action: action.into(),
-        policy_version,
-        organization_version: erp_identity::repository::OrganizationRepository::new(db)
-            .revision(executor)
-            .await?
-            .map_or(0, |revision| revision.revision),
-        as_of: Instant::now(),
-    })
-}
+impl Authorization {
+    /// 编译当前资源动作的完整共享资料授权。
+    /// # 参数
+    /// actor 为当前账号，action 为固定动作，executor 为原执行器。
+    /// # 返回
+    /// 本阶段不可伪造的编译凭证。
+    /// # 错误
+    /// 账号、功能权限、登记、编译或版本校验失败返回错误。
+    pub(crate) async fn resolve(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<CompiledScope> {
+        let permission = Permission::parse(format!("{}:{action}", self.resource))?;
+        let query = self.service.query(actor, &permission, AccessSubject::Direct, executor).await?;
+        let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
+        self.service.validate(&compiled, executor).await?;
+        let [stage] = compiled.stages() else {
+            return Err(erp_identity::Error::ValidationError("共享资料查询产生未支持的关联阶段".into()));
+        };
+        let filter = stage
+            .get_document("$match")
+            .map_err(|_| erp_identity::Error::ValidationError("共享资料查询缺少授权条件".into()))?
+            .clone();
+        Ok(CompiledScope {
+            scope_version: compiled.version(),
+            policy_version: compiled.policy_version(),
+            organization_version: compiled.organization_version(),
+            as_of: compiled.as_of(),
+            compiled,
+            authorization: self.service.clone(),
+            filter,
+        })
+    }
 
-/// 在原事务内检查完整对象访问。
-/// # 参数
-/// db、rbac、actor 为可信身份设施；id 为实际对象，executor 为业务执行器。
-/// # 返回
-/// 身份域允许对象操作时成功。
-/// # 错误
-/// 缺失对象、功能权限或数据授权拒绝。
-pub async fn require(
-    db: &Database,
-    rbac: SharedRbacService,
-    actor: &AuditActor,
-    resource: &str,
-    action: &str,
-    id: &str,
-    executor: &mut dyn Executor,
-) -> erp_identity::Result<()> {
-    let (service, _) = setup(db, rbac, resource)?;
-    service
-        .require(
-            actor,
-            &Permission::parse(format!("{resource}:{action}"))?,
-            AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-            executor,
-        )
-        .await
-}
+    /// 在原事务内检查完整对象访问。
+    /// # 参数
+    /// actor 为当前账号，action/id 为实际操作对象，executor 为原执行器。
+    /// # 返回
+    /// 身份域允许对象操作时成功。
+    /// # 错误
+    /// 缺失对象、功能权限或数据授权拒绝。
+    pub(crate) async fn require(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<()> {
+        self.service
+            .require(
+                actor,
+                &Permission::parse(format!("{}:{action}", self.resource))?,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await
+    }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[tokio::test]
-    async fn missing_identity_proof_rejects_execution() {
-        let scope = CompiledScope::default();
-        assert_eq!(scope.document(), doc! {"$expr":false});
-        assert!(matches!(
-            scope.validate(&mut persistence_core::NoTransaction).await,
-            Err(erp_identity::Error::Forbidden(_))
-        ));
+    /// 使用固定目录的身份设施读取当前功能资格。
+    /// # 参数
+    /// actor 为当前账号，permission 为具体功能权限，executor 为原执行器。
+    /// # 返回
+    /// 当前账号具有功能资格时为真。
+    /// # 错误
+    /// 身份、策略或数据库读取失败时返回原错误。
+    pub(crate) async fn has_permission(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<bool> {
+        self.service.has_permission(actor, permission, executor).await
     }
 }

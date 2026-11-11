@@ -150,7 +150,6 @@ impl WorkItemReadService {
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
         let access = QueueAccess::new(self.authorization.query(&actor, "list", executor).await?);
-        access.scope_filter(&query)?;
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs())?;
         let context = StatsContext {

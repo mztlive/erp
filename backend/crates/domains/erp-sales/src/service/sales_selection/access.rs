@@ -14,6 +14,7 @@ use persistence_core::Executor;
 use super::authorization;
 use crate::entity::sales_selection::{SalesSelectionBooklet, SalesSelectionProposal};
 use crate::error::{Error, Result};
+use crate::ports::sales_selection::SelectionCustomerAccessPort;
 use crate::repository::SalesSelectionExt;
 use crate::repository::sales_selection::authorization::SelectionFacts;
 use crate::repository::sales_selection::scope::SelectionReadScope;
@@ -27,21 +28,32 @@ pub struct SelectionAccess {
     authorization: AuthorizationService,
     booklet: Arc<dyn AccessMapping>,
     proposal: Arc<dyn AccessMapping>,
+    customer_mapping: Arc<dyn AccessMapping>,
+    customers: Arc<dyn SelectionCustomerAccessPort>,
 }
 
 impl SelectionAccess {
     /// 绑定选品集合、共享身份设施与固定登记。
     /// # 参数
-    /// db 为选品数据库，rbac 为共享身份服务。
+    /// db 为选品数据库，rbac 为共享身份服务；customer_mapping/customers 提供客户查询与对象授权。
     /// # 返回
     /// 不缓存跨请求授权的访问器。
     /// # 错误
     /// 固定登记非法时启动失败；不执行 I/O。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let (authorization, booklet, proposal) =
-            authorization::service(db.clone(), rbac.clone(), Arc::new(SelectionFacts::new(db.clone())))
-                .expect("固定选品授权目录完整");
-        Self { db, rbac, authorization, booklet, proposal }
+    pub fn new(
+        db: Database,
+        rbac: SharedRbacService,
+        customer_mapping: Arc<dyn AccessMapping>,
+        customers: Arc<dyn SelectionCustomerAccessPort>,
+    ) -> Self {
+        let (authorization, booklet, proposal) = authorization::service(
+            db.clone(),
+            rbac.clone(),
+            Arc::new(SelectionFacts::new(db.clone())),
+            customer_mapping.clone(),
+        )
+        .expect("固定选品授权目录完整");
+        Self { db, rbac, authorization, booklet, proposal, customer_mapping, customers }
     }
 
     /// 在调用方事务内证明资源动作并映射选品责任条件。
@@ -106,23 +118,18 @@ impl SelectionAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBooklet> {
-        self.authorization
-            .require(
-                actor,
-                &Permission::parse(format!("sales_selection_booklet:{action}"))?,
-                AccessTarget::Records {
-                    subject: AccessSubject::Direct,
-                    ids: ResourceTargets::new(&[id]).map_err(identity_error)?,
-                },
-                executor,
-            )
-            .await
-            .map_err(identity_error)?;
-        self.db
+        if action != "get" {
+            self.require_object(actor, "sales_selection_booklet", "get", id, executor).await?;
+        }
+        self.require_object(actor, "sales_selection_booklet", action, id, executor).await?;
+        let book = self
+            .db
             .sales_selection_booklets()
             .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))
+            .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+        self.customers.require_detail(actor, book.customer_id.as_ref(), executor).await?;
+        Ok(book)
     }
 
     /// 在调用方事务内重验方案对象资格。
@@ -148,10 +155,30 @@ impl SelectionAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionProposal> {
+        self.require_object(actor, "sales_selection_proposal", action, id, executor).await?;
+        let proposal = self
+            .db
+            .sales_selection_proposals()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
+        self.customers.require_detail(actor, proposal.customer_id.as_ref(), executor).await?;
+        Ok(proposal)
+    }
+
+    /// 同一执行器内证明当前选品动作；客户资格由拥有领域独立解释。
+    async fn require_object(
+        &self,
+        actor: &AuditActor,
+        resource: &str,
+        action: &str,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         self.authorization
             .require(
                 actor,
-                &Permission::parse(format!("sales_selection_proposal:{action}"))?,
+                &Permission::parse(format!("{resource}:{action}"))?,
                 AccessTarget::Records {
                     subject: AccessSubject::Direct,
                     ids: ResourceTargets::new(&[id]).map_err(identity_error)?,
@@ -159,12 +186,7 @@ impl SelectionAccess {
                 executor,
             )
             .await
-            .map_err(identity_error)?;
-        self.db
-            .sales_selection_proposals()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))
+            .map_err(identity_error)
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。
@@ -193,7 +215,7 @@ impl SelectionAccess {
 
     /// 检查拟创建选品册的责任资格。
     /// # 参数
-    /// actor 为操作人，owner/org 为拟写入责任，executor 为原事务。
+    /// actor 为操作人，customer_id 为实际客户，owner/org 为拟写入责任，executor 为原事务。
     /// # 返回
     /// 统一授权通过时成功。
     /// # 错误
@@ -201,14 +223,17 @@ impl SelectionAccess {
     pub async fn require_new(
         &self,
         actor: &AuditActor,
+        customer_id: &str,
         owner: &str,
         org: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.customers.require_detail(actor, customer_id, executor).await?;
         let (authorization, _, _) = authorization::service(
             self.db.clone(),
             self.rbac.clone(),
             Arc::new(SelectionFacts::proposed(self.db.clone(), owner, org)),
+            self.customer_mapping.clone(),
         )
         .map_err(identity_error)?;
         let permission = Permission::parse("sales_selection_booklet:create")?;

@@ -240,13 +240,12 @@ async fn build_list_input(
         Some(keyword) => Some(party.matching_current_party_ids_by_name(keyword, executor).await?),
         None => None,
     };
-    let mut input = supplier_list_search_input(
+    Ok(supplier_list_search_input(
         query,
         erp_core::common::time::BusinessDate::today().to_string(),
         keyword_party_ids,
-    );
-    input.authorized_scope = scope.clone();
-    Ok(input)
+        scope.clone(),
+    ))
 }
 
 /// 用当前筛选下的身份版本重算范围指纹；超过一万条时拒绝。

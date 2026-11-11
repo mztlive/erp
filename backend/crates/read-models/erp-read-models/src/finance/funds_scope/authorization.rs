@@ -313,11 +313,11 @@ pub fn matches_linked_condition(facts: &FundsLinkedFacts, condition: &FundsLinke
 /// 返回按负责人分组的份额合计与未分配余额；金额方向保持原事实正反。
 ///
 /// # 错误
-/// 不返回错误。金额相加使用 `Amount::checked_add`，本函数始终返回 `Ok`。
+/// 不返回错误。金额相加使用 `Amount::checked_add`。
 pub fn summarize_matched_shares(
     allocations: &[(String, Amount, Option<String>)],
     owner_of: impl Fn(&str) -> Option<String>,
-) -> Result<(BTreeMap<String, Amount>, Amount)> {
+) -> (BTreeMap<String, Amount>, Amount) {
     let mut grouped = BTreeMap::<String, Amount>::new();
     let mut unassigned = erp_finance::service::receivable::mapping::zero_amount();
     for (allocation_id, amount, order_id) in allocations {
@@ -335,7 +335,7 @@ pub fn summarize_matched_shares(
             },
         }
     }
-    Ok((grouped, unassigned))
+    (grouped, unassigned)
 }
 
 /// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
@@ -390,20 +390,6 @@ pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
     format!("{:x}", fingerprint.finish())
 }
 
-/// 部分授权的受限金额统一为空并注明权限限制，不得写零或差额推导。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 始终返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn restricted<T>() -> Option<T> {
-    None
-}
-
 /// 整单读取才返回完整金额；部分授权统一返 null，禁止零值掩盖或差额推导。
 ///
 /// # 参数
@@ -456,38 +442,6 @@ pub(super) fn empty_page<T>(
         scope_summary: summary,
         ownership_basis: "current_linked_responsibility",
     }
-}
-
-/// 连拍两次范围快照：先对照调用方 `expected`，再对照二次快照的 `scope_version`。
-///
-/// 必须保持该两段比较顺序，禁止合成一次读取。版本一致时交付第一次快照。
-///
-/// # 参数
-/// * `expected` - 调用方回传的范围版本；首页可为 `None`
-/// * `snapshot` - 产生范围页的闭包，按顺序调用两次
-///
-/// # 返回
-/// 两次版本一致时返回第一次快照。
-///
-/// # 错误
-/// * `ConflictError` - `expected` 与第一次快照不一致，或两次快照的 `scope_version` 不一致
-pub(super) async fn checked_twice<T, F, Fut>(
-    expected: Option<&str>,
-    snapshot: F,
-) -> Result<FundsScopedPage<T>>
-where
-    F: Fn() -> Fut,
-    Fut: Future<Output = Result<FundsScopedPage<T>>>,
-{
-    let first = snapshot().await?;
-    if expected.is_some_and(|value| value != first.scope_version) {
-        return Err(changed());
-    }
-    let current = snapshot().await?;
-    if current.scope_version != first.scope_version {
-        return Err(changed());
-    }
-    Ok(first)
 }
 
 /// 首次返回页面，第二次只重新解析资格并读取完整匹配集合的版本材料。
@@ -577,7 +531,7 @@ mod tests {
             .into_iter()
             .collect::<std::collections::HashMap<_, _>>();
         let (grouped, unassigned) =
-            summarize_matched_shares(&allocations, |order| owners.get(order).cloned()).unwrap();
+            summarize_matched_shares(&allocations, |order| owners.get(order).cloned());
         assert_eq!(grouped["zhang"], "60".parse().unwrap());
         assert_eq!(grouped["li"], "40".parse().unwrap());
         assert_eq!(unassigned, "10".parse().unwrap());
@@ -614,50 +568,6 @@ mod tests {
             scope_summary: "",
             ownership_basis: "",
         }
-    }
-
-    #[tokio::test]
-    async fn checked_twice_compares_expected_before_second_snapshot() {
-        use std::cell::Cell;
-        let calls = Cell::new(0);
-        let err = checked_twice(Some("old"), || {
-            calls.set(calls.get() + 1);
-            async { Ok(test_page("new", 1)) }
-        })
-        .await
-        .unwrap_err();
-        assert_eq!(calls.get(), 1);
-        assert!(
-            matches!(err, Error::ConflictError(message) if message == "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新")
-        );
-    }
-
-    #[tokio::test]
-    async fn checked_twice_rejects_second_snapshot_change_and_returns_first_page() {
-        use std::cell::Cell;
-        let calls = Cell::new(0);
-        let err = checked_twice(Some("v1"), || {
-            let n = calls.get();
-            calls.set(n + 1);
-            let version = if n == 0 { "v1" } else { "v2" };
-            async move { Ok(test_page(version, 1)) }
-        })
-        .await
-        .unwrap_err();
-        assert_eq!(calls.get(), 2);
-        assert!(matches!(err, Error::ConflictError(_)));
-
-        let calls = Cell::new(0);
-        let page = checked_twice(Some("v1"), || {
-            let n = calls.get();
-            calls.set(n + 1);
-            async move { Ok(test_page("v1", n as u64 + 1)) }
-        })
-        .await
-        .unwrap();
-        assert_eq!(calls.get(), 2);
-        assert_eq!(page.page, 1);
-        assert_eq!(page.scope_version, "v1");
     }
 
     /// 初次失配立即失败；完整集合重验变化不得返回首次页面。

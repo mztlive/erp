@@ -12,8 +12,6 @@ use erp_customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountStatus, CustomerAssignment,
     CustomerAssignmentData, CustomerExt,
 };
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
 use erp_party::repository::identity_guard::guarded_candidates;
 use erp_party::{Party, PartyData, PartyExt, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use id_generator::next_id;
@@ -114,13 +112,6 @@ impl ContractImportProcess {
             return Err(Error::BusinessLogicError("当前合同必须关联原客户，不能创建其它客户".into()));
         }
         self.services.customer_access.clone().require_create(actor, executor).await?;
-        self.db
-            .accounts()
-            .find_account(actor.id(), executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户负责人账号不存在".into()))?
-            .ensure_can_login()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         Ok(())
     }
 

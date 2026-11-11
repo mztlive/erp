@@ -26,8 +26,8 @@ use crate::dto::contract::{
 use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountNamePort, ContractAuditPort, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
-    PreparedContractAudit, SigningCompanyPort,
+    AccountNamePort, ContractAuditPort, CustomerAccountFact, CustomerFactsPort, PreparedContractAudit,
+    SigningCompanyPort,
 };
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
@@ -51,7 +51,6 @@ pub struct ContractService {
     db: Database,
     audit: Arc<dyn ContractAuditPort>,
     customers: Arc<dyn CustomerFactsPort>,
-    assignments: Arc<dyn CustomerAssignmentFactsPort>,
     accounts: Arc<dyn AccountNamePort>,
     companies: Arc<dyn SigningCompanyPort>,
     data_scope: ContractAuthorization,
@@ -64,7 +63,6 @@ impl ContractService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `customers` - 客户存在性与编号事实
-    /// * `assignments` - 客户归属可见范围
     /// * `accounts` - 负责人显示名
     /// * `companies` - 我方公司身份及启停事实
     /// * `authorization` - 组合层装配固定责任模型和真实客户来源的授权能力
@@ -81,12 +79,11 @@ impl ContractService {
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
         customers: Arc<dyn CustomerFactsPort>,
-        assignments: Arc<dyn CustomerAssignmentFactsPort>,
         accounts: Arc<dyn AccountNamePort>,
         companies: Arc<dyn SigningCompanyPort>,
         authorization: ContractAuthorization,
     ) -> Self {
-        Self { db, audit, customers, assignments, accounts, companies, data_scope: authorization }
+        Self { db, audit, customers, accounts, companies, data_scope: authorization }
     }
 
     /// 构造复用本服务授权能力 的合同访问器。

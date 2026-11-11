@@ -23,11 +23,11 @@ impl CatalogCenterReadService {
     /// 编号仓储读取失败时拒绝整页，避免展示不完整的编号结论。
     pub(super) async fn supplier_numbers(&self, row_ids: &[Vec<String>]) -> Result<HashMap<String, String>> {
         let ids = row_ids.iter().flatten().cloned().collect::<BTreeSet<_>>();
-        let Some(db) = self.db.as_ref().filter(|_| !ids.is_empty()) else {
+        if ids.is_empty() {
             return Ok(HashMap::new());
-        };
+        }
         let ids = ids.into_iter().map(SupplierAccountId::from).collect::<Vec<_>>();
-        Ok(db.supplier_accounts().supplier_numbers_by_ids(&ids, &mut NoTransaction).await?)
+        Ok(self.db.supplier_accounts().supplier_numbers_by_ids(&ids, &mut NoTransaction).await?)
     }
 }
 

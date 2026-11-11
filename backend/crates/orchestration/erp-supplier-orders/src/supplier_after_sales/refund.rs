@@ -41,7 +41,7 @@ impl SupplierAfterSalesProcess {
         actor: &AuditActor,
         access: &FulfillmentOrderAccess,
     ) -> Result<Option<SubmitActionResultView>> {
-        access.require_order(actor, "refund", id, None, &mut NoTransaction).await?;
+        access.require_order(actor, "refund", id, &mut NoTransaction).await?;
         if self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?.is_none() {
             return Ok(None);
         }
@@ -71,7 +71,7 @@ impl SupplierAfterSalesProcess {
         access: &FulfillmentOrderAccess,
         executor: &mut dyn Executor,
     ) -> Result<String> {
-        let mut order = access.require_order(actor, "refund", id, None, executor).await?;
+        let mut order = access.require_order(actor, "refund", id, executor).await?;
         let execution = self
             .db
             .supplier_api_order_executions()

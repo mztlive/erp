@@ -1,5 +1,6 @@
 //! 选品拥有领域提供字段映射与对象事实，不决定授权组合。
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
@@ -18,6 +19,7 @@ use crate::repository::SalesSelectionExt;
 /// 固定选品查询模型；方案责任取实际所属册。
 pub struct SelectionMapping {
     model: QueryModel,
+    customer: Option<Arc<dyn AccessMapping>>,
 }
 impl SelectionMapping {
     /// 创建固定业务模型。
@@ -34,6 +36,7 @@ impl SelectionMapping {
             _ => return Err(IdentityError::ValidationError("非选品资源".into())),
         };
         Ok(Self {
+            customer: None,
             model: QueryModel {
                 key: QueryModelKey::parse(resource)?,
                 resource: resource.into(),
@@ -50,6 +53,22 @@ impl SelectionMapping {
             },
         })
     }
+    /// 绑定客户拥有领域的来源映射。
+    /// # 参数
+    /// resource 为固定选品资源，customer 为客户集合映射。
+    /// # 返回
+    /// 同时提供选品责任与真实客户关系的映射。
+    /// # 错误
+    /// 未知选品资源或非客户映射时拒绝。
+    pub fn with_customer(resource: &str, customer: Arc<dyn AccessMapping>) -> IdentityResult<Self> {
+        if customer.model().resource != "customer" {
+            return Err(IdentityError::ValidationError("选品客户来源映射不匹配".into()));
+        }
+        let mut mapping = Self::new(resource)?;
+        mapping.customer = Some(customer);
+        Ok(mapping)
+    }
+
     /// 方案通过有效父册解释当前责任；选品册直接使用本行字段。
     fn responsibility(&self, condition: Document) -> QueryFragment {
         if self.model.resource == "sales_selection_booklet" {
@@ -101,11 +120,18 @@ impl AccessMapping for SelectionMapping {
     }
     fn relation(
         &self,
-        _: &RelationKey,
+        relation: &RelationKey,
         _: &AccessContext,
         _: &MappingFacts,
     ) -> IdentityResult<RelationMapping> {
-        Err(IdentityError::ValidationError("选品模型未登记额外来源关系".into()))
+        if relation.as_str() != "customer" {
+            return Err(IdentityError::ValidationError("选品模型未登记该来源关系".into()));
+        }
+        let mapping = self
+            .customer
+            .clone()
+            .ok_or_else(|| IdentityError::ValidationError("选品客户来源映射未装配".into()))?;
+        Ok(RelationMapping { expected_ids: Bson::Array(vec!["$customer_id".into()]), mapping })
     }
 }
 
@@ -210,6 +236,55 @@ mod tests {
             model: Some(QueryModelKey::parse(resource).unwrap()),
             as_of: Instant::from_unix_secs(10),
         }
+    }
+
+    fn customer_mapping() -> Arc<dyn AccessMapping> {
+        let mut mapping = SelectionMapping::new("sales_selection_booklet").unwrap();
+        mapping.model.resource = "customer".into();
+        mapping.model.collection = "test_customer_sources".into();
+        mapping.model.key = QueryModelKey::parse("test_customer_sources").unwrap();
+        Arc::new(mapping)
+    }
+
+    #[test]
+    fn customer_relation_preserves_the_actual_reference_and_registered_source() {
+        let customer = customer_mapping();
+        for resource in ["sales_selection_booklet", "sales_selection_proposal"] {
+            let mapping = SelectionMapping::with_customer(resource, customer.clone()).unwrap();
+            let relation = mapping
+                .relation(
+                    &RelationKey::parse("customer").unwrap(),
+                    &context(resource),
+                    &MappingFacts::default(),
+                )
+                .unwrap();
+            assert_eq!(relation.expected_ids, Bson::Array(vec!["$customer_id".into()]));
+            assert!(Arc::ptr_eq(&relation.mapping, &customer));
+            assert!(
+                mapping
+                    .relation(
+                        &RelationKey::parse("unregistered").unwrap(),
+                        &context(resource),
+                        &MappingFacts::default(),
+                    )
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn missing_or_mismatched_customer_mapping_does_not_drop_the_customer_boundary() {
+        let mapping = SelectionMapping::new("sales_selection_booklet").unwrap();
+        assert!(
+            mapping
+                .relation(
+                    &RelationKey::parse("customer").unwrap(),
+                    &context("sales_selection_booklet"),
+                    &MappingFacts::default(),
+                )
+                .is_err()
+        );
+        assert!(SelectionMapping::with_customer("sales_selection_booklet", Arc::new(mapping)).is_err());
     }
 
     #[test]

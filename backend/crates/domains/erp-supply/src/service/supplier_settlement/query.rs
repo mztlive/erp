@@ -72,9 +72,6 @@ impl SupplierSettlementService {
         let context = self.access().resolve(actor, "list", executor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
         context.validate(executor).await?;
-        if !context.has_scope_rules() {
-            return Ok(empty_list_view(&query, &context, true));
-        }
         let org_ids = expand_org_filter(
             &self.access(),
             query.org_unit_ids.as_ref().map(|ids| ids.as_slice()),
@@ -138,7 +135,7 @@ impl SupplierSettlementService {
             .aggregate_supplier_settlement_statement_stats(filter, executor)
             .await?;
         let items = page.items.into_iter().map(statement_row_view).collect::<Vec<_>>();
-        Ok(list_view(items, page.total, filter, stats, context, false))
+        Ok(list_view(items, page.total, filter, stats, context))
     }
 }
 
@@ -191,7 +188,6 @@ fn list_view(
     filter: &StatementFilter,
     stats: Option<crate::repository::supplier_settlement::SupplierSettlementStatementStatsRow>,
     context: Option<&SettlementResolvedScope>,
-    no_scope: bool,
 ) -> SupplierSettlementStatementListView {
     let stats = stats.map_or_else(
         || dto::SettlementStatementListStatsView {
@@ -218,18 +214,10 @@ fn list_view(
         policy_version: context.map(|ctx| ctx.policy_version).unwrap_or_default(),
         organization_version: context.map(|ctx| ctx.organization_version).unwrap_or_default(),
         as_of: context.map(|ctx| ctx.as_of.as_utc().to_rfc3339()).unwrap_or_default(),
-        empty_reason: no_scope.then_some("no_scope"),
+        empty_reason: None,
         scope_summary: "结算单按岗位权限共享；负责人筛选为额外收窄",
         ownership_basis: "settlement_prepared_by",
     }
-}
-
-fn empty_list_view(
-    query: &StatementListQuery,
-    context: &SettlementResolvedScope,
-    no_scope: bool,
-) -> SupplierSettlementStatementListView {
-    list_view(Vec::new(), 0, &statement_filter(query), None, Some(context), no_scope)
 }
 
 /// 构建结算单列表筛选条件。

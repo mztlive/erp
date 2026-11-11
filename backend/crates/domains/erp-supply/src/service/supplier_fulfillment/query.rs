@@ -1,14 +1,12 @@
 use persistence_core::NoTransaction;
-use validator::Validate;
 
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::{
-    FulfillmentOrderListQuery, PageView, SortDir, SupplierFulfillmentOrderListParams,
-    SupplierFulfillmentOrderView,
+    FulfillmentOrderListQuery, PageView, SortDir, SupplierFulfillmentOrderView,
 };
 use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
+use crate::repository::SupplierFulfillmentExt;
 use crate::repository::prelude::*;
-use crate::repository::{FulfillmentOrderReadScope, SupplierFulfillmentExt};
 use crate::{Error, Result};
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
@@ -16,29 +14,6 @@ pub type FulfillmentOrderFilter =
     <mongodb::Database as SupplierFulfillmentExt>::SupplierFulfillmentOrderFilter;
 
 impl SupplierFulfillmentService {
-    /// 分页查询供应商履约订单列表（无范围时失败关闭）。
-    ///
-    /// 授权范围内的列表由组合层注入范围后调用 [`Self::search_fulfillment_orders`]。
-    ///
-    /// # 参数
-    /// * `params` - 列表查询参数。
-    ///
-    /// # 返回
-    /// 返回以默认空范围筛选后的分页视图。
-    ///
-    /// # 错误
-    /// 参数校验或规范化失败，以及仓储查询失败时返回对应错误。
-    pub async fn supplier_fulfillment_order_list(
-        &self,
-        params: &SupplierFulfillmentOrderListParams,
-    ) -> Result<PageView<SupplierFulfillmentOrderView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let mut filter = fulfillment_order_filter(&query);
-        filter.scope = Some(FulfillmentOrderReadScope::default());
-        self.search_fulfillment_orders(filter, &mut NoTransaction).await
-    }
-
     /// 按已组装筛选条件分页检索履约订单。
     ///
     /// # 参数

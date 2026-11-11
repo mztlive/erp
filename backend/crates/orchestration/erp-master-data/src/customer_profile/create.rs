@@ -10,8 +10,6 @@ use erp_customer::{
     CustomerProfileCommandResultData, CustomerProfileMutationView, CustomerProfileOperation,
     CustomerProfileReplayContext, SaveCustomerProfileRequest,
 };
-use erp_identity::AccessControlExt;
-use erp_identity::repository::prelude::*;
 use erp_party::{Party, PartyData, PartyExt, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use id_generator::next_id;
 use mongodb::Database;
@@ -22,7 +20,7 @@ use super::facts::PartyFacts;
 use super::idempotency::{checked_command_view, command_view};
 use super::identity::CreationIdentity;
 use super::numbering::business_no;
-use crate::{Error, Result};
+use crate::Result;
 
 impl CustomerProfileProcess {
     /// 原子创建 Party、客户角色、首条 OWNER 与首批资料事实。
@@ -76,7 +74,7 @@ impl CustomerProfileProcess {
         replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<CustomerProfileMutationView> {
-        let rbac = self.require_access()?.clone();
+        let rbac = self.access.clone();
         let actor = actor.clone();
         let this = self.clone();
         self.db
@@ -85,7 +83,6 @@ impl CustomerProfileProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     rbac.require_create(&actor, executor).await?;
-                    this.ensure_user_exists(actor.id(), executor).await?;
                     let identity = this.creation_identity(&req, &actor, executor).await?;
                     let prepared = this.prepare_create(req, identity, replay, &actor)?;
                     let result = prepared.result.clone();
@@ -132,17 +129,6 @@ impl CustomerProfileProcess {
             replay,
             actor,
         )
-    }
-
-    /// 校验负责人账号存在。
-    async fn ensure_user_exists(&self, user_id: &str, executor: &mut dyn Executor) -> Result<()> {
-        let account = self
-            .db
-            .accounts()
-            .find_account(user_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("负责销售账号不存在".to_string()))?;
-        account.ensure_can_login().map_err(|error| Error::BusinessLogicError(error.to_string()))
     }
 }
 
@@ -301,19 +287,46 @@ fn create_owner(
 mod tests {
     use std::sync::Arc;
 
+    use async_trait::async_trait;
     use erp_core::AccountKind;
+    use erp_customer::CustomerAccess;
+    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
     use erp_party::SensitiveDataCodec;
     use mongodb::Client;
     use serde_json::json;
 
     use super::*;
 
+    struct UnusedIdentityAudit;
+
+    #[async_trait]
+    impl IdentityAuditPort for UnusedIdentityAudit {
+        fn resource_log(
+            &self,
+            _: AuditActor,
+            _: &str,
+            _: &str,
+            _: String,
+        ) -> erp_identity::Result<PreparedResourceAudit> {
+            panic!("pure preparation must not execute identity auditing")
+        }
+
+        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> erp_identity::Result<()> {
+            panic!("pure preparation must not persist identity auditing")
+        }
+    }
+
     /// 仅调用纯载荷准备，不执行数据库读写。
     #[tokio::test]
     async fn reuse_creates_only_customer_role_and_preserves_existing_identity() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let service =
-            CustomerProfileProcess::new(db, Arc::new(SensitiveDataCodec::from_secret(b"reuse-unit-test")));
+        let rbac = erp_identity::shared_rbac_service(db.clone(), Arc::new(UnusedIdentityAudit));
+        let access = CustomerAccess::new(db.clone(), rbac);
+        let service = CustomerProfileProcess::new(
+            db,
+            Arc::new(SensitiveDataCodec::from_secret(b"reuse-unit-test")),
+            access,
+        );
         let actor = AuditActor::new("sales-a".into(), "sales".into(), AccountKind::Admin);
         let mut req: SaveCustomerProfileRequest = serde_json::from_value(json!({
             "idempotency_key": "reuse-supplier-party", "reuse_existing_party": true,

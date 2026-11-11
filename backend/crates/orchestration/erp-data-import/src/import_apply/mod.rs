@@ -15,7 +15,7 @@ mod execution;
 pub mod factories;
 mod supersede;
 mod work_items;
-pub use work_items::{ImportWorkItemAccess, ImportWorkItems};
+pub use work_items::ImportWorkItems;
 
 #[cfg(test)]
 mod confirmation_tests;

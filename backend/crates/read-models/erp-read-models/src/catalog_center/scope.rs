@@ -62,7 +62,7 @@ impl CatalogCenterReadService {
     /// # 错误
     /// 不存在或不在范围内返回 NotFound。
     pub async fn product_detail(&self, id: &str, actor: &AuditActor) -> Result<ProductView> {
-        let access = self.access.clone().ok_or_else(|| Error::Internal("商品中心未装配授权服务".into()))?;
+        let access = self.access.clone();
         let product =
             access.require_product(actor, "detail", id, &mut persistence_core::NoTransaction).await?;
         let mut filter = prepare_product_list(&ProductListParams {
@@ -76,11 +76,11 @@ impl CatalogCenterReadService {
         view.items.into_iter().next().ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))
     }
 
-    /// 未装配数据库时返回 `Internal`；否则在同一事务装载列表快照。
+    /// 在同一事务装载列表快照。
     async fn list_snapshot(&self, params: &ProductListParams, actor: &AuditActor) -> Result<ProductSnapshot> {
-        let db = self.db.clone().ok_or_else(|| Error::Internal("商品中心未装配数据库".into()))?;
+        let db = self.db.clone();
         let query = self.query.clone();
-        let access = self.access.clone().ok_or_else(|| Error::Internal("商品中心未装配授权服务".into()))?;
+        let access = self.access.clone();
         let procurement = self.procurement.clone();
         let params = params.clone();
         let actor = actor.clone();

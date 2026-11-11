@@ -11,9 +11,29 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::WorkItemExt;
+use crate::entity::work_item::WorkItem;
 use crate::repository::WorkItemRepositoryExt;
 
-pub(super) struct WorkItemFacts(pub Database);
+pub(super) struct WorkItemFacts {
+    pub db: Database,
+    pub proposed: Option<WorkItem>,
+}
+
+impl WorkItemFacts {
+    /// 拟创建任务只读取输入事实，已有任务沿用原执行器读取持久化事实。
+    async fn items(&self, targets: &ResourceTargets, executor: &mut dyn Executor) -> Result<Vec<WorkItem>> {
+        if let Some(item) = &self.proposed {
+            return Ok(proposed_targets(item, targets));
+        }
+        let mut items = Vec::new();
+        for id in targets.ids() {
+            if let Some(item) = self.db.work_items().find_work_item(id, executor).await? {
+                items.push(item);
+            }
+        }
+        Ok(items)
+    }
+}
 
 #[async_trait]
 impl AccessFactsPort for WorkItemFacts {
@@ -25,12 +45,11 @@ impl AccessFactsPort for WorkItemFacts {
     ) -> Result<Vec<ObjectFacts>> {
         let mut organizations = BTreeMap::new();
         let mut facts = Vec::new();
-        for id in targets.ids() {
-            let Some(item) = self.0.work_items().find_work_item(id, executor).await? else { continue };
+        for item in self.items(targets, executor).await? {
             let org = match &item.owner_user_id {
                 Some(owner) => {
                     if !organizations.contains_key(owner) {
-                        let memberships = OrganizationRepository::new(&self.0)
+                        let memberships = OrganizationRepository::new(&self.db)
                             .primary_memberships(owner, context.as_of, executor)
                             .await?;
                         organizations.insert(
@@ -53,5 +72,46 @@ impl AccessFactsPort for WorkItemFacts {
             });
         }
         Ok(facts)
+    }
+}
+
+/// 创建检查仅提供本次拟保存的任务，其他根目标保持缺失。
+fn proposed_targets(item: &WorkItem, targets: &ResourceTargets) -> Vec<WorkItem> {
+    if targets.ids().contains(&item.base.id) { vec![item.clone()] } else { Vec::new() }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::WorkItemId;
+
+    use super::*;
+    use crate::entity::work_item::SupplierPortalReviewTaskData;
+
+    /// 拟创建任务按完整根目标取证，无需预先存在数据库记录。
+    #[test]
+    fn proposed_review_preserves_identity_and_rejects_unrelated_targets() {
+        let item = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("review-task"),
+            SupplierPortalReviewTaskData {
+                request_id: "supplier-request".into(),
+                subject_version: "submission-1".into(),
+                owner_user_id: "reviewer".into(),
+                owner_organization_id: "procurement".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        let targets = ResourceTargets::new(&["review-task"]).unwrap();
+        let loaded = proposed_targets(&item, &targets);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].base.id, "review-task");
+        assert_eq!(loaded[0].owner_user_id.as_deref(), Some("reviewer"));
+        assert_eq!(loaded[0].owner_organization_id, "procurement");
+        assert_eq!(loaded[0].subject_version, "submission-1");
+        assert!(proposed_targets(&item, &ResourceTargets::new(&["other-task"]).unwrap()).is_empty());
+        let incomplete = ResourceTargets::new(&["review-task", "other-task"]).unwrap();
+        let loaded = proposed_targets(&item, &incomplete);
+        assert_eq!(loaded.len(), 1);
     }
 }

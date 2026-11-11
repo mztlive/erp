@@ -89,20 +89,17 @@ mod tests {
         }
     }
 
-    /// 只构造惰性客户端；用例在授权依赖或输入校验阶段返回，不执行数据库及对象存储操作。
-    async fn service(with_rbac: bool) -> SupplierProfileProcess {
+    /// 只构造惰性客户端；输入校验必须在任何数据库或对象存储读取前返回。
+    async fn service() -> SupplierProfileProcess {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let service = SupplierProfileProcess::new(
-            db.clone(),
+        let access = SupplierAccess::unwired(db.clone());
+        let rbac = erp_identity::shared_rbac_service(db.clone(), Arc::new(UnusedIdentityAudit));
+        SupplierProfileProcess::new(
+            db,
             Arc::new(SensitiveDataCodec::from_secret(b"supplier-assets-unit-test")),
-        );
-        if with_rbac {
-            let access = SupplierAccess::unwired(db.clone());
-            let rbac = erp_identity::shared_rbac_service(db, Arc::new(UnusedIdentityAudit));
-            service.with_authorization(rbac, access)
-        } else {
-            service
-        }
+            rbac,
+            access,
+        )
     }
 
     fn request() -> SaveSupplierProfileRequest {
@@ -157,7 +154,7 @@ mod tests {
 
     #[tokio::test]
     async fn asset_commands_preserve_injected_authorization_and_reach_input_validation() {
-        let service = service(true).await;
+        let service = service().await;
         for update in [false, true] {
             let mut req = request();
             req.clear_contact = true;
@@ -165,20 +162,6 @@ mod tests {
             assert!(matches!(
                 result,
                 Err(Error::ValidationError(message)) if message == "联系人不能同时替换和清空"
-            ));
-        }
-    }
-
-    #[tokio::test]
-    async fn asset_commands_without_authorization_fail_before_database_access() {
-        let service = service(false).await;
-        let req = request();
-        assert!(req.validate_contract().is_ok());
-        for update in [false, true] {
-            let result = save(&service, req.clone(), update).await;
-            assert!(matches!(
-                result,
-                Err(Error::Internal(message)) if message == "供应商资料写入需要授权源"
             ));
         }
     }

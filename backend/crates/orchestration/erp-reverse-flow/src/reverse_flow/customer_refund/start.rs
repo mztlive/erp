@@ -141,7 +141,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 按原顺序重验账号、退款来源和提交权限，沿用调用方事务。
+/// 先证明账号和提交资格，再读取退款并核验资金来源，沿用调用方事务。
 /// # 参数
 /// * `db` / `rbac` - 数据库与审批授权端口。
 /// * `actor` / `refund_id` - 当前操作人与退款单主键。
@@ -157,7 +157,7 @@ pub(in crate::reverse_flow) async fn authorized_customer_refund(
     refund_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<CustomerRefund> {
-    ensure_return_start_actor_active(db, rbac, actor, executor).await?;
+    ensure_submit_permission(db, rbac, actor, "customer_refund:submit", executor).await?;
     let refund = ReturnsService::new(db.clone()).load_customer_refund(refund_id, executor).await?;
     let customer = db
         .customer_accounts()
@@ -165,15 +165,6 @@ pub(in crate::reverse_flow) async fn authorized_customer_refund(
         .await?
         .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
     customer_refund_responsible_org_id(customer.party_id.as_ref())?;
-    ensure_return_start_replay_authorized(
-        db,
-        rbac,
-        actor,
-        DocumentType::CustomerRefund,
-        "customer_refund:submit",
-        refund_id,
-        executor,
-    )
-    .await?;
+    ensure_source_authorized(db, rbac, actor, DocumentType::CustomerRefund, refund_id, executor).await?;
     Ok(refund)
 }

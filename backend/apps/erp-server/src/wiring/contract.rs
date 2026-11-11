@@ -9,14 +9,12 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_contract::authorization::ContractAuthorization;
 use erp_contract::{
-    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractService,
-    CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort, Error as ContractError,
-    PreparedContractAudit,
+    AccountNamePort, ContractAuditPort, ContractParticipantPort, ContractService, CustomerAccountFact,
+    CustomerFactsPort, Error as ContractError, PreparedContractAudit,
 };
-use erp_core::common::time::BusinessDate;
 use erp_core::ids::CustomerAccountId;
+use erp_customer::CustomerExt;
 use erp_customer::repository::prelude::*;
-use erp_customer::{AssignmentRole, CustomerExt};
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, SharedRbacService};
 use erp_workflow::repository::document_registry::participant_access;
@@ -153,107 +151,6 @@ impl CustomerFactsPort for MongoContractCustomers {
             .map_err(map_customer_to_contract)?
             .into_iter()
             .map(customer_account_fact)
-            .collect())
-    }
-}
-
-/// 为合同列表读取归属可见性的 Mongo adapter。
-#[derive(Clone)]
-pub(crate) struct MongoContractAssignments {
-    db: Database,
-}
-
-impl MongoContractAssignments {
-    /// 绑定客户归属集合所在数据库，构造时不读取。
-    ///
-    /// # 参数
-    /// * `db` - 客户归属集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回未执行 I/O 的 adapter。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self { db }
-    }
-
-    /// 包装为合同域可注入的客户归属事实 Port。
-    ///
-    /// # 参数
-    /// * `db` - 客户归属集合所在数据库。
-    ///
-    /// # 返回
-    /// 返回共享的客户归属事实 Port。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn shared(db: Database) -> Arc<dyn CustomerAssignmentFactsPort> {
-        Arc::new(Self::new(db))
-    }
-}
-
-#[async_trait]
-impl CustomerAssignmentFactsPort for MongoContractAssignments {
-    async fn active_assignments_for_user(
-        &self,
-        user_id: &str,
-        as_of: BusinessDate,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<Vec<ContractAssignmentFact>> {
-        let assignments = self
-            .db
-            .customer_assignments()
-            .find_active_assignments_for_user(user_id, as_of, executor)
-            .await
-            .map_err(map_customer_to_contract)?;
-        Ok(assignments
-            .into_iter()
-            .map(|assignment| ContractAssignmentFact {
-                customer_id: assignment.customer_id.to_string(),
-                user_id: assignment.user_id,
-                is_owner: assignment.assignment_role == AssignmentRole::Owner,
-            })
-            .collect())
-    }
-
-    async fn current_owner_customer_ids(
-        &self,
-        customer_ids: Option<&[String]>,
-        owner_ids: Option<&[String]>,
-        as_of: BusinessDate,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<Vec<String>> {
-        if owner_ids.is_some_and(<[String]>::is_empty) || customer_ids.is_some_and(<[String]>::is_empty) {
-            return Ok(Vec::new());
-        }
-        Ok(self
-            .db
-            .customer_assignments()
-            .current_owners(customer_ids, owner_ids, as_of, executor)
-            .await
-            .map_err(map_customer_to_contract)?
-            .into_iter()
-            .map(|assignment| assignment.customer_id.to_string())
-            .collect())
-    }
-
-    async fn owner_user_ids_by_customer(
-        &self,
-        customer_ids: &[String],
-        as_of: BusinessDate,
-        executor: &mut dyn Executor,
-    ) -> erp_contract::Result<HashMap<String, String>> {
-        let assignments = self
-            .db
-            .customer_assignments()
-            .list_active_for_customers(customer_ids, as_of, executor)
-            .await
-            .map_err(map_customer_to_contract)?;
-        Ok(assignments
-            .into_iter()
-            .filter(|assignment| assignment.assignment_role == AssignmentRole::Owner)
-            .map(|assignment| (assignment.customer_id.to_string(), assignment.user_id))
             .collect())
     }
 }
@@ -403,7 +300,6 @@ pub fn contract_service(db: Database) -> ContractService {
         db.clone(),
         MongoContractAudit::shared(db.clone()),
         MongoContractCustomers::shared(db.clone()),
-        MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
         ContractAuthorization::unwired(db),
@@ -429,7 +325,6 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
         db.clone(),
         MongoContractAudit::shared(db.clone()),
         MongoContractCustomers::shared(db.clone()),
-        MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         Arc::new(MongoSigningCompanies(db.clone())),
         contract_authorization(db, rbac),

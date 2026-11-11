@@ -9,13 +9,15 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    ids_to_strings, negate_decimal128, paged_projection_search, scoped_base_filter, sort_doc, to_decimal128,
-    with_id_tie_breaker,
+    authorized_projection_search, ids_to_strings, negate_decimal128, scoped_base_filter, sort_doc,
+    to_decimal128, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_RESERVATIONS};
+use crate::Result as InventoryResult;
 use crate::entity::inventory::{
     ReservationStatus, StockReservation, StockReservationSourceType, zero_quantity,
 };
+use crate::ports::InventoryQuery;
 
 /// 库存预占列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -45,7 +47,7 @@ pub struct StockReservationRow {
 pub struct StockReservationFilter {
     /// Service 解析的搜索条件；只允许服务端构造。
     pub search: super::InventorySearch,
-    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    /// 业务仓库筛选；`None` 不收窄候选，授权由独立凭证限定。
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
     pub sku_id: Option<SkuId>,
@@ -154,11 +156,19 @@ pub trait StockReservationRepositoryExt {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    async fn search_stock_reservations(
+    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
+    /// # 参数
+    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// # 返回
+    /// 完整授权条件下的页与总数；缺资格返回空页。
+    /// # 错误
+    /// 模型错配、复验或数据库失败返回错误。
+    async fn search_authorized_stock_reservations(
         &self,
         filter: &StockReservationFilter,
+        access: Option<&InventoryQuery>,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockReservationRow>>;
+    ) -> InventoryResult<PageResult<StockReservationRow>>;
 
     /// ★原子条件写★：消耗预占（`reserved -= q`、`consumed += q`）。
     ///
@@ -225,18 +235,19 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
             db.operation.name = "search"
         )
     )]
-    async fn search_stock_reservations(
+    async fn search_authorized_stock_reservations(
         &self,
         filter: &StockReservationFilter,
+        access: Option<&InventoryQuery>,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<StockReservationRow>> {
+    ) -> InventoryResult<PageResult<StockReservationRow>> {
         let options = FindOptions::builder()
             .sort(stock_reservation_sort(filter))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(stock_reservation_projection())
             .build();
-        paged_projection_search(&self.collection(), filter.to_doc(), options, executor).await
+        authorized_projection_search(&self.collection(), filter.to_doc(), options, access, executor).await
     }
 
     #[tracing::instrument(

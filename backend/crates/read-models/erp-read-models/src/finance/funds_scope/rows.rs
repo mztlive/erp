@@ -682,7 +682,7 @@ pub(super) fn build_summary(
         .filter(|(_, _, order)| !permission_limited || order.is_some())
         .cloned()
         .collect::<Vec<_>>();
-    let (grouped, unassigned) = summarize_matched_shares(&visible, |order| owner_of.get(order).cloned())?;
+    let (grouped, unassigned) = summarize_matched_shares(&visible, |order| owner_of.get(order).cloned());
     let mut grouped = grouped
         .into_iter()
         .map(|(owner_user_id, visible_share)| FundsPersonShare { owner_user_id, visible_share })

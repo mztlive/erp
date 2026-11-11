@@ -20,7 +20,7 @@ use crate::repository::SupplierListSearchInput;
 /// * `keyword_party_ids` - 关键词命中的主体 ID，由 PartyFactsPort 预先解析
 ///
 /// # 返回
-/// 返回仓储侧列表事实束搜索输入。授权范围与业务组织留空，由调用方再填。
+/// 返回携带有效授权凭证的仓储列表搜索输入。
 ///
 /// # 错误
 /// 不返回错误。
@@ -28,6 +28,7 @@ pub(super) fn supplier_list_search_input(
     query: &SupplierListQuery,
     as_of: String,
     keyword_party_ids: Option<Vec<erp_core::ids::PartyId>>,
+    authorized_scope: crate::repository::scope::SupplierReadScope,
 ) -> SupplierListSearchInput {
     let qualification_health =
         query.qualification_health.map(SupplierQualificationHealth::to_repository_filter);
@@ -44,7 +45,7 @@ pub(super) fn supplier_list_search_input(
         page_size: query.paging.page_size,
         sort_by: Some(query.paging.sort_by.to_string()),
         sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        authorized_scope: crate::repository::scope::SupplierReadScope::default(),
+        authorized_scope,
         maintainer_user_ids: query.owner_user_ids.as_ref().map(|ids| ids.as_slice().to_vec()),
         capability_owner_user_ids: query
             .capability_owner_user_ids

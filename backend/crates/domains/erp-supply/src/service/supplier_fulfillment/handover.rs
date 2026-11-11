@@ -15,7 +15,6 @@ impl SupplierFulfillmentService {
     /// # 参数
     /// * `id` - 订单稳定 ID
     /// * `req` - 已校验交接请求
-    /// * `handler_user_id` - 当前开放 W26 处理人
     /// * `actor` - 已认证操作人
     /// * `executor` - 调用方执行器
     ///
@@ -28,12 +27,11 @@ impl SupplierFulfillmentService {
         &self,
         id: &str,
         req: &HandoverFulfillmentOrderRequest,
-        handler_user_id: Option<&str>,
         actor: &AuditActor,
         executor: &mut dyn persistence_core::Executor,
     ) -> Result<HandoverFulfillmentOrderView> {
         req.validate()?;
-        persist_handover(&self.db, &self.access(), id, req, handler_user_id, actor, executor).await
+        persist_handover(&self.db, &self.access(), id, req, actor, executor).await
     }
 }
 
@@ -43,16 +41,14 @@ async fn persist_handover(
     access: &crate::service::supplier_fulfillment::FulfillmentOrderAccess,
     id: &str,
     req: &HandoverFulfillmentOrderRequest,
-    handler_user_id: Option<&str>,
     actor: &AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<HandoverFulfillmentOrderView> {
-    let mut order = access.require_order(actor, "handover", id, handler_user_id, executor).await?;
+    let mut order = access.require_order(actor, "handover", id, executor).await?;
     if order.base.version != req.expected_version {
         return Err(Error::ConflictError("供应商履约订单责任或版本已变化，请刷新后重试".into()));
     }
     order.handover(req.target_user_id.clone(), req.target_org_unit_id.clone()).map_err(Error::from)?;
-    access.ensure_writable(actor, "handover", executor).await?;
     db.supplier_fulfillment_orders().update(&mut order, executor).await?;
     Ok(handover_view(&order, Vec::new()))
 }

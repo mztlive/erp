@@ -12,7 +12,7 @@ use erp_sales::dto::sales_selection::{
 };
 use serde::Deserialize;
 
-use super::{access, process};
+use super::process;
 use crate::http::errors::Result;
 use crate::http::extractor::Json;
 use crate::http::response::ApiResponse;
@@ -37,7 +37,6 @@ pub async fn booklet_password(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionPasswordRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).set_access_password(id, req, actor).await?))
 }
 
@@ -58,7 +57,6 @@ pub async fn booklet_vouchers(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<SelectionVoucherView>> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).vouchers(&id, &actor).await?))
 }
 
@@ -79,7 +77,6 @@ pub async fn booklet_selection_details(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<SelectionDetailView>> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).selection_details(&id, &actor).await?))
 }
 

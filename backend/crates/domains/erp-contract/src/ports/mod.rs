@@ -10,9 +10,7 @@ mod participant;
 pub use audit::{ContractAuditPort, FailClosedAuditPort, PreparedContractAudit};
 pub use company::{SigningCompanyFact, SigningCompanyPort};
 pub use customer::{
-    ContractAssignmentFact, ContractCreationPort, CustomerAccountFact, CustomerAssignmentFactsPort,
-    CustomerFactsPort, EmptyAssignments, EmptyCustomers, FailClosedAssignmentFactsPort,
-    FailClosedCustomerFactsPort,
+    ContractCreationPort, CustomerAccountFact, CustomerFactsPort, EmptyCustomers, FailClosedCustomerFactsPort,
 };
 pub use file_asset::{EmptyFileAssetFacts, FailClosedFileAssetFacts, FileAssetFact, FileAssetFactsPort};
 pub use identity::{AccountNamePort, EmptyAccountNames, FailClosedAccountNamePort};

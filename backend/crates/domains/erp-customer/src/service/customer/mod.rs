@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
 use id_generator::next_id;
 use mongodb::Database;
@@ -162,42 +161,6 @@ impl CustomerService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         persist_new_account(&self.db, account, assignment, executor).await
-    }
-
-    /// 按服务端数据范围解析允许返回的客户 ID。
-    ///
-    /// # 参数
-    /// * `scope` - 目录范围；必须由入口授权。`AllAuthorized` 不按归属收窄，其余范围只保留负责销售
-    /// * `actor_user_id` - 当前登录用户
-    ///
-    /// # 返回
-    /// 全量权限返回 `None`；受限范围返回当前负责销售的客户（可为空）。协作销售不计入。
-    ///
-    /// # 错误
-    /// 查询失败时返回仓储错误。
-    pub async fn customer_ids_for_scope(
-        &self,
-        scope: CustomerScope,
-        actor_user_id: &str,
-    ) -> Result<Option<Vec<String>>> {
-        let expected_role = match scope {
-            CustomerScope::AllAuthorized => return Ok(None),
-            CustomerScope::Mine | CustomerScope::Collaborating | CustomerScope::Assigned => {
-                Some(AssignmentRole::Owner)
-            },
-        };
-        let assignments = self
-            .db
-            .customer_assignments()
-            .find_active_assignments_for_user(actor_user_id, BusinessDate::today(), &mut NoTransaction)
-            .await?;
-        Ok(Some(
-            assignments
-                .into_iter()
-                .filter(|assignment| expected_role.is_none_or(|role| assignment.assignment_role == role))
-                .map(|assignment| assignment.customer_id.to_string())
-                .collect(),
-        ))
     }
 
     /// 更新客户角色（乐观锁；单集合 + 审计）。

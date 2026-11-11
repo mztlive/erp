@@ -72,7 +72,6 @@ struct ListSnapshot {
     policy_version: u64,
     organization_version: u64,
     as_of: String,
-    no_scope: bool,
 }
 
 async fn build_snapshot(
@@ -84,7 +83,6 @@ async fn build_snapshot(
 ) -> Result<ListSnapshot> {
     let access = domain.access();
     let mut context = access.resolve(actor, "list", executor).await?;
-    let no_scope = !context.has_scope_rules();
     let mut filter = fulfillment_order_filter(query);
     filter.scope = Some(context.clone());
     apply_org_filter(&access, query, &mut filter, executor).await?;
@@ -94,7 +92,6 @@ async fn build_snapshot(
     fingerprint(&mut context.scope_version, page.total);
     let names = account_display_names(db, &page.items, executor).await?;
     Ok(ListSnapshot {
-        no_scope,
         page: application_core::PageView {
             items: named_rows(page.items, &names),
             total: page.total,
@@ -212,7 +209,7 @@ fn to_list_view(snapshot: ListSnapshot) -> SupplierFulfillmentOrderListView {
         policy_version: snapshot.policy_version,
         organization_version: snapshot.organization_version,
         as_of: snapshot.as_of,
-        empty_reason: snapshot.no_scope.then_some("no_scope"),
+        empty_reason: None,
         scope_summary: "API 供应商订单跟进人及其业务组织范围；异常处理人为当前开放 W26 任务",
 
         data: OwnershipPage { ownership_basis: "fulfillment_follow_up", page: snapshot.page },
@@ -257,7 +254,6 @@ mod tests {
             policy_version: 1,
             organization_version: 1,
             as_of: "2026-09-23T00:00:00Z".to_string(),
-            no_scope: false,
         });
         let json = serde_json::to_value(&view).expect("list view serializes");
         assert_eq!(json["items"][0]["follow_up_user_id"], "buyer-1");

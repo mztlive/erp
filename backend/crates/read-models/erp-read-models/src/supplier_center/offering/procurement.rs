@@ -12,7 +12,6 @@ use erp_procurement::entity::procurement_responsibility::ProcurementResponsibili
 use erp_procurement::repository::ProcurementResponsibilityExt;
 use erp_procurement::repository::prelude::*;
 use erp_supply::SupplierOfferingExt;
-use erp_supply::repository::prelude::*;
 use erp_supply::repository::supplier_offering::procurement::{
     ProcurementOfferingFact, ProcurementOfferingRepositoryExt,
 };
@@ -30,7 +29,7 @@ pub trait OfferingProcurementOwners: Send + Sync {
     /// 返回采购负责人落在请求集合内的供给 ID。
     ///
     /// # 参数
-    /// * `authorized_ids` - 已授权供给；`None` 表示公司范围需先列举
+    /// * `authorized_ids` - 已按完整条件裁剪的供给候选
     /// * `owner_user_ids` - 请求的采购负责人
     /// * `executor` - 与授权相同的执行器
     ///
@@ -41,7 +40,7 @@ pub trait OfferingProcurementOwners: Send + Sync {
     /// 授权集合超限时整体拒绝；缺规则的供给不命中。
     async fn matching_offering_ids(
         &self,
-        authorized_ids: Option<&[String]>,
+        authorized_ids: &[String],
         owner_user_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>>;
@@ -86,17 +85,13 @@ impl MongoOfferingProcurementOwners {
 impl OfferingProcurementOwners for MongoOfferingProcurementOwners {
     async fn matching_offering_ids(
         &self,
-        authorized_ids: Option<&[String]>,
+        authorized_ids: &[String],
         owner_user_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         let wanted: HashSet<&str> = owner_user_ids.iter().map(String::as_str).collect();
-        let offering_ids = match authorized_ids {
-            Some(ids) => ids.to_vec(),
-            None => self.db.supplier_offerings().list_ids(executor).await?,
-        };
-        ensure_authorized_count(offering_ids.len())?;
-        if offering_ids.is_empty() {
+        ensure_authorized_count(authorized_ids.len())?;
+        if authorized_ids.is_empty() {
             return Ok(Vec::new());
         }
         let rules = self
@@ -104,7 +99,7 @@ impl OfferingProcurementOwners for MongoOfferingProcurementOwners {
             .procurement_responsibility_rules()
             .list_active_procurement_responsibility_rules(executor)
             .await?;
-        let offerings = load_offerings(&self.db, &offering_ids, executor).await?;
+        let offerings = load_offerings(&self.db, authorized_ids, executor).await?;
         let sku_ids: Vec<String> = offerings.iter().map(|row| row.sku_id.clone()).collect();
         let skus = load_skus(&self.db, &sku_ids, executor).await?;
         let products = load_products(&self.db, &skus, executor).await?;
@@ -136,7 +131,7 @@ pub struct MapOfferingProcurementOwners {
 impl OfferingProcurementOwners for MapOfferingProcurementOwners {
     async fn matching_offering_ids(
         &self,
-        authorized_ids: Option<&[String]>,
+        authorized_ids: &[String],
         owner_user_ids: &[String],
         _executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
@@ -145,8 +140,7 @@ impl OfferingProcurementOwners for MapOfferingProcurementOwners {
             .owners
             .iter()
             .filter(|(offering_id, owner)| {
-                wanted.contains(owner.as_str())
-                    && authorized_ids.is_none_or(|ids| ids.iter().any(|id| id == *offering_id))
+                wanted.contains(owner.as_str()) && authorized_ids.iter().any(|id| id == *offering_id)
             })
             .map(|(id, _)| id.clone())
             .collect())

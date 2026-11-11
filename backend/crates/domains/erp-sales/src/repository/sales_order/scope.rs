@@ -134,27 +134,6 @@ fn related_sales_stages(source_field: &str, authorization: Vec<Document>) -> Vec
 /// 销售单责任范围查询。
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryScopeExt {
-    /// 按两组独立授权交集批量读取关联销售责任事实。
-    ///
-    /// # 参数
-    /// * `ids` - 待核对的销售单 ID；空集合直接返回空结果。
-    /// * `sales` - 已证明的销售范围。
-    /// * `resource` - 已证明的消费资源范围。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 仅返回指定 ID 内同时满足两组范围的订单；调用方负责分批和总上限。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    async fn scope_orders(
-        &self,
-        ids: &[String],
-        sales: &SalesReadScope,
-        resource: &SalesReadScope,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> crate::Result<Vec<crate::entity::sales_order::SalesOrder>>;
-
     /// 只读取关联销售范围内的身份与版本，避免授权重验装载完整订单。
     ///
     /// # 参数
@@ -198,37 +177,6 @@ pub trait SalesOrderRepositoryScopeExt {
 }
 
 impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order::SalesOrder> {
-    async fn scope_orders(
-        &self,
-        ids: &[String],
-        sales: &SalesReadScope,
-        resource: &SalesReadScope,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> crate::Result<Vec<crate::entity::sales_order::SalesOrder>> {
-        if ids.is_empty() {
-            return Ok(vec![]);
-        }
-        sales.validate(executor).await?;
-        resource.validate(executor).await?;
-        let result = aggregate::find(
-            &self.collection(),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
-                { "id": { "$in": ids } }, sales.document(), resource.document()
-            ] },
-            FindOptions::default(),
-            {
-                let mut stages = sales.lookup_after(doc! { "deleted_at": 0, "id": { "$in": ids } });
-                stages.extend(resource.stages());
-                stages
-            },
-            executor,
-        )
-        .await?;
-        sales.validate(executor).await?;
-        resource.validate(executor).await?;
-        Ok(result)
-    }
-
     async fn scope_order_versions(
         &self,
         ids: &[String],

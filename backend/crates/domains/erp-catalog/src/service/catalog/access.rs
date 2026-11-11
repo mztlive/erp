@@ -1,13 +1,11 @@
 //! 商品对象读取与写入范围；显式维护人和业务组织分别解释。
 
 use application_core::AuditActor;
-use erp_identity::{
-    AuthorizationRegistry, AuthorizationService, OrganizationDirectoryService, Permission, SharedRbacService,
-};
+use erp_identity::{OrganizationDirectoryService, Permission, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, CompiledScope};
+use crate::authorization::{Authorization, CompiledScope};
 use crate::entity::catalog::Product;
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
@@ -16,7 +14,7 @@ use crate::repository::CatalogExt;
 #[derive(Clone)]
 pub struct CatalogAccess {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    authorization: Option<Authorization>,
 }
 
 impl CatalogAccess {
@@ -35,7 +33,8 @@ impl CatalogAccess {
     /// # 关键业务约束
     /// 目录由本域固定登记，不能由业务请求替换。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        let authorization = Authorization::new(&db, rbac, "product").expect("固定资源授权目录有效");
+        Self { db, authorization: Some(authorization) }
     }
 
     /// 构造未装配身份设施的访问器。
@@ -46,12 +45,12 @@ impl CatalogAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self { db, authorization: None }
     }
 
     /// 读取已装配身份设施，缺失时拒绝授权。
-    fn identity(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Internal("商品身份设施未接线".into()))
+    fn authorization(&self) -> Result<&Authorization> {
+        self.authorization.as_ref().ok_or_else(|| Error::Internal("商品身份设施未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射商品责任条件。
@@ -75,7 +74,7 @@ impl CatalogAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(authorization::resolve(&self.db, self.identity()?, actor, "product", action, executor).await?)
+        Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
     /// 在调用方事务内重验商品对象资格。
@@ -101,7 +100,7 @@ impl CatalogAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Product> {
-        authorization::require(&self.db, self.identity()?, actor, "product", action, id, executor).await?;
+        self.authorization()?.require(actor, action, id, executor).await?;
         self.db
             .products()
             .find_by_id(id, executor)
@@ -201,10 +200,8 @@ impl CatalogAccess {
         if !matches!(action, "create" | "update") {
             return Err(Error::ValidationError("未登记商品写动作".into()));
         }
-        let service =
-            AuthorizationService::new(self.db.clone(), self.identity()?, AuthorizationRegistry::default());
         let permission = Permission::parse(format!("product:{action}"))?;
-        if !service.has_permission(actor, &permission, executor).await? {
+        if !self.authorization()?.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有商品写入权限".into()));
         }
         Ok(())

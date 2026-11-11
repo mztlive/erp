@@ -4,6 +4,7 @@
 //! 保持原子条件更新，事务边界与执行器选择仍由 Service 负责。
 
 mod adjustment;
+pub mod authorization;
 mod balance;
 mod movement;
 mod people_read;

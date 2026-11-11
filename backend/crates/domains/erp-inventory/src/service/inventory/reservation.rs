@@ -3,12 +3,12 @@ use persistence_core::Transactional;
 use validator::Validate;
 
 use super::InventoryService;
-use crate::dto::{PageView, StockReservationListParams, StockReservationView};
+use crate::dto::{PageView, StockReservationListParams, StockReservationListQuery, StockReservationView};
 use crate::entity::inventory::StockReservation;
 use crate::error::{Error, Result};
 use crate::ports::InventoryAction;
 use crate::repository::prelude::*;
-use crate::repository::{InventoryExt, StockReservationFilter};
+use crate::repository::{InventoryExt, InventorySearch, StockReservationFilter};
 
 impl InventoryService {
     /// 分页查询库存预占列表（W10 销售预占视图）。
@@ -59,21 +59,15 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
-                    let (sort_by, sort_ascending) = query.paging.sort_selection();
-                    let filter = StockReservationFilter {
-                        search,
-                        warehouse_ids: authorization
-                            .reservation_list_scope()
-                            .repository_warehouse_ids(query.warehouse_id),
-                        sku_id: query.sku_id,
-                        status: query.status,
-                        sales_order_line_id: query.sales_order_line_id,
-                        page: query.paging.page,
-                        page_size: query.paging.page_size,
-                        sort_by,
-                        sort_ascending,
-                    };
-                    let page = db.stock_reservations().search_stock_reservations(&filter, executor).await?;
+                    let filter = reservation_filter(query, search);
+                    let page = db
+                        .stock_reservations()
+                        .search_authorized_stock_reservations(
+                            &filter,
+                            authorization.query(InventoryAction::ReservationList),
+                            executor,
+                        )
+                        .await?;
                     authorization.validate(executor).await?;
                     Ok::<_, Error>(page)
                 })
@@ -98,5 +92,21 @@ impl From<StockReservation> for StockReservationView {
             status: reservation.status,
             version: reservation.base.version,
         }
+    }
+}
+
+/// 请求仓库仅收窄业务候选，完整权限由独立查询凭证限定。
+fn reservation_filter(query: StockReservationListQuery, search: InventorySearch) -> StockReservationFilter {
+    let (sort_by, sort_ascending) = query.paging.sort_selection();
+    StockReservationFilter {
+        search,
+        warehouse_ids: query.warehouse_id.map(|id| vec![id]),
+        sku_id: query.sku_id,
+        status: query.status,
+        sales_order_line_id: query.sales_order_line_id,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by,
+        sort_ascending,
     }
 }

@@ -128,25 +128,6 @@ pub struct SupplierAccountFilter {
     pub sort_ascending: bool,
 }
 
-impl Default for SupplierAccountFilter {
-    fn default() -> Self {
-        Self {
-            keyword: None,
-            party_id: None,
-            party_ids: None,
-            status: None,
-            supplier_ids: None,
-            excluded_supplier_ids: None,
-            authorized_scope: crate::repository::scope::SupplierReadScope::default(),
-            maintainer_user_ids: None,
-            page: 1,
-            page_size: 20,
-            sort_by: None,
-            sort_ascending: false,
-        }
-    }
-}
-
 impl QueryFilter for SupplierAccountFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -162,8 +143,7 @@ impl QueryFilter for SupplierAccountFilter {
     /// `supplier_ids` 为 `Some` 时写入 `id` 的 `$in`（空集合即无命中），
     /// `excluded_supplier_ids` 为 `Some` 时再写入 `$nin`；只排除时只写 `$nin`。
     /// `maintainer_user_ids` 为 `Some` 时按 `$in` 过滤。
-    /// `authorized_scope` 为空时在已有条件上写入 `$expr: false` 并返回；
-    /// 范围文档为空时不再追加条件，否则与前述条件做 `$and`。
+    /// 完整授权条件与前述业务筛选做 `$and`。
     /// 分页与排序字段不进入条件。
     ///
     /// # 错误
@@ -200,16 +180,7 @@ impl QueryFilter for SupplierAccountFilter {
         if let Some(owners) = &self.maintainer_user_ids {
             filter.insert("maintainer_user_id", doc! { "$in": owners });
         }
-        if self.authorized_scope.is_empty() {
-            filter.insert("$expr", false);
-            return filter;
-        }
-        let scope = self.authorized_scope.document();
-        if scope.is_empty() {
-            filter
-        } else {
-            doc! { "$and": [filter, scope] }
-        }
+        doc! { "$and": [filter, self.authorized_scope.document()] }
     }
 }
 
@@ -732,25 +703,30 @@ struct SupplierSearchId {
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
-    use persistence_core::QueryFilter;
 
-    use super::{SupplierAccountFilter, sort_doc};
-    use crate::entity::supplier::SupplierAccountStatus;
+    use super::{insert_supplier_id_constraints, sort_doc};
 
     #[test]
     fn account_filter_applies_candidate_and_excluded_supplier_ids() {
-        let filter = SupplierAccountFilter {
-            status: Some(SupplierAccountStatus::Active),
-            supplier_ids: Some(vec![erp_core::ids::SupplierAccountId::new("supplier-1")]),
-            excluded_supplier_ids: Some(vec![erp_core::ids::SupplierAccountId::new("supplier-2")]),
-            ..SupplierAccountFilter::default()
-        };
-
-        let document = filter.to_doc();
+        let mut document = doc! {};
+        insert_supplier_id_constraints(
+            &mut document,
+            Some(&[erp_core::ids::SupplierAccountId::new("supplier-1")]),
+            Some(&[erp_core::ids::SupplierAccountId::new("supplier-2")]),
+        );
         let ids = document.get_document("id").unwrap();
-        assert_eq!(ids.get_array("$in").unwrap().len(), 1);
-        assert_eq!(ids.get_array("$nin").unwrap().len(), 1);
-        assert_eq!(document.get_str("status").unwrap(), "active");
+        assert_eq!(ids, &doc! { "$in": ["supplier-1"], "$nin": ["supplier-2"] });
+    }
+
+    #[test]
+    fn empty_supplier_candidates_stay_empty_with_exclusions() {
+        let mut document = doc! {};
+        insert_supplier_id_constraints(
+            &mut document,
+            Some(&[]),
+            Some(&[erp_core::ids::SupplierAccountId::new("supplier-2")]),
+        );
+        assert_eq!(document, doc! { "id": { "$in": [], "$nin": ["supplier-2"] } });
     }
 
     #[test]

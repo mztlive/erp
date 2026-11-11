@@ -14,9 +14,9 @@ use erp_identity::entity::authorization::{
 use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
-    AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget,
-    AuthorizationRegistry, AuthorizationService, DataAccess, Error as IdentityError, Permission,
-    Result as IdentityResult, SharedRbacService,
+    AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry,
+    AuthorizationService, DataAccess, Error as IdentityError, Permission, Result as IdentityResult,
+    SharedRbacService,
 };
 use erp_procurement::authorization::PurchaseMapping;
 use mongodb::Database;
@@ -58,11 +58,7 @@ impl WholeAccess {
     ) -> Result<Self> {
         require_entry(entry)?;
         let ledger = Permission::parse(FINANCE_LEDGER_READ)?;
-        let mut registrations = vec![AccessRegistration {
-            permission: ledger.clone(),
-            required_permissions: vec![entry.clone()],
-            access: AccessMode::Operation,
-        }];
+        let mut registrations = Vec::new();
         let mappings = whole_mappings(db, entry, collection)?;
         for mapping in &mappings {
             registrations.push(registration(entry, &ledger, mapping.clone())?);
@@ -74,7 +70,6 @@ impl WholeAccess {
         if !qualified.is_some_and(|qualified| qualified.same_role(&permissions)) {
             return Ok(Self::default());
         }
-        service.require(actor, &ledger, AccessTarget::Operation, executor).await?;
         let queries = compile_views(&service, actor, entry, mappings, executor).await?;
         Ok(Self { queries, zero: true, collection: collection.into() })
     }
@@ -311,7 +306,7 @@ fn partition_records(partition: u8) -> Document {
     doc! { "deleted_at": 0, "__funds_sources_valid": true, "$expr": { "$and": conditions } }
 }
 
-/// 无来源根只接受已经完成财务整账 Operation 授权的查询路径。
+/// 无来源根沿用已取证的同角色入口与整账资格。
 fn zero_stages() -> Vec<Document> {
     vec![doc! { "$match": partition_records(0) }, doc! { "$project": { "_id": 0, "id": 1 } }]
 }

@@ -44,13 +44,7 @@ impl WorkItemReadService {
         fields: &[WorkItemFields],
         executor: &mut dyn Executor,
     ) -> Result<QualifiedPermissions> {
-        let mut codes = BTreeSet::from([
-            "work_item:list",
-            "work_item:detail",
-            "work_item:manage",
-            "approval_instance:read",
-            "approval_instance:decide",
-        ]);
+        let mut codes = BTreeSet::from(["approval_instance:read", "approval_instance:decide"]);
         for field in fields {
             if let Some(relation) = field.work_item_type.brief_relation(&field.business_object_type) {
                 codes.insert(relation.read_permission);

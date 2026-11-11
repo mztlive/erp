@@ -103,11 +103,10 @@ impl SupplierFulfillmentProcess {
     ) -> Result<Vec<FulfillmentHandoverCandidateView>> {
         let identity = (self.identity)();
         let rbac = identity.rbac;
-        let handler = current_handler(&self.db, id, &mut NoTransaction).await?;
         let order = self
             .domain_with_scope(identity.data_scope)
             .access()
-            .require_order(actor, "handover", id, handler.as_deref(), &mut NoTransaction)
+            .require_order(actor, "handover", id, &mut NoTransaction)
             .await?;
         let accounts =
             self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
@@ -178,8 +177,7 @@ async fn persist_handover(
 ) -> Result<HandoverFulfillmentOrderView> {
     ensure_target_qualified(db, rbac, req.target_user_id.trim(), executor).await?;
     ensure_org_enabled(db, req.target_org_unit_id.as_deref(), executor).await?;
-    let handler = current_handler(db, id, executor).await?;
-    let mut view = service.apply_fulfillment_handover(id, req, handler.as_deref(), actor, executor).await?;
+    let mut view = service.apply_fulfillment_handover(id, req, actor, executor).await?;
     let transferred = if req.transfer_open_exception_tasks {
         transfer_open_w26(db, id, req.target_user_id.trim(), executor).await?
     } else {
@@ -247,17 +245,6 @@ async fn open_w26(
         .collect())
 }
 
-async fn current_handler(
-    db: &mongodb::Database,
-    order_id: &str,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<Option<String>> {
-    Ok(open_w26(db, order_id, executor)
-        .await?
-        .into_iter()
-        .find_map(|item| item.owner_user_id.filter(|id| !id.is_empty())))
-}
-
 async fn replay(
     db: &mongodb::Database,
     service: &SupplierFulfillmentService,
@@ -281,11 +268,7 @@ async fn replay(
     if !matches!(stored.result, SupplyCommandResult::FulfillmentHandover) {
         return Err(Error::Internal("供应商订单交接回执类型非法".to_string()));
     }
-    let handler = current_handler(db, order_id, &mut NoTransaction).await?;
-    let order = service
-        .access()
-        .require_order(actor, "handover", order_id, handler.as_deref(), &mut NoTransaction)
-        .await?;
+    let order = service.access().require_order(actor, "handover", order_id, &mut NoTransaction).await?;
     Ok(Some(HandoverFulfillmentOrderView {
         order_id: order.base.id,
         follow_up_user_id: order.follow_up_user_id,

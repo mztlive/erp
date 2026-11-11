@@ -5,7 +5,7 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_sales::dto::sales_selection::{SalesSelectionBookletView, UpdateSelectionPricesRequest};
 
-use super::{access, process};
+use super::process;
 use crate::http::errors::Result;
 use crate::http::extractor::Json;
 use crate::http::response::ApiResponse;
@@ -27,7 +27,6 @@ pub async fn booklet_update_prices(
     Path(id): Path<String>,
     Json(req): Json<UpdateSelectionPricesRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).update_prices(id, req, actor).await?))
 }
 

@@ -40,6 +40,7 @@ use crate::{Error, Result};
 pub(crate) async fn check_create_scope(
     access: &SelectionAccess,
     actor: &AuditActor,
+    customer_id: &str,
     owner: &str,
     org: &str,
     executor: &mut dyn Executor,
@@ -47,7 +48,7 @@ pub(crate) async fn check_create_scope(
     if owner.trim().is_empty() || org.trim().is_empty() {
         return Err(Error::ValidationError("销售负责人与业务组织必填".into()));
     }
-    access.require_new(actor, owner, org, executor).await?;
+    access.require_new(actor, customer_id, owner, org, executor).await?;
     Ok(())
 }
 

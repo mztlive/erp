@@ -18,68 +18,25 @@ use erp_customer::CustomerAccess;
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
 
-use crate::{Error, Result};
-
 /// 完整客户资料的根级服务。
 #[derive(Clone)]
 pub struct CustomerProfileProcess {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
-    access: Option<CustomerAccess>,
+    access: CustomerAccess,
 }
 
 impl CustomerProfileProcess {
-    /// 创建客户资料根级服务。
+    /// 创建具备完整授权能力的客户资料服务。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库实例
-    /// * `sensitive_data` - 启动期固定的敏感数据编解码器
-    ///
+    /// db 为业务数据库，sensitive_data 为敏感数据编解码器，access 为客户授权能力。
     /// # 返回
-    /// 返回可执行客户资料用例的服务实例。
-    ///
+    /// 可在原事务中重验客户访问资格的服务。
     /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 写入前必须注入 RBAC，不得在缺授权源时按登录人推断范围。
-    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
-        Self { db, sensitive_data, access: None }
-    }
-
-    /// 注入当前 RBAC 快照，供资料写入在事务内重验 DataScope。
-    ///
-    /// # 参数
-    /// * `access` - 应用装配的客户范围服务
-    ///
-    /// # 返回
-    /// 返回可在同一写入事务证明客户范围的资料服务。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// handler 事前检查不能代替事务内 `require_create` / `require_with`。
-    pub fn with_access(mut self, access: CustomerAccess) -> Self {
-        self.access = Some(access);
-        self
-    }
-
-    /// 取得资料写入所需的授权源。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回已注入的 RBAC 服务。
-    ///
-    /// # 错误
-    /// 未注入时返回内部错误。
-    ///
-    /// # 关键业务约束
-    /// 缺少授权源不得写入客户资料。
-    pub(super) fn require_access(&self) -> Result<&CustomerAccess> {
-        self.access.as_ref().ok_or_else(|| Error::Internal("客户资料写入需要授权源".into()))
+    /// 构造不执行 I/O。
+    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>, access: CustomerAccess) -> Self {
+        Self { db, sensitive_data, access }
     }
 }
 

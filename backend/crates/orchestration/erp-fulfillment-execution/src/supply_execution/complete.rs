@@ -4,7 +4,6 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
-use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_fulfillment::SupplierOrderTaskCompletionCommand;
@@ -336,7 +335,6 @@ async fn load_completion_task(
         &command.expected_subject_version,
         actor.id(),
     )?;
-    ensure_task_actor_eligible(db, &work_item, actor.id(), executor).await?;
     workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
 
     Ok(work_item)

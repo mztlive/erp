@@ -27,6 +27,8 @@ pub(crate) struct AccessProof {
     pub rule: AccessRule,
     pub version: String,
     pub valid_until: Option<Instant>,
+    pub policy_version: u64,
+    pub organization_version: u64,
     pub session: Option<Document>,
     pub registry: Arc<()>,
 }
@@ -120,6 +122,39 @@ impl CompiledAccess {
     /// 无；使用凭证前后仍须复验。
     pub fn permission(&self) -> &Permission {
         &self.proof.context.permission
+    }
+
+    /// 返回本次身份资格取证使用的权限策略修订。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 与查询凭证同次读取的策略修订，不能代替 validate。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn policy_version(&self) -> u64 {
+        self.proof.policy_version
+    }
+
+    /// 返回本次范围解析使用的组织修订。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 依赖组织的范围修订；未读取组织范围时为 0。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn organization_version(&self) -> u64 {
+        self.proof.organization_version
+    }
+
+    /// 返回统一授权冻结的解释时点。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 与范围及业务映射使用的同一授权时点。
+    /// # 错误
+    /// 不执行 I/O。
+    pub fn as_of(&self) -> Instant {
+        self.proof.context.as_of
     }
 
     /// 在所有异步复验完成后检查整体有效期。

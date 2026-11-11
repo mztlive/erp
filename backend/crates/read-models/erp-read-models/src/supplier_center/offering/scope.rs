@@ -149,7 +149,7 @@ async fn apply_candidate_filter(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
     ensure_authorized_count(candidates.len())?;
-    let matched = procurement.matching_offering_ids(Some(candidates), owner_ids, executor).await?;
+    let matched = procurement.matching_offering_ids(candidates, owner_ids, executor).await?;
     let matched_ids = matched.into_iter().map(SupplierOfferingId::new).collect();
     filter.offering_ids = Some(intersect_ids(filter.offering_ids.take(), matched_ids));
     Ok(())
@@ -170,7 +170,6 @@ fn intersect_ids(
 #[cfg(test)]
 mod tests {
     use erp_core::ids::{SkuId, SupplierAccountId};
-    use erp_supply::OfferingReadScope;
     use erp_supply::entity::supplier_offering::{OfferingSourceType, OfferingStatus};
     use persistence_core::{NoTransaction, QueryFilter};
 
@@ -201,7 +200,7 @@ mod tests {
             supplier_sku_code: Some("礼盒.*".into()),
             source_type: Some(OfferingSourceType::Excel),
             status: Some(OfferingStatus::Active),
-            scope: Some(OfferingReadScope::default()),
+            scope: None,
             maintainer_user_ids: Some(vec!["maintainer".into()]),
             page: 7,
             page_size: 1,
@@ -247,16 +246,12 @@ mod tests {
             owners: [("off-a".into(), "buyer-1".into()), ("off-b".into(), "buyer-2".into())].into(),
         };
         let matched = port
-            .matching_offering_ids(
-                Some(&["off-a".into(), "off-b".into()]),
-                &["buyer-1".into()],
-                &mut NoTransaction,
-            )
+            .matching_offering_ids(&["off-a".into(), "off-b".into()], &["buyer-1".into()], &mut NoTransaction)
             .await
             .unwrap();
         assert_eq!(matched, vec!["off-a".to_string()]);
         let none = port
-            .matching_offering_ids(Some(&["off-b".into()]), &["buyer-1".into()], &mut NoTransaction)
+            .matching_offering_ids(&["off-b".into()], &["buyer-1".into()], &mut NoTransaction)
             .await
             .unwrap();
         assert!(none.is_empty());

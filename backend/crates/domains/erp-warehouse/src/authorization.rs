@@ -3,24 +3,70 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, ReadAccess,
-    RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
+    QueryOutput, ReadAccess, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
-    AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry,
-    AuthorizationService, CompiledAccess, DataAccess, Permission, SharedRbacService,
+    AccessFactsPort, AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject,
+    AccessTarget, AuthorizationRegistry, AuthorizationService, CompiledAccess, DataAccess, Permission,
+    ResourceTargets, SharedRbacService,
 };
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
 
 use crate::repository::WarehouseExt;
-use crate::repository::directory::{authorized_ids, authorized_rows_exist};
+use crate::repository::directory::{authorized_ids_in, authorized_rows_exist};
 
 /// 只把仓库业务字段映射为 identity 事实，不组合权限规则。
-struct WarehouseMapping(QueryModel);
+pub struct WarehouseMapping(QueryModel);
+impl WarehouseMapping {
+    /// 提供仓库真实身份映射供跨域来源登记复用。
+    /// # 参数
+    /// resource 为消费入口的固定资源。
+    /// # 返回
+    /// 固定仓库集合及仓库事实的映射。
+    /// # 错误
+    /// 固定模型标识无效时失败。
+    pub fn shared(resource: &str) -> erp_identity::Result<Arc<dyn AccessMapping>> {
+        Ok(Arc::new(Self(QueryModel {
+            key: QueryModelKey::parse(format!("{resource}_warehouse_identity"))?,
+            resource: resource.into(),
+            collection: <Database as WarehouseExt>::WAREHOUSES.into(),
+            id_field: "id".into(),
+            output: QueryOutput::Object,
+            facts: [FactKind::Warehouse].into(),
+        })))
+    }
+}
+
+struct WarehouseFacts(Database);
+#[async_trait]
+impl AccessFactsPort for WarehouseFacts {
+    async fn load(
+        &self,
+        context: &AccessContext,
+        ids: &ResourceTargets,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<Vec<ObjectFacts>> {
+        let mut objects = Vec::new();
+        for id in ids.ids() {
+            if let Some(row) = self.0.warehouse().warehouse(id, executor).await? {
+                objects.push(ObjectFacts {
+                    resource: context.resource.clone(),
+                    id: row.base.id.clone(),
+                    version: row.base.version.to_string(),
+                    warehouse_id: FactValue::Known(Some(row.base.id)),
+                    ..Default::default()
+                });
+            }
+        }
+        Ok(objects)
+    }
+}
 
 #[async_trait]
 impl AccessMapping for WarehouseMapping {
@@ -80,7 +126,7 @@ impl WarehouseAuthorization {
         permission: Permission,
         required: Vec<Permission>,
     ) -> erp_identity::Result<Self> {
-        let (registry, mapping) = registration(&permission, required)?;
+        let (registry, mapping) = registration(&permission, required, Arc::new(WarehouseFacts(db.clone())))?;
         Ok(Self {
             db: db.clone(),
             service: AuthorizationService::new(db, rbac, registry),
@@ -89,24 +135,51 @@ impl WarehouseAuthorization {
         })
     }
 
-    /// 查询完整已授权仓库身份集合，前后由 identity 复验。
+    /// 查询本次展示候选内有权的真实仓库。
     /// # 参数
-    /// actor 为真实会话账号；executor 为调用方事务。
+    /// actor 为真实账号，ids 为当前页候选，executor 为原读取执行器。
     /// # 返回
-    /// 已授权且实际存在的仓库 ID 及完整查询版本。
+    /// 已授权候选子集，不装载全量授权身份。
     /// # 错误
-    /// 身份、权限、映射、数据库或版本变化错误透传。
-    pub async fn ids(
+    /// 身份、权限、映射或数据库失败透传。
+    pub async fn ids_in(
         &self,
         actor: &AuditActor,
+        ids: &[String],
         executor: &mut dyn Executor,
-    ) -> erp_identity::Result<WarehouseRead> {
+    ) -> erp_identity::Result<Vec<String>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let query = self.service.query(actor, &self.permission, AccessSubject::Direct, executor).await?;
         let compiled = query.compile(self.mapping.as_ref(), executor).await?;
         self.service.validate(&compiled, executor).await?;
-        let ids = authorized_ids(&self.db, &compiled, executor).await?;
+        let ids = authorized_ids_in(&self.db, &compiled, ids, executor).await?;
         self.service.validate(&compiled, executor).await?;
-        Ok(WarehouseRead { ids, authorization: self.service.clone(), compiled: Arc::new(compiled) })
+        Ok(ids)
+    }
+
+    /// 在原业务执行器检查实际仓库的完整动作资格。
+    /// # 参数
+    /// actor 为实际账号，id 为实际仓库，executor 为原事务。
+    /// # 返回
+    /// 功能、同角色附加资格和仓库范围均成立时成功。
+    /// # 错误
+    /// 仓库缺失、无权或事实变化拒绝。
+    pub async fn require(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<()> {
+        self.service
+            .require(
+                actor,
+                &self.permission,
+                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                executor,
+            )
+            .await
     }
 
     /// 编译当前仓库查询，不预载全部授权身份。
@@ -161,6 +234,17 @@ impl WarehouseQuery {
         self.compiled.version()
     }
 
+    /// 返回本次冻结的授权元数据。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 权限版本、组织版本和授权时点。
+    /// # 错误
+    /// 无；实际有效性仍由 validate 核验。
+    pub(crate) fn metadata(&self) -> (u64, u64, Instant) {
+        (self.compiled.policy_version(), self.compiled.organization_version(), self.compiled.as_of())
+    }
+
     /// 判断完整授权查询是否没有实际仓库。
     /// # 参数
     /// 无。
@@ -168,7 +252,7 @@ impl WarehouseQuery {
     /// 完整查询的有界存在性结果，不解释权限规则。
     /// # 错误
     /// 无。
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         !self.has_rows
     }
 
@@ -184,50 +268,11 @@ impl WarehouseQuery {
     }
 }
 
-/// 当前读取阶段的仓库身份结果及不可伪造凭证。
-#[derive(Clone)]
-pub struct WarehouseRead {
-    ids: Vec<String>,
-    authorization: AuthorizationService,
-    compiled: Arc<CompiledAccess>,
-}
-impl WarehouseRead {
-    /// 返回已经授权的真实仓库身份。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 当前读取阶段的完整身份集合。
-    /// # 错误
-    /// 无；使用结果前后仍须复验。
-    pub fn ids(&self) -> &[String] {
-        &self.ids
-    }
-    /// 返回完整授权查询版本。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 身份及业务映射依赖指纹。
-    /// # 错误
-    /// 无。
-    pub fn version(&self) -> String {
-        self.compiled.version()
-    }
-    /// 在实际业务读取前后复验原凭证。
-    /// # 参数
-    /// executor 必须是原读取事务。
-    /// # 返回
-    /// 身份、权限及有效期仍一致时成功。
-    /// # 错误
-    /// 变化返回 DATA_SCOPE_CHANGED，其余错误原样传播。
-    pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
-        self.authorization.validate(&self.compiled, executor).await
-    }
-}
-
 /// 固定入口登记仅表达仓库事实和同角色附加功能要求。
 fn registration(
     permission: &Permission,
     required: Vec<Permission>,
+    facts: Arc<dyn AccessFactsPort>,
 ) -> erp_identity::Result<(AuthorizationRegistry, Arc<dyn AccessMapping>)> {
     let mapping: Arc<dyn AccessMapping> = Arc::new(WarehouseMapping(QueryModel {
         key: QueryModelKey::parse(format!("{}_warehouses", permission.resource()))?,
@@ -245,7 +290,7 @@ fn registration(
     let registry = AuthorizationRegistry::new(vec![AccessRegistration {
         permission: permission.clone(),
         required_permissions: required,
-        access: AccessMode::Query { data, mapping: mapping.clone() },
+        access: AccessMode::QueryAndObject { data, mapping: mapping.clone(), facts },
     }])?;
     Ok((registry, mapping))
 }
@@ -277,6 +322,18 @@ mod tests {
 
     use super::*;
 
+    struct UnusedFacts;
+    #[async_trait]
+    impl AccessFactsPort for UnusedFacts {
+        async fn load(
+            &self,
+            _: &AccessContext,
+            _: &ResourceTargets,
+            _: &mut dyn Executor,
+        ) -> erp_identity::Result<Vec<ObjectFacts>> {
+            panic!("目录登记不读对象")
+        }
+    }
     fn mapping() -> WarehouseMapping {
         WarehouseMapping(QueryModel {
             key: QueryModelKey::parse("warehouse_rows").unwrap(),
@@ -333,8 +390,14 @@ mod tests {
         ] {
             let required =
                 detail.then(|| Permission::parse("stock_adjustment:detail").unwrap()).into_iter().collect();
-            assert!(registration(&Permission::parse(code).unwrap(), required).is_ok(), "{code}");
+            assert!(
+                registration(&Permission::parse(code).unwrap(), required, Arc::new(UnusedFacts)).is_ok(),
+                "{code}"
+            );
         }
-        assert!(registration(&Permission::parse("warehouse:update").unwrap(), Vec::new()).is_err());
+        assert!(
+            registration(&Permission::parse("warehouse:update").unwrap(), Vec::new(), Arc::new(UnusedFacts))
+                .is_err()
+        );
     }
 }

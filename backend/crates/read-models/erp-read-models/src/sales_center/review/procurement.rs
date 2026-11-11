@@ -52,7 +52,7 @@ impl SalesChangeReadService {
         actor: &AuditActor,
     ) -> Result<SalesChangeProcurementView> {
         let updates = list_by_trigger_change(&self.db, &view.id, &mut NoTransaction).await?;
-        let visible = can_list_purchases(&self.db, self.require_rbac()?, Some(actor)).await?;
+        let visible = can_list_purchases(&self.db, &self.rbac, Some(actor)).await?;
         if updates.is_empty() {
             return match (&view.status, &view.current_submission_id) {
                 (SalesChangeOrderStatus::InApproval, Some(submission_id)) => {

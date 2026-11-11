@@ -14,6 +14,7 @@ use facts::WorkItemFacts;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::entity::work_item::WorkItem;
 use crate::repository::work_item::authorization::WorkItemMapping;
 use crate::{Error, Result};
 
@@ -34,7 +35,22 @@ impl WorkItemAuthorization {
     /// 无。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         let mapping = WorkItemMapping::shared();
-        let service = authorization(db, rbac, mapping.clone());
+        let facts = Arc::new(WorkItemFacts { db: db.clone(), proposed: None });
+        let service = authorization(db, rbac, mapping.clone(), facts);
+        Self { service, mapping }
+    }
+
+    /// 用拟保存事实执行同一任务范围政策，不要求任务已存在于数据库。
+    /// # 参数
+    /// db、rbac 为身份设施，item 为本事务将保存的完整任务。
+    /// # 返回
+    /// 返回只对本次拟创建任务取证的授权服务。
+    /// # 错误
+    /// 固定任务登记错误时启动失败，不执行 I/O。
+    pub(super) fn proposed(db: Database, rbac: SharedRbacService, item: &WorkItem) -> Self {
+        let mapping = WorkItemMapping::shared();
+        let facts = Arc::new(WorkItemFacts { db: db.clone(), proposed: Some(item.clone()) });
+        let service = authorization(db, rbac, mapping.clone(), facts);
         Self { service, mapping }
     }
 }
@@ -44,8 +60,8 @@ fn authorization(
     db: Database,
     rbac: SharedRbacService,
     mapping: Arc<dyn AccessMapping>,
+    facts: Arc<WorkItemFacts>,
 ) -> AuthorizationService {
-    let facts = Arc::new(WorkItemFacts(db.clone()));
     let entries = ["list", "detail", "manage"]
         .into_iter()
         .map(|action| {

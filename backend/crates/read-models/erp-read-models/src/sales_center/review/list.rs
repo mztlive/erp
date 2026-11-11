@@ -36,7 +36,7 @@ impl SalesChangeReadService {
         actor: &AuditActor,
     ) -> Result<SalesChangeListView> {
         let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
+        let rbac = self.rbac.clone();
         let params = params.clone();
         let actor = actor.clone();
         self.db
@@ -82,7 +82,7 @@ impl SalesChangeReadService {
         actor: &AuditActor,
     ) -> Result<String> {
         let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
+        let rbac = self.rbac.clone();
         let params = params.clone();
         let actor = actor.clone();
         self.db

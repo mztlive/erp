@@ -52,23 +52,6 @@ impl SalesChangeProcess {
         Self { db, rbac, services }
     }
 
-    /// 返回写命令使用的授权源。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回构造时注入的 RBAC。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得用空授权源补公司范围。
-    fn require_rbac(&self) -> Result<SharedRbacService> {
-        Ok(self.rbac.clone())
-    }
-
     /// 最终通过并生效：生成生效修订并改写销售单。
     ///
     /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工中间旁路。
@@ -115,7 +98,7 @@ impl SalesChangeProcess {
                 })
             })
             .await?;
-        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
             .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)

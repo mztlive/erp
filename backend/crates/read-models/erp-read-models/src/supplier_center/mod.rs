@@ -7,7 +7,6 @@ mod fulfillment_display;
 
 pub use fulfillment_detail::SupplierFulfillmentDetailReadService;
 
-pub mod fulfillment_access;
 pub mod fulfillment_dto;
 pub mod offering;
 pub mod repository;

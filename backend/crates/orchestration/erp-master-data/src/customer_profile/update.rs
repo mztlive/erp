@@ -77,7 +77,7 @@ impl CustomerProfileProcess {
         prepared: PreparedUpdate,
         actor: &AuditActor,
     ) -> Result<()> {
-        let rbac = self.require_access()?.clone();
+        let rbac = self.access.clone();
         let actor = actor.clone();
         let customer_id = customer_id.to_string();
         let db = self.db.clone();

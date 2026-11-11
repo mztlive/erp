@@ -49,8 +49,8 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     ReversalSubmitReplayInput, ReverseStartInput, SupplierRefundStartPersistInput,
-    build_supplier_refund_start_input, ensure_return_start_actor_active,
-    ensure_return_start_replay_authorized, load_start_graph, load_supplier_refund_start_receipt,
+    build_supplier_refund_start_input, ensure_return_start_replay_authorized, ensure_source_authorized,
+    ensure_submit_permission, load_start_graph, load_supplier_refund_start_receipt,
     persist_supplier_refund_start, reversal_result_read_error,
 };
 use crate::{Error, Result};
@@ -480,7 +480,7 @@ async fn persist_bound_supplier_refund_document(
     Ok(binding)
 }
 
-/// 按原顺序重验账号、退款来源和提交权限，沿用调用方事务。
+/// 先证明账号和提交资格，再读取退款并核验资金来源，沿用调用方事务。
 /// # 参数
 /// * `db` / `rbac` - 数据库与审批授权端口。
 /// * `actor` / `refund_id` - 当前操作人与退款单主键。
@@ -496,7 +496,7 @@ pub(super) async fn authorized_supplier_refund(
     refund_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<SupplierRefund> {
-    ensure_return_start_actor_active(db, rbac, actor, executor).await?;
+    ensure_submit_permission(db, rbac, actor, "supplier_refund:submit", executor).await?;
     let refund = ReturnsService::new(db.clone()).load_supplier_refund(refund_id, executor).await?;
     let supplier = db
         .supplier_accounts()
@@ -504,15 +504,6 @@ pub(super) async fn authorized_supplier_refund(
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
     supplier_refund_responsible_org_id(supplier.party_id.as_ref())?;
-    ensure_return_start_replay_authorized(
-        db,
-        rbac,
-        actor,
-        DocumentType::SupplierRefund,
-        "supplier_refund:submit",
-        refund_id,
-        executor,
-    )
-    .await?;
+    ensure_source_authorized(db, rbac, actor, DocumentType::SupplierRefund, refund_id, executor).await?;
     Ok(refund)
 }

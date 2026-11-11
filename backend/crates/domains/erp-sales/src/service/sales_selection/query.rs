@@ -37,7 +37,6 @@ impl SalesSelectionService {
     ) -> Result<crate::dto::sales_selection::SalesSelectionProposalPage> {
         use application_core::{page_or_default, page_size_or_default};
         let filter = crate::repository::sales_selection::SelectionProposalFilter {
-            authorized_customer_ids: params.authorized_customer_ids.clone(),
             authorized_scope: authorized_scope.clone(),
             owner_user_ids: params.owner_user_ids.clone(),
             org_unit_ids: params.org_unit_ids.clone(),
@@ -334,7 +333,6 @@ fn booklet_filter(
         authorized_scope: authorized_scope.clone(),
         owner_user_ids: params.owner_user_ids.clone(),
         org_unit_ids: params.org_unit_ids.clone(),
-        authorized_customer_ids: params.authorized_customer_ids.clone(),
         customer_id: params.customer_id.clone(),
         form: params.form,
         status: params.status,
@@ -371,7 +369,6 @@ mod tests {
     #[test]
     fn list_filter_defaults_to_created_desc() {
         let params = SalesSelectionBookletListParams {
-            authorized_customer_ids: None,
             scope_version: None,
             owner_user_ids: None,
             org_unit_ids: None,

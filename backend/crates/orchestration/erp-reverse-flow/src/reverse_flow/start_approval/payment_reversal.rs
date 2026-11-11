@@ -18,7 +18,8 @@ use persistence_core::{Executor, Transactional};
 
 use super::super::adapter::payment_reversal_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
-use super::prepare::{ensure_return_start_replay_authorized, load_start_receipt_for_document_type};
+use super::ensure_return_start_replay_authorized;
+use super::prepare::load_start_receipt_for_document_type;
 use super::reversal_submit::{committed_reversal_submit, mark_reversal_started, persist_submit_receipt};
 use crate::{Error, Result, ReverseFlowPorts};
 

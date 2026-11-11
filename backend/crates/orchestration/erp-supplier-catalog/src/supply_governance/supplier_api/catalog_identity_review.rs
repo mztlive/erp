@@ -34,7 +34,6 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<CatalogIdentityReviewView> {
         self.ensure_permission(actor, "supplier_api_connection:detail").await?;
-        self.rbac.as_ref().ok_or_else(|| Error::Forbidden("未装配目录核对权限".into()))?;
         let services = self.services.clone();
         Ok(load_review(&self.db, &services, connection, item, actor, false, &mut NoTransaction).await?.1)
     }
@@ -56,7 +55,6 @@ impl SupplierApiGovernanceProcess {
         self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
         self.ensure_permission(actor, "product:update").await?;
         self.ensure_permission(actor, "supplier_offering:update").await?;
-        self.rbac.as_ref().ok_or_else(|| Error::Forbidden("未装配目录核对权限".into()))?;
         let services = self.services.clone();
         let (db, connection, item, actor) =
             (self.db.clone(), connection.to_owned(), item.to_owned(), actor.clone());

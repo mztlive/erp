@@ -607,8 +607,11 @@ impl Application {
 
     /// Customer profile root process.
     pub fn customer_profile_process(&self) -> erp_master_data::CustomerProfileProcess {
-        erp_master_data::CustomerProfileProcess::new(self.db(), self.sensitive_data())
-            .with_access(crate::wiring::customer_access(self.db(), self.rbac()))
+        erp_master_data::CustomerProfileProcess::new(
+            self.db(),
+            self.sensitive_data(),
+            crate::wiring::customer_access(self.db(), self.rbac()),
+        )
     }
 
     /// Supplier list/detail service with party facts and reveal tokens.
@@ -618,8 +621,12 @@ impl Application {
 
     /// Supplier profile root process.
     pub fn supplier_profile_process(&self) -> erp_master_data::SupplierProfileProcess {
-        erp_master_data::SupplierProfileProcess::new(self.db(), self.sensitive_data())
-            .with_authorization(self.rbac(), crate::wiring::supplier_access(self.db(), self.rbac()))
+        erp_master_data::SupplierProfileProcess::new(
+            self.db(),
+            self.sensitive_data(),
+            self.rbac(),
+            crate::wiring::supplier_access(self.db(), self.rbac()),
+        )
     }
 
     /// Catalog domain service with audit and file-asset adapters.

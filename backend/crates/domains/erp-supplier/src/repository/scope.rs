@@ -22,28 +22,6 @@ pub struct SupplierVersion {
 /// 供应商账号集合上的授权范围查询。
 #[allow(async_fn_in_trait)]
 pub trait SupplierAccountRepositoryScopeExt {
-    /// 按明确授权条件读取单个供应商。
-    ///
-    /// # 参数
-    /// * `id` - 供应商稳定主键
-    /// * `scope` - 已证明的授权条件
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 不存在或不在范围内均返回 `None`。
-    ///
-    /// # 错误
-    /// 数据库读取失败时返回仓储错误。
-    ///
-    /// # 关键业务约束
-    /// ID 条件不能替换范围交集；空授权不得返回文档。
-    async fn find_authorized(
-        &self,
-        id: &str,
-        scope: &SupplierReadScope,
-        executor: &mut dyn Executor,
-    ) -> crate::Result<Option<SupplierAccount>>;
-
     /// 装载查询的有界身份与版本集合，用于跨页及导出一致性校验。
     ///
     /// # 参数
@@ -63,20 +41,6 @@ pub trait SupplierAccountRepositoryScopeExt {
 }
 
 impl SupplierAccountRepositoryScopeExt for Repository<'_, SupplierAccount> {
-    async fn find_authorized(
-        &self,
-        id: &str,
-        scope: &SupplierReadScope,
-        executor: &mut dyn Executor,
-    ) -> crate::Result<Option<SupplierAccount>> {
-        scope.validate(executor).await?;
-        let result =
-            async { self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor).await }.await;
-        let result = result?;
-        scope.validate(executor).await?;
-        Ok(result)
-    }
-
     async fn query_versions(
         &self,
         filter: &SupplierAccountFilter,

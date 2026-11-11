@@ -1,9 +1,11 @@
 //! 商品中心聚合读取；查询规则和响应形状由商品领域提供。
 use std::sync::Arc;
 
-use erp_catalog::CatalogAccess;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
+use erp_catalog::service::catalog::{prepare_sellable_sku_list, sellable_sku_page_view};
+use erp_catalog::{CatalogAccess, Error as CatalogError, PageView, SellableSkuListParams, SellableSkuView};
 use mongodb::Database;
+use persistence_core::NoTransaction;
 
 use crate::Result;
 
@@ -17,9 +19,9 @@ pub use procurement::{MapProductProcurementOwners, MongoProductProcurementOwners
 
 /// 商品列表与可售商品列表的组合入口。
 pub struct CatalogCenterReadService {
-    db: Option<Database>,
+    db: Database,
     query: Arc<dyn CatalogSupplyQueryPort>,
-    access: Option<CatalogAccess>,
+    access: CatalogAccess,
     procurement: Arc<dyn ProductProcurementOwners>,
 }
 
@@ -43,13 +45,7 @@ impl CatalogCenterReadService {
         access: CatalogAccess,
         procurement: Arc<dyn ProductProcurementOwners>,
     ) -> Self {
-        Self { db: Some(db), query, access: Some(access), procurement }
-    }
-
-    /// 仅装配查询端口，供不解析范围的可售列表测试使用。
-    #[cfg(test)]
-    pub fn for_query(query: Arc<dyn CatalogSupplyQueryPort>) -> Self {
-        Self { db: None, query, access: None, procurement: Arc::new(MapProductProcurementOwners::default()) }
+        Self { db, query, access, procurement }
     }
 
     /// 查询可售 SKU；资格日期由原商品领域逻辑确定。
@@ -64,20 +60,24 @@ impl CatalogCenterReadService {
     /// 筛选非法或仓储失败时拒绝。
     pub async fn sellable_sku_list(
         &self,
-        params: &erp_catalog::SellableSkuListParams,
-    ) -> Result<erp_catalog::PageView<erp_catalog::SellableSkuView>> {
-        let filter = erp_catalog::service::catalog::prepare_sellable_sku_list(params)?;
-        let page = self
-            .query
-            .search_sellable_skus(&filter, &mut persistence_core::NoTransaction)
-            .await
-            .map_err(erp_catalog::Error::from)?;
-        let supplier_ids = page.items.iter().map(|row| row.supplier_ids.clone()).collect::<Vec<_>>();
+        params: &SellableSkuListParams,
+    ) -> Result<PageView<SellableSkuView>> {
+        let (mut view, supplier_ids) = sellable_sku_page(self.query.as_ref(), params).await?;
         let numbers = self.supplier_numbers(&supplier_ids).await?;
-        let mut view = erp_catalog::service::catalog::sellable_sku_page_view(page, &filter)?;
         supplier_codes::apply_supplier_codes(&mut view.items, &supplier_ids, &numbers);
         Ok(view)
     }
+}
+
+/// 按商品领域筛选查询并投影当前可售页，保留同序供应商身份供编号补齐。
+async fn sellable_sku_page(
+    query: &dyn CatalogSupplyQueryPort,
+    params: &SellableSkuListParams,
+) -> Result<(PageView<SellableSkuView>, Vec<Vec<String>>)> {
+    let filter = prepare_sellable_sku_list(params)?;
+    let page = query.search_sellable_skus(&filter, &mut NoTransaction).await.map_err(CatalogError::from)?;
+    let supplier_ids = page.items.iter().map(|row| row.supplier_ids.clone()).collect();
+    Ok((sellable_sku_page_view(page, &filter)?, supplier_ids))
 }
 
 #[cfg(test)]

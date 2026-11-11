@@ -14,13 +14,12 @@ use crate::{Error, Result, ReverseFlowPorts};
 
 #[async_trait]
 trait ReplayAuthorizationPort: Send + Sync {
-    async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool>;
-    async fn action_allowed(
+    async fn qualification(
         &self,
         actor: &AuditActor,
         permission: &str,
         executor: &mut dyn Executor,
-    ) -> Result<bool>;
+    ) -> Result<SubmissionQualification>;
     async fn source_readable(
         &self,
         actor: &AuditActor,
@@ -36,27 +35,38 @@ trait ReplayAuthorizationPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
 }
+
+/// 同一次账号与权限取证的提交资格，保留现有两种拒绝语义。
+#[derive(Clone, Copy)]
+enum SubmissionQualification {
+    Inactive,
+    MissingPermission,
+    Allowed,
+}
+
 struct MongoReplayAuthorization<'a> {
     db: &'a Database,
     rbac: &'a ReverseFlowPorts,
 }
 #[async_trait]
 impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
-    async fn actor_active(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<bool> {
-        Ok(self.rbac.identity.directory().actor_is_active(actor, executor).await?)
-    }
-    async fn action_allowed(
+    async fn qualification(
         &self,
         actor: &AuditActor,
         permission: &str,
         executor: &mut dyn Executor,
-    ) -> Result<bool> {
+    ) -> Result<SubmissionQualification> {
         let authorization = AuthorizationService::new(
             self.db.clone(),
             self.rbac.identity.clone(),
             AuthorizationRegistry::default(),
         );
-        Ok(authorization.has_permission(actor, &Permission::parse(permission)?, executor).await?)
+        let required = [Permission::parse(permission)?];
+        Ok(match authorization.permissions(actor, &required, executor).await? {
+            None => SubmissionQualification::Inactive,
+            Some(qualified) if qualified.same_role(&required) => SubmissionQualification::Allowed,
+            Some(_) => SubmissionQualification::MissingPermission,
+        })
     }
     async fn source_readable(
         &self,
@@ -77,16 +87,20 @@ impl ReplayAuthorizationPort for MongoReplayAuthorization<'_> {
         ensure_financial_initiator(self.db, actor, kind, id, executor).await
     }
 }
-/// 失效账号必须先于具体来源读取被拒绝。
-async fn ensure_active<P: ReplayAuthorizationPort>(
+/// 账号和提交资格必须先于具体来源读取被拒绝。
+async fn ensure_qualification<P: ReplayAuthorizationPort>(
     port: &P,
     actor: &AuditActor,
+    permission: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if !port.actor_active(actor, executor).await? {
-        return Err(Error::Forbidden("当前账号不可提交该退款或冲正单".to_string()));
+    match port.qualification(actor, permission, executor).await? {
+        SubmissionQualification::Inactive => Err(Error::Forbidden("当前账号不可提交该退款或冲正单".into())),
+        SubmissionQualification::MissingPermission => {
+            Err(Error::Forbidden("当前账号缺少退款提交权限".into()))
+        },
+        SubmissionQualification::Allowed => Ok(()),
     }
-    Ok(())
 }
 /// 同一事务重验静态提交能力和完整资金来源。
 async fn authorize<P: ReplayAuthorizationPort>(
@@ -97,10 +111,18 @@ async fn authorize<P: ReplayAuthorizationPort>(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_active(port, actor, executor).await?;
-    if !port.action_allowed(actor, permission, executor).await? {
-        return Err(Error::Forbidden("当前账号缺少退款提交权限".to_string()));
-    }
+    ensure_qualification(port, actor, permission, executor).await?;
+    authorize_source(port, actor, kind, id, executor).await
+}
+
+/// 当前阶段已证明提交资格后，检查完整资金来源与原经办职责。
+async fn authorize_source<P: ReplayAuthorizationPort>(
+    port: &P,
+    actor: &AuditActor,
+    kind: DocumentType,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     if !port.source_readable(actor, kind, id, executor).await? {
         return Err(Error::Forbidden("无权读取退款所引用的完整资金来源".to_string()));
     }
@@ -137,26 +159,46 @@ async fn ensure_financial_initiator(
     Ok(())
 }
 
-/// 在读取具体退款或冲正来源前确认账号仍可提交。
+/// 在读取具体退款或冲正来源前一次确认账号及提交资格。
 ///
 /// # 参数
 /// * `db` - 数据库。
 /// * `rbac` - 共享 RBAC。
 /// * `actor` - 待重验的操作人。
+/// * `permission` - 服务端固定的提交动作权限码。
 /// * `executor` - 调用方事务执行器。
 ///
 /// # 返回
-/// 账号仍有效时无返回值。
+/// 账号和提交资格仍有效时无返回值。
 ///
 /// # 错误
-/// 账号失效时返回 `Forbidden`。授权查询失败时返回对应错误。
-pub(super) async fn ensure_actor_active(
+/// 账号失效或缺少提交权限时返回 `Forbidden`。授权查询失败时返回对应错误。
+pub(in crate::reverse_flow) async fn ensure_submit_permission(
     db: &Database,
     rbac: &ReverseFlowPorts,
     actor: &AuditActor,
+    permission: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_active(&MongoReplayAuthorization { db, rbac }, actor, executor).await
+    ensure_qualification(&MongoReplayAuthorization { db, rbac }, actor, permission, executor).await
+}
+
+/// 已在同一执行器证明提交资格后，重验资金来源与原经办职责。
+/// # 参数
+/// db、rbac 为共享设施，actor 为当前账号，kind、id 为精确单据，executor 为原事务。
+/// # 返回
+/// 完整来源可读且原经办职责成立时成功。
+/// # 错误
+/// 来源无权、经办人不符或仓储读取失败时返回对应错误。
+pub(in crate::reverse_flow) async fn ensure_source_authorized(
+    db: &Database,
+    rbac: &ReverseFlowPorts,
+    actor: &AuditActor,
+    kind: DocumentType,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    authorize_source(&MongoReplayAuthorization { db, rbac }, actor, kind, id, executor).await
 }
 
 /// 在同一事务内重验账号、提交权限、资金来源可读性和原经办职责。
@@ -175,7 +217,7 @@ pub(super) async fn ensure_actor_active(
 ///
 /// # 错误
 /// 账号失效、缺少提交权限、无权读取资金来源、经办人不符或仓储失败时返回对应错误。
-pub(super) async fn ensure_replay_authorized(
+pub(in crate::reverse_flow) async fn ensure_replay_authorized(
     db: &Database,
     rbac: &ReverseFlowPorts,
     actor: &AuditActor,
@@ -233,8 +275,8 @@ mod tests {
     use super::*;
 
     struct RecordingPort {
-        active: bool,
-        action: bool,
+        qualification: SubmissionQualification,
+        qualification_error: bool,
         source: bool,
         initiator: bool,
         kind: DocumentType,
@@ -243,19 +285,18 @@ mod tests {
     }
     #[async_trait]
     impl ReplayAuthorizationPort for RecordingPort {
-        async fn actor_active(&self, _: &AuditActor, _: &mut dyn Executor) -> Result<bool> {
-            self.calls.lock().unwrap().push("actor");
-            Ok(self.active)
-        }
-        async fn action_allowed(
+        async fn qualification(
             &self,
             _: &AuditActor,
             permission: &str,
             _: &mut dyn Executor,
-        ) -> Result<bool> {
+        ) -> Result<SubmissionQualification> {
             assert_eq!(permission, self.permission);
-            self.calls.lock().unwrap().push("action");
-            Ok(self.action)
+            self.calls.lock().unwrap().push("qualification");
+            if self.qualification_error {
+                return Err(Error::Internal("identity unavailable".into()));
+            }
+            Ok(self.qualification)
         }
         async fn source_readable(
             &self,
@@ -288,19 +329,50 @@ mod tests {
     async fn submission_checks_active_actor_action_and_exact_source() {
         for (kind, permission) in [
             (DocumentType::CustomerRefund, "customer_refund:submit"),
+            (DocumentType::SupplierRefund, "supplier_refund:submit"),
             (DocumentType::ReceiptReversal, "receipt_reversal:submit"),
             (DocumentType::PaymentReversal, "payment_reversal:submit"),
         ] {
-            for (active, action, source, initiator, expected_calls) in [
-                (true, true, true, true, vec!["actor", "action", "source", "initiator"]),
-                (false, true, true, true, vec!["actor"]),
-                (true, false, true, true, vec!["actor", "action"]),
-                (true, true, false, true, vec!["actor", "action", "source"]),
-                (true, true, true, false, vec!["actor", "action", "source", "initiator"]),
+            for (qualification, source, initiator, expected_error, expected_calls) in [
+                (
+                    SubmissionQualification::Allowed,
+                    true,
+                    true,
+                    None,
+                    vec!["qualification", "source", "initiator"],
+                ),
+                (
+                    SubmissionQualification::Inactive,
+                    true,
+                    true,
+                    Some("当前账号不可提交该退款或冲正单"),
+                    vec!["qualification"],
+                ),
+                (
+                    SubmissionQualification::MissingPermission,
+                    true,
+                    true,
+                    Some("当前账号缺少退款提交权限"),
+                    vec!["qualification"],
+                ),
+                (
+                    SubmissionQualification::Allowed,
+                    false,
+                    true,
+                    Some("无权读取退款所引用的完整资金来源"),
+                    vec!["qualification", "source"],
+                ),
+                (
+                    SubmissionQualification::Allowed,
+                    true,
+                    false,
+                    Some("仅原经办人可以提交"),
+                    vec!["qualification", "source", "initiator"],
+                ),
             ] {
                 let port = RecordingPort {
-                    active,
-                    action,
+                    qualification,
+                    qualification_error: false,
                     source,
                     initiator,
                     kind,
@@ -310,9 +382,39 @@ mod tests {
                 let actor = AuditActor::new("actor-1".into(), "actor".into(), erp_core::AccountKind::Admin);
                 let result =
                     authorize(&port, &actor, kind, permission, "document-1", &mut NoTransaction).await;
-                assert_eq!(result.is_ok(), active && action && source && initiator);
+                if let Some(expected) = expected_error {
+                    assert!(matches!(result, Err(Error::Forbidden(message)) if message == expected));
+                } else {
+                    result.unwrap();
+                }
                 assert_eq!(port.calls.into_inner().unwrap(), expected_calls);
             }
         }
+    }
+
+    /// 资格设施错误不得降级为无权，也不得继续读取资金来源。
+    #[tokio::test]
+    async fn qualification_failure_stops_before_source_reads() {
+        let port = RecordingPort {
+            qualification: SubmissionQualification::Allowed,
+            qualification_error: true,
+            source: true,
+            initiator: true,
+            kind: DocumentType::CustomerRefund,
+            permission: "customer_refund:submit",
+            calls: Mutex::new(Vec::new()),
+        };
+        let actor = AuditActor::new("actor-1".into(), "actor".into(), erp_core::AccountKind::Admin);
+        let result = authorize(
+            &port,
+            &actor,
+            DocumentType::CustomerRefund,
+            "customer_refund:submit",
+            "document-1",
+            &mut NoTransaction,
+        )
+        .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "identity unavailable"));
+        assert_eq!(port.calls.into_inner().unwrap(), ["qualification"]);
     }
 }

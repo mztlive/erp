@@ -42,7 +42,7 @@ impl SupplierApiOrderProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_order(&actor, "submit", &id, None, executor).await?;
+                    access.require_order(&actor, "submit", &id, executor).await?;
                     let mut execution = db
                         .supplier_api_order_executions()
                         .find_by_id(&id, executor)

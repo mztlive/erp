@@ -396,12 +396,25 @@ mod tests {
                 rule,
                 version: "identity-v1".into(),
                 valid_until: None,
+                policy_version: 7,
+                organization_version: 11,
                 session: None,
                 registry: Arc::new(()),
             },
             mapping,
             model,
         }
+    }
+
+    #[tokio::test]
+    async fn compiled_metadata_comes_from_the_original_authorization_proof() {
+        let mapping = mapping("sales_order", None);
+        let query = query(AccessRule::Allow, mapping.clone());
+        let as_of = query.proof.context.as_of;
+        let compiled = query.compile(mapping.as_ref(), &mut NoTransaction).await.unwrap();
+        assert_eq!(compiled.policy_version(), 7);
+        assert_eq!(compiled.organization_version(), 11);
+        assert_eq!(compiled.as_of(), as_of);
     }
 
     #[tokio::test]

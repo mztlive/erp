@@ -8,9 +8,13 @@ use persistence_core::repository::find_active_by_field_in;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use super::shared::{paged_projection_search, scoped_base_filter, sort_doc, with_id_tie_breaker};
+use super::shared::{
+    authorized_projection_search, paged_projection_search, scoped_base_filter, sort_doc, with_id_tie_breaker,
+};
 use super::{InventoryRepository, STOCK_MOVEMENTS};
+use crate::Result as InventoryResult;
 use crate::entity::inventory::{MovementDirection, MovementType, StockMovement};
+use crate::ports::InventoryQuery;
 
 /// 库存流水列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,7 +48,7 @@ pub struct StockMovementRow {
 pub struct StockMovementFilter {
     /// Service 解析的搜索条件；只允许服务端构造。
     pub search: super::InventorySearch,
-    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    /// 业务仓库筛选；`None` 不收窄候选，授权由独立凭证限定。
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
     pub sku_id: Option<SkuId>,
@@ -177,6 +181,27 @@ pub trait StockMovementRepositoryExt {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    /// 按统一库存模型凭证分页查询；候选条件只收窄结果。
+    /// # 参数
+    /// filter 为业务筛选，access 为当前动作凭证，executor 为原读取执行器。
+    /// # 返回
+    /// 完整授权条件下的页与总数；缺资格返回空页。
+    /// # 错误
+    /// 模型错配、复验或数据库失败返回错误。
+    async fn search_authorized_stock_movements(
+        &self,
+        filter: &StockMovementFilter,
+        access: Option<&InventoryQuery>,
+        executor: &mut dyn Executor,
+    ) -> InventoryResult<PageResult<StockMovementRow>>;
+
+    /// 查询已授权父对象的附属流水，调用方必须先证明父对象资格。
+    /// # 参数
+    /// filter 为固定父对象维度，executor 为原读取执行器。
+    /// # 返回
+    /// 该维度内的流水页。
+    /// # 错误
+    /// 数据库或解码失败返回错误。
     async fn search_stock_movements(
         &self,
         filter: &StockMovementFilter,
@@ -215,6 +240,21 @@ impl StockMovementRepositoryExt for Repository<'_, StockMovement> {
             db.operation.name = "search"
         )
     )]
+    async fn search_authorized_stock_movements(
+        &self,
+        filter: &StockMovementFilter,
+        access: Option<&InventoryQuery>,
+        executor: &mut dyn Executor,
+    ) -> InventoryResult<PageResult<StockMovementRow>> {
+        let options = FindOptions::builder()
+            .sort(stock_movement_sort(filter))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(stock_movement_projection())
+            .build();
+        authorized_projection_search(&self.collection(), filter.to_doc(), options, access, executor).await
+    }
+
     async fn search_stock_movements(
         &self,
         filter: &StockMovementFilter,

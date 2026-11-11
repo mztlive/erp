@@ -98,25 +98,6 @@ impl RbacService {
         self.fresh_enforcer().await.map(|_| ())
     }
 
-    /// 判断账号是否具有指定权限。
-    ///
-    /// # 参数
-    /// * `subject` - Casbin 主体标识。
-    /// * `permission` - 待判断的资源动作。
-    ///
-    /// # 返回
-    /// 当前策略允许该主体执行该权限时返回 `true`。
-    ///
-    /// # 错误
-    /// 当 Casbin policy 加载或匹配失败时返回错误。
-    pub(crate) async fn enforce(&self, subject: &str, permission: &Permission) -> Result<bool> {
-        Ok(self.fresh_enforcer().await?.read().await.enforce((
-            subject,
-            permission.resource(),
-            permission.action(),
-        ))?)
-    }
-
     /// 返回当前已稳定加载的授权策略版本。
     ///
     /// # 参数

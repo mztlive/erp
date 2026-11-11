@@ -279,8 +279,8 @@ impl SupplierFulfillmentDetailReadService {
                 );
                 false
             } else {
-                self.formal_actor_eligible(work_item_id.expect("formal work item id"), actor, blockers)
-                    .await?
+                self.ensure_formal_task_exists(work_item_id.expect("formal work item id")).await?;
+                true
             }
         } else if has_active_task {
             block_supplier_order_domain_actions(
@@ -318,27 +318,14 @@ impl SupplierFulfillmentDetailReadService {
         Ok(Some(view))
     }
 
-    async fn formal_actor_eligible(
-        &self,
-        work_item_id: &str,
-        actor: &AuditActor,
-        blockers: &mut Vec<SupplierOrderActionBlockerView>,
-    ) -> Result<bool> {
-        let raw = self
-            .db
+    /// 返回详情前重读正式任务存在性；办理资格已由工作流授权结果证明。
+    async fn ensure_formal_task_exists(&self, work_item_id: &str) -> Result<()> {
+        self.db
             .work_items()
             .find_by_id(work_item_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-        if ensure_task_actor_eligible(&self.db, &raw, actor.id(), &mut NoTransaction).await.is_err() {
-            block_supplier_order_domain_actions(
-                blockers,
-                "ACTOR_INELIGIBLE",
-                "当前账号已不具备该供应商履约任务的角色或组织资格",
-            );
-            return Ok(false);
-        }
-        Ok(true)
+        Ok(())
     }
 
     /// 以原供应商动作、连接能力和最新结构化证据投影 W26 动作。
@@ -351,33 +338,8 @@ impl SupplierFulfillmentDetailReadService {
         allowed_actions: &mut Vec<SupplierOrderAllowedAction>,
         action_blockers: &mut Vec<SupplierOrderActionBlockerView>,
     ) -> Result<()> {
-        let connection =
-            self.db.supplier_api_connections().find_by_id(&order.connection_id, &mut NoTransaction).await?;
-        let connection_active = connection.as_ref().is_some_and(SupplierApiConnection::is_active);
-        let capabilities = connection
-            .as_ref()
-            .and_then(|connection| self.fulfillment.capabilities(connection).ok())
-            .unwrap_or_default();
-
-        if order.verified_resolution(target).is_some()
-            || ensure_capability(&capabilities, SupplierApiCapabilityCode::Query).is_ok()
-        {
-            allowed_actions.push(SupplierOrderAllowedAction::QueryResult);
-        } else {
-            action_blockers.push(supplier_order_blocker(
-                SupplierOrderAllowedAction::QueryResult.as_str(),
-                if connection_active {
-                    "QUERY_CAPABILITY_MISSING"
-                } else {
-                    "SUPPLIER_CONNECTION_UNAVAILABLE"
-                },
-                if connection_active {
-                    "供应商接口不支持结果查询"
-                } else {
-                    "供应商接口未配置，且当前业务事实尚不能证明终态"
-                },
-            ));
-        }
+        let (connection_active, capabilities) =
+            self.project_query_action(order, target, allowed_actions, action_blockers).await?;
 
         let replay_capability_ready = capability_for_action(target.action_type)
             .ok()
@@ -419,6 +381,45 @@ impl SupplierFulfillmentDetailReadService {
             ));
         }
         Ok(())
+    }
+
+    /// 读取实际连接能力并投影结果查询入口，返回重放判断所需的同次连接事实。
+    async fn project_query_action(
+        &self,
+        order: &SupplierFulfillmentOrder,
+        target: &SupplierOrderAction,
+        allowed_actions: &mut Vec<SupplierOrderAllowedAction>,
+        action_blockers: &mut Vec<SupplierOrderActionBlockerView>,
+    ) -> Result<(bool, Vec<SupplierApiCapabilityCode>)> {
+        let connection =
+            self.db.supplier_api_connections().find_by_id(&order.connection_id, &mut NoTransaction).await?;
+        let connection_active = connection.as_ref().is_some_and(SupplierApiConnection::is_active);
+        let capabilities = connection
+            .as_ref()
+            .and_then(|connection| self.fulfillment.capabilities(connection).ok())
+            .unwrap_or_default();
+
+        if order.verified_resolution(target).is_some()
+            || ensure_capability(&capabilities, SupplierApiCapabilityCode::Query).is_ok()
+        {
+            allowed_actions.push(SupplierOrderAllowedAction::QueryResult);
+        } else {
+            action_blockers.push(supplier_order_blocker(
+                SupplierOrderAllowedAction::QueryResult.as_str(),
+                if connection_active {
+                    "QUERY_CAPABILITY_MISSING"
+                } else {
+                    "SUPPLIER_CONNECTION_UNAVAILABLE"
+                },
+                if connection_active {
+                    "供应商接口不支持结果查询"
+                } else {
+                    "供应商接口未配置，且当前业务事实尚不能证明终态"
+                },
+            ));
+        }
+
+        Ok((connection_active, capabilities))
     }
 
     /// 按子订单加载全部退款事实视图（含分配行）。
@@ -512,5 +513,4 @@ use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 
-use super::fulfillment_access::ensure_task_actor_eligible;
 use super::fulfillment_dto::SupplierFulfillmentOrderDetailView;

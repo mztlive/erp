@@ -45,7 +45,7 @@ impl InventoryService {
         params.validate()?;
         let query = params.normalized()?;
         let (page, authorization, people) = self.search_stock_adjustments(&query, actor).await?;
-        let meta = authorization.adjustment_list_meta();
+        let meta = authorization.meta(InventoryAction::AdjustmentList);
         ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
         let mut items =
             page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect::<Vec<_>>();
@@ -53,7 +53,7 @@ impl InventoryService {
         Ok(InventoryListPage::from_page(
             PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
             meta,
-            authorization.adjustment_list_scope().is_empty(),
+            authorization.no_scope(InventoryAction::AdjustmentList),
             ADJUSTMENT_SCOPE_SUMMARY,
             ADJUSTMENT_OWNERSHIP_BASIS,
         ))
@@ -98,8 +98,15 @@ impl InventoryService {
                         .inventory()
                         .adjustment_search(search, query.adjustment_id.as_deref(), executor)
                         .await?;
-                    let filter = adjustment_filter(query, &authorization, search, id_in);
-                    let page = db.stock_adjustments().search_stock_adjustments(&filter, executor).await?;
+                    let filter = adjustment_filter(query, search, id_in);
+                    let page = db
+                        .stock_adjustments()
+                        .search_authorized_stock_adjustments(
+                            &filter,
+                            authorization.query(InventoryAction::AdjustmentList),
+                            executor,
+                        )
+                        .await?;
                     let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
                     let people = people_facts.people_by_adjustment_ids(&ids, executor).await?;
                     authorization.validate(executor).await?;
@@ -147,20 +154,23 @@ impl InventoryService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustment> {
-        let authorization =
-            self.authorization.authorize(actor, &[InventoryAction::AdjustmentDetail], executor).await?;
         let adjustment = self
             .db
             .inventory()
             .stock_adjustment(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        if !authorization.actor_is_active()
-            || !authorization.read_scope().covers(adjustment.warehouse_id.as_ref())
+        if !super::warehouse_allowed(
+            self.authorization.as_ref(),
+            actor,
+            InventoryAction::AdjustmentDetail,
+            adjustment.warehouse_id.as_ref(),
+            executor,
+        )
+        .await?
         {
             return Err(Error::NotFound("库存调整单不存在".to_string()));
         }
-        authorization.validate(executor).await?;
         Ok(adjustment)
     }
 
@@ -246,14 +256,13 @@ async fn people_object_ids(
 /// 将已规范化的查询字段移动到库存调整筛选条件。
 fn adjustment_filter(
     query: StockAdjustmentListQuery,
-    authorization: &InventoryAuthorization,
     search: crate::repository::InventorySearch,
     id_in: Option<Vec<String>>,
 ) -> StockAdjustmentFilter {
     let (sort_by, sort_ascending) = query.paging.sort_selection();
     StockAdjustmentFilter {
         search,
-        warehouse_ids: authorization.adjustment_list_scope().repository_warehouse_ids(query.warehouse_id),
+        warehouse_ids: query.warehouse_id.map(|id| vec![id]),
         status: query.status,
         prepared_by_ids: query.operator_user_ids,
         id_in,

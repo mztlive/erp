@@ -44,7 +44,6 @@ impl ContractService {
         let db = self.db.clone();
         let access = self.access();
         let data_scope = self.data_scope.clone();
-        let assignments = self.assignments.clone();
         let accounts = self.accounts.clone();
         let customers = self.customers.clone();
         let actor = actor.clone();
@@ -53,16 +52,14 @@ impl ContractService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (context, as_of) = resolve_list_scope(&access, &actor, executor).await?;
+                    let context = access.resolve(&actor, "list", executor).await?;
                     let (filter, search, versions) = load_list_filter_and_search(
                         &db,
                         &data_scope,
-                        assignments.as_ref(),
                         customers.as_ref(),
                         accounts.as_ref(),
                         &context,
                         &query,
-                        as_of,
                         executor,
                     )
                     .await?;
@@ -74,28 +71,48 @@ impl ContractService {
             })
             .await
     }
-}
 
-/// 解析列表授权范围与归属时点（`list_snapshot` 第一步）。
-///
-/// # 参数
-/// * `access` - 合同范围访问器
-/// * `actor` - 已认证操作人
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回授权凭证与归属自然日。
-///
-/// # 错误
-/// 无动作权限或组织关系非法时拒绝。
-async fn resolve_list_scope(
-    access: &super::access::ContractAccess,
-    actor: &AuditActor,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<(ContractResolvedScope, erp_core::common::time::BusinessDate)> {
-    let context = access.resolve(actor, "list", executor).await?;
-    let as_of = super::access::business_date(context.as_of)?;
-    Ok((context, as_of))
+    /// 只复核列表依赖版本，不重复分页、汇总及展示水合。
+    /// # 参数
+    /// query 为同一归一化筛选，actor 为当前账号。
+    /// # 返回
+    /// 同一授权和业务事实口径下的范围版本。
+    /// # 错误
+    /// 当前授权、筛选事实或仓储读取失败时拒绝。
+    pub(super) async fn list_scope_version(
+        &self,
+        query: ContractListQuery,
+        actor: &AuditActor,
+    ) -> Result<String> {
+        let db = self.db.clone();
+        let access = self.access();
+        let data_scope = self.data_scope.clone();
+        let accounts = self.accounts.clone();
+        let customers = self.customers.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let mut context = access.resolve(&actor, "list", executor).await?;
+                    let (_, search, versions) = load_list_filter_and_search(
+                        &db,
+                        &data_scope,
+                        customers.as_ref(),
+                        accounts.as_ref(),
+                        &context,
+                        &query,
+                        executor,
+                    )
+                    .await?;
+                    fingerprint_context(&mut context, &versions, &search)?;
+                    context.validate(executor).await?;
+                    Ok(context.scope_version)
+                })
+            })
+            .await
+    }
 }
 
 /// 求交授权与基础条件并装配列表搜索事实（`list_snapshot` 第二步）。
@@ -103,12 +120,10 @@ async fn resolve_list_scope(
 /// # 参数
 /// * `db` - 合同数据库
 /// * `data_scope` - 组织展开与成员事实 Port
-/// * `assignments` - 当前主责事实
 /// * `customers` - 客户编号事实
 /// * `accounts` - 账号显示名 Port
 /// * `context` - 已解析的合同范围事实
 /// * `query` - 归一化查询
-/// * `as_of` - 客户归属自然日
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
@@ -120,12 +135,10 @@ async fn resolve_list_scope(
 async fn load_list_filter_and_search(
     db: &mongodb::Database,
     data_scope: &ContractAuthorization,
-    assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
     customers: &dyn crate::ports::CustomerFactsPort,
     accounts: &dyn crate::ports::AccountNamePort,
     context: &ContractResolvedScope,
     query: &ContractListQuery,
-    as_of: erp_core::common::time::BusinessDate,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(ContractFilter, ContractSearch, Vec<ContractVersion>)> {
     let customer_ids = query.customer_id.clone().map(|id| vec![id]);
@@ -140,9 +153,7 @@ async fn load_list_filter_and_search(
         ));
     }
     let ids = db.contract().list_customer_ids(&filter, executor).await?;
-    let customer_facts =
-        super::query::list_customer_facts_with(customers, assignments, accounts, &ids, as_of, executor)
-            .await?;
+    let customer_facts = super::query::list_customer_facts_with(customers, &ids, executor).await?;
     filter.require_existing_customers(customer_facts.iter().map(|fact| fact.id.clone()).collect());
     let owner_ids = db.contract().list_owner_ids(&filter, executor).await?;
     let owner_names = accounts.names_by_ids(&owner_ids).await?;
@@ -181,17 +192,7 @@ async fn finish_list_snapshot(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(ContractListView, ContractResolvedScope)> {
     let result = db.contract().search_list(&filter, &search, executor).await?;
-    let mut fingerprint = super::access::scope_fingerprint_input(&[], &[], versions.as_slice(), &[]);
-    // 当前负责人不再收窄公共范围；其身份和显示事实仍须参与跨页版本。
-    let mut customer_facts = search
-        .customers
-        .iter()
-        .map(|customer| (&customer.id, &customer.owner_id, &customer.number, &customer.owner))
-        .collect::<Vec<_>>();
-    customer_facts.sort_unstable();
-    fingerprint.extend(to_vec(&customer_facts).map_err(|error| Error::Internal(error.to_string()))?);
-    context.scope_version =
-        format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
+    fingerprint_context(&mut context, &versions, &search)?;
     let total = result.total();
     let items =
         super::query::contract_rows(db, result.items, &search.customers, &search.owners, executor).await?;
@@ -208,6 +209,25 @@ async fn finish_list_snapshot(
     };
     context.validate(executor).await?;
     Ok((view, context))
+}
+
+/// 把授权及列表业务事实绑定到同一个跨页版本。
+fn fingerprint_context(
+    context: &mut ContractResolvedScope,
+    versions: &[ContractVersion],
+    search: &ContractSearch,
+) -> Result<()> {
+    let mut fingerprint = super::access::version_fingerprint_input(versions);
+    let mut customers = search
+        .customers
+        .iter()
+        .map(|customer| (&customer.id, &customer.owner_id, &customer.number, &customer.owner))
+        .collect::<Vec<_>>();
+    customers.sort_unstable();
+    fingerprint.extend(to_vec(&customers).map_err(|error| Error::Internal(error.to_string()))?);
+    context.scope_version =
+        format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
+    Ok(())
 }
 
 /// 将内部快照转换为对外列表视图。
@@ -364,6 +384,33 @@ async fn requested_contract_owners(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::repository::list_search::ContractCustomer;
+
+    #[test]
+    fn list_version_tracks_customer_search_facts_and_contract_versions() {
+        let versions = [ContractVersion { id: "contract-a".into(), version: 1 }];
+        let mut search = ContractSearch {
+            customers: vec![ContractCustomer {
+                id: "customer-a".into(),
+                number: "C-1".into(),
+                owner_id: None,
+                owner: "—".into(),
+            }],
+            ..Default::default()
+        };
+        let version = |versions: &[ContractVersion], search: &ContractSearch| {
+            let mut context = ContractResolvedScope::default();
+            context.scope_version = "authorization-v1".into();
+            fingerprint_context(&mut context, versions, search).unwrap();
+            context.scope_version
+        };
+        let initial = version(&versions, &search);
+        assert_eq!(initial, version(&versions, &search));
+        search.customers[0].number = "C-2".into();
+        assert_ne!(initial, version(&versions, &search));
+        let changed = [ContractVersion { id: "contract-a".into(), version: 2 }];
+        assert_ne!(version(&versions, &search), version(&changed, &search));
+    }
 
     #[test]
     fn later_pages_without_scope_version_are_rejected() {

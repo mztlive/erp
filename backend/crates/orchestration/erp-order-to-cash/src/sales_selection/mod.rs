@@ -151,6 +151,7 @@ impl SalesSelectionProcess {
                     check_create_scope(
                         &access,
                         &actor,
+                        &req.customer_id,
                         &creator.user_id,
                         &creator.business_org_unit_id,
                         executor,
@@ -715,9 +716,10 @@ impl CommandKind {
 async fn check_create_scope(
     access: &erp_sales::service::sales_selection::SelectionAccess,
     actor: &AuditActor,
+    customer_id: &str,
     owner: &str,
     org: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    scope_checks::check_create_scope(access, actor, owner, org, executor).await
+    scope_checks::check_create_scope(access, actor, customer_id, owner, org, executor).await
 }

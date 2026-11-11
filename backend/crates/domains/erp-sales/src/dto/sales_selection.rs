@@ -172,9 +172,6 @@ pub struct SalesSelectionCommandRequest {
 /// 列表筛选。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct SalesSelectionBookletListParams {
-    /// 服务端注入的客户访问范围，拒绝客户端覆盖。
-    #[serde(skip)]
-    pub authorized_customer_ids: Option<Vec<String>>,
     /// 服务端注入的选品责任范围版本；跨页必须原样回传。
     #[serde(default, deserialize_with = "deserialize_optional_csv")]
     pub scope_version: Option<String>,
@@ -208,9 +205,6 @@ pub struct SalesSelectionBookletListParams {
 /// 方案列表。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SalesSelectionProposalListParams {
-    /// 服务端注入的客户访问范围，拒绝客户端覆盖。
-    #[serde(skip)]
-    pub authorized_customer_ids: Option<Vec<String>>,
     /// 服务端注入的方案责任范围版本；跨页必须原样回传。
     #[serde(default, deserialize_with = "deserialize_optional_csv")]
     pub scope_version: Option<String>,

@@ -133,7 +133,6 @@ async fn authorize_posting<A: WorkflowAuthorizationPort>(
         &input.work_items.identity,
         input.actor_id,
         &input.statement.prepared_by,
-        &input.statement.business_org_unit_id,
         ex,
     )
     .await

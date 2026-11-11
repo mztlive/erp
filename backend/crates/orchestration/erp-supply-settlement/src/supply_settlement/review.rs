@@ -83,7 +83,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let statement =
             self.domain().access().require_statement(actor, "submit", id, &mut NoTransaction).await?;
         validate_submission_command(&statement, &req, actor)?;
-        self.authorize_reviewer(&req.reviewer_user_id, actor.id(), &statement.business_org_unit_id).await?;
+        self.authorize_reviewer(&req.reviewer_user_id, actor.id()).await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let operation_id = req.operation_id.clone();
@@ -319,7 +319,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             &self.work_items.identity,
             actor.id(),
             &statement.prepared_by,
-            &statement.business_org_unit_id,
             &mut NoTransaction,
         )
         .await?;
@@ -373,7 +372,6 @@ impl SubmissionCommit {
             &self.identity,
             &self.request.reviewer_user_id,
             &current.prepared_by,
-            &current.business_org_unit_id,
             executor,
         )
         .await?;

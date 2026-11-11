@@ -122,7 +122,7 @@ impl SalesChangeProcess {
         )
         .await?;
 
-        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
             .sales_change_order_detail(&change_id, actor)
             .await
             .map_err(crate::Error::from)
@@ -159,11 +159,11 @@ impl SalesChangeProcess {
             &req.idempotency_key,
             req.resubmission_reason.as_deref(),
         )?;
-        if replay_submission(&self.db, self.require_rbac()?, actor, &command, &mut NoTransaction)
+        if replay_submission(&self.db, self.rbac.clone(), actor, &command, &mut NoTransaction)
             .await?
             .is_some()
         {
-            return SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            return SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
                 .sales_change_order_detail(id, actor)
                 .await
                 .map_err(Error::from);
@@ -206,7 +206,7 @@ impl SalesChangeProcess {
             actor.clone().resource_log("sales_change_order.void", "sales_change_order", id.to_string())?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let rbac = self.require_rbac()?;
+        let rbac = self.rbac.clone();
         let actor_for_tx = actor.clone();
         let document_id = id.to_string();
         client
@@ -232,7 +232,7 @@ impl SalesChangeProcess {
             })
             .await?;
 
-        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
             .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
@@ -298,11 +298,11 @@ impl SalesChangeProcess {
                 now,
                 audit,
                 actor: actor.clone(),
-                rbac: self.require_rbac()?,
+                rbac: self.rbac.clone(),
             },
         )
         .await?;
-        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
             .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
@@ -337,7 +337,7 @@ impl SalesChangeProcess {
             }
             self.recover_sales_change_start(&command, actor, error).await?;
         }
-        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
             .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
@@ -420,7 +420,7 @@ impl SalesChangeProcess {
             now,
             audit,
             actor: actor.clone(),
-            rbac: self.require_rbac()?,
+            rbac: self.rbac.clone(),
         })
     }
 
@@ -465,7 +465,7 @@ impl SalesChangeProcess {
         actor: &AuditActor,
         original_error: Error,
     ) -> Result<String> {
-        let rbac = self.require_rbac()?;
+        let rbac = self.rbac.clone();
         recover_approval_command(original_error, || {
             let db = self.db.clone();
             let command = command.clone();

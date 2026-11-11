@@ -5,14 +5,14 @@ use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use crate::authorization::{self, CompiledScope};
+use crate::authorization::{Authorization, CompiledScope};
 use crate::error::{Error, Result};
 
 /// 供应商对象访问范围；列表、详情、导出和写命令复用同一解析。
 #[derive(Clone)]
 pub struct SupplierAccess {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    authorization: Option<Authorization>,
 }
 
 impl SupplierAccess {
@@ -28,7 +28,8 @@ impl SupplierAccess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        let authorization = Authorization::new(&db, rbac, "supplier").expect("固定资源授权目录有效");
+        Self { db, authorization: Some(authorization) }
     }
 
     /// 构造未装配身份设施的访问器。
@@ -39,12 +40,12 @@ impl SupplierAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self { db, authorization: None }
     }
 
     /// 读取已装配身份设施，缺失时拒绝授权。
-    fn identity(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Internal("供应商身份设施未接线".into()))
+    fn authorization(&self) -> Result<&Authorization> {
+        self.authorization.as_ref().ok_or_else(|| Error::Internal("供应商身份设施未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射供应商责任条件。
@@ -68,7 +69,7 @@ impl SupplierAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(authorization::resolve(&self.db, self.identity()?, actor, "supplier", action, executor).await?)
+        Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
     /// 在独立事务中重验对象资格。
@@ -125,16 +126,7 @@ impl SupplierAccess {
         supplier_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(authorization::require(
-            &self.db,
-            self.identity()?,
-            actor,
-            "supplier",
-            action,
-            supplier_id,
-            executor,
-        )
-        .await?)
+        Ok(self.authorization()?.require(actor, action, supplier_id, executor).await?)
     }
 
     /// 在调用方事务内证明创建资格。

@@ -24,7 +24,7 @@ mod source_authorization;
 mod source_read;
 pub use authorization::{
     FundsAccess, FundsAuthorization, FundsLinkedCondition, FundsLinkedFacts, FundsReadContext,
-    FundsScopedResult, ensure_page, ensure_version, matches_linked_condition, restricted, scope_version,
+    FundsScopedResult, ensure_page, ensure_version, matches_linked_condition, scope_version,
     summarize_matched_shares, whole_amount,
 };
 pub(crate) use repository::whole_access::WholeAccess;

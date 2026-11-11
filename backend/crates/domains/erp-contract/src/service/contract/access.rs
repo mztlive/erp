@@ -1,7 +1,6 @@
 //! 合同对象按独立负责销售、明确共享及负责销售组织授权；客户关系只用于建档资格。
 
 use application_core::AuditActor;
-use erp_core::common::time::{BusinessDate, Instant};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -109,81 +108,17 @@ impl ContractAccess {
         self.scope.require_create(actor, customer_id, executor).await
     }
 }
-/// 将UTC授权时点转换为业务日期。
-/// # 参数
-/// at为授权时点。
-/// # 返回
-/// 上海业务日期。
-/// # 错误
-/// 日期无法表示时返回错误。
-pub(super) fn business_date(at: Instant) -> Result<BusinessDate> {
-    let date = at.as_utc() + chrono::Duration::hours(8);
-    Ok(date.format("%Y-%m-%d").to_string().parse()?)
-}
-
-pub(super) fn scope_fingerprint_input(
-    owned: &[String],
-    collaborating: &[String],
-    history: impl ScopeFingerprintHistory,
-    org_owned: &[(Vec<String>, Vec<String>)],
-) -> Vec<u8> {
+/// 编码合同身份和业务版本；输入顺序不影响分页指纹。
+pub(super) fn version_fingerprint_input(versions: &[crate::repository::scope::ContractVersion]) -> Vec<u8> {
+    let mut pairs = versions.iter().map(|version| (version.id.as_str(), version.version)).collect::<Vec<_>>();
+    pairs.sort_unstable();
     let mut out = Vec::new();
-    push_str_section(&mut out, owned);
-    push_str_section(&mut out, collaborating);
-    history.push_section(&mut out);
-    let mut orgs: Vec<(&[String], &[String])> =
-        org_owned.iter().map(|(orgs, customers)| (orgs.as_slice(), customers.as_slice())).collect();
-    orgs.sort();
-    for (org_set, customers) in orgs {
-        push_str_section(&mut out, org_set);
-        push_str_section(&mut out, customers);
+    push_u64(&mut out, u64::try_from(pairs.len()).expect("合同版本集合长度可表示为 u64"));
+    for (id, version) in pairs {
+        push_bytes(&mut out, id.as_bytes());
+        push_u64(&mut out, version);
     }
     out
-}
-
-/// 范围指纹历史段的抽象：字符串列表或合同版本列表统一压入同一规范字节串。
-pub(super) trait ScopeFingerprintHistory {
-    /// 把历史段按规范编码追加到 `out`。
-    ///
-    /// # 参数
-    /// * `out` - 累积中的规范字节串。
-    ///
-    /// # 返回
-    /// 无返回值。排序后的历史段写入 `out`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    fn push_section(self, out: &mut Vec<u8>);
-}
-
-impl ScopeFingerprintHistory for &[String] {
-    fn push_section(self, out: &mut Vec<u8>) {
-        let mut sorted: Vec<&str> = self.iter().map(String::as_str).collect();
-        sorted.sort_unstable();
-        push_str_section(out, &sorted);
-    }
-}
-
-impl ScopeFingerprintHistory for &[crate::repository::scope::ContractVersion] {
-    fn push_section(self, out: &mut Vec<u8>) {
-        let mut pairs: Vec<(&str, u64)> =
-            self.iter().map(|version| (version.id.as_str(), version.version)).collect();
-        pairs.sort_unstable();
-        push_u64(out, pairs.len() as u64);
-        for (id, version) in pairs {
-            push_bytes(out, id.as_bytes());
-            push_u64(out, version);
-        }
-    }
-}
-
-fn push_str_section(out: &mut Vec<u8>, values: &[impl AsRef<str>]) {
-    let mut sorted: Vec<&str> = values.iter().map(AsRef::as_ref).collect();
-    sorted.sort_unstable();
-    push_u64(out, sorted.len() as u64);
-    for value in sorted {
-        push_bytes(out, value.as_bytes());
-    }
 }
 
 fn push_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
@@ -198,7 +133,7 @@ fn push_u64(out: &mut Vec<u8>, value: u64) {
 /// 对规范字节串计算稳定指纹（FNV-1a 64 位固定算法，不随工具链漂移）。
 ///
 /// # 参数
-/// * `input` - `scope_fingerprint_input` 输出的规范字节串
+/// * `input` - `version_fingerprint_input` 输出的规范字节串
 ///
 /// # 返回
 /// 返回 64 位指纹，仅用于同版本内快照比对。
@@ -212,4 +147,30 @@ pub(super) fn stable_fingerprint(input: &[u8]) -> u64 {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repository::scope::ContractVersion;
+
+    #[test]
+    fn version_fingerprint_is_order_independent_and_tracks_business_changes() {
+        let versions = [
+            ContractVersion { id: "contract-b".into(), version: 2 },
+            ContractVersion { id: "contract-a".into(), version: 1 },
+        ];
+        let reordered = [
+            ContractVersion { id: "contract-a".into(), version: 1 },
+            ContractVersion { id: "contract-b".into(), version: 2 },
+        ];
+        let changed = [
+            ContractVersion { id: "contract-a".into(), version: 2 },
+            ContractVersion { id: "contract-b".into(), version: 2 },
+        ];
+        let fingerprint = |rows: &[ContractVersion]| stable_fingerprint(&version_fingerprint_input(rows));
+        assert_eq!(fingerprint(&versions), fingerprint(&reordered));
+        assert_ne!(fingerprint(&versions), fingerprint(&changed));
+        assert_ne!(fingerprint(&[]), fingerprint(&versions));
+    }
 }

@@ -1,6 +1,5 @@
 //! 销售选品 HTTP handler。
 
-mod access;
 mod copy;
 mod pricing;
 pub mod protection;
@@ -29,8 +28,7 @@ pub use pricing::booklet_update_prices;
 use serde::Deserialize;
 
 use crate::http::errors::{Error, Result};
-use crate::http::extractor::{Json, Query, UserID};
-use crate::http::handler::customer::ensure_customer_access;
+use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
@@ -55,10 +53,8 @@ fn process(state: &HttpState) -> SalesSelectionProcess {
 pub async fn booklet_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(UserID(user_id)): Extension<UserID>,
-    Query(mut params): Query<SalesSelectionBookletListParams>,
+    Query(params): Query<SalesSelectionBookletListParams>,
 ) -> Result<SelectionBookletListView> {
-    params.authorized_customer_ids = access::customer_ids(&state, &actor, &user_id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params, actor).await?))
 }
 
@@ -76,7 +72,6 @@ pub async fn booklet_detail(
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
     let view = process(&state).booklet_detail(&id, &actor).await?;
-    ensure_customer_access(&state, &actor, "detail", &view.customer_id).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -94,7 +89,6 @@ pub async fn booklet_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesSelectionBookletRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).create(req, actor).await?))
 }
 
@@ -114,7 +108,6 @@ pub async fn booklet_prepare(
     Path(id): Path<String>,
     Json(req): Json<PrepareSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).start_prepare(id, req, actor).await?))
 }
 
@@ -134,7 +127,6 @@ pub async fn booklet_delete_item(
     Path((id, item_id)): Path<(String, String)>,
     Query(req): Query<DeleteDisplayItemRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).delete_display_item(id, item_id, req, actor).await?))
 }
 
@@ -154,7 +146,6 @@ pub async fn booklet_delete_item_post(
     Path((id, item_id)): Path<(String, String)>,
     Json(req): Json<DeleteDisplayItemRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).delete_display_item(id, item_id, req, actor).await?))
 }
 
@@ -174,7 +165,6 @@ pub async fn booklet_publish(
     Path(id): Path<String>,
     Json(req): Json<PublishSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).publish(id, req, actor).await?))
 }
 
@@ -191,7 +181,6 @@ pub async fn booklet_copy_link(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).copy_link(&id, &actor).await?))
 }
 
@@ -208,7 +197,6 @@ pub async fn booklet_copy_link_url(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CopyLinkView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).copy_link_url(&id, &actor).await?))
 }
 
@@ -225,7 +213,6 @@ pub async fn booklet_session(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionSessionView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).admin_session(&id, &actor).await?))
 }
 
@@ -245,7 +232,6 @@ pub async fn booklet_rotate_link(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).rotate_link(id, req, actor).await?))
 }
 
@@ -265,7 +251,6 @@ pub async fn booklet_close(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).close(id, req, actor).await?))
 }
 
@@ -285,7 +270,6 @@ pub async fn booklet_revoke(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).revoke(id, req, actor).await?))
 }
 
@@ -305,7 +289,6 @@ pub async fn booklet_void(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).void(id, req, actor).await?))
 }
 
@@ -320,10 +303,8 @@ pub async fn booklet_void(
 pub async fn proposal_list(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(UserID(user_id)): Extension<UserID>,
-    Query(mut params): Query<SalesSelectionProposalListParams>,
+    Query(params): Query<SalesSelectionProposalListParams>,
 ) -> Result<SelectionProposalListView> {
-    params.authorized_customer_ids = access::customer_ids(&state, &actor, &user_id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params, actor).await?))
 }
 
@@ -341,7 +322,6 @@ pub async fn proposal_detail(
     Path(id): Path<String>,
 ) -> Result<SalesSelectionProposalView> {
     let proposal = process(&state).proposal_detail(&id, &actor).await?;
-    ensure_customer_access(&state, &actor, "detail", &proposal.customer_id).await?;
     Ok(ApiResponse::ok_with_data(proposal))
 }
 
@@ -354,7 +334,6 @@ pub async fn admin_image(
     Path(id): Path<String>,
     Query(query): Query<PublicImageQuery>,
 ) -> std::result::Result<Response, Error> {
-    access::booklet(&state, &actor, &id).await?;
     let (bytes, content_type) = process(&state).admin_image(&id, &query.asset_id, &actor).await?;
     let mut response = Response::new(Body::from(bytes));
     response.headers_mut().insert(

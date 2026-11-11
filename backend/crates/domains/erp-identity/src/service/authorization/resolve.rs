@@ -14,11 +14,12 @@ use crate::entity::fingerprint::Fingerprint;
 use crate::repository::authorization::AccessProof;
 use crate::repository::resource_grants;
 use crate::service::access_control::resolve::DataScopeService;
-use crate::{Error, Permission, Result};
+use crate::{Error, Permission, QualifiedPermissions, Result};
 
 struct Resolution {
     versions: Vec<String>,
     valid_until: Option<Instant>,
+    organization_version: u64,
 }
 
 impl AuthorizationService {
@@ -38,11 +39,13 @@ impl AuthorizationService {
                 model: None,
                 as_of: Instant::now(),
             };
-            let mut resolution = Resolution { versions: vec![], valid_until: None };
+            let mut resolution = Resolution { versions: vec![], valid_until: None, organization_version: 0 };
             if self.policy(policy, entry, &context, &mut resolution, executor).await? != AccessRule::Allow {
                 return Err(Error::Forbidden("账号不具备本操作的管理资格".into()));
             }
-            if self.identity(actor, entry, executor).await.map_err(revalidation_error)? != version {
+            if self.identity(actor, entry, executor).await.map_err(revalidation_error)?.version()
+                != version.version()
+            {
                 return Err(Error::ConflictError("DATA_SCOPE_CHANGED：身份资格已变化".into()));
             }
         }
@@ -56,7 +59,7 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<AccessProof> {
         let data = entry.access.data()?;
-        let version = self.identity(actor, &entry, executor).await?;
+        let qualification = self.identity(actor, &entry, executor).await?;
         let model = match (&data.subject, &entry.access) {
             (AccessSubject::View(key), _) => Some(key.clone()),
             (_, AccessMode::Query { mapping, .. } | AccessMode::QueryAndObject { mapping, .. }) => {
@@ -71,7 +74,11 @@ impl AuthorizationService {
             model: model.clone(),
             as_of: Instant::now(),
         };
-        let mut resolution = Resolution { versions: vec![version], valid_until: None };
+        let mut resolution = Resolution {
+            versions: vec![qualification.version().to_owned()],
+            valid_until: None,
+            organization_version: 0,
+        };
         let rule = self
             .policy(&data.policy, &entry, &context, &mut resolution, executor)
             .await?
@@ -88,6 +95,8 @@ impl AuthorizationService {
             rule,
             version: version.finish(),
             valid_until: resolution.valid_until,
+            policy_version: qualification.policy_revision(),
+            organization_version: resolution.organization_version,
             session: executor.session().map(|s| s.id().clone()),
             registry: self.token.clone(),
         })
@@ -99,22 +108,23 @@ impl AuthorizationService {
         actor: &AuditActor,
         entry: &AccessRegistration,
         executor: &mut dyn Executor,
-    ) -> Result<String> {
+    ) -> Result<QualifiedPermissions> {
         let mut permissions = entry.required_permissions.clone();
         if !matches!(entry.access.data().map(|data| &data.policy), Ok(AccessPolicy::Account { .. })) {
             permissions.push(entry.permission.clone());
         }
-        if permissions.is_empty() {
-            return self
-                .rbac
-                .qualified_permissions(actor, &[], executor)
-                .await?
-                .map(|qualified| qualified.version().to_owned())
-                .ok_or_else(|| Error::Forbidden("授权账号已失效".into()));
-        }
-        self.qualification(actor, &permissions, executor)
+        self.rbac
+            .qualified_permissions(actor, &permissions, executor)
             .await?
-            .ok_or_else(|| Error::Forbidden("账号或有效角色不具备本操作的完整权限".into()))
+            .filter(|qualified| permissions.is_empty() || qualified.same_role(&permissions))
+            .ok_or_else(|| {
+                let message = if permissions.is_empty() {
+                    "授权账号已失效"
+                } else {
+                    "账号或有效角色不具备本操作的完整权限"
+                };
+                Error::Forbidden(message.into())
+            })
     }
 
     /// 功能资格与对象入口共享账号、启用角色和同角色完整权限证明。
@@ -229,6 +239,7 @@ impl AuthorizationService {
             )
             .await?;
         resolution.versions.push(scope.scope_version.clone());
+        resolution.organization_version = resolution.organization_version.max(scope.organizations.version);
         for member in &scope.organizations.memberships {
             for boundary in [Some(member.validity.valid_from), member.validity.valid_to].into_iter().flatten()
             {

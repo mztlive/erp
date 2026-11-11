@@ -10,9 +10,7 @@ use super::mapping::build_adjustment_line_updates;
 use crate::dto::{StockAdjustmentView, UpdateStockAdjustmentRequest};
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLineUpdate, StockAdjustmentUpdate};
 use crate::error::{Error, Result};
-use crate::ports::{
-    AuthorizationPort, InventoryAction, InventoryAuditPort, InventoryAuthorization, PreparedInventoryAudit,
-};
+use crate::ports::{AuthorizationPort, InventoryAction, InventoryAuditPort, PreparedInventoryAudit};
 use crate::repository::InventoryExt;
 
 impl InventoryService {
@@ -102,20 +100,27 @@ async fn adjustment_for_update(
     id: &StockAdjustmentId,
     version: u64,
     executor: &mut dyn Executor,
-) -> Result<(StockAdjustment, InventoryAuthorization)> {
-    let authorization = authorization_port.authorize(actor, &[InventoryAction::Update], executor).await?;
+) -> Result<StockAdjustment> {
     let adjustment = db
         .inventory()
         .stock_adjustment(id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
-    if !authorization.actor_is_active() || !authorization.can_update(adjustment.warehouse_id.as_ref()) {
+    if !super::warehouse_allowed(
+        authorization_port,
+        actor,
+        InventoryAction::Update,
+        adjustment.warehouse_id.as_ref(),
+        executor,
+    )
+    .await?
+    {
         return Err(Error::NotFound("库存调整单不存在".into()));
     }
     if !adjustment.matches_version(version) {
         return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".into()));
     }
-    Ok((adjustment, authorization))
+    Ok(adjustment)
 }
 
 struct UpdateCommand {
@@ -135,8 +140,7 @@ async fn persist_update(
     executor: &mut dyn Executor,
 ) -> Result<StockAdjustment> {
     let UpdateCommand { actor, id, req, line_updates, audit } = command;
-    let (mut adjustment, authorization) =
-        adjustment_for_update(db, authorization, &actor, &id, req.version, executor).await?;
+    let mut adjustment = adjustment_for_update(db, authorization, &actor, &id, req.version, executor).await?;
     adjustment.update(StockAdjustmentUpdate {
         reason_type: req.reason_type,
         reviewed_by: None,
@@ -149,6 +153,5 @@ async fn persist_update(
     }
     db.stock_adjustments().update(&mut adjustment, executor).await?;
     audit_port.persist(&audit, executor).await?;
-    authorization.validate(executor).await?;
     Ok(adjustment)
 }

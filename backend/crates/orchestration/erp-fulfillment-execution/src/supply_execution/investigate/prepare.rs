@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_read_models::supplier_center::fulfillment_access::ensure_task_actor_eligible;
 use erp_supply::dto::supplier_fulfillment::SupplierOrderInvestigationAction;
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
 use erp_supply::entity::supplier_fulfillment::{
@@ -300,7 +299,6 @@ pub(super) async fn load_investigation_task(
         actor.id(),
     )?;
     ensure_task_subject_matches_order(&work_item, &task.expected_subject_version, order_version)?;
-    ensure_task_actor_eligible(db, &work_item, actor.id(), executor).await?;
     if let Some(workflow) = workflow {
         workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
     }

@@ -5,10 +5,9 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_sales::dto::sales_selection::{CopySalesSelectionBookletRequest, SalesSelectionBookletView};
 
-use super::{access, process};
+use super::process;
 use crate::http::errors::Result;
 use crate::http::extractor::Json;
-use crate::http::handler::customer::ensure_customer_access;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
@@ -31,8 +30,6 @@ pub async fn booklet_copy(
     Path(id): Path<String>,
     Json(req): Json<CopySalesSelectionBookletRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &actor, &id).await?;
-    ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).copy(id, req, actor).await?))
 }
 

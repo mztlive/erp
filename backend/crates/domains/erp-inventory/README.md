@@ -56,6 +56,6 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-inventory --lib --locked
 
 代码变更还须执行[统一质量门禁](../../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
 
-库存仓库筛选只接受 identity 授权查询返回的实际仓库 ID。`WarehouseScope` 仅承载当次查询结果，不支持公司范围、通配授权或角色条款解释。组合层必须在原业务事务执行统一授权查询及前后复验。
+库存列表必须将 `InventoryQuery` 的完整授权阶段用于分页和计数。仓库来源由拥有领域提供 Mapping，不预加载账号全部授权仓库 ID。对象命令必须在原事务执行 `require_warehouse`。按钮资格只批量查询当前页仓库；每次查询必须在原执行器完成前后复验。
 
 库存审批管理使用 `authorization::require_management_source`，必须传入工作流固定的审批动作、读取权限及该类型管理权限。完整操作资格与实际调整单的仓库来源范围必须由 identity 在同一次对象检查中证明，不得分别判定后合并。

@@ -1,20 +1,23 @@
 //! 读取销售变更事实并组合创建时冻结的审批绑定。
 
 use application_core::{AuditActor, PageView};
+use erp_identity::SharedRbacService;
 use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_workflow::BpmExt;
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
 use super::projection::document_approval_view;
 use super::{SalesChangeOrderDetailView, SalesChangeProcurementView, SalesChangeReadService};
 use crate::approval_runtime::DocumentApprovalNodeView;
-use crate::sales_center::access::SalesAccess;
+use crate::sales_center::access::{SalesAccess, SalesReadContext};
 use crate::{Error, Result};
 
 /// 销售变更列表保持现有分页字段并声明独立的授权时点及版本。
@@ -49,7 +52,6 @@ impl SalesChangeReadService {
     /// * `ValidationError` - 分页参数非法，或匹配版本超过上限
     /// * `ConflictError` - 跨页范围版本缺失或已变化
     /// * `Forbidden` - 没有列表动作权限
-    /// * `Internal` - 未注入授权源
     ///
     /// 仓储或事务失败会返回对应错误。
     ///
@@ -86,7 +88,6 @@ impl SalesChangeReadService {
     /// # 错误
     /// * `NotFound` - 变更单不存在或来源销售单不可见
     /// * `ConflictError` - 两次读取之间数据范围或变更单已变化
-    /// * `Internal` - 未注入授权源
     ///
     /// 仓储或事务失败会返回对应错误。
     ///
@@ -97,13 +98,12 @@ impl SalesChangeReadService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SalesChangeOrderDetailView> {
-        let first = load_authorized_change(&self.db, self.require_rbac()?, actor, id).await?;
-        let current = load_authorized_change(&self.db, self.require_rbac()?, actor, id).await?;
-        if first.1 != current.1 {
+        let (mut view, version) = load_authorized_change(&self.db, &self.rbac, actor, id).await?;
+        view.procurement = self.change_procurement(&view, actor).await?;
+        let current = load_change_version(&self.db, &self.rbac, actor, id).await?;
+        if version != current {
             return Err(crate::support::data_scope_changed("数据范围或销售变更单已变化，请刷新"));
         }
-        let mut view = first.0;
-        view.procurement = self.change_procurement(&view, actor).await?;
         Ok(view)
     }
 }
@@ -125,8 +125,8 @@ impl SalesChangeReadService {
 /// # 关键业务约束
 /// 不泄露越权变更单的存在性。
 async fn load_authorized_change(
-    db: &mongodb::Database,
-    rbac: &erp_identity::SharedRbacService,
+    db: &Database,
+    rbac: &SharedRbacService,
     actor: &AuditActor,
     id: &str,
 ) -> Result<(SalesChangeOrderDetailView, String)> {
@@ -157,12 +157,38 @@ async fn load_authorized_change(
 /// # 错误
 /// 来源不可见、缺单、审批关系非法或仓储失败时拒绝。
 async fn load_change_snapshot(
-    db: &mongodb::Database,
-    rbac: &erp_identity::SharedRbacService,
+    db: &Database,
+    rbac: &SharedRbacService,
     actor: &AuditActor,
     id: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<(SalesChangeOrderDetailView, String)> {
+    let AuthorizedChange { change, context, version } =
+        load_change_facts(db, rbac, actor, id, executor).await?;
+    let binding = match find_approval_binding(db, id, executor).await.map_err(crate::Error::from) {
+        Ok(binding) => binding,
+        Err(Error::NotFound(_)) => None,
+        Err(error) => return Err(error),
+    };
+    let view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
+    context.validate(executor).await?;
+    Ok((view, version))
+}
+
+struct AuthorizedChange {
+    change: SalesChangeOrder,
+    context: SalesReadContext,
+    version: String,
+}
+
+/// 在原执行器内独立证明变更单与来源销售单资格，并绑定两者业务版本。
+async fn load_change_facts(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<AuthorizedChange> {
     let change = db
         .sales_change_orders()
         .find_by_id(id, executor)
@@ -175,16 +201,32 @@ async fn load_change_snapshot(
         .find_authorized(change.sales_order_id.as_ref(), &scope, executor)
         .await?
         .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
-    let binding = match find_approval_binding(db, id, executor).await.map_err(crate::Error::from) {
-        Ok(binding) => binding,
-        Err(Error::NotFound(_)) => None,
-        Err(error) => return Err(error),
-    };
     let version =
         format!("{}:{}:{}:{}", context.scope_version, order.base.id, order.base.version, change.base.version);
-    let view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
-    context.validate(executor).await?;
-    Ok((view, version))
+    Ok(AuthorizedChange { change, context, version })
+}
+
+/// 在独立事务只复核授权与业务版本，不重复读取审批图、工作副本和详情投影。
+async fn load_change_version(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    id: &str,
+) -> Result<String> {
+    let actor = actor.clone();
+    let id = id.to_string();
+    let rbac = rbac.clone();
+    let db = db.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                let facts = load_change_facts(&db, &rbac, &actor, &id, executor).await?;
+                facts.context.validate(executor).await?;
+                Ok(facts.version)
+            })
+        })
+        .await
 }
 
 /// 使用已授权原单装配定义、真实运行审批与冻结目标身份。
@@ -203,12 +245,12 @@ async fn load_change_snapshot(
 /// # 错误
 /// 定义缺失、当前提交来源或审批事实不一致时拒绝。
 async fn runtime_detail_view(
-    db: &mongodb::Database,
-    rbac: &erp_identity::SharedRbacService,
+    db: &Database,
+    rbac: &SharedRbacService,
     actor: &AuditActor,
     change: SalesChangeOrder,
-    binding: Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>,
-    executor: &mut dyn persistence_core::Executor,
+    binding: Option<ApprovalDefinitionBinding>,
+    executor: &mut dyn Executor,
 ) -> Result<SalesChangeOrderDetailView> {
     let graph = match binding.as_ref() {
         Some(binding) => Some(
@@ -250,7 +292,7 @@ async fn runtime_detail_view(
 /// 返回详情视图。
 fn detail_view(
     change_order: SalesChangeOrder,
-    binding: Option<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding>,
+    binding: Option<ApprovalDefinitionBinding>,
 ) -> SalesChangeOrderDetailView {
     SalesChangeOrderDetailView {
         id: change_order.base.id,

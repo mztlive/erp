@@ -1,7 +1,7 @@
 //! 固定选品登记与真实责任事实装配。
 use std::sync::Arc;
 
-use erp_identity::entity::authorization::{FactKind, ReadAccess};
+use erp_identity::entity::authorization::{FactKind, ReadAccess, RelationKey, RelationMatch};
 use erp_identity::{
     AccessFactsPort, AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject,
     AuthorizationRegistry, AuthorizationService, DataAccess, Permission, Result, SharedRbacService,
@@ -32,9 +32,12 @@ pub(super) fn service(
     db: Database,
     rbac: SharedRbacService,
     facts: Arc<dyn AccessFactsPort>,
+    customer: Arc<dyn AccessMapping>,
 ) -> Result<SelectionAuthorization> {
-    let booklet: Arc<dyn AccessMapping> = Arc::new(SelectionMapping::new("sales_selection_booklet")?);
-    let proposal: Arc<dyn AccessMapping> = Arc::new(SelectionMapping::new("sales_selection_proposal")?);
+    let booklet: Arc<dyn AccessMapping> =
+        Arc::new(SelectionMapping::with_customer("sales_selection_booklet", customer.clone())?);
+    let proposal: Arc<dyn AccessMapping> =
+        Arc::new(SelectionMapping::with_customer("sales_selection_proposal", customer)?);
     let mut entries = Vec::new();
     for (resource, actions, mapping) in [
         ("sales_selection_booklet", BOOKLET_ACTIONS, &booklet),
@@ -54,20 +57,50 @@ fn registration(
     mapping: Arc<dyn AccessMapping>,
     facts: Arc<dyn AccessFactsPort>,
 ) -> Result<AccessRegistration> {
+    let data = DataAccess {
+        subject: AccessSubject::Direct,
+        required_facts: [FactKind::Owner, FactKind::Organization].into(),
+        policy: policy(resource, action)?,
+    };
+    let access = if action == "list" {
+        // 客户多负责人事实以完整来源查询执行，不声明单值对象事实能力。
+        AccessMode::Query { data, mapping }
+    } else {
+        AccessMode::QueryAndObject { data, mapping, facts }
+    };
     Ok(AccessRegistration {
         permission: Permission::parse(format!("{resource}:{action}"))?,
         required_permissions: vec![],
-        access: AccessMode::QueryAndObject {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                policy: AccessPolicy::Scope {
-                    permission: Permission::parse(format!("{resource}:{action}"))?,
-                    read: ReadAccess::default(),
-                },
+        access,
+    })
+}
+
+/// 列表客户范围与当前选品责任在同次授权中取交集。
+fn policy(resource: &str, action: &str) -> Result<AccessPolicy> {
+    let permission = Permission::parse(format!("{resource}:{action}"))?;
+    let scope = AccessPolicy::Scope { permission, read: ReadAccess::default() };
+    if action == "list" {
+        return Ok(AccessPolicy::All(vec![scope, customer_list_policy()?]));
+    }
+    Ok(scope)
+}
+
+/// 有目录资格仍须满足客户范围；普通列表只显示当前负责的有权客户。
+fn customer_list_policy() -> Result<AccessPolicy> {
+    Ok(AccessPolicy::Related {
+        relation: RelationKey::parse("customer")?,
+        resource: "customer".into(),
+        mode: RelationMatch::AllNonEmpty,
+        required_facts: [FactKind::Owner, FactKind::Organization].into(),
+        policy: Box::new(AccessPolicy::All(vec![
+            AccessPolicy::Scope {
+                permission: Permission::parse("customer:list")?,
+                read: ReadAccess::default(),
             },
-            mapping,
-            facts,
-        },
+            AccessPolicy::Any(vec![
+                AccessPolicy::Permission(Permission::parse("customer_scope:detail")?),
+                AccessPolicy::Owned,
+            ]),
+        ])),
     })
 }

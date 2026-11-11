@@ -46,9 +46,9 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     CustomerRefundStartPersistInput, ReversalSubmitReplayInput, ReverseStartInput,
-    build_customer_refund_start_input, ensure_return_start_actor_active,
-    ensure_return_start_replay_authorized, load_start_graph, load_start_receipt,
-    persist_customer_refund_start, reversal_result_read_error,
+    build_customer_refund_start_input, ensure_return_start_replay_authorized, ensure_source_authorized,
+    ensure_submit_permission, load_start_graph, load_start_receipt, persist_customer_refund_start,
+    reversal_result_read_error,
 };
 use crate::{Error, Result};
 

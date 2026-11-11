@@ -39,7 +39,7 @@ impl SupplierApiOrderProcess {
         actor: &AuditActor,
         access: &FulfillmentOrderAccess,
     ) -> Result<Option<SubmitActionResultView>> {
-        access.require_order(actor, "cancel", id, None, &mut NoTransaction).await?;
+        access.require_order(actor, "cancel", id, &mut NoTransaction).await?;
         let Some(mut execution) =
             self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?
         else {

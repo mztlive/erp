@@ -22,12 +22,11 @@ pub use entity::contract::{
 };
 pub use error::{Error, Result, known_duplicate_index_message};
 pub use ports::{
-    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort,
-    ContractResolvedScope, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
-    EmptyAccountNames, EmptyAssignments, EmptyContractParticipants, EmptyCustomers, EmptyFileAssetFacts,
-    FailClosedAccountNamePort, FailClosedAssignmentFactsPort, FailClosedAuditPort,
-    FailClosedContractParticipantPort, FailClosedCustomerFactsPort, FailClosedFileAssetFacts, FileAssetFact,
-    FileAssetFactsPort, PreparedContractAudit,
+    AccountNamePort, ContractAuditPort, ContractParticipantPort, ContractResolvedScope, CustomerAccountFact,
+    CustomerFactsPort, EmptyAccountNames, EmptyContractParticipants, EmptyCustomers, EmptyFileAssetFacts,
+    FailClosedAccountNamePort, FailClosedAuditPort, FailClosedContractParticipantPort,
+    FailClosedCustomerFactsPort, FailClosedFileAssetFacts, FileAssetFact, FileAssetFactsPort,
+    PreparedContractAudit,
 };
 pub use repository::{
     ContractDomainRepository, ContractExt, ContractFilter, ContractRepository, ContractRevisionRepository,

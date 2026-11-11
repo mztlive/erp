@@ -153,18 +153,20 @@ pub(crate) async fn authorized_rows_exist(
 
 /// 执行统一授权阶段后返回真实仓库身份。
 /// # 参数
-/// db 为仓库数据库，access 为完整查询凭证，executor 为原事务。
+/// db 为仓库数据库，access 为完整查询凭证，ids 为有界候选，executor 为原事务。
 /// # 返回
-/// 完整已授权仓库 ID，不截断。
+/// 当前候选内的已授权仓库 ID，不截断。
 /// # 错误
 /// 数据库或解码失败透传。
-pub(crate) async fn authorized_ids(
+pub(crate) async fn authorized_ids_in(
     db: &Database,
     access: &CompiledAccess,
+    ids: &[String],
     executor: &mut dyn Executor,
 ) -> RepositoryResult<Vec<String>> {
     let collection = db.collection::<Document>(<Database as WarehouseExt>::WAREHOUSES);
-    let mut pipeline = access.stages().to_vec();
+    let mut pipeline = vec![doc! {"$match": {"id": {"$in": ids}}}];
+    pipeline.extend_from_slice(access.stages());
     pipeline.push(doc! {"$project":{"_id":0,"id":1}});
     let mut ids = Vec::new();
     if let Some(session) = executor.session() {

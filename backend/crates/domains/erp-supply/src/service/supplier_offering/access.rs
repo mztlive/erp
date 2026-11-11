@@ -1,13 +1,11 @@
 //! 供给对象读取与写入范围；显式维护人和业务组织分别解释。
 
 use application_core::AuditActor;
-use erp_identity::{
-    AuthorizationRegistry, AuthorizationService, OrganizationDirectoryService, SharedRbacService,
-};
+use erp_identity::{OrganizationDirectoryService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, OfferingResolvedScope};
+use crate::authorization::{self, Authorization, OfferingResolvedScope};
 use crate::entity::supplier_offering::SupplierOffering;
 use crate::error::{Error, Result};
 use crate::repository::SupplierOfferingExt;
@@ -16,7 +14,7 @@ use crate::repository::SupplierOfferingExt;
 #[derive(Clone)]
 pub struct OfferingAccess {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    authorization: Option<Authorization>,
 }
 
 impl OfferingAccess {
@@ -35,7 +33,8 @@ impl OfferingAccess {
     /// # 关键业务约束
     /// 账号和功能资格由 identity 执行；业务组织只作为写入事实。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+        let authorization = Authorization::new(&db, rbac, "supplier_offering").expect("固定资源授权目录有效");
+        Self { db, authorization: Some(authorization) }
     }
 
     /// 创建尚未接线的访问器，授权调用保持失败关闭。
@@ -46,12 +45,12 @@ impl OfferingAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, rbac: None }
+        Self { db, authorization: None }
     }
 
     /// 取得已注入的身份设施，禁止默认扩大范围。
-    fn rbac(&self) -> Result<SharedRbacService> {
-        self.rbac.clone().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
+    fn authorization(&self) -> Result<&Authorization> {
+        self.authorization.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
     }
 
     /// 在调用方事务内证明资源动作并映射供给责任条件。
@@ -75,8 +74,7 @@ impl OfferingAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> Result<OfferingResolvedScope> {
-        Ok(authorization::resolve(&self.db, self.rbac()?, actor, "supplier_offering", action, executor)
-            .await?)
+        Ok(self.authorization()?.resolve(actor, action, executor).await?)
     }
 
     /// 在调用方事务内重验供给对象资格。
@@ -102,8 +100,7 @@ impl OfferingAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierOffering> {
-        authorization::require(&self.db, self.rbac()?, actor, "supplier_offering", action, id, executor)
-            .await?;
+        self.authorization()?.require(actor, action, id, executor).await?;
         self.db
             .supplier_offerings()
             .find_by_id(id, executor)
@@ -129,7 +126,7 @@ impl OfferingAccess {
         at: erp_core::common::time::Instant,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        self.rbac()?;
+        self.authorization()?;
         Ok(OrganizationDirectoryService::new(self.db.clone()).own_org(user_id, at, executor).await?)
     }
 
@@ -184,9 +181,7 @@ impl OfferingAccess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let permission = authorization::action_permission("supplier_offering", action)?;
-        let service =
-            AuthorizationService::new(self.db.clone(), self.rbac()?, AuthorizationRegistry::default());
-        if !service.has_permission(actor, &permission, executor).await? {
+        if !self.authorization()?.has_permission(actor, &permission, executor).await? {
             return Err(Error::Forbidden("没有该操作权限".into()));
         }
         Ok(())

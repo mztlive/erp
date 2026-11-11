@@ -322,19 +322,12 @@ impl PurchaseDataScopePort for MongoPurchaseDataScope {
         let query = service.query(actor, &permission, AccessSubject::Direct, e).await?;
         let compiled = Arc::new(query.compile(mapping.as_ref(), e).await?);
         service.validate(&compiled, e).await?;
-        let qualification = service
-            .permissions(actor, std::slice::from_ref(&permission), e)
-            .await?
-            .ok_or_else(|| erp_procurement::Error::Forbidden("账号已失效".into()))?;
         Ok(PurchaseResolvedScope {
             scope_version: compiled.version(),
+            policy_version: compiled.policy_version(),
+            as_of: compiled.as_of(),
             compiled,
             authorization: service,
-            user_id: actor.id().into(),
-            resource: "purchase_order".into(),
-            action: action.into(),
-            policy_version: qualification.policy_revision(),
-            as_of: Instant::now(),
         })
     }
     async fn expand_org_units(

@@ -41,13 +41,11 @@ impl SalesSelectionProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let source = access.require_booklet(&actor, "get", &id, executor).await?;
-                    customer_access
-                        .require_with(actor.clone(), "detail", source.customer_id.as_ref(), executor)
-                        .await?;
                     customer_access.require_current(&actor, &req.customer_id, executor).await?;
                     check_create_scope(
                         &access,
                         &actor,
+                        &req.customer_id,
                         &source.sales_owner_user_id,
                         &source.business_org_unit_id,
                         executor,

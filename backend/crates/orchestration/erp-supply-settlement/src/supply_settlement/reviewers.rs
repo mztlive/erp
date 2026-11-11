@@ -50,7 +50,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// # 返回
     /// 返回按姓名及账号排序的合格候选；提交仍独立重新验证资格。
     /// # 错误
-    /// 非当前经办人或单据不可编辑时返回 `Forbidden`。账号、权限或财务角色范围读取失败时返回对应错误。
+    /// 非当前经办人或单据不可编辑时返回 `Forbidden`。账号或权限读取失败时返回对应错误。
     /// 岗位分离或资格不足的人员被排除，不因此失败。
     pub async fn reviewer_options(
         &self,
@@ -91,26 +91,14 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
     /// 提交前预检复核人资格；实际提交事务仍独立重验。
     /// # 参数
-    /// reviewer_id 为复核人，preparer_id 为经办人，org 为业务组织。
+    /// reviewer_id 为复核人，preparer_id 为经办人。
     /// # 返回
     /// 当前资格与岗位分离满足时成功。
     /// # 错误
     /// 人员或资格失效时拒绝。
-    pub(super) async fn authorize_reviewer(
-        &self,
-        reviewer_id: &str,
-        preparer_id: &str,
-        org: &str,
-    ) -> Result<()> {
-        ensure_reviewer(
-            &self.db,
-            &self.work_items.identity,
-            reviewer_id,
-            preparer_id,
-            org,
-            &mut NoTransaction,
-        )
-        .await
+    pub(super) async fn authorize_reviewer(&self, reviewer_id: &str, preparer_id: &str) -> Result<()> {
+        ensure_reviewer(&self.db, &self.work_items.identity, reviewer_id, preparer_id, &mut NoTransaction)
+            .await
     }
 }
 
@@ -120,7 +108,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `reviewer_id` - 复核人账号。
 /// * `preparer_id` - 经办人账号。
-/// * `org` - 结算单业务组织。
 /// * `executor` - 调用方执行器。
 ///
 /// # 返回
@@ -128,13 +115,12 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 ///
 /// # 错误
 /// 复核人不存在时返回 `ValidationError`。资格、权限或财务角色不满足时返回 `Forbidden`。
-/// 账号或范围读取失败时返回对应错误。
+/// 账号或权限读取失败时返回对应错误。
 pub(super) async fn ensure_reviewer(
     db: &Database,
     identity_service: &SharedRbacService,
     reviewer_id: &str,
     preparer_id: &str,
-    _org: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if reviewer_id == preparer_id {
@@ -150,7 +136,7 @@ pub(super) async fn ensure_reviewer(
     if qualified.is_some() {
         return Ok(());
     }
-    if qualified.is_none() && identity_service.directory().account(reviewer_id, executor).await?.is_none() {
+    if identity_service.directory().account(reviewer_id, executor).await?.is_none() {
         return Err(Error::ValidationError("复核人不存在，请重新选择".into()));
     }
     Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()))

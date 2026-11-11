@@ -1,6 +1,6 @@
 //! 开票申请范围查询。
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
@@ -88,7 +88,12 @@ impl FundsAccess {
         actor: &AuditActor,
         expected: Option<&str>,
     ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
-        checked_twice(expected, || self.snapshot_requests(query, actor)).await
+        checked_revalidated(
+            expected,
+            || self.snapshot_requests(query, actor),
+            || self.request_fingerprint_snapshot(query, actor),
+        )
+        .await
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
@@ -119,7 +124,7 @@ impl FundsAccess {
             .await
     }
 
-    /// 分页查询开票申请范围行：申请人取创建人，处理人取工作项当前负责人。
+    /// 分页查询开票申请范围行：申请人取创建人，处理人优先工作项负责人、否则完成人。
     ///
     /// # 参数
     /// * `query` - 开票申请列表查询。
@@ -137,7 +142,7 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
-        let (access, authorization) = self.resolve(actor, "sales_invoice_request", "list", executor).await?;
+        let (_, authorization) = self.resolve(actor, "sales_invoice_request", "list", executor).await?;
         if authorization.empty() {
             return Ok(empty_page(&authorization, "no_scope", "开票申请无可见范围"));
         }
@@ -147,51 +152,65 @@ impl FundsAccess {
             self.ensure_request_ready(&request, actor, &authorization, executor).await?;
         }
         let candidates = self.request_candidates(query, &authorization, executor).await?;
-        let RequestSnapshot { decided, facts, order_nos } =
-            self.assemble_requests(query, candidates, &access, &authorization, executor).await?;
-        let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-        authorization.context.scope_version.hash(&mut fingerprint);
-        for (row, _) in decided.iter() {
-            row.base.id.hash(&mut fingerprint);
-            row.base.version.hash(&mut fingerprint);
-            if let Some(order) = facts.get(&row.sales_order_id.to_string()) {
-                order.version.hash(&mut fingerprint);
-            }
-        }
-        self.finish_requests(query, decided, facts, order_nos, authorization, fingerprint, executor).await
+        let snapshot = self.assemble_requests(candidates, executor).await?;
+        let version = request_version(
+            &authorization.context,
+            snapshot.decided.iter().map(|(row, _)| row),
+            &snapshot.facts,
+        );
+        finish_requests(query, snapshot, authorization, version)
     }
 
-    /// 开票申请候选逐行判定可见性与筛选；缺失销售单的行跳过，不计未分配。
+    /// 仅水合已经通过数据库授权和业务筛选的申请，不再解释范围或重做条件裁剪。
     ///
     /// # 参数
-    /// * `query` - 开票申请列表查询。
-    /// * `rows` - 已装载的申请候选。
-    /// * `access` - 本次列表动作的已解析范围。
-    /// * `authorization` - 资金授权，用于销售单 ID 限制。
-    /// * `executor` - 调用方事务。
+    /// * `rows` - 数据库返回的完整授权候选。
+    /// * `executor` - 原读取事务。
     ///
     /// # 返回
-    /// 已决定的申请行、销售责任事实与销售单号。
+    /// 候选顺序不变的申请、展示处理人及销售责任事实。
     ///
     /// # 错误
-    /// 销售单、授权 ID、工作项或组织条件读取失败时返回对应错误。
-    pub(super) async fn assemble_requests(
+    /// 销售来源或工作项读取失败时返回原错误。
+    async fn assemble_requests(
         &self,
-        query: &erp_finance::dto::receivable::InvoiceRequestQuery,
         rows: Vec<SalesInvoiceRequest>,
-        access: &FundsReadContext,
-        authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<RequestSnapshot> {
         let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
         let (facts, order_nos) = self.request_sales_context(&order_ids, executor).await?;
-        let authorized = self.authorized_sales_targets(authorization, &order_ids, executor).await?;
-        let allowed = authorized.into_iter().collect::<BTreeSet<_>>();
         let work_ids = rows.iter().filter_map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
         let handlers = self.work_item_handlers(&work_ids, executor).await?;
-        let condition = self.request_condition(query, executor).await?;
-        let decided = decide_requests(rows, &facts, &allowed, &handlers, access, &condition)?;
+        let decided = hydrate_requests(rows, &facts, &handlers);
         Ok(RequestSnapshot { decided, facts, order_nos })
+    }
+
+    /// 独立复核完整候选及销售版本，不重读展示处理人、不构造页面和汇总。
+    async fn request_fingerprint_snapshot(
+        &self,
+        query: &erp_finance::dto::receivable::InvoiceRequestQuery,
+        actor: &AuditActor,
+    ) -> Result<String> {
+        let this = self.clone();
+        let query = query.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (_, authorization) =
+                        this.resolve(&actor, "sales_invoice_request", "list", executor).await?;
+                    if authorization.empty() {
+                        return Ok(authorization.context.scope_version);
+                    }
+                    let rows = this.request_candidates(&query, &authorization, executor).await?;
+                    let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
+                    let (facts, _) = this.request_sales_context(&order_ids, executor).await?;
+                    Ok(request_version(&authorization.context, rows.iter(), &facts))
+                })
+            })
+            .await
     }
 
     /// 开票申请关联筛选条件：负责人、申请人、处理人与组织分别精确匹配。
@@ -251,71 +270,6 @@ impl FundsAccess {
         Ok((facts, numbers))
     }
 
-    /// 开票申请候选分页裁剪与汇总装配；申请金额为行级事实，始终返回。
-    ///
-    /// # 参数
-    /// * `query` - 开票申请列表查询，提供页码、页大小与范围版本。
-    /// * `decided` - 已通过授权与筛选的申请及处理人。
-    /// * `facts` - 关联销售责任事实。
-    /// * `order_nos` - 销售单号。
-    /// * `authorization` - 已解析授权，用于范围元信息。
-    /// * `fingerprint` - 已写入授权与单据版本的哈希器。
-    /// * `_executor` - 调用方事务；本方法不再读取。
-    ///
-    /// # 返回
-    /// 当前页申请行、候选总数与按销售负责人归组的汇总。
-    ///
-    /// # 错误
-    /// 回传范围版本与本次指纹不一致时返回范围变化冲突错误。
-    // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
-    #[allow(clippy::too_many_arguments)]
-    pub(super) async fn finish_requests(
-        &self,
-        query: &erp_finance::dto::receivable::InvoiceRequestQuery,
-        decided: Vec<(SalesInvoiceRequest, Option<String>)>,
-        facts: HashMap<String, LinkedSalesFact>,
-        order_nos: HashMap<String, String>,
-        authorization: FundsAuthorization,
-        fingerprint: std::collections::hash_map::DefaultHasher,
-        _executor: &mut dyn Executor,
-    ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
-        let total = decided.len() as u64;
-        let page = query.page.unwrap_or(1).max(1);
-        let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
-        let start = ((page - 1) as usize).saturating_mul(page_size as usize);
-        let end = start.saturating_add(page_size as usize).min(decided.len());
-        let whole = true;
-        let items = decided
-            .get(start..end)
-            .unwrap_or_default()
-            .iter()
-            .map(|(row, handler)| request_row(row, handler.clone(), &facts, &order_nos))
-            .collect();
-        let triples = decided
-            .iter()
-            .map(|(row, _)| (row.base.id.clone(), row.data.amount, Some(row.sales_order_id.to_string())))
-            .collect::<Vec<_>>();
-        let owner_of = facts
-            .iter()
-            .map(|(id, fact)| (id.clone(), fact.owner_user_id.clone()))
-            .collect::<HashMap<_, _>>();
-        let version = format!("{:x}", fingerprint.finish());
-        ensure_version(query.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary = build_summary(&triples, &owner_of, None, &version, !whole)?;
-        Ok(FundsScopedPage {
-            items,
-            total,
-            summary,
-            page,
-            page_size,
-            scope_version: version.clone(),
-            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-            empty_reason: None,
-            scope_summary: "开票申请按关联销售当前负责人、申请人与当前开票处理人授权；不改变正式开票准入",
-            ownership_basis: "linked_sales_owner_applicant_and_handler",
-        })
-    }
-
     /// 开票申请详情同一事务内解析、取数与裁剪；版本绑定关联销售单。
     ///
     /// # 参数
@@ -371,8 +325,66 @@ impl FundsAccess {
     }
 }
 
+/// 只对已经确定的完整候选分页并汇总，不执行授权或数据库读取。
+fn finish_requests(
+    query: &erp_finance::dto::receivable::InvoiceRequestQuery,
+    snapshot: RequestSnapshot,
+    authorization: FundsAuthorization,
+    version: String,
+) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
+    let RequestSnapshot { decided, facts, order_nos } = snapshot;
+    let total = decided.len() as u64;
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
+    let start = ((page - 1) as usize).saturating_mul(page_size as usize);
+    let end = start.saturating_add(page_size as usize).min(decided.len());
+    let items = decided
+        .get(start..end)
+        .unwrap_or_default()
+        .iter()
+        .map(|(row, handler)| request_row(row, handler.clone(), &facts, &order_nos))
+        .collect();
+    let triples = decided
+        .iter()
+        .map(|(row, _)| (row.base.id.clone(), row.data.amount, Some(row.sales_order_id.to_string())))
+        .collect::<Vec<_>>();
+    let owner_of =
+        facts.iter().map(|(id, fact)| (id.clone(), fact.owner_user_id.clone())).collect::<HashMap<_, _>>();
+    ensure_version(query.scope_version.as_deref(), &version).map_err(|_| changed())?;
+    let summary = build_summary(&triples, &owner_of, None, &version, false)?;
+    Ok(FundsScopedPage {
+        items,
+        total,
+        summary,
+        page,
+        page_size,
+        scope_version: version.clone(),
+        as_of: authorization.context.as_of.as_utc().to_rfc3339(),
+        empty_reason: None,
+        scope_summary: "开票申请按关联销售当前负责人、申请人与当前开票处理人授权；不改变正式开票准入",
+        ownership_basis: "linked_sales_owner_applicant_and_handler",
+    })
+}
+
+/// 范围及完整匹配集合的业务版本共用同一编码，复核拍不依赖展示字段。
+fn request_version<'a>(
+    context: &FundsReadContext,
+    rows: impl Iterator<Item = &'a SalesInvoiceRequest>,
+    facts: &HashMap<String, LinkedSalesFact>,
+) -> String {
+    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+    context.scope_version.hash(&mut fingerprint);
+    for row in rows {
+        let Some(order) = facts.get(row.sales_order_id.as_ref()) else { continue };
+        row.base.id.hash(&mut fingerprint);
+        row.base.version.hash(&mut fingerprint);
+        order.version.hash(&mut fingerprint);
+    }
+    format!("{:x}", fingerprint.finish())
+}
+
 /// 本次申请快照的已决行与来源事实，禁止跨独立快照共享。
-pub(super) struct RequestSnapshot {
+struct RequestSnapshot {
     decided: Vec<(SalesInvoiceRequest, Option<String>)>,
     facts: HashMap<String, LinkedSalesFact>,
     order_nos: HashMap<String, String>,
@@ -386,30 +398,19 @@ pub(super) fn bounded_request_candidates(rows: Vec<SalesInvoiceRequest>) -> Resu
     Ok(rows)
 }
 
-/// 按原候选顺序裁剪来源授权与业务条件，来源缺失仍跳过，不推导未分配份额。
-fn decide_requests(
+/// 原候选已在数据库完成授权和筛选，仅补展示处理人，缺失来源沿既有合同跳过。
+fn hydrate_requests(
     rows: Vec<SalesInvoiceRequest>,
     facts: &HashMap<String, LinkedSalesFact>,
-    allowed: &BTreeSet<String>,
     handlers: &HashMap<String, String>,
-    _access: &FundsReadContext,
-    condition: &FundsLinkedCondition,
-) -> Result<Vec<(SalesInvoiceRequest, Option<String>)>> {
-    let mut decided = Vec::new();
-    for row in rows {
-        let Some(fact) = facts.get(row.sales_order_id.as_ref()) else {
-            continue;
-        };
-        if !allowed.contains(row.sales_order_id.as_ref()) {
-            continue;
-        }
-        let handler = row.work_item_id.as_ref().and_then(|id| handlers.get(id).cloned());
-        let row_facts = request_linked_facts(&row, fact, handler.as_deref());
-        if matches_linked_condition(&row_facts, condition) {
-            decided.push((row, handler));
-        }
-    }
-    Ok(decided)
+) -> Vec<(SalesInvoiceRequest, Option<String>)> {
+    rows.into_iter()
+        .filter_map(|row| {
+            facts.get(row.sales_order_id.as_ref())?;
+            let handler = row.work_item_id.as_ref().and_then(|id| handlers.get(id).cloned());
+            Some((row, handler))
+        })
+        .collect()
 }
 
 /// 来源责任、申请人和工作项处理人沿用各自事实口径。
@@ -512,25 +513,6 @@ mod tests {
         }
     }
 
-    /// 构造仅在本次查询中使用的公司范围，个人上限缺省。
-    fn access() -> FundsReadContext {
-        FundsReadContext {
-            resource: "sales_invoice_request".into(),
-            scope_version: "v".into(),
-            as_of: Instant::from_unix_secs(1),
-        }
-    }
-
-    /// 构造不附加业务条件的范围筛选。
-    fn condition() -> FundsLinkedCondition {
-        FundsLinkedCondition {
-            owner_user_ids: None,
-            operator_user_ids: None,
-            secondary_operator_user_ids: None,
-            org_unit_ids: None,
-        }
-    }
-
     /// 构造同拍来源责任和业务版本。
     fn fact(owner: &str, org: &str, version: u64) -> LinkedSalesFact {
         LinkedSalesFact { owner_user_id: owner.into(), business_org_unit_id: org.into(), version }
@@ -564,15 +546,7 @@ mod tests {
         ]);
         let numbers = HashMap::from([("so-a".into(), "SO-A".into()), ("so-b".into(), "SO-B".into())]);
         let handlers = HashMap::from([("work".into(), "handler".into())]);
-        let decided = decide_requests(
-            rows,
-            &facts,
-            &facts.keys().cloned().collect(),
-            &handlers,
-            &access(),
-            &condition(),
-        )
-        .unwrap();
+        let decided = hydrate_requests(rows, &facts, &handlers);
         assert_eq!(
             decided.iter().map(|(row, _)| row.base.id.as_str()).collect::<Vec<_>>(),
             ["second", "first"]
@@ -638,40 +612,30 @@ mod tests {
         assert!(serde_json::to_value(refreshed).unwrap()["work_item_id"].is_null());
     }
 
-    /// 来源授权与所有业务条件取交集；权限政策不因共享事实变宽。
+    /// 复核覆盖全部候选业务版本；页外申请或销售来源变化也会使首拍失效。
     #[test]
-    fn scoped_request_snapshot_keeps_authorization_and_all_filter_intersections() {
-        let rows = vec![request("a", "so-a", Some("work")), request("b", "so-b", None)];
-        let facts = HashMap::from([
+    fn request_fingerprint_binds_authorization_and_all_candidate_business_versions() {
+        let context = FundsReadContext {
+            resource: "sales_invoice_request".into(),
+            scope_version: "authorization".into(),
+            as_of: Instant::from_unix_secs(1),
+        };
+        let mut rows = [request("a", "so-a", None), request("b", "so-b", None)];
+        let mut facts = HashMap::from([
             ("so-a".into(), fact("owner-a", "org-a", 1)),
             ("so-b".into(), fact("owner-b", "org-b", 2)),
         ]);
-        let handlers = HashMap::from([("work".into(), "handler".into())]);
-        let mut filters = condition();
-        filters.owner_user_ids = Some(vec!["owner-a".into()]);
-        filters.operator_user_ids = Some(vec!["applicant".into()]);
-        filters.secondary_operator_user_ids = Some(vec!["handler".into()]);
-        filters.org_unit_ids = Some(vec!["org-a".into()]);
-        let allowed = BTreeSet::from(["so-a".into()]);
-        let decided =
-            decide_requests(rows.clone(), &facts, &allowed, &handlers, &access(), &filters).unwrap();
-        assert_eq!(decided.len(), 1);
-        assert_eq!(decided[0].0.base.id, "a");
-        filters.org_unit_ids = Some(vec!["org-b".into()]);
-        assert!(
-            decide_requests(rows.clone(), &facts, &allowed, &handlers, &access(), &filters)
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            decide_requests(rows.clone(), &facts, &BTreeSet::new(), &handlers, &access(), &condition())
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            decide_requests(rows, &facts, &BTreeSet::new(), &handlers, &access(), &condition())
-                .unwrap()
-                .is_empty()
-        );
+        let version = request_version(&context, rows.iter(), &facts);
+        rows[1].base.version += 1;
+        assert_ne!(version, request_version(&context, rows.iter(), &facts));
+        rows[1].base.version -= 1;
+        facts.get_mut("so-b").unwrap().version += 1;
+        assert_ne!(version, request_version(&context, rows.iter(), &facts));
+        facts.get_mut("so-b").unwrap().version -= 1;
+        let mut changed = context.clone();
+        changed.scope_version = "revoked".into();
+        assert_ne!(version, request_version(&changed, rows.iter(), &facts));
+        assert_ne!(version, request_version(&context, rows[..1].iter(), &facts));
+        assert_eq!(version, request_version(&context, rows.iter(), &facts));
     }
 }

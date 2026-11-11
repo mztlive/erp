@@ -49,8 +49,6 @@ pub const BOOK_SORT_FIELDS: &[&str] = &["created_at", "status"];
 /// 选品册列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SelectionBookFilter {
-    /// 入口授权后的客户集合。None 表示全量，空集合表示无权查看任何客户。
-    pub authorized_customer_ids: Option<Vec<String>>,
     /// 已证明的选品责任范围；仓储只执行条件，不推断权限。
     pub authorized_scope: SelectionReadScope,
     /// 负责人筛选；`None` 表示不筛选。
@@ -80,7 +78,6 @@ pub struct SelectionBookFilter {
 impl Default for SelectionBookFilter {
     fn default() -> Self {
         Self {
-            authorized_customer_ids: None,
             authorized_scope: SelectionReadScope::default(),
             owner_user_ids: None,
             org_unit_ids: None,
@@ -100,7 +97,7 @@ impl Default for SelectionBookFilter {
 impl QueryFilter for SelectionBookFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
-    /// 未删除条件与 `authorized_scope` 始终放入 `$and`。授权客户、负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
+    /// 未删除条件与 `authorized_scope` 始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
     ///
     /// # 参数
     /// 无。
@@ -113,9 +110,6 @@ impl QueryFilter for SelectionBookFilter {
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
-        if let Some(ids) = &self.authorized_customer_ids {
-            and.push(doc! { "customer_id": { "$in": ids } });
-        }
         if let Some(owners) = &self.owner_user_ids {
             and.push(doc! { "sales_owner_user_id": { "$in": owners } });
         }
@@ -161,8 +155,6 @@ impl Pagination for SelectionBookFilter {
 /// 方案列表筛选条件；方案沿所属册责任解释，不读提交人。
 #[derive(Debug, Clone)]
 pub struct SelectionProposalFilter {
-    /// 入口授权后的客户集合。None 表示全量，空集合表示无权查看任何客户。
-    pub authorized_customer_ids: Option<Vec<String>>,
     /// 已证明的方案责任范围；仓储只执行条件，不推断权限。
     pub authorized_scope: SelectionReadScope,
     /// 负责人筛选；`None` 表示不筛选。
@@ -195,9 +187,6 @@ impl QueryFilter for SelectionProposalFilter {
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
-        if let Some(ids) = &self.authorized_customer_ids {
-            and.push(doc! { "customer_id": { "$in": ids } });
-        }
         let mut filter = doc! { "$and": and };
         if let Some(customer_id) = &self.customer_id {
             filter.insert("customer_id", customer_id);
@@ -577,7 +566,6 @@ mod tests {
 
     fn filter() -> SelectionBookFilter {
         SelectionBookFilter {
-            authorized_customer_ids: None,
             authorized_scope: super::SelectionReadScope::default(),
             owner_user_ids: None,
             org_unit_ids: None,
@@ -601,25 +589,6 @@ mod tests {
         let and = document.get_array("$and").unwrap();
         assert!(and.iter().any(|item| item.as_document().unwrap().contains_key("deleted_at")));
         assert_eq!(filter().page_and_size(), (1, 20));
-    }
-
-    #[test]
-    fn customer_scope_intersects_explicit_filter_and_empty_scope_stays_empty() {
-        let mut scoped = filter();
-        scoped.authorized_customer_ids = Some(vec!["allowed".into()]);
-        let doc = scoped.to_doc();
-        assert_eq!(doc.get_str("customer_id").unwrap(), "cust-1");
-        let and = doc.get_array("$and").unwrap();
-        assert!(and.iter().any(|item| item.as_document().unwrap()
-            == &mongodb::bson::doc! { "customer_id": { "$in": ["allowed"] } }));
-        scoped.authorized_customer_ids = Some(vec![]);
-        let doc = scoped.to_doc();
-        let and = doc.get_array("$and").unwrap();
-        assert!(
-            and.iter()
-                .any(|item| item.as_document().unwrap()
-                    == &mongodb::bson::doc! { "customer_id": { "$in": [] } })
-        );
     }
 
     #[test]

@@ -287,7 +287,7 @@ impl SupplierApiOrderProcess {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_order(&actor, "submit", &execution.base.id, None, executor).await?;
+                    access.require_order(&actor, "submit", &execution.base.id, executor).await?;
                     db.supplier_api_order_executions().update(&mut execution, executor).await?;
                     db.supplier_api_order_setup_receipts().create(&receipt, executor).await?;
                     let audit = actor.resource_log(

@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
-use erp_core::common::time::BusinessDate;
 use erp_core::ids::CustomerAccountId;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -13,7 +12,7 @@ use super::ContractService;
 use super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot, to_list_view};
 use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisionView, ContractView};
 use crate::error::Result;
-use crate::ports::{AccountNamePort, CustomerAssignmentFactsPort, CustomerFactsPort};
+use crate::ports::CustomerFactsPort;
 use crate::repository::list_search::ContractCustomer;
 use crate::repository::prelude::*;
 use crate::repository::{ContractExt, ContractRow};
@@ -43,20 +42,17 @@ impl ContractService {
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
         let snapshot = self.list_snapshot(query.clone(), actor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
-        let current = self.list_snapshot(query, actor).await?;
-        ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
+        let current = self.list_scope_version(query, actor).await?;
+        ensure_stable_snapshot(&snapshot.context.scope_version, &current)?;
         Ok(to_list_view(snapshot))
     }
 }
 
-/// 在指定执行器上读取客户编号与当前主负责人。
+/// 在指定执行器上读取列表所需的客户编号。
 ///
 /// # 参数
 /// * `customers` - 客户编号事实
-/// * `assignments` - 客户归属 Port
-/// * `accounts` - 账号显示名 Port
 /// * `ids` - 客户 ID
-/// * `as_of` - 归属自然日
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
@@ -66,13 +62,10 @@ impl ContractService {
 /// 外域读取失败。
 ///
 /// # 关键业务约束
-/// 未分配主责时显示破折号，不得回填创建人或签约人。
+/// 客户事实不提供合同负责人；合同独立责任字段负责展示。
 pub(super) async fn list_customer_facts_with(
     customers: &dyn CustomerFactsPort,
-    _assignments: &dyn CustomerAssignmentFactsPort,
-    _accounts: &dyn AccountNamePort,
     ids: &[String],
-    _as_of: BusinessDate,
     executor: &mut dyn Executor,
 ) -> Result<Vec<ContractCustomer>> {
     let customer_ids = ids.iter().cloned().map(CustomerAccountId::new).collect::<Vec<_>>();
@@ -135,17 +128,13 @@ pub(super) async fn contract_rows(
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use erp_core::common::time::BusinessDate;
     use erp_core::ids::{CustomerAccountId, PartyId};
     use persistence_core::{Executor, NoTransaction};
 
     use super::super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot};
     use super::list_customer_facts_with;
     use crate::error::{Error, Result};
-    use crate::ports::{
-        CustomerAccountFact, CustomerFactsPort, FailClosedAccountNamePort, FailClosedAssignmentFactsPort,
-        FailClosedCustomerFactsPort,
-    };
+    use crate::ports::{CustomerAccountFact, CustomerFactsPort, FailClosedCustomerFactsPort};
 
     struct Customers {
         expected_ids: Vec<CustomerAccountId>,
@@ -181,16 +170,7 @@ mod tests {
             expected_ids: ids.iter().map(CustomerAccountId::new).collect(),
             facts: vec![fact("customer-1", "C-1"), fact("customer-2", "C-2")],
         };
-        let rows = list_customer_facts_with(
-            &customers,
-            &FailClosedAssignmentFactsPort,
-            &FailClosedAccountNamePort,
-            &ids,
-            BusinessDate::from_ymd(2026, 10, 25).unwrap(),
-            &mut NoTransaction,
-        )
-        .await
-        .unwrap();
+        let rows = list_customer_facts_with(&customers, &ids, &mut NoTransaction).await.unwrap();
         assert_eq!(
             rows.iter().map(|row| (row.id.as_str(), row.number.as_str())).collect::<Vec<_>>(),
             [("customer-2", "C-2"), ("customer-1", "C-1"), ("customer-2", "C-2")],
@@ -200,29 +180,12 @@ mod tests {
 
     #[tokio::test]
     async fn customer_facts_keep_empty_result_and_propagate_port_failure() {
-        let date = BusinessDate::from_ymd(2026, 10, 25).unwrap();
         let customers = Customers { expected_ids: vec![], facts: vec![] };
-        let rows = list_customer_facts_with(
-            &customers,
-            &FailClosedAssignmentFactsPort,
-            &FailClosedAccountNamePort,
-            &[],
-            date,
-            &mut NoTransaction,
-        )
-        .await
-        .unwrap();
+        let rows = list_customer_facts_with(&customers, &[], &mut NoTransaction).await.unwrap();
         assert!(rows.is_empty());
-        let error = list_customer_facts_with(
-            &FailClosedCustomerFactsPort,
-            &FailClosedAssignmentFactsPort,
-            &FailClosedAccountNamePort,
-            &[],
-            date,
-            &mut NoTransaction,
-        )
-        .await
-        .unwrap_err();
+        let error = list_customer_facts_with(&FailClosedCustomerFactsPort, &[], &mut NoTransaction)
+            .await
+            .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "客户端口未接线"));
     }
 

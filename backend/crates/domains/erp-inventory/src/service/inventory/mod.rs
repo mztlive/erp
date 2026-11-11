@@ -8,11 +8,11 @@ use application_core::AuditActor;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::Result;
 use crate::ports::{
     AdjustmentPeopleFactsPort, AuthorizationPort, CatalogFactsPort, FulfillmentFactsPort, InventoryAction,
     InventoryAuditPort, WarehouseFactsPort,
 };
-use crate::{InventoryAuthorization, Result};
 
 mod adjustment_display;
 mod adjustment_query;
@@ -39,21 +39,21 @@ pub struct InventoryService {
 }
 
 impl InventoryService {
-    /// 在调用方执行器内解析本服务已经装配的库存动作资格。
-    ///
+    /// 在原命令执行器证明目标仓库的完整动作资格。
     /// # 参数
-    /// `actor` 为当前操作人，`actions` 为所需动作，`executor` 为当前业务命令的执行器。
+    /// actor、action、warehouse 为可信账号、固定动作和实际仓库；executor 为原事务。
     /// # 返回
-    /// 返回本服务的权威库存授权事实。
+    /// 账号、同角色功能资格和仓库范围均成立时成功。
     /// # 错误
-    /// 授权来源或事实查询失败时返回原库存错误。
-    pub async fn authorize(
+    /// 对象、范围或功能资格不足拒绝；设施错误透传。
+    pub async fn require_warehouse(
         &self,
         actor: &AuditActor,
-        actions: &[InventoryAction],
+        action: InventoryAction,
+        warehouse: &str,
         executor: &mut dyn Executor,
-    ) -> Result<InventoryAuthorization> {
-        self.authorization.authorize(actor, actions, executor).await
+    ) -> Result<()> {
+        self.authorization.require_warehouse(actor, action, warehouse, executor).await
     }
 
     /// 创建库存服务实例。
@@ -82,5 +82,20 @@ impl InventoryService {
         people_facts: Arc<dyn AdjustmentPeopleFactsPort>,
     ) -> Self {
         Self { db, authorization, warehouse_facts, catalog_facts, fulfillment_facts, audit, people_facts }
+    }
+}
+
+/// 只把普通对象拒绝转换为当前入口的不可见结果，设施错误继续失败。
+async fn warehouse_allowed(
+    port: &dyn AuthorizationPort,
+    actor: &AuditActor,
+    action: InventoryAction,
+    warehouse: &str,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    match port.require_warehouse(actor, action, warehouse, executor).await {
+        Ok(()) => Ok(true),
+        Err(crate::Error::Forbidden(_) | crate::Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(error),
     }
 }

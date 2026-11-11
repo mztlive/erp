@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use application_core::AuditActor;
 use erp_core::money::Quantity;
@@ -55,7 +55,7 @@ impl InventoryService {
         let page_no = query.paging.page;
         let page_size = query.paging.page_size;
         let scope_version = query.scope_version.clone();
-        let BalancePage { page, authorization, enrichments, active_reservation_dims } =
+        let BalancePage { page, authorization, enrichments, active_reservation_dims, create_warehouses } =
             self.balance_page(query, actor).await?;
         let items = page
             .items
@@ -65,19 +65,19 @@ impl InventoryService {
                 let has_active_reservation =
                     active_reservation_dims.contains(&(balance.warehouse_id.clone(), balance.sku_id.clone()));
                 let can_create_adjustment = enrichments.warehouses.contains_key(&balance.warehouse_id)
-                    && authorization.can_create(balance.warehouse_id.as_str());
+                    && create_warehouses.contains(&balance.warehouse_id);
                 enrich_balance_view(balance, &enrichments, has_active_reservation, can_create_adjustment)
             })
             .collect();
         ensure_scope_version(
             page_no,
             scope_version.as_deref(),
-            authorization.balance_list_meta().scope_version(),
+            authorization.meta(InventoryAction::BalanceList).scope_version(),
         )?;
         Ok(InventoryListPage::from_page(
             PageView { items, total: page.total, page: page_no, page_size },
-            authorization.balance_list_meta(),
-            authorization.balance_list_scope().is_empty(),
+            authorization.meta(InventoryAction::BalanceList),
+            authorization.no_scope(InventoryAction::BalanceList),
             BALANCE_SCOPE_SUMMARY,
             BALANCE_OWNERSHIP_BASIS,
         ))
@@ -94,7 +94,7 @@ impl InventoryService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let authorization = authorization_port
-                        .authorize(&actor, &[InventoryAction::BalanceList, InventoryAction::Create], executor)
+                        .authorize(&actor, &[InventoryAction::BalanceList], executor)
                         .await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存读取权限".into()));
@@ -109,8 +109,19 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
+                    let candidates =
+                        page.items.iter().map(|row| row.warehouse_id.to_string()).collect::<Vec<_>>();
+                    let create_warehouses = authorization_port
+                        .allowed_warehouses(&actor, InventoryAction::Create, &candidates, executor)
+                        .await?;
                     authorization.validate(executor).await?;
-                    Ok(BalancePage { page, authorization, enrichments, active_reservation_dims })
+                    Ok(BalancePage {
+                        page,
+                        authorization,
+                        enrichments,
+                        active_reservation_dims,
+                        create_warehouses,
+                    })
                 })
             })
             .await
@@ -134,7 +145,7 @@ impl InventoryService {
         fields(layer = "service", domain = "inventory", operation = "stock_balance_detail")
     )]
     pub async fn stock_balance_detail(&self, id: &str, actor: &AuditActor) -> Result<StockBalanceDetailView> {
-        let (balance, authorization, details) = self.balance_detail_snapshot(id, actor).await?;
+        let (balance, can_create, details) = self.balance_detail_snapshot(id, actor).await?;
         let enrichments = load_balance_enrichments(
             &self.db,
             self.warehouse_facts.as_ref(),
@@ -149,7 +160,7 @@ impl InventoryService {
             (&balance).into(),
             &enrichments,
             !details.reservations.is_empty(),
-            authorization.can_create(balance.warehouse_id.as_ref()),
+            can_create,
         );
         Ok(StockBalanceDetailView {
             balance: balance_view,
@@ -164,7 +175,7 @@ impl InventoryService {
         &self,
         id: &str,
         actor: &AuditActor,
-    ) -> Result<(StockBalance, InventoryAuthorization, BalanceDetails)> {
+    ) -> Result<(StockBalance, bool, BalanceDetails)> {
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
         let fulfillment = self.fulfillment_facts.clone();
@@ -174,32 +185,42 @@ impl InventoryService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port
-                        .authorize(
-                            &actor,
-                            &[
-                                InventoryAction::BalanceDetail,
-                                InventoryAction::AdjustmentDetail,
-                                InventoryAction::Create,
-                            ],
-                            executor,
-                        )
-                        .await?;
                     let balance = db
                         .inventory()
                         .stock_balance(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
-                    if !authorization.actor_is_active()
-                        || !authorization.can_read_balance_detail(balance.warehouse_id.as_ref())
+                    if !super::warehouse_allowed(
+                        authorization_port.as_ref(),
+                        &actor,
+                        InventoryAction::BalanceDetail,
+                        balance.warehouse_id.as_ref(),
+                        executor,
+                    )
+                    .await?
                     {
                         return Err(Error::NotFound("库存余额不存在".to_string()));
                     }
+                    let can_read_adjustments = super::warehouse_allowed(
+                        authorization_port.as_ref(),
+                        &actor,
+                        InventoryAction::AdjustmentDetail,
+                        balance.warehouse_id.as_ref(),
+                        executor,
+                    )
+                    .await?;
+                    let can_create = super::warehouse_allowed(
+                        authorization_port.as_ref(),
+                        &actor,
+                        InventoryAction::Create,
+                        balance.warehouse_id.as_ref(),
+                        executor,
+                    )
+                    .await?;
                     let details =
-                        balance_details(&db, fulfillment.as_ref(), &balance, &authorization, executor)
+                        balance_details(&db, fulfillment.as_ref(), &balance, can_read_adjustments, executor)
                             .await?;
-                    authorization.validate(executor).await?;
-                    Ok::<_, Error>((balance, authorization, details))
+                    Ok::<_, Error>((balance, can_create, details))
                 })
             })
             .await
@@ -211,6 +232,7 @@ struct BalancePage {
     authorization: InventoryAuthorization,
     enrichments: BalanceEnrichments,
     active_reservation_dims: HashSet<(String, String)>,
+    create_warehouses: BTreeSet<String>,
 }
 
 async fn search_balance_rows(
@@ -229,14 +251,21 @@ async fn search_balance_rows(
     let (sort_by, sort_ascending) = query.paging.sort_selection();
     let filter = StockBalanceFilter {
         search,
-        warehouse_ids: authorization.balance_list_scope().repository_warehouse_ids(query.warehouse_id),
+        warehouse_ids: query.warehouse_id.map(|id| vec![id]),
         sku_id: query.sku_id,
         page: query.paging.page,
         page_size: query.paging.page_size,
         sort_by,
         sort_ascending,
     };
-    let page = db.stock_balances().search_stock_balances(&filter, executor).await?;
+    let page = db
+        .stock_balances()
+        .search_authorized_stock_balances(
+            &filter,
+            authorization.query(InventoryAction::BalanceList),
+            executor,
+        )
+        .await?;
     Ok(page)
 }
 
@@ -292,7 +321,7 @@ async fn balance_details(
     db: &Database,
     fulfillment: &dyn FulfillmentFactsPort,
     balance: &StockBalance,
-    authorization: &InventoryAuthorization,
+    can_read_adjustments: bool,
     executor: &mut dyn Executor,
 ) -> Result<BalanceDetails> {
     let filter = StockMovementFilter {
@@ -307,7 +336,7 @@ async fn balance_details(
         .inventory()
         .operable_reservations_for_balance(&balance.warehouse_id, &balance.sku_id, executor)
         .await?;
-    let adjustments = if authorization.read_scope().covers(balance.warehouse_id.as_ref()) {
+    let adjustments = if can_read_adjustments {
         db.inventory().pending_adjustments_for_warehouse(&balance.warehouse_id, executor).await?
     } else {
         Vec::new()

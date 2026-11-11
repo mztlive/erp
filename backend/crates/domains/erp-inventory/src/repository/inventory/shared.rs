@@ -5,8 +5,11 @@ use erp_core::money::Quantity;
 use mongodb::bson::{Decimal128, Document, doc};
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
-use persistence_core::{Executor, PageResult, Result, mongo_ops};
+use persistence_core::{Executor, PageResult, Result, aggregate, mongo_ops};
 use serde::{Deserialize, Serialize};
+
+use crate::ports::InventoryQuery;
+use crate::{Error, Result as InventoryResult};
 
 /// 按主键读取未删除实体。
 ///
@@ -253,6 +256,40 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction }
+}
+
+/// 执行同一完整授权条件下的投影分页和计数。
+/// # 参数
+/// base、filter、options 为本域业务查询；access 为固定模型凭证，executor 为原执行器。
+/// # 返回
+/// 授权先于分页和计数的结果；缺功能资格保持空集合。
+/// # 错误
+/// 模型错配、复验、数据库或计数转换失败返回原错误。
+pub(super) async fn authorized_projection_search<Entity, Row>(
+    base: &Collection<Entity>,
+    filter: Document,
+    options: FindOptions,
+    access: Option<&InventoryQuery>,
+    executor: &mut dyn Executor,
+) -> InventoryResult<PageResult<Row>>
+where
+    Entity: Send + Sync,
+    Row: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    let Some(access) = access else {
+        return Ok(PageResult { items: Vec::new(), total: 0 });
+    };
+    if access.collection() != base.name() {
+        return Err(Error::ValidationError("库存授权模型与查询集合不匹配".into()));
+    }
+    access.validate(executor).await?;
+    let prefix = access.stages().to_vec();
+    let collection = base.clone_with_type::<Row>();
+    let items = aggregate::find(&collection, filter.clone(), options, prefix.clone(), executor).await?;
+    let total = aggregate::count(base, filter, prefix, executor).await?;
+    let total = i64::try_from(total).map_err(|_| Error::Internal("库存结果数量超限".into()))?;
+    access.validate(executor).await?;
+    Ok(PageResult { items, total })
 }
 
 #[cfg(test)]
