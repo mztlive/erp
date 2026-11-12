@@ -11,10 +11,9 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::access_control::{ResolvedScope, ScopeClause};
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::consumer_spec::{ConsumerSpec, OrganizationFacts};
 use crate::entity::access_control::governance::root_scope;
 use crate::entity::access_control::person_scope::PersonDataScope;
+use crate::entity::access_control::scope_spec::{self, OrganizationLoad, ScopeSource};
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::OrganizationRepository;
@@ -135,9 +134,8 @@ impl DataScopeService {
         entry_permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        super::consumers::registration(entry_permission.resource(), entry_permission.action())?;
-        let source_permission = AuthorizationPolicy::scope_source(entry_permission)?;
-        self.resolve_boundary(actor, entry_permission, &source_permission, &[], executor).await
+        let source_permission = scope_spec::runtime_source(scope_spec::require_scope(entry_permission)?)?;
+        self.resolve_boundary(actor, entry_permission, source_permission.permission(), &[], executor).await
     }
 
     /// 同一角色必须满足全部权限，范围仍只绑定目标资源动作。
@@ -160,9 +158,9 @@ impl DataScopeService {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        super::consumers::registration(entry_permission.resource(), entry_permission.action())?;
-        let source_permission = AuthorizationPolicy::scope_source(entry_permission)?;
-        self.resolve_boundary(actor, entry_permission, &source_permission, permissions, executor).await
+        let source_permission = scope_spec::runtime_source(scope_spec::require_scope(entry_permission)?)?;
+        self.resolve_boundary(actor, entry_permission, source_permission.permission(), permissions, executor)
+            .await
     }
 
     /// 动作资格与数据边界在同一策略快照中独立取证。
@@ -185,15 +183,15 @@ impl DataScopeService {
     async fn scope_organizations(
         &self,
         actor_id: &str,
-        resource: &str,
+        load: OrganizationLoad,
         at: Instant,
         executor: &mut dyn Executor,
     ) -> Result<OrganizationState> {
         let repository = OrganizationRepository::new(&self.db);
-        if ConsumerSpec::get(resource)?.organization_facts() == OrganizationFacts::AllMembers {
-            Ok(repository.state(executor).await?)
-        } else {
-            repository.directory_state(actor_id, at, executor).await
+        match load {
+            OrganizationLoad::AllMembers => Ok(repository.state(executor).await?),
+            OrganizationLoad::Actor => repository.directory_state(actor_id, at, executor).await,
+            OrganizationLoad::None => Ok(OrganizationState::default()),
         }
     }
 
@@ -208,15 +206,14 @@ impl DataScopeService {
         executor: &mut dyn Executor,
     ) -> Result<ResolvedScope> {
         let (resource, action) = resource_action;
-        let registration = super::consumers::registration(resource, action)?;
-        let policy = AuthorizationPolicy::for_action(resource, action)?;
-        resolve_policy_scope(policy, roles, async {
+        let spec = scope_spec::require_runtime_action(resource, action)?;
+        resolve_configured_scope(spec, roles, async {
             state.own_org(user, at)?;
             let configs =
                 self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
             match configs.first() {
                 Some(config) => config.resolve(state, at),
-                None if registration.default_self() => {
+                None if spec.default_self() => {
                     PersonDataScope::default_for(user, resource, action).resolve(state, at)
                 },
                 None => Ok(PersonDataScope::denied()),
@@ -226,16 +223,16 @@ impl DataScopeService {
     }
 }
 
-/// 仅在账号与同角色完整动作已取证后应用共享政策；旧人员配置不再限制共享业务。
-async fn resolve_policy_scope(
-    policy: AuthorizationPolicy,
+/// 仅在账号与同角色完整动作已取证后应用公司或人员范围；旧人员配置不再限制公司范围。
+async fn resolve_configured_scope(
+    spec: &scope_spec::ScopeSpec,
     qualified_roles: &[Role],
     person_scope: impl Future<Output = Result<ResolvedScope>>,
 ) -> Result<ResolvedScope> {
     if !qualified_roles.iter().any(|role| !role.disabled && !role.base.is_deleted()) {
         return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
     }
-    if policy == AuthorizationPolicy::Shared {
+    if matches!(spec.source(), ScopeSource::Company) {
         return Ok(ResolvedScope {
             role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
             user_limit: None,
@@ -275,8 +272,8 @@ mod tests {
             "supplier_fulfillment_order",
             "supplier_settlement_statement",
         ] {
-            let policy = AuthorizationPolicy::for_action(resource, "list").unwrap();
-            let scope = resolve_policy_scope(policy, &roles, async {
+            let spec = scope_spec::require_runtime_action(resource, "list").unwrap();
+            let scope = resolve_configured_scope(spec, &roles, async {
                 panic!("共享资源不得读取旧人员范围或要求主属部门");
             })
             .await
@@ -294,12 +291,14 @@ mod tests {
                 false
             ));
         }
-        let sales = AuthorizationPolicy::for_action("sales_order", "list").unwrap();
+        let sales = scope_spec::require_runtime_action("sales_order", "list").unwrap();
         let denied =
-            resolve_policy_scope(sales, &roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
+            resolve_configured_scope(sales, &roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
         assert!(!denied.has_role_scope());
-        let failed =
-            resolve_policy_scope(sales, &roles, async { Err(Error::Forbidden("人员范围失效".into())) }).await;
+        let failed = resolve_configured_scope(sales, &roles, async {
+            Err(Error::Forbidden("人员范围失效".into()))
+        })
+        .await;
         assert!(matches!(failed, Err(Error::Forbidden(_))));
     }
 
@@ -312,9 +311,11 @@ mod tests {
         deleted.disabled = false;
         deleted.base.deleted_at = 1;
         for roles in [vec![], vec![disabled], vec![deleted]] {
-            let result = resolve_policy_scope(AuthorizationPolicy::Shared, &roles, async {
-                panic!("无动作资格不得读取人员范围");
-            })
+            let result = resolve_configured_scope(
+                scope_spec::require_runtime_action("product", "list").unwrap(),
+                &roles,
+                async { panic!("无动作资格不得读取人员范围") },
+            )
             .await;
             assert!(matches!(result, Err(Error::Forbidden(_))));
         }

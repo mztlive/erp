@@ -2,6 +2,7 @@
 mod registry;
 mod require;
 mod resolve;
+mod rules;
 mod validate;
 
 use std::slice;

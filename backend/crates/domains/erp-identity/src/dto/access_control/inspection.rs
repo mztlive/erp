@@ -1,8 +1,7 @@
 //! 权限检查只返回判定与下一步，不返回其他人员的业务数据。
 use serde::{Deserialize, Serialize};
 
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::consumer_spec::registration;
+use crate::entity::access_control::scope_spec::{self, ScopeSource};
 use crate::service::access_control::resolve::AuthorizedDataScope;
 #[cfg(test)]
 use crate::service::access_control::resolve::DataScopeFacts;
@@ -30,7 +29,7 @@ impl AccessInspectionRequest {
         if self.user_id.trim().is_empty() || self.user_id.len() > 128 {
             return Err(Error::ValidationError("请选择需要检查的人员".into()));
         }
-        registration(&self.resource, &self.action)?;
+        scope_spec::kind(&crate::Permission::parse(format!("{}:{}", self.resource, self.action))?)?;
         if let Some(id) = &self.object_id {
             if id.trim().is_empty() || id.len() > 128 {
                 return Err(Error::ValidationError("请选择有效业务单据".into()));
@@ -62,32 +61,35 @@ pub struct AccessInspectionView {
 }
 
 impl AccessInspectionView {
-    /// 仅有动作资格时报告仍需具体对象，不给出范围允许结论。
+    /// 缺少对象或任务上下文时只报告已完成的检查，不给出对象授权通过。
     /// # 参数
-    /// `policy` 为资源动作的真实授权策略。
+    /// `resource` 与 `action` 为已接入的动作。
     /// # 返回
-    /// 动作通过、业务授权待检查的只读结果。
+    /// 动作通过、对象条件待检查的只读结果。
     /// # 错误
-    /// 无；调用方必须先验证当前有效动作权限。
-    pub fn contextual(policy: AuthorizationPolicy) -> Self {
+    /// 动作未接入时返回校验错误。
+    pub fn without_object(resource: &str, action: &str) -> Result<Self> {
+        let description = scope_spec::action_description(resource, action)?;
         let mut view = Self::default();
         view.push("操作权限", "passed", "账号有效，启用角色提供了本操作权限。");
-        if policy == AuthorizationPolicy::Shared {
-            view.push("岗位共享", "passed", policy.description());
+        let company = scope_spec::find_action(resource, action)
+            .is_some_and(|spec| matches!(spec.source(), ScopeSource::Company));
+        if company {
+            view.push("岗位共享", "passed", description);
             view.push(
                 "对象资格",
                 "review",
                 "尚未检查具体对象；维护权限、敏感信息、单据状态及任务责任仍须在业务操作时校验。",
             );
-            return view;
+            return Ok(view);
         }
-        view.push("业务授权", "review", policy.description());
+        view.push("业务授权", "review", description);
         view.push(
             "对象上下文",
             "review",
             "需在实际业务中核验来源单据、任务归属、版本和管理资格；此检查不代表可以访问或处理具体对象。",
         );
-        view
+        Ok(view)
     }
 
     /// 追加明确的检查层结果。
@@ -144,7 +146,7 @@ mod tests {
 
     #[test]
     fn shared_policy_explains_company_access_without_claiming_task_eligibility() {
-        let view = AccessInspectionView::contextual(AuthorizationPolicy::Shared);
+        let view = AccessInspectionView::without_object("product", "list").unwrap();
         assert_eq!(view.steps[1].layer, "岗位共享");
         assert_eq!(view.steps[1].status, "passed");
         assert_eq!(view.steps[2].status, "review");
@@ -153,10 +155,10 @@ mod tests {
 
     #[test]
     fn contextual_policies_never_report_object_access_as_passed_or_blocked() {
-        for policy in
-            [AuthorizationPolicy::Task, AuthorizationPolicy::SourceInherited, AuthorizationPolicy::Role]
+        for (resource, action) in
+            [("approval_instance", "decide"), ("cost_entry", "list"), ("integration_error_task", "create")]
         {
-            let view = AccessInspectionView::contextual(policy);
+            let view = AccessInspectionView::without_object(resource, action).unwrap();
             assert_eq!(view.steps[0].status, "passed");
             assert!(view.steps[1..].iter().all(|step| step.status == "review"));
             assert!(view.scope_version.is_none());

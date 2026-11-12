@@ -27,6 +27,13 @@ pub const COMMANDS_PROCUREMENT_SUPPLEMENT: Permission =
 pub const COMMANDS_PROCUREMENT_REASSIGN: Permission =
     Permission::new(resources::PROCUREMENT_INQUIRY, "reassign");
 
+/// 领取采购询价任务。
+pub const COMMANDS_PROCUREMENT_CLAIM: Permission = Permission::new(resources::PROCUREMENT_INQUIRY, "claim");
+
+/// 读取询价转费用候选。
+pub const COMMANDS_PROCUREMENT_CONVERT_EXPENSES: Permission =
+    Permission::new(resources::PROCUREMENT_INQUIRY, "convert_expenses");
+
 /// 保存询价反馈草稿。
 pub const COMMANDS_PROCUREMENT_SAVE_FEEDBACK: Permission =
     Permission::new(resources::PROCUREMENT_INQUIRY, "save_feedback");

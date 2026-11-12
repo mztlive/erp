@@ -8,7 +8,7 @@ use persistence_core::Executor;
 
 use super::validate::revalidation_error;
 use super::{AccessMode, AccessPolicy, AccessRegistration, AuthorizationService};
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+use crate::entity::access_control::scope_spec;
 use crate::entity::authorization::{AccessContext, AccessFact, AccessRule, AccessSubject, ReadAccess};
 use crate::entity::fingerprint::Fingerprint;
 use crate::repository::authorization::AccessProof;
@@ -259,7 +259,7 @@ impl AuthorizationService {
         if permission.resource() != context.resource {
             return Err(Error::ValidationError("范围政策与对象资源不匹配".into()));
         }
-        let source = AuthorizationPolicy::scope_source(permission)?;
+        let source = scope_spec::runtime_source(scope_spec::require_scope(permission)?)?.permission().clone();
         let scope = DataScopeService::new(self.db.clone(), self.rbac.clone())
             .registered(
                 &context.actor,

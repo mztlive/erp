@@ -2,13 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::slice;
 use std::sync::Arc;
 
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::consumer_spec::ConsumerSpec;
+use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{
     AccessRule, AccessSubject, FactKind, QueryModel, QueryOutput, ReadAccess, RelationKey, RelationMatch,
 };
 use crate::ports::{AccessFactsPort, AccessMapping};
-use crate::service::access_control::consumers::registration;
 use crate::{Error, Permission, QualifiedPermissions, Result, RoleId};
 
 /// 组合根登记的数据政策；无对象操作由 AccessMode 单独表达。
@@ -169,7 +167,7 @@ impl AccessPolicy {
                 Err(Error::ValidationError("政策角色集合必须包含 1 至 32 个角色".into()))
             },
             Self::Scope { permission, read } => {
-                let consumer = registration(permission.resource(), permission.action())?;
+                let consumer = scope_spec::require_scope(permission)?;
                 read.validate(permission, consumer.allows_history())
             },
             Self::Independent { permission, policy } => {
@@ -272,15 +270,14 @@ impl AccessRegistration {
             return Err(Error::ValidationError("业务入口必须登记具体权限".into()));
         }
         if self.access.data().is_ok_and(|data| matches!(data.policy, AccessPolicy::Account { .. }))
-            && ConsumerSpec::find(self.permission.resource()).is_some()
+            && scope_spec::resource_is_known(self.permission.resource())
         {
             return Err(Error::ValidationError("已有业务资源不能免除入口权限".into()));
         }
         match &self.access {
             AccessMode::Operation | AccessMode::QualifiedOperation { .. } => {
-                if ConsumerSpec::find(self.permission.resource()).is_some()
-                    && AuthorizationPolicy::for_action(self.permission.resource(), self.permission.action())?
-                        != AuthorizationPolicy::Role
+                if scope_spec::resource_is_known(self.permission.resource())
+                    && scope_spec::kind(&self.permission)? != ActionKind::Function
                 {
                     return Err(Error::ValidationError("已有对象范围的操作不能登记为无对象政策".into()));
                 }

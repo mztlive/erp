@@ -33,7 +33,6 @@ use crate::entity::access_control::{
 };
 use crate::ports::ScopeTargetPort;
 use crate::repository::prelude::*;
-pub mod consumers;
 mod person_scope;
 mod person_scope_query;
 pub mod policy_bundle;

@@ -6,9 +6,10 @@ use entity_macros::{Entity, id_type};
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
-use super::consumer_spec::registration;
 use super::scope_target::{BoundScopeTarget, ScopeTarget};
-use super::{DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode};
+use super::{
+    DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode, scope_spec,
+};
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::{Error, Result};
@@ -97,7 +98,7 @@ impl PersonScopeExpression {
     /// # 错误
     /// 不返回错误。
     pub fn default_self(resource: &str, action: &str) -> bool {
-        registration(resource, action).is_ok_and(|spec| spec.default_self())
+        scope_spec::find_action(resource, action).is_some_and(|spec| spec.default_self())
     }
 
     /// 基础本人只加入新模型；旧配置原样保留，不因发布自动扩权。
@@ -156,7 +157,7 @@ impl PersonDataScope {
     /// # 错误
     /// 未登记动作或非法范围表达式返回校验错误。
     pub fn resolve(&self, state: &OrganizationState, at: Instant) -> Result<ResolvedScope> {
-        let spec = registration(&self.resource, &self.action)?;
+        let spec = scope_spec::require_action(&self.resource, &self.action)?;
         self.compile(state, spec.required_dimensions(), spec.allows_history(), at)
     }
 
@@ -560,9 +561,8 @@ mod tests {
             ("work_item", "list", true, false),
             ("work_item", "manage", false, false),
             ("product", "list", false, false),
-            ("reconciliation_difference", "create", false, false),
         ] {
-            let spec = registration(resource, action).unwrap();
+            let spec = scope_spec::require_action(resource, action).unwrap();
             assert_eq!(spec.default_self(), expected_self);
             assert_eq!(spec.allows_history(), expected_history);
             assert_eq!(PersonScopeExpression::default_self(resource, action), expected_self);

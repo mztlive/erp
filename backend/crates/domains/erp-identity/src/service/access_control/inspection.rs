@@ -7,7 +7,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
+use crate::entity::access_control::scope_spec;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
@@ -65,9 +65,9 @@ impl AccessInspectionService {
             return Ok(denied("账号", "账号不存在或未启用，请核对人员账号状态。"));
         };
         let actor = AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind);
-        let policy = AuthorizationPolicy::for_action(&request.resource, &request.action)?;
-        if !policy.configurable() {
-            return self.inspect_contextual(actor, request, policy, executor).await;
+        let permission = Permission::parse(format!("{}:{}", request.resource, request.action))?;
+        if scope_spec::find(&permission).is_none_or(|spec| !spec.configurable()) {
+            return self.inspect_contextual(actor, request, executor).await;
         }
         let result = DataScopeService::new(self.db.clone(), self.rbac.clone())
             .resolve(
@@ -94,7 +94,6 @@ impl AccessInspectionService {
         &self,
         actor: AuditActor,
         request: &AccessInspectionRequest,
-        policy: AuthorizationPolicy,
         executor: &mut dyn Executor,
     ) -> Result<InspectedAccess> {
         let permission = Permission::parse(format!("{}:{}", request.resource, request.action))?;
@@ -107,7 +106,10 @@ impl AccessInspectionService {
         if self.db.roles().enabled_roles(&ids, executor).await?.is_empty() {
             return Ok(denied("操作权限", "没有启用角色提供本操作权限，请检查人员角色及操作权限。"));
         }
-        Ok(InspectedAccess { actor: None, view: AccessInspectionView::contextual(policy) })
+        Ok(InspectedAccess {
+            actor: None,
+            view: AccessInspectionView::without_object(&request.resource, &request.action)?,
+        })
     }
 
     /// 读取本操作的合格角色规则，为缺失部门关系提供可操作原因。

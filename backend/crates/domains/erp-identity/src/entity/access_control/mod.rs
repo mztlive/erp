@@ -2,12 +2,11 @@
 
 pub mod audit_actions;
 pub mod audit_event;
-pub mod authorization_policy;
-pub mod consumer_spec;
 pub(crate) mod governance;
 pub mod permission;
 pub mod person_scope;
 pub mod resolved_scope;
+pub(crate) mod scope_spec;
 pub mod scope_type;
 pub use resolved_scope::{ResolvedScope, ScopeClause, ScopedObject};
 pub mod scope_binding;

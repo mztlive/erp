@@ -3,8 +3,8 @@ use super::plan::{PolicyFacts, ensure_role};
 use super::{PolicyBinding, PolicyDocument, PolicyMode, PolicyRole, PolicyScope, PolicyVersion};
 use crate::dto::authorization_bundle::PolicyExport;
 use crate::dto::person_scope::PersonScopeGrant;
-use crate::entity::access_control::consumer_spec::{CONSUMERS, configurable_registration};
 use crate::entity::access_control::person_scope::PersonDataScope;
+use crate::entity::access_control::scope_spec;
 use crate::{Error, Permission, PermissionSet, Result, RoleId};
 
 impl PolicyFacts {
@@ -60,17 +60,16 @@ impl PolicyFacts {
                     .filter_map(|id| self.roles.get(id.as_str()))
                     .flat_map(|role| role.permissions.iter().cloned()),
             );
-            for spec in CONSUMERS {
-                let resource = spec.resource();
+            for resource in scope_spec::resources() {
                 let mut missing = Vec::new();
-                for action in spec.actions().iter().map(|action| action.action()) {
-                    let configured = self
-                        .scopes
-                        .iter()
-                        .any(|s| s.user_id == *user_id && s.resource == resource && s.action == action);
+                for permission in scope_spec::actions(resource) {
+                    let action = permission.action();
+                    let configured = self.scopes.iter().any(|scope| {
+                        scope.user_id == *user_id && scope.resource == resource && scope.action == action
+                    });
                     if !configured
-                        && configurable_registration(resource, action).is_ok()
-                        && permissions.covers_one(&Permission::parse(format!("{resource}:{action}"))?)
+                        && scope_spec::is_configurable(resource, action)
+                        && permissions.covers_one(permission)
                     {
                         missing.push(action.to_owned());
                     }
@@ -93,7 +92,7 @@ impl PolicyFacts {
     /// 每个动作独立导出，保留追加项的并集和维度交集。
     fn export_scopes(&self, document: &mut PolicyDocument, notes: &mut Vec<String>) -> Result<()> {
         for scope in &self.scopes {
-            if configurable_registration(&scope.resource, &scope.action).is_err() {
+            if !scope_spec::is_configurable(&scope.resource, &scope.action) {
                 notes.push(format!(
                     "已退役配置未参与导出：{}/{}/{}",
                     scope.user_id, scope.resource, scope.action

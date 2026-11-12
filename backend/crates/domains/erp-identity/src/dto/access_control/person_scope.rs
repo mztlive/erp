@@ -4,11 +4,8 @@ use std::ops::Deref;
 use serde::{Deserialize, Serialize};
 
 use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::consumer_spec::{
-    configurable_registration, registration, validate_binding, validate_scope_type,
-};
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
+use crate::entity::access_control::scope_spec;
 use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::{Error, Result};
 
@@ -70,7 +67,6 @@ pub struct PersonScopeGrant {
 
 #[derive(Serialize)]
 pub struct PersonBusinessOption {
-    pub authorization_policy: AuthorizationPolicy,
     pub configurable_actions: Vec<String>,
     pub policy_description: String,
     pub resource: String,
@@ -89,43 +85,41 @@ pub struct PersonScopeView {
 }
 
 impl PersonBusinessOption {
-    /// 将已证明的角色动作映射为配置候选，保留不可配置动作的真实授权说明。
+    /// 将已证明的角色动作映射为配置候选，说明按每个动作的实际能力生成。
     /// # 参数
-    /// `resource`、`actions` 为有效动作，`dimensions` 为登记维度。
+    /// `resource`、`actions` 为当前角色已证明的动作。
     /// # 返回
-    /// 可编辑动作子集与完整角色动作。
+    /// 可编辑动作子集、维度并集与完整角色动作。
     /// # 错误
-    /// 空动作或未登记策略返回校验错误。
-    pub fn from_granted(resource: &str, actions: Vec<String>, dimensions: &[ScopeDimension]) -> Result<Self> {
-        let first = actions.first().ok_or_else(|| Error::ValidationError("缺少操作权限".into()))?;
-        let authorization_policy = actions.iter().try_fold(
-            AuthorizationPolicy::for_action(resource, first)?,
-            |policy, action| {
-                let candidate = AuthorizationPolicy::for_action(resource, action)?;
-                Ok::<_, Error>(if candidate == AuthorizationPolicy::Shared { candidate } else { policy })
-            },
-        )?;
-        let configurable_actions: Vec<String> = actions
+    /// 空动作或未登记动作返回校验错误。
+    pub fn from_granted(resource: &str, actions: Vec<String>) -> Result<Self> {
+        if actions.is_empty() {
+            return Err(Error::ValidationError("缺少操作权限".into()));
+        }
+        let policy_description = scope_spec::policy_description(resource, &actions)?;
+        let configurable_actions = actions
             .iter()
-            .filter(|action| configurable_registration(resource, action).is_ok())
+            .filter(|action| scope_spec::is_configurable(resource, action))
             .cloned()
-            .collect();
+            .collect::<Vec<_>>();
         let default_self_actions = configurable_actions
             .iter()
-            .filter(|action| registration(resource, action).is_ok_and(|entry| entry.default_self()))
+            .filter(|action| {
+                scope_spec::find_action(resource, action).is_some_and(|spec| spec.default_self())
+            })
             .cloned()
             .collect::<Vec<_>>();
         let default_self =
             !configurable_actions.is_empty() && default_self_actions.len() == configurable_actions.len();
+        let dimensions = scope_spec::configurable_dimensions(resource, &configurable_actions);
         Ok(Self {
             resource: resource.into(),
-            authorization_policy,
             configurable_actions,
-            policy_description: authorization_policy.description_for(resource).into(),
+            policy_description,
             default_self,
             default_self_actions,
             actions,
-            dimensions: dimensions.to_vec(),
+            dimensions,
         })
     }
 }
@@ -147,8 +141,7 @@ impl RetiredPersonScope {
     /// # 错误
     /// 无；未知资源同样标记不可配置。
     pub fn from_scope(scope: &PersonDataScope) -> Option<Self> {
-        let policy = AuthorizationPolicy::for_action(&scope.resource, &scope.action);
-        if configurable_registration(&scope.resource, &scope.action).is_ok() {
+        if scope_spec::is_configurable(&scope.resource, &scope.action) {
             return None;
         }
         Some(Self {
@@ -157,7 +150,9 @@ impl RetiredPersonScope {
             reason: if scope.resource == "settlement_party" {
                 "结算主体目录登录后即可查看，不再配置数据范围。".into()
             } else {
-                policy.map_or("当前资源未登记独立范围策略。".into(), |p| p.description().into())
+                scope_spec::action_description(&scope.resource, &scope.action)
+                    .unwrap_or("当前资源未登记独立范围策略。")
+                    .into()
             },
         })
     }
@@ -178,7 +173,7 @@ impl SavePersonScopeRequest {
             return Err(Error::ValidationError("请选择操作，附加授权最多32项".into()));
         }
         for action in &self.actions {
-            configurable_registration(&self.resource, action)?;
+            scope_spec::configurable_action(&self.resource, action)?;
         }
         ScopeBinding {
             schema_version: 2,
@@ -268,8 +263,8 @@ impl PersonScopeGrant {
             term.scope_targets.sort();
             term.scope_targets.dedup();
             let target = term.target(resource, &self.actions)?;
-            validate_binding(&term.binding(resource, &self.actions))?;
-            validate_scope_type(resource, term.scope_type)?;
+            scope_spec::validate_binding(&term.binding(resource, &self.actions))?;
+            scope_spec::validate_scope_type(resource, term.scope_type)?;
             term.scope_targets = target.ids().to_vec();
             term.scope_targets.sort();
             if !targets.contains(&target) {
@@ -288,7 +283,7 @@ impl PersonScopeGrant {
     fn validate_dimensions(&self, resource: &str) -> Result<()> {
         let company = self.terms.iter().any(|term| term.scope_type == DataScopeType::Company);
         for action in &self.actions {
-            let spec = configurable_registration(resource, action)?;
+            let spec = scope_spec::configurable_action(resource, action)?;
             if !company
                 && spec
                     .required_dimensions()
@@ -333,23 +328,22 @@ mod tests {
         let option = PersonBusinessOption::from_granted(
             "supplier_settlement_statement",
             vec!["list".into(), "confirm".into()],
-            &[ScopeDimension::InternalOrg],
         )
         .unwrap();
         assert_eq!(option.actions, vec!["list", "confirm"]);
         assert!(option.configurable_actions.is_empty());
         assert!(!option.default_self);
-        assert_eq!(option.authorization_policy, AuthorizationPolicy::Shared);
-        let task = PersonBusinessOption::from_granted(
-            "approval_instance",
-            vec!["read".into(), "decide".into()],
-            &[],
-        )
-        .unwrap();
+        assert!(option.policy_description.contains("list"));
+        assert!(option.policy_description.contains("岗位共享"));
+        assert!(option.policy_description.contains("confirm"));
+        assert!(option.policy_description.contains("流程任务"));
+        let task =
+            PersonBusinessOption::from_granted("approval_instance", vec!["read".into(), "decide".into()])
+                .unwrap();
         assert!(task.configurable_actions.is_empty());
         assert!(!task.default_self);
-        assert_eq!(task.authorization_policy, AuthorizationPolicy::Task);
-        assert!(PersonBusinessOption::from_granted("customer", vec![], &[]).is_err());
+        assert!(task.policy_description.contains("流程任务"));
+        assert!(PersonBusinessOption::from_granted("customer", vec![]).is_err());
     }
 
     #[test]
@@ -603,7 +597,6 @@ mod tests {
             let option = PersonBusinessOption::from_granted(
                 "work_item",
                 actions.into_iter().map(String::from).collect(),
-                &[ScopeDimension::InternalOrg],
             )
             .unwrap();
             assert!(!option.default_self);
@@ -612,12 +605,8 @@ mod tests {
             assert!(option.default_self_actions.contains(&"detail".to_owned()));
             assert!(!option.default_self_actions.contains(&"manage".to_owned()));
         }
-        let reader = PersonBusinessOption::from_granted(
-            "work_item",
-            vec!["list".into(), "detail".into()],
-            &[ScopeDimension::InternalOrg],
-        )
-        .unwrap();
+        let reader =
+            PersonBusinessOption::from_granted("work_item", vec!["list".into(), "detail".into()]).unwrap();
         assert!(reader.default_self);
     }
 }

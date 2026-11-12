@@ -131,6 +131,34 @@ impl RbacService {
     }
 }
 
+#[cfg(test)]
+impl QualifiedPermissions {
+    /// 用一次快照构造资格，供规则测试复用同角色证明。
+    pub(crate) fn test_grants(grants: &[(&str, &[Permission])]) -> Self {
+        use std::collections::{HashMap, HashSet};
+
+        use erp_core::AccountKind;
+
+        let mut role_ids = Vec::new();
+        let mut map = HashMap::new();
+        let mut roles = Vec::new();
+        for (index, (id, permissions)) in grants.iter().enumerate() {
+            let role_id = RoleId::parse(id).expect("测试角色编号");
+            role_ids.push(role_id.clone());
+            map.insert(role_id, permissions.iter().cloned().collect::<HashSet<_>>());
+            let mut role = Role::new(RoleId::parse(id).expect("测试角色编号"), crate::RoleData::new(*id))
+                .expect("测试角色");
+            role.base = entity_core::BaseModel::fake();
+            role.base.id = (*id).into();
+            role.base.version = u64::try_from(index).expect("角色序号") + 1;
+            roles.push(role);
+        }
+        let snapshot = RolePermissionSnapshot { role_ids, grants: map, policy_revision: 1 };
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        qualified(snapshot, &roles, &actor, 1, AccountSummary::new("user", AccountKind::Admin, true))
+    }
+}
+
 /// 只保留启用角色的授权，身份版本包含所有参与取证角色。
 fn qualified(
     mut snapshot: RolePermissionSnapshot,

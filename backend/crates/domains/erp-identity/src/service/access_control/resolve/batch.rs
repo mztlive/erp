@@ -8,13 +8,11 @@ use persistence_core::Executor;
 
 use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService};
 use crate::access_control::ResolvedScope;
-use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
-use crate::entity::access_control::consumer_spec::{ConsumerSpec, OrganizationFacts};
+use crate::entity::access_control::scope_spec::{self, OrganizationLoad};
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::scope_registration;
 use crate::{AccessControlExt, Error, Permission, Result, RoleId, RolePermissionSnapshot};
 
 /// 一次事务读取阶段的范围解析批次；持有原执行器以阻止夹入业务写入。
@@ -82,7 +80,7 @@ impl<'a> DataScopeBatch<'a> {
     ) -> Result<AuthorizedDataScope> {
         let target = (entry_permission.resource(), entry_permission.action());
         let source = (source_permission.resource(), source_permission.action());
-        scope_registration(source.0, source.1)?;
+        let source_spec = scope_spec::require_runtime(source_permission)?;
         let mut required = permissions.to_vec();
         required.push(entry_permission.clone());
         self.ensure_declared(&required)?;
@@ -96,10 +94,9 @@ impl<'a> DataScopeBatch<'a> {
             return Err(Error::Forbidden(facts.snapshot.denial_message(&required)));
         }
         let at = facts.as_of;
-        let state = if AuthorizationPolicy::for_action(source.0, source.1)? == AuthorizationPolicy::Shared {
-            OrganizationState::default()
-        } else {
-            self.scope_organizations(source.0, at).await?
+        let state = match scope_spec::organization_load(source_spec) {
+            OrganizationLoad::None => OrganizationState::default(),
+            load => self.scope_organizations(load, at).await?,
         };
         let scope = self.service.resolved(self.actor.id(), &roles, source, &state, at, self.executor).await?;
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
@@ -182,13 +179,17 @@ impl<'a> DataScopeBatch<'a> {
     }
 
     /// 保留目录窄查询与普通业务完整组织事实的区别，不混用两种状态。
-    async fn scope_organizations(&mut self, resource: &str, at: Instant) -> Result<OrganizationState> {
-        let directory = ConsumerSpec::get(resource)?.organization_facts() == OrganizationFacts::Actor;
+    async fn scope_organizations(
+        &mut self,
+        load: OrganizationLoad,
+        at: Instant,
+    ) -> Result<OrganizationState> {
+        let directory = load == OrganizationLoad::Actor;
         let current = if directory { &self.directory } else { &self.organizations };
         if let Some(state) = current {
             return Ok(state.clone());
         }
-        let state = self.service.scope_organizations(self.actor.id(), resource, at, self.executor).await?;
+        let state = self.service.scope_organizations(self.actor.id(), load, at, self.executor).await?;
         let current = if directory { &mut self.directory } else { &mut self.organizations };
         *current = Some(state.clone());
         Ok(state)
