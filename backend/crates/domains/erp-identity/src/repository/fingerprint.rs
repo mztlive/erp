@@ -45,7 +45,7 @@ impl BsonFingerprint for Fingerprint {
 
 impl Fingerprint {
     /// JSON 固定类型标记；对象键排序，数字采用 JSON 十进制表示。
-    fn json(&mut self, value: &Value) {
+    pub(crate) fn json(&mut self, value: &Value) {
         match value {
             Value::Null => self.text("null"),
             Value::Bool(value) => self.boolean(*value),

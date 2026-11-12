@@ -30,6 +30,7 @@ impl AuthorizationService {
         entry: &AccessRegistration,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        let boundary = executor.boundary();
         let version = self.identity(actor, entry, executor).await?;
         if let AccessMode::QualifiedOperation { policy } = &entry.access {
             let context = AccessContext {
@@ -43,11 +44,18 @@ impl AuthorizationService {
             if self.policy(policy, entry, &context, &mut resolution, executor).await? != AccessRule::Allow {
                 return Err(Error::Forbidden("账号不具备本操作的管理资格".into()));
             }
-            if self.identity(actor, entry, executor).await.map_err(revalidation_error)?.version()
-                != version.version()
+            if !boundary.as_ref().is_some_and(|boundary| boundary.is_snapshot())
+                && self.identity(actor, entry, executor).await.map_err(revalidation_error)?.version()
+                    != version.version()
             {
                 return Err(Error::ConflictError("DATA_SCOPE_CHANGED：身份资格已变化".into()));
             }
+            if resolution.valid_until.is_some_and(|until| Instant::now() >= until) {
+                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：操作资格已到期".into()));
+            }
+        }
+        if boundary.is_some_and(|boundary| !boundary.is_current(executor)) {
+            return Err(Error::ValidationError("操作检查跨越执行阶段".into()));
         }
         Ok(())
     }
@@ -58,6 +66,9 @@ impl AuthorizationService {
         entry: Arc<AccessRegistration>,
         executor: &mut dyn Executor,
     ) -> Result<AccessProof> {
+        let boundary = executor
+            .boundary()
+            .ok_or_else(|| Error::ValidationError("授权要求可核验的事务或读取阶段".into()))?;
         let data = entry.access.data()?;
         let qualification = self.identity(actor, &entry, executor).await?;
         let model = match (&data.subject, &entry.access) {
@@ -97,7 +108,7 @@ impl AuthorizationService {
             valid_until: resolution.valid_until,
             policy_version: qualification.policy_revision(),
             organization_version: resolution.organization_version,
-            session: executor.session().map(|s| s.id().clone()),
+            boundary,
             registry: self.token.clone(),
         })
     }

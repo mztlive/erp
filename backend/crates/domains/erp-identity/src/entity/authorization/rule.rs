@@ -29,13 +29,14 @@ pub(crate) enum AccessRule {
     Required { facts: BTreeSet<FactKind>, rule: Box<Self> },
     Independent { permission: Permission, rule: Box<Self> },
     RecordReadGrant(ResourceKind),
+    RelationPresence { relation: RelationKey, present: bool },
     Related { relation: RelationKey, resource: String, mode: RelationMatch, rule: Box<Self> },
 }
 
 impl AccessRule {
     /// 归一化交集；空规则拒绝，显式 Allow 才表示无限制。
     pub(crate) fn all(rules: Vec<Self>) -> Self {
-        if rules.is_empty() || rules.contains(&Self::Deny) {
+        if rules.is_empty() || (rules.contains(&Self::Deny) && !rules.iter().any(Self::has_requirements)) {
             return Self::Deny;
         }
         let mut rules: Vec<_> = rules.into_iter().filter(|rule| *rule != Self::Allow).collect();
@@ -64,7 +65,8 @@ impl AccessRule {
         match self {
             Self::Required { facts, rule } => !facts.is_empty() || rule.has_requirements(),
             Self::All(items) | Self::Any(items) => items.iter().any(Self::has_requirements),
-            Self::Related { rule, .. } | Self::Independent { rule, .. } => rule.has_requirements(),
+            Self::Fact(_) | Self::Related { .. } | Self::RelationPresence { .. } => true,
+            Self::Independent { rule, .. } => rule.has_requirements(),
             _ => false,
         }
     }
@@ -134,7 +136,7 @@ impl AccessRule {
             Self::Fact(fact) => fact.matches_scope(object),
             Self::RecordReadGrant(resource) => granted(*resource),
             Self::Independent { rule, .. } => rule.evaluate(object, granted),
-            Self::Related { .. } | Self::Required { .. } => false,
+            Self::Related { .. } | Self::RelationPresence { .. } | Self::Required { .. } => false,
         }
     }
 }

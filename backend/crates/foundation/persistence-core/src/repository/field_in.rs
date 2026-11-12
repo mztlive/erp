@@ -50,9 +50,12 @@ mod tests {
     use mongodb::{Client, ClientSession};
 
     use super::*;
+    use crate::executor::sealed::Sealed;
 
     /// 空输入若触发会话访问则使测试失败。
     struct UnusedExecutor;
+
+    impl Sealed for UnusedExecutor {}
 
     impl Executor for UnusedExecutor {
         fn session(&mut self) -> Option<&mut ClientSession> {

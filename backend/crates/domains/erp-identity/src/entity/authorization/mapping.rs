@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use erp_core::common::time::Instant;
+use serde_json::Value;
 
 use super::{FactKind, QueryModelKey};
 use crate::{Error, Result};
@@ -62,6 +63,8 @@ fn valid_segment(value: &str) -> bool {
 /// 映射准备的修订号和有效期。无修订号时只能用于调用方事务快照。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MappingFacts {
+    /// 当前调用冻结的数据，Mapping 不得把准备结果写入共享实例。
+    pub data: Value,
     pub version: Option<String>,
     pub valid_until: Option<Instant>,
 }

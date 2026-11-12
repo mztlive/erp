@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use persistence_core::Executor;
+use persistence_core::{ExecutionBoundary, Executor};
 
 use super::{AuthorizedDataScope, DataScopeFacts, DataScopeService};
 use crate::access_control::ResolvedScope;
@@ -24,7 +24,7 @@ pub(crate) struct DataScopeBatch<'a> {
     facts: Option<IdentityFacts>,
     organizations: Option<OrganizationState>,
     directory: Option<OrganizationState>,
-    reuse: bool,
+    boundary: Option<ExecutionBoundary>,
     as_of: Instant,
 }
 
@@ -51,7 +51,7 @@ impl<'a> DataScopeBatch<'a> {
         permissions: &[Permission],
         executor: &'a mut dyn Executor,
     ) -> Self {
-        let reuse = executor.session().is_some();
+        let boundary = executor.boundary().filter(ExecutionBoundary::is_snapshot);
         Self {
             service,
             actor,
@@ -60,7 +60,7 @@ impl<'a> DataScopeBatch<'a> {
             facts: None,
             organizations: None,
             directory: None,
-            reuse,
+            boundary,
             as_of: Instant::now(),
         }
     }
@@ -129,7 +129,8 @@ impl<'a> DataScopeBatch<'a> {
 
     /// 账号有效性、策略 revision 与启用角色均在调用方事务中读一次。
     async fn load_identity(&mut self) -> Result<()> {
-        if self.reuse && self.facts.is_some() {
+        let reuse = self.boundary.as_ref().is_some_and(|boundary| boundary.is_current(self.executor));
+        if reuse && self.facts.is_some() {
             return Ok(());
         }
         let account = self
@@ -156,7 +157,7 @@ impl<'a> DataScopeBatch<'a> {
             checked_roles: BTreeSet::new(),
             as_of: self.as_of,
         });
-        if !self.reuse {
+        if !reuse {
             self.organizations = None;
             self.directory = None;
         }

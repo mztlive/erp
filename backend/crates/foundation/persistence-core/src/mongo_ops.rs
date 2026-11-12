@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Executor;
 use crate::errors::Result;
+use crate::executor::session;
 
 /// 按执行器是否携带会话，展开 MongoDB 驱动的带/不带 `session` 调用。
 ///
@@ -29,7 +30,7 @@ use crate::errors::Result;
 /// 一次会话，不得使用本宏。
 macro_rules! exec_with_session {
     ($executor:expr, $operation:expr) => {
-        match $executor.session() {
+        match session($executor) {
             Some(session) => $operation.session(session).await?,
             None => $operation.await?,
         }
@@ -57,6 +58,7 @@ where
     T: Serialize + Send + Sync + 'a,
 {
     Box::pin(async move {
+        executor.next_read();
         exec_with_session!(executor, collection.insert_one(document));
         Ok(())
     })
@@ -94,6 +96,7 @@ where
             return Ok(());
         }
 
+        executor.next_read();
         exec_with_session!(executor, collection.insert_many(documents));
         Ok(())
     })
@@ -124,6 +127,7 @@ where
     T: Send + Sync + 'a,
 {
     Box::pin(async move {
+        executor.next_read();
         let result = exec_with_session!(executor, collection.update_one(filter, update).upsert(upsert));
         Ok(result)
     })
@@ -152,6 +156,7 @@ where
     T: Send + Sync + 'a,
 {
     Box::pin(async move {
+        executor.next_read();
         let result = exec_with_session!(executor, collection.update_many(filter, update));
         Ok(result)
     })
@@ -184,6 +189,7 @@ where
     T: DeserializeOwned + Send + Sync + 'a,
 {
     Box::pin(async move {
+        executor.next_read();
         let operation =
             collection.find_one_and_update(filter, pipeline).return_document(ReturnDocument::After);
         let document = exec_with_session!(executor, operation);
@@ -212,6 +218,7 @@ where
     T: Send + Sync + 'a,
 {
     Box::pin(async move {
+        executor.next_read();
         let result = exec_with_session!(executor, collection.delete_many(filter));
         Ok(result)
     })
@@ -238,6 +245,7 @@ where
     T: Send + Sync + 'a,
 {
     Box::pin(async move {
+        executor.next_read();
         let result = exec_with_session!(executor, collection.delete_one(filter));
         Ok(result)
     })
@@ -295,7 +303,7 @@ where
 {
     Box::pin(async move {
         let mut documents = Vec::new();
-        match executor.session() {
+        match session(executor) {
             Some(session) => {
                 let mut cursor = collection.find(filter).with_options(options).session(&mut *session).await?;
                 while let Some(document) = cursor.next(&mut *session).await.transpose()? {
@@ -387,8 +395,9 @@ mod tests {
     use serde::ser::Error as SerializeError;
 
     use super::*;
-    use crate::NoTransaction;
     use crate::errors::Error;
+    use crate::executor::sealed::Sealed;
+    use crate::{NoTransaction, ReadExecutor};
 
     /// 不实现 Clone 的文档；记录序列化顺序并在指定位置终止。
     struct TracedDocument {
@@ -418,6 +427,8 @@ mod tests {
 
     /// 空输入不得访问执行器会话。
     struct UnusedExecutor;
+
+    impl Sealed for UnusedExecutor {}
 
     impl Executor for UnusedExecutor {
         /// 空输入若触发会话访问则使测试失败。
@@ -452,6 +463,19 @@ mod tests {
         assert!(matches!(owned, Error::DatabaseError(_)));
         assert_eq!(owned.to_string(), borrowed.to_string());
         assert_eq!(*visits.lock().unwrap(), [1, 2]);
+    }
+
+    #[tokio::test]
+    async fn attempted_write_invalidates_old_read_even_when_serialization_fails() {
+        let collection = traced_collection();
+        let mut executor = ReadExecutor::default();
+        let before = executor.boundary().unwrap();
+        insert_many(&collection, Vec::<TracedDocument>::new(), &mut executor).await.unwrap();
+        assert!(before.is_current(&executor));
+        let document = TracedDocument { id: 1, visits: Arc::default(), fail: true };
+        let error = insert_many(&collection, vec![document], &mut executor).await.unwrap_err();
+        assert!(matches!(error, Error::DatabaseError(_)));
+        assert!(!before.is_current(&executor));
     }
 
     #[derive(Debug, Deserialize)]

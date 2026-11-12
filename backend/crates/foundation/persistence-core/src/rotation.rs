@@ -56,7 +56,7 @@ pub async fn advance(
     last_owner_user_id: Option<&str>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::UnsupportedDeployment("游标写入必须加入调用方事务"));
     }
     let update = expected.update_document(last_owner_user_id)?;

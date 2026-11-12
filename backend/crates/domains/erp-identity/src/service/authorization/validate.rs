@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use persistence_core::Executor;
 
 use super::AuthorizationService;
@@ -19,7 +17,9 @@ impl AuthorizationService {
         for dependency in &access.dependencies {
             dependency.validate(executor).await?;
         }
-        access.ensure_current(executor)
+        access.ensure_current(executor)?;
+        executor.next_read();
+        Ok(())
     }
 
     /// 重读所有授权依赖，而非只比较记录授权修订号。
@@ -28,9 +28,8 @@ impl AuthorizationService {
         proof: &AccessProof,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        proof.ensure_current(executor)?;
-        if !Arc::ptr_eq(&proof.registry, &self.token) {
-            return Err(Error::ValidationError("授权结果属于其他服务目录".into()));
+        if !proof.needs_revalidation(&self.token, executor)? {
+            return Ok(());
         }
         let entry = self.registry.entry(&proof.context.permission, &proof.subject)?;
         let current =

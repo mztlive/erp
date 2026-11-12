@@ -2,7 +2,8 @@
 mod registry;
 mod require;
 mod resolve;
-mod rules;
+pub(crate) mod rules;
+mod targets;
 mod validate;
 
 use std::slice;
@@ -83,6 +84,7 @@ impl AuthorizationService {
         subject: AccessSubject,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedQuery> {
+        executor.next_read();
         let entry = self.registry.entry(permission, &subject)?;
         let mapping = entry.access.mapping()?.clone();
         let model = mapping.model().clone();

@@ -200,8 +200,11 @@ mod tests {
 
     use super::{mark_ids, mark_update};
     use crate::Executor;
+    use crate::executor::sealed::Sealed;
 
     struct UnusedExecutor;
+
+    impl Sealed for UnusedExecutor {}
 
     impl Executor for UnusedExecutor {
         fn session(&mut self) -> Option<&mut ClientSession> {

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use application_core::AuditActor;
 use persistence_core::Executor;
 
-use super::{AccessMode, AuthorizationService};
+use super::{AccessMode, AuthorizationService, rules};
 use crate::entity::authorization::{AccessSubject, AccessTarget, ObjectFacts, ResourceTargets};
 use crate::repository::authorization::AccessProof;
 use crate::repository::resource_grants;
@@ -24,6 +24,7 @@ impl AuthorizationService {
         target: AccessTarget,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        executor.next_read();
         match target {
             AccessTarget::Operation => {
                 let entry = self.registry.entry(permission, &AccessSubject::Direct)?;
@@ -50,6 +51,10 @@ impl AuthorizationService {
         if ids.ids().is_empty() {
             return Err(Error::ValidationError("授权目标不能为空".into()));
         }
+        if !rules::is_read(permission) && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
+        {
+            return Err(Error::ValidationError("对象写入授权必须使用快照事务".into()));
+        }
         let entry = self.registry.entry(permission, &subject)?;
         let port = entry.access.facts()?.clone();
         let query = self.resolve(actor, entry, executor).await?;
@@ -57,11 +62,12 @@ impl AuthorizationService {
         ids.ensure_objects(&query.context.resource, &objects)?;
         self.check_objects(&query, &objects, executor).await?;
         self.validate_proof(&query, executor).await?;
-        if port.load(&query.context, &ids, executor).await? != objects {
+        if !query.boundary.is_snapshot() && port.load(&query.context, &ids, executor).await? != objects {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象事实已改变".into()));
         }
+        let mut flattened = Vec::new();
         for object in &objects {
-            object.flatten(&mut Vec::new(), 0)?;
+            object.flatten(&mut flattened, 0)?;
         }
         query.ensure_current(executor)?;
         Ok(())
@@ -94,7 +100,7 @@ impl AuthorizationService {
             grants.extend(authorized.into_iter().map(|id| (resource, id)));
         }
         for object in objects {
-            if !query.rule.allows_object(&query.context, object, &grants)? {
+            if !query.rule.allows_object(query.context.actor.id(), object, &grants)? {
                 return Err(Error::Forbidden("操作包含不可访问的对象".into()));
             }
         }

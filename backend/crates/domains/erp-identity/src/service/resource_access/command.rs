@@ -177,7 +177,7 @@ impl ResourceGrantService {
     }
 }
 fn require_transaction(executor: &mut dyn Executor) -> Result<()> {
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("授权发布必须加入调用方事务".into()));
     }
     Ok(())

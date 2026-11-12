@@ -47,6 +47,11 @@ impl Fingerprint {
                 self.text("record_read_grant");
                 self.text(resource.code());
             },
+            AccessRule::RelationPresence { relation, present } => {
+                self.text("relation_presence");
+                self.text(relation.as_str());
+                self.boolean(*present);
+            },
             AccessRule::Related { relation, resource, mode, rule } => {
                 self.text("related");
                 self.text(relation.as_str());
@@ -54,6 +59,7 @@ impl Fingerprint {
                 self.text(match mode {
                     RelationMatch::Any => "any",
                     RelationMatch::AllNonEmpty => "all_non_empty",
+                    RelationMatch::ExactlyOne => "exactly_one",
                 });
                 self.rule(rule);
             },
@@ -110,7 +116,7 @@ impl Fingerprint {
 
     /// 映射事实字段顺序：修订号、到期时刻；时刻保留秒及纳秒。
     pub(crate) fn facts(&mut self, facts: &MappingFacts) {
-        let MappingFacts { version, valid_until } = facts;
+        let MappingFacts { version, valid_until, .. } = facts;
         self.optional(version.as_deref(), Self::text);
         self.optional(*valid_until, |hash, until| {
             hash.text(&until.unix_secs().to_string());
@@ -202,6 +208,7 @@ mod tests {
             facts: [FactKind::Owner].into(),
         };
         let facts = MappingFacts {
+            data: Default::default(),
             version: Some("revision".into()),
             valid_until: Some(Instant::from_unix_secs(100)),
         };

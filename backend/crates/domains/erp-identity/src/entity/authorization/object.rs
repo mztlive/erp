@@ -2,27 +2,22 @@ use std::collections::BTreeSet;
 
 use erp_core::common::time::Instant;
 
-use super::{AccessContext, AccessFact, AccessRule, ObjectFacts, RelatedObjects, RelationMatch};
+use super::{AccessFact, AccessRule, ObjectFacts, RelatedObjects, RelationMatch, ResourceTargets};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Result};
 
 type Grants = BTreeSet<(ResourceKind, String)>;
 
 impl AccessRule {
-    /// 对象与查询共用表达式，读取授权集合只包含本次目标。
-    pub(crate) fn allows_object(
-        &self,
-        context: &AccessContext,
-        object: &ObjectFacts,
-        grants: &Grants,
-    ) -> Result<bool> {
+    /// 对象与查询共用数据条件，读取授权集合只包含本次目标。
+    pub(crate) fn allows_object(&self, actor: &str, object: &ObjectFacts, grants: &Grants) -> Result<bool> {
         match self {
             Self::Allow => Ok(true),
             Self::Deny => Ok(false),
             Self::All(rules) | Self::Any(rules) => {
                 let mut results = Vec::new();
                 for rule in rules {
-                    results.push(rule.allows_object(context, object, grants)?);
+                    results.push(rule.allows_object(actor, object, grants)?);
                 }
                 Ok(!results.is_empty()
                     && if matches!(self, Self::All(_)) {
@@ -31,14 +26,19 @@ impl AccessRule {
                         results.iter().any(|v| *v)
                     })
             },
-            Self::Fact(fact) => fact.matches_object(context.actor.id(), object),
+            Self::Fact(fact) => fact.matches_object(actor, object),
             Self::Required { facts, rule } => {
                 object.require_facts(facts)?;
-                rule.allows_object(context, object, grants)
+                rule.allows_object(actor, object, grants)
             },
-            Self::Independent { permission, rule } => {
-                let context = AccessContext { permission: permission.clone(), ..context.clone() };
-                rule.allows_object(&context, object, grants)
+            Self::Independent { rule, .. } => rule.allows_object(actor, object, grants),
+            Self::RelationPresence { relation, present } => {
+                let related = object
+                    .relations
+                    .get(relation)
+                    .ok_or_else(|| Error::ValidationError("缺少必要来源关系".into()))?;
+                related.validate()?;
+                Ok(*present != related.expected_ids.is_empty())
             },
             Self::RecordReadGrant(resource) => {
                 Ok(object.resource == resource.code() && grants.contains(&(*resource, object.id.clone())))
@@ -48,7 +48,7 @@ impl AccessRule {
                     .relations
                     .get(relation)
                     .ok_or_else(|| Error::ValidationError("缺少必要来源关系".into()))?;
-                rule.allows_related(context, related, resource, *mode, grants)
+                rule.allows_related(actor, related, resource, *mode, grants)
             },
         }
     }
@@ -56,7 +56,7 @@ impl AccessRule {
     /// 校验完整引用与实际来源身份，再按登记模式判断来源覆盖。
     fn allows_related(
         &self,
-        context: &AccessContext,
+        actor: &str,
         related: &RelatedObjects,
         resource: &str,
         mode: RelationMatch,
@@ -71,13 +71,14 @@ impl AccessRule {
             {
                 return Err(Error::ValidationError("来源身份错配或重复".into()));
             }
-            if self.allows_object(context, child, grants)? {
+            if self.allows_object(actor, child, grants)? {
                 allowed.insert(child.id.clone());
             }
         }
         Ok(match mode {
             RelationMatch::Any => !allowed.is_empty(),
             RelationMatch::AllNonEmpty => !related.expected_ids.is_empty() && allowed == related.expected_ids,
+            RelationMatch::ExactlyOne => related.expected_ids.len() == 1 && allowed == related.expected_ids,
         })
     }
 
@@ -126,11 +127,13 @@ impl ObjectFacts {
         if depth > 8 || output.len() >= 1000 || self.resource.is_empty() || self.version.is_empty() {
             return Err(Error::ValidationError("授权对象事实缺失或规模超限".into()));
         }
+        ResourceTargets::new(&[&self.id])?;
         if self.valid_until.is_some_and(|until| Instant::now() >= until) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象责任关系已到期".into()));
         }
         output.push(self);
         for related in self.relations.values() {
+            related.validate()?;
             for child in &related.objects {
                 child.flatten(output, depth + 1)?;
             }
@@ -139,24 +142,26 @@ impl ObjectFacts {
     }
 }
 
+impl RelatedObjects {
+    /// 检查原始引用和已读取记录的身份，缺失引用保留给覆盖规则拒绝。
+    pub(crate) fn validate(&self) -> Result<()> {
+        let ids = self.expected_ids.iter().map(String::as_str).collect::<Vec<_>>();
+        ResourceTargets::new(&ids)?;
+        let mut seen = BTreeSet::new();
+        for object in &self.objects {
+            if !self.expected_ids.contains(&object.id) || !seen.insert(&object.id) {
+                return Err(Error::ValidationError("来源身份错配或重复".into()));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use application_core::AuditActor;
-    use erp_core::AccountKind;
 
     use super::*;
-    use crate::Permission;
-    use crate::entity::authorization::{FactValue, QueryModelKey, RelatedObjects, RelationKey};
-
-    fn context() -> AccessContext {
-        AccessContext {
-            actor: AuditActor::new("u".into(), "user".into(), AccountKind::Admin),
-            permission: Permission::parse("invoice:detail").unwrap(),
-            resource: "invoice".into(),
-            model: Some(QueryModelKey::parse("invoice").unwrap()),
-            as_of: Instant::from_unix_secs(1),
-        }
-    }
+    use crate::entity::authorization::{FactValue, RelatedObjects, RelationKey};
 
     fn source(id: &str, owner: &str) -> ObjectFacts {
         ObjectFacts {
@@ -198,18 +203,17 @@ mod tests {
 
     #[test]
     fn all_sources_requires_every_actual_reference_and_any_does_not_authorize_whole_object() {
-        let context = context();
         let grants = BTreeSet::new();
         let all = rule(RelationMatch::AllNonEmpty);
         let any = rule(RelationMatch::Any);
         let missing = root(vec![source("s1", "u")]);
-        assert!(!all.allows_object(&context, &missing, &grants).unwrap());
-        assert!(any.allows_object(&context, &missing, &grants).unwrap());
+        assert!(!all.allows_object("u", &missing, &grants).unwrap());
+        assert!(any.allows_object("u", &missing, &grants).unwrap());
         let denied = root(vec![source("s1", "u"), source("s2", "other")]);
-        assert!(!all.allows_object(&context, &denied, &grants).unwrap());
+        assert!(!all.allows_object("u", &denied, &grants).unwrap());
         let complete = root(vec![source("s1", "u"), source("s2", "u")]);
-        assert!(all.allows_object(&context, &complete, &grants).unwrap());
-        assert!(!all.allows_object(&context, &root(vec![]), &grants).unwrap());
+        assert!(all.allows_object("u", &complete, &grants).unwrap());
+        assert!(!all.allows_object("u", &root(vec![]), &grants).unwrap());
     }
 
     #[test]
@@ -219,11 +223,7 @@ mod tests {
             vec![source("extra", "u")],
             vec![ObjectFacts { resource: "customer".into(), ..source("s1", "u") }],
         ] {
-            assert!(
-                rule(RelationMatch::Any)
-                    .allows_object(&context(), &root(children), &BTreeSet::new())
-                    .is_err()
-            );
+            assert!(rule(RelationMatch::Any).allows_object("u", &root(children), &BTreeSet::new()).is_err());
         }
     }
 
@@ -231,11 +231,9 @@ mod tests {
     fn empty_relations_missing_relations_and_expired_facts_never_pass() {
         let mut object = root(vec![]);
         object.relations.values_mut().next().unwrap().expected_ids.clear();
-        assert!(
-            !rule(RelationMatch::AllNonEmpty).allows_object(&context(), &object, &BTreeSet::new()).unwrap()
-        );
+        assert!(!rule(RelationMatch::AllNonEmpty).allows_object("u", &object, &BTreeSet::new()).unwrap());
         object.relations.clear();
-        assert!(rule(RelationMatch::Any).allows_object(&context(), &object, &BTreeSet::new()).is_err());
+        assert!(rule(RelationMatch::Any).allows_object("u", &object, &BTreeSet::new()).is_err());
         object.valid_until = Some(Instant::from_unix_secs(1));
         assert!(object.flatten(&mut Vec::new(), 0).is_err());
     }
@@ -247,13 +245,11 @@ mod tests {
         object.participants = FactValue::Known(["u".into()].into());
         let grants = BTreeSet::new();
         let assigned = AccessRule::Fact(AccessFact::AssignedTo);
-        assert!(!assigned.allows_object(&context(), &object, &grants).unwrap());
+        assert!(!assigned.allows_object("u", &object, &grants).unwrap());
         object.assignee_id = FactValue::Known(Some("u".into()));
-        assert!(assigned.allows_object(&context(), &object, &grants).unwrap());
+        assert!(assigned.allows_object("u", &object, &grants).unwrap());
         assert!(
-            AccessRule::Fact(AccessFact::HistoryParticipant)
-                .allows_object(&context(), &object, &grants)
-                .unwrap()
+            AccessRule::Fact(AccessFact::HistoryParticipant).allows_object("u", &object, &grants).unwrap()
         );
     }
 
@@ -265,17 +261,17 @@ mod tests {
             AccessRule::RecordReadGrant(ResourceKind::SalesOrder),
         ]);
         let grants = BTreeSet::from([(ResourceKind::SalesOrder, "s1".into())]);
-        assert!(read.allows_object(&context(), &object, &grants).unwrap());
-        assert!(!read.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
+        assert!(read.allows_object("u", &object, &grants).unwrap());
+        assert!(!read.allows_object("u", &object, &BTreeSet::new()).unwrap());
         let limited =
             AccessRule::all(vec![read, AccessRule::Fact(AccessFact::WarehouseIn(["w".into()].into()))]);
-        assert!(!limited.allows_object(&context(), &object, &grants).unwrap());
+        assert!(!limited.allows_object("u", &object, &grants).unwrap());
         object.warehouse_id = FactValue::Known(Some("w".into()));
-        assert!(limited.allows_object(&context(), &object, &grants).unwrap());
+        assert!(limited.allows_object("u", &object, &grants).unwrap());
         object.id = "s2".into();
-        assert!(!limited.allows_object(&context(), &object, &grants).unwrap());
+        assert!(!limited.allows_object("u", &object, &grants).unwrap());
         object.id = "s1".into();
         object.resource = "purchase_order".into();
-        assert!(!limited.allows_object(&context(), &object, &grants).unwrap());
+        assert!(!limited.allows_object("u", &object, &grants).unwrap());
     }
 }

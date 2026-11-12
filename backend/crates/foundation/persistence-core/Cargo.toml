@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 autotests = false
 
+[features]
+test-support = []
+
 [dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true }

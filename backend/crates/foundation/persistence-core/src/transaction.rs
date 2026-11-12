@@ -13,6 +13,7 @@ use mongodb::{Client, ClientSession};
 
 use crate::Executor;
 use crate::errors::{Error, Result};
+use crate::executor::TransactionExecutor;
 
 const COMMIT_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -144,7 +145,8 @@ impl Transactional for Client {
     {
         let mut session = start_transaction_session(self).await?;
 
-        match f(&mut session).await {
+        let outcome = f(&mut TransactionExecutor::new(&mut session)).await;
+        match outcome {
             Ok(result) => {
                 commit_with_retry(&mut session).await?;
                 Ok(result)

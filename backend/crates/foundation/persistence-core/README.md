@@ -23,16 +23,28 @@
 ## 使用与边界要求
 
 1. 仅提供通用持久化能力，不拥有业务实体、业务集合名、业务查询或业务索引。
-2. Repository 操作沿用 Executor；单集合操作按需要使用 NoTransaction，多集合原子操作使用 Transactional::with_transaction。
+2. Repository 操作沿用 Executor；独立自动提交操作使用 NoTransaction，需要交付复验的非事务读取使用同一个 ReadExecutor，多集合原子操作使用 Transactional::with_transaction。
 3. connect 创建客户端和数据库句柄；事务部署能力须另调用 ensure_transaction_support 验证，不能把句柄创建成功视为数据库健康验证。
 4. 业务仓储、集合访问器和索引定义留在拥有领域；HTTP 错误映射留在应用边界。
+
+## 读取边界
+
+`Transactional::with_transaction` 在开启 snapshot 读取和 majority 提交的事务后，向回调提供带唯一 `ExecutionBoundary` 的执行器。边界同时标识事务和当前读取阶段。同一会话开启下一事务时，必须取得新边界。
+
+`Executor` 仅由本 crate 实现。业务使用本库提供的执行器，不能通过自定义实现重新挂载旧边界。边界只持有阶段的弱引用；复制边界不能延长阶段生命周期。执行器退出、事务重启、阶段推进或原始会话暴露后，全部旧边界失效。
+
+非事务授权读取创建 `ReadExecutor::default()`，查询生成、仓储读取和结果复验必须复用该实例。开始下一读取阶段时调用 `Executor::next_read()`。`NoTransaction` 仅用于独立自动提交操作，不提供授权凭证所需边界。
+
+统一写操作在尝试写入前调用 `next_read()`；失败的写入尝试也使旧读取凭证失效。只读操作保持当前边界。仓储使用 `mongo_ops`、`aggregate` 或通用 Repository 执行数据访问，不直接取得事务会话。调用 `Executor::session()` 会永久撤销当前事务执行器的边界证明，不能据此跳过授权依赖复验。
+
+`test-support` feature 只允许在 dev-dependency 中启用。`testing::SnapshotExecutor` 用于无数据库的执行合同测试，不提供真实 MongoDB 事务或回滚保证。
 
 ## 代码入口
 
 | 入口 | 用途 |
 | --- | --- |
 | [src/connection.rs](src/connection.rs) | connect 与 ensure_transaction_support |
-| [src/executor.rs](src/executor.rs) | Executor 与 NoTransaction |
+| [src/executor.rs](src/executor.rs) | Executor、ExecutionBoundary、ReadExecutor 与 NoTransaction |
 | [src/transaction.rs](src/transaction.rs) | Transactional |
 | [src/repository/mod.rs](src/repository/mod.rs) | Repository、PageResult、Pagination 和 QueryFilter |
 | [src/mongo_ops.rs](src/mongo_ops.rs) | 统一执行器下的 MongoDB 操作 |

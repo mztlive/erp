@@ -4,13 +4,11 @@ use std::{fmt, ptr};
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::bson::{Bson, Document};
-use persistence_core::Executor;
+use persistence_core::{ExecutionBoundary, Executor};
 
 use crate::entity::authorization::{AccessContext, AccessRule, AccessSubject, MappingFacts, QueryModel};
-use crate::entity::fingerprint::Fingerprint;
 use crate::ports::AccessMapping;
 use crate::repository::authorization::compile;
-use crate::repository::fingerprint::BsonFingerprint;
 use crate::{Error, Permission, Result};
 
 /// 只有授权服务能生成的完整查询约束。
@@ -29,15 +27,24 @@ pub(crate) struct AccessProof {
     pub valid_until: Option<Instant>,
     pub policy_version: u64,
     pub organization_version: u64,
-    pub session: Option<Document>,
+    pub boundary: ExecutionBoundary,
     pub registry: Arc<()>,
 }
 
 impl AccessProof {
+    /// 事务快照仅检查当前边界和服务；非事务必须重读实际依赖。
+    pub(crate) fn needs_revalidation(&self, token: &Arc<()>, executor: &mut dyn Executor) -> Result<bool> {
+        self.ensure_current(executor)?;
+        if !Arc::ptr_eq(&self.registry, token) {
+            return Err(Error::ValidationError("授权结果属于其他服务目录".into()));
+        }
+        Ok(!self.boundary.is_snapshot())
+    }
+
     /// 执行器和有效期必须与本次解析阶段一致。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
-        if self.session != executor.session().map(|session| session.id().clone()) {
-            return Err(Error::ValidationError("授权上下文不能更换执行器会话".into()));
+        if !self.boundary.is_current(executor) {
+            return Err(Error::ValidationError("授权结果不能跨事务或读取阶段使用".into()));
         }
         if self.valid_until.is_some_and(|until| Instant::now() >= until) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权关系已到期".into()));
@@ -75,6 +82,7 @@ pub struct CompiledAccess {
     pub(crate) model: QueryModel,
     pub(crate) stages: Vec<Document>,
     pub(crate) dependencies: Vec<MappingDependency>,
+    pub(crate) version: String,
 }
 
 pub(crate) struct MappingDependency {
@@ -91,10 +99,14 @@ impl MappingDependency {
         if *self.mapping.model() != self.model {
             return Err(Error::ValidationError("授权 Mapping 模型已改变".into()));
         }
-        self.facts.validate(executor.session().is_some(), Instant::now())?;
-        let current = self.mapping.prepare(&self.context, executor).await?;
-        current.validate(executor.session().is_some(), Instant::now())?;
-        if current != self.facts || self.mapping.key(&self.context, &current)? != self.key {
+        self.facts.validate(false, Instant::now())?;
+        let preparation = self
+            .mapping
+            .preparation()
+            .ok_or_else(|| Error::ValidationError("动态 Mapping 的准备能力已改变".into()))?;
+        let current = preparation.prepare(&self.context, executor).await?;
+        current.validate(false, Instant::now())?;
+        if current != self.facts || self.mapping.key(&self.context, Some(&current))? != self.key {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：业务授权事实已变化".into()));
         }
         Ok(())
@@ -157,11 +169,17 @@ impl CompiledAccess {
         self.proof.context.as_of
     }
 
-    /// 在所有异步复验完成后检查整体有效期。
-    pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
+    /// 在仓储执行前核对原事务、读取阶段和全部有效期，不读取数据库。
+    /// # 参数
+    /// executor 为本次读取使用的原执行器。
+    /// # 返回
+    /// 当前边界及有效期内返回成功。
+    /// # 错误
+    /// 跨事务、跨写入阶段或到期时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         self.proof.ensure_current(executor)?;
         for dependency in &self.dependencies {
-            dependency.facts.validate(executor.session().is_some(), Instant::now())?;
+            dependency.facts.validate(false, Instant::now())?;
         }
         Ok(())
     }
@@ -174,15 +192,7 @@ impl CompiledAccess {
     /// # 错误
     /// 不返回错误；不能替代执行前后的 validate。
     pub fn version(&self) -> String {
-        // v3 字段顺序：证明版本、无序映射依赖（模型、修订号及有效期、查询键）。
-        let mut version = Fingerprint::new("authorization-query-v3");
-        version.text(&self.proof.version);
-        version.unordered(&self.dependencies, |hash, dependency| {
-            hash.model(&dependency.model);
-            hash.facts(&dependency.facts);
-            hash.bson(&dependency.key);
-        });
-        version.finish()
+        self.version.clone()
     }
 
     /// 读取完整授权阶段，必须在分页、计数和汇总前执行。

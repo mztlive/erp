@@ -11,10 +11,12 @@ pub mod indexes;
 pub mod mongo_ops;
 pub mod repository;
 mod reset;
+#[cfg(feature = "test-support")]
+pub mod testing;
 mod transaction;
 pub use connection::{connect, ensure_transaction_support};
 pub use errors::{Error, Result};
-pub use executor::{Executor, NoTransaction};
+pub use executor::{ExecutionBoundary, Executor, NoTransaction, ReadExecutor, SessionAccess};
 pub use repository::{
     PageResult, Pagination, QueryFilter, Repository, insert_literal_regex_filter, persisted_document,
 };

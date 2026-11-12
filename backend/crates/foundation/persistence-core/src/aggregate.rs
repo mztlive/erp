@@ -6,6 +6,7 @@ use mongodb::options::FindOptions;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
+use crate::executor::session;
 use crate::{Executor, Result};
 
 /// 执行聚合并解码目标投影。
@@ -21,7 +22,7 @@ pub async fn rows<T: DeserializeOwned + Send + Sync>(
     executor: &mut dyn Executor,
 ) -> Result<Vec<T>> {
     let operation = collection.aggregate(pipeline).with_type::<T>();
-    Ok(match executor.session() {
+    Ok(match session(executor) {
         Some(session) => operation.session(&mut *session).await?.stream(session).try_collect().await?,
         None => operation.await?.try_collect().await?,
     })

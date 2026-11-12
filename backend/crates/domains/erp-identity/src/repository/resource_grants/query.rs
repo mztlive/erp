@@ -1,10 +1,9 @@
 //! 数据库内校验授权来源；仅把本次目标的有效 ID 返回应用层。
 use std::collections::BTreeSet;
 
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
-use persistence_core::Executor;
+use persistence_core::{Executor, aggregate};
 use serde::Deserialize;
 
 use super::{GRANTS, SOURCES};
@@ -13,14 +12,13 @@ use crate::entity::authorization::ResourceTargets;
 use crate::entity::resource_access::ResourceKind;
 
 /// 对指定业务主键构造存在性读取授权关联，不丢弃未命中的根记录。
-pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson, alias: &str) -> Document {
+pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson) -> Document {
     let mut filter = grant_filter(user, resource);
-    filter.insert("$expr", doc! { "$eq": ["$resource_id", "$$__identity_key"] });
+    filter.insert("$expr", doc! { "$eq": ["$resource_id", "$$identity_key"] });
     let mut pipeline = vec![doc! { "$match": filter }];
     pipeline.extend(valid_source(user, resource));
     pipeline.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": 1 } }]);
-    doc! { "$lookup": { "from": GRANTS, "let": { "__identity_key": key },
-    "pipeline": pipeline, "as": alias } }
+    doc! { "from": GRANTS, "let": { "identity_key": key }, "pipeline": pipeline }
 }
 
 /// 只读取本次目标的有效授权；数据库关联来源并按目标去重。
@@ -40,12 +38,8 @@ pub(crate) async fn target_ids(
     if targets.ids().is_empty() {
         return Ok(BTreeSet::new());
     }
-    let collection = db.collection::<Document>(GRANTS);
-    let aggregate = collection.aggregate(target_pipeline(user, resource, targets)).with_type::<TargetId>();
-    let rows: Vec<TargetId> = match executor.session() {
-        Some(session) => aggregate.session(&mut *session).await?.stream(session).try_collect().await?,
-        None => aggregate.await?.try_collect().await?,
-    };
+    let collection = db.collection::<TargetId>(GRANTS);
+    let rows = aggregate::rows(&collection, target_pipeline(user, resource, targets), executor).await?;
     Ok(rows.into_iter().map(|row| row.id).collect())
 }
 
@@ -123,9 +117,8 @@ mod tests {
 
     #[test]
     fn lookup_binds_business_key_and_checks_live_source() {
-        let stage = grant_lookup("u", ResourceKind::SalesOrder, "$order_id".into(), "__identity_fact_0");
-        let lookup = stage.get_document("$lookup").unwrap();
-        assert_eq!(lookup.get_document("let").unwrap(), &doc! { "__identity_key": "$order_id" });
+        let lookup = grant_lookup("u", ResourceKind::SalesOrder, "$order_id".into());
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! { "identity_key": "$order_id" });
         let pipeline = lookup.get_array("pipeline").unwrap();
         assert_eq!(pipeline[1], valid_source("u", ResourceKind::SalesOrder)[0].clone().into());
         assert_eq!(pipeline[2], doc! { "$match": { "__grant_source.0": { "$exists": true } } }.into());

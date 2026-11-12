@@ -110,24 +110,10 @@ impl ObjectFacts {
 
 #[cfg(test)]
 mod tests {
-    use application_core::AuditActor;
-    use erp_core::AccountKind;
-    use erp_core::common::time::Instant;
 
     use super::*;
-    use crate::Permission;
-    use crate::entity::authorization::{AccessContext, AccessRule};
+    use crate::entity::authorization::AccessRule;
     use crate::entity::resource_access::ResourceKind;
-
-    fn context() -> AccessContext {
-        AccessContext {
-            actor: AuditActor::new("u".into(), "user".into(), AccountKind::Admin),
-            permission: Permission::parse("sales_order:detail").unwrap(),
-            resource: "sales_order".into(),
-            model: None,
-            as_of: Instant::from_unix_secs(1),
-        }
-    }
 
     #[test]
     fn missing_fact_is_not_known_empty_and_cannot_be_hidden_by_a_grant() {
@@ -137,13 +123,11 @@ mod tests {
             AccessRule::Fact(AccessFact::Owned),
             AccessRule::RecordReadGrant(ResourceKind::SalesOrder),
         ]);
-        assert!(matches!(rule.allows_object(&context(), &object, &grants), Err(Error::ValidationError(_))));
+        assert!(matches!(rule.allows_object("u", &object, &grants), Err(Error::ValidationError(_))));
         object.owner_id = FactValue::Known(None);
-        assert!(rule.allows_object(&context(), &object, &grants).unwrap());
+        assert!(rule.allows_object("u", &object, &grants).unwrap());
         object.collaborators = FactValue::Known(BTreeSet::new());
-        assert!(
-            !AccessRule::Fact(AccessFact::Collaborating).allows_object(&context(), &object, &grants).unwrap()
-        );
+        assert!(!AccessRule::Fact(AccessFact::Collaborating).allows_object("u", &object, &grants).unwrap());
     }
 
     #[test]
@@ -151,9 +135,23 @@ mod tests {
         let required = AccessRule::Allow.requiring(&[FactKind::Warehouse].into());
         let rule = AccessRule::any(vec![AccessRule::Allow, required]);
         let mut object = ObjectFacts::default();
-        assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).is_err());
+        assert!(rule.allows_object("u", &object, &BTreeSet::new()).is_err());
         object.warehouse_id = FactValue::Known(None);
-        assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
+        assert!(rule.allows_object("u", &object, &BTreeSet::new()).unwrap());
+    }
+
+    #[test]
+    fn ordinary_facts_cannot_be_erased_by_allow_or_deny_normalization() {
+        let missing = ObjectFacts::default();
+        for rule in [
+            AccessRule::any(vec![AccessRule::Allow, AccessRule::Fact(AccessFact::Owned)]),
+            AccessRule::all(vec![AccessRule::Deny, AccessRule::Fact(AccessFact::Owned)]),
+        ] {
+            assert!(matches!(
+                rule.allows_object("u", &missing, &BTreeSet::new()),
+                Err(Error::ValidationError(_))
+            ));
+        }
     }
 
     #[test]
@@ -168,12 +166,12 @@ mod tests {
             AccessRule::Fact(AccessFact::OrganizationIn(["org-b".into()].into())),
         ])
         .requiring(&[FactKind::Owner, FactKind::Organization].into());
-        assert!(rule.allows_object(&context(), &object, &BTreeSet::new()).unwrap());
+        assert!(rule.allows_object("u", &object, &BTreeSet::new()).unwrap());
         let denied =
             ObjectFacts { org_unit_ids: FactValue::Known(["org-c".into()].into()), ..object.clone() };
-        assert!(!rule.allows_object(&context(), &denied, &BTreeSet::new()).unwrap());
+        assert!(!rule.allows_object("u", &denied, &BTreeSet::new()).unwrap());
         let non_owner = ObjectFacts { owner_ids: FactValue::Known(["other".into()].into()), ..object };
-        assert!(!rule.allows_object(&context(), &non_owner, &BTreeSet::new()).unwrap());
+        assert!(!rule.allows_object("u", &non_owner, &BTreeSet::new()).unwrap());
     }
 
     #[test]
@@ -185,11 +183,7 @@ mod tests {
             ..Default::default()
         };
         assert!(object.require_facts(&required).is_ok());
-        assert!(
-            !AccessRule::Fact(AccessFact::Owned)
-                .allows_object(&context(), &object, &BTreeSet::new())
-                .unwrap()
-        );
+        assert!(!AccessRule::Fact(AccessFact::Owned).allows_object("u", &object, &BTreeSet::new()).unwrap());
         object.owner_id = FactValue::Known(None);
         assert!(matches!(object.require_facts(&required), Err(Error::ValidationError(_))));
         object.owner_id = FactValue::Missing;

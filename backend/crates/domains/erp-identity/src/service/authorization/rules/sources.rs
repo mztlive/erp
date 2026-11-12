@@ -16,7 +16,7 @@ use crate::{Error, Permission, QualifiedPermissions, Result};
 
 /// 完整对象和匹配份额的判断不可互换；存在性也只能消费匹配份额结果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Output {
+pub(crate) enum Output {
     Object,
     Share,
 }
@@ -44,7 +44,6 @@ enum Source {
 pub(super) struct Partition {
     present: Vec<Source>,
     absent: Vec<Source>,
-    pub output: Output,
     pub rule: AccessRule,
     nested: Option<(Source, Vec<Partition>)>,
 }
@@ -175,7 +174,7 @@ pub(super) fn conditions(
         } else {
             AccessRule::all(rules)
         };
-        partitions.push(Partition { present, absent, output, rule, nested: None });
+        partitions.push(Partition { present, absent, rule, nested: None });
     }
     Ok(partitions)
 }
@@ -219,18 +218,50 @@ pub(super) fn evaluate(
     if &input.context.permission != permission || input.object.resource != permission.resource() {
         return Err(Error::ValidationError("来源入口与对象错配".into()));
     }
-    let partitions = conditions(permission, qualified, input.scopes, Output::Object)?;
-    let mut matched = false;
-    for partition in partitions {
-        if partition.matches(input.object)? {
-            matched = partition.allows(input.context, input.object, input.grants)?;
-        }
-    }
+    let rule = data_condition(permission, qualified, input.scopes, Output::Object)?;
+    let matched = rule.allows_object(input.context.actor.id(), input.object, input.grants)?;
     Ok(if matched { Decision::Allow } else { Decision::Deny })
 }
 
+/// 来源分区和来源数据检查合并为同一表达式，供对象与查询共同执行。
+pub(crate) fn data_condition(
+    permission: &Permission,
+    qualified: &QualifiedPermissions,
+    scopes: &[(Permission, ResolvedScope)],
+    output: Output,
+) -> Result<AccessRule> {
+    let partitions = conditions(permission, qualified, scopes, output)?;
+    Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
+}
+
 impl Partition {
+    /// 每个分区保留完整关系的有无条件；不能提前按通过来源过滤根记录。
+    fn condition(&self) -> Result<AccessRule> {
+        let mut rules = vec![self.rule.clone()];
+        for source in self.present.iter().chain(&self.absent) {
+            rules.push(AccessRule::RelationPresence {
+                relation: RelationKey::parse(source.relation())?,
+                present: self.present.contains(source),
+            });
+        }
+        if let Some((source, partitions)) = &self.nested {
+            rules.push(AccessRule::Related {
+                relation: RelationKey::parse(source.relation())?,
+                resource: source.permission().resource().into(),
+                mode: RelationMatch::ExactlyOne,
+                rule: Box::new(AccessRule::Independent {
+                    permission: source.permission(),
+                    rule: Box::new(AccessRule::any(
+                        partitions.iter().map(Self::condition).collect::<Result<_>>()?,
+                    )),
+                }),
+            });
+        }
+        Ok(AccessRule::all(rules))
+    }
+
     /// 已知空关系才进入空分区；缺失关系、损坏引用不能伪装为无来源。
+    #[cfg(test)]
     pub(super) fn matches(&self, object: &ObjectFacts) -> Result<bool> {
         let mut matches = true;
         for source in self.present.iter().chain(&self.absent) {
@@ -262,7 +293,6 @@ fn refund_conditions(
         partitions.push(Partition {
             present: vec![*source],
             absent: sources.iter().copied().filter(|item| item != source).collect(),
-            output: Output::Object,
             rule: AccessRule::Fact(AccessFact::Owned),
             nested: Some((*source, nested)),
         });
@@ -272,42 +302,14 @@ fn refund_conditions(
 
 impl Partition {
     /// 使用相同分区规则递归核验退款资金根，完整性不能由可见来源子集替代。
+    #[cfg(test)]
     fn allows(
         &self,
         context: &AccessContext,
         object: &ObjectFacts,
         grants: &BTreeSet<(ResourceKind, String)>,
     ) -> Result<bool> {
-        let mut allowed = self.rule.allows_object(context, object, grants)?;
-        if let Some((source, partitions)) = &self.nested {
-            let relation = object
-                .relations
-                .get(&RelationKey::parse(source.relation())?)
-                .ok_or_else(|| Error::ValidationError("资金来源未读取".into()))?;
-            let mut seen = BTreeSet::new();
-            for child in &relation.objects {
-                if child.resource != source.permission().resource()
-                    || !relation.expected_ids.contains(&child.id)
-                    || !seen.insert(child.id.clone())
-                {
-                    return Err(Error::ValidationError("资金来源身份错配或重复".into()));
-                }
-                let child_context = AccessContext {
-                    permission: source.permission(),
-                    resource: child.resource.clone(),
-                    ..context.clone()
-                };
-                let mut child_allowed = false;
-                for partition in partitions {
-                    if partition.matches(child)? {
-                        child_allowed |= partition.allows(&child_context, child, grants)?;
-                    }
-                }
-                allowed &= child_allowed;
-            }
-            allowed &= !seen.is_empty() && seen == relation.expected_ids;
-        }
-        Ok(allowed)
+        self.condition()?.allows_object(context.actor.id(), object, grants)
     }
 }
 
@@ -379,6 +381,7 @@ mod tests {
             resource: permission.resource().into(),
             id: "root".into(),
             version: "1".into(),
+            owner_id: FactValue::Known(None),
             ..Default::default()
         };
         for source in sources(permission).unwrap() {

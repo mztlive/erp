@@ -9,7 +9,6 @@ use crate::entity::authorization::{
 };
 
 /// 业务字段与关系映射。所有组合规则由身份域编译器执行。
-#[async_trait]
 pub trait AccessMapping: Send + Sync {
     /// 取得固定查询模型。
     /// # 参数
@@ -27,16 +26,18 @@ pub trait AccessMapping: Send + Sync {
     /// MongoDB 标量表达式，支持字段、类型转换及计算主键。
     /// # 错误
     /// 无法表达该资源身份时返回接入错误。
-    fn key(&self, context: &AccessContext, prepared: &MappingFacts) -> Result<Bson>;
+    fn key(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<Bson>;
 
-    /// 准备当前阶段的业务事实和版本。
+    /// 取得查询外动态准备能力；静态映射无需实现。
     /// # 参数
-    /// context 为授权身份和时点；executor 为原执行器。
+    /// 无。
     /// # 返回
-    /// 有界事实、修订号及有效期。
+    /// 静态映射返回 None，不制造空事实或 Mapping 版本。
     /// # 错误
-    /// 事实不可取得时失败，不返回空集合代替错误。
-    async fn prepare(&self, context: &AccessContext, executor: &mut dyn Executor) -> Result<MappingFacts>;
+    /// 无；动态准备错误由 MappingPreparation 返回。
+    fn preparation(&self) -> Option<&dyn MappingPreparation> {
+        None
+    }
 
     /// 限定模型中实际存在且未删除的记录，根查询与来源关联均应用。
     /// # 参数
@@ -45,7 +46,7 @@ pub trait AccessMapping: Send + Sync {
     /// 行存在性约束；没有软删除的专用模型可返回空字段条件。
     /// # 错误
     /// 无法确定有效记录集合时拒绝，禁止用对象状态替代权限检查。
-    fn records(&self, context: &AccessContext, prepared: &MappingFacts) -> Result<QueryFragment>;
+    fn records(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<QueryFragment>;
 
     /// 翻译一个业务事实，不能改变上层与或关系。
     /// # 参数
@@ -58,7 +59,7 @@ pub trait AccessMapping: Send + Sync {
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        prepared: &MappingFacts,
+        prepared: Option<&MappingFacts>,
     ) -> Result<QueryFragment>;
 
     /// 提供完整来源关系，不筛除无权或缺失的引用。
@@ -72,8 +73,21 @@ pub trait AccessMapping: Send + Sync {
         &self,
         relation: &RelationKey,
         context: &AccessContext,
-        prepared: &MappingFacts,
+        prepared: Option<&MappingFacts>,
     ) -> Result<RelationMapping>;
+}
+
+/// 只有查询外读取动态数据的映射接入本能力；准备结果属于单次调用。
+#[async_trait]
+pub trait MappingPreparation: Send + Sync {
+    /// 经原执行器读取用于本次条件转换的完整动态数据。
+    /// # 参数
+    /// context 为固定身份和时点；executor 为原读取阶段。
+    /// # 返回
+    /// 数据、覆盖相应写入的真实修订号及最早到期边界。
+    /// # 错误
+    /// 读取失败原样传播；非事务缺少可靠修订号时由执行管道拒绝。
+    async fn prepare(&self, context: &AccessContext, executor: &mut dyn Executor) -> Result<MappingFacts>;
 }
 
 /// 拥有领域提供当前对象事实；不得读取其他领域的集合。

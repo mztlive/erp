@@ -74,7 +74,7 @@ impl GrantQueue {
         mut event: GrantEvent,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("事件完成必须使用事务".into()));
         }
         if event.status == GrantEventStatus::Applied {

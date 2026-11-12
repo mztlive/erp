@@ -61,7 +61,7 @@ pub enum AccessTarget {
 }
 
 /// 同一授权阶段使用的事实解释上下文；构造上下文本身不产生授权。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccessContext {
     pub actor: AuditActor,
     pub permission: Permission,
@@ -89,6 +89,7 @@ pub struct ObjectFacts {
     pub warehouse_id: FactValue<Option<String>>,
     pub assignee_id: FactValue<Option<String>>,
     pub participants: FactValue<BTreeSet<String>>,
+    pub completed: FactValue<bool>,
     pub relations: BTreeMap<RelationKey, RelatedObjects>,
 }
 
@@ -104,4 +105,5 @@ pub struct RelatedObjects {
 pub enum RelationMatch {
     Any,
     AllNonEmpty,
+    ExactlyOne,
 }

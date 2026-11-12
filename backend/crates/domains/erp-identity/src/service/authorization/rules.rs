@@ -1,12 +1,14 @@
 //! 按权限固定的授权规则。对象判断和查询转换共用这里产生的数据条件。
 //! 统一服务在第四阶段调用这些函数；在此之前由单元测试执行。
 #![allow(dead_code)]
-mod sources;
+pub(crate) mod sources;
+use std::collections::BTreeSet;
+
 use erp_permissions::{cost, sales_order};
 
-use crate::entity::access_control::scope_spec::{self, ActionKind, ScopeSource};
-use crate::entity::access_control::{ResolvedScope, ScopedObject};
-use crate::entity::authorization::{AccessFact, AccessRule};
+use crate::entity::access_control::scope_spec::{self, ActionKind};
+use crate::entity::access_control::{ResolvedScope, ScopeDimension};
+use crate::entity::authorization::{AccessFact, AccessRule, FactKind, ObjectFacts};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
@@ -20,28 +22,14 @@ pub(crate) enum TargetForm {
     Task,
 }
 
-/// 已加载和尚未加载的对象事实。`None` 是未读取，已知空值用 `Some`。
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ObjectEvidence {
-    pub owner: Option<bool>,
-    pub collaborating: Option<bool>,
-    pub organization_id: Option<Option<String>>,
-    pub historical_participant: Option<bool>,
-    pub settlement_party_id: Option<Option<String>>,
-    pub warehouse_id: Option<Option<String>>,
-}
-
 /// 一次规则判断的输入。身份资格由调用方在同一次解析中取好后复用。
 pub(crate) struct RuleInput<'a> {
     pub target: TargetForm,
     pub qualified: &'a QualifiedPermissions,
     pub scope: Option<&'a ResolvedScope>,
-    pub object: Option<&'a ObjectEvidence>,
-    pub candidate: Option<&'a ObjectEvidence>,
+    pub object: Option<&'a ObjectFacts>,
+    pub candidate: Option<&'a ObjectFacts>,
     pub record_granted: bool,
-    pub completed: Option<bool>,
-    pub assigned: Option<bool>,
-    pub participant: Option<bool>,
     pub sources: Option<&'a sources::Input<'a>>,
 }
 
@@ -84,7 +72,7 @@ pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedSco
                 };
                 rule = AccessRule::any(vec![rule, AccessRule::RecordReadGrant(resource)]);
             }
-            Ok(rule)
+            Ok(rule.requiring(&required_facts(permission)?))
         },
     }
 }
@@ -104,7 +92,7 @@ pub(crate) fn evaluate(permission: &Permission, input: &RuleInput<'_>) -> Result
     }
 }
 
-fn ensure_target(permission: &Permission, kind: ActionKind, target: TargetForm) -> Result<()> {
+pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: TargetForm) -> Result<()> {
     let allowed = match kind {
         ActionKind::Function => matches!(target, TargetForm::Operation),
         ActionKind::Task => matches!(target, TargetForm::Task),
@@ -124,6 +112,11 @@ fn ensure_target(permission: &Permission, kind: ActionKind, target: TargetForm) 
     if allowed { Ok(()) } else { Err(Error::ValidationError("此权限不支持该授权目标".into())) }
 }
 
+/// 已有记录的读取动作；其余对象操作必须先进入快照事务。
+pub(super) fn is_read(permission: &Permission) -> bool {
+    matches!(permission.action(), "list" | "detail" | "get" | "read")
+}
+
 /// 列表读取允许参与关系；办理条件必须另行验证当前指派。
 fn task_condition(permission: &Permission) -> AccessRule {
     if matches!(permission.action(), "list" | "detail" | "read") {
@@ -138,21 +131,24 @@ fn task_condition(permission: &Permission) -> AccessRule {
 
 /// 采购任务完成后必须同时证明原指派与参与，未读取的必要事实不能被并集掩盖。
 fn evaluate_task(permission: &Permission, input: &RuleInput<'_>) -> Result<Decision> {
-    let assigned = input.assigned.ok_or_else(|| Error::ValidationError("任务指派事实未读取".into()))?;
+    let object = input.object.ok_or_else(|| Error::ValidationError("精确任务事实未读取".into()))?;
+    let allowed = task_allowed(permission, &input.qualified.account().id, object)?;
+    Ok(if allowed { Decision::Allow } else { Decision::Deny })
+}
+
+/// 办理与查询共用真实任务事实，但办理不能用参与关系代替指派。
+pub(super) fn task_allowed(permission: &Permission, actor: &str, object: &ObjectFacts) -> Result<bool> {
+    let assigned = object.assignee_id.get()?.as_deref() == Some(actor);
     let readable = matches!(permission.action(), "list" | "detail" | "read");
-    let completed = if permission.resource() == "procurement_inquiry" {
-        input.completed.ok_or_else(|| Error::ValidationError("任务状态事实未读取".into()))?
-    } else {
-        false
-    };
+    let completed =
+        if permission.resource() == "procurement_inquiry" { *object.completed.get()? } else { false };
     let allowed = if readable || completed {
-        let participant =
-            input.participant.ok_or_else(|| Error::ValidationError("任务参与事实未读取".into()))?;
+        let participant = object.participants.get()?.contains(actor);
         if readable { assigned || participant } else { assigned && participant }
     } else {
         assigned
     };
-    Ok(if allowed { Decision::Allow } else { Decision::Deny })
+    Ok(allowed)
 }
 
 /// 来源输入由实际对象、范围及授权行构成，不能传入预先计算的允许布尔值。
@@ -162,12 +158,13 @@ fn evaluate_source(permission: &Permission, input: &RuleInput<'_>) -> Result<Dec
 }
 
 fn evaluate_scope(permission: &Permission, input: &RuleInput<'_>) -> Result<Decision> {
-    let spec = scope_spec::require_scope(permission)?;
     if matches!(input.target, TargetForm::OwnershipChange) {
         let current = input.object.ok_or_else(|| Error::ValidationError("对象事实未读取".into()))?;
         let candidate = input.candidate.ok_or_else(|| Error::ValidationError("目标归属事实未读取".into()))?;
-        let current = decide_evidence(permission, input.scope, current, false)?;
-        let candidate = decide_evidence(permission, input.scope, candidate, false)?;
+        let current =
+            decide_evidence(permission, input.scope, current, false, &input.qualified.account().id)?;
+        let candidate =
+            decide_evidence(permission, input.scope, candidate, false, &input.qualified.account().id)?;
         return Ok(if current == Decision::Allow && candidate == Decision::Allow {
             Decision::Allow
         } else {
@@ -180,85 +177,49 @@ fn evaluate_scope(permission: &Permission, input: &RuleInput<'_>) -> Result<Deci
     }
     .ok_or_else(|| Error::ValidationError("对象事实未读取".into()))?;
     let grant = input.record_granted && record_grant(permission);
-    if matches!(spec.source(), ScopeSource::Company) && !spec.allows_history() && !grant {
-        return Ok(Decision::Allow);
-    }
-    decide_evidence(permission, input.scope, evidence, grant)
+    decide_evidence(permission, input.scope, evidence, grant, &input.qualified.account().id)
 }
 
+/// 目标必需维度独立于本次条款是否恰好使用该字段，不能被公司或记录授权分支掩盖。
+fn required_facts(permission: &Permission) -> Result<BTreeSet<FactKind>> {
+    let spec = scope_spec::require_scope(permission)?;
+    let mut facts = BTreeSet::new();
+    for dimension in spec.required_dimensions() {
+        match dimension {
+            ScopeDimension::InternalOrg => {
+                facts.extend([FactKind::Owner, FactKind::Organization]);
+            },
+            ScopeDimension::SettlementParty => {
+                facts.insert(FactKind::SettlementParty);
+            },
+            ScopeDimension::Warehouse => {
+                facts.insert(FactKind::Warehouse);
+            },
+        }
+    }
+    Ok(facts)
+}
+
+/// 对象事实直接执行与查询转换相同的数据条件。
 fn decide_evidence(
     permission: &Permission,
     scope: Option<&ResolvedScope>,
-    evidence: &ObjectEvidence,
+    evidence: &ObjectFacts,
     record_granted: bool,
+    actor: &str,
 ) -> Result<Decision> {
     let rule = data_condition(permission, scope)?;
-    ensure_facts_loaded(&rule, evidence)?;
-    let object = scoped_object(evidence);
-    let allowed = rule.evaluate(&object, &|resource| {
-        record_granted && matches!(resource, ResourceKind::SalesOrder | ResourceKind::PurchaseOrder)
-    });
-    Ok(if allowed { Decision::Allow } else { Decision::Deny })
-}
-
-fn ensure_facts_loaded(rule: &AccessRule, evidence: &ObjectEvidence) -> Result<()> {
-    let mut facts = Vec::new();
-    collect_facts(rule, &mut facts);
-    for fact in facts {
-        let loaded = match fact {
-            AccessFact::Owned => evidence.owner.is_some(),
-            AccessFact::Collaborating => evidence.collaborating.is_some(),
-            AccessFact::OrganizationIn(_) => evidence.organization_id.is_some(),
-            AccessFact::SettlementPartyIn(_) => evidence.settlement_party_id.is_some(),
-            AccessFact::WarehouseIn(_) => evidence.warehouse_id.is_some(),
-            AccessFact::HistoryParticipant => evidence.historical_participant.is_some(),
-            AccessFact::AssignedTo | AccessFact::Participant => true,
+    let mut grants = BTreeSet::new();
+    if record_granted {
+        let resource = if evidence.resource == "sales_order" {
+            ResourceKind::SalesOrder
+        } else {
+            ResourceKind::PurchaseOrder
         };
-        if !loaded {
-            return Err(Error::ValidationError(missing_fact(fact).into()));
-        }
+        grants.insert((resource, evidence.id.clone()));
     }
-    Ok(())
-}
-
-fn collect_facts<'a>(rule: &'a AccessRule, facts: &mut Vec<&'a AccessFact>) {
-    match rule {
-        AccessRule::Fact(fact) => facts.push(fact),
-        AccessRule::All(items) | AccessRule::Any(items) => {
-            for item in items {
-                collect_facts(item, facts);
-            }
-        },
-        AccessRule::Required { rule, .. }
-        | AccessRule::Independent { rule, .. }
-        | AccessRule::Related { rule, .. } => {
-            collect_facts(rule, facts);
-        },
-        AccessRule::Allow | AccessRule::Deny | AccessRule::RecordReadGrant(_) => {},
-    }
-}
-
-fn missing_fact(fact: &AccessFact) -> &'static str {
-    match fact {
-        AccessFact::Owned => "负责人事实未读取",
-        AccessFact::Collaborating => "协作事实未读取",
-        AccessFact::OrganizationIn(_) => "组织事实未读取",
-        AccessFact::SettlementPartyIn(_) => "结算主体事实未读取",
-        AccessFact::WarehouseIn(_) => "仓库事实未读取",
-        AccessFact::HistoryParticipant => "历史参与事实未读取",
-        AccessFact::AssignedTo | AccessFact::Participant => "任务指派事实未读取",
-    }
-}
-
-fn scoped_object(evidence: &ObjectEvidence) -> ScopedObject<'_> {
-    ScopedObject {
-        owned: evidence.owner.unwrap_or(false),
-        collaborating: evidence.collaborating.unwrap_or(false),
-        historical_read_participant: evidence.historical_participant.unwrap_or(false),
-        org_unit_id: evidence.organization_id.as_ref().and_then(|id| id.as_deref()),
-        settlement_party_id: evidence.settlement_party_id.as_ref().and_then(|id| id.as_deref()),
-        warehouse_id: evidence.warehouse_id.as_ref().and_then(|id| id.as_deref()),
-    }
+    let allowed = rule.allows_object(actor, evidence, &grants)?;
+    Ok(if allowed { Decision::Allow } else { Decision::Deny })
 }
 
 fn record_grant(permission: &Permission) -> bool {
@@ -273,6 +234,7 @@ mod tests {
     use super::*;
     use crate::QualifiedPermissions;
     use crate::entity::access_control::ScopeClause;
+    use crate::entity::authorization::FactValue;
 
     fn grants(pairs: &[(&str, &[Permission])]) -> QualifiedPermissions {
         QualifiedPermissions::test_grants(pairs)
@@ -285,14 +247,23 @@ mod tests {
         }
     }
 
-    fn owned(owner: Option<bool>) -> ObjectEvidence {
-        ObjectEvidence { owner, ..ObjectEvidence::default() }
+    fn owned(owner: Option<bool>) -> ObjectFacts {
+        ObjectFacts {
+            resource: "sales_order".into(),
+            id: "record".into(),
+            version: "v1".into(),
+            owner_id: owner
+                .map(|owned| FactValue::Known(Some(if owned { "user" } else { "other" }.into())))
+                .unwrap_or(FactValue::Missing),
+            org_unit_id: FactValue::Known(None),
+            ..ObjectFacts::default()
+        }
     }
 
     fn input<'a>(
         qualified: &'a QualifiedPermissions,
         scope: Option<&'a ResolvedScope>,
-        object: Option<&'a ObjectEvidence>,
+        object: Option<&'a ObjectFacts>,
     ) -> RuleInput<'a> {
         RuleInput {
             target: TargetForm::Record,
@@ -301,9 +272,6 @@ mod tests {
             object,
             candidate: None,
             record_granted: false,
-            completed: None,
-            assigned: None,
-            participant: None,
             sources: None,
         }
     }
@@ -322,7 +290,7 @@ mod tests {
         let missing = owned(None);
         request.object = Some(&missing);
         assert!(
-            matches!(evaluate(permission, &request), Err(Error::ValidationError(message)) if message == "负责人事实未读取")
+            matches!(evaluate(permission, &request), Err(Error::ValidationError(message)) if message.starts_with("缺少必要授权事实"))
         );
         let empty = ResolvedScope { role_clauses: vec![], user_limit: None };
         request.scope = Some(&empty);
@@ -336,10 +304,7 @@ mod tests {
         assert_eq!(evaluate(permission, &request).unwrap(), Decision::Deny);
         request.target = TargetForm::Operation;
         assert!(evaluate(permission, &request).is_err());
-        assert!(matches!(
-            data_condition(permission, Some(&scope)).unwrap(),
-            AccessRule::Fact(AccessFact::Owned)
-        ));
+        assert!(matches!(data_condition(permission, Some(&scope)).unwrap(), AccessRule::Required { .. }));
     }
 
     #[test]
@@ -348,7 +313,10 @@ mod tests {
         let update = &sales_order::HANDOVER;
         let qualified = grants(&[("sales", &[permission.clone(), update.clone()])]);
         let scope = ResolvedScope { role_clauses: vec![], user_limit: None };
-        let evidence = ObjectEvidence { historical_participant: Some(true), ..ObjectEvidence::default() };
+        let evidence = ObjectFacts {
+            history_participants: FactValue::Known(["user".into()].into()),
+            ..owned(Some(false))
+        };
         let mut request = input(&qualified, Some(&scope), Some(&evidence));
         assert_eq!(evaluate(permission, &request).unwrap(), Decision::Allow);
         let limited = ResolvedScope { role_clauses: vec![], user_limit: Some(ScopeClause::default()) };
@@ -368,7 +336,8 @@ mod tests {
             grants(&[("decide", std::slice::from_ref(&decide)), ("read", std::slice::from_ref(&read))]);
         let mut request = input(&split, None, None);
         request.target = TargetForm::Task;
-        request.assigned = Some(true);
+        let task = ObjectFacts { assignee_id: FactValue::Known(Some("user".into())), ..owned(Some(true)) };
+        request.object = Some(&task);
         assert!(matches!(evaluate(&decide, &request), Err(Error::Forbidden(_))));
         let missing = grants(&[("decide", std::slice::from_ref(&decide))]);
         request.qualified = &missing;
@@ -386,29 +355,34 @@ mod tests {
     fn task_handling_requires_assignment_and_rejects_a_plain_record() {
         let permission = &inquiry::COMMANDS_PROCUREMENT_RENEW;
         let qualified = grants(&[("buyer", std::slice::from_ref(permission))]);
-        let mut request = input(&qualified, None, None);
-        request.target = TargetForm::Task;
-        request.completed = Some(false);
-        request.assigned = Some(true);
-        assert_eq!(evaluate(permission, &request).unwrap(), Decision::Allow);
-        request.assigned = Some(false);
-        request.participant = Some(false);
-        assert_eq!(evaluate(permission, &request).unwrap(), Decision::Deny);
-        request.participant = Some(true);
-        assert_eq!(evaluate(permission, &request).unwrap(), Decision::Deny);
-        request.assigned = None;
+        let decide = |task: &ObjectFacts| {
+            let mut request = input(&qualified, None, Some(task));
+            request.target = TargetForm::Task;
+            evaluate(permission, &request)
+        };
+        let mut task = ObjectFacts {
+            assignee_id: FactValue::Known(Some("user".into())),
+            completed: FactValue::Known(false),
+            ..owned(Some(true))
+        };
+        assert_eq!(decide(&task).unwrap(), Decision::Allow);
+        task.assignee_id = FactValue::Known(None);
+        task.participants = FactValue::Known(BTreeSet::new());
+        assert_eq!(decide(&task).unwrap(), Decision::Deny);
+        task.participants = FactValue::Known(["user".into()].into());
+        assert_eq!(decide(&task).unwrap(), Decision::Deny);
+        task.assignee_id = FactValue::Missing;
+        assert!(matches!(decide(&task), Err(Error::ValidationError(_))));
+        task.assignee_id = FactValue::Known(Some("user".into()));
+        task.completed = FactValue::Known(true);
+        task.participants = FactValue::Known(BTreeSet::new());
+        assert_eq!(decide(&task).unwrap(), Decision::Deny);
+        task.participants = FactValue::Missing;
+        assert!(matches!(decide(&task), Err(Error::ValidationError(_))));
+        task.participants = FactValue::Known(["user".into()].into());
+        assert_eq!(decide(&task).unwrap(), Decision::Allow);
+        let request = input(&qualified, None, Some(&task));
         assert!(matches!(evaluate(permission, &request), Err(Error::ValidationError(_))));
-        request.assigned = Some(true);
-        request.completed = Some(true);
-        request.participant = Some(false);
-        assert_eq!(evaluate(permission, &request).unwrap(), Decision::Deny);
-        request.participant = None;
-        assert!(matches!(evaluate(permission, &request), Err(Error::ValidationError(_))));
-        request.participant = Some(true);
-        assert_eq!(evaluate(permission, &request).unwrap(), Decision::Allow);
-        request.target = TargetForm::Record;
-        request.assigned = Some(true);
-        assert!(evaluate(permission, &request).is_err());
         assert!(scope_spec::find(permission).is_none());
     }
 
@@ -438,12 +412,12 @@ mod tests {
         let contract_user = grants(&[("sales", std::slice::from_ref(contract))]);
         let scope = self_scope();
         let mut owner = owned(Some(true));
-        owner.historical_participant = Some(false);
+        owner.history_participants = FactValue::Known(BTreeSet::new());
         let mut contract_request = input(&contract_user, Some(&scope), Some(&owner));
         assert_eq!(runtime_customer_source(), "customer:list");
         assert_eq!(evaluate(contract, &contract_request).unwrap(), Decision::Allow);
         let mut stranger = owned(Some(false));
-        stranger.historical_participant = Some(false);
+        stranger.history_participants = FactValue::Known(BTreeSet::new());
         contract_request.object = Some(&stranger);
         assert_eq!(evaluate(contract, &contract_request).unwrap(), Decision::Deny);
     }

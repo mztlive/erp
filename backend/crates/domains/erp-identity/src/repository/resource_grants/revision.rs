@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::Executor;
+use persistence_core::{Executor, mongo_ops};
 
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Result};
@@ -24,11 +24,8 @@ pub(crate) async fn revision(
     executor: &mut dyn Executor,
 ) -> Result<u64> {
     let collection = db.collection::<Document>(REVISIONS);
-    let find = collection.find_one(doc! { "_id": revision_id(user, resource)? });
-    let row = match executor.session() {
-        Some(session) => find.session(session).await?,
-        None => find.await?,
-    };
+    let row =
+        mongo_ops::find_one(&collection, doc! { "_id": revision_id(user, resource)? }, executor).await?;
     row.map(|row| {
         let revision = row.get_i64("revision").map_err(|e| Error::Internal(e.to_string()))?;
         u64::try_from(revision).map_err(|e| Error::Internal(e.to_string()))
@@ -50,12 +47,14 @@ pub(crate) async fn advance(
     resources: &BTreeSet<ResourceKind>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let session = executor.session().ok_or_else(|| Error::Internal("授权版本更新必须使用事务".into()))?;
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::Internal("授权版本更新必须使用快照事务".into()));
+    }
     let collection = db.collection::<Document>(REVISIONS);
     for resource in resources {
-        collection.update_one(doc! { "_id": revision_id(user, *resource)? },
-            doc! { "$inc": { "revision": 1_i64 }, "$setOnInsert": { "recipient": user, "resource": resource.code() } })
-            .upsert(true).session(&mut *session).await?;
+        mongo_ops::update_one(&collection, doc! { "_id": revision_id(user, *resource)? },
+            doc! { "$inc": { "revision": 1_i64 }, "$setOnInsert": { "recipient": user, "resource": resource.code() } },
+            true, executor).await?;
     }
     Ok(())
 }

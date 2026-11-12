@@ -80,7 +80,7 @@ impl DatabaseReset {
     /// # 错误
     /// `executor` 没有会话时返回 `UnsupportedDeployment`。保留集合不在当前库、删除计数溢出或删除后仍有残留时返回 `EntityMetadataOutOfRange`。删除或残留检查失败时返回下层错误。出错后由调用方回滚。
     pub async fn execute(self, retention: ResetRetention, executor: &mut dyn Executor) -> Result<u64> {
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::UnsupportedDeployment("database reset requires a transaction"));
         }
         if retention.0.keys().any(|name| !self.collections.contains(name)) {

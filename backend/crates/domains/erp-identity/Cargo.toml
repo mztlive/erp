@@ -30,3 +30,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "macros"] }
 tracing = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+persistence-core = { workspace = true, features = ["test-support"] }

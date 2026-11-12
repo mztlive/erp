@@ -6,7 +6,7 @@
 
 本 crate 不依赖其他业务领域。业务模块提供事实读取器和 Mapping；server 的 `wiring/authorization/` 装配事实读取器和 Mapping；identity 固定并执行授权规则。
 
-公共权限值与目录已迁入 `erp-permissions`，identity 的 `Permission` 导出引用同一类型。解析错误由 identity 和 erp-core 映射为原有错误语义。本文中的共享授权服务及业务授权 API 为后续阶段的目标设计，代码示例不可视为当前实现。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
+公共权限值与目录已迁入 `erp-permissions`，identity 的 `Permission` 导出引用同一类型。范围规则、事实执行、Mapping 分离和执行边界已完成前三阶段实现；统一公共 API 和 Builder 在第四阶段接通。本文中的共享授权服务及业务授权 API 示例仍为目标设计。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
 
 ## 共享服务
 
@@ -82,7 +82,7 @@ authorization.validate(&access, executor).await?;
 
 业务筛选只收窄候选集合，不能先用部分权限条件排除记录。列表、总数、汇总和导出使用同一完整授权条件。
 
-`CompiledAccess` 不可由业务构造或修改，绑定操作、Mapping、共享服务、身份与业务版本及执行器会话，只用于当前读取阶段，禁止跨请求或事务缓存。凭证延后使用或切换执行器时，重新取得相应读取阶段的授权。
+`CompiledAccess` 不可由业务构造或修改，绑定操作、查询模型、共享服务、身份依赖及执行边界，只用于当前读取阶段。边界区分同一会话的不同事务及同一事务的不同读取阶段；写入尝试、新查询和交付完成使旧凭证失效。仓储执行前调用公开的 `ensure_current` 核对边界与有效期。
 
 跨页游标使用 `CompiledAccess::version()`，包含身份和业务映射依赖。复验发现账号停用、权限撤销、版本变化或有效期到达时返回 `DATA_SCOPE_CHANGED`，丢弃结果并重新查询；数据库和接入错误保留原类别。
 
@@ -122,10 +122,16 @@ authorization.validate(&access, executor).await?;
 | ------------ | -------------------------------------------------------------------------- |
 | `model`      | 固定模型、资源、集合、行主键、输出粒度和支持的事实维度                     |
 | `key`        | 返回授权资源 ID 表达式，供记录授权和来源连接使用；支持字段引用及计算表达式 |
-| `prepare`    | 在原执行器读取本次事实、修订号和有效期                                     |
+| `preparation` | 默认返回 `None`；只有查询外动态数据才提供 `MappingPreparation` |
 | `records`    | 限定实际存在且未删除的模型记录；根查询、来源关联均应用                     |
 | `predicate`  | 将一个 `AccessFact` 转成字段条件或关联存在性查询                           |
 | `relation`   | 提供完整来源 ID 表达式及来源 Mapping                                       |
+
+静态 Mapping 的转换方法接收 `None`，不执行准备。动态 `MappingPreparation::prepare` 经原执行器返回本次 `MappingFacts`；其中 `data` 保存条件转换实际使用的数据，`version` 覆盖相应写入，`valid_until` 限定最早到期时点。非事务路径必须提供可靠修订号，交付前重新准备并比较；事务路径不保存这些复验数据，仍保留摘要及到期边界。
+
+同次查询编译中，同一个 Mapping 实例在完整 `AccessContext` 相同时只准备一次；不同实例、身份、权限或时点分别准备。非事务交付按唯一依赖逐项复验，缓存不得跨查询或读取阶段。同一集合管道内，集合、变量绑定和子管道完全相同的关联只执行一次；来源子管道使用独立别名作用域，完整来源检查与最终逻辑过滤保持不变。
+
+非事务授权读取使用 `ReadExecutor`，统一事务回调使用设施签发的执行边界。原始 `ClientSession` 和 `NoTransaction` 不提供可核验的授权读取阶段。仓储使用 `mongo_ops`、`aggregate` 或通用 Repository；直接取得原始事务会话后，不再允许复用该执行器的授权凭证。
 
 所有者事实在销售单中映射到负责销售字段，在客户中映射到有效负责人分配。字段不同，语义相同。Mapping 不决定权限条件的与或关系、个人上限或是否接受记录授权。
 
