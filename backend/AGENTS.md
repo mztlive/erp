@@ -38,6 +38,7 @@ backend/
 │   ├── adapters/                     # 具体外部协议与技术适配
 │   │   └── erp-contract-recognition/
 │   ├── foundation/                   # 共享值对象、应用合同与持久化机制
+│   │   ├── erp-permissions/           # 公共权限值、常量与目录
 │   │   ├── erp-core/
 │   │   ├── application-core/
 │   │   └── persistence-core/
@@ -83,9 +84,10 @@ backend/
 
 ## HTTP 与权限
 
-- 管理端接口必须通过 `with_permission` 引用 `apps/erp-server/permission_catalog/` 中的显式权限常量；处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
-- 新权限在所属目录模块定义并加入 `ENTRIES`；新模块登记 `MODULES`。新增受保护路由模块同步登记 `build_permissions.rs` 的扫描清单。权限代码只定义一次，复用时保留接口各自的展示说明。
-- 前端权限由 `apps/erp-server/build.rs` 生成，禁手改生成物；改动后跑 `./scripts/check-permissions-drift.sh`。
+- 公共 `Permission` 值类型、资源标识、权限常量及展示分组归 `crates/foundation/erp-permissions/`；账号授权仍由 identity 执行。动态输入通过公共解析器校验，运行时和构建生成器使用同一份类型。
+- 管理端接口通过 `with_permission` 直接引用 `erp-permissions` 公共目录中登记的权限主常量，不再建立 server 权限包装目录。接口专属说明仅在 `apps/erp-server/route_descriptions.rs` 登记与默认说明不同的项；分组及展示权限差异归 `build_route_overrides.rs`，不得参与运行时鉴权。处理函数不声明权限属性。公开选品、结算主体登录目录等既有例外保持原认证链路。
+- 新权限在 `erp-permissions` 所属模块定义并加入公共 `ENTRIES`；新模块登记公共 `MODULES`。server 不维护第二份 `ENTRIES` 或 `MODULES`。新增受保护路由模块登记 `build_permissions.rs` 的扫描清单。相同权限编码只定义一次，复用时保留接口各自的展示说明。
+- 前端权限由 `apps/erp-server/build.rs` 生成，禁手改生成物。独立生成使用 `python3 scripts/generate-permissions.py`，生成器单元测试使用 `python3 scripts/generate-permissions.py --test`；改动后跑 `./scripts/check-permissions-drift.sh`，无需编译业务 crate。
 - 配置只经 `config::SafeConfig` 读取；上传只经共享 `Application` 的 `storage::S3Storage` 写入。
 
 ## 编码约定

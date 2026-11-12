@@ -8,11 +8,11 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::{access_control, organization};
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -41,7 +41,7 @@ fn policy_bundle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::policy_bundle::validate),
                 rbac,
-                permissions::access_control::POLICY_BUNDLE_VALIDATE,
+                &permissions::access_control::POLICY_BUNDLE_PREVIEW,
             ),
         )
         .route(
@@ -49,7 +49,7 @@ fn policy_bundle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::policy_bundle::preview),
                 rbac,
-                permissions::access_control::POLICY_BUNDLE_PREVIEW,
+                &permissions::access_control::POLICY_BUNDLE_PREVIEW,
             ),
         )
         .route(
@@ -57,7 +57,7 @@ fn policy_bundle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::policy_bundle::apply),
                 rbac,
-                permissions::access_control::POLICY_BUNDLE_APPLY,
+                &permissions::access_control::POLICY_BUNDLE_APPLY,
             ),
         )
         .route(
@@ -65,7 +65,7 @@ fn policy_bundle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::policy_bundle::export),
                 rbac,
-                permissions::access_control::POLICY_BUNDLE_EXPORT,
+                &permissions::access_control::POLICY_BUNDLE_EXPORT,
             ),
         )
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
@@ -79,7 +79,7 @@ fn organization_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::get_qualification),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_GET_QUALIFICATION,
+                &permissions::access_control::PERSON_DIRECTORY_GET_QUALIFICATION,
             ),
         )
         .route(
@@ -87,17 +87,17 @@ fn organization_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(access_control::person_directory::change_qualification),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_CHANGE_QUALIFICATION,
+                &permissions::access_control::PERSON_DIRECTORY_GET_QUALIFICATION,
             ),
         )
-        .route("/org-units", with_permission(get(organization::list), rbac, permissions::organization::LIST))
+        .route("/org-units", with_permission(get(organization::list), rbac, &permissions::organization::LIST))
         .route(
             "/org-units/preview",
-            with_permission(post(organization::preview), rbac, permissions::organization::PREVIEW),
+            with_permission(post(organization::preview), rbac, &permissions::organization::CHANGE),
         )
         .route(
             "/org-units/change",
-            with_permission(post(organization::change), rbac, permissions::organization::CHANGE),
+            with_permission(post(organization::change), rbac, &permissions::organization::CHANGE),
         )
 }
 
@@ -109,7 +109,7 @@ fn permission_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::permission_list),
                 rbac,
-                permissions::access_control::PERMISSION_LIST,
+                &permissions::access_control::PERMISSION_LIST,
             ),
         )
         .route(
@@ -117,7 +117,7 @@ fn permission_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::permission_create),
                 rbac,
-                permissions::access_control::PERMISSION_CREATE,
+                &permissions::access_control::PERMISSION_CREATE,
             ),
         )
         .route(
@@ -125,7 +125,7 @@ fn permission_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(access_control::permission_update),
                 rbac,
-                permissions::access_control::PERMISSION_UPDATE,
+                &permissions::access_control::PERMISSION_UPDATE,
             ),
         )
         .route(
@@ -133,7 +133,7 @@ fn permission_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 delete(access_control::permission_delete),
                 rbac,
-                permissions::access_control::PERMISSION_DELETE,
+                &permissions::access_control::PERMISSION_DELETE,
             ),
         )
 }
@@ -146,7 +146,7 @@ fn binding_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::user_role_list),
                 rbac,
-                permissions::access_control::USER_ROLE_LIST,
+                &permissions::access_control::USER_ROLE_LIST,
             ),
         )
         .route(
@@ -154,7 +154,7 @@ fn binding_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::user_role_create),
                 rbac,
-                permissions::access_control::USER_ROLE_CREATE,
+                &permissions::access_control::USER_ROLE_CREATE,
             ),
         )
         .route(
@@ -162,7 +162,7 @@ fn binding_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::user_role_revoke),
                 rbac,
-                permissions::access_control::USER_ROLE_REVOKE,
+                &permissions::access_control::USER_ROLE_REVOKE,
             ),
         )
 }
@@ -175,7 +175,7 @@ fn inspection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::inspection::inspect),
                 rbac,
-                permissions::access_control::INSPECTION_INSPECT,
+                &permissions::access_control::PERSON_SCOPE_LIST,
             ),
         )
         .route(
@@ -183,7 +183,7 @@ fn inspection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::audit_event_list),
                 rbac,
-                permissions::access_control::AUDIT_EVENT_LIST,
+                &permissions::access_control::AUDIT_EVENT_LIST,
             ),
         )
 }
@@ -196,7 +196,7 @@ fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::list_salespeople),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
+                &permissions::access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
             ),
         )
         .route(
@@ -204,7 +204,7 @@ fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::list_selected_salespeople),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_LIST_SELECTED_SALESPEOPLE,
+                &permissions::access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
             ),
         )
         .route(
@@ -212,7 +212,7 @@ fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::list_procurement_people),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_LIST_PROCUREMENT_PEOPLE,
+                &permissions::access_control::PERSON_DIRECTORY_LIST_PROCUREMENT_PEOPLE,
             ),
         )
         .route(
@@ -220,7 +220,7 @@ fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::list_selected_procurement_people),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_LIST_SELECTED_PROCUREMENT_PEOPLE,
+                &permissions::access_control::PERSON_DIRECTORY_LIST_PROCUREMENT_PEOPLE,
             ),
         )
         .route(
@@ -228,7 +228,7 @@ fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::list_business_people),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_LIST_BUSINESS_PEOPLE,
+                &permissions::access_control::PERSON_DIRECTORY_LIST_BUSINESS_PEOPLE,
             ),
         )
         .route(
@@ -236,7 +236,7 @@ fn people_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_directory::list_selected_business_people),
                 rbac,
-                permissions::access_control::PERSON_DIRECTORY_LIST_SELECTED_BUSINESS_PEOPLE,
+                &permissions::access_control::PERSON_DIRECTORY_LIST_BUSINESS_PEOPLE,
             ),
         )
 }
@@ -249,7 +249,7 @@ fn person_scope_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::person_scope::list),
                 rbac,
-                permissions::access_control::PERSON_SCOPE_LIST,
+                &permissions::access_control::PERSON_SCOPE_LIST,
             ),
         )
         .route(
@@ -257,7 +257,7 @@ fn person_scope_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(access_control::person_scope::save),
                 rbac,
-                permissions::access_control::PERSON_SCOPE_SAVE,
+                &permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
 }
@@ -270,7 +270,7 @@ fn resource_grant_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::resource_grants::grant),
                 rbac,
-                permissions::access_control::RESOURCE_GRANT_MANAGE,
+                &permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
         .route(
@@ -278,7 +278,7 @@ fn resource_grant_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(access_control::resource_grants::sources),
                 rbac,
-                permissions::access_control::RESOURCE_GRANT_MANAGE,
+                &permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
         .route(
@@ -286,7 +286,7 @@ fn resource_grant_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::resource_grants::revoke),
                 rbac,
-                permissions::access_control::RESOURCE_GRANT_MANAGE,
+                &permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
         .route(
@@ -294,7 +294,7 @@ fn resource_grant_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::resource_grants::recompute),
                 rbac,
-                permissions::access_control::RESOURCE_GRANT_MANAGE,
+                &permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
         .route(
@@ -302,7 +302,7 @@ fn resource_grant_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(access_control::resource_grants::backfill),
                 rbac,
-                permissions::access_control::RESOURCE_GRANT_MANAGE,
+                &permissions::access_control::PERSON_SCOPE_SAVE,
             ),
         )
         .layer(DefaultBodyLimit::max(256 * 1024))

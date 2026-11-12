@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::integration_ops;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -28,7 +28,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(integration_ops::inbox_message_list),
                 rbac,
-                permissions::integration_ops::INBOX_MESSAGE_LIST,
+                &permissions::integration_ops::INBOX_MESSAGE_LIST,
             ),
         )
         .route(
@@ -36,7 +36,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::inbox_message_register),
                 rbac,
-                permissions::integration_ops::INBOX_MESSAGE_REGISTER,
+                &permissions::integration_ops::INBOX_MESSAGE_REGISTER,
             ),
         )
         .route(
@@ -44,7 +44,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(integration_ops::inbox_message_detail),
                 rbac,
-                permissions::integration_ops::INBOX_MESSAGE_DETAIL,
+                &permissions::integration_ops::INBOX_MESSAGE_DETAIL,
             ),
         )
         .route(
@@ -52,7 +52,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::inbox_message_write_back),
                 rbac,
-                permissions::integration_ops::INBOX_MESSAGE_WRITE_BACK,
+                &permissions::integration_ops::INBOX_MESSAGE_WRITE_BACK,
             ),
         )
         // 集成错误任务
@@ -61,7 +61,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(integration_ops::error_task_list),
                 rbac,
-                permissions::integration_ops::ERROR_TASK_LIST,
+                &permissions::integration_ops::ERROR_TASK_LIST,
             ),
         )
         .route(
@@ -69,7 +69,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::error_task_create),
                 rbac,
-                permissions::integration_ops::ERROR_TASK_CREATE,
+                &permissions::integration_ops::ERROR_TASK_CREATE,
             ),
         )
         .route(
@@ -77,7 +77,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(integration_ops::error_task_detail),
                 rbac,
-                permissions::integration_ops::ERROR_TASK_DETAIL,
+                &permissions::integration_ops::ERROR_TASK_DETAIL,
             ),
         )
         .route(
@@ -85,7 +85,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::integration_task_action),
                 rbac,
-                permissions::integration_ops::INTEGRATION_TASK_ACTION,
+                &permissions::integration_ops::INTEGRATION_TASK_ACTION,
             ),
         )
         .route(
@@ -93,7 +93,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::integration_task_completion),
                 rbac,
-                permissions::integration_ops::INTEGRATION_TASK_COMPLETION,
+                &permissions::integration_ops::INTEGRATION_TASK_COMPLETION,
             ),
         )
         // 对账差异
@@ -102,7 +102,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(integration_ops::difference_list),
                 rbac,
-                permissions::integration_ops::DIFFERENCE_LIST,
+                &permissions::integration_ops::DIFFERENCE_LIST,
             ),
         )
         .route(
@@ -110,7 +110,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::difference_create),
                 rbac,
-                permissions::integration_ops::DIFFERENCE_CREATE,
+                &permissions::integration_ops::DIFFERENCE_CREATE,
             ),
         )
         .route(
@@ -118,7 +118,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(integration_ops::difference_detail),
                 rbac,
-                permissions::integration_ops::DIFFERENCE_DETAIL,
+                &permissions::integration_ops::DIFFERENCE_DETAIL,
             ),
         )
         .route(
@@ -126,7 +126,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(integration_ops::difference_decision),
                 rbac,
-                permissions::integration_ops::DIFFERENCE_DECISION,
+                &permissions::integration_ops::DIFFERENCE_DECISION,
             ),
         )
 }

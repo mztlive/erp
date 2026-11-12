@@ -5,8 +5,6 @@ mod indexes;
 pub mod runtime;
 pub(crate) mod worker;
 
-pub mod permissions;
-
 #[cfg(test)]
 #[path = "../build_catalog.rs"]
 mod build_catalog;
@@ -15,3 +13,10 @@ mod build_catalog;
 mod build_permissions;
 
 pub mod wiring;
+
+#[cfg(test)]
+#[path = "../build_route_overrides.rs"]
+mod build_route_overrides;
+#[cfg(test)]
+#[path = "../route_descriptions.rs"]
+mod route_descriptions;

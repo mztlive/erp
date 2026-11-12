@@ -10,11 +10,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::legacy_import;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -30,7 +30,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(legacy_import::legacy_import_batch_list),
                 rbac,
-                permissions::legacy_import::BATCH_LIST,
+                &permissions::legacy_import::BATCH_LIST,
             ),
         )
         .route(
@@ -38,7 +38,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(legacy_import::legacy_import_batch_create),
                 rbac,
-                permissions::legacy_import::BATCH_CREATE,
+                &permissions::legacy_import::BATCH_CREATE,
             ),
         )
         .route(
@@ -46,7 +46,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(legacy_import::legacy_import_batch_detail),
                 rbac,
-                permissions::legacy_import::BATCH_DETAIL,
+                &permissions::legacy_import::BATCH_DETAIL,
             ),
         )
         .route(
@@ -54,7 +54,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(legacy_import::legacy_import_row_list),
                 rbac,
-                permissions::legacy_import::ROW_LIST,
+                &permissions::legacy_import::ROW_LIST,
             ),
         )
         .route(
@@ -62,7 +62,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(legacy_import::legacy_import_batch_apply),
                 rbac,
-                permissions::legacy_import::BATCH_APPLY,
+                &permissions::legacy_import::BATCH_APPLY,
             ),
         )
         .route(
@@ -70,7 +70,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(legacy_import::legacy_import_execution_command),
                 rbac,
-                permissions::legacy_import::EXECUTION_COMMAND,
+                &permissions::legacy_import::EXECUTION_COMMAND,
             ),
         )
         .route(
@@ -78,7 +78,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(legacy_import::legacy_import_confirmation_list),
                 rbac,
-                permissions::legacy_import::CONFIRMATION_LIST,
+                &permissions::legacy_import::CONFIRMATION_LIST,
             ),
         )
         .route(
@@ -86,7 +86,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(legacy_import::legacy_import_confirmation_create),
                 rbac,
-                permissions::legacy_import::CONFIRMATION_CREATE,
+                &permissions::legacy_import::CONFIRMATION_CREATE,
             ),
         )
         .route(
@@ -94,7 +94,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(legacy_import::legacy_import_confirmation_complete),
                 rbac,
-                permissions::legacy_import::CONFIRMATION_COMPLETE,
+                &permissions::legacy_import::CONFIRMATION_COMPLETE,
             ),
         )
 }

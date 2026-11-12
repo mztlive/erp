@@ -6,12 +6,12 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::contract;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
 use crate::http::upload;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -32,9 +32,9 @@ fn sales_access_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new().route(
         "/contracts/{id}/sales-access",
         with_permission(
-            with_permission(put(contract::contract_sales_access), rbac, permissions::contract::SALES_ACCESS),
+            with_permission(put(contract::contract_sales_access), rbac, &permissions::contract::TERMINATE),
             rbac,
-            permissions::customer::ASSIGNMENT_APPLY,
+            &permissions::customer::ASSIGNMENT_APPLY,
         ),
     )
 }
@@ -42,7 +42,10 @@ fn sales_access_routes(rbac: &AuthorizationService) -> Router<HttpState> {
 fn archived_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .merge(file_routes(rbac))
-        .route("/contracts", with_permission(get(contract::contract_list), rbac, permissions::contract::LIST))
+        .route(
+            "/contracts",
+            with_permission(get(contract::contract_list), rbac, &permissions::contract::LIST),
+        )
         .route(
             "/contracts/upload",
             with_permission(
@@ -51,28 +54,28 @@ fn archived_routes(rbac: &AuthorizationService) -> Router<HttpState> {
                     upload::MAX_CONTRACT_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                permissions::contract::IMPORTS_UPLOAD,
+                &permissions::contract::CREATE,
             ),
         )
         .route(
             "/contracts",
-            with_permission(post(contract::contract_create), rbac, permissions::contract::CREATE),
+            with_permission(post(contract::contract_create), rbac, &permissions::contract::CREATE),
         )
         .route(
             "/contracts/{id}",
-            with_permission(get(contract::contract_detail), rbac, permissions::contract::DETAIL),
+            with_permission(get(contract::contract_detail), rbac, &permissions::contract::DETAIL),
         )
         .route(
             "/contracts/{id}/revisions",
             with_permission(
                 post(contract::contract_archive_revision),
                 rbac,
-                permissions::contract::ARCHIVE_REVISION,
+                &permissions::contract::TERMINATE,
             ),
         )
         .route(
             "/contracts/{id}/terminate",
-            with_permission(post(contract::contract_terminate), rbac, permissions::contract::TERMINATE),
+            with_permission(post(contract::contract_terminate), rbac, &permissions::contract::TERMINATE),
         )
 }
 
@@ -81,7 +84,7 @@ fn template_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contract-templates",
-            with_permission(get(contract::templates::list), rbac, permissions::contract::TEMPLATES_LIST),
+            with_permission(get(contract::templates::list), rbac, &permissions::contract::TEMPLATES_LIST),
         )
         .route(
             "/contract-templates",
@@ -91,23 +94,27 @@ fn template_routes(rbac: &AuthorizationService) -> Router<HttpState> {
                     upload::MAX_CONTRACT_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                permissions::contract::TEMPLATES_CREATE,
+                &permissions::contract::TEMPLATES_CREATE,
             ),
         )
         .route(
             "/contract-templates/{id}/status",
-            with_permission(post(contract::templates::status), rbac, permissions::contract::TEMPLATES_STATUS),
+            with_permission(
+                post(contract::templates::status),
+                rbac,
+                &permissions::contract::TEMPLATES_CREATE,
+            ),
         )
         .route(
             "/contract-templates/{id}/sample",
-            with_permission(get(contract::templates::sample), rbac, permissions::contract::TEMPLATES_SAMPLE),
+            with_permission(get(contract::templates::sample), rbac, &permissions::contract::TEMPLATES_CREATE),
         )
         .route(
             "/contract-number-counters",
             with_permission(
                 get(contract::templates::counters),
                 rbac,
-                permissions::contract::TEMPLATES_COUNTERS,
+                &permissions::contract::TEMPLATES_CREATE,
             ),
         )
         .route(
@@ -115,7 +122,7 @@ fn template_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(contract::templates::configure),
                 rbac,
-                permissions::contract::TEMPLATES_CONFIGURE,
+                &permissions::contract::TEMPLATES_CREATE,
             ),
         )
 }
@@ -127,19 +134,19 @@ fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(contract::templates::applications),
                 rbac,
-                permissions::contract::TEMPLATES_APPLICATIONS,
+                &permissions::contract::TEMPLATES_APPLICATIONS,
             ),
         )
         .route(
             "/contract-applications",
-            with_permission(post(contract::templates::apply), rbac, permissions::contract::TEMPLATES_APPLY),
+            with_permission(post(contract::templates::apply), rbac, &permissions::contract::TEMPLATES_APPLY),
         )
         .route(
             "/contract-applications/{id}/download",
             with_permission(
                 get(contract::templates::download),
                 rbac,
-                permissions::contract::TEMPLATES_DOWNLOAD,
+                &permissions::contract::TEMPLATES_DOWNLOAD,
             ),
         )
 }
@@ -148,11 +155,11 @@ fn file_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contracts/{id}/files/{file_id}",
-            with_permission(get(contract::contract_file), rbac, permissions::contract::FILE),
+            with_permission(get(contract::contract_file), rbac, &permissions::contract::DETAIL),
         )
         .route(
             "/contracts/{id}/files/{file_id}/preview",
-            with_permission(get(contract::contract_file_preview), rbac, permissions::contract::FILE_PREVIEW),
+            with_permission(get(contract::contract_file_preview), rbac, &permissions::contract::DETAIL),
         )
 }
 
@@ -160,22 +167,22 @@ fn import_routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/contract-imports",
-            with_permission(get(contract::imports::list), rbac, permissions::contract::IMPORTS_LIST),
+            with_permission(get(contract::imports::list), rbac, &permissions::contract::CREATE),
         )
         .route(
             "/contract-imports/{id}",
-            with_permission(get(contract::imports::detail), rbac, permissions::contract::IMPORTS_DETAIL),
+            with_permission(get(contract::imports::detail), rbac, &permissions::contract::CREATE),
         )
         .route(
             "/contract-imports/{id}/run",
-            with_permission(post(contract::imports::run), rbac, permissions::contract::IMPORTS_RUN),
+            with_permission(post(contract::imports::run), rbac, &permissions::contract::CREATE),
         )
         .route(
             "/contract-imports/{id}/confirm",
-            with_permission(post(contract::imports::confirm), rbac, permissions::contract::IMPORTS_CONFIRM),
+            with_permission(post(contract::imports::confirm), rbac, &permissions::contract::CREATE),
         )
         .route(
             "/contract-imports/{id}/preview",
-            with_permission(get(contract::imports::preview), rbac, permissions::contract::IMPORTS_PREVIEW),
+            with_permission(get(contract::imports::preview), rbac, &permissions::contract::CREATE),
         )
 }

@@ -6,11 +6,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::approval_instance;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// P0-B 声明 `mod approval_process` 后应删除此 `#[path]`。
 #[path = "approval_process.rs"]
@@ -41,7 +41,7 @@ fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::materials::invoice_review),
                 rbac,
-                permissions::approval_instance::MATERIALS_INVOICE_REVIEW,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -49,7 +49,7 @@ fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::materials::list),
                 rbac,
-                permissions::approval_instance::MATERIALS_LIST,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -57,7 +57,7 @@ fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::materials::preview),
                 rbac,
-                permissions::approval_instance::MATERIALS_PREVIEW,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -65,7 +65,7 @@ fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::materials::download),
                 rbac,
-                permissions::approval_instance::MATERIALS_DOWNLOAD,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
 }
@@ -78,7 +78,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::timeline::approval_timeline),
                 rbac,
-                permissions::approval_instance::TIMELINE_APPROVAL_TIMELINE,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -86,7 +86,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::instance_list),
                 rbac,
-                permissions::approval_instance::INSTANCE_LIST,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -94,7 +94,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::instance_detail),
                 rbac,
-                permissions::approval_instance::INSTANCE_DETAIL,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -102,7 +102,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::instance_history),
                 rbac,
-                permissions::approval_instance::INSTANCE_HISTORY,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -110,7 +110,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::recovery_options),
                 rbac,
-                permissions::approval_instance::RECOVERY_OPTIONS,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
 }
@@ -123,7 +123,7 @@ fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_instance::submit_decision),
                 rbac,
-                permissions::approval_instance::SUBMIT_DECISION,
+                &permissions::approval_instance::SUBMIT_DECISION,
             ),
         )
         .route(
@@ -131,7 +131,7 @@ fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_instance::resume_current_approver),
                 rbac,
-                permissions::approval_instance::RESUME_CURRENT_APPROVER,
+                &permissions::approval_instance::RESUME_CURRENT_APPROVER,
             ),
         )
         .route(
@@ -139,7 +139,7 @@ fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_instance::cancel_blocked),
                 rbac,
-                permissions::approval_instance::CANCEL_BLOCKED,
+                &permissions::approval_instance::CANCEL_BLOCKED,
             ),
         )
         .route(
@@ -147,7 +147,7 @@ fn command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_instance::upgrade_binding),
                 rbac,
-                permissions::approval_instance::UPGRADE_BINDING,
+                &permissions::approval_instance::UPGRADE_BINDING,
             ),
         )
 }
@@ -158,7 +158,7 @@ fn copy_routes(rbac: &AuthorizationService) -> Router<HttpState> {
         with_permission(
             get(approval_instance::copies::history),
             rbac,
-            permissions::approval_instance::COPIES_HISTORY,
+            &permissions::approval_instance::INSTANCE_LIST,
         ),
     )
 }
@@ -171,7 +171,7 @@ fn progress_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_instance::progress::count),
                 rbac,
-                permissions::approval_instance::STARTED_UNREAD_COUNT,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
         .route(
@@ -179,7 +179,7 @@ fn progress_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_instance::progress::mark_read),
                 rbac,
-                permissions::approval_instance::PROGRESS_READ,
+                &permissions::approval_instance::INSTANCE_LIST,
             ),
         )
 }

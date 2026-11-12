@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::cost;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -24,43 +24,35 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/actual-profit-loss/history-directory",
-            with_permission(
-                get(cost::profit_loss::history_directory),
-                rbac,
-                permissions::cost::PROFIT_LOSS_HISTORY_DIRECTORY,
-            ),
+            with_permission(get(cost::profit_loss::history_directory), rbac, &permissions::cost::ENTRY_LIST),
         )
         .route(
             "/actual-profit-loss",
-            with_permission(get(cost::profit_loss::view), rbac, permissions::cost::PROFIT_LOSS_VIEW),
+            with_permission(get(cost::profit_loss::view), rbac, &permissions::cost::ENTRY_LIST),
         )
         .route(
             "/actual-profit-loss/period-basis",
-            with_permission(
-                get(cost::profit_loss::period_basis),
-                rbac,
-                permissions::cost::PROFIT_LOSS_PERIOD_BASIS,
-            ),
+            with_permission(get(cost::profit_loss::period_basis), rbac, &permissions::cost::ENTRY_LIST),
         )
         .route(
             "/actual-profit-loss/exports",
-            with_permission(post(cost::profit_loss::export), rbac, permissions::cost::PROFIT_LOSS_EXPORT),
+            with_permission(post(cost::profit_loss::export), rbac, &permissions::cost::ENTRY_LIST),
         )
         .route(
             "/cost-entries",
-            with_permission(get(cost::cost_entry_list), rbac, permissions::cost::ENTRY_LIST),
+            with_permission(get(cost::cost_entry_list), rbac, &permissions::cost::ENTRY_LIST),
         )
         .route(
             "/cost-entries",
-            with_permission(post(cost::cost_entry_create), rbac, permissions::cost::ENTRY_CREATE),
+            with_permission(post(cost::cost_entry_create), rbac, &permissions::cost::ENTRY_CREATE),
         )
         .route(
             "/cost-entries/{id}",
-            with_permission(get(cost::cost_entry_detail), rbac, permissions::cost::ENTRY_DETAIL),
+            with_permission(get(cost::cost_entry_detail), rbac, &permissions::cost::ENTRY_DETAIL),
         )
         .route(
             "/cost-allocations",
-            with_permission(get(cost::cost_allocation_list), rbac, permissions::cost::ALLOCATION_LIST),
+            with_permission(get(cost::cost_allocation_list), rbac, &permissions::cost::ALLOCATION_LIST),
         )
         .merge(extra_cost_routes(rbac))
 }
@@ -79,7 +71,7 @@ fn extra_cost_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(cost::extra_cost::sales_extra_cost_list),
                 rbac,
-                permissions::cost::EXTRA_COST_SALES_EXTRA_COST_LIST,
+                &permissions::cost::ENTRY_LIST,
             ),
         )
         .route(
@@ -87,7 +79,7 @@ fn extra_cost_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(cost::extra_cost::sales_extra_cost_register),
                 rbac,
-                permissions::cost::EXTRA_COST_SALES_EXTRA_COST_REGISTER,
+                &permissions::cost::ENTRY_CREATE,
             ),
         )
         .route(
@@ -95,7 +87,7 @@ fn extra_cost_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(cost::extra_cost::sales_extra_cost_reduce),
                 rbac,
-                permissions::cost::EXTRA_COST_SALES_EXTRA_COST_REDUCE,
+                &permissions::cost::ENTRY_CREATE,
             ),
         )
 }

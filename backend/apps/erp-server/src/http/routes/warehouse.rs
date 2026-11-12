@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{delete, get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::warehouse;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -24,34 +24,30 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/warehouse-directory",
-            with_permission(get(warehouse::directory::list), rbac, permissions::warehouse::DIRECTORY_LIST),
+            with_permission(get(warehouse::directory::list), rbac, &permissions::warehouse::LIST),
         )
         .route(
             "/warehouse-directory/selected",
-            with_permission(
-                get(warehouse::directory::selected),
-                rbac,
-                permissions::warehouse::DIRECTORY_SELECTED,
-            ),
+            with_permission(get(warehouse::directory::selected), rbac, &permissions::warehouse::LIST),
         )
         .route(
             "/warehouses",
-            with_permission(get(warehouse::warehouse_list), rbac, permissions::warehouse::LIST),
+            with_permission(get(warehouse::warehouse_list), rbac, &permissions::warehouse::LIST),
         )
         .route(
             "/warehouses",
-            with_permission(post(warehouse::warehouse_create), rbac, permissions::warehouse::CREATE),
+            with_permission(post(warehouse::warehouse_create), rbac, &permissions::warehouse::CREATE),
         )
         .route(
             "/warehouses/{id}",
-            with_permission(put(warehouse::warehouse_update), rbac, permissions::warehouse::UPDATE),
+            with_permission(put(warehouse::warehouse_update), rbac, &permissions::warehouse::UPDATE),
         )
         .route(
             "/warehouses/{id}/fulfillment-handlers",
             with_permission(
                 put(warehouse::warehouse_fulfillment_handlers_update),
                 rbac,
-                permissions::warehouse::FULFILLMENT_HANDLERS_UPDATE,
+                &permissions::warehouse::UPDATE,
             ),
         )
         .route(
@@ -59,7 +55,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(warehouse::warehouse_fulfillment_handler_options),
                 rbac,
-                permissions::warehouse::FULFILLMENT_HANDLER_OPTIONS,
+                &permissions::warehouse::UPDATE,
             ),
         )
         .route(
@@ -67,7 +63,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(warehouse::warehouse_revision_list),
                 rbac,
-                permissions::warehouse::REVISION_LIST,
+                &permissions::warehouse::REVISION_LIST,
             ),
         )
         .route(
@@ -75,7 +71,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(warehouse::warehouse_sku_policy_list),
                 rbac,
-                permissions::warehouse::SKU_POLICY_LIST,
+                &permissions::warehouse::SKU_POLICY_LIST,
             ),
         )
         .route(
@@ -83,7 +79,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(warehouse::warehouse_sku_policy_create),
                 rbac,
-                permissions::warehouse::SKU_POLICY_CREATE,
+                &permissions::warehouse::SKU_POLICY_CREATE,
             ),
         )
         .route(
@@ -91,7 +87,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(warehouse::warehouse_sku_policy_update),
                 rbac,
-                permissions::warehouse::SKU_POLICY_UPDATE,
+                &permissions::warehouse::SKU_POLICY_UPDATE,
             ),
         )
         .route(
@@ -99,7 +95,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 delete(warehouse::warehouse_sku_policy_delete),
                 rbac,
-                permissions::warehouse::SKU_POLICY_DELETE,
+                &permissions::warehouse::SKU_POLICY_DELETE,
             ),
         )
 }

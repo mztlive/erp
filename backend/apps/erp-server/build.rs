@@ -5,20 +5,24 @@ mod build_catalog;
 mod build_format;
 mod build_permissions;
 mod build_policy_catalog;
-#[path = "permission_catalog/mod.rs"]
-mod permissions;
+mod build_route_overrides;
+mod route_descriptions;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
 use build_format::push_description;
 use build_permissions::PermissionGroup;
 use build_policy_catalog::write_policy_catalog;
+
 /// 构建脚本入口。
 ///
 /// # 返回
 /// 不返回数据，仅表示执行结果。
 fn main() {
-    let manifest_dir = match env::var("CARGO_MANIFEST_DIR").map(PathBuf::from) {
+    let manifest_dir = match env::var("ERP_PERMISSION_MANIFEST_DIR")
+        .or_else(|_| env::var("CARGO_MANIFEST_DIR"))
+        .map(PathBuf::from)
+    {
         Ok(path) => path,
         Err(err) => {
             println!("cargo:warning=missing manifest dir: {}", err);
@@ -41,12 +45,17 @@ fn main() {
         },
     };
 
-    generate_audit_actions(&backend_root, &repo_root).expect("generate audit action catalog");
-    rerun_if_changed(&backend_root.join("crates/domains/erp-identity/src/entity/policy_permission.rs"));
+    let client_output_dir = env::var_os("ERP_PERMISSION_OUTPUT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root.join("erp-client/lib"));
+    fs::create_dir_all(&client_output_dir).expect("create catalog output directory");
+    generate_audit_actions(&backend_root, &client_output_dir).expect("generate audit action catalog");
+    rerun_if_changed(&backend_root.join("crates/foundation/erp-permissions/src"));
 
     let routes_mod_path = manifest_dir.join("src/http/routes/mod.rs");
     let routes_admin_path = manifest_dir.join("src/http/routes/admin.rs");
-    rerun_if_changed(&manifest_dir.join("permission_catalog"));
+    rerun_if_changed(&manifest_dir.join("route_descriptions.rs"));
+    rerun_if_changed(&manifest_dir.join("build_route_overrides.rs"));
     rerun_if_changed(&manifest_dir.join("build_catalog.rs"));
     rerun_if_changed(&manifest_dir.join("build_routes.rs"));
     rerun_if_changed(&manifest_dir.join("build_permissions.rs"));
@@ -76,7 +85,7 @@ fn main() {
 
     // P0-4.1：权限生成物落点修正，输出到 erp-client（实际前端）。
     // erp-client 侧自包含 PermissionItem 类型（其 tsconfig 无 @/types/admin 映射）。
-    let client_output_path = repo_root.join("erp-client/lib/permissions.generated.ts");
+    let client_output_path = client_output_dir.join("permissions.generated.ts");
     write_generated_file(&client_output_path, &groups, client_permission_item_source())
         .expect("必须生成前端权限目录");
 }
@@ -267,7 +276,7 @@ fn client_permission_item_source() -> &'static str {
 }
 
 /// 从事件拥有领域生成前端固定目录；写失败使构建失败，禁止保留过期生成物。
-fn generate_audit_actions(backend_root: &Path, repo_root: &Path) -> io::Result<()> {
+fn generate_audit_actions(backend_root: &Path, client_output_dir: &Path) -> io::Result<()> {
     rerun_if_changed(
         &backend_root.join("crates/domains/erp-identity/src/entity/access_control/audit_actions.rs"),
     );
@@ -278,7 +287,7 @@ fn generate_audit_actions(backend_root: &Path, repo_root: &Path) -> io::Result<(
         output.push_str(&format!("    {{\n        value: {value:?},\n        label: {label:?},\n    }},\n"));
     }
     output.push_str("] as const\n");
-    let target = repo_root.join("erp-client/lib/audit-actions.generated.ts");
+    let target = client_output_dir.join("audit-actions.generated.ts");
     if fs::read_to_string(&target).ok().as_deref() != Some(output.as_str()) {
         fs::write(target, output)?;
     }

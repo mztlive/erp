@@ -15,7 +15,6 @@ use tracing::{error, warn};
 
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::permissions::PermissionBinding;
 
 /// HTTP 层仅通过统一授权服务读取真实账号的功能资格。
 #[async_trait]
@@ -39,15 +38,15 @@ impl HttpAuthorization for AuthorizationService {
 ///
 /// # 返回值
 /// 返回带权限校验层的路由。
+///
+/// # 错误
+/// 不执行授权读取，不返回错误；请求到达时由权限层执行检查。
 pub fn with_permission(
     route: MethodRouter<HttpState>,
     authorization: &AuthorizationService,
-    permission: impl Into<PermissionBinding>,
+    permission: &Permission,
 ) -> MethodRouter<HttpState> {
-    route.route_layer(RbacAuthorizeLayer::new(
-        std::sync::Arc::new(authorization.clone()),
-        permission.into().required.permission(),
-    ))
+    route.route_layer(RbacAuthorizeLayer::new(std::sync::Arc::new(authorization.clone()), permission.clone()))
 }
 
 #[derive(Clone)]

@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+erp-permissions = { workspace = true }
 bson = { workspace = true }
 chrono = { workspace = true }
 entity-macros = { workspace = true }

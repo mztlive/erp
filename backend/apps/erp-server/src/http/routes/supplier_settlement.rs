@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::supplier_settlement;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +27,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::reviewer_options::supplier_settlement_reviewer_options),
                 rbac,
-                permissions::supplier_settlement::REVIEWER_OPTIONS_SUPPLIER_SETTLEMENT_REVIEWER_OPTIONS,
+                &permissions::supplier_settlement::STATEMENT_SUBMIT_REVIEW,
             ),
         )
         .route(
@@ -35,7 +35,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_list),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_LIST,
+                &permissions::supplier_settlement::STATEMENT_LIST,
             ),
         )
         .route(
@@ -43,7 +43,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_create),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_CREATE,
+                &permissions::supplier_settlement::STATEMENT_CREATE,
             ),
         )
         .route(
@@ -51,7 +51,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_detail),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_DETAIL,
+                &permissions::supplier_settlement::STATEMENT_DETAIL,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_submit_review),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_SUBMIT_REVIEW,
+                &permissions::supplier_settlement::STATEMENT_SUBMIT_REVIEW,
             ),
         )
         .route(
@@ -67,7 +67,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_refresh),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_REFRESH,
+                &permissions::supplier_settlement::STATEMENT_REFRESH,
             ),
         )
         .route(
@@ -75,7 +75,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_source_evidence_latest),
                 rbac,
-                permissions::supplier_settlement::SOURCE_EVIDENCE_LATEST,
+                &permissions::supplier_settlement::SOURCE_EVIDENCE_LATEST,
             ),
         )
         .route(
@@ -83,7 +83,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_source_evidence_record),
                 rbac,
-                permissions::supplier_settlement::SOURCE_EVIDENCE_RECORD,
+                &permissions::supplier_settlement::SOURCE_EVIDENCE_RECORD,
             ),
         )
         .route(
@@ -91,7 +91,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_review_decide),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_REVIEW_DECIDE,
+                &permissions::supplier_settlement::STATEMENT_REVIEW_DECIDE,
             ),
         )
         .route(
@@ -99,7 +99,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_void),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_VOID,
+                &permissions::supplier_settlement::STATEMENT_VOID,
             ),
         )
         .route(
@@ -107,7 +107,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_handover),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_HANDOVER,
+                &permissions::supplier_settlement::STATEMENT_REFRESH,
             ),
         )
         .route(
@@ -115,7 +115,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_handover_candidates),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_HANDOVER_CANDIDATES,
+                &permissions::supplier_settlement::STATEMENT_REFRESH,
             ),
         )
         .route(
@@ -123,7 +123,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_statement_reassign_difference_handler),
                 rbac,
-                permissions::supplier_settlement::STATEMENT_REASSIGN_DIFFERENCE_HANDLER,
+                &permissions::supplier_settlement::STATEMENT_REFRESH,
             ),
         )
         .route(
@@ -131,7 +131,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_item_list),
                 rbac,
-                permissions::supplier_settlement::ITEM_LIST,
+                &permissions::supplier_settlement::ITEM_LIST,
             ),
         )
         .route(
@@ -139,7 +139,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_settlement::supplier_settlement_difference_list),
                 rbac,
-                permissions::supplier_settlement::DIFFERENCE_LIST,
+                &permissions::supplier_settlement::DIFFERENCE_LIST,
             ),
         )
         .route(
@@ -147,7 +147,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_difference_decide),
                 rbac,
-                permissions::supplier_settlement::DIFFERENCE_DECIDE,
+                &permissions::supplier_settlement::DIFFERENCE_DECIDE,
             ),
         )
         .route(
@@ -155,7 +155,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_settlement::supplier_settlement_difference_evidence_append),
                 rbac,
-                permissions::supplier_settlement::DIFFERENCE_EVIDENCE_APPEND,
+                &permissions::supplier_settlement::DIFFERENCE_DECIDE,
             ),
         )
 }

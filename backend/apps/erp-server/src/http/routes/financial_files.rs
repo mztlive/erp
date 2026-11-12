@@ -2,11 +2,11 @@
 use axum::Router;
 use axum::routing::get;
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::financial_files;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 构建财务文件业务访问路由。
 /// # 参数
@@ -23,7 +23,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::fulfillment_payment::purchase_payment_summary),
                 rbac,
-                permissions::financial_files::FULFILLMENT_PAYMENT_PURCHASE_PAYMENT_SUMMARY,
+                &permissions::work_item::DETAIL,
             ),
         )
         .route(
@@ -31,7 +31,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::sales_invoice_files),
                 rbac,
-                permissions::financial_files::SALES_INVOICE_FILES,
+                &permissions::sales_order::DETAIL,
             ),
         )
         .route(
@@ -39,7 +39,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::sales_invoice_download),
                 rbac,
-                permissions::financial_files::SALES_INVOICE_DOWNLOAD,
+                &permissions::sales_order::DETAIL,
             ),
         )
         .route(
@@ -47,7 +47,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::purchase_payment_receipts),
                 rbac,
-                permissions::financial_files::PURCHASE_PAYMENT_RECEIPTS,
+                &permissions::work_item::DETAIL,
             ),
         )
         .route(
@@ -55,7 +55,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::purchase_payment_receipt_download),
                 rbac,
-                permissions::financial_files::PURCHASE_PAYMENT_RECEIPT_DOWNLOAD,
+                &permissions::work_item::DETAIL,
             ),
         )
 }
@@ -68,7 +68,7 @@ fn invoice_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::invoice::invoice_files),
                 rbac,
-                permissions::financial_files::INVOICE_INVOICE_FILES,
+                &permissions::receivable::INVOICE_DETAIL,
             ),
         )
         .route(
@@ -76,7 +76,7 @@ fn invoice_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::invoice::invoice_download),
                 rbac,
-                permissions::financial_files::INVOICE_INVOICE_DOWNLOAD,
+                &permissions::receivable::INVOICE_DETAIL,
             ),
         )
 }
@@ -89,7 +89,7 @@ fn receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::receipt::receipt_files),
                 rbac,
-                permissions::financial_files::RECEIPT_RECEIPT_FILES,
+                &permissions::receivable::CUSTOMER_RECEIPT_DETAIL,
             ),
         )
         .route(
@@ -97,7 +97,7 @@ fn receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::receipt::receipt_file_download),
                 rbac,
-                permissions::financial_files::RECEIPT_RECEIPT_FILE_DOWNLOAD,
+                &permissions::receivable::CUSTOMER_RECEIPT_DETAIL,
             ),
         )
         .route(
@@ -105,7 +105,7 @@ fn receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::receipt::receipt_draft_files),
                 rbac,
-                permissions::financial_files::RECEIPT_RECEIPT_DRAFT_FILES,
+                &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
         .route(
@@ -113,7 +113,7 @@ fn receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(financial_files::receipt::receipt_draft_file_download),
                 rbac,
-                permissions::financial_files::RECEIPT_RECEIPT_DRAFT_FILE_DOWNLOAD,
+                &permissions::receivable::CUSTOMER_RECEIPT_SUBMIT,
             ),
         )
 }

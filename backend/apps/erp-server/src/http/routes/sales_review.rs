@@ -5,11 +5,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::sales_review;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -26,7 +26,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_review::sales_change_order_list),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_ORDER_LIST,
+                &permissions::sales_review::SALES_CHANGE_ORDER_LIST,
             ),
         )
         .route(
@@ -34,7 +34,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_review::sales_change_order_create),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_ORDER_CREATE,
+                &permissions::sales_review::SALES_CHANGE_ORDER_CREATE,
             ),
         )
         .route(
@@ -42,7 +42,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_review::sales_change_order_detail),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_ORDER_DETAIL,
+                &permissions::sales_review::SALES_CHANGE_ORDER_DETAIL,
             ),
         )
         .route(
@@ -50,7 +50,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_review::sales_change_order_submit_impact),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_ORDER_SUBMIT_IMPACT,
+                &permissions::sales_review::SALES_CHANGE_DRAFT,
             ),
         )
         .route(
@@ -58,7 +58,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_review::sales_change_order_void),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_ORDER_VOID,
+                &permissions::sales_review::SALES_CHANGE_ORDER_VOID,
             ),
         )
         .route(
@@ -66,7 +66,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_review::sales_change_order_cancel_approval),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_ORDER_CANCEL_APPROVAL,
+                &permissions::sales_review::SALES_CHANGE_DRAFT,
             ),
         )
 }
@@ -86,7 +86,7 @@ fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_review::sales_change_draft),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_DRAFT,
+                &permissions::sales_review::SALES_CHANGE_DRAFT,
             ),
         )
         .route(
@@ -94,7 +94,7 @@ fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_review::sales_change_save_draft),
                 rbac,
-                permissions::sales_review::SALES_CHANGE_SAVE_DRAFT,
+                &permissions::sales_review::SALES_CHANGE_DRAFT,
             ),
         )
 }

@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::bulk_job;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +27,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(bulk_job::bulk_selection_snapshot_list),
                 rbac,
-                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_LIST,
+                &permissions::bulk_job::BULK_SELECTION_SNAPSHOT_LIST,
             ),
         )
         .route(
@@ -35,7 +35,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(bulk_job::bulk_selection_snapshot_create),
                 rbac,
-                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_CREATE,
+                &permissions::bulk_job::BULK_SELECTION_SNAPSHOT_CREATE,
             ),
         )
         .route(
@@ -43,7 +43,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(bulk_job::bulk_selection_snapshot_confirm),
                 rbac,
-                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_CONFIRM,
+                &permissions::bulk_job::BULK_SELECTION_SNAPSHOT_CONFIRM,
             ),
         )
         .route(
@@ -51,7 +51,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(bulk_job::bulk_selection_snapshot_expire),
                 rbac,
-                permissions::bulk_job::BULK_SELECTION_SNAPSHOT_EXPIRE,
+                &permissions::bulk_job::BULK_SELECTION_SNAPSHOT_EXPIRE,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(bulk_job::bulk_selection_item_list),
                 rbac,
-                permissions::bulk_job::BULK_SELECTION_ITEM_LIST,
+                &permissions::bulk_job::BULK_SELECTION_ITEM_LIST,
             ),
         )
         .route(
@@ -67,7 +67,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(bulk_job::background_job_list),
                 rbac,
-                permissions::bulk_job::BACKGROUND_JOB_LIST,
+                &permissions::bulk_job::BACKGROUND_JOB_LIST,
             ),
         )
         .route(
@@ -75,7 +75,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(bulk_job::background_job_create),
                 rbac,
-                permissions::bulk_job::BACKGROUND_JOB_CREATE,
+                &permissions::bulk_job::BACKGROUND_JOB_CREATE,
             ),
         )
         .route(
@@ -83,7 +83,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(bulk_job::background_job_cancel_all),
                 rbac,
-                permissions::bulk_job::BACKGROUND_JOB_CANCEL_ALL,
+                &permissions::bulk_job::BACKGROUND_JOB_CANCEL_ALL,
             ),
         )
         .route(
@@ -91,7 +91,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(bulk_job::background_job_detail),
                 rbac,
-                permissions::bulk_job::BACKGROUND_JOB_DETAIL,
+                &permissions::bulk_job::BACKGROUND_JOB_DETAIL,
             ),
         )
         .route(
@@ -99,7 +99,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(bulk_job::background_job_cancel),
                 rbac,
-                permissions::bulk_job::BACKGROUND_JOB_CANCEL,
+                &permissions::bulk_job::BACKGROUND_JOB_CANCEL,
             ),
         )
         .route(
@@ -107,7 +107,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(bulk_job::background_job_item_list),
                 rbac,
-                permissions::bulk_job::BACKGROUND_JOB_ITEM_LIST,
+                &permissions::bulk_job::BACKGROUND_JOB_ITEM_LIST,
             ),
         )
 }

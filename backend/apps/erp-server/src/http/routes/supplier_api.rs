@@ -3,11 +3,11 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::supplier_api;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
@@ -27,7 +27,7 @@ fn jd_vop_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             supplier_api::jd_vop::authorize_route(with_permission(
                 post(supplier_api::jd_vop::tokens::configure),
                 rbac,
-                permissions::supplier_api::JD_VOP_TOKENS_CONFIGURE,
+                &permissions::supplier_api::JD_VOP_AUTHORIZE,
             )),
         )
         .route(
@@ -35,12 +35,12 @@ fn jd_vop_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             supplier_api::jd_vop::status_route(with_permission(
                 get(supplier_api::jd_vop::status),
                 rbac,
-                permissions::supplier_api::JD_VOP_STATUS,
+                &permissions::supplier_api::CONNECTION_DETAIL,
             ))
             .merge(supplier_api::jd_vop::authorize_route(with_permission(
                 post(supplier_api::jd_vop::authorize),
                 rbac,
-                permissions::supplier_api::JD_VOP_AUTHORIZE,
+                &permissions::supplier_api::JD_VOP_AUTHORIZE,
             ))),
         )
 }
@@ -59,7 +59,7 @@ fn adoption_preparation_routes(rbac: &AuthorizationService) -> Router<HttpState>
             with_permission(
                 get(supplier_api::adoption_batches::selection),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_SELECTION,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -67,12 +67,12 @@ fn adoption_preparation_routes(rbac: &AuthorizationService) -> Router<HttpState>
             with_permission(
                 get(supplier_api::adoption_batches::preparation),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_PREPARATION,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             )
             .merge(with_permission(
                 post(supplier_api::adoption_batches::control_preparation),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_CONTROL_PREPARATION,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             )),
         )
 }
@@ -84,7 +84,7 @@ fn adoption_batch_query_routes(rbac: &AuthorizationService) -> Router<HttpState>
             with_permission(
                 post(supplier_api::adoption_batches::submission_result),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_SUBMISSION_RESULT,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -92,7 +92,7 @@ fn adoption_batch_query_routes(rbac: &AuthorizationService) -> Router<HttpState>
             with_permission(
                 post(supplier_api::adoption_batches::create),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_CREATE,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -100,7 +100,7 @@ fn adoption_batch_query_routes(rbac: &AuthorizationService) -> Router<HttpState>
             with_permission(
                 get(supplier_api::adoption_batches::list),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_LIST,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -108,7 +108,7 @@ fn adoption_batch_query_routes(rbac: &AuthorizationService) -> Router<HttpState>
             with_permission(
                 get(supplier_api::adoption_batches::detail),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_DETAIL,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
 }
@@ -120,7 +120,7 @@ fn adoption_batch_command_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 post(supplier_api::adoption_batches::control_work),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_CONTROL_WORK,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -128,7 +128,7 @@ fn adoption_batch_command_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 put(supplier_api::adoption_batches::save),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_SAVE,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -136,7 +136,7 @@ fn adoption_batch_command_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 post(supplier_api::adoption_batches::preview),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_PREVIEW,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -144,7 +144,7 @@ fn adoption_batch_command_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 post(supplier_api::adoption_batches::submit),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_SUBMIT,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -152,7 +152,7 @@ fn adoption_batch_command_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 post(supplier_api::adoption_batches::reconcile),
                 rbac,
-                permissions::supplier_api::ADOPTION_BATCHES_RECONCILE,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
 }
@@ -164,7 +164,7 @@ fn adoption_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_api::adoptions::preview),
                 rbac,
-                permissions::supplier_api::ADOPTIONS_PREVIEW,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -172,7 +172,7 @@ fn adoption_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_api::adoptions::confirm),
                 rbac,
-                permissions::supplier_api::ADOPTIONS_CONFIRM,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
         .route(
@@ -180,7 +180,7 @@ fn adoption_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_api::adoptions::resolve),
                 rbac,
-                permissions::supplier_api::ADOPTIONS_RESOLVE,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             ),
         )
 }
@@ -192,7 +192,7 @@ fn dangaoshushu_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_api::references::options),
                 rbac,
-                permissions::supplier_api::REFERENCES_OPTIONS,
+                &permissions::supplier_api::REFERENCES_OPTIONS,
             ),
         )
         .route(
@@ -200,7 +200,7 @@ fn dangaoshushu_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_api::dangaoshushu::read),
                 rbac,
-                permissions::supplier_api::DANGAOSHUSHU_READ,
+                &permissions::supplier_api::DANGAOSHUSHU_READ,
             ),
         )
         .route(
@@ -208,7 +208,7 @@ fn dangaoshushu_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_api::dangaoshushu::reference_tickets),
                 rbac,
-                permissions::supplier_api::DANGAOSHUSHU_REFERENCE_TICKETS,
+                &permissions::supplier_api::DANGAOSHUSHU_REFERENCE_TICKETS,
             ),
         )
 }
@@ -220,7 +220,7 @@ fn connection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_api::connector_types::options),
                 rbac,
-                permissions::supplier_api::CONNECTOR_TYPES_OPTIONS,
+                &permissions::supplier_api::CONNECTION_CREATE,
             ),
         )
         .route(
@@ -228,7 +228,7 @@ fn connection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_api::supplier_api_connection_list),
                 rbac,
-                permissions::supplier_api::CONNECTION_LIST,
+                &permissions::supplier_api::CONNECTION_LIST,
             ),
         )
         .route(
@@ -236,7 +236,7 @@ fn connection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_api::supplier_api_connection_create),
                 rbac,
-                permissions::supplier_api::CONNECTION_CREATE,
+                &permissions::supplier_api::CONNECTION_CREATE,
             ),
         )
         .route(
@@ -244,7 +244,7 @@ fn connection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_api::supplier_api_connection_detail),
                 rbac,
-                permissions::supplier_api::CONNECTION_DETAIL,
+                &permissions::supplier_api::CONNECTION_DETAIL,
             ),
         )
         .route(
@@ -252,8 +252,7 @@ fn connection_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_api::supplier_api_connection_command),
                 rbac,
-                permissions::supplier_api::CONNECTION_DETAIL
-                    .documented_as(permissions::supplier_api::CONNECTION_COMMAND),
+                &permissions::supplier_api::CONNECTION_DETAIL,
             ),
         )
 }
@@ -264,7 +263,7 @@ fn governance_routes(rbac: &AuthorizationService) -> Router<HttpState> {
         with_permission(
             get(supplier_api::supplier_api_connection_job_detail),
             rbac,
-            permissions::supplier_api::CONNECTION_JOB_DETAIL,
+            &permissions::supplier_api::CONNECTION_DETAIL,
         ),
     )
 }
@@ -276,16 +275,20 @@ fn catalog_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_api::catalog::identity_review),
                 rbac,
-                permissions::supplier_api::CATALOG_IDENTITY_REVIEW,
+                &permissions::supplier_api::CONNECTION_DETAIL,
             )
             .merge(with_permission(
                 post(supplier_api::catalog::confirm_identity_review),
                 rbac,
-                permissions::supplier_api::CATALOG_CONFIRM_IDENTITY_REVIEW,
+                &permissions::supplier_api::ADOPTIONS_PREVIEW,
             )),
         )
         .route(
             "/supplier-api-connections/{id}/catalog",
-            with_permission(get(supplier_api::catalog::list), rbac, permissions::supplier_api::CATALOG_LIST),
+            with_permission(
+                get(supplier_api::catalog::list),
+                rbac,
+                &permissions::supplier_api::CONNECTION_DETAIL,
+            ),
         )
 }

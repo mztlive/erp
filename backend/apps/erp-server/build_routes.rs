@@ -90,17 +90,12 @@ fn call_handlers(
     };
     let name = function.path.segments.last().ok_or("缺少函数名")?.ident.to_string();
     if name == "with_permission" {
-        let (required, catalog) = permission_binding(call.args.iter().nth(2).ok_or("缺少权限定义")?)?;
+        let required = permission_symbol(call.args.iter().nth(2).ok_or("缺少权限定义")?)?;
         let route = call.args.first().ok_or("缺少受保护路由")?;
         let before = out.len();
         let mut guards = permission.to_vec();
         guards.push(required.clone());
         handlers(route, path, &guards, out)?;
-        if required != catalog {
-            for route in &mut out[before..] {
-                route.permission = Some(catalog.clone());
-            }
-        }
         if out.len() == before {
             return Err(format!("路由 {path} 的权限未绑定到 HTTP 方法"));
         }
@@ -113,18 +108,10 @@ fn call_handlers(
     }
 }
 
-fn permission_binding(expression: &Expr) -> Result<(String, String), String> {
-    if let Expr::MethodCall(call) = expression
-        && call.method == "documented_as"
-        && call.args.len() == 1
-    {
-        return Ok((permission_symbol(&call.receiver)?, permission_symbol(&call.args[0])?));
-    }
-    let symbol = permission_symbol(expression)?;
-    Ok((symbol.clone(), symbol))
-}
-
 fn permission_symbol(expression: &Expr) -> Result<String, String> {
+    if let Expr::Reference(reference) = expression {
+        return permission_symbol(&reference.expr);
+    }
     let Expr::Path(reference) = expression else {
         return Err("路由必须直接引用显式权限常量".into());
     };
@@ -169,23 +156,23 @@ mod tests {
     #[test]
     fn preserves_nested_guards_and_independent_merged_method_permissions() {
         let routes = parse_routes(r#"fn routes() { Router::new()
-            .route("/nested", with_permission(with_permission(put(h::update), rbac, permissions::contract::UPDATE), rbac, permissions::customer::ASSIGN))
-            .route("/merged", wrapper(with_permission(get(h::read), rbac, permissions::item::READ)).merge(wrapper(with_permission(post(h::command), rbac, permissions::item::READ.documented_as(permissions::item::COMMAND))))); }"#).unwrap();
+            .route("/nested", with_permission(with_permission(put(h::update), rbac, &permissions::contract::UPDATE), rbac, &permissions::customer::ASSIGN))
+            .route("/merged", wrapper(with_permission(get(h::read), rbac, &permissions::item::READ)).merge(wrapper(with_permission(post(h::command), rbac, &permissions::item::COMMAND)))); }"#).unwrap();
         assert_eq!(routes.len(), 3);
         assert_eq!(routes[0].guards, ["customer::ASSIGN", "contract::UPDATE"]);
         assert_eq!(routes[0].permission.as_deref(), Some("contract::UPDATE"));
         assert_eq!(routes[1].method, "GET");
         assert_eq!(routes[2].method, "POST");
-        assert_eq!(routes[2].guards, ["item::READ"]);
+        assert_eq!(routes[2].guards, ["item::COMMAND"]);
         assert_eq!(routes[2].permission.as_deref(), Some("item::COMMAND"));
     }
 
     #[test]
     fn reads_real_route_syntax_with_chains_wrappers_and_independent_permissions() {
         let source = r#"fn routes() { Router::new()
-            .route("/first", with_permission(get(handler::first), rbac, permissions::item::READ))
-            .route("/second", with_permission(upload::multipart_route(post(handler::second), LIMIT), rbac, permissions::item::WRITE).layer(limit))
-            .route("/shared", with_permission(get(handler::first).post(handler::second), rbac, permissions::item::READ)); }"#;
+            .route("/first", with_permission(get(handler::first), rbac, &permissions::item::READ))
+            .route("/second", with_permission(upload::multipart_route(post(handler::second), LIMIT), rbac, &permissions::item::WRITE).layer(limit))
+            .route("/shared", with_permission(get(handler::first).post(handler::second), rbac, &permissions::item::READ)); }"#;
         let routes = parse_routes(source).unwrap();
         let actual = routes
             .iter()
@@ -213,8 +200,8 @@ mod tests {
     fn rejects_unresolvable_permissions_and_nonliteral_paths() {
         for source in [
             r#"fn routes() { Router::new().route("/a", with_permission(get(h), rbac, make_permission())); }"#,
-            r#"fn routes() { Router::new().route(path, with_permission(get(h), rbac, permissions::item::READ)); }"#,
-            r#"fn routes() { Router::new().route("/a", with_permission(dynamic, rbac, permissions::item::READ)); }"#,
+            r#"fn routes() { Router::new().route(path, with_permission(get(h), rbac, &permissions::item::READ)); }"#,
+            r#"fn routes() { Router::new().route("/a", with_permission(dynamic, rbac, &permissions::item::READ)); }"#,
         ] {
             assert!(parse_routes(source).is_err());
         }

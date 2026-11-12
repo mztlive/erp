@@ -1,3 +1,5 @@
+use erp_permissions::ParsePermissionError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
@@ -21,6 +23,19 @@ impl From<&str> for Error {
 impl From<String> for Error {
     fn from(message: String) -> Self {
         Self::LogicError(message)
+    }
+}
+
+impl From<ParsePermissionError> for Error {
+    /// 将公共权限解析错误映射为既有业务值校验错误。
+    /// # 参数
+    /// error 为权限格式或规范化错误。
+    /// # 返回
+    /// 保留原校验文案的业务错误。
+    /// # 错误
+    /// 不返回错误。
+    fn from(error: ParsePermissionError) -> Self {
+        Self::LogicError(error.to_string())
     }
 }
 

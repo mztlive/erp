@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::validation::normalize_required_text_ref;
+use erp_permissions::resources;
 use serde::{Deserialize, Serialize};
 
 use crate::{Error, Permission, Result};
@@ -41,8 +42,8 @@ impl ResourceKind {
     /// 不返回错误。
     pub fn code(self) -> &'static str {
         match self {
-            Self::SalesOrder => "sales_order",
-            Self::PurchaseOrder => "purchase_order",
+            Self::SalesOrder => resources::SALES_ORDER,
+            Self::PurchaseOrder => resources::PURCHASE_ORDER,
         }
     }
 }

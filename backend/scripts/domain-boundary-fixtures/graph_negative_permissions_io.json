@@ -1,0 +1,17 @@
+{
+  "packages": [
+    {
+      "name": "erp-permissions",
+      "deps": [
+        {
+          "name": "mongodb",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "name": "mongodb",
+      "deps": []
+    }
+  ]
+}

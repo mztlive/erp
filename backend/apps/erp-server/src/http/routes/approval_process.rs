@@ -6,11 +6,11 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::approval_instance::approval_process;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回定义管理路由。
 ///
@@ -26,7 +26,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_process::definition_catalog),
                 rbac,
-                permissions::approval_process::DEFINITION_CATALOG,
+                &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
@@ -34,7 +34,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_process::definition_versions),
                 rbac,
-                permissions::approval_process::DEFINITION_VERSIONS,
+                &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
@@ -42,7 +42,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_process::eligible_assignees),
                 rbac,
-                permissions::approval_process::ELIGIBLE_ASSIGNEES,
+                &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
@@ -50,7 +50,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_process::create_definition_draft),
                 rbac,
-                permissions::approval_process::CREATE_DEFINITION_DRAFT,
+                &permissions::approval_process::CREATE_DEFINITION_DRAFT,
             ),
         )
         .route(
@@ -58,7 +58,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(approval_process::definition_detail),
                 rbac,
-                permissions::approval_process::DEFINITION_DETAIL,
+                &permissions::approval_process::DEFINITION_DETAIL,
             ),
         )
         .route(
@@ -66,7 +66,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(approval_process::replace_definition_nodes),
                 rbac,
-                permissions::approval_process::REPLACE_DEFINITION_NODES,
+                &permissions::approval_process::REPLACE_DEFINITION_NODES,
             ),
         )
         .route(
@@ -74,7 +74,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_process::publish_definition),
                 rbac,
-                permissions::approval_process::PUBLISH_DEFINITION,
+                &permissions::approval_process::PUBLISH_DEFINITION,
             ),
         )
         .route(
@@ -82,7 +82,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(approval_process::retire_definition),
                 rbac,
-                permissions::approval_process::RETIRE_DEFINITION,
+                &permissions::approval_process::RETIRE_DEFINITION,
             ),
         )
 }

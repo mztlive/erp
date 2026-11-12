@@ -1,8 +1,8 @@
 //! 部署岗位模板的身份、权限分工及生成规则。
 
+use erp_permissions::policy_permission::FINANCE_LEDGER_READ;
 use serde::Serialize;
 
-use crate::entity::policy_permission::FINANCE_LEDGER_READ;
 use crate::entity::{Permission, PermissionSet, Role};
 use crate::{Error, Result};
 
@@ -30,7 +30,7 @@ impl BuiltinRoleTemplate {
             raw.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
         Self::retain_position_permissions(id, &mut permissions);
         if id == "role-finance" {
-            permissions.push(Permission::parse(FINANCE_LEDGER_READ)?);
+            permissions.push(FINANCE_LEDGER_READ);
         }
         Ok(Self {
             id: id.into(),

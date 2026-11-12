@@ -48,6 +48,7 @@ members = [
   # 基础合同
   "crates/foundation/application-core",
   "crates/foundation/erp-core",
+  "crates/foundation/erp-permissions",
   "crates/foundation/persistence-core",
   # 技术组件
   "crates/platform/aliyun-ocr",
@@ -120,6 +121,7 @@ erp-contract-recognition = { path = "crates/adapters/erp-contract-recognition" }
 # 基础合同
 application-core = { path = "crates/foundation/application-core" }
 erp-core = { path = "crates/foundation/erp-core" }
+erp-permissions = { path = "crates/foundation/erp-permissions" }
 persistence-core = { path = "crates/foundation/persistence-core" }
 # 技术组件
 aliyun-ocr = { path = "crates/platform/aliyun-ocr" }

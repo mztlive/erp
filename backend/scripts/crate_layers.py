@@ -72,6 +72,11 @@ def dependency_errors(edges: Any) -> list[str]:
         layer = source["layer"]
         target_layer = target["layer"] if target else None
         label = f"{src} -[{kind}{f', rename={edge.rename}' if edge.rename else ''}]-> {dst}"
+        if src == "erp-permissions" and not (
+            (dst in {"serde", "thiserror"} and kind == "normal")
+            or (dst == "serde_json" and kind == "dev")
+        ):
+            errors.append(f"公共权限定义仅允许纯值及序列化依赖: {label}")
         if layer == "orchestration":
             if dst not in source.get("dependencies", []):
                 errors.append(f"编排直接依赖未登记: {label}")

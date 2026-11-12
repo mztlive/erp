@@ -70,7 +70,7 @@ async fn existing_permissions_preserve_http_authorization_contract() {
 
 #[tokio::test]
 async fn layered_permissions_keep_outer_first_denial_and_stop_execution() {
-    use crate::permissions::{contract, customer};
+    use erp_permissions::{contract, customer};
     for (outer_result, inner_result, authenticated, status, denied) in [
         (Some(false), Some(true), true, 403, "customer_assignment:create"),
         (Some(true), Some(false), true, 403, "contract:update"),
@@ -83,11 +83,11 @@ async fn layered_permissions_keep_outer_first_denial_and_stop_execution() {
         let executed = Arc::new(AtomicUsize::new(0));
         let outer = RbacAuthorizeLayer::new(
             Arc::new(Authorization { result: outer_result, calls: calls.clone() }),
-            customer::ASSIGNMENT_APPLY.permission(),
+            customer::ASSIGNMENT_APPLY,
         );
         let inner = RbacAuthorizeLayer::new(
             Arc::new(Authorization { result: inner_result, calls: calls.clone() }),
-            contract::SALES_ACCESS.permission(),
+            contract::SALES_ACCESS,
         );
         let count = executed.clone();
         let handler = service_fn(move |_: Request<Body>| {

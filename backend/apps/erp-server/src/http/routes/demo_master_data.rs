@@ -3,11 +3,11 @@
 use axum::Router;
 use axum::routing::{delete, get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::demo_master_data;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 演示主数据路由。
 ///
@@ -23,7 +23,7 @@ pub(super) fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(demo_master_data::demo_master_data_status),
                 rbac,
-                permissions::demo_master_data::STATUS,
+                &permissions::demo_master_data::STATUS,
             ),
         )
         .route(
@@ -31,7 +31,7 @@ pub(super) fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(demo_master_data::demo_master_data_apply),
                 rbac,
-                permissions::demo_master_data::APPLY,
+                &permissions::demo_master_data::APPLY,
             ),
         )
         .route(
@@ -39,7 +39,7 @@ pub(super) fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(demo_master_data::demo_master_data_foundation),
                 rbac,
-                permissions::demo_master_data::FOUNDATION,
+                &permissions::demo_master_data::APPLY,
             ),
         )
         .route(
@@ -47,7 +47,7 @@ pub(super) fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 delete(demo_master_data::demo_master_data_remove),
                 rbac,
-                permissions::demo_master_data::REMOVE,
+                &permissions::demo_master_data::REMOVE,
             ),
         )
 }

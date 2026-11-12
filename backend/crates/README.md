@@ -12,7 +12,7 @@
 | `orchestration/` | 13 个编排库按业务链路执行跨域命令与事务；依赖必须逐项登记 |
 | `read-models/` | `erp-read-models`；组合只读事实，不依赖编排库 |
 | `adapters/` | 具体外部协议和 `erp-contract-recognition` 等技术实现 |
-| `foundation/` | `erp-core`、`application-core`、`persistence-core` |
+| `foundation/` | `erp-core`、`erp-permissions`、`application-core`、`persistence-core` |
 | `platform/` | `bpm`、`storage`、`aliyun-ocr`、`entity-core`、`entity-macros`、`id-generator`、`background-runtime` |
 | `testing/` | `test-support`；仅在允许的 dev-dependency 中接入 |
 
@@ -25,6 +25,7 @@
 | 管理一种业务对象，维护它的规则、查询和数据 | 对应业务领域 crate | 客户分配放 erp-customer，库存预占放 erp-inventory |
 | 一个操作需要多个领域共同完成 | 下表所属业务编排库 | 提交销售单并启动审批；收货过账并更新库存 |
 | 一个查询需要组合多个领域的信息 | [erp-read-models](read-models/erp-read-models/README.md) | 客户中心展示合同、销售和应收；采购列表补齐供应商名称 |
+| 定义公共权限编码、资源标识或目录 | [erp-permissions](foundation/erp-permissions/README.md) | 定义内置权限常量，供 identity 和 server 生成器共同使用 |
 | 多个领域需要相同的金额、数量、时间类型 | [erp-core](foundation/erp-core/README.md) | 使用 Amount 计算金额，使用 BusinessDate 表达到期日 |
 | 多个用例需要相同的请求处理约定 | [application-core](foundation/application-core/README.md) | 分页结构、调用人上下文、命令重试匹配 |
 | 多个仓储需要相同的数据库操作机制 | [persistence-core](foundation/persistence-core/README.md) | 通用 CRUD、分页、共享事务执行器 |
@@ -95,6 +96,7 @@
 | Crate | 用途 |
 | --- | --- |
 | [erp-core](foundation/erp-core/README.md) | 提供整个 ERP 共用的基础业务值类型，例如金额、数量、税率、业务日期、ID 类型和字段更新方式。 |
+| [erp-permissions](foundation/erp-permissions/README.md) | 提供公共权限值、内置常量、资源标识和展示目录；授权判断由 identity 执行。 |
 | [application-core](foundation/application-core/README.md) | 提供多个业务用例共同使用的应用层约定：分页结果、调用人上下文、命令身份、重试匹配和错误分类。 |
 | [persistence-core](foundation/persistence-core/README.md) | 提供各业务仓储共用的 MongoDB 连接、通用数据操作、分页与事务执行机制。 |
 

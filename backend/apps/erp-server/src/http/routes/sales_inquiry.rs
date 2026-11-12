@@ -3,11 +3,11 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::sales_inquiry;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 装配询价路由。
 /// # 参数
@@ -38,7 +38,7 @@ fn procurement_fee_attachments(rbac: &AuthorizationService) -> Router<HttpState>
         with_permission(
             get(sales_inquiry::internal::fee_basis_attachment),
             rbac,
-            permissions::sales_inquiry::INTERNAL_FEE_BASIS_ATTACHMENT,
+            &permissions::sales_inquiry::INTERNAL_FEE_BASES,
         ),
     )
 }
@@ -50,7 +50,7 @@ fn sales_reads(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::query::sales_list),
                 rbac,
-                permissions::sales_inquiry::QUERY_SALES_LIST,
+                &permissions::sales_inquiry::QUERY_SALES_LIST,
             ),
         )
         .route(
@@ -58,7 +58,7 @@ fn sales_reads(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::query::sales_detail),
                 rbac,
-                permissions::sales_inquiry::QUERY_SALES_DETAIL,
+                &permissions::sales_inquiry::QUERY_SALES_DETAIL,
             ),
         )
         .route(
@@ -66,7 +66,7 @@ fn sales_reads(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::query::sales_template_products),
                 rbac,
-                permissions::sales_inquiry::QUERY_SALES_TEMPLATE_PRODUCTS,
+                &permissions::sales_inquiry::COMMANDS_SALES_CREATE,
             ),
         )
 }
@@ -78,7 +78,7 @@ fn sales_drafts(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::sales_create),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_SALES_CREATE,
+                &permissions::sales_inquiry::COMMANDS_SALES_CREATE,
             ),
         )
         .route(
@@ -86,7 +86,7 @@ fn sales_drafts(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(sales_inquiry::commands::sales_save),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_SALES_SAVE,
+                &permissions::sales_inquiry::COMMANDS_SALES_SAVE,
             ),
         )
         .route(
@@ -94,7 +94,7 @@ fn sales_drafts(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::sales_submit),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_SALES_SUBMIT,
+                &permissions::sales_inquiry::COMMANDS_SALES_SUBMIT,
             ),
         )
 }
@@ -106,7 +106,7 @@ fn sales_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::sales_accept),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_SALES_ACCEPT,
+                &permissions::sales_inquiry::COMMANDS_SALES_ACCEPT,
             ),
         )
         .route(
@@ -114,7 +114,7 @@ fn sales_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::sales_reinquire),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_SALES_REINQUIRE,
+                &permissions::sales_inquiry::COMMANDS_SALES_REINQUIRE,
             ),
         )
         .route(
@@ -122,7 +122,7 @@ fn sales_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::sales_close),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_SALES_CLOSE,
+                &permissions::sales_inquiry::COMMANDS_SALES_CLOSE,
             ),
         )
 }
@@ -134,7 +134,7 @@ fn sales_imports(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::import_creation::creation_preview),
                 rbac,
-                permissions::sales_inquiry::IMPORT_CREATION_CREATION_PREVIEW,
+                &permissions::sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
             )
             .layer(DefaultBodyLimit::max(5 * 1024 * 1024 + 64 * 1024)),
         )
@@ -143,7 +143,7 @@ fn sales_imports(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::import_creation::creation_confirm),
                 rbac,
-                permissions::sales_inquiry::IMPORT_CREATION_CREATION_CONFIRM,
+                &permissions::sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
             ),
         )
         .route(
@@ -151,7 +151,7 @@ fn sales_imports(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::import::sales_import_preview),
                 rbac,
-                permissions::sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
+                &permissions::sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
             )
             .layer(DefaultBodyLimit::max(5 * 1024 * 1024 + 64 * 1024)),
         )
@@ -160,7 +160,7 @@ fn sales_imports(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::import::sales_import_confirm),
                 rbac,
-                permissions::sales_inquiry::IMPORT_SALES_IMPORT_CONFIRM,
+                &permissions::sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
             ),
         )
 }
@@ -172,7 +172,7 @@ fn sales_conversion(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::conversion::financial_inquiry_candidates),
                 rbac,
-                permissions::sales_inquiry::CONVERSION_FINANCIAL_INQUIRY_CANDIDATES,
+                &permissions::cost::ENTRY_CREATE,
             ),
         )
         .route(
@@ -180,7 +180,7 @@ fn sales_conversion(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::conversion::sales_basis),
                 rbac,
-                permissions::sales_inquiry::CONVERSION_SALES_BASIS,
+                &permissions::sales_inquiry::CONVERSION_SALES_BASIS,
             ),
         )
         .route(
@@ -188,7 +188,7 @@ fn sales_conversion(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::conversion::fee_sales),
                 rbac,
-                permissions::sales_inquiry::CONVERSION_FEE_SALES,
+                &permissions::sales_inquiry::QUERY_SALES_DETAIL,
             ),
         )
         .route(
@@ -196,7 +196,7 @@ fn sales_conversion(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::conversion::allocate_fees),
                 rbac,
-                permissions::sales_inquiry::CONVERSION_ALLOCATE_FEES,
+                &permissions::sales_inquiry::CONVERSION_SALES_BASIS,
             ),
         )
 }
@@ -208,7 +208,7 @@ fn sales_recovery(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::recovery::sales_create_recover),
                 rbac,
-                permissions::sales_inquiry::RECOVERY_SALES_CREATE_RECOVER,
+                &permissions::sales_inquiry::RECOVERY_SALES_RECOVER,
             ),
         )
         .route(
@@ -216,7 +216,7 @@ fn sales_recovery(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::recovery::sales_recover),
                 rbac,
-                permissions::sales_inquiry::RECOVERY_SALES_RECOVER,
+                &permissions::sales_inquiry::RECOVERY_SALES_RECOVER,
             ),
         )
 }
@@ -228,7 +228,7 @@ fn procurement_reads(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::query::procurement_list),
                 rbac,
-                permissions::sales_inquiry::QUERY_PROCUREMENT_LIST,
+                &permissions::sales_inquiry::QUERY_PROCUREMENT_LIST,
             ),
         )
         .route(
@@ -236,7 +236,7 @@ fn procurement_reads(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::query::procurement_detail),
                 rbac,
-                permissions::sales_inquiry::QUERY_PROCUREMENT_DETAIL,
+                &permissions::sales_inquiry::QUERY_PROCUREMENT_DETAIL,
             ),
         )
         .route(
@@ -244,7 +244,7 @@ fn procurement_reads(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::recovery::procurement_recover),
                 rbac,
-                permissions::sales_inquiry::RECOVERY_PROCUREMENT_RECOVER,
+                &permissions::sales_inquiry::RECOVERY_PROCUREMENT_RECOVER,
             ),
         )
 }
@@ -256,7 +256,7 @@ fn procurement_work(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_supplement),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_PROCUREMENT_SUPPLEMENT,
+                &permissions::sales_inquiry::COMMANDS_PROCUREMENT_SUPPLEMENT,
             ),
         )
         .route(
@@ -264,7 +264,7 @@ fn procurement_work(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_reassign),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_PROCUREMENT_REASSIGN,
+                &permissions::sales_inquiry::COMMANDS_PROCUREMENT_REASSIGN,
             ),
         )
 }
@@ -276,7 +276,7 @@ fn procurement_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_renew),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_PROCUREMENT_RENEW,
+                &permissions::sales_inquiry::COMMANDS_PROCUREMENT_RENEW,
             ),
         )
         .route(
@@ -284,7 +284,7 @@ fn procurement_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(sales_inquiry::commands::procurement_save_feedback),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
+                &permissions::sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
             ),
         )
         .route(
@@ -292,7 +292,7 @@ fn procurement_feedback(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::commands::procurement_publish),
                 rbac,
-                permissions::sales_inquiry::COMMANDS_PROCUREMENT_PUBLISH,
+                &permissions::sales_inquiry::COMMANDS_PROCUREMENT_RENEW,
             ),
         )
 }
@@ -304,7 +304,7 @@ fn procurement_quotes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::internal::import_quotes),
                 rbac,
-                permissions::sales_inquiry::INTERNAL_IMPORT_QUOTES,
+                &permissions::sales_inquiry::INTERNAL_FEE_BASES,
             )
             .layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
         )
@@ -313,7 +313,7 @@ fn procurement_quotes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::query::procurement_internal_quotes),
                 rbac,
-                permissions::sales_inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES,
+                &permissions::sales_inquiry::INTERNAL_FEE_BASES,
             ),
         )
         .route(
@@ -321,7 +321,7 @@ fn procurement_quotes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::internal::save_quote),
                 rbac,
-                permissions::sales_inquiry::INTERNAL_SAVE_QUOTE,
+                &permissions::sales_inquiry::INTERNAL_FEE_BASES,
             ),
         )
 }
@@ -333,7 +333,7 @@ fn procurement_fees(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::internal::fee_bases),
                 rbac,
-                permissions::sales_inquiry::INTERNAL_FEE_BASES,
+                &permissions::sales_inquiry::INTERNAL_FEE_BASES,
             ),
         )
         .route(
@@ -341,7 +341,7 @@ fn procurement_fees(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_inquiry::internal::save_fee_basis),
                 rbac,
-                permissions::sales_inquiry::INTERNAL_SAVE_FEE_BASIS,
+                &permissions::sales_inquiry::INTERNAL_FEE_BASES,
             ),
         )
         .route(
@@ -349,7 +349,7 @@ fn procurement_fees(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_inquiry::conversion::expense_inquiry_candidates),
                 rbac,
-                permissions::sales_inquiry::CONVERSION_EXPENSE_INQUIRY_CANDIDATES,
+                &permissions::purchase_order::CREATE,
             ),
         )
 }

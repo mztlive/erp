@@ -8,6 +8,7 @@ autotests = false
 test-support = []
 
 [dependencies]
+erp-permissions = { workspace = true }
 application-core = { workspace = true }
 argon2 = { workspace = true }
 async-trait = { workspace = true }

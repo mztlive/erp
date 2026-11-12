@@ -39,9 +39,9 @@ pub async fn sales_order_contract_check(
 #[cfg(test)]
 mod tests {
     use axum::http::Uri;
+    use erp_permissions as permissions;
 
     use super::*;
-    use crate::permissions;
 
     #[test]
     fn preflight_requires_order_and_contract_versions() {
@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn preflight_uses_sales_update_permission() {
         assert_eq!(
-            permissions::sales_order::CONTRACT_CHECK_SALES_ORDER_CONTRACT_CHECK.permission().to_string(),
+            permissions::sales_order::CONTRACT_CHECK_SALES_ORDER_CONTRACT_CHECK.to_string(),
             "sales_order:update"
         );
     }

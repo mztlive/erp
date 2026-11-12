@@ -8,12 +8,12 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::fulfillment;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
 use crate::http::upload;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -44,7 +44,7 @@ fn address_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> 
             with_permission(
                 get(fulfillment::address_arrangement::delivery_get),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
+                &permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
             ),
         )
         .route(
@@ -52,7 +52,7 @@ fn address_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> 
             with_permission(
                 put(fulfillment::address_arrangement::delivery_save),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
+                &permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
             ),
         )
 }
@@ -64,7 +64,7 @@ fn purchase_receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::purchase_receipt::purchase_receipt_list),
                 rbac,
-                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
+                &permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
             ),
         )
         .route(
@@ -72,7 +72,7 @@ fn purchase_receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::purchase_receipt::purchase_receipt_create),
                 rbac,
-                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_CREATE,
+                &permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_CREATE,
             ),
         )
         .route(
@@ -80,7 +80,7 @@ fn purchase_receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::purchase_receipt::purchase_receipt_detail),
                 rbac,
-                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
+                &permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
             ),
         )
         .route(
@@ -88,7 +88,7 @@ fn purchase_receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(fulfillment::purchase_receipt::purchase_receipt_update),
                 rbac,
-                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
+                &permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
             ),
         )
         .route(
@@ -96,7 +96,7 @@ fn purchase_receipt_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::purchase_receipt::purchase_receipt_post),
                 rbac,
-                permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
+                &permissions::fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
             ),
         )
 }
@@ -108,7 +108,7 @@ fn delivery_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::delivery::delivery_list),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_LIST,
+                &permissions::fulfillment::DELIVERY_DELIVERY_LIST,
             ),
         )
         .route(
@@ -116,7 +116,7 @@ fn delivery_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::delivery::delivery_create),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_CREATE,
+                &permissions::fulfillment::DELIVERY_DELIVERY_CREATE,
             ),
         )
         .route(
@@ -124,7 +124,7 @@ fn delivery_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::delivery::delivery_detail),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_DETAIL,
+                &permissions::fulfillment::DELIVERY_DELIVERY_DETAIL,
             ),
         )
         .route(
@@ -132,7 +132,7 @@ fn delivery_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(fulfillment::delivery::delivery_update),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
+                &permissions::fulfillment::DELIVERY_DELIVERY_UPDATE,
             ),
         )
         .route(
@@ -140,7 +140,7 @@ fn delivery_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::delivery::delivery_post),
                 rbac,
-                permissions::fulfillment::DELIVERY_DELIVERY_POST,
+                &permissions::fulfillment::DELIVERY_DELIVERY_POST,
             ),
         )
 }
@@ -152,7 +152,7 @@ fn electronic_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::electronic_delivery::electronic_delivery_list),
                 rbac,
-                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
+                &permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
             ),
         )
         .route(
@@ -160,7 +160,7 @@ fn electronic_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::electronic_delivery::electronic_delivery_create),
                 rbac,
-                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CREATE,
+                &permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CREATE,
             ),
         )
         .route(
@@ -168,7 +168,7 @@ fn electronic_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::electronic_delivery::electronic_delivery_detail),
                 rbac,
-                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_DETAIL,
+                &permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
             ),
         )
         .route(
@@ -176,7 +176,7 @@ fn electronic_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::electronic_delivery::electronic_delivery_confirm),
                 rbac,
-                permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
+                &permissions::fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
             ),
         )
 }
@@ -188,7 +188,7 @@ fn service_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::service_fulfillment::service_fulfillment_list),
                 rbac,
-                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
+                &permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
             ),
         )
         .route(
@@ -196,7 +196,7 @@ fn service_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::service_fulfillment::service_fulfillment_create),
                 rbac,
-                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CREATE,
+                &permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CREATE,
             ),
         )
         .route(
@@ -204,7 +204,7 @@ fn service_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::service_fulfillment::service_fulfillment_detail),
                 rbac,
-                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_DETAIL,
+                &permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
             ),
         )
         .route(
@@ -215,7 +215,7 @@ fn service_routes(rbac: &AuthorizationService) -> Router<HttpState> {
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
+                &permissions::fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
             ),
         )
 }
@@ -227,7 +227,7 @@ fn acceptance_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::customer_acceptance::customer_acceptance_list),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
             ),
         )
         .route(
@@ -235,7 +235,7 @@ fn acceptance_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_create),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
             ),
         )
         .route(
@@ -243,7 +243,7 @@ fn acceptance_query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::customer_acceptance::customer_acceptance_eligible),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_ELIGIBLE,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
             ),
         )
 }
@@ -255,7 +255,7 @@ fn acceptance_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_commit),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_POST,
             ),
         )
         .route(
@@ -263,7 +263,7 @@ fn acceptance_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(fulfillment::customer_acceptance::customer_acceptance_detail),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_DETAIL,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_DETAIL,
             ),
         )
         .route(
@@ -271,7 +271,7 @@ fn acceptance_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_post),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_POST,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_POST,
             ),
         )
         .route(
@@ -279,7 +279,7 @@ fn acceptance_command_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(fulfillment::customer_acceptance::customer_acceptance_reverse),
                 rbac,
-                permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_REVERSE,
+                &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_REVERSE,
             ),
         )
 }
@@ -298,7 +298,7 @@ fn acceptance_evidence_routes(rbac: &AuthorizationService) -> Router<HttpState> 
         with_permission(
             get(fulfillment::acceptance_evidence::customer_acceptance_evidence),
             rbac,
-            permissions::fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
+            &permissions::fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_DETAIL,
         ),
     )
 }

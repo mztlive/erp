@@ -8,11 +8,11 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::returns;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -29,7 +29,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::sales_return::sales_return_case_list),
                 rbac,
-                permissions::returns::SALES_RETURN_SALES_RETURN_CASE_LIST,
+                &permissions::returns::SALES_RETURN_SALES_RETURN_CASE_LIST,
             ),
         )
         .route(
@@ -37,7 +37,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::sales_return::sales_return_case_create),
                 rbac,
-                permissions::returns::SALES_RETURN_SALES_RETURN_CASE_CREATE,
+                &permissions::returns::SALES_RETURN_SALES_RETURN_CASE_CREATE,
             ),
         )
         .route(
@@ -45,7 +45,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::sales_return::sales_return_case_detail),
                 rbac,
-                permissions::returns::SALES_RETURN_SALES_RETURN_CASE_DETAIL,
+                &permissions::returns::SALES_RETURN_SALES_RETURN_CASE_DETAIL,
             ),
         )
         .route(
@@ -53,7 +53,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::purchase_return::purchase_return_finance_sync),
                 rbac,
-                permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_FINANCE_SYNC,
+                &permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE,
             ),
         )
         .route(
@@ -61,7 +61,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::purchase_return::purchase_direct_return_confirm),
                 rbac,
-                permissions::returns::PURCHASE_RETURN_PURCHASE_DIRECT_RETURN_CONFIRM,
+                &permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE,
             ),
         )
         .route(
@@ -69,7 +69,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::purchase_return::purchase_return_order_list),
                 rbac,
-                permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_LIST,
+                &permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_LIST,
             ),
         )
         .route(
@@ -77,7 +77,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::purchase_return::purchase_return_order_create),
                 rbac,
-                permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE,
+                &permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE,
             ),
         )
         .route(
@@ -85,7 +85,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::purchase_return::purchase_return_order_detail),
                 rbac,
-                permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_DETAIL,
+                &permissions::returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_DETAIL,
             ),
         )
         .route(
@@ -93,7 +93,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::customer_refund::customer_refund_list),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_LIST,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_LIST,
             ),
         )
         .route(
@@ -101,7 +101,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::customer_refund::customer_refund_commit),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_COMMIT,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
             ),
         )
         .route(
@@ -109,7 +109,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::customer_refund::customer_refund_create),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
             ),
         )
         .route(
@@ -117,7 +117,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::customer_refund::customer_refund_detail),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_DETAIL,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_DETAIL,
             ),
         )
         .route(
@@ -125,7 +125,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::customer_refund::customer_refund_submit),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
             ),
         )
         .route(
@@ -133,7 +133,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::customer_refund::customer_refund_cancel_approval),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -141,7 +141,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::customer_refund::customer_refund_post),
                 rbac,
-                permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_POST,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_POST,
             ),
         )
         .route(
@@ -149,7 +149,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::supplier_refund::supplier_refund_create),
                 rbac,
-                permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CREATE,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CREATE,
             ),
         )
         .route(
@@ -157,7 +157,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::supplier_refund::supplier_refund_commit),
                 rbac,
-                permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_COMMIT,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
             ),
         )
         .route(
@@ -165,7 +165,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::supplier_refund::supplier_refund_detail),
                 rbac,
-                permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_DETAIL,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_DETAIL,
             ),
         )
         .route(
@@ -173,7 +173,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::supplier_refund::supplier_refund_submit),
                 rbac,
-                permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
             ),
         )
         .route(
@@ -181,7 +181,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::supplier_refund::supplier_refund_cancel_approval),
                 rbac,
-                permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CANCEL_APPROVAL,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -189,7 +189,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::supplier_refund::supplier_refund_post),
                 rbac,
-                permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_POST,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_POST,
             ),
         )
         .route(
@@ -197,7 +197,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::receipt_reversal::receipt_reversal_create),
                 rbac,
-                permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
             ),
         )
         .route(
@@ -205,7 +205,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::receipt_reversal::receipt_reversal_commit),
                 rbac,
-                permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_COMMIT,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
             ),
         )
         .route(
@@ -213,7 +213,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::receipt_reversal::receipt_reversal_detail),
                 rbac,
-                permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_DETAIL,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_DETAIL,
             ),
         )
         .route(
@@ -221,7 +221,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::receipt_reversal::receipt_reversal_submit),
                 rbac,
-                permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
             ),
         )
         .route(
@@ -229,7 +229,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::receipt_reversal::receipt_reversal_cancel_approval),
                 rbac,
-                permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CANCEL_APPROVAL,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -237,7 +237,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::receipt_reversal::receipt_reversal_post),
                 rbac,
-                permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_POST,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_POST,
             ),
         )
         .route(
@@ -245,7 +245,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::payment_reversal::payment_reversal_create),
                 rbac,
-                permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CREATE,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CREATE,
             ),
         )
         .route(
@@ -253,7 +253,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::payment_reversal::payment_reversal_commit),
                 rbac,
-                permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_COMMIT,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
             ),
         )
         .route(
@@ -261,7 +261,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(returns::payment_reversal::payment_reversal_detail),
                 rbac,
-                permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_DETAIL,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_DETAIL,
             ),
         )
         .route(
@@ -269,7 +269,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::payment_reversal::payment_reversal_submit),
                 rbac,
-                permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
             ),
         )
         .route(
@@ -277,7 +277,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::payment_reversal::payment_reversal_cancel_approval),
                 rbac,
-                permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CANCEL_APPROVAL,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -285,7 +285,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(returns::payment_reversal::payment_reversal_post),
                 rbac,
-                permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_POST,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_POST,
             ),
         )
 }
@@ -305,7 +305,7 @@ fn draft_update_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(returns::draft_update::customer_refund_update),
                 rbac,
-                permissions::returns::DRAFT_UPDATE_CUSTOMER_REFUND_UPDATE,
+                &permissions::returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
             ),
         )
         .route(
@@ -313,7 +313,7 @@ fn draft_update_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(returns::draft_update::supplier_refund_update),
                 rbac,
-                permissions::returns::DRAFT_UPDATE_SUPPLIER_REFUND_UPDATE,
+                &permissions::returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
             ),
         )
         .route(
@@ -321,7 +321,7 @@ fn draft_update_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(returns::draft_update::receipt_reversal_update),
                 rbac,
-                permissions::returns::DRAFT_UPDATE_RECEIPT_REVERSAL_UPDATE,
+                &permissions::returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
             ),
         )
         .route(
@@ -329,7 +329,7 @@ fn draft_update_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(returns::draft_update::payment_reversal_update),
                 rbac,
-                permissions::returns::DRAFT_UPDATE_PAYMENT_REVERSAL_UPDATE,
+                &permissions::returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
             ),
         )
 }

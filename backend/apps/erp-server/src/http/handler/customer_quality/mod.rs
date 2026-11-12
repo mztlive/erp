@@ -90,17 +90,18 @@ pub async fn quality_history_directory(
 
 #[cfg(test)]
 mod tests {
+    use erp_permissions as permissions;
+
     use super::*;
-    use crate::permissions;
 
     #[test]
     fn caliber_routes_do_not_share_ranking_or_permission() {
         assert_ne!(
-            permissions::customer_quality::QUALITY_CURRENT.permission(),
-            permissions::customer_quality::QUALITY_HISTORY.permission()
+            permissions::customer_quality::QUALITY_CURRENT,
+            permissions::customer_quality::QUALITY_HISTORY
         );
-        let current = permissions::customer_quality::QUALITY_CURRENT.permission();
-        let history = permissions::customer_quality::QUALITY_HISTORY.permission();
+        let current = permissions::customer_quality::QUALITY_CURRENT;
+        let history = permissions::customer_quality::QUALITY_HISTORY;
         assert_eq!(current.resource(), "customer");
         assert_eq!(history.resource(), "sales_order");
     }

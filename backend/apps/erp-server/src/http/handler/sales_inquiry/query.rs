@@ -112,8 +112,9 @@ pub async fn sales_template_products(
 
 #[cfg(test)]
 mod tests {
+    use erp_permissions as permissions;
+
     use super::*;
-    use crate::permissions;
     #[test]
     fn procurement_list_accepts_only_known_task_filters() {
         for value in [r#"{}"#, r#"{"task_status":"open"}"#, r#"{"task_status":"completed"}"#] {
@@ -124,16 +125,13 @@ mod tests {
     }
     #[test]
     fn sales_and_internal_quote_routes_use_independent_permissions() {
+        assert_eq!(permissions::sales_inquiry::QUERY_SALES_DETAIL.to_string(), "sales_inquiry:detail");
         assert_eq!(
-            permissions::sales_inquiry::QUERY_SALES_DETAIL.permission().to_string(),
-            "sales_inquiry:detail"
-        );
-        assert_eq!(
-            permissions::sales_inquiry::QUERY_PROCUREMENT_DETAIL.permission().to_string(),
+            permissions::sales_inquiry::QUERY_PROCUREMENT_DETAIL.to_string(),
             "procurement_inquiry:detail"
         );
         assert_eq!(
-            permissions::sales_inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES.permission().to_string(),
+            permissions::sales_inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES.to_string(),
             "procurement_inquiry:internal_quote"
         );
     }

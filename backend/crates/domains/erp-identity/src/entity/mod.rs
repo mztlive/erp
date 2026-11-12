@@ -10,7 +10,6 @@ pub(crate) mod fingerprint;
 pub mod organization;
 pub mod organization_change;
 pub mod person_directory;
-pub mod policy_permission;
 pub mod portal;
 pub mod rbac;
 pub mod role;

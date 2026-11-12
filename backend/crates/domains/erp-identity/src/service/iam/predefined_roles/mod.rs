@@ -95,15 +95,13 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
 
 #[cfg(test)]
 mod tests {
-    use erp_core::Result as CoreResult;
-
     use super::{PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS, SALES_PERMISSIONS, builtin_role_templates};
     use crate::Result;
     use crate::entity::rbac::{Permission, PermissionSet};
 
     /// 解析静态权限表，供岗位职责断言使用。
     fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
-        Ok(raw.iter().map(Permission::parse).collect::<CoreResult<_>>()?)
+        Ok(raw.iter().map(Permission::parse).collect::<std::result::Result<_, _>>()?)
     }
 
     /// 显式采购模板授予门户职责和供应商维护权限，不授予内部账号管理。

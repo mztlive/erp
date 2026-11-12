@@ -14,7 +14,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 
 - `apps/erp-server/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`http/handler/`), independent Worker (`worker/`), shared composition (`wiring/`) and process lifecycle (`runtime/`).
 - `apps/cli/` – Operator CLI for `init-admin` and `reset-password`.
-- `crates/foundation/` – Shared values (`erp-core`), application contracts (`application-core`) and persistence mechanisms (`persistence-core`).
+- `crates/foundation/` – Shared values (`erp-core`), permission values and catalog (`erp-permissions`), application contracts (`application-core`) and persistence mechanisms (`persistence-core`).
 - `apps/erp-server/README.md` – Required ownership, process startup and shutdown contracts.
 - `crates/read-models/erp-read-models` – Mixed queries, display projections and the shared work-item fact reader.
 - Other `crates/domains/erp-*` – Business domains with independent normal/build/dev dependency boundaries.

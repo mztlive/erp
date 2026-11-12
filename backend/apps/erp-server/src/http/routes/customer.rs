@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{delete, get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::customer;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -24,50 +24,30 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/customer-profiles",
-            with_permission(
-                post(customer::customer_profile_create),
-                rbac,
-                permissions::customer::PROFILE_CREATE,
-            ),
+            with_permission(post(customer::customer_profile_create), rbac, &permissions::customer::CREATE),
         )
         .route(
             "/customer-profiles/{id}",
-            with_permission(
-                get(customer::customer_profile_detail),
-                rbac,
-                permissions::customer::PROFILE_DETAIL,
-            ),
+            with_permission(get(customer::customer_profile_detail), rbac, &permissions::customer::DETAIL),
         )
         .route(
             "/customer-profiles/{id}/related-summary",
-            with_permission(
-                get(customer::customer_center_related),
-                rbac,
-                permissions::customer::CENTER_RELATED,
-            ),
+            with_permission(get(customer::customer_center_related), rbac, &permissions::customer::DETAIL),
         )
         .route(
             "/customer-profiles/{id}/receivable-summary",
-            with_permission(
-                get(customer::customer_center_receivable),
-                rbac,
-                permissions::customer::CENTER_RECEIVABLE,
-            ),
+            with_permission(get(customer::customer_center_receivable), rbac, &permissions::customer::DETAIL),
         )
         .route(
             "/customer-profiles/{id}",
-            with_permission(
-                put(customer::customer_profile_update),
-                rbac,
-                permissions::customer::PROFILE_UPDATE,
-            ),
+            with_permission(put(customer::customer_profile_update), rbac, &permissions::customer::UPDATE),
         )
         .route(
             "/customer-profile-commands/{idempotency_key}",
             with_permission(
                 get(customer::customer_profile_command_detail),
                 rbac,
-                permissions::customer::PROFILE_COMMAND_DETAIL,
+                &permissions::customer::DETAIL,
             ),
         )
         .route(
@@ -75,40 +55,43 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(customer::customer_sensitive_reveal),
                 rbac,
-                permissions::customer::SENSITIVE_REVEAL,
+                &permissions::customer::SENSITIVE_REVEAL,
             ),
         )
-        .route("/customers", with_permission(get(customer::customer_list), rbac, permissions::customer::LIST))
+        .route(
+            "/customers",
+            with_permission(get(customer::customer_list), rbac, &permissions::customer::LIST),
+        )
         .route(
             "/customers/all-authorized",
             with_permission(
                 get(customer::customer_all_authorized_list),
                 rbac,
-                permissions::customer::ALL_AUTHORIZED_LIST,
+                &permissions::customer::ALL_AUTHORIZED_LIST,
             ),
         )
         .route(
             "/customers",
-            with_permission(post(customer::customer_create), rbac, permissions::customer::CREATE),
+            with_permission(post(customer::customer_create), rbac, &permissions::customer::CREATE),
         )
         .route(
             "/customers/{id}",
-            with_permission(get(customer::customer_detail), rbac, permissions::customer::DETAIL),
+            with_permission(get(customer::customer_detail), rbac, &permissions::customer::DETAIL),
         )
         .route(
             "/customers/{id}",
-            with_permission(put(customer::customer_update), rbac, permissions::customer::UPDATE),
+            with_permission(put(customer::customer_update), rbac, &permissions::customer::UPDATE),
         )
         .route(
             "/customers/{id}",
-            with_permission(delete(customer::customer_delete), rbac, permissions::customer::DELETE),
+            with_permission(delete(customer::customer_delete), rbac, &permissions::customer::DELETE),
         )
         .route(
             "/customers/{id}/assignments",
             with_permission(
                 get(customer::customer_assignment_list),
                 rbac,
-                permissions::customer::ASSIGNMENT_LIST,
+                &permissions::customer::ASSIGNMENT_LIST,
             ),
         )
         .route(
@@ -116,7 +99,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(customer::customer_assignment_apply),
                 rbac,
-                permissions::customer::ASSIGNMENT_APPLY,
+                &permissions::customer::ASSIGNMENT_APPLY,
             ),
         )
 }

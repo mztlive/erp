@@ -132,6 +132,23 @@
           "kind": "normal"
         }
       ]
+    },
+    {
+      "name": "erp-permissions",
+      "deps": [
+        {
+          "name": "serde",
+          "kind": "normal"
+        },
+        {
+          "name": "thiserror",
+          "kind": "normal"
+        },
+        {
+          "name": "serde_json",
+          "kind": "dev"
+        }
+      ]
     }
   ]
 }

@@ -33,13 +33,10 @@ pub async fn selection_basis(
 
 #[cfg(test)]
 mod tests {
-    use crate::permissions;
+    use erp_permissions as permissions;
 
     #[test]
     fn basis_requires_sales_creation_permission() {
-        assert_eq!(
-            permissions::sales_order::SELECTION_SELECTION_BASIS.permission().to_string(),
-            "sales_order:create"
-        );
+        assert_eq!(permissions::sales_order::SELECTION_SELECTION_BASIS.to_string(), "sales_order:create");
     }
 }

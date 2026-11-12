@@ -2,6 +2,7 @@
 
 use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
 use casbin::Error as CasbinError;
+use erp_permissions::ParsePermissionError;
 use mongodb::error::Error as MongoError;
 use persistence_core::{Error as PersistenceError, impl_repository_error};
 use serde_json::Error as JsonError;
@@ -112,6 +113,19 @@ impl From<CasbinError> for Error {
     /// 不返回错误。
     fn from(error: CasbinError) -> Self {
         Self::Rbac(error.to_string())
+    }
+}
+
+impl From<ParsePermissionError> for Error {
+    /// 保留迁移前权限解析失败的业务错误映射。
+    /// # 参数
+    /// error 为公共权限值的解析错误。
+    /// # 返回
+    /// 与原 erp_core 解析错误相同的身份错误。
+    /// # 错误
+    /// 不返回错误。
+    fn from(error: ParsePermissionError) -> Self {
+        Self::Logic(error.into())
     }
 }
 

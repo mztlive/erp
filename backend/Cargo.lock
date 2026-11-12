@@ -1909,6 +1909,7 @@ dependencies = [
  "bson",
  "chrono",
  "entity-macros",
+ "erp-permissions",
  "regex",
  "rust_decimal",
  "serde",
@@ -2190,6 +2191,7 @@ dependencies = [
  "entity-core",
  "entity-macros",
  "erp-core",
+ "erp-permissions",
  "futures-util",
  "id-generator",
  "md5",
@@ -2380,6 +2382,15 @@ dependencies = [
  "tokio",
  "tracing",
  "validator",
+]
+
+[[package]]
+name = "erp-permissions"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -2639,6 +2650,7 @@ dependencies = [
  "erp-notification",
  "erp-order-to-cash",
  "erp-party",
+ "erp-permissions",
  "erp-procure-to-pay",
  "erp-procurement",
  "erp-read-models",

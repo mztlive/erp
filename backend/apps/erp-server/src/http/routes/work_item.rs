@@ -5,11 +5,11 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::work_item;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回只暴露稳定责任接口的管理端路由。
 ///
@@ -19,51 +19,43 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/work-items/{id}/timeline",
-            with_permission(
-                get(work_item::timeline::task_timeline),
-                rbac,
-                permissions::work_item::TIMELINE_TASK_TIMELINE,
-            ),
+            with_permission(get(work_item::timeline::task_timeline), rbac, &permissions::work_item::DETAIL),
         )
         .route(
             "/work-items",
-            with_permission(get(work_item::work_item_list), rbac, permissions::work_item::LIST),
+            with_permission(get(work_item::work_item_list), rbac, &permissions::work_item::LIST),
         )
         .route(
             "/work-items/fulfillment-queue",
-            with_permission(
-                get(work_item::fulfillment_queue_list),
-                rbac,
-                permissions::work_item::FULFILLMENT_QUEUE_LIST,
-            ),
+            with_permission(get(work_item::fulfillment_queue_list), rbac, &permissions::work_item::LIST),
         )
         .route(
             "/work-items/stats",
-            with_permission(get(work_item::work_item_stats), rbac, permissions::work_item::STATS),
+            with_permission(get(work_item::work_item_stats), rbac, &permissions::work_item::LIST),
         )
         .route(
             "/work-items/{id}",
-            with_permission(get(work_item::work_item_detail), rbac, permissions::work_item::DETAIL),
+            with_permission(get(work_item::work_item_detail), rbac, &permissions::work_item::DETAIL),
         )
         .route(
             "/work-items/{id}/reassign",
-            with_permission(post(work_item::work_item_reassign), rbac, permissions::work_item::REASSIGN),
+            with_permission(post(work_item::work_item_reassign), rbac, &permissions::work_item::MANAGE),
         )
         .route(
             "/work-items/{id}/reassign-candidates",
             with_permission(
                 get(work_item::work_item_reassign_candidates),
                 rbac,
-                permissions::work_item::REASSIGN_CANDIDATES,
+                &permissions::work_item::MANAGE,
             ),
         )
         .route(
             "/work-items/{id}/close",
-            with_permission(post(work_item::work_item_close), rbac, permissions::work_item::CLOSE),
+            with_permission(post(work_item::work_item_close), rbac, &permissions::work_item::MANAGE),
         )
         .route(
             "/work-items/{id}/abandon-rework",
-            with_permission(post(work_item::abandon_rework), rbac, permissions::work_item::ABANDON_REWORK),
+            with_permission(post(work_item::abandon_rework), rbac, &permissions::work_item::MANAGE),
         )
         .merge(finance_responsibility_routes(rbac))
 }
@@ -75,7 +67,7 @@ fn finance_responsibility_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 get(work_item::finance_responsibility::finance_responsibility_rule_list),
                 rbac,
-                permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_LIST,
+                &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_LIST,
             ),
         )
         .route(
@@ -83,7 +75,7 @@ fn finance_responsibility_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 post(work_item::finance_responsibility::finance_responsibility_rule_create),
                 rbac,
-                permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_CREATE,
+                &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_CREATE,
             ),
         )
         .route(
@@ -91,7 +83,7 @@ fn finance_responsibility_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 put(work_item::finance_responsibility::finance_responsibility_rule_update),
                 rbac,
-                permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_UPDATE,
+                &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_CREATE,
             ),
         )
         .route(
@@ -99,7 +91,7 @@ fn finance_responsibility_routes(rbac: &AuthorizationService) -> Router<HttpStat
             with_permission(
                 get(work_item::finance_responsibility::finance_responsibility_owner_options),
                 rbac,
-                permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_OWNER_OPTIONS,
+                &permissions::work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_LIST,
             ),
         )
 }

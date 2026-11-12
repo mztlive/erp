@@ -1,7 +1,7 @@
 //! 权限构建目录的值类型及非路由政策权限。
 use std::collections::HashMap;
-#[path = "../../crates/domains/erp-identity/src/entity/policy_permission.rs"]
-mod policy_permission;
+
+use erp_permissions::policy_permission;
 
 /// 权限扫描覆盖的业务域模块：既有业务域、审批定义管理，以及演示主数据。
 pub(crate) const DOMAIN_MODULES: &[&str] = &[
@@ -99,21 +99,19 @@ pub(crate) fn append_policy_permissions(
     groups: &mut HashMap<String, PermissionGroup>,
     order: &mut Vec<String>,
 ) {
-    for &(group, description, key, label) in policy_permission::POLICY_PERMISSIONS {
-        let Some((resource, action)) = key.split_once(':') else {
-            panic!("invalid domain policy permission: {key}");
-        };
-        let entry = groups.entry(group.into()).or_insert_with(|| {
-            order.push(group.into());
-            PermissionGroup { desc: description.into(), permissions: Vec::new() }
+    for (_, definition) in policy_permission::ENTRIES {
+        let group = definition.group;
+        let entry = groups.entry(group.name.into()).or_insert_with(|| {
+            order.push(group.name.into());
+            PermissionGroup { desc: group.description.into(), permissions: Vec::new() }
         });
         entry.permissions.push(PermissionItem {
             module: "admin".into(),
             method: "POLICY".into(),
             path: String::new(),
-            description: label.into(),
-            resource: resource.into(),
-            action: action.into(),
+            description: definition.description.into(),
+            resource: definition.permission.resource().into(),
+            action: definition.permission.action().into(),
         });
     }
 }

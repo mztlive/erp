@@ -24,7 +24,6 @@ src/
 ├── bin/erp-worker.rs          # worker 入口
 ├── bootstrap.rs              # 配置、基础资源、初始化与配置变更观察
 ├── indexes.rs                # 按既有顺序调用领域公开索引入口
-├── permissions.rs            # 显式权限目录入口
 ├── http/
 │   ├── state.rs              # HttpState、JWT 缓存、京东页面授权任务
 │   ├── tasks.rs              # 请求衍生任务登记与排空
@@ -78,9 +77,11 @@ Worker `/health` 表示进程存活，`/ready` 在排空时关闭；不得将其
 
 ## HTTP 与权限合同
 
-- 管理端路由通过 `with_permission` 引用 `permission_catalog/` 中的显式常量，保持既有 JWT、RBAC 与 DataScope 链路。
+- 路由通过 `with_permission` 直接引用 `erp-permissions` 公共目录中登记的权限主常量；编码、分组和默认说明只维护一份。
+- `route_descriptions.rs` 仅登记不同于默认值的接口说明，按 HTTP 方法及不含 `/admin` 的管理端路径匹配。`build_route_overrides.rs` 保存少量分组及展示权限差异，只参与生成，不改变鉴权权限。不存在或重复登记的接口差异使生成失败。
 - 请求与响应优先复用拥有领域或编排库 DTO；协议包装必须提供显式转换并说明原因。
-- `build.rs` 从 `src/http/routes/` 生成路由权限合同、后端白名单及前端权限目录。生成物不得手改。
+- `build.rs` 使用公共权限定义与 `src/http/routes/` 生成路由权限合同、后端白名单及前端权限目录。生成物不得手改。
+- 在 `backend/` 执行 `python3 scripts/generate-permissions.py` 可独立运行同一生成器；`--test` 执行目录与路由合同单元测试。`check-permissions-drift.sh` 使用独立生成结果比较文件，无需编译业务 crate。
 - 响应字段、HTTP 状态、错误文本、上传限制、限流窗口、路由路径及鉴权顺序保持既有合同。配置变更与错误分类遵循 [后端规则](../../AGENTS.md)。
 
 ## 验证与历史材料

@@ -8,11 +8,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::document_registry;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -28,7 +28,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(document_registry::business_document_list),
                 rbac,
-                permissions::document_registry::BUSINESS_DOCUMENT_LIST,
+                &permissions::document_registry::BUSINESS_DOCUMENT_LIST,
             ),
         )
         .route(
@@ -36,7 +36,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(document_registry::business_document_register),
                 rbac,
-                permissions::document_registry::BUSINESS_DOCUMENT_REGISTER,
+                &permissions::document_registry::BUSINESS_DOCUMENT_REGISTER,
             ),
         )
         .route(
@@ -44,7 +44,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(document_registry::business_document_detail),
                 rbac,
-                permissions::document_registry::BUSINESS_DOCUMENT_DETAIL,
+                &permissions::document_registry::BUSINESS_DOCUMENT_DETAIL,
             ),
         )
         .route(
@@ -52,7 +52,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(document_registry::workflow_action_list),
                 rbac,
-                permissions::document_registry::WORKFLOW_ACTION_LIST,
+                &permissions::document_registry::WORKFLOW_ACTION_LIST,
             ),
         )
         .route(
@@ -60,7 +60,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(document_registry::workflow_action_create),
                 rbac,
-                permissions::document_registry::WORKFLOW_ACTION_CREATE,
+                &permissions::document_registry::WORKFLOW_ACTION_CREATE,
             ),
         )
         .route(
@@ -68,7 +68,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(document_registry::document_relation_list),
                 rbac,
-                permissions::document_registry::DOCUMENT_RELATION_LIST,
+                &permissions::document_registry::DOCUMENT_RELATION_LIST,
             ),
         )
         .route(
@@ -76,7 +76,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(document_registry::document_relation_create),
                 rbac,
-                permissions::document_registry::DOCUMENT_RELATION_CREATE,
+                &permissions::document_registry::DOCUMENT_RELATION_CREATE,
             ),
         )
         .route(
@@ -84,7 +84,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(document_registry::document_participant_list),
                 rbac,
-                permissions::document_registry::DOCUMENT_PARTICIPANT_LIST,
+                &permissions::document_registry::DOCUMENT_PARTICIPANT_LIST,
             ),
         )
         .route(
@@ -92,7 +92,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(document_registry::document_participant_create),
                 rbac,
-                permissions::document_registry::DOCUMENT_PARTICIPANT_CREATE,
+                &permissions::document_registry::DOCUMENT_PARTICIPANT_CREATE,
             ),
         )
 }

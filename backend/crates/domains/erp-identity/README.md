@@ -4,15 +4,15 @@
 
 所有权限判断必须统一通过本 crate 执行；业务模块只提供业务事实并调用授权入口，不得自行实现、解释或组合权限规则。
 
-本 crate 不依赖其他业务领域。业务模块提供事实读取器和 Mapping；`erp-authorization-wiring` 集中声明业务操作并装配授权服务；identity 定义和执行通用授权规则。
+本 crate 不依赖其他业务领域。业务模块提供事实读取器和 Mapping；server 的 `wiring/authorization/` 装配事实读取器和 Mapping；identity 固定并执行授权规则。
 
-本文中的共享授权服务及业务授权 API 为待实施的目标设计，代码示例不可视为当前实现。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
+公共权限值与目录已迁入 `erp-permissions`，identity 的 `Permission` 导出引用同一类型。解析错误由 identity 和 erp-core 映射为原有错误语义。本文中的共享授权服务及业务授权 API 为后续阶段的目标设计，代码示例不可视为当前实现。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
 
 ## 共享服务
 
-需要业务授权的进程启动时通过 `erp-authorization-wiring` 构造一个 `Arc<AuthorizationService>`。HTTP 和 worker 将实例保存在 `Application`；CLI 命令将实例保存在自身运行时。`HttpState` 通过 `Application` 使用它；业务 Service、Process 和 ReadModel 通过构造函数接收共享实例。
+需要业务授权的进程启动时通过 server 的 `wiring/authorization/` 构造一个 `Arc<AuthorizationService>`。HTTP 和 worker 将实例保存在 `Application`；CLI 保持独立运行时，不依赖 server 或接入其全量业务授权装配。`HttpState` 通过 `Application` 使用它；业务 Service、Process 和 ReadModel 通过构造函数接收共享实例。
 
-业务授权声明、事实读取器和 Mapping 在 `erp-authorization-wiring` 统一装配。`Application::authorization()` 只克隆共享 `Arc`，请求处理期间不再创建授权服务或登记政策。
+identity 固定授权规则，事实读取器和 Mapping 在 server 的 `wiring/authorization/` 统一装配。`Application::authorization()` 只克隆共享 `Arc`，请求处理期间不再创建授权服务或登记政策。
 
 共享服务不保存当前账号、事务、候选对象或授权结果。每次检查使用本次调用的执行器读取权限、范围和对象事实。
 
@@ -40,11 +40,11 @@ HTTP 层通过 JWT 认证身份，受保护的公共业务用例在返回业务�
 
 ```rust
 use erp_identity::AccessTarget;
-use erp_permissions::operations;
+use erp_permissions::sales_inquiry;
 
 authorization.require(
     actor,
-    &operations::sales_inquiry::UPDATE,
+    &sales_inquiry::COMMANDS_SALES_SAVE,
     AccessTarget::record(inquiry_id)?,
     executor,
 ).await?;
@@ -62,12 +62,12 @@ authorization.require(
 ## 列表查询
 
 ```rust
-use erp_permissions::operations;
+use erp_permissions::sales_inquiry;
 
 let access = authorization
     .query(
         actor,
-        &operations::sales_inquiry::LIST,
+        &sales_inquiry::QUERY_SALES_LIST,
         executor,
     )
     .await?;
@@ -78,7 +78,7 @@ let page = repository.list(&filter, &access, executor).await?;
 authorization.validate(&access, executor).await?;
 ```
 
-`query` 根据操作标识取得已装配的授权声明和 Mapping，生成并编译完整授权条件。领域公共读取方法统一管理查询生成、仓储执行和返回前复验；业务调用不取得或传入 Mapping，也不选择查询模型。执行前只检查凭证绑定、执行器及有效期，不重复执行完整授权复验。
+`query` 根据权限取得已装配的授权声明和 Mapping，生成并编译完整授权条件。领域公共读取方法统一管理查询生成、仓储执行和返回前复验；业务调用不取得或传入 Mapping，也不选择查询模型。执行前只检查凭证绑定、执行器及有效期，不重复执行完整授权复验。
 
 业务筛选只收窄候选集合，不能先用部分权限条件排除记录。列表、总数、汇总和导出使用同一完整授权条件。
 
@@ -86,28 +86,27 @@ authorization.validate(&access, executor).await?;
 
 跨页游标使用 `CompiledAccess::version()`，包含身份和业务映射依赖。复验发现账号停用、权限撤销、版本变化或有效期到达时返回 `DATA_SCOPE_CHANGED`，丢弃结果并重新查询；数据库和接入错误保留原类别。
 
-`MappingFacts` 仅携带业务映射的修订号与有效期。查询指纹使用 `authorization-query-v3` 格式；升级前的分页版本按 `DATA_SCOPE_CHANGED` 合同失效，调用方须重新查询。
+静态 Mapping 只描述字段和关系，不提供空的动态准备结果。确有查询外动态依赖时，才按需准备并记录实际依赖。
 
-记录授权在数据库内按有效来源关联，不预加载账号全部授权 ID。关联采用存在性查询，不增加根记录数量。事务读取以原事务快照为准；非事务映射必须提供完整修订号，不能用前后读取代替缺失的版本证据。
+记录授权在数据库内按有效来源关联，不预加载账号全部授权 ID。关联采用存在性查询，不增加根记录数量。事务读取以原事务快照为准，交付检查核对事务边界、读取阶段和有效期，不重读同一快照。非事务读取复验身份、范围及实际动态依赖；动态准备缺少可靠修订号时只允许事务路径。
 
-## 操作定义与事实装配
+## 权限定义与事实装配
 
-不再使用 `AuthorizationRegistry` 和 `AccessRegistration`。`erp-permissions` 统一定义权限编码、操作标识、资源标识及权限目录的公共定义。`erp-authorization-wiring` 使用 identity 的通用授权声明类型，集中声明各操作的入口权限、资源、授权方式、额外必需权限及必需事实，并绑定事实读取器和 Mapping。业务模块引用操作常量；server 补充 HTTP 路由及接口专属说明。
+`erp-permissions` 提供权限值、内置常量、资源标识和公共目录。server 补充 HTTP 路由及接口说明。当前业务授权登记仍使用 `AuthorizationRegistry` 和 `AccessRegistration`，按[改造计划](docs/authorization-service-improvement.md)第四阶段删除，业务调用在第五阶段迁移。
 
-`erp-authorization-wiring` 通过 `AuthorizationService::builder` 装配声明、事实读取器和 Mapping，`build()` 校验后固定服务。未知操作或引用、重复装配、Mapping 与操作资源不匹配及缺少必需能力均拒绝。
+目标设计由 identity 按权限执行固定函数，检查功能资格、数据范围和必要记录关系。server 的 `wiring/authorization/` 只绑定 Facts 与 Mapping，不声明政策。`AuthorizationService::builder` 及统一入口在第四阶段接通，缺少引用、重复绑定、资源错配或必要能力缺失时拒绝构造。
 
-| 位置                                 | 职责                                           |
-| ------------------------------------ | ---------------------------------------------- |
-| `erp-permissions`                    | 定义权限编码、操作标识、资源标识和公共目录     |
-| identity                             | 定义通用授权声明和规则，执行判断及查询编译     |
-| `erp-authorization-wiring`           | 声明业务操作，装配事实读取器和 Mapping         |
-| 业务 crate 的 `AccessFactsPort` 实现 | 使用 repository 读取真实对象归属、版本及来源   |
-| 业务 crate 的 `AccessMapping` 实现   | 映射查询字段、有效记录及实际来源关系           |
-| 应用入口                             | 构造共享实例并注入业务服务                     |
+| 位置 | 职责 |
+| --- | --- |
+| `erp-permissions` | 权限值、常量、资源标识和公共展示目录 |
+| identity | 固定授权规则、范围解析、对象判断与查询转换 |
+| server 的 `wiring/authorization/` | 连接身份设施、Facts 和 Mapping |
+| 业务 Facts 与 Mapping | 读取真实事实，提供查询字段及来源关系 |
+| 应用入口 | 构造共享实例并注入业务服务 |
 
 事实读取器可以由 repository 直接实现，也可以组合本域仓储；跨域事实通过窄 Port 获取。事实读取器不判断权限，不依赖需要授权服务的业务 Service，不保存请求对象。
 
-全部必需权限须由同一个有效角色提供。固定角色资格只接受启用角色，身份判断绑定同次账号、策略及角色版本。
+要求同角色的入口及额外权限必须由同一个启用角色提供；独立来源资格分别取证。身份判断使用同次账号、策略及角色版本。
 
 独立入口分别证明功能资格，并只用授予各自入口的有效角色解释范围。不同独立入口允许由不同角色满足。同资源的独立读取必须与根操作范围求交，不能替代修改等根操作范围。查询编译和对象判定使用相同动作上下文，交付前复验全部身份、映射版本和有效期。
 

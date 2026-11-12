@@ -6,11 +6,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::customer_quality;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -26,31 +26,23 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(customer_quality::quality_history_directory),
                 rbac,
-                permissions::customer_quality::QUALITY_HISTORY_DIRECTORY,
+                &permissions::sales_order::LIST,
             ),
         )
         .route(
             "/customer-quality/current",
-            with_permission(
-                get(customer_quality::quality_current),
-                rbac,
-                permissions::customer_quality::QUALITY_CURRENT,
-            ),
+            with_permission(get(customer_quality::quality_current), rbac, &permissions::customer::LIST),
         )
         .route(
             "/customer-quality/history",
-            with_permission(
-                get(customer_quality::quality_history),
-                rbac,
-                permissions::customer_quality::QUALITY_HISTORY,
-            ),
+            with_permission(get(customer_quality::quality_history), rbac, &permissions::sales_order::LIST),
         )
         .route(
             "/customer-quality/current/exports",
             with_permission(
                 post(customer_quality::quality_current_export),
                 rbac,
-                permissions::customer_quality::QUALITY_CURRENT_EXPORT,
+                &permissions::customer::LIST,
             ),
         )
         .route(
@@ -58,7 +50,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(customer_quality::quality_history_export),
                 rbac,
-                permissions::customer_quality::QUALITY_HISTORY_EXPORT,
+                &permissions::sales_order::LIST,
             ),
         )
 }

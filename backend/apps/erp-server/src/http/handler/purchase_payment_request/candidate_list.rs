@@ -43,17 +43,18 @@ pub async fn ids(
 
 #[cfg(test)]
 mod tests {
+    use erp_permissions as permissions;
+
     use super::*;
-    use crate::permissions;
 
     #[test]
     fn candidate_reads_require_create_permission() {
         assert_eq!(
-            permissions::purchase_payment_request::CANDIDATE_LIST_PAGE.permission().to_string(),
+            permissions::purchase_payment_request::CANDIDATE_LIST_PAGE.to_string(),
             "purchase_payment_request:create"
         );
         assert_eq!(
-            permissions::purchase_payment_request::CANDIDATE_LIST_IDS.permission().to_string(),
+            permissions::purchase_payment_request::CANDIDATE_LIST_IDS.to_string(),
             "purchase_payment_request:create"
         );
     }

@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::source_registry;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +27,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(source_registry::source_system_list),
                 rbac,
-                permissions::source_registry::SOURCE_SYSTEM_LIST,
+                &permissions::source_registry::SOURCE_SYSTEM_LIST,
             ),
         )
         .route(
@@ -35,7 +35,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(source_registry::source_system_create),
                 rbac,
-                permissions::source_registry::SOURCE_SYSTEM_CREATE,
+                &permissions::source_registry::SOURCE_SYSTEM_CREATE,
             ),
         )
         .route(
@@ -43,7 +43,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(source_registry::source_system_update),
                 rbac,
-                permissions::source_registry::SOURCE_SYSTEM_UPDATE,
+                &permissions::source_registry::SOURCE_SYSTEM_UPDATE,
             ),
         )
         .route(
@@ -51,7 +51,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(source_registry::external_identity_map_list),
                 rbac,
-                permissions::source_registry::EXTERNAL_IDENTITY_MAP_LIST,
+                &permissions::source_registry::EXTERNAL_IDENTITY_MAP_LIST,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(source_registry::external_identity_map_create),
                 rbac,
-                permissions::source_registry::EXTERNAL_IDENTITY_MAP_CREATE,
+                &permissions::source_registry::EXTERNAL_IDENTITY_MAP_CREATE,
             ),
         )
 }

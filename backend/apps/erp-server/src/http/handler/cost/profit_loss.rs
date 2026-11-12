@@ -69,22 +69,14 @@ pub async fn history_directory(
 
 #[cfg(test)]
 mod tests {
+    use erp_permissions as permissions;
+
     use super::*;
-    use crate::permissions;
     #[test]
     fn all_routes_require_existing_cost_read_permission() {
-        assert_eq!(
-            permissions::cost::PROFIT_LOSS_VIEW.permission(),
-            permissions::cost::ENTRY_LIST.permission()
-        );
-        assert_eq!(
-            permissions::cost::PROFIT_LOSS_PERIOD_BASIS.permission(),
-            permissions::cost::PROFIT_LOSS_VIEW.permission()
-        );
-        assert_eq!(
-            permissions::cost::PROFIT_LOSS_EXPORT.permission(),
-            permissions::cost::PROFIT_LOSS_VIEW.permission()
-        );
+        assert_eq!(permissions::cost::PROFIT_LOSS_VIEW, permissions::cost::ENTRY_LIST);
+        assert_eq!(permissions::cost::PROFIT_LOSS_PERIOD_BASIS, permissions::cost::PROFIT_LOSS_VIEW);
+        assert_eq!(permissions::cost::PROFIT_LOSS_EXPORT, permissions::cost::PROFIT_LOSS_VIEW);
     }
     #[test]
     fn client_cannot_submit_authorized_customer_scope_or_export_amounts() {

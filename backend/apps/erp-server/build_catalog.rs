@@ -3,11 +3,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
+use erp_permissions::{MODULES, PermissionDef, PermissionModule};
+
 use crate::build_permissions::{
     DOMAIN_MODULES, PermissionGroup, PermissionItem, RouteHandler, append_policy_permissions,
     management_routes,
 };
-use crate::permissions::{MODULES, PermissionBinding, PermissionDef, PermissionModule};
+use crate::build_route_overrides;
 
 #[path = "build_routes.rs"]
 mod route_parser;
@@ -29,6 +31,7 @@ pub(crate) fn collect_routes(manifest: &Path) -> Result<Vec<RouteHandler>, Strin
         routes.extend(management_routes(module, parsed));
     }
     reject_unscanned_modules(&root)?;
+    build_route_overrides::validate(&routes)?;
     Ok(routes)
 }
 
@@ -62,7 +65,6 @@ pub(crate) fn registry(modules: &[PermissionModule]) -> Result<HashMap<String, P
             return Err(format!("重复的权限模块 {}", module.name));
         }
         for (name, definition) in module.entries {
-            validate_code(definition.code)?;
             if definition.description.is_empty()
                 || definition.group.name.is_empty()
                 || definition.group.description.is_empty()
@@ -81,26 +83,6 @@ pub(crate) fn registry(modules: &[PermissionModule]) -> Result<HashMap<String, P
         }
     }
     Ok(definitions)
-}
-
-fn validate_code(code: &str) -> Result<(), String> {
-    let (resource, action) = code.split_once(':').ok_or_else(|| format!("非法权限代码 {code}"))?;
-    for (part, slash) in [(resource, true), (action, false)] {
-        let valid = !part.is_empty()
-            && part.len() <= 128
-            && (part == "*"
-                || part.split('/').all(|segment| {
-                    !segment.is_empty()
-                        && segment.chars().all(|ch| {
-                            ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-')
-                        })
-                }))
-            && (slash || !part.contains('/'));
-        if !valid {
-            return Err(format!("非法权限代码 {code}"));
-        }
-    }
-    Ok(())
 }
 
 /// 从同一显式定义生成保持既有顺序和展示内容的权限分组。
@@ -123,20 +105,19 @@ fn project_groups(
         if exempt(route) {
             continue;
         }
-        let definition = resolve(route, definitions)?.catalog;
+        let definition = resolve(route, definitions)?;
         let name = definition.group.name;
         let entry = groups.entry(name.into()).or_insert_with(|| {
             order.push(name.into());
             PermissionGroup { desc: definition.group.description.into(), permissions: Vec::new() }
         });
-        let (resource, action) = definition.code.split_once(':').ok_or("已校验权限代码缺少分隔符")?;
         entry.permissions.push(PermissionItem {
             module: "admin".into(),
             method: route.method.clone(),
             path: format!("{}/{}", prefix.trim_end_matches('/'), route.path.trim_start_matches('/')),
             description: definition.description.into(),
-            resource: resource.into(),
-            action: action.into(),
+            resource: definition.permission.resource().into(),
+            action: definition.permission.action().into(),
         });
     }
     append_policy_permissions(&mut groups, &mut order);
@@ -159,7 +140,7 @@ fn exempt(route: &RouteHandler) -> bool {
 fn resolve(
     route: &RouteHandler,
     definitions: &HashMap<String, PermissionDef>,
-) -> Result<PermissionBinding, String> {
+) -> Result<PermissionDef, String> {
     for symbol in &route.guards {
         if !definitions.contains_key(symbol) {
             return Err(format!("{} {} 引用了未登记的权限 {symbol}", route.method, route.path));
@@ -169,12 +150,25 @@ fn resolve(
         .permission
         .as_ref()
         .ok_or_else(|| format!("{} {} 缺少显式权限绑定", route.method, route.path))?;
-    let catalog = definitions
+    let required = definitions
         .get(symbol)
         .ok_or_else(|| format!("{} {} 引用了未登记的权限 {symbol}", route.method, route.path))?;
-    let required_symbol = route.guards.last().unwrap_or(symbol);
-    let required = definitions.get(required_symbol).ok_or("入口权限必须已登记")?;
-    Ok(required.documented_as(*catalog))
+    let presentation = build_route_overrides::presentation(&route.method, &route.path);
+    let mut catalog = if let Some(permission) = presentation.catalog_permission {
+        *definitions
+            .values()
+            .find(|definition| definition.permission == permission)
+            .ok_or_else(|| format!("接口展示引用了未登记权限 {permission}"))?
+    } else {
+        *required
+    };
+    if let Some(group) = presentation.group {
+        catalog.group = group;
+    }
+    if let Some(description) = presentation.description {
+        catalog.description = description;
+    }
+    Ok(catalog)
 }
 
 /// 输出可对比的路由权限事实；不包含源码符号的迁移噪声。
@@ -185,11 +179,11 @@ pub(crate) fn route_contract(routes: &[RouteHandler]) -> Result<String, String> 
         if exempt(route) {
             continue;
         }
-        let definition = resolve(route, &definitions)?.catalog;
+        let definition = resolve(route, &definitions)?;
         rows.push(serde_json::json!({
             "method": route.method, "path": route.path, "handler": route.handler,
-            "code": definition.code, "group": definition.group.name,
-            "guards": route.guards.iter().map(|symbol| definitions.get(symbol).expect("全部权限层已校验").code).collect::<Vec<_>>(),
+            "code": definition.permission, "group": definition.group.name,
+            "guards": route.guards.iter().map(|symbol| definitions.get(symbol).expect("全部权限层已校验").permission).collect::<Vec<_>>(),
             "group_desc": definition.group.description, "description": definition.description,
         }));
     }
@@ -197,14 +191,13 @@ pub(crate) fn route_contract(routes: &[RouteHandler]) -> Result<String, String> 
 }
 
 /// 为库测试生成对真实 Rust 常量的引用，防止显式索引名称与值配错。
-#[cfg(not(test))]
 pub(crate) fn compiled_references() -> Result<String, String> {
     let definitions = registry(MODULES)?;
     let mut names = definitions.keys().collect::<Vec<_>>();
     names.sort();
-    let mut output = String::from("const COMPILED_DEFINITIONS: &[(&str, PermissionDef)] = &[\n");
+    let mut output = String::from("const COMPILED_PERMISSIONS: &[(&str, &Permission)] = &[\n");
     for name in names {
-        output.push_str(&format!("({name:?}, permissions::{name}),\n"));
+        output.push_str(&format!("({name:?}, &permissions::{name}),\n"));
     }
     output.push_str("];\n");
     Ok(output)
@@ -212,12 +205,31 @@ pub(crate) fn compiled_references() -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    use erp_permissions::{self as permissions, Permission, PermissionGroupDef, groups, purchase_order};
+
     use super::*;
-    use crate::permissions::{PermissionGroupDef, purchase_order};
+
+    const SUBMIT: PermissionDef = PermissionDef {
+        permission: &purchase_order::SUBMIT,
+        group: groups::PURCHASE_ORDER,
+        description: "提交",
+    };
+
+    include!(concat!(env!("OUT_DIR"), "/permission_references.rs"));
+
+    #[test]
+    fn public_index_resolves_to_the_compiled_permission_constants() {
+        let actual = registry(MODULES).unwrap();
+        for (symbol, permission) in COMPILED_PERMISSIONS {
+            assert_eq!(actual[*symbol].permission, *permission, "{symbol}");
+        }
+    }
 
     #[test]
     fn registered_catalog_preserves_all_frozen_route_bindings() {
-        let routes = collect_routes(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let manifest = std::env::var("ERP_PERMISSION_MANIFEST_DIR")
+            .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").into());
+        let routes = collect_routes(Path::new(&manifest)).unwrap();
         let actual: serde_json::Value = serde_json::from_str(&route_contract(&routes).unwrap()).unwrap();
         let expected: serde_json::Value =
             serde_json::from_str(include_str!("testdata/permission-routes.json")).unwrap();
@@ -226,21 +238,17 @@ mod tests {
 
     #[test]
     fn duplicate_symbols_and_inconsistent_groups_fail() {
-        const DUPLICATE: PermissionModule = PermissionModule {
-            name: "purchase",
-            entries: &[("SUBMIT", purchase_order::SUBMIT), ("SUBMIT", purchase_order::SUBMIT)],
-        };
+        const DUPLICATE: PermissionModule =
+            PermissionModule { name: "purchase", entries: &[("SUBMIT", SUBMIT), ("SUBMIT", SUBMIT)] };
         assert!(registry(&[DUPLICATE]).unwrap_err().contains("重复的权限定义"));
         const EMPTY: PermissionModule = PermissionModule { name: "purchase", entries: &[] };
         assert!(registry(&[EMPTY, EMPTY]).unwrap_err().contains("重复的权限模块"));
-        const WRONG_GROUP: PermissionDef = purchase_order::SUBMIT.described(
-            PermissionGroupDef { name: purchase_order::SUBMIT.group.name, description: "不同说明" },
-            "接口",
-        );
-        const CONFLICT: PermissionModule = PermissionModule {
-            name: "purchase",
-            entries: &[("SUBMIT", purchase_order::SUBMIT), ("OTHER", WRONG_GROUP)],
+        const WRONG_GROUP: PermissionDef = PermissionDef {
+            group: PermissionGroupDef { name: SUBMIT.group.name, description: "不同说明" },
+            ..SUBMIT
         };
+        const CONFLICT: PermissionModule =
+            PermissionModule { name: "purchase", entries: &[("SUBMIT", SUBMIT), ("OTHER", WRONG_GROUP)] };
         assert!(registry(&[CONFLICT]).unwrap_err().contains("说明不一致"));
     }
 
@@ -264,16 +272,6 @@ mod tests {
     }
 
     #[test]
-    fn invalid_codes_fail_before_generating_catalogs() {
-        for code in ["", "a", "a:", ":read", "a:read:more", "a:bad/action", "a::read", "a/ /b:read"] {
-            assert!(validate_code(code).is_err(), "{code}");
-        }
-        for code in ["purchase_order:submit", "a/b:read", "a:*", "*:*", "a-b:action_1"] {
-            validate_code(code).unwrap();
-        }
-    }
-
-    #[test]
     fn reuse_keeps_endpoint_descriptions_and_non_http_policy_permissions() {
         let routes = route_parser::parse_routes(
             r#"fn routes() { Router::new()
@@ -283,10 +281,13 @@ mod tests {
         .unwrap();
         let groups = groups("/admin", &routes).unwrap();
         assert_eq!(groups[0].1.permissions.len(), 2);
-        assert_eq!(groups[0].1.desc, purchase_order::SUBMIT.group.description);
+        assert_eq!(groups[0].1.desc, groups::PURCHASE_ORDER.description);
         assert_eq!(groups[0].1.permissions[0].module, "admin");
         assert_eq!(groups[0].1.permissions[0].path, "/admin/a");
-        assert_eq!(groups[0].1.permissions[1].description, purchase_order::SUBMIT.description);
+        assert_eq!(
+            groups[0].1.permissions[1].description,
+            registry(MODULES).unwrap()["purchase_order::SUBMIT"].description
+        );
         assert!(groups.iter().flat_map(|(_, group)| &group.permissions).any(|item| item.method == "POLICY"
             && item.resource == "finance_ledger"
             && item.action == "read"));

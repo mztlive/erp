@@ -27,7 +27,7 @@ from cutover_workspace import (
 from crate_layers import dependency_errors as layer_dependency_errors, load_registry, member_directories
 
 
-FOUNDATION = {"erp-core", "application-core", "persistence-core"}
+FOUNDATION = {"erp-core", "erp-permissions", "application-core", "persistence-core"}
 ORCHESTRATION = {name for name, entry in load_registry().items() if entry["layer"] == "orchestration"}
 COMPOSITION = ORCHESTRATION | {"erp-read-models"}
 CONTRACT_RECOGNITION = "erp-contract-recognition"
@@ -523,6 +523,7 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
         "graph_negative_domain_to_domain.json",
         "graph_negative_identity_to_domain.json",
         "graph_negative_foundation_to_identity.json",
+        "graph_negative_permissions_io.json",
         "graph_negative_platform_to_identity.json",
         "graph_negative_foundation_to_business.json",
         "graph_negative_bpm_io.json",

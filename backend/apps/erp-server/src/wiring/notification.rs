@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_notification::{Channel, Error, NotificationData, NotificationService};
+use erp_permissions as permissions;
 use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
 use erp_workflow::service::approval::execution::notification_worker::{
     ApprovalNotificationDelivery, DeliveryAttempt,
@@ -13,7 +14,6 @@ use persistence_core::NoTransaction;
 
 use super::Application;
 use super::errors::{Error as ApplicationError, Result as ApplicationResult};
-use crate::permissions;
 
 pub(super) struct ApprovalNotifications(NotificationService);
 
@@ -77,10 +77,8 @@ fn event_label(event: ApprovalNotificationEventKind) -> &'static str {
 /// # 错误
 /// 授权或查询失败原样返回，不回退为零。
 pub async fn todo_count(app: &Application, actor: &AuditActor) -> ApplicationResult<Option<i64>> {
-    let allowed = app
-        .authorization()
-        .has_permission(actor, &permissions::work_item::LIST.permission(), &mut NoTransaction)
-        .await?;
+    let allowed =
+        app.authorization().has_permission(actor, &permissions::work_item::LIST, &mut NoTransaction).await?;
     if !allowed {
         return Ok(None);
     }

@@ -6,12 +6,12 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::fulfillment::address_arrangement;
 use crate::http::handler::sales_order;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -24,15 +24,11 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
     Router::new()
         .route(
             "/sales-orders/{id}/delivery-arrangements",
-            with_permission(get(address_arrangement::sales_get), rbac, permissions::sales_order::DETAIL),
+            with_permission(get(address_arrangement::sales_get), rbac, &permissions::sales_order::DETAIL),
         )
         .route(
             "/sales-orders/{id}/delivery-arrangements",
-            with_permission(
-                put(address_arrangement::sales_save),
-                rbac,
-                permissions::sales_order::DELIVERY_ARRANGEMENT,
-            ),
+            with_permission(put(address_arrangement::sales_save), rbac, &permissions::sales_order::HANDOVER),
         )
         .merge(evidence_contract_routes(rbac))
         .merge(read_create_routes(rbac))
@@ -47,7 +43,7 @@ fn read_create_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_order::timeline::sales_timeline),
                 rbac,
-                permissions::sales_order::TIMELINE_SALES_TIMELINE,
+                &permissions::sales_order::DETAIL,
             ),
         )
         .route(
@@ -55,20 +51,20 @@ fn read_create_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_order::selection::selection_basis),
                 rbac,
-                permissions::sales_order::SELECTION_SELECTION_BASIS,
+                &permissions::sales_order::CREATE,
             ),
         )
         .route(
             "/sales-orders",
-            with_permission(get(sales_order::sales_order_list), rbac, permissions::sales_order::LIST),
+            with_permission(get(sales_order::sales_order_list), rbac, &permissions::sales_order::LIST),
         )
         .route(
             "/sales-orders",
-            with_permission(post(sales_order::sales_order_create), rbac, permissions::sales_order::CREATE),
+            with_permission(post(sales_order::sales_order_create), rbac, &permissions::sales_order::CREATE),
         )
         .route(
             "/sales-orders/{id}",
-            with_permission(get(sales_order::sales_order_detail), rbac, permissions::sales_order::DETAIL),
+            with_permission(get(sales_order::sales_order_detail), rbac, &permissions::sales_order::DETAIL),
         )
 }
 
@@ -80,31 +76,31 @@ fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(sales_order::sales_order_save_working_copy),
                 rbac,
-                permissions::sales_order::SAVE_WORKING_COPY,
+                &permissions::sales_order::HANDOVER,
             ),
         )
         .route(
             "/sales-orders/{id}/submit",
-            with_permission(post(sales_order::sales_order_submit), rbac, permissions::sales_order::SUBMIT),
+            with_permission(post(sales_order::sales_order_submit), rbac, &permissions::sales_order::SUBMIT),
         )
         .route(
             "/sales-orders/{id}/cancel-approval",
             with_permission(
                 post(sales_order::sales_order_cancel_approval),
                 rbac,
-                permissions::sales_order::CANCEL_APPROVAL,
+                &permissions::sales_order::CANCEL_APPROVAL,
             ),
         )
         .route(
             "/sales-orders/{id}/void",
-            with_permission(post(sales_order::sales_order_void), rbac, permissions::sales_order::VOID),
+            with_permission(post(sales_order::sales_order_void), rbac, &permissions::sales_order::VOID),
         )
         .route(
             "/sales-orders/{id}/handover",
             with_permission(
                 post(sales_order::sales_order_handover),
                 rbac,
-                permissions::sales_order::HANDOVER,
+                &permissions::sales_order::HANDOVER,
             ),
         )
         .route(
@@ -112,7 +108,7 @@ fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_order::sales_order_handover_candidates),
                 rbac,
-                permissions::sales_order::HANDOVER_CANDIDATES,
+                &permissions::sales_order::LIST,
             ),
         )
 }
@@ -132,7 +128,7 @@ fn evidence_contract_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_order::contract_check::sales_order_contract_check),
                 rbac,
-                permissions::sales_order::CONTRACT_CHECK_SALES_ORDER_CONTRACT_CHECK,
+                &permissions::sales_order::HANDOVER,
             ),
         )
         .route(
@@ -140,7 +136,7 @@ fn evidence_contract_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(sales_order::evidence::sales_order_evidence_download),
                 rbac,
-                permissions::sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
+                &permissions::sales_order::DETAIL,
             ),
         )
         .route(
@@ -148,7 +144,7 @@ fn evidence_contract_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(sales_order::sales_order_bind_contract),
                 rbac,
-                permissions::sales_order::BIND_CONTRACT,
+                &permissions::sales_order::HANDOVER,
             ),
         )
 }

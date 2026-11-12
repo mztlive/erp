@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::inventory;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -27,7 +27,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_balance_list),
                 rbac,
-                permissions::inventory::STOCK_BALANCE_LIST,
+                &permissions::inventory::STOCK_BALANCE_LIST,
             ),
         )
         .route(
@@ -35,7 +35,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_balance_detail),
                 rbac,
-                permissions::inventory::STOCK_BALANCE_DETAIL,
+                &permissions::inventory::STOCK_BALANCE_DETAIL,
             ),
         )
         .route(
@@ -43,7 +43,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_movement_list),
                 rbac,
-                permissions::inventory::STOCK_MOVEMENT_LIST,
+                &permissions::inventory::STOCK_MOVEMENT_LIST,
             ),
         )
         .route(
@@ -51,7 +51,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_reservation_list),
                 rbac,
-                permissions::inventory::STOCK_RESERVATION_LIST,
+                &permissions::inventory::STOCK_RESERVATION_LIST,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_adjustment_list),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_LIST,
+                &permissions::inventory::STOCK_ADJUSTMENT_LIST,
             ),
         )
         .route(
@@ -67,7 +67,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(inventory::stock_adjustment_create),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_CREATE,
+                &permissions::inventory::STOCK_ADJUSTMENT_CREATE,
             ),
         )
         .route(
@@ -75,7 +75,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_adjustment_detail),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_DETAIL,
+                &permissions::inventory::STOCK_ADJUSTMENT_DETAIL,
             ),
         )
         .route(
@@ -83,7 +83,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(inventory::stock_adjustment_update),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_UPDATE,
+                &permissions::inventory::STOCK_ADJUSTMENT_UPDATE,
             ),
         )
         .route(
@@ -91,7 +91,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(inventory::stock_adjustment_submit),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_SUBMIT,
+                &permissions::inventory::STOCK_ADJUSTMENT_SUBMIT,
             ),
         )
         .route(
@@ -99,7 +99,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(inventory::stock_adjustment_submit_result),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_SUBMIT_RESULT,
+                &permissions::inventory::STOCK_ADJUSTMENT_DETAIL,
             ),
         )
         .route(
@@ -107,7 +107,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(inventory::stock_adjustment_cancel_approval),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
+                &permissions::inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -115,7 +115,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(inventory::stock_adjustment_post),
                 rbac,
-                permissions::inventory::STOCK_ADJUSTMENT_POST,
+                &permissions::inventory::STOCK_ADJUSTMENT_POST,
             ),
         )
 }

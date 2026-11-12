@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{delete, get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::party;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -20,17 +20,37 @@ use crate::permissions;
 ///
 /// # 返回
 /// 返回挂载了权限校验层的路由集合。
+///
+/// # 错误
+/// 不执行 I/O，不返回错误。
 pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
+        .merge(directory())
+        .merge(companies(rbac))
+        .merge(records(rbac))
+        .merge(contacts(rbac))
+        .merge(addresses(rbac))
+        .merge(tax_profiles(rbac))
+        .merge(bank_accounts(rbac))
+}
+
+/// 结算主体候选和回显继续使用上层认证。
+fn directory() -> Router<HttpState> {
     Router::new()
         // 上层 admin 路由统一认证；结算主体候选与回显不设置独立权限。
         .route("/settlement-parties", get(party::directory::list))
         .route("/settlement-parties/selected", get(party::directory::selected))
+}
+
+/// 公司档案路由。
+fn companies(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/companies",
             with_permission(
                 get(party::company::company_list),
                 rbac,
-                permissions::party::COMPANY_COMPANY_LIST,
+                &permissions::party::COMPANY_COMPANY_LIST,
             ),
         )
         .route(
@@ -38,7 +58,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(party::company::company_create),
                 rbac,
-                permissions::party::COMPANY_COMPANY_CREATE,
+                &permissions::party::COMPANY_COMPANY_CREATE,
             ),
         )
         .route(
@@ -46,7 +66,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(party::company::company_detail),
                 rbac,
-                permissions::party::COMPANY_COMPANY_DETAIL,
+                &permissions::party::COMPANY_COMPANY_DETAIL,
             ),
         )
         .route(
@@ -54,55 +74,75 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(party::company::company_update),
                 rbac,
-                permissions::party::COMPANY_COMPANY_UPDATE,
+                &permissions::party::COMPANY_COMPANY_UPDATE,
             ),
         )
-        .route("/parties", with_permission(get(party::party_list), rbac, permissions::party::LIST))
-        .route("/parties", with_permission(post(party::party_create), rbac, permissions::party::CREATE))
-        .route("/parties/{id}", with_permission(get(party::party_detail), rbac, permissions::party::DETAIL))
-        .route("/parties/{id}", with_permission(put(party::party_update), rbac, permissions::party::UPDATE))
+}
+
+/// 主体档案路由。
+fn records(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
+        .route("/parties", with_permission(get(party::party_list), rbac, &permissions::party::LIST))
+        .route("/parties", with_permission(post(party::party_create), rbac, &permissions::party::CREATE))
+        .route("/parties/{id}", with_permission(get(party::party_detail), rbac, &permissions::party::DETAIL))
+        .route("/parties/{id}", with_permission(put(party::party_update), rbac, &permissions::party::UPDATE))
         .route(
             "/parties/{id}",
-            with_permission(delete(party::party_delete), rbac, permissions::party::DELETE),
+            with_permission(delete(party::party_delete), rbac, &permissions::party::DELETE),
         )
         .route(
             "/parties/{id}/revisions",
-            with_permission(get(party::party_revision_list), rbac, permissions::party::REVISION_LIST),
+            with_permission(get(party::party_revision_list), rbac, &permissions::party::REVISION_LIST),
+        )
+}
+
+/// 主体联系人路由。
+fn contacts(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/parties/{id}/contacts",
+            with_permission(get(party::party_contact_list), rbac, &permissions::party::CONTACT_LIST),
         )
         .route(
             "/parties/{id}/contacts",
-            with_permission(get(party::party_contact_list), rbac, permissions::party::CONTACT_LIST),
-        )
-        .route(
-            "/parties/{id}/contacts",
-            with_permission(post(party::party_contact_create), rbac, permissions::party::CONTACT_CREATE),
+            with_permission(post(party::party_contact_create), rbac, &permissions::party::CONTACT_CREATE),
         )
         .route(
             "/party-contacts/{id}",
-            with_permission(put(party::party_contact_update), rbac, permissions::party::CONTACT_UPDATE),
+            with_permission(put(party::party_contact_update), rbac, &permissions::party::CONTACT_UPDATE),
+        )
+}
+
+/// 主体地址路由。
+fn addresses(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/parties/{id}/addresses",
+            with_permission(get(party::party_address_list), rbac, &permissions::party::ADDRESS_LIST),
         )
         .route(
             "/parties/{id}/addresses",
-            with_permission(get(party::party_address_list), rbac, permissions::party::ADDRESS_LIST),
-        )
-        .route(
-            "/parties/{id}/addresses",
-            with_permission(post(party::party_address_create), rbac, permissions::party::ADDRESS_CREATE),
+            with_permission(post(party::party_address_create), rbac, &permissions::party::ADDRESS_CREATE),
         )
         .route(
             "/party-addresses/{id}",
-            with_permission(put(party::party_address_update), rbac, permissions::party::ADDRESS_UPDATE),
+            with_permission(put(party::party_address_update), rbac, &permissions::party::ADDRESS_UPDATE),
         )
+}
+
+/// 主体税务资料路由。
+fn tax_profiles(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/parties/{id}/tax-profiles",
-            with_permission(get(party::party_tax_profile_list), rbac, permissions::party::TAX_PROFILE_LIST),
+            with_permission(get(party::party_tax_profile_list), rbac, &permissions::party::TAX_PROFILE_LIST),
         )
         .route(
             "/parties/{id}/tax-profiles",
             with_permission(
                 post(party::party_tax_profile_create),
                 rbac,
-                permissions::party::TAX_PROFILE_CREATE,
+                &permissions::party::TAX_PROFILE_CREATE,
             ),
         )
         .route(
@@ -110,19 +150,28 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(party::party_tax_profile_update),
                 rbac,
-                permissions::party::TAX_PROFILE_UPDATE,
+                &permissions::party::TAX_PROFILE_UPDATE,
             ),
         )
+}
+
+/// 主体银行账户路由。
+fn bank_accounts(rbac: &AuthorizationService) -> Router<HttpState> {
+    Router::new()
         .route(
             "/parties/{id}/bank-accounts",
-            with_permission(get(party::party_bank_account_list), rbac, permissions::party::BANK_ACCOUNT_LIST),
+            with_permission(
+                get(party::party_bank_account_list),
+                rbac,
+                &permissions::party::BANK_ACCOUNT_LIST,
+            ),
         )
         .route(
             "/parties/{id}/bank-accounts",
             with_permission(
                 post(party::party_bank_account_create),
                 rbac,
-                permissions::party::BANK_ACCOUNT_CREATE,
+                &permissions::party::BANK_ACCOUNT_CREATE,
             ),
         )
         .route(
@@ -130,7 +179,7 @@ pub fn routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(party::party_bank_account_update),
                 rbac,
-                permissions::party::BANK_ACCOUNT_UPDATE,
+                &permissions::party::BANK_ACCOUNT_UPDATE,
             ),
         )
 }

@@ -7,11 +7,11 @@
 use axum::Router;
 use axum::routing::{get, post};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::purchase_order;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
-use crate::permissions;
 
 /// 返回本域管理端路由集合。
 ///
@@ -38,7 +38,7 @@ fn purchase_sales_material_routes(rbac: &AuthorizationService) -> Router<HttpSta
         with_permission(
             get(purchase_order::sales_material::purchase_sales_material_download),
             rbac,
-            permissions::purchase_order::SALES_MATERIAL_PURCHASE_SALES_MATERIAL_DOWNLOAD,
+            &permissions::purchase_order::DETAIL,
         ),
     )
 }
@@ -51,7 +51,7 @@ fn purchase_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::purchase_order_list),
                 rbac,
-                permissions::purchase_order::LIST,
+                &permissions::purchase_order::LIST,
             ),
         )
         .route(
@@ -59,7 +59,7 @@ fn purchase_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_create),
                 rbac,
-                permissions::purchase_order::CREATE,
+                &permissions::purchase_order::CREATE,
             ),
         )
         .route(
@@ -67,7 +67,7 @@ fn purchase_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_create_from_sourcing),
                 rbac,
-                permissions::purchase_order::CREATE_FROM_SOURCING,
+                &permissions::purchase_order::CREATE,
             ),
         )
         .route(
@@ -75,7 +75,7 @@ fn purchase_document_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::purchase_order_detail),
                 rbac,
-                permissions::purchase_order::DETAIL,
+                &permissions::purchase_order::DETAIL,
             ),
         )
 }
@@ -88,7 +88,7 @@ fn purchase_detail_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::payments::purchase_payments),
                 rbac,
-                permissions::purchase_order::PAYMENTS_PURCHASE_PAYMENTS,
+                &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
@@ -96,7 +96,7 @@ fn purchase_detail_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::payments::purchase_payment_receipt),
                 rbac,
-                permissions::purchase_order::PAYMENTS_PURCHASE_PAYMENT_RECEIPT,
+                &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
@@ -104,7 +104,7 @@ fn purchase_detail_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::delivery_options::purchase_delivery_options),
                 rbac,
-                permissions::purchase_order::DELIVERY_OPTIONS_PURCHASE_DELIVERY_OPTIONS,
+                &permissions::purchase_order::SAVE_DRAFT,
             ),
         )
         .route(
@@ -112,7 +112,7 @@ fn purchase_detail_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_save_draft),
                 rbac,
-                permissions::purchase_order::SAVE_DRAFT,
+                &permissions::purchase_order::SAVE_DRAFT,
             ),
         )
 }
@@ -125,7 +125,7 @@ fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_void),
                 rbac,
-                permissions::purchase_order::VOID,
+                &permissions::purchase_order::VOID,
             ),
         )
         .route(
@@ -133,7 +133,7 @@ fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_submit),
                 rbac,
-                permissions::purchase_order::SUBMIT,
+                &permissions::purchase_order::SUBMIT,
             ),
         )
         .route(
@@ -141,7 +141,7 @@ fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_maintain_source),
                 rbac,
-                permissions::purchase_order::MAINTAIN_SOURCE,
+                &permissions::purchase_order::MAINTAIN_SOURCE,
             ),
         )
         .route(
@@ -149,7 +149,7 @@ fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_order_cancel_approval),
                 rbac,
-                permissions::purchase_order::CANCEL_APPROVAL,
+                &permissions::purchase_order::CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -157,7 +157,7 @@ fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::purchase_creation_basis_list),
                 rbac,
-                permissions::purchase_order::PURCHASE_CREATION_BASIS_LIST,
+                &permissions::purchase_order::CREATE,
             ),
         )
         .route(
@@ -165,7 +165,7 @@ fn purchase_workflow_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_change_create),
                 rbac,
-                permissions::purchase_order::PURCHASE_CHANGE_CREATE,
+                &permissions::purchase_order::PURCHASE_CHANGE_CREATE,
             ),
         )
 }
@@ -178,7 +178,7 @@ fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::purchase_change_list),
                 rbac,
-                permissions::purchase_order::PURCHASE_CHANGE_LIST,
+                &permissions::purchase_order::PURCHASE_CHANGE_LIST,
             ),
         )
         .route(
@@ -186,7 +186,7 @@ fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::purchase_change_detail),
                 rbac,
-                permissions::purchase_order::PURCHASE_CHANGE_DETAIL,
+                &permissions::purchase_order::PURCHASE_CHANGE_DETAIL,
             ),
         )
         .route(
@@ -194,7 +194,7 @@ fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_change_submit),
                 rbac,
-                permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
+                &permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
             ),
         )
         .route(
@@ -202,7 +202,7 @@ fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_change_cancel_approval),
                 rbac,
-                permissions::purchase_order::PURCHASE_CHANGE_CANCEL_APPROVAL,
+                &permissions::purchase_order::PURCHASE_CHANGE_CANCEL_APPROVAL,
             ),
         )
         .route(
@@ -210,7 +210,7 @@ fn purchase_change_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_order::purchase_change_effect),
                 rbac,
-                permissions::purchase_order::PURCHASE_CHANGE_EFFECT,
+                &permissions::purchase_order::PURCHASE_CHANGE_EFFECT,
             ),
         )
 }
@@ -223,7 +223,7 @@ fn purchase_change_draft_routes(rbac: &AuthorizationService) -> Router<HttpState
             with_permission(
                 post(purchase_order::change_draft::purchase_change_save_draft),
                 rbac,
-                permissions::purchase_order::CHANGE_DRAFT_SAVE,
+                &permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
             ),
         )
         .route(
@@ -231,7 +231,7 @@ fn purchase_change_draft_routes(rbac: &AuthorizationService) -> Router<HttpState
             with_permission(
                 get(purchase_order::change_draft::purchase_change_draft),
                 rbac,
-                permissions::purchase_order::CHANGE_DRAFT_PURCHASE_CHANGE_DRAFT,
+                &permissions::purchase_order::PURCHASE_CHANGE_SUBMIT,
             ),
         )
         .route(
@@ -239,7 +239,7 @@ fn purchase_change_draft_routes(rbac: &AuthorizationService) -> Router<HttpState
             with_permission(
                 post(purchase_order::change_void::purchase_change_void),
                 rbac,
-                permissions::purchase_order::CHANGE_VOID_PURCHASE_CHANGE_VOID,
+                &permissions::purchase_order::CHANGE_VOID_PURCHASE_CHANGE_VOID,
             ),
         )
 }
@@ -252,7 +252,7 @@ fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpSta
             with_permission(
                 get(purchase_order::correspondence::purchase_email_history),
                 rbac,
-                permissions::purchase_order::CORRESPONDENCE_PURCHASE_EMAIL_HISTORY,
+                &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
@@ -260,7 +260,7 @@ fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpSta
             with_permission(
                 get(purchase_order::correspondence::purchase_paper),
                 rbac,
-                permissions::purchase_order::CORRESPONDENCE_PURCHASE_PAPER,
+                &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
@@ -268,7 +268,7 @@ fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpSta
             with_permission(
                 post(purchase_order::expense::expense_purchase_create),
                 rbac,
-                permissions::purchase_order::EXPENSE_EXPENSE_PURCHASE_CREATE,
+                &permissions::purchase_order::CREATE,
             ),
         )
         .route(
@@ -276,7 +276,7 @@ fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpSta
             with_permission(
                 post(purchase_order::expense::expense_occurrence_confirm),
                 rbac,
-                permissions::purchase_order::EXPENSE_EXPENSE_OCCURRENCE_CONFIRM,
+                &permissions::purchase_order::EXPENSE_EXPENSE_OCCURRENCE_CONFIRM,
             ),
         )
         .route(
@@ -284,7 +284,7 @@ fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpSta
             with_permission(
                 post(purchase_order::freight::freight_waiver_create),
                 rbac,
-                permissions::purchase_order::FREIGHT_FREIGHT_WAIVER_CREATE,
+                &permissions::purchase_order::SAVE_DRAFT,
             ),
         )
         .route(
@@ -292,7 +292,7 @@ fn purchase_correspondence_routes(rbac: &AuthorizationService) -> Router<HttpSta
             with_permission(
                 post(purchase_order::correspondence::send_purchase_email),
                 rbac,
-                permissions::purchase_order::CORRESPONDENCE_SEND_PURCHASE_EMAIL,
+                &permissions::purchase_order::CORRESPONDENCE_SEND_PURCHASE_EMAIL,
             ),
         )
 }
@@ -304,7 +304,7 @@ fn expense_source_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::expense::expense_sources),
                 rbac,
-                permissions::purchase_order::EXPENSE_EXPENSE_SOURCES,
+                &permissions::purchase_order::CREATE,
             ),
         )
         .route(
@@ -312,7 +312,7 @@ fn expense_source_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_order::expense::expense_source_detail),
                 rbac,
-                permissions::purchase_order::EXPENSE_EXPENSE_SOURCE_DETAIL,
+                &permissions::purchase_order::CREATE,
             ),
         )
 }
@@ -325,7 +325,7 @@ fn payment_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> 
             with_permission(
                 get(purchase_order::payment_arrangement::payment_arrangement),
                 rbac,
-                permissions::purchase_order::PAYMENT_ARRANGEMENT_PAYMENT_ARRANGEMENT,
+                &permissions::purchase_order::DETAIL,
             ),
         )
         .route(
@@ -333,7 +333,7 @@ fn payment_arrangement_routes(rbac: &AuthorizationService) -> Router<HttpState> 
             with_permission(
                 post(purchase_order::payment_arrangement::schedule_payment_follow_up),
                 rbac,
-                permissions::purchase_order::PAYMENT_ARRANGEMENT_SCHEDULE_PAYMENT_FOLLOW_UP,
+                &permissions::purchase_payment_request::SUBMIT,
             ),
         )
 }

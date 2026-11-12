@@ -737,6 +737,12 @@
         "serde",
         "serde_json"
       ]
+    },
+    "erp-permissions": {
+      "layer": "foundation",
+      "paths": [
+        "crates/foundation/erp-permissions"
+      ]
     }
   }
 }

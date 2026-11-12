@@ -1,6 +1,6 @@
 # 权限系统重写方案
 
-状态：待实施。本文规定权限系统重写的目标设计、实现合同、实施顺序和验收条件。下文代码均为目标 API，不代表当前实现已完成切换。实施必须遵守本文规定的接口、职责边界和阶段验收条件。
+状态：第一阶段已实现，待 review；第二至第六阶段待实施。公共权限值、常量和目录已迁入 `erp-permissions`；下文授权服务接口及执行流程仍为目标设计。实施必须遵守本文规定的接口、职责边界和阶段验收条件。
 
 本文规定公共接口、授权行为、数据接口和验收条件。内部临时类型、字段布局和函数拆分由实现确定，不作为兼容合同。
 
@@ -145,9 +145,11 @@ pub const QUERY_SALES_LIST: Permission =
 
 #### 3.1.2 公共权限目录的迁移
 
-将 `erp-server/permission_catalog/` 中的权限编码转为 `erp-permissions` 内的 `Permission` 常量，公共目录类型、分组和可复用说明一并迁入，删除原位置的重复定义。server 保留 HTTP 方法、路径、路由绑定和接口专属说明，并引用公共定义。
+将原 server 权限目录中的权限编码、公共目录类型、分组和可复用说明迁入 `erp-permissions`，删除 server 的 `permission_catalog/` 和同名包装。HTTP 路由直接引用公共目录登记的权限主常量，server 不再维护第二份权限 `ENTRIES` 或 `MODULES`。
 
-目录条目通过 `&'static Permission` 引用内置常量，分组和说明作为展示信息单独保存，不再维护独立的 `code` 字符串。同一常量可以被多个接口说明引用。目录输出和前端生成统一通过 `Permission` 的格式化或序列化能力取得权限编码，既有编码、共享关系、展示分组和接口说明必须保持一致。
+公共目录条目通过 `&'static Permission` 引用内置常量，保存默认分组和说明，不再维护独立的 `code` 字符串。多个接口复用同一主常量及公共元数据。server 只按方法和路径登记与默认值不同的接口说明、分组或既有展示权限差异；方法、路径及实际鉴权权限仍从路由取得。展示差异仅供构建生成器使用，不得改变运行时鉴权。
+
+目录输出和前端生成统一通过 `Permission` 的格式化或序列化能力取得权限编码。差异引用不存在的受保护接口或同一字段重复登记时生成失败。既有编码、共享关系、展示分组和接口说明必须保持一致。
 
 `erp-server/build.rs` 通过 build-dependency 读取 `erp-permissions`，运行时通过普通依赖读取同一份定义。前端权限生成、角色配置目录和权限漂移检查均使用这份公共定义，由 server 补充路由信息。
 
@@ -564,7 +566,7 @@ Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造�
 | 当前结构与位置 | 执行要求 |
 | --- | --- |
 | `Permission`：[`entity/access_control/permission.rs`](../src/entity/access_control/permission.rs) | 迁入 `erp-permissions`；删除 identity 中原实现，全部使用同一个值类型 |
-| `PermissionDef.code`：[`erp-server/permission_catalog/types.rs`](../../../../apps/erp-server/permission_catalog/types.rs) | 删除独立字符串字段，改为引用公共 `Permission` 常量；分组和接口说明保留 |
+| 原 server 权限目录及 `PermissionDef.code` | 删除包装目录和第二份符号索引；公共目录引用权限常量，server 仅保留接口展示差异 |
 | `AuthorizedQuery`：[`repository/authorization/query.rs`](../src/repository/authorization/query.rs) | 删除公开导出和业务侧 `compile`；无独立职责时删除中间包装，由 `query` 直接返回 `CompiledAccess` |
 | `ReadAccess`：[`entity/authorization/read.rs`](../src/entity/authorization/read.rs) | 收为内部执行参数；历史读取能力来自 `ScopeSpec`，记录读取补充来自固定行级检查；删除业务侧构造 |
 | 私有 `ScopeSource`：[`consumer_spec.rs`](../src/entity/access_control/consumer_spec.rs) | 调整为第 3.3.3 节的三种范围来源，来源权限直接引用公共常量 |
@@ -618,7 +620,7 @@ Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造�
 #### 4.1.1 第一阶段：建立公共权限定义与目录
 
 1. 创建 `erp-permissions`，按第 3.1 节实现权限值类型、常量、资源标识和公共目录。
-2. 切换 identity 的权限类型引用，删除原值类型实现；迁出 server 的公共目录定义，保留路由及接口专属信息。
+2. 切换 identity 的权限类型引用，删除原值类型实现；迁出 server 的公共目录定义，删除权限包装目录和重复符号索引；路由直接引用公共常量，仅保留接口展示差异。
 3. 完成 server 的普通依赖、build-dependency、前端权限生成器及权限漂移检查的目录接入。业务用例中的常量引用在第五阶段切换。
 4. 同步 workspace 成员、`scripts/crate-layers.json`、依赖边界配置、README、`crates/README.md`，以及 `backend/AGENTS.md` 中权限定义与目录的归属。
 

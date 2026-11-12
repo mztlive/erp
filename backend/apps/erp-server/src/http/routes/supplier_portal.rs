@@ -4,6 +4,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post, put};
 use axum::{Extension, Router, middleware};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::data_transfer as transfers;
 use crate::http::handler::supplier_portal::{self, assets, auth, read, write};
@@ -11,7 +12,6 @@ use crate::http::middleware::supplier_portal::authenticate_portal;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
 use crate::http::upload;
-use crate::permissions;
 
 /// 装配公开登录及逐请求重验身份的门户业务接口。
 ///
@@ -106,7 +106,7 @@ fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::accounts),
                 rbac,
-                permissions::supplier_portal::ADMIN_ACCOUNTS,
+                &permissions::supplier_portal::ADMIN_ACCOUNTS,
             ),
         )
         .route(
@@ -114,7 +114,7 @@ fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_portal::admin::create_account),
                 rbac,
-                permissions::supplier_portal::ADMIN_CREATE_ACCOUNT,
+                &permissions::supplier_portal::ADMIN_CREATE_ACCOUNT,
             ),
         )
         .route(
@@ -122,7 +122,7 @@ fn account_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(supplier_portal::admin::update_account),
                 rbac,
-                permissions::supplier_portal::ADMIN_UPDATE_ACCOUNT,
+                &permissions::supplier_portal::ADMIN_UPDATE_ACCOUNT,
             ),
         )
 }
@@ -135,7 +135,7 @@ fn catalog_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::grants),
                 rbac,
-                permissions::supplier_portal::ADMIN_GRANTS,
+                &permissions::supplier_portal::ADMIN_GRANTS,
             ),
         )
         .route(
@@ -143,7 +143,7 @@ fn catalog_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_portal::admin::update_grant),
                 rbac,
-                permissions::supplier_portal::ADMIN_UPDATE_GRANT,
+                &permissions::supplier_portal::ADMIN_UPDATE_GRANT,
             ),
         )
 }
@@ -156,7 +156,7 @@ fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::applications),
                 rbac,
-                permissions::supplier_portal::ADMIN_APPLICATIONS,
+                &permissions::supplier_portal::ADMIN_APPLICATIONS,
             ),
         )
         .route(
@@ -164,7 +164,7 @@ fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::application),
                 rbac,
-                permissions::supplier_portal::ADMIN_APPLICATION,
+                &permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
@@ -172,7 +172,7 @@ fn application_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(supplier_portal::admin::review),
                 rbac,
-                permissions::supplier_portal::ADMIN_REVIEW,
+                &permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )
 }
@@ -185,7 +185,7 @@ fn review_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::impacts),
                 rbac,
-                permissions::supplier_portal::ADMIN_IMPACTS,
+                &permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
@@ -193,7 +193,7 @@ fn review_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::assets::review_download),
                 rbac,
-                permissions::supplier_portal::ASSETS_REVIEW_DOWNLOAD,
+                &permissions::supplier_portal::ADMIN_IMPACTS,
             ),
         )
         .route(
@@ -201,7 +201,7 @@ fn review_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::dictionaries),
                 rbac,
-                permissions::supplier_portal::ADMIN_DICTIONARIES,
+                &permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )
         .route(
@@ -209,7 +209,7 @@ fn review_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(supplier_portal::admin::duplicates),
                 rbac,
-                permissions::supplier_portal::ADMIN_DUPLICATES,
+                &permissions::supplier_portal::ADMIN_REVIEW,
             ),
         )
 }

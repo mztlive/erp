@@ -3,12 +3,12 @@
 use axum::Router;
 use axum::routing::{get, post, put};
 use erp_identity::AuthorizationService;
+use erp_permissions as permissions;
 
 use crate::http::handler::purchase_payment_request;
 use crate::http::middleware::with_permission;
 use crate::http::state::HttpState;
 use crate::http::upload;
-use crate::permissions;
 
 /// 装配申请、材料及付款路由。
 /// # 参数
@@ -28,7 +28,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::list),
                 rbac,
-                permissions::purchase_payment_request::LIST,
+                &permissions::purchase_payment_request::LIST,
             ),
         )
         .route(
@@ -36,7 +36,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::candidates),
                 rbac,
-                permissions::purchase_payment_request::CANDIDATES,
+                &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
@@ -44,7 +44,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::detail),
                 rbac,
-                permissions::purchase_payment_request::DETAIL,
+                &permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
@@ -52,7 +52,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::materials::submission),
                 rbac,
-                permissions::purchase_payment_request::MATERIALS_SUBMISSION,
+                &permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
@@ -60,7 +60,7 @@ fn query_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::materials::task_context),
                 rbac,
-                permissions::purchase_payment_request::MATERIALS_TASK_CONTEXT,
+                &permissions::work_item::DETAIL,
             ),
         )
 }
@@ -72,7 +72,7 @@ fn candidate_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::candidate_list::page),
                 rbac,
-                permissions::purchase_payment_request::CANDIDATE_LIST_PAGE,
+                &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
@@ -80,7 +80,7 @@ fn candidate_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::candidate_list::ids),
                 rbac,
-                permissions::purchase_payment_request::CANDIDATE_LIST_IDS,
+                &permissions::purchase_payment_request::CREATE,
             ),
         )
 }
@@ -96,7 +96,7 @@ fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::create_batch),
                 rbac,
-                permissions::purchase_payment_request::CREATE_BATCH,
+                &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
@@ -104,7 +104,7 @@ fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::create),
                 rbac,
-                permissions::purchase_payment_request::CREATE,
+                &permissions::purchase_payment_request::CREATE,
             ),
         )
         .route(
@@ -112,7 +112,7 @@ fn draft_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 put(purchase_payment_request::update),
                 rbac,
-                permissions::purchase_payment_request::UPDATE,
+                &permissions::purchase_payment_request::UPDATE,
             ),
         )
 }
@@ -124,7 +124,7 @@ fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::submit),
                 rbac,
-                permissions::purchase_payment_request::SUBMIT,
+                &permissions::purchase_payment_request::SUBMIT,
             ),
         )
         .route(
@@ -132,7 +132,7 @@ fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::withdraw),
                 rbac,
-                permissions::purchase_payment_request::WITHDRAW,
+                &permissions::purchase_payment_request::WITHDRAW,
             ),
         )
         .route(
@@ -140,7 +140,7 @@ fn lifecycle_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::close),
                 rbac,
-                permissions::purchase_payment_request::CLOSE,
+                &permissions::purchase_payment_request::CLOSE,
             ),
         )
 }
@@ -153,7 +153,7 @@ fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::credit::list),
                 rbac,
-                permissions::purchase_payment_request::CREDIT_LIST,
+                &permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
         .route(
@@ -161,7 +161,7 @@ fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::credit::apply),
                 rbac,
-                permissions::purchase_payment_request::CREDIT_APPLY,
+                &permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
         .route(
@@ -169,7 +169,7 @@ fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 post(purchase_payment_request::payments::reveal_account),
                 rbac,
-                permissions::purchase_payment_request::PAYMENTS_REVEAL_ACCOUNT,
+                &permissions::payable::PAYMENT_RECIPIENT_REVEAL,
             ),
         )
         .route(
@@ -180,7 +180,7 @@ fn payment_routes(rbac: &AuthorizationService) -> Router<HttpState> {
                     upload::MAX_MULTIPART_REQUEST_BYTES,
                 ),
                 rbac,
-                permissions::purchase_payment_request::PAYMENTS_PAY,
+                &permissions::purchase_payment_request::CREDIT_LIST,
             ),
         )
 }
@@ -191,7 +191,7 @@ fn deposit_routes(rbac: &AuthorizationService) -> Router<HttpState> {
         with_permission(
             post(purchase_payment_request::deposit::execute),
             rbac,
-            permissions::purchase_payment_request::DEPOSIT_EXECUTE,
+            &permissions::purchase_payment_request::CREDIT_LIST,
         ),
     )
 }
@@ -203,7 +203,7 @@ fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::materials::material_download),
                 rbac,
-                permissions::purchase_payment_request::MATERIALS_MATERIAL_DOWNLOAD,
+                &permissions::purchase_payment_request::DETAIL,
             ),
         )
         .route(
@@ -211,7 +211,7 @@ fn material_routes(rbac: &AuthorizationService) -> Router<HttpState> {
             with_permission(
                 get(purchase_payment_request::materials::material_preview),
                 rbac,
-                permissions::purchase_payment_request::MATERIALS_MATERIAL_PREVIEW,
+                &permissions::purchase_payment_request::DETAIL,
             ),
         )
 }
