@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use mongodb::bson::Bson;
 use persistence_core::Executor;
@@ -18,6 +21,17 @@ pub trait AccessMapping: Send + Sync {
     /// # 错误
     /// 不执行 I/O。
     fn model(&self) -> &QueryModel;
+
+    /// 描述全部固定来源映射，供启动校验；不读取动态准备数据。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 关系标识及对应的不可变 Mapping；没有来源时为空。
+    /// # 错误
+    /// 无；缺少规则所需关系由 Builder 拒绝。
+    fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
+        BTreeMap::new()
+    }
 
     /// 返回当前记录的资源主键表达式。
     /// # 参数

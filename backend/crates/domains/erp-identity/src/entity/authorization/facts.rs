@@ -68,6 +68,7 @@ pub enum FactKind {
     HistoryParticipants,
     Assignee,
     Participants,
+    Completed,
 }
 
 impl AccessFact {
@@ -82,6 +83,7 @@ impl AccessFact {
             Self::HistoryParticipant => FactKind::HistoryParticipants,
             Self::AssignedTo => FactKind::Assignee,
             Self::Participant => FactKind::Participants,
+            Self::Completed(_) => FactKind::Completed,
         }
     }
 }
@@ -99,6 +101,7 @@ impl ObjectFacts {
                 FactKind::HistoryParticipants => self.history_participants.loaded(),
                 FactKind::Assignee => self.assignee_id.loaded(),
                 FactKind::Participants => self.participants.loaded(),
+                FactKind::Completed => self.completed.loaded(),
             };
             if !loaded {
                 return Err(Error::ValidationError(format!("缺少必要授权事实：{kind:?}")));

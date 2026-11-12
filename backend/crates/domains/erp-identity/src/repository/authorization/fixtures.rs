@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use mongodb::bson::{Bson, Document};
 
-pub(super) fn execute(
+pub(crate) fn execute(
     mut rows: Vec<Document>,
     stages: &[Document],
     collections: &BTreeMap<String, Vec<Document>>,

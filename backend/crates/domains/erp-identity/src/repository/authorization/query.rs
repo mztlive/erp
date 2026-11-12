@@ -1,41 +1,32 @@
+use std::fmt;
 use std::sync::Arc;
-use std::{fmt, ptr};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::bson::{Bson, Document};
 use persistence_core::{ExecutionBoundary, Executor};
 
-use crate::entity::authorization::{AccessContext, AccessRule, AccessSubject, MappingFacts, QueryModel};
+use crate::entity::authorization::{AccessContext, AccessRule, MappingFacts, QueryModel};
 use crate::ports::AccessMapping;
-use crate::repository::authorization::compile;
 use crate::{Error, Permission, Result};
-
-/// 只有授权服务能生成的完整查询约束。
-pub struct AuthorizedQuery {
-    pub(crate) proof: AccessProof,
-    pub(crate) mapping: Arc<dyn AccessMapping>,
-    pub(crate) model: QueryModel,
-}
 
 #[derive(Clone)]
 pub(crate) struct AccessProof {
     pub context: AccessContext,
-    pub subject: AccessSubject,
     pub rule: AccessRule,
     pub version: String,
     pub valid_until: Option<Instant>,
     pub policy_version: u64,
     pub organization_version: u64,
     pub boundary: ExecutionBoundary,
-    pub registry: Arc<()>,
+    pub service: Arc<()>,
 }
 
 impl AccessProof {
     /// 事务快照仅检查当前边界和服务；非事务必须重读实际依赖。
     pub(crate) fn needs_revalidation(&self, token: &Arc<()>, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_current(executor)?;
-        if !Arc::ptr_eq(&self.registry, token) {
+        if !Arc::ptr_eq(&self.service, token) {
             return Err(Error::ValidationError("授权结果属于其他服务目录".into()));
         }
         Ok(!self.boundary.is_snapshot())
@@ -50,29 +41,6 @@ impl AccessProof {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权关系已到期".into()));
         }
         Ok(())
-    }
-}
-
-impl AuthorizedQuery {
-    /// 用服务端登记的映射编译查询约束。
-    /// # 参数
-    /// mapping 必须是本次解析绑定的映射；executor 为原执行器。
-    /// # 返回
-    /// 完整查询阶段及复验所需事实。
-    /// # 错误
-    /// 映射错配、事实缺失、有效期或会话变化拒绝。
-    pub async fn compile(
-        &self,
-        mapping: &dyn AccessMapping,
-        executor: &mut dyn Executor,
-    ) -> Result<CompiledAccess> {
-        self.proof.ensure_current(executor)?;
-        if !ptr::eq(mapping, self.mapping.as_ref()) || *mapping.model() != self.model {
-            return Err(Error::ValidationError("授权查询与 Mapping 不匹配".into()));
-        }
-        let compiled = compile(self, executor).await?;
-        compiled.ensure_current(executor)?;
-        Ok(compiled)
     }
 }
 

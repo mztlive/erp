@@ -1,94 +1,95 @@
-//! 业务授权唯一入口；查询和对象检查共享目录、规则与事实版本。
-mod registry;
+//! 业务授权唯一入口；固定规则及启动绑定不能由调用方替换。
+mod builder;
+mod facilities;
 mod require;
 mod resolve;
 pub(crate) mod rules;
 mod targets;
+#[cfg(test)]
+mod tests;
 mod validate;
 
+use std::collections::BTreeMap;
 use std::slice;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use mongodb::Database;
+pub use builder::AuthorizationBuilder;
+use facilities::Facilities;
 use persistence_core::Executor;
-pub use registry::{AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, DataAccess};
 
-use crate::entity::authorization::AccessSubject;
-use crate::{AuthorizedQuery, Permission, QualifiedPermissions, Result, SharedRbacService};
+use crate::repository::authorization::compile;
+use crate::{
+    AccessFactsPort, AccessMapping, CompiledAccess, Error, Permission, QualifiedPermissions, Result,
+};
 
-/// 授权服务。组合根装配不可变目录，业务只提供操作与目标。
+/// 共享授权服务。只保存身份设施及校验后的不可变实现绑定。
 #[derive(Clone)]
 pub struct AuthorizationService {
-    db: Database,
-    rbac: SharedRbacService,
-    registry: Arc<AuthorizationRegistry>,
+    facilities: Arc<dyn Facilities>,
+    facts: BTreeMap<String, Arc<dyn AccessFactsPort>>,
+    mappings: BTreeMap<Permission, Arc<dyn AccessMapping>>,
     token: Arc<()>,
 }
 
 impl AuthorizationService {
     /// 查询单个功能资格；不能作为对象访问或写入凭证。
     /// # 参数
-    /// actor 为当前账号，permission 为入口权限，executor 为原执行器。
+    /// actor 为当前账号，permission 为具体权限，executor 为原执行器。
     /// # 返回
-    /// 账号有效且至少一个启用角色授予权限时为 true，否则为 false。
+    /// 有效账号的启用角色授予权限时为 true，否则为 false。
     /// # 错误
-    /// 通配入口、数据库或策略读取失败返回错误，不按无权处理。
+    /// 非法权限或身份设施取证失败原样传播。
     pub async fn has_permission(
         &self,
         actor: &AuditActor,
         permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        Ok(self.qualification(actor, slice::from_ref(permission), executor).await?.is_some())
+        Ok(self
+            .permissions(actor, slice::from_ref(permission), executor)
+            .await?
+            .is_some_and(|qualified| qualified.same_role(slice::from_ref(permission))))
     }
 
-    /// 批量读取功能资格，不生成对象授权凭证。
+    /// 批量读取功能资格，不加载业务事实或数据范围。
     /// # 参数
-    /// actor、permissions 为真实账号与具体权限集合，executor 为原执行器。
+    /// actor、permissions 为真实账号与具体权限集合；executor 为原执行器。
     /// # 返回
-    /// 返回逐项独立授权结果；账号失效时为 None。
+    /// 账号失效返回 None；有效账号返回逐项独立授权结果，允许零权限。
     /// # 错误
-    /// 身份设施、策略版本或非法权限错误透传。
+    /// 非法权限或身份设施取证失败原样传播。
     pub async fn permissions(
         &self,
         actor: &AuditActor,
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<Option<QualifiedPermissions>> {
-        self.rbac.qualified_permissions(actor, permissions, executor).await
+        self.facilities.permissions(actor, permissions, executor).await
     }
 
-    /// 绑定身份设施和服务端登记。
+    /// 按固定权限选择查询入口并生成完整数据库授权条件。
     /// # 参数
-    /// db、rbac 为身份设施；registry 为已经校验的完整目录。
+    /// actor 为认证账号，permission 为查询权限，executor 为同一读取阶段执行器。
     /// # 返回
-    /// 不启动事务的授权服务。
+    /// 仓储可执行的 CompiledAccess；交付业务结果前仍须调用 validate。
     /// # 错误
-    /// 不执行 I/O。
-    pub fn new(db: Database, rbac: SharedRbacService, registry: AuthorizationRegistry) -> Self {
-        Self { db, rbac, registry: Arc::new(registry), token: Arc::new(()) }
-    }
-
-    /// 证明入口资格并生成完整查询约束。
-    /// # 参数
-    /// actor、permission 为服务端身份与入口；subject 为登记模型；executor 为原执行器。
-    /// # 返回
-    /// 不可伪造的查询约束，不装载全量授权 ID。
-    /// # 错误
-    /// 账号、权限、登记或事实取证失败时拒绝。
+    /// 未知权限、缺少绑定、完整资格不足、动态依赖或执行边界错误均拒绝。
     pub async fn query(
         &self,
         actor: &AuditActor,
         permission: &Permission,
-        subject: AccessSubject,
         executor: &mut dyn Executor,
-    ) -> Result<AuthorizedQuery> {
+    ) -> Result<CompiledAccess> {
         executor.next_read();
-        let entry = self.registry.entry(permission, &subject)?;
-        let mapping = entry.access.mapping()?.clone();
-        let model = mapping.model().clone();
-        let proof = self.resolve(actor, entry, executor).await?;
-        Ok(AuthorizedQuery { proof, mapping, model })
+        if !rules::query_supported(permission)? {
+            return Err(Error::ValidationError("此权限不支持查询".into()));
+        }
+        let mapping = self
+            .mappings
+            .get(permission)
+            .ok_or_else(|| Error::ValidationError("缺少查询 Mapping 绑定".into()))?;
+        let proof = self.resolve(actor, permission, Some(mapping.model()), None, executor).await?;
+        compile(&proof, mapping, mapping.model(), executor).await
     }
 }

@@ -1,8 +1,11 @@
 //! 将权限语义编译为数据库内条件；根记录只在完整表达式完成后过滤。
+pub(crate) mod binding;
 #[cfg(test)]
-mod fixtures;
+pub(crate) mod fixtures;
 mod fragment;
 mod query;
+#[cfg(test)]
+pub(crate) mod testing;
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
@@ -10,11 +13,11 @@ use fragment::{Fragment, combine, exists};
 use futures_util::future::BoxFuture;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{ExecutionBoundary, Executor};
+pub use query::CompiledAccess;
 pub(crate) use query::{AccessProof, MappingDependency};
-pub use query::{AuthorizedQuery, CompiledAccess};
 
 use crate::entity::authorization::{
-    AccessContext, AccessRule, MappingFacts, QueryOutput, RelationKey, RelationMatch,
+    AccessContext, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
 };
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::resource_access::ResourceKind;
@@ -33,8 +36,16 @@ struct Compiler<'a> {
 }
 
 /// 编译服务端生成的完整表达式，保留所有事实依赖。
-pub(crate) async fn compile(query: &AuthorizedQuery, executor: &mut dyn Executor) -> Result<CompiledAccess> {
-    let proof = &query.proof;
+pub(crate) async fn compile(
+    proof: &AccessProof,
+    mapping: &Arc<dyn AccessMapping>,
+    model: &QueryModel,
+    executor: &mut dyn Executor,
+) -> Result<CompiledAccess> {
+    proof.ensure_current(executor)?;
+    if mapping.model() != model {
+        return Err(Error::ValidationError("Mapping 描述与启动绑定不一致".into()));
+    }
     let mut compiler = Compiler {
         executor,
         boundary: proof.boundary.clone(),
@@ -42,9 +53,9 @@ pub(crate) async fn compile(query: &AuthorizedQuery, executor: &mut dyn Executor
         prepared: vec![],
         versions: vec![],
     };
-    let (fragment, _) = compiler.model(&proof.rule, &query.mapping, &proof.context, 0).await?;
+    let (fragment, _) = compiler.model(&proof.rule, mapping, &proof.context, 0).await?;
     let mut stages = fragment.finish();
-    if let QueryOutput::Share { fields } | QueryOutput::Existence { fields } = &query.model.output {
+    if let QueryOutput::Share { fields } | QueryOutput::Existence { fields } = &model.output {
         let mut projection = doc! { "_id": 0 };
         for field in fields {
             projection.insert(field, 1);
@@ -55,16 +66,18 @@ pub(crate) async fn compile(query: &AuthorizedQuery, executor: &mut dyn Executor
     proof.valid_until = compiler.valid_until;
     let mut version = Fingerprint::new("authorization-query-v4");
     version.text(&proof.version);
-    version.model(&query.model);
+    version.model(model);
     version.unordered(&compiler.versions, |hash, value| hash.text(value));
     version.sequence(&stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
-    Ok(CompiledAccess {
+    let compiled = CompiledAccess {
         proof,
-        model: query.model.clone(),
+        model: model.clone(),
         stages,
         dependencies: if compiler.boundary.is_snapshot() { vec![] } else { compiler.prepared },
         version: version.finish(),
-    })
+    };
+    compiled.ensure_current(compiler.executor)?;
+    Ok(compiled)
 }
 
 impl Compiler<'_> {
@@ -293,9 +306,6 @@ fn relation_presence(
 }
 
 #[cfg(test)]
-pub(crate) use tests::model_mapping;
-
-#[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -314,8 +324,7 @@ mod tests {
     use super::*;
     use crate::entity::access_control::{ResolvedScope, ScopeClause};
     use crate::entity::authorization::{
-        AccessFact, AccessSubject, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey,
-        RelatedObjects,
+        AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, RelatedObjects,
     };
     use crate::entity::resource_access::ResourceKind;
     use crate::ports::{MappingPreparation, QueryFragment, RelationMapping};
@@ -430,21 +439,6 @@ mod tests {
         }
     }
 
-    /// 复用查询编译器的无 I/O Mapping 替身，验证服务端模型登记。
-    pub(crate) fn model_mapping(model: QueryModel) -> Arc<dyn AccessMapping> {
-        Arc::new(Mapping {
-            model,
-            child: None,
-            versioned: None,
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
-            sources: BTreeMap::new(),
-            live_only: false,
-            key_expression: None,
-            action_sensitive: false,
-        })
-    }
-
     fn mapping(resource: &str, child: Option<Arc<dyn AccessMapping>>) -> Arc<dyn AccessMapping> {
         Arc::new(Mapping {
             model: QueryModel {
@@ -466,9 +460,21 @@ mod tests {
         })
     }
 
-    fn query(rule: AccessRule, mapping: Arc<dyn AccessMapping>, executor: &dyn Executor) -> AuthorizedQuery {
+    struct Query {
+        proof: AccessProof,
+        mapping: Arc<dyn AccessMapping>,
+        model: QueryModel,
+    }
+
+    impl Query {
+        async fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
+            compile(&self.proof, &self.mapping, &self.model, executor).await
+        }
+    }
+
+    fn query(rule: AccessRule, mapping: Arc<dyn AccessMapping>, executor: &dyn Executor) -> Query {
         let model = mapping.model().clone();
-        AuthorizedQuery {
+        Query {
             proof: AccessProof {
                 context: AccessContext {
                     actor: AuditActor::new("u".into(), "user".into(), AccountKind::Admin),
@@ -477,14 +483,13 @@ mod tests {
                     model: Some(model.key.clone()),
                     as_of: Instant::now(),
                 },
-                subject: AccessSubject::Direct,
                 rule,
                 version: "identity-v1".into(),
                 valid_until: None,
                 policy_version: 7,
                 organization_version: 11,
                 boundary: executor.boundary().unwrap(),
-                registry: Arc::new(()),
+                service: Arc::new(()),
             },
             mapping,
             model,
@@ -497,7 +502,7 @@ mod tests {
         let mapping = mapping("sales_order", None);
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
         let as_of = query.proof.context.as_of;
-        let compiled = query.compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let compiled = query.compile(&mut executor).await.unwrap();
         assert_eq!(compiled.policy_version(), 7);
         assert_eq!(compiled.organization_version(), 11);
         assert_eq!(compiled.as_of(), as_of);
@@ -511,8 +516,7 @@ mod tests {
             AccessRule::Fact(AccessFact::Owned),
             AccessRule::Fact(AccessFact::HistoryParticipant),
         ]);
-        let plan =
-            query(rule, mapping.clone(), &executor).compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let plan = query(rule, mapping.clone(), &executor).compile(&mut executor).await.unwrap();
         assert_eq!(plan.stages.len(), 3);
         assert!(plan.stages[0].contains_key("$lookup"));
         assert_eq!(
@@ -547,8 +551,7 @@ mod tests {
                 AccessRule::RecordReadGrant(ResourceKind::SalesOrder),
             ]),
         ]);
-        let plan =
-            query(rule, mapping.clone(), &executor).compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let plan = query(rule, mapping.clone(), &executor).compile(&mut executor).await.unwrap();
         assert_eq!(
             plan.stages[1].get_document("$lookup").unwrap().get_document("let").unwrap(),
             &doc! { "identity_key": "$business_id" }
@@ -575,7 +578,7 @@ mod tests {
             mode: RelationMatch::AllNonEmpty,
             rule: Box::new(AccessRule::Fact(AccessFact::Owned)),
         };
-        let plan = query(rule, root.clone(), &executor).compile(root.as_ref(), &mut executor).await.unwrap();
+        let plan = query(rule, root.clone(), &executor).compile(&mut executor).await.unwrap();
         let lookup = plan.stages[0].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_str("from").unwrap(), "access_rows");
         let pipeline = lookup.get_array("pipeline").unwrap();
@@ -602,17 +605,10 @@ mod tests {
         let sales = mapping("sales_order", None);
         let unknown =
             query(AccessRule::Fact(AccessFact::WarehouseIn(["w".into()].into())), sales.clone(), &executor);
-        assert!(unknown.compile(sales.as_ref(), &mut executor).await.is_err());
-        let same_name_different_instance = mapping("sales_order", None);
-        assert!(
-            query(AccessRule::Allow, sales.clone(), &executor)
-                .compile(same_name_different_instance.as_ref(), &mut executor)
-                .await
-                .is_err()
-        );
+        assert!(unknown.compile(&mut executor).await.is_err());
         let wrong_resource =
             query(AccessRule::RecordReadGrant(ResourceKind::PurchaseOrder), sales.clone(), &executor);
-        assert!(wrong_resource.compile(sales.as_ref(), &mut executor).await.is_err());
+        assert!(wrong_resource.compile(&mut executor).await.is_err());
     }
 
     #[tokio::test]
@@ -629,22 +625,14 @@ mod tests {
             key_expression: None,
             action_sensitive: false,
         });
-        assert!(
-            query(AccessRule::Allow, mapping.clone(), &executor)
-                .compile(mapping.as_ref(), &mut executor)
-                .await
-                .is_err()
-        );
+        assert!(query(AccessRule::Allow, mapping.clone(), &executor).compile(&mut executor).await.is_err());
     }
 
     #[tokio::test]
     async fn denied_query_compiles_false_instead_of_missing_filter() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
-        let plan = query(AccessRule::Deny, mapping.clone(), &executor)
-            .compile(mapping.as_ref(), &mut executor)
-            .await
-            .unwrap();
+        let plan = query(AccessRule::Deny, mapping.clone(), &executor).compile(&mut executor).await.unwrap();
         assert_eq!(plan.stages, vec![doc! { "$match": { "$expr": false } }]);
     }
 
@@ -659,9 +647,7 @@ mod tests {
         };
         let child = mapping("sales_order", None);
         let root = mapping("invoice", Some(child.clone()));
-        assert!(
-            query(rule.clone(), root.clone(), &executor).compile(root.as_ref(), &mut executor).await.is_err()
-        );
+        assert!(query(rule.clone(), root.clone(), &executor).compile(&mut executor).await.is_err());
         let mut model = root.model().clone();
         model.output = QueryOutput::Share { fields: ["business_id".into(), "share_amount".into()].into() };
         let share: Arc<dyn AccessMapping> = Arc::new(Mapping {
@@ -675,8 +661,7 @@ mod tests {
             key_expression: None,
             action_sensitive: false,
         });
-        let plan =
-            query(rule, share.clone(), &executor).compile(share.as_ref(), &mut executor).await.unwrap();
+        let plan = query(rule, share.clone(), &executor).compile(&mut executor).await.unwrap();
         assert_eq!(
             plan.stages.last().unwrap(),
             &doc! { "$project": { "_id": 0, "business_id": 1, "share_amount": 1 } }
@@ -706,11 +691,11 @@ mod tests {
             action_sensitive: false,
         });
         let query = query(AccessRule::Allow, live.clone(), &executor);
-        let plan = query.compile(live.as_ref(), &mut executor).await.unwrap();
+        let plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies[0].validate(&mut executor).await.is_ok());
         live.revision.store(2, Ordering::Relaxed);
         assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
-        let updated = query.compile(live.as_ref(), &mut executor).await.unwrap();
+        let updated = query.compile(&mut executor).await.unwrap();
         assert_ne!(plan.version(), updated.version());
     }
 
@@ -720,13 +705,10 @@ mod tests {
         let mapping = mapping("sales_order", None);
         let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
         query.proof.valid_until = Some(Instant::from_unix_secs(1));
-        assert!(matches!(query.compile(mapping.as_ref(), &mut executor).await, Err(Error::ConflictError(_))));
+        assert!(matches!(query.compile(&mut executor).await, Err(Error::ConflictError(_))));
         query.proof.valid_until = None;
         executor.next_read();
-        assert!(matches!(
-            query.compile(mapping.as_ref(), &mut executor).await,
-            Err(Error::ValidationError(_))
-        ));
+        assert!(matches!(query.compile(&mut executor).await, Err(Error::ValidationError(_))));
     }
 
     #[tokio::test]
@@ -748,7 +730,7 @@ mod tests {
             rule: Box::new(AccessRule::Fact(AccessFact::Owned)),
         };
         let query = query(rule, mapping.clone(), &executor);
-        let plan = query.compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let plan = query.compile(&mut executor).await.unwrap();
         assert_eq!(plan.dependencies.len(), 2);
         assert_eq!(plan.dependencies[0].context.permission.action(), "list");
         assert_eq!(plan.dependencies[1].context.permission.action(), "detail");
@@ -790,7 +772,7 @@ mod tests {
             mode: RelationMatch::AllNonEmpty,
             rule: Box::new(AccessRule::Allow),
         };
-        let plan = query(rule, root.clone(), &executor).compile(root.as_ref(), &mut executor).await.unwrap();
+        let plan = query(rule, root.clone(), &executor).compile(&mut executor).await.unwrap();
         let pipeline = plan.stages[0].get_document("$lookup").unwrap().get_array("pipeline").unwrap();
         assert_eq!(
             pipeline[1],
@@ -814,7 +796,7 @@ mod tests {
         });
         let grant =
             query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), calculated.clone(), &executor);
-        let compiled = grant.compile(calculated.as_ref(), &mut executor).await.unwrap();
+        let compiled = grant.compile(&mut executor).await.unwrap();
         assert_eq!(
             compiled.stages[0].get_document("$lookup").unwrap().get_document("let").unwrap(),
             &doc! { "identity_key": expression.clone() }
@@ -826,8 +808,7 @@ mod tests {
             mode: RelationMatch::AllNonEmpty,
             rule: Box::new(AccessRule::Allow),
         };
-        let compiled =
-            query(rule, root.clone(), &executor).compile(root.as_ref(), &mut executor).await.unwrap();
+        let compiled = query(rule, root.clone(), &executor).compile(&mut executor).await.unwrap();
         let pipeline = compiled.stages[0].get_document("$lookup").unwrap().get_array("pipeline").unwrap();
         assert_eq!(
             pipeline[0],
@@ -845,13 +826,11 @@ mod tests {
         let mapping = mapping("sales_order", None);
         let rule = AccessRule::Allow.requiring(&[FactKind::Warehouse].into());
         assert!(matches!(
-            query(rule, mapping.clone(), &executor).compile(mapping.as_ref(), &mut executor).await,
+            query(rule, mapping.clone(), &executor).compile(&mut executor).await,
             Err(Error::ValidationError(_))
         ));
         let rule = AccessRule::Allow.requiring(&[FactKind::Owner].into());
-        assert!(
-            query(rule, mapping.clone(), &executor).compile(mapping.as_ref(), &mut executor).await.is_ok()
-        );
+        assert!(query(rule, mapping.clone(), &executor).compile(&mut executor).await.is_ok());
     }
 
     #[tokio::test]
@@ -878,7 +857,7 @@ mod tests {
         };
         let rule = rules::data_condition(&sales_inquiry::QUERY_SALES_LIST, Some(&scope)).unwrap();
         let query = query(rule.clone(), mapping.clone(), &executor);
-        let plan = query.compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies.is_empty());
         let samples = [("own", "u", "other"), ("team", "other", "team"), ("denied", "other", "other")];
         let rows = samples
@@ -946,7 +925,7 @@ mod tests {
             .unwrap();
         let mut query = query(rule.clone(), root.clone(), &executor);
         query.proof.context.permission = permission;
-        let plan = query.compile(root.as_ref(), &mut executor).await.unwrap();
+        let plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies.is_empty());
         let sources = [("s1", "u", 0), ("s2", "u", 0), ("denied", "other", 0), ("deleted", "u", 1)];
         let collections = [("access_sources".into(), sources.iter().map(|(id, owner, deleted)| doc! {
@@ -1050,7 +1029,7 @@ mod tests {
                 let rule = source_condition(&permission, &qualified, &scopes, Output::Object).unwrap();
                 let mut query = query(rule, root.clone(), executor.as_ref());
                 query.proof.context.permission = permission;
-                let plan = query.compile(root.as_ref(), executor.as_mut()).await.unwrap();
+                let plan = query.compile(executor.as_mut()).await.unwrap();
                 assert_eq!(plan.stages().iter().filter(|stage| stage.contains_key("$lookup")).count(), 3);
                 let make_row =
                     |id: &str, sales_ids: Vec<&str>, purchase_ids: Vec<&str>, settlement_ids: Vec<&str>| {
@@ -1167,7 +1146,7 @@ mod tests {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let query = query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), mapping.clone(), &executor);
-        let plan = query.compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let plan = query.compile(&mut executor).await.unwrap();
         let grants = ["allowed", "stale", "wrong_user", "wrong_target"]
             .iter()
             .map(|id| {
@@ -1219,7 +1198,7 @@ mod tests {
             action_sensitive: true,
         });
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
-        let mut plan = query.compile(mapping.as_ref(), &mut executor).await.unwrap();
+        let mut plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies.is_empty());
         assert!(plan.proof.valid_until.is_some());
         mapping.revision.store(2, Ordering::Relaxed);
@@ -1241,28 +1220,25 @@ mod tests {
         let mapping = mapping("sales_order", None);
         let snapshot_query = query(AccessRule::Allow, mapping.clone(), &snapshot);
         assert!(
-            !snapshot_query.proof.needs_revalidation(&snapshot_query.proof.registry, &mut snapshot).unwrap()
+            !snapshot_query.proof.needs_revalidation(&snapshot_query.proof.service, &mut snapshot).unwrap()
         );
         assert!(matches!(
             snapshot_query.proof.needs_revalidation(&Arc::new(()), &mut snapshot),
             Err(Error::ValidationError(_))
         ));
-        assert!(matches!(
-            snapshot_query.compile(mapping.as_ref(), &mut NoTransaction).await,
-            Err(Error::ValidationError(_))
-        ));
+        assert!(matches!(snapshot_query.compile(&mut NoTransaction).await, Err(Error::ValidationError(_))));
         snapshot.session();
         assert!(matches!(
-            snapshot_query.proof.needs_revalidation(&snapshot_query.proof.registry, &mut snapshot),
+            snapshot_query.proof.needs_revalidation(&snapshot_query.proof.service, &mut snapshot),
             Err(Error::ValidationError(_))
         ));
 
         let mut executor = ReadExecutor::default();
         let proof = query(AccessRule::Allow, mapping, &executor).proof;
-        assert!(proof.needs_revalidation(&proof.registry, &mut executor).unwrap());
+        assert!(proof.needs_revalidation(&proof.service, &mut executor).unwrap());
         executor.next_read();
         assert!(matches!(
-            proof.needs_revalidation(&proof.registry, &mut executor),
+            proof.needs_revalidation(&proof.service, &mut executor),
             Err(Error::ValidationError(_))
         ));
     }

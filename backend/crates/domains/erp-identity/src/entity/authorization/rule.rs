@@ -16,6 +16,8 @@ pub enum AccessFact {
     HistoryParticipant,
     AssignedTo,
     Participant,
+    /// 任务的真实完成标记；与指派、参与条件由 identity 组合。
+    Completed(bool),
 }
 
 /// 只能由身份域构造；查询和对象判定共用的规则树。
@@ -151,7 +153,7 @@ impl AccessFact {
             Self::SettlementPartyIn(ids) => object.settlement_party_id.is_some_and(|id| ids.contains(id)),
             Self::WarehouseIn(ids) => object.warehouse_id.is_some_and(|id| ids.contains(id)),
             Self::HistoryParticipant => object.historical_read_participant,
-            Self::AssignedTo | Self::Participant => false,
+            Self::AssignedTo | Self::Participant | Self::Completed(_) => false,
         }
     }
 }

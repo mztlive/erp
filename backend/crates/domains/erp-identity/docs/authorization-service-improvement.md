@@ -1,6 +1,6 @@
 # 权限系统重写方案
 
-状态：第一至第三阶段已实现，待 review；第四至第六阶段待实施。公共权限定义、固定范围与授权规则、事实检查、静态与动态 Mapping 分离和执行边界已完成。统一服务、Builder 及新目标检查的公共入口仍按第四阶段接通。实施必须遵守本文规定的接口、职责边界和阶段验收条件。
+状态：第一至第四阶段已实现，待 review；第五、第六阶段待实施。统一服务、Builder、新目标检查及 server 装配入口已接通。业务调用、完整业务绑定与应用工厂按第五、第六阶段迁移。实施必须遵守本文规定的接口、职责边界和阶段验收条件。
 
 本文规定公共接口、授权行为、数据接口和验收条件。内部临时类型、字段布局和函数拆分由实现确定，不作为兼容合同。
 
@@ -238,6 +238,8 @@ pub trait AccessFactsPort: Send + Sync {
 
 事实读取器返回对象身份、版本、负责人、所属组织，以及已有规则要求的任务指派和实际来源关系。必需事实由 DataScope 的维度要求、固定行级检查及本次目标共同确定。事实未加载、已加载但为空必须保持可区分，不能用空值掩盖缺失事实。
 
+根对象及各层来源对象均按资源与身份视为无序集合。identity 在校验完整集合、重复对象及展开上限后固定比较顺序；非事务复验忽略排列差异，仍比较全部事实、版本和来源引用。
+
 拥有领域的 repository 可以直接实现该接口；需要组合本域仓储时，由本域事实读取器实现。跨域事实通过窄 Port 获取，所需适配器在 server 的授权装配模块中连接。
 
 所有读取使用本次调用的 `executor`。共享实例的状态限制按第 3.6.1 节执行。
@@ -332,28 +334,26 @@ Builder 的目标接口为：
 | `mapping(permission, mapping)` | `permission: &Permission` 为查询权限，`mapping: Arc<dyn AccessMapping>` 为查询实现；返回 `Result<Self>` |
 | `build()` | 校验规则所需绑定，返回 `Result<AuthorizationService>` |
 
-以下示例只装配询价资源。参数中的两个 trait 实现由 server 使用业务仓储创建。全量 `build` 必须补齐当前 HTTP 和 worker 使用的全部必要绑定。
+以下示例展示询价资源的绑定步骤，返回尚未完成的 Builder。参数中的两个 trait 实现由 server 使用业务仓储创建。调用 `build()` 前，必须补齐全部固定规则要求的 Facts 和查询 Mapping；仅绑定询价时不得构造生产服务。
 
 ```rust
 use std::sync::Arc;
 
 use erp_identity::{
-    AccessFactsPort, AccessMapping, AuthorizationService, Result, SharedRbacService,
+    AccessFactsPort, AccessMapping, AuthorizationBuilder, AuthorizationService, Result, SharedRbacService,
 };
 use erp_permissions::sales_inquiry;
 use mongodb::Database;
 
-fn build(
+fn inquiry_bindings(
     db: Database,
     rbac: SharedRbacService,
     inquiry_facts: Arc<dyn AccessFactsPort>,
     inquiry_mapping: Arc<dyn AccessMapping>,
-) -> Result<Arc<AuthorizationService>> {
-    let service = AuthorizationService::builder(db, rbac)
+) -> Result<AuthorizationBuilder> {
+    AuthorizationService::builder(db, rbac)
         .facts("sales_inquiry", inquiry_facts)?
-        .mapping(&sales_inquiry::QUERY_SALES_LIST, inquiry_mapping)?
-        .build()?;
-    Ok(Arc::new(service))
+        .mapping(&sales_inquiry::QUERY_SALES_LIST, inquiry_mapping)
 }
 ```
 
@@ -361,7 +361,9 @@ fn build(
 
 每个查询权限绑定一个确定的查询入口，不要求该入口的所有来源共用一个集合或输出形态。普通入口使用一个根 Mapping；资金等复杂入口由固定实现连接所需分区及来源 Mapping，identity 决定授权组合和允许输出。来源映射可以有多个，不能被业务调用方替换或作为完整对象凭证使用。不要为分区另建可由调用方配置的政策树。
 
-Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造完成后保持固定。
+查询能力按公共权限常量显式声明，不按动作名称推断。`procurement_inquiry:internal_quote` 和 `purchase_payment_request:pay` 同时支持固定查询入口与精确任务检查；支持查询不改变写入授权必须使用快照事务的要求。付款入口的 `pay` 与 `detail` 必须来自同一个启用角色，查询与任务检查均执行此资格要求。
+
+Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造完成后保持固定。 `AccessMapping::relations()` 描述固定关系及来源 Mapping，默认返回空集合；有来源的实现必须提供完整描述。`relation()` 返回的来源实例必须与启动描述一致，动态准备不得替换来源或查询模型。
 
 构造时必须校验：
 
@@ -370,6 +372,7 @@ Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造�
 - 每个资源只绑定一个根 Facts 实例，每个查询权限只绑定一个查询入口；重复绑定返回错误。内部来源与分区映射不作为该权限的重复入口。
 - 按统一入口的固定处理分支及 `ScopeSpec` 确定所需能力，缺少必要 Facts 或 Mapping 时构造失败。仅功能权限操作不要求无用的对象或查询绑定。
 - Mapping 的根资源、集合、主键、输出粒度及事实能力符合对应查询要求；描述在构造后不可变，不依赖请求状态。复杂入口同时校验全部来源和分区的绑定与输出限制；具体对象的必需事实在 Facts 返回后校验。
+- `QueryOutput::Existence` 的输出字段必须且只能包含模型的 `id_field`；登记金额或内容字段时构造失败。
 
 共享实例保存在 `Application`，`HttpState` 经 `Application` 取得它。`Application::authorization()` 只克隆 `Arc`。
 
@@ -458,6 +461,8 @@ Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造�
 - 完整对象要求全部来源时，引用必须非空且全部通过；任一来源命中只能支持该权限明确允许的输出粒度。
 
 `FactKind` 描述所需数据维度，`AccessFact` 表达具体条件，Facts 提供真实值，Mapping 翻译数据库字段。内部可沿用 `AccessRule`，但其节点只服务上述共享条件。创建、归属变更和任务办理的专有流程不增加通用查询节点。
+
+采购任务内部资料要求当前指派给本人；已完成任务还须本人参与。完成标记使用 `ObjectFacts.completed` 和对应的 `FactKind::Completed`、`AccessFact::Completed` 表达，查询和精确任务检查共用这一条件。Facts 与 Mapping 必须完整提供指派、完成标记和参与事实；业务状态迁移仍由业务用例校验。
 
 #### 3.6.3 对象与操作检查
 

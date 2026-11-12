@@ -6,7 +6,7 @@
 
 本 crate 不依赖其他业务领域。业务模块提供事实读取器和 Mapping；server 的 `wiring/authorization/` 装配事实读取器和 Mapping；identity 固定并执行授权规则。
 
-公共权限值与目录已迁入 `erp-permissions`，identity 的 `Permission` 导出引用同一类型。范围规则、事实执行、Mapping 分离和执行边界已完成前三阶段实现；统一公共 API 和 Builder 在第四阶段接通。本文中的共享授权服务及业务授权 API 示例仍为目标设计。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
+公共权限值与目录已迁入 `erp-permissions`，identity 的 `Permission` 导出引用同一类型。统一公共 API、Builder、固定规则和执行边界已实现。业务调用与完整 Facts/Mapping 在第五阶段迁移，`Application`、HTTP 和 worker 在第六阶段切换。实施要求见 [授权服务改进](docs/authorization-service-improvement.md)。
 
 ## 共享服务
 
@@ -30,7 +30,7 @@ identity 固定授权规则，事实读取器和 Mapping 在 server 的 `wiring/
 
 `permissions` 批量读取各项功能资格，账号失效时返回 `None`；身份设施、策略版本或非法权限错误直接返回。批量结果不代表同一角色具备全部权限，需要此约束时使用 `QualifiedPermissions::same_role`。功能资格不能替代 `require` 或 `query` 的对象授权。
 
-HTTP 层通过 JWT 认证身份，受保护的公共业务用例在返回业务数据或执行写入前调用 `require` 或 `query`。仅要求功能权限的操作使用 `require` 和 `AccessTarget::Operation`；`has_permission` 和 `permissions` 用于功能资格查询及按钮展示。目标方案移除 `with_permission` 鉴权中间件及路由包装调用。
+HTTP 层通过 JWT 认证身份，受保护的公共业务用例在返回业务数据或执行写入前调用 `require` 或 `query`。仅要求功能权限的操作使用 `require` 和 `AccessTarget::Operation`；`has_permission` 和 `permissions` 用于功能资格查询及按钮展示。第六阶段移除 `with_permission` 鉴权中间件及路由包装调用；切换前保留既有路由鉴权。
 
 业务不得直接调用 `RbacService::enforce`、`DataScopeService`、`ResourceAccessService`，也不得手工合并基础范围和记录授权。范围解析和查询编译由 identity 内部执行。
 
@@ -78,7 +78,7 @@ let page = repository.list(&filter, &access, executor).await?;
 authorization.validate(&access, executor).await?;
 ```
 
-`query` 根据权限取得已装配的授权声明和 Mapping，生成并编译完整授权条件。领域公共读取方法统一管理查询生成、仓储执行和返回前复验；业务调用不取得或传入 Mapping，也不选择查询模型。执行前只检查凭证绑定、执行器及有效期，不重复执行完整授权复验。
+`query` 根据权限取得 identity 固定规则和已绑定的 Mapping，生成并编译完整授权条件。领域公共读取方法统一管理查询生成、仓储执行和返回前复验；业务调用不取得或传入 Mapping，也不选择查询模型。执行前只检查凭证绑定、执行器及有效期，不重复执行完整授权复验。
 
 业务筛选只收窄候选集合，不能先用部分权限条件排除记录。列表、总数、汇总和导出使用同一完整授权条件。
 
@@ -92,9 +92,13 @@ authorization.validate(&access, executor).await?;
 
 ## 权限定义与事实装配
 
-`erp-permissions` 提供权限值、内置常量、资源标识和公共目录。server 补充 HTTP 路由及接口说明。当前业务授权登记仍使用 `AuthorizationRegistry` 和 `AccessRegistration`，按[改造计划](docs/authorization-service-improvement.md)第四阶段删除，业务调用在第五阶段迁移。
+`erp-permissions` 提供权限值、内置常量、资源标识和公共目录。server 补充 HTTP 路由及接口说明。identity 不再公开登记政策、选择授权主体或独立编译查询的接口。业务调用必须按第五阶段迁入本文 API。
 
-目标设计由 identity 按权限执行固定函数，检查功能资格、数据范围和必要记录关系。server 的 `wiring/authorization/` 只绑定 Facts 与 Mapping，不声明政策。`AuthorizationService::builder` 及统一入口在第四阶段接通，缺少引用、重复绑定、资源错配或必要能力缺失时拒绝构造。
+identity 按权限执行固定函数，检查功能资格、数据范围和必要记录关系。server 的 `wiring/authorization::build` 接收身份设施、按资源组织的 Facts 和按权限组织的 Mapping，返回 `Result<Arc<AuthorizationService>>`。Builder 只绑定实现，不声明政策。
+
+使用 `AuthorizationService::builder(db, rbac)` 开始装配，依次调用 `facts(resource, facts)?` 和 `mapping(&permission, mapping)?`，最后调用 `build()?`。全部固定数据规则所需资源必须有 Facts，每个支持查询的权限必须有唯一 Mapping；仅功能权限操作不需要对象或查询绑定。缺失、重复、未知引用、事实能力不足、来源资源或输出粒度错配均返回接入错误。不得用空实现补齐生产绑定。
+
+Mapping 的 `model()` 和 `relations()` 必须提供不依赖请求或动态准备的描述。Builder 校验后冻结根及来源模型；`relation()` 必须返回启动时登记的同一个来源实例。多个权限或关系可以复用同一个实现实例，动态准备仍只按当前读取阶段缓存。
 
 | 位置 | 职责 |
 | --- | --- |
@@ -120,6 +124,7 @@ authorization.validate(&access, executor).await?;
 
 | Mapping 能力 | 职责                                                                       |
 | ------------ | -------------------------------------------------------------------------- |
+| `relations` | 提供固定关系及来源 Mapping，供 Builder 校验，不读取动态事实 |
 | `model`      | 固定模型、资源、集合、行主键、输出粒度和支持的事实维度                     |
 | `key`        | 返回授权资源 ID 表达式，供记录授权和来源连接使用；支持字段引用及计算表达式 |
 | `preparation` | 默认返回 `None`；只有查询外动态数据才提供 `MappingPreparation` |
@@ -135,19 +140,23 @@ authorization.validate(&access, executor).await?;
 
 所有者事实在销售单中映射到负责销售字段，在客户中映射到有效负责人分配。字段不同，语义相同。Mapping 不决定权限条件的与或关系、个人上限或是否接受记录授权。
 
-`QueryOutput::Object` 表示完整对象。`Share` 和 `Existence` 必须登记为独立只读视图并列出输出字段，编译器执行字段投影。份额模型每行只对应一个来源，金额只能来自该份额；存在性视图不能登记其他来源内容或完整单据金额。受限视图不能用于 `require` 完整对象检查。查询调用不通过选择模型切换授权政策或输出份额；Mapping 由操作定义固定。
+`QueryOutput::Object` 表示完整对象。`Share` 和 `Existence` 必须登记为独立只读视图，编译器执行字段投影。份额模型每行只对应一个来源，金额只能来自该份额；存在性视图的 `fields` 必须且只能包含 `id_field`，登记金额或内容字段时 Builder 返回错误。受限视图不能用于 `require` 完整对象检查。查询调用不通过选择模型切换授权政策或输出份额；Mapping 由启动绑定固定，identity 校验该权限允许的输出粒度。
 
-业务授权声明指定根对象及来源的必需事实，Mapping 声明支持的维度。对象字段使用 `FactValue`：`Missing` 表示未读取；`Known(None)` 或已知空集合表示确认没有值。必需事实缺失时返回接入错误，其他授权分支命中不能掩盖缺失。
+查询能力由 identity 按权限固定声明，不根据动作名称推断。复用写权限的查询仍须绑定 Mapping；支持查询不免除该权限执行 `require` 时的快照事务要求。采购任务内部资料的 Mapping 必须支持指派、完成标记和参与事实，查询与精确任务检查使用相同条件。
+
+identity 固定规则指定根对象及来源的必需事实，Mapping 声明支持的维度。对象字段使用 `FactValue`：`Missing` 表示未读取；`Known(None)` 或已知空集合表示确认没有值。必需事实缺失时返回接入错误，其他授权分支命中不能掩盖缺失。
+
+Facts 返回的根对象和各层来源对象按资源与身份视为无序集合。非事务复验忽略排列变化，仍比较完整事实、版本和来源引用；缺失、重复或额外对象按原校验规则拒绝。
 
 查询缺少映射、对象检查缺少事实端口、未知事实、资源不匹配或不支持维度均返回错误，不能降级成全量查询。Mapping 与事实端口执行相同责任定义，并验证对象判定与列表成员判断一致。
 
 ## 授权规则
 
 1. 账号和同角色完整操作权限先于数据判断。
-2. 历史参与和记录读取补充由统一操作定义固定，默认关闭。基础数据范围为有效条款或已开启的历史参与，再与个人上限求交。
+2. 历史参与和记录读取补充由identity 固定规则确定，默认关闭。基础数据范围为有效条款或已开启的历史参与，再与个人上限求交。
 3. 销售单、采购单的列表和详情开启记录读取补充后增加有效记录授权分支；该分支不放行原单据修改、提交。
 4. 独立范围继续与读取结果求交。
-5. 来源业务默认检查入口权限及实际来源数据资格。独立来源入口资格由统一操作定义固定，不由调用方临时追加。
+5. 来源业务默认检查入口权限及实际来源数据资格。独立来源入口资格由identity 固定规则确定，不由调用方临时追加。
 6. 任务可见、资料可读、任务可办理分别定义；业务状态不由授权服务判断。
 7. 公司共享资源仍检查账号和操作权限，不读取无关的人员范围或记录授权。
 

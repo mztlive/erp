@@ -117,11 +117,32 @@ impl AccessFact {
             Self::HistoryParticipant => object.history_participants.get()?.contains(actor),
             Self::AssignedTo => object.assignee_id.get()?.as_deref() == Some(actor),
             Self::Participant => object.participants.get()?.contains(actor),
+            Self::Completed(completed) => object.completed.get()? == completed,
         })
     }
 }
 
 impl ObjectFacts {
+    /// 先校验完整事实及展开上限，再按资源和身份固定根与嵌套来源的顺序。
+    pub(crate) fn canonicalize(objects: &mut [Self]) -> Result<()> {
+        let mut flattened = Vec::new();
+        for object in objects.iter() {
+            object.flatten(&mut flattened, 0)?;
+        }
+        Self::sort(objects);
+        Ok(())
+    }
+
+    /// 仅重排已校验的集合，不去重或丢弃来源引用。
+    fn sort(objects: &mut [Self]) {
+        objects.sort_unstable_by(|a, b| (&a.resource, &a.id).cmp(&(&b.resource, &b.id)));
+        for object in objects {
+            for relation in object.relations.values_mut() {
+                Self::sort(&mut relation.objects);
+            }
+        }
+    }
+
     /// 有界展开事实，防止递归关系或遗漏身份造成错误授权。
     pub(crate) fn flatten<'a>(&'a self, output: &mut Vec<&'a Self>, depth: usize) -> Result<()> {
         if depth > 8 || output.len() >= 1000 || self.resource.is_empty() || self.version.is_empty() {

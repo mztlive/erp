@@ -3,20 +3,21 @@ use std::collections::BTreeSet;
 use application_core::AuditActor;
 use persistence_core::Executor;
 
-use super::{AccessMode, AuthorizationService, rules};
-use crate::entity::authorization::{AccessSubject, AccessTarget, ObjectFacts, ResourceTargets};
-use crate::repository::authorization::AccessProof;
-use crate::repository::resource_grants;
+use super::targets::{Target, TargetFacts};
+use super::{AuthorizationService, rules};
+use crate::entity::access_control::scope_spec;
+use crate::entity::authorization::{AccessContext, AccessRule, AccessTarget, ResourceTargets};
+use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, Result};
 
 impl AuthorizationService {
-    /// 检查完整操作目标；任一必要对象失败则整体拒绝。
+    /// 检查固定操作及完整目标；不返回可供后续写入复用的凭证。
     /// # 参数
-    /// actor、permission 为服务端身份与实际操作；target 为完整目标；executor 为原执行器。
+    /// actor、permission 为真实身份及操作；target 为服务端目标；executor 为原执行器。
     /// # 返回
-    /// 本次授权全部通过时成功，不产生长期凭证。
+    /// 全部目标、归属及精确任务要求通过时返回成功。
     /// # 错误
-    /// 缺少资格、对象、来源、版本或正确登记时拒绝。
+    /// 未知操作、不支持目标、缺权、事实缺失、越权或依赖变化均拒绝。
     pub async fn require(
         &self,
         actor: &AuditActor,
@@ -25,67 +26,43 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         executor.next_read();
-        match target {
-            AccessTarget::Operation => {
-                let entry = self.registry.entry(permission, &AccessSubject::Direct)?;
-                if !matches!(entry.access, AccessMode::Operation | AccessMode::QualifiedOperation { .. }) {
-                    return Err(Error::ValidationError("本操作必须提供对象".into()));
-                }
-                self.require_operation(actor, &entry, executor).await
-            },
-            AccessTarget::Records { subject, ids } => {
-                self.records(actor, permission, subject, ids, executor).await
-            },
-        }
-    }
-
-    /// 根对象身份和数量必须与完整请求集合一致。
-    async fn records(
-        &self,
-        actor: &AuditActor,
-        permission: &Permission,
-        subject: AccessSubject,
-        ids: ResourceTargets,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if ids.ids().is_empty() {
-            return Err(Error::ValidationError("授权目标不能为空".into()));
-        }
+        let kind = scope_spec::kind(permission)?;
+        let form = target.form();
+        rules::ensure_target(permission, kind, form)?;
         if !rules::is_read(permission) && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
         {
-            return Err(Error::ValidationError("对象写入授权必须使用快照事务".into()));
+            return Err(Error::ValidationError("写入授权必须使用快照事务".into()));
         }
-        let entry = self.registry.entry(permission, &subject)?;
-        let port = entry.access.facts()?.clone();
-        let query = self.resolve(actor, entry, executor).await?;
-        let objects = port.load(&query.context, &ids, executor).await?;
-        ids.ensure_objects(&query.context.resource, &objects)?;
-        self.check_objects(&query, &objects, executor).await?;
-        self.validate_proof(&query, executor).await?;
-        if !query.boundary.is_snapshot() && port.load(&query.context, &ids, executor).await? != objects {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象事实已改变".into()));
+        if matches!(target, AccessTarget::Operation) {
+            let boundary = executor.boundary();
+            self.qualify(actor, permission, executor).await?;
+            if boundary.is_some_and(|boundary| !boundary.is_current(executor)) {
+                return Err(Error::ValidationError("操作检查跨越执行阶段".into()));
+            }
+            return Ok(());
         }
-        let mut flattened = Vec::new();
-        for object in &objects {
-            object.flatten(&mut flattened, 0)?;
-        }
-        query.ensure_current(executor)?;
-        Ok(())
+        let proof = self.resolve(actor, permission, None, None, executor).await?;
+        let facts =
+            TargetFacts::load(&self.facts, &proof.context, &proof.rule, target.borrowed()?, executor).await?;
+        let grants = self.target_grants(&proof.context, &proof.rule, &facts, executor).await?;
+        facts.require(&proof.context, &proof.rule, &grants, executor)?;
+        self.validate_proof(&proof, executor).await?;
+        facts.revalidate(&self.facts, &proof.context, executor).await?;
+        facts.require(&proof.context, &proof.rule, &grants, executor)?;
+        proof.ensure_current(executor)
     }
 
-    /// 批量读取本次目标的授权，查询规模不随账号历史授权增长。
-    async fn check_objects(
+    /// 授权行只读取本次目标及真实来源；不读取账号历史授权全集。
+    async fn target_grants(
         &self,
-        query: &AccessProof,
-        objects: &[ObjectFacts],
+        context: &AccessContext,
+        rule: &AccessRule,
+        facts: &TargetFacts,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let mut flattened = Vec::new();
-        for object in objects {
-            object.flatten(&mut flattened, 0)?;
-        }
+    ) -> Result<BTreeSet<(ResourceKind, String)>> {
+        let flattened = facts.flattened()?;
         let mut resources = BTreeSet::new();
-        query.rule.grant_resources(&mut resources);
+        rule.grant_resources(&mut resources);
         let mut grants = BTreeSet::new();
         for resource in resources {
             let ids = flattened
@@ -93,17 +70,35 @@ impl AuthorizationService {
                 .filter(|object| object.resource == resource.code())
                 .map(|object| object.id.as_str())
                 .collect::<Vec<_>>();
+            if ids.is_empty() {
+                continue;
+            }
             let targets = ResourceTargets::new(&ids)?;
-            let authorized =
-                resource_grants::target_ids(&self.db, query.context.actor.id(), resource, &targets, executor)
-                    .await?;
+            let authorized = self.facilities.grants(context, resource, &targets, executor).await?;
             grants.extend(authorized.into_iter().map(|id| (resource, id)));
         }
-        for object in objects {
-            if !query.rule.allows_object(query.context.actor.id(), object, &grants)? {
-                return Err(Error::Forbidden("操作包含不可访问的对象".into()));
-            }
+        Ok(grants)
+    }
+}
+
+impl AccessTarget {
+    fn form(&self) -> rules::TargetForm {
+        match self {
+            Self::Operation => rules::TargetForm::Operation,
+            Self::Records(_) => rules::TargetForm::Record,
+            Self::Candidate(_) => rules::TargetForm::Candidate,
+            Self::OwnershipChange { .. } => rules::TargetForm::OwnershipChange,
+            Self::Task { .. } => rules::TargetForm::Task,
         }
-        Ok(())
+    }
+
+    fn borrowed(&self) -> Result<Target<'_>> {
+        Ok(match self {
+            Self::Records(ids) => Target::Records(ids),
+            Self::Candidate(candidate) => Target::Candidate(candidate),
+            Self::OwnershipChange { id, candidate } => Target::OwnershipChange { id, candidate },
+            Self::Task { id, version } => Target::Task { id, version },
+            Self::Operation => return Err(Error::ValidationError("无对象目标不能读取事实".into())),
+        })
     }
 }

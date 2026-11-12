@@ -45,19 +45,27 @@ macro_rules! access_key {
 access_key!(RelationKey);
 access_key!(QueryModelKey);
 
-/// 调用方只能选择服务端登记的业务主体。
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AccessSubject {
-    Direct,
-    Source(RelationKey),
-    View(QueryModelKey),
-}
-
-/// 本次完整操作目标；读取结果不能作为后续命令凭证。
+/// 本次完整操作目标；候选事实只能由业务模块从已验证输入构造。
 #[derive(Debug, Clone)]
 pub enum AccessTarget {
     Operation,
-    Records { subject: AccessSubject, ids: ResourceTargets },
+    Records(ResourceTargets),
+    Candidate(ObjectFacts),
+    OwnershipChange { id: String, candidate: ObjectFacts },
+    Task { id: String, version: String },
+}
+
+impl AccessTarget {
+    /// 构造单条已有记录目标。
+    /// # 参数
+    /// id 为拥有领域的真实记录 ID。
+    /// # 返回
+    /// 包含完整单条 ID 集合的目标。
+    /// # 错误
+    /// 非法或空 ID 返回校验错误。
+    pub fn record(id: &str) -> Result<Self> {
+        Ok(Self::Records(ResourceTargets::new(&[id])?))
+    }
 }
 
 /// 同一授权阶段使用的事实解释上下文；构造上下文本身不产生授权。

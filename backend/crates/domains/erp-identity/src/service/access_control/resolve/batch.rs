@@ -65,12 +65,6 @@ impl<'a> DataScopeBatch<'a> {
         }
     }
 
-    /// 统一授权阶段固定事实解释时点，必须在首次取证前调用。
-    pub(super) fn at(mut self, at: Instant) -> Self {
-        self.as_of = at;
-        self
-    }
-
     /// 保留调用顺序和各动作失败顺序，只去重同阶段公共事实。
     pub(super) async fn resolve_boundary(
         &mut self,

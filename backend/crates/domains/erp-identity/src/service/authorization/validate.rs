@@ -31,9 +31,21 @@ impl AuthorizationService {
         if !proof.needs_revalidation(&self.token, executor)? {
             return Ok(());
         }
-        let entry = self.registry.entry(&proof.context.permission, &proof.subject)?;
-        let current =
-            self.resolve(&proof.context.actor, entry, executor).await.map_err(revalidation_error)?;
+        let model = self
+            .mappings
+            .get(&proof.context.permission)
+            .filter(|_| proof.context.model.is_some())
+            .map(|mapping| mapping.model());
+        let current = self
+            .resolve(
+                &proof.context.actor,
+                &proof.context.permission,
+                model,
+                Some(proof.context.as_of),
+                executor,
+            )
+            .await
+            .map_err(revalidation_error)?;
         if current.version != proof.version || current.rule != proof.rule {
             return Err(changed());
         }

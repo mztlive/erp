@@ -1,5 +1,4 @@
-//! 已有记录、服务端候选和精确任务的事实执行。第四阶段将其接入固定权限入口。
-#![allow(dead_code)]
+//! 已有记录、服务端候选和精确任务的事实执行。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -27,7 +26,6 @@ pub(super) enum Target<'a> {
 }
 
 pub(super) struct TargetFacts {
-    form: TargetForm,
     objects: Vec<ObjectFacts>,
     candidate: Option<ObjectFacts>,
     boundary: ExecutionBoundary,
@@ -77,7 +75,7 @@ impl TargetFacts {
             Some(candidate) => Some(load_candidate(bindings, context, rule, candidate, executor).await?),
             None => None,
         };
-        let result = Self { form, objects, candidate, boundary };
+        let result = Self { objects, candidate, boundary };
         if !result.boundary.is_current(executor) {
             return Err(Error::ValidationError("目标读取跨越执行阶段".into()));
         }
@@ -85,7 +83,7 @@ impl TargetFacts {
         Ok(result)
     }
 
-    /// 所有根对象与新归属同时通过；任务办理额外核对当前指派和完成状态。
+    /// 所有根对象与新归属同时通过；任务条件与查询共用固定数据规则。
     pub(super) fn require(
         &self,
         context: &AccessContext,
@@ -99,11 +97,7 @@ impl TargetFacts {
         ensure_whole_object(rule)?;
         self.ensure_current()?;
         for object in self.objects.iter().chain(&self.candidate) {
-            let base = rule.allows_object(context.actor.id(), object, grants)?;
-            let task = self.form != TargetForm::Task
-                || rules::task_allowed(&context.permission, context.actor.id(), object)?;
-            let allowed = base && task;
-            if !allowed {
+            if !rule.allows_object(context.actor.id(), object, grants)? {
                 return Err(Error::Forbidden("操作包含不可访问的对象或目标归属".into()));
             }
         }
@@ -111,7 +105,7 @@ impl TargetFacts {
     }
 
     /// 有界展开复用同一个总量计数；异步检查结束后再次核对全部到期边界。
-    fn ensure_current(&self) -> Result<()> {
+    pub(super) fn flattened(&self) -> Result<Vec<&ObjectFacts>> {
         let mut flattened = Vec::new();
         for object in &self.objects {
             object.flatten(&mut flattened, 0)?;
@@ -126,7 +120,28 @@ impl TargetFacts {
                 }
             }
         }
-        Ok(())
+        Ok(flattened)
+    }
+
+    fn ensure_current(&self) -> Result<()> {
+        self.flattened().map(|_| ())
+    }
+
+    /// 非事务读取核对完整根及来源事实；快照事务不重读同一批对象。
+    pub(super) async fn revalidate(
+        &self,
+        bindings: &FactsBindings,
+        context: &AccessContext,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if !self.boundary.is_snapshot() {
+            let ids = self.objects.iter().map(|object| object.id.as_str()).collect::<Vec<_>>();
+            let current = load_records(bindings, context, &ResourceTargets::new(&ids)?, executor).await?;
+            if current != self.objects {
+                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象事实已改变".into()));
+            }
+        }
+        self.ensure_current()
     }
 }
 
@@ -143,8 +158,9 @@ async fn load_records(
     let port = bindings
         .get(&context.resource)
         .ok_or_else(|| Error::ValidationError("缺少对象 Facts 绑定".into()))?;
-    let objects = port.load(context, ids, executor).await?;
+    let mut objects = port.load(context, ids, executor).await?;
     ids.ensure_objects(&context.resource, &objects)?;
+    ObjectFacts::canonicalize(&mut objects)?;
     Ok(objects)
 }
 
@@ -470,6 +486,7 @@ mod tests {
             id: "task".into(),
             version: "v2".into(),
             assignee_id: FactValue::Known(Some("user".into())),
+            participants: FactValue::Known(BTreeSet::new()),
             completed: FactValue::Known(false),
             ..Default::default()
         };
@@ -570,7 +587,6 @@ mod tests {
             objects: children,
         };
         let build = |related: RelatedObjects| TargetFacts {
-            form: TargetForm::Candidate,
             objects: vec![],
             boundary: executor.boundary().unwrap(),
             candidate: Some(ObjectFacts {

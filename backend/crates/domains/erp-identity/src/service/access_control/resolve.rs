@@ -14,11 +14,12 @@ use crate::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::access_control::governance::root_scope;
 use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::access_control::scope_spec::{self, OrganizationLoad, ScopeSource};
+use crate::entity::authorization::AccessContext;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
+use crate::{AccessControlExt, Error, Permission, QualifiedPermissions, Result, SharedRbacService};
 
 /// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。
 pub(crate) struct AuthorizedDataScope {
@@ -68,20 +69,60 @@ pub(crate) struct DataScopeService {
 }
 
 impl DataScopeService {
-    /// 统一目录已验证入口，按同一时点解释范围并证明同角色完整权限。
-    pub(crate) async fn registered(
+    /// 使用统一授权已取得的完整资格，只读取本次实际需要的范围设施。
+    pub(crate) async fn qualified(
         &self,
-        actor: &AuditActor,
-        entry: &Permission,
+        context: &AccessContext,
         source: &Permission,
         required: &[Permission],
-        at: Instant,
+        qualified: &QualifiedPermissions,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        let mut permissions = required.to_vec();
-        permissions.push(entry.clone());
-        self.batch(actor, &permissions, executor).at(at).resolve_boundary(entry, source, required).await
+        let spec = scope_spec::require_runtime(source)?;
+        let ids = qualified.roles_for_all(required);
+        let roles = qualified
+            .roles
+            .iter()
+            .filter(|role| ids.iter().any(|id| id.as_str() == role.base.id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if roles.is_empty() {
+            return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
+        }
+        let state = self
+            .scope_organizations(
+                context.actor.id(),
+                scope_spec::organization_load(spec),
+                context.as_of,
+                executor,
+            )
+            .await?;
+        let target = (context.permission.resource(), context.permission.action());
+        let origin = (source.resource(), source.action());
+        let scope =
+            self.resolved(context.actor.id(), &roles, origin, &state, context.as_of, executor).await?;
+        let scope_version = batch::scope_version(
+            context.actor.id(),
+            target,
+            origin,
+            (qualified.account_version, qualified.policy_revision()),
+            &roles,
+            &state,
+            &scope,
+        );
+        Ok(AuthorizedDataScope {
+            facts: DataScopeFacts {
+                resource: target.0.into(),
+                action: target.1.into(),
+                scope,
+                organizations: state,
+                policy_version: qualified.policy_revision(),
+                scope_version,
+                as_of: context.as_of,
+            },
+        })
     }
+
     /// 在一次调用方事务中复用身份和组织事实，各动作分别解析真实范围。
     ///
     /// # 参数

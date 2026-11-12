@@ -32,7 +32,7 @@ impl QueryModel {
     /// # 返回
     /// 标识和路径可用于权限编译时成功。
     /// # 错误
-    /// 空值、表达式路径和保留字段拒绝。
+    /// 拒绝非法模型或字段、缺少行主键的受限输出，以及包含额外字段的存在性输出。
     pub fn validate(&self) -> Result<()> {
         for value in [&self.resource, &self.collection, &self.id_field] {
             if value.is_empty()
@@ -48,6 +48,11 @@ impl QueryModel {
                 || fields.iter().any(|field| !field.split('.').all(valid_segment)))
         {
             return Err(Error::ValidationError("受限查询必须声明有效字段及行主键".into()));
+        }
+        if let QueryOutput::Existence { fields } = &self.output
+            && fields.len() != 1
+        {
+            return Err(Error::ValidationError("存在性查询只允许输出行主键".into()));
         }
         Ok(())
     }

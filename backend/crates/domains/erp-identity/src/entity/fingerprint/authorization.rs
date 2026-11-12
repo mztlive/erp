@@ -1,24 +1,9 @@
 use super::Fingerprint;
 use crate::entity::authorization::{
-    AccessFact, AccessRule, AccessSubject, FactKind, MappingFacts, QueryModel, QueryOutput, RelationMatch,
+    AccessFact, AccessRule, FactKind, MappingFacts, QueryModel, QueryOutput, RelationMatch,
 };
 
 impl Fingerprint {
-    /// 主体编码：固定种类标记，随后为来源或视图标识。
-    pub(crate) fn subject(&mut self, subject: &AccessSubject) {
-        match subject {
-            AccessSubject::Direct => self.text("direct"),
-            AccessSubject::Source(key) => {
-                self.text("source");
-                self.text(key.as_str());
-            },
-            AccessSubject::View(key) => {
-                self.text("view");
-                self.text(key.as_str());
-            },
-        }
-    }
-
     /// 规则编码：固定节点标记及声明顺序的字段；All/Any 分支按无序集合编码。
     pub(crate) fn rule(&mut self, rule: &AccessRule) {
         match rule {
@@ -80,6 +65,7 @@ impl Fingerprint {
             | AccessFact::HistoryParticipant
             | AccessFact::AssignedTo
             | AccessFact::Participant => {},
+            AccessFact::Completed(completed) => self.boolean(*completed),
         }
     }
 
@@ -94,6 +80,7 @@ impl Fingerprint {
             FactKind::HistoryParticipants => "history_participants",
             FactKind::Assignee => "assignee",
             FactKind::Participants => "participants",
+            FactKind::Completed => "completed",
         });
     }
 
@@ -180,20 +167,21 @@ mod tests {
         let reversed = branches.iter().rev().cloned().collect();
         assert_eq!(hash(&AccessRule::All(branches.clone())), hash(&AccessRule::All(reversed)));
         assert_ne!(hash(&AccessRule::All(branches.clone())), hash(&AccessRule::Any(branches)));
-        let subjects = [
-            AccessSubject::Direct,
-            AccessSubject::Source(RelationKey::parse("same").unwrap()),
-            AccessSubject::View(QueryModelKey::parse("same").unwrap()),
-        ];
-        let versions: BTreeSet<_> = subjects
-            .iter()
-            .map(|subject| {
-                let mut hash = Fingerprint::new("subject-test-v2");
-                hash.subject(subject);
+    }
+
+    /// 完成状态取值与参与事实分别影响授权版本。
+    #[test]
+    fn task_completion_values_have_distinct_fingerprints() {
+        let facts = [AccessFact::Completed(false), AccessFact::Completed(true), AccessFact::Participant];
+        let hashes = facts
+            .into_iter()
+            .map(|fact| {
+                let mut hash = Fingerprint::new("rule-test-v2");
+                hash.rule(&AccessRule::Fact(fact));
                 hash.finish()
             })
-            .collect();
-        assert_eq!(versions.len(), subjects.len());
+            .collect::<BTreeSet<_>>();
+        assert_eq!(hashes.len(), 3);
     }
 
     /// 模型身份、集合、输出范围和事实内容均影响分页版本。
