@@ -1,11 +1,13 @@
 //! 付款申请仓储；标准 Repository.update 对申请版本进行 CAS。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Error, Executor, PageResult, Repository, Result, insert_literal_regex_filter, mongo_ops,
+    Error, Executor, PageResult, Repository, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 
 use crate::dto::payable::payment_request::{PaymentRequestListView, PurchasePaymentRequestQuery};
@@ -34,10 +36,11 @@ impl PurchasePaymentRequestExt for Database {
 
 #[allow(async_fn_in_trait)]
 pub trait PurchasePaymentRequestRepositoryExt {
-    /// 装载有界完整候选，由组合层按每个真实采购来源授权后分页。
+    /// 数据库先执行完整授权，再装载有界候选供组合层排序和分页。
     ///
     /// # 参数
     /// * `query` - 来源、状态和关键词筛选。
+    /// * `access` - 同次查询的付款申请完整对象授权凭证。
     /// * `executor` - 当前事务执行器。
     /// # 返回
     /// 稳定倒序最多返回 10001 个候选，额外一行供调用方拒绝超限。
@@ -46,6 +49,20 @@ pub trait PurchasePaymentRequestRepositoryExt {
     async fn scope_candidates(
         &self,
         query: &PurchasePaymentRequestQuery,
+        access: &CompiledAccess,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Vec<PurchasePaymentRequest>>;
+
+    /// 在已授权采购上下文中读取该应付关联的有界申请候选。
+    /// # 参数
+    /// account_id 为上游已验证属于授权采购的应付账户，executor 为同一事务。
+    /// # 返回
+    /// 最多10001条关联申请；调用方只投影该采购的份额，禁止交付其他来源。
+    /// # 错误
+    /// 数据库读取或反序列化失败时返回错误。
+    async fn linked_for_account(
+        &self,
+        account_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchasePaymentRequest>>;
 
@@ -99,10 +116,37 @@ impl PurchasePaymentRequestRepositoryExt for Repository<'_, PurchasePaymentReque
     async fn scope_candidates(
         &self,
         query: &PurchasePaymentRequestQuery,
+        access: &CompiledAccess,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Vec<PurchasePaymentRequest>> {
+        if access.model().collection != self.collection().name()
+            || access.model().output != QueryOutput::Object
+        {
+            return Err(crate::Error::ValidationError("付款申请授权查询模型不匹配".into()));
+        }
+        access.ensure_current(executor)?;
+        let options = FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(10_001).build();
+        let rows = aggregate::find(
+            &self.collection(),
+            query_doc(query),
+            options,
+            access.stages().to_vec(),
+            executor,
+        )
+        .await?;
+        access.ensure_current(executor)?;
+        Ok(rows)
+    }
+
+    async fn linked_for_account(
+        &self,
+        account_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchasePaymentRequest>> {
+        let query =
+            PurchasePaymentRequestQuery { payable_account_id: Some(account_id.into()), ..Default::default() };
         let options = FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(10_001).build();
-        mongo_ops::find_many(&self.collection(), query_doc(query), options, executor).await
+        mongo_ops::find_many(&self.collection(), query_doc(&query), options, executor).await
     }
 
     async fn find_for_task(

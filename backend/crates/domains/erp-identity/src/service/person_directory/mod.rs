@@ -5,37 +5,38 @@ pub mod management;
 mod query;
 mod sync;
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 pub use grant::grant_assigned_roles;
 use mongodb::Database;
 use persistence_core::Transactional;
 pub use sync::sync_role_grants;
 
-use crate::Result;
 use crate::dto::{PersonDirectoryPage, PersonDirectoryQuery};
 use crate::entity::person_directory::{DirectoryListRequest, PersonDirectoryCategory};
-use crate::service::iam::SharedRbacService;
+use crate::{AuthorizationService, Result};
 
 /// 人员目录用例。
 pub struct PersonDirectoryService {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl PersonDirectoryService {
-    /// 绑定身份库和既有 RBAC 服务。
+    /// 绑定身份库和统一授权服务。
     ///
     /// # 参数
     /// * `db` - 身份数据库
-    /// * `rbac` - 共享 RBAC 服务
+    /// * `authorization` - 应用注入的共享授权服务
     ///
     /// # 返回
     /// 返回人员目录服务。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     /// 分页查询某一固定类别的人员目录。
@@ -92,7 +93,7 @@ impl PersonDirectoryService {
         read: Read,
     ) -> Result<PersonDirectoryPage> {
         let db = self.db.clone();
-        let rbac = self.rbac.clone();
+        let authorization = self.authorization.clone();
         self.db
             .client()
             .clone()
@@ -100,10 +101,10 @@ impl PersonDirectoryService {
                 Box::pin(async move {
                     match read {
                         Read::List(request) => {
-                            query::list_page(&db, &rbac, &actor, category, &request, executor).await
+                            query::list_page(&db, &authorization, &actor, category, &request, executor).await
                         },
                         Read::Selected(ids) => {
-                            query::selected_page(&db, &rbac, &actor, category, &ids, executor).await
+                            query::selected_page(&db, &authorization, &actor, category, &ids, executor).await
                         },
                     }
                 })

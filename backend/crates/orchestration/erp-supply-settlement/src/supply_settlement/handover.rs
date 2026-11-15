@@ -1,12 +1,15 @@
 //! 结算对账负责人交接与差异处理人改派。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::AccountKind;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::supplier_settlement;
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_settlement::{
@@ -18,7 +21,7 @@ use erp_supply::service::supplier_fulfillment::receipt::stable_digest;
 use erp_supply::service::supplier_settlement::SettlementAccess;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -116,13 +119,17 @@ impl ResponsibilityCommand {
 struct SettlementDependencies {
     db: Database,
     access: SettlementAccess,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl SettlementDependencies {
     /// 捕获事务所需依赖，事务闭包仅消费一次，无需再次复制句柄。
     fn from_process<A: WorkflowAuthorizationPort>(process: &SupplierSettlementProcess<A>) -> Result<Self> {
-        Ok(Self { db: process.db.clone(), access: process.data_scope.clone(), rbac: process.rbac.clone() })
+        Ok(Self {
+            db: process.db.clone(),
+            access: process.data_scope.clone(),
+            authorization: process.authorization.clone(),
+        })
     }
 
     /// 业务更新之后依次保存独立命令回执与展示审计，沿用同一执行器。
@@ -168,6 +175,26 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: HandoverSettlementRequest,
         actor: &AuditActor,
     ) -> Result<HandoverSettlementView> {
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.handover_statement_apply(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在入口事务内完成授权、准备、重放与持久化。
+    async fn handover_statement_apply(
+        &self,
+        id: &str,
+        req: HandoverSettlementRequest,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<HandoverSettlementView> {
         req.validate()?;
         let command = ResponsibilityCommand::new(
             actor,
@@ -176,18 +203,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             ResponsibilityChange::Handover,
             handover_fingerprint(actor.id(), id, &req),
         );
-        if let Some(existing) = self.replay_handover(&command).await? {
+        if let Some(existing) = self.replay_handover(&command, executor).await? {
             return Ok(existing);
         }
-        ensure_target_qualified(&self.db, &self.rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
-        ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
+        ensure_target_qualified(&self.authorization, req.target_user_id.trim(), executor).await?;
+        ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), executor).await?;
         let dependencies = SettlementDependencies::from_process(self)?;
-        let client = dependencies.db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move { apply_handover(&dependencies, &command, &req, executor).await })
-            })
-            .await
+        apply_handover(&dependencies, &command, &req, executor).await
     }
 
     /// 独立改派差异处理人。
@@ -208,6 +230,28 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: ReassignSettlementDifferenceHandlerRequest,
         actor: &AuditActor,
     ) -> Result<ReassignSettlementDifferenceHandlerView> {
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process.reassign_difference_handler_apply(&id, req, &actor, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在入口事务内完成授权、准备、重放与持久化。
+    async fn reassign_difference_handler_apply(
+        &self,
+        id: &str,
+        req: ReassignSettlementDifferenceHandlerRequest,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<ReassignSettlementDifferenceHandlerView> {
         req.validate()?;
         let command = ResponsibilityCommand::new(
             actor,
@@ -216,17 +260,12 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             ResponsibilityChange::ReassignDifferenceHandler,
             handler_fingerprint(actor.id(), id, &req),
         );
-        if let Some(existing) = self.replay_handler(&command).await? {
+        if let Some(existing) = self.replay_handler(&command, executor).await? {
             return Ok(existing);
         }
-        ensure_target_qualified(&self.db, &self.rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
+        ensure_target_qualified(&self.authorization, req.target_user_id.trim(), executor).await?;
         let dependencies = SettlementDependencies::from_process(self)?;
-        let client = dependencies.db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move { apply_handler(&dependencies, &command, &req, executor).await })
-            })
-            .await
+        apply_handler(&dependencies, &command, &req, executor).await
     }
 
     /// 查询可交接的合格有效人员。
@@ -245,17 +284,41 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<HandoverCandidateView>> {
-        let current =
-            self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
-        list_candidates(&self.db, &self.rbac, &current.prepared_by, &mut NoTransaction).await
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.handover_candidates_apply(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一读取快照内检查结算范围并返回合格交接人。
+    async fn handover_candidates_apply(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<HandoverCandidateView>> {
+        let current = self
+            .domain()
+            .access()
+            .require_statement(actor, &supplier_settlement::STATEMENT_REFRESH, id, executor)
+            .await?;
+        list_candidates(&self.authorization, &self.rbac, &current.prepared_by, executor).await
     }
 
     async fn replay_handover(
         &self,
         command: &ResponsibilityCommand,
+
+        executor: &mut dyn Executor,
     ) -> Result<Option<HandoverSettlementView>> {
         let Some(stored) =
-            self.db.supply_command_receipts().find_command(&command.audit_id, &mut NoTransaction).await?
+            self.db.supply_command_receipts().find_command(&command.audit_id, executor).await?
         else {
             return Ok(None);
         };
@@ -268,7 +331,15 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         )?;
         stored.verify(&command.fingerprint, Some(&command.statement_id), "同一幂等键已用于不同的结算交接")?;
         command.change.verify_result(&stored.result)?;
-        let statement = self.domain().load_statement(&command.statement_id, &mut NoTransaction).await?;
+        self.data_scope
+            .require_statement(
+                &command.actor,
+                &supplier_settlement::STATEMENT_REFRESH,
+                &command.statement_id,
+                executor,
+            )
+            .await?;
+        let statement = self.domain().load_statement(&command.statement_id, executor).await?;
         Ok(Some(HandoverSettlementView {
             statement_id: statement.base.id,
             prepared_by: statement.prepared_by,
@@ -280,9 +351,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     async fn replay_handler(
         &self,
         command: &ResponsibilityCommand,
+
+        executor: &mut dyn Executor,
     ) -> Result<Option<ReassignSettlementDifferenceHandlerView>> {
         let Some(stored) =
-            self.db.supply_command_receipts().find_command(&command.audit_id, &mut NoTransaction).await?
+            self.db.supply_command_receipts().find_command(&command.audit_id, executor).await?
         else {
             return Ok(None);
         };
@@ -299,7 +372,15 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             "同一幂等键已用于不同的差异处理人改派",
         )?;
         command.change.verify_result(&stored.result)?;
-        let statement = self.domain().load_statement(&command.statement_id, &mut NoTransaction).await?;
+        self.data_scope
+            .require_statement(
+                &command.actor,
+                &supplier_settlement::STATEMENT_REFRESH,
+                &command.statement_id,
+                executor,
+            )
+            .await?;
+        let statement = self.domain().load_statement(&command.statement_id, executor).await?;
         Ok(Some(ReassignSettlementDifferenceHandlerView {
             statement_id: statement.base.id.clone(),
             difference_handler_user_id: statement.difference_handler().to_string(),
@@ -317,16 +398,21 @@ async fn apply_handover(
 ) -> Result<HandoverSettlementView> {
     let mut statement = dependencies
         .access
-        .require_statement(&command.actor, "update", &command.statement_id, executor)
+        .require_statement(
+            &command.actor,
+            &supplier_settlement::STATEMENT_REFRESH,
+            &command.statement_id,
+            executor,
+        )
         .await?;
     if statement.base.version != req.expected_version {
         return Err(Error::ConflictError("结算单责任或版本已变化，请刷新后重试".into()));
     }
-    ensure_target_qualified(&dependencies.db, &dependencies.rbac, req.target_user_id.trim(), executor)
-        .await?;
+    ensure_target_qualified(&dependencies.authorization, req.target_user_id.trim(), executor).await?;
     ensure_org_enabled(&dependencies.db, req.target_org_unit_id.as_deref(), executor).await?;
     let next_org = req.target_org_unit_id.clone().filter(|value| !value.trim().is_empty());
     statement.handover(req.target_user_id.clone(), next_org)?;
+    dependencies.access.require_owner_change(&command.actor, &statement, executor).await?;
     dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
     dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
     Ok(HandoverSettlementView {
@@ -346,13 +432,17 @@ async fn apply_handler(
 ) -> Result<ReassignSettlementDifferenceHandlerView> {
     let mut statement = dependencies
         .access
-        .require_statement(&command.actor, "update", &command.statement_id, executor)
+        .require_statement(
+            &command.actor,
+            &supplier_settlement::STATEMENT_REFRESH,
+            &command.statement_id,
+            executor,
+        )
         .await?;
     if statement.base.version != req.expected_version {
         return Err(Error::ConflictError("结算单责任或版本已变化，请刷新后重试".into()));
     }
-    ensure_target_qualified(&dependencies.db, &dependencies.rbac, req.target_user_id.trim(), executor)
-        .await?;
+    ensure_target_qualified(&dependencies.authorization, req.target_user_id.trim(), executor).await?;
     statement.reassign_difference_handler(req.target_user_id.clone())?;
     dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
     dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
@@ -364,24 +454,20 @@ async fn apply_handler(
 }
 
 async fn ensure_target_qualified(
-    db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &AuthorizationService,
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
-    let permission = Permission::parse("supplier_settlement_statement:update")?;
-    if !AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
-        .has_permission(&actor, &permission, executor)
-        .await?
-    {
+    let permission = supplier_settlement::STATEMENT_REFRESH;
+    if !authorization.has_permission(&actor, &permission, executor).await? {
         return Err(Error::Forbidden("目标账号不存在、已失效或不具备结算维护资格".into()));
     }
     Ok(())
 }
 
 async fn list_candidates(
-    db: &Database,
+    authorization: &AuthorizationService,
     rbac: &SharedRbacService,
     current: &str,
     executor: &mut dyn Executor,
@@ -392,11 +478,9 @@ async fn list_candidates(
         if account.id == current {
             continue;
         }
-        let required = [Permission::parse("supplier_settlement_statement:update")?];
+        let required = [supplier_settlement::STATEMENT_REFRESH];
         let actor = AuditActor::new(account.id, account.login_account, account.kind);
-        let qualified = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
-            .permissions(&actor, &required, executor)
-            .await?;
+        let qualified = authorization.permissions(&actor, &required, executor).await?;
         let Some(qualified) = qualified.filter(|value| value.same_role(&required)) else { continue };
         let account = qualified.account();
         candidates.push(HandoverCandidateView {

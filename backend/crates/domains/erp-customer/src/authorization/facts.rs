@@ -125,6 +125,7 @@ fn object(
         version: format!("{}:{revisions:?}", account.base.version),
         valid_until: Some(valid_until),
         owner_ids: FactValue::Known(owners),
+        collaborators: FactValue::Known(BTreeSet::new()),
         org_unit_ids: FactValue::Known(organizations),
         history_participants: FactValue::Known(history),
         ..Default::default()
@@ -188,6 +189,74 @@ mod tests {
         let (owners, history) = responsibility(&[&deleted, &collaborator], &context("detail")).unwrap();
         assert!(owners.is_empty());
         assert!(history.is_empty());
+    }
+
+    /// 旧协作行不能使对象判定或查询事实获得协作资格；当前负责人及公司范围仍按原规则工作。
+    #[test]
+    fn retired_collaboration_is_known_empty_and_matches_the_query_denial() {
+        use erp_core::ids::PartyId;
+        use erp_identity::AccessMapping;
+        use erp_identity::entity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
+        use erp_identity::entity::authorization::{AccessFact, FactKind};
+        use erp_identity::ports::QueryFragment;
+
+        use crate::authorization::CustomerMapping;
+        use crate::entity::customer::{CustomerAccountData, CustomerAccountStatus};
+        let owner = assignment("current-owner", "1970-01-01", None);
+        let mut legacy = assignment("legacy-helper", "1970-01-01", None);
+        legacy.assignment_role = AssignmentRole::Collaborator;
+        let rows = [&owner, &legacy];
+        let (owners, history) = responsibility(&rows, &context("detail")).unwrap();
+        let account = CustomerAccount::new(
+            CustomerAccountId::new("customer"),
+            CustomerAccountData {
+                party_id: PartyId::new("party"),
+                customer_no: "C-1".into(),
+                default_payment_term_id: None,
+                status: CustomerAccountStatus::Active,
+            },
+            "creator",
+        )
+        .unwrap();
+        let facts = object(
+            &account,
+            &rows,
+            owners,
+            ["org".into()].into(),
+            history,
+            super::super::next_day(context("detail").as_of),
+        );
+        let known = facts.collaborators.get().expect("协作事实必须已知，不能以Missing绕过完整性");
+        assert!(known.is_empty());
+        let mapping = CustomerMapping::new();
+        assert!(mapping.model().facts.contains(&FactKind::Collaborators));
+        let QueryFragment::Match(filter) =
+            mapping.predicate(&AccessFact::Collaborating, &context("detail"), None).unwrap()
+        else {
+            panic!("退役协作查询不得读取协作集合");
+        };
+        let query_allows = filter.get_bool("$expr").unwrap();
+        let scope = ResolvedScope {
+            role_clauses: vec![ScopeClause { collaborative: true, ..Default::default() }],
+            user_limit: None,
+        };
+        for actor in ["legacy-helper", "current-owner", "unrelated"] {
+            let scoped = ScopedObject {
+                owned: facts.owner_ids.get().unwrap().contains(actor),
+                collaborating: known.contains(actor),
+                historical_read_participant: false,
+                org_unit_id: Some("org"),
+                settlement_party_id: None,
+                warehouse_id: None,
+            };
+            assert_eq!(scope.allows(&scoped, false), query_allows);
+            assert!(!query_allows);
+            let company = ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            };
+            assert!(company.allows(&scoped, false));
+        }
     }
 
     #[test]

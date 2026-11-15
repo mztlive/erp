@@ -15,6 +15,8 @@ use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::service::supplier_api::context::digest;
 use erp_support::BackgroundJob;
 use erp_workflow::WorkItemExt;
+#[cfg(test)]
+use persistence_core::ReadExecutor;
 
 use crate::Result;
 use crate::integration_resolution::producer::error_work_item;
@@ -225,15 +227,7 @@ mod tests {
         assert!(task.last_attempt_at.is_some());
     }
 
-    struct TestExecutor {
-        visits: usize,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
+    type TestExecutor = ReadExecutor;
 
     struct RecordingWrite {
         identity: usize,
@@ -250,7 +244,6 @@ mod tests {
         ) -> Result<()> {
             assert_eq!(value, expected);
             assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.identity);
-            assert!(executor.session().is_none());
             let mut calls = self.calls.lock().unwrap();
             let position = calls.len();
             calls.push(call);
@@ -277,7 +270,7 @@ mod tests {
 
     #[tokio::test]
     async fn w29_failure_writes_share_executor_in_task_work_item_audit_order() {
-        let mut executor = TestExecutor { visits: 0 };
+        let mut executor = TestExecutor::default();
         let port = RecordingWrite {
             identity: &mut executor as *mut TestExecutor as usize,
             fail_at: None,
@@ -285,14 +278,13 @@ mod tests {
         };
         persist_failure(&port, &1, &2, &3, &mut executor).await.unwrap();
         assert_eq!(*port.calls.lock().unwrap(), ["error_task", "work_item", "audit"]);
-        assert_eq!(executor.visits, 3);
     }
 
     #[tokio::test]
     async fn w29_failure_stops_at_each_write_preserving_first_error() {
         let expected = ["error_task", "work_item", "audit"];
         for fail_at in 0..expected.len() {
-            let mut executor = TestExecutor { visits: 0 };
+            let mut executor = TestExecutor::default();
             let port = RecordingWrite {
                 identity: &mut executor as *mut TestExecutor as usize,
                 fail_at: Some(fail_at),
@@ -303,7 +295,6 @@ mod tests {
                 matches!(error, Error::ConflictError(message) if message == format!("failed {}", expected[fail_at]))
             );
             assert_eq!(*port.calls.lock().unwrap(), expected[..=fail_at]);
-            assert_eq!(executor.visits, fail_at + 1);
         }
     }
 }

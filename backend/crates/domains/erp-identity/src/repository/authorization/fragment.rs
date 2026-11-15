@@ -6,11 +6,16 @@ use crate::{Error, Result};
 /// 一个集合查询内的关联准备和最终条件；嵌套来源使用各自的字段作用域。
 #[derive(Default)]
 pub(super) struct Fragment {
+    pub(super) stages: Vec<Document>,
     lookups: Vec<(Vec<u8>, Document)>,
     pub(super) filter: Document,
 }
 
 impl Fragment {
+    pub(super) fn with_stages(stages: Vec<Document>) -> Self {
+        Self { stages, ..Self::default() }
+    }
+
     /// 等价关联只执行一次；字段别名仅在当前集合的管道内使用。
     pub(super) fn lookup(&mut self, lookup: Document) -> Result<String> {
         // BSON 文档的 PartialEq 忽略字段顺序，不能用于合并含排序或嵌入文档比较的管道。
@@ -44,7 +49,7 @@ impl Fragment {
 
     /// 关联全部准备完成后统一过滤，再清理仅在本集合内使用的临时字段。
     pub(super) fn finish(self) -> Vec<Document> {
-        let mut stages = Vec::new();
+        let mut stages = self.stages;
         let mut aliases = Vec::new();
         for (index, (_, mut lookup)) in self.lookups.into_iter().enumerate() {
             let alias = format!("__identity_fact_{index}");

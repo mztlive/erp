@@ -18,9 +18,11 @@ use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 use erp_core::region::RegionCode;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::warehouse;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, PageResult, Transactional};
+use persistence_core::{Executor, NoTransaction, PageResult, Transactional};
 use validator::Validate;
 
 pub use crate::dto::warehouse::{
@@ -52,12 +54,14 @@ const FINGERPRINT_KEY: &[u8] = b"erp-warehouse-sensitive-fingerprint-key-v1";
 /// 仓库域服务。
 ///
 /// 提供仓库稳定身份、仓库修订与仓库-SKU 预警策略的创建、查询、更新编排。
+#[derive(Clone)]
 pub struct WarehouseService {
     db: Database,
     identity: Arc<dyn IdentityFactPort>,
     audit: Arc<dyn WarehouseAuditPort>,
     fingerprint: Arc<dyn AttachmentFingerprintPort>,
     fingerprint_key: &'static [u8],
+    authorization: Arc<AuthorizationService>,
 }
 
 /// 在仓库事务内执行写入并持久化审计（五处用例共用；事务边界与写入顺序不变）。
@@ -68,14 +72,17 @@ pub struct WarehouseService {
 /// 泛型高阶界限无法满足 `with_transaction` 的 `for<'a>` 要求（`E0310`），
 /// 且闭包返回借用参数的 future 时推断失败；语句块在调用点直接展开则无此约束。
 macro_rules! transact_with_audit {
-    ($service:expr, $audit:expr, |$db:ident, $session:ident| $body:block) => {{
+    ($service:expr, $audit:expr, $actor:expr, $permission:expr, |$db:ident, $session:ident| $body:block) => {{
         let $db = $service.db.clone();
         let audit_port = $service.audit.clone();
         let audit = $audit;
+        let actor = $actor.clone();
+        let authorization = $service.authorization.clone();
         let client = $service.db.client().clone();
         client
             .with_transaction(move |$session| {
                 Box::pin(async move {
+                    authorization.require(&actor, &$permission, AccessTarget::Operation, $session).await?;
                     let result = $body;
                     let result = result?;
                     audit_port.persist(&audit, $session).await?;
@@ -105,8 +112,9 @@ impl WarehouseService {
         identity: Arc<dyn IdentityFactPort>,
         audit: Arc<dyn WarehouseAuditPort>,
         fingerprint: Arc<dyn AttachmentFingerprintPort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, identity, audit, fingerprint, fingerprint_key: FINGERPRINT_KEY }
+        Self { db, identity, audit, fingerprint, fingerprint_key: FINGERPRINT_KEY, authorization }
     }
 
     /// 创建仓库（仓库稳定身份 + 首个修订，跨集合事务）。
@@ -160,7 +168,7 @@ impl WarehouseService {
         )?;
         let audit =
             self.audit.resource_log(actor.clone(), "warehouse.create", "warehouse", id.to_string())?;
-        transact_with_audit!(self, audit, |operation_db, session| {
+        transact_with_audit!(self, audit, actor, warehouse::CREATE, |operation_db, session| {
             operation_db
                 .warehouse()
                 .create_warehouse_with_revision(&mut warehouse, &revision, session)
@@ -234,7 +242,7 @@ impl WarehouseService {
             "warehouse",
             warehouse.base.id.clone(),
         )?;
-        transact_with_audit!(self, audit, |operation_db, session| {
+        transact_with_audit!(self, audit, actor, warehouse::UPDATE, |operation_db, session| {
             operation_db.warehouse_revisions().create(&revision, session).await?;
             operation_db.warehouses().update(&mut warehouse, session).await?;
             Ok::<Warehouse, Error>(warehouse)
@@ -296,7 +304,7 @@ impl WarehouseService {
             warehouse.base.id.clone(),
             Some(audit_message),
         )?;
-        transact_with_audit!(self, audit, |operation_db, session| {
+        transact_with_audit!(self, audit, actor, warehouse::UPDATE, |operation_db, session| {
             operation_db.warehouses().update(&mut warehouse, session).await?;
             Ok::<Warehouse, Error>(warehouse)
         })
@@ -315,9 +323,23 @@ impl WarehouseService {
     /// 账号或权限数据读取失败时返回错误。
     pub async fn warehouse_fulfillment_handler_options(
         &self,
+        actor: &AuditActor,
     ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
-        let facts = self.identity.admin_handler_identities().await?;
-        Ok(handler_option_views(facts))
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        let identity = self.identity.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(&actor, &warehouse::UPDATE, AccessTarget::Operation, executor)
+                        .await?;
+                    Ok(handler_option_views(identity.admin_handler_identities().await?))
+                })
+            })
+            .await
     }
 
     /// 分页查询仓库修订列表。
@@ -332,13 +354,37 @@ impl WarehouseService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn warehouse_revision_list(
         &self,
+        actor: &AuditActor,
         params: &WarehouseRevisionListParams,
+    ) -> Result<PageView<WarehouseRevisionView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.warehouse_revision_list_snapshot(&actor, &params, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn warehouse_revision_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &WarehouseRevisionListParams,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<WarehouseRevisionView>> {
         params.validate()?;
         let filter = params.normalized()?.into_filter();
-        let mut executor = NoTransaction;
+        self.authorization
+            .require(actor, &warehouse::REVISION_LIST, AccessTarget::Operation, executor)
+            .await?;
         map_search_page(
-            self.db.warehouse_revisions().search_warehouse_revisions(&filter, &mut executor),
+            self.db.warehouse_revisions().search_warehouse_revisions(&filter, executor),
             WarehouseRevisionView::from_row,
             filter.page,
             filter.page_size,
@@ -358,13 +404,37 @@ impl WarehouseService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn warehouse_sku_policy_list(
         &self,
+        actor: &AuditActor,
         params: &WarehouseSkuPolicyListParams,
+    ) -> Result<PageView<WarehouseSkuPolicyView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.warehouse_sku_policy_list_snapshot(&actor, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn warehouse_sku_policy_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &WarehouseSkuPolicyListParams,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<WarehouseSkuPolicyView>> {
         params.validate()?;
         let filter = params.normalized()?.into_filter();
-        let mut executor = NoTransaction;
+        self.authorization
+            .require(actor, &warehouse::SKU_POLICY_LIST, AccessTarget::Operation, executor)
+            .await?;
         map_search_page(
-            self.db.warehouse_sku_policies().search_warehouse_sku_policies(&filter, &mut executor),
+            self.db.warehouse_sku_policies().search_warehouse_sku_policies(&filter, executor),
             WarehouseSkuPolicyView::from_row,
             filter.page,
             filter.page_size,
@@ -419,7 +489,7 @@ impl WarehouseService {
             "warehouse_sku_policy",
             policy.base.id.clone(),
         )?;
-        transact_with_audit!(self, audit, |operation_db, session| {
+        transact_with_audit!(self, audit, actor, warehouse::SKU_POLICY_UPDATE, |operation_db, session| {
             operation_db.warehouse_sku_policies().update(&mut policy, session).await?;
             Ok::<WarehouseSkuPolicy, Error>(policy)
         })
@@ -451,7 +521,7 @@ impl WarehouseService {
             "warehouse_sku_policy",
             policy.base.id.clone(),
         )?;
-        transact_with_audit!(self, audit, |operation_db, session| {
+        transact_with_audit!(self, audit, actor, warehouse::SKU_POLICY_DELETE, |operation_db, session| {
             operation_db.warehouse_sku_policies().soft_delete(&mut policy, session).await?;
             Ok::<(), Error>(())
         })

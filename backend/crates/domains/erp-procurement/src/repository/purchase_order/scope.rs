@@ -14,7 +14,7 @@ use super::PURCHASE_ORDERS;
 #[derive(Clone)]
 pub struct PurchaseReadScope {
     access: Arc<CompiledAccess>,
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl std::fmt::Debug for PurchaseReadScope {
@@ -31,7 +31,7 @@ impl PurchaseReadScope {
     /// 不缓存跨请求授权的仓储读取凭证。
     /// # 错误
     /// 不执行 I/O。
-    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
+    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: Arc<AuthorizationService>) -> Self {
         Self { access, authorization }
     }
 
@@ -57,21 +57,34 @@ impl PurchaseReadScope {
         self.access.stages()
     }
 
-    /// 在原执行器复验凭证。
+    /// 在仓储执行前后检查模型、原执行边界和有效期，不读取数据库。
     /// # 参数
-    /// executor 是本次读取的执行器。
+    /// executor 为生成凭证时的原执行器。
     /// # 返回
-    /// 身份、授权与业务依赖未变时成功。
+    /// 模型、边界和期限均符合当前读取时成功。
     /// # 错误
-    /// 失效授权、事实版本变化或设施失败时返回错误。
-    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+    /// 模型不匹配、跨阶段或到期时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> crate::Result<()> {
         if self.access.model().collection != PURCHASE_ORDERS
             || self.access.model().output != QueryOutput::Object
         {
             return Err(crate::Error::ValidationError("采购授权查询模型不匹配".into()));
         }
-        self.authorization.validate(&self.access, executor).await?;
+
+        self.access.ensure_current(executor)?;
         Ok(())
+    }
+
+    /// 在读取用例交付结果前复验本次实际授权依赖。
+    /// # 参数
+    /// executor 为查询时的原执行器。
+    /// # 返回
+    /// 当前边界、期限及依赖仍有效时成功。
+    /// # 错误
+    /// 身份、范围或动态依赖失效时拒绝交付。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+        self.ensure_current(executor)?;
+        self.authorization.validate(&self.access, executor).await.map_err(Into::into)
     }
 
     /// 将业务筛选放在完整授权阶段之前。
@@ -186,7 +199,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let rows = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": 0, "id": id },
@@ -195,7 +208,7 @@ impl PurchaseOrderRepositoryScopeExt
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows.into_iter().next())
     }
 
@@ -205,7 +218,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope: &PurchaseReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<crate::entity::purchase_order::PurchaseOrder>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -218,7 +231,7 @@ impl PurchaseOrderRepositoryScopeExt
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows)
     }
 
@@ -228,7 +241,7 @@ impl PurchaseOrderRepositoryScopeExt
         scope: &PurchaseReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Vec<PurchaseVersion>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let rows = aggregate::find(
             &self.collection().clone_with_type::<PurchaseVersion>(),
             filter.to_doc(),
@@ -241,7 +254,7 @@ impl PurchaseOrderRepositoryScopeExt
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows)
     }
 }

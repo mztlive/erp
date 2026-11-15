@@ -1,19 +1,22 @@
 //! 采购责任授权、规则维护审计事务与逐行解析预览。
 
+use std::sync::Arc;
+
 mod adapter;
 mod authorization;
 pub mod eligibility;
+mod preview;
 mod resolver;
 mod service;
 
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
 pub use resolver::{AuthorizedResolutionLine, AuthorizedResolutionPlan, ResolutionInput};
 
 /// 采购责任跨域用例根：持有共享授权服务并维护原策略版本提交栅栏。
 pub struct ProcurementResponsibilityProcess {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl ProcurementResponsibilityProcess {
@@ -28,7 +31,7 @@ impl ProcurementResponsibilityProcess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 }

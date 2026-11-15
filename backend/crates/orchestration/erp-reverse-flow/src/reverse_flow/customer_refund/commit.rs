@@ -6,6 +6,8 @@ use erp_approval_runtime::approver_directory::resolve_approvers;
 use erp_audit::AuditLog;
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerReceiptId;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::dto::CustomerRefundView;
 use erp_returns::dto::CommitCustomerRefundRequest;
 use erp_returns::entity::returns::CustomerRefund;
@@ -67,7 +69,14 @@ impl ReturnsProcess {
             &req,
         )?;
         if let Some(id) = self.customer_refund_commit_replay(&command_receipt, actor).await? {
-            return self.reads().customer_refund_detail(&id).await.map_err(Error::from);
+            return self
+                .customer_refund_result(
+                    &id,
+                    actor,
+                    &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+                    AccessTarget::record(&id)?,
+                )
+                .await;
         }
         let input = self.prepare_customer_refund_commit(&req, actor, &command_receipt).await?;
         let id = input.refund.base.id.clone();
@@ -91,7 +100,13 @@ impl ReturnsProcess {
                 recovered_resource(error, self.customer_refund_commit_replay(&command_receipt, actor).await)?
             },
         };
-        self.reads().customer_refund_detail(&detail_id).await.map_err(Error::from)
+        self.customer_refund_result(
+            &detail_id,
+            actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+            AccessTarget::record(&detail_id)?,
+        )
+        .await
     }
 
     /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。

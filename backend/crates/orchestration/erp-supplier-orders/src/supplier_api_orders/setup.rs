@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_permissions::supplier_fulfillment;
 use erp_read_models::supplier_center::execution_progress::{ExecutionOrderTreeView, ExecutionShipmentView};
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, ApiOrderSetupReceipt, ApiOrderStage};
 use erp_supply::ports::connector::address::{
@@ -287,7 +288,14 @@ impl SupplierApiOrderProcess {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_order(&actor, "submit", &execution.base.id, executor).await?;
+                    access
+                        .require_order(
+                            &actor,
+                            &supplier_fulfillment::ORDER_SUBMIT,
+                            &execution.base.id,
+                            executor,
+                        )
+                        .await?;
                     db.supplier_api_order_executions().update(&mut execution, executor).await?;
                     db.supplier_api_order_setup_receipts().create(&receipt, executor).await?;
                     let audit = actor.resource_log(

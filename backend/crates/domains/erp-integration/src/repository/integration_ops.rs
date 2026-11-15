@@ -17,6 +17,7 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -242,9 +243,12 @@ impl IntegrationErrorTaskRepositoryExt for Repository<'_, IntegrationErrorTask> 
         access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<IntegrationErrorTaskRow>> {
-        if access.model().resource != "integration_error_task" {
-            return Err(PersistenceError::EntityMetadataOutOfRange("集成授权模型与仓储不匹配"));
-        }
+        ensure_authorized_model(
+            access,
+            "integration_error_task",
+            Database::INTEGRATION_ERROR_TASKS,
+            executor,
+        )?;
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, ERROR_TASK_SORT_FIELDS))
             .skip(filter.skip())
@@ -324,9 +328,12 @@ impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDiff
         access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<ReconciliationDifferenceRow>> {
-        if access.model().resource != "reconciliation_difference" {
-            return Err(PersistenceError::EntityMetadataOutOfRange("集成授权模型与仓储不匹配"));
-        }
+        ensure_authorized_model(
+            access,
+            "reconciliation_difference",
+            Database::RECONCILIATION_DIFFERENCES,
+            executor,
+        )?;
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, DIFFERENCE_SORT_FIELDS))
             .skip(filter.skip())
@@ -617,6 +624,28 @@ fn resolution_history_projection() -> Document {
         "handled_by": 1,
         "handled_at": 1,
     }
+}
+
+/// 只接受当前阶段、当前仓储固定模型的授权查询计划。
+fn ensure_authorized_model(
+    access: &CompiledAccess,
+    resource: &str,
+    collection: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    access
+        .ensure_current(executor)
+        .map_err(|_| PersistenceError::EntityMetadataOutOfRange("集成授权阶段已失效"))?;
+    let model = access.model();
+    if model.resource != resource
+        || model.collection != collection
+        || model.key.as_str() != collection
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(PersistenceError::EntityMetadataOutOfRange("集成授权模型与仓储不匹配"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

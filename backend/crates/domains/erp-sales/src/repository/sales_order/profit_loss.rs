@@ -82,7 +82,7 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
         scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ProfitLossOrder>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let options = FindOptions::builder()
             .limit((PROFIT_LOSS_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
@@ -97,7 +97,7 @@ impl SalesOrderRepositoryProfitLossExt for Repository<'_, SalesOrder> {
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows)
     }
 }

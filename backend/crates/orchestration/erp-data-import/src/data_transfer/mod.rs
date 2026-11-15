@@ -17,6 +17,7 @@ mod workbook;
 mod workbook_access;
 pub use business::{BusinessTransferServices, BusinessTransfers, TransferReader};
 mod files;
+mod submission_access;
 mod submit;
 mod types;
 
@@ -25,9 +26,11 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 pub use context_view::{TransferContext, TransferResumeState};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_party::SensitiveDataCodec;
+use erp_permissions::internal;
 use mongodb::Database;
+use persistence_core::Executor;
 use serde_json::Value;
 use storage::S3Storage;
 pub use types::{TransferKind, TransferRequest, TransferResult};
@@ -38,6 +41,20 @@ use crate::repository::import_job_access::ImportJobAccess;
 /// 业务适配器只接受固定任务类型；授权与业务规则沿用原用例。
 #[async_trait]
 pub trait TransferHandler: Send + Sync {
+    /// 在登记任务或返回同内容回执的原事务中检查当前业务资格。
+    /// # 参数
+    /// kind、input 为固定任务类型及其业务参数，actor 为当前身份，executor 为原登记事务。
+    /// # 返回
+    /// 当前资格及本任务实际目标仍满足原业务授权时成功。
+    /// # 错误
+    /// 身份、权限、目标、版本或事务边界无效时拒绝，不登记新任务或返回回执。
+    async fn authorize_submission(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
     /// 校验输入并冻结执行条件。
     /// # 参数
     /// 固定类型、原始参数和当前认证人。
@@ -111,12 +128,13 @@ impl DataTransferProcess {
     /// 无。
     pub fn new(
         db: Database,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         storage: S3Storage,
         codec: Arc<SensitiveDataCodec>,
         handler: Arc<dyn TransferHandler>,
     ) -> Self {
-        let job_access = ImportJobAccess::new(db.clone(), rbac, submit::DOMAIN, None);
+        let job_access =
+            ImportJobAccess::new(db.clone(), authorization, submit::DOMAIN, internal::DATA_TRANSFER_JOB_READ);
         Self { db, storage, codec, handler, job_access }
     }
 }

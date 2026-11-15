@@ -11,7 +11,9 @@ use erp_core::AccountKind;
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryType, ElectronicDelivery, PurchaseReceipt, ServiceFulfillment,
 };
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService, Error as IdentityError};
+use erp_permissions::internal;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_warehouse::{WarehouseExt, WarehouseFulfillmentOperation};
@@ -27,9 +29,6 @@ mod creation;
 #[cfg(test)]
 mod fixtures;
 pub mod supersede;
-
-/// 履约任务在创建、活动和完成的原资格重验位置创建独立身份。
-pub type FulfillmentIdentityFactory = Arc<dyn Fn() -> SharedRbacService + Send + Sync>;
 
 const PURCHASE_ORDER_OWNER_ROLE: &str = "purchase_order_owner";
 const WAREHOUSE_INBOUND_ROLE: &str = "warehouse_inbound_handler";
@@ -141,7 +140,7 @@ struct FulfillmentTaskOwner {
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `identity_factory` - 每次调用创建独立身份服务的应用工厂。
+/// * `authorization` - 进程共享授权服务。
 /// * `object` - 已在当前事务中形成的履约草稿
 /// * `executor` - 调用方事务执行器
 ///
@@ -156,18 +155,18 @@ struct FulfillmentTaskOwner {
 /// 责任配置只影响新任务，已存在任务不得在幂等重入时被配置变化静默改派。
 pub async fn ensure_fulfillment_task(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    creation::ensure(db, identity_factory, object, executor).await
+    creation::ensure(db, authorization, object, executor).await
 }
 
 /// 在领域草稿更新事务内记录当前责任人的处理活动。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `identity_factory` - 当前任务资格核验时创建独立身份的工厂。
+/// * `authorization` - 进程共享授权服务。
 /// * `object` - 已更新且冻结责任身份的强类型履约对象
 /// * `actor_id` - 当前操作人
 /// * `executor` - 调用方事务执行器
@@ -179,19 +178,19 @@ pub async fn ensure_fulfillment_task(
 /// 任务缺失、重复、非当前责任人或仓储写入失败时返回错误。
 pub(crate) async fn record_fulfillment_activity(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    command::record(db, identity_factory, object, actor_id, executor).await
+    command::record(db, authorization, object, actor_id, executor).await
 }
 
 /// 在强类型履约命令事务内完成对应执行任务。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
-/// * `identity_factory` - 当前任务资格核验时创建独立身份的工厂。
+/// * `authorization` - 进程共享授权服务。
 /// * `object` - 已形成正式事实且冻结责任身份的强类型履约对象
 /// * `actor_id` - 当前操作人
 /// * `executor` - 调用方事务执行器
@@ -203,12 +202,12 @@ pub(crate) async fn record_fulfillment_activity(
 /// 任务缺失、重复、非当前责任人或仓储写入失败时返回错误。
 pub async fn complete_fulfillment_task(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    command::complete(db, identity_factory, object, actor_id, executor).await
+    command::complete(db, authorization, object, actor_id, executor).await
 }
 
 /// 校验开放任务与强类型履约对象冻结的责任身份完全一致。
@@ -388,29 +387,40 @@ async fn purchase_order_owner(
 /// # 错误
 /// 对象权限合同缺失、账号不存在或不可用、权限不足，以及账号或 RBAC 查询失败时返回错误。
 pub async fn ensure_fulfillment_owner_eligible(
-    db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    _db: &mongodb::Database,
+    rbac: &Arc<AuthorizationService>,
     owner_user_id: &str,
     business_object_type: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let required_permissions = WorkItemType::FulfillmentOperation
-        .fulfillment_execution_permissions(business_object_type)
-        .ok_or_else(|| Error::Internal("履约对象未登记完整执行权限，请联系管理员修复后重试".to_string()))?;
-    let required: Vec<_> = required_permissions
-        .iter()
-        .map(|code| Permission::parse(code).expect("固定履约操作权限必须合法"))
-        .collect();
-    let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-    let qualified = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
-        .permissions(&actor, &required, executor)
-        .await?;
-    if qualified.as_ref().is_some_and(|value| value.same_role(&required)) {
-        return Ok(());
+    if !matches!(
+        business_object_type,
+        "purchase_receipt" | "delivery" | "electronic_delivery" | "service_fulfillment"
+    ) {
+        return Err(Error::Internal("履约对象未登记完整执行权限，请联系管理员修复后重试".into()));
     }
-    Err(Error::BusinessLogicError(
-        "履约责任人账号无效或缺少完成当前操作所需权限，请先调整角色或责任配置".to_string(),
-    ))
+    let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
+    let candidate = ObjectFacts {
+        resource: "work_item".into(),
+        subject_type: FactValue::Known(WorkItemType::FulfillmentOperation.as_str().into()),
+        subject_source_resource: FactValue::Known(business_object_type.into()),
+        ..Default::default()
+    };
+    match rbac
+        .require(
+            &actor,
+            &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+            AccessTarget::Candidate(candidate),
+            executor,
+        )
+        .await
+    {
+        Ok(()) => Ok(()),
+        Err(IdentityError::Forbidden(_)) => Err(Error::BusinessLogicError(
+            "履约责任人账号无效或缺少完成当前操作所需权限，请先调整角色或责任配置".into(),
+        )),
+        Err(error) => Err(error.into()),
+    }
 }
 
 #[cfg(test)]
@@ -419,6 +429,37 @@ mod tests {
     use erp_workflow::entity::work_item::{AssignmentSource, WorkItemData, WorkItemPriority, WorkItemType};
 
     use super::{WorkItem, ensure_frozen_identity_fields};
+
+    #[tokio::test]
+    async fn owner_qualification_uses_the_original_snapshot_and_preserves_authorization_errors() {
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::NoTransaction;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
+        let authorization = unavailable_authorization();
+        let error = super::ensure_fulfillment_owner_eligible(
+            &db,
+            &authorization,
+            "buyer",
+            "delivery",
+            &mut NoTransaction,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, crate::Error::ValidationError(_)));
+        let error = super::ensure_fulfillment_owner_eligible(
+            &db,
+            &authorization,
+            "buyer",
+            "delivery",
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, crate::Error::Internal(message) if message == "测试授权设施不可用"));
+    }
 
     fn fulfillment_task() -> WorkItem {
         WorkItem::new_with_responsibility_key(

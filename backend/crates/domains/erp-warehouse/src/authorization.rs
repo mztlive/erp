@@ -6,14 +6,13 @@ use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, ReadAccess, RelationKey,
+    QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
-    AccessFactsPort, AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject,
-    AccessTarget, AuthorizationRegistry, AuthorizationService, CompiledAccess, DataAccess, Permission,
-    ResourceTargets, SharedRbacService,
+    AccessFactsPort, AccessMapping, AccessTarget, AuthorizationService, CompiledAccess, ResourceTargets,
 };
+use erp_permissions::Permission;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
@@ -43,7 +42,19 @@ impl WarehouseMapping {
     }
 }
 
-struct WarehouseFacts(Database);
+pub struct WarehouseFacts(Database);
+impl WarehouseFacts {
+    /// 构造本域仓库事实读取器。
+    /// # 参数
+    /// db 为拥有仓库集合的数据库。
+    /// # 返回
+    /// 供统一授权装配复用的共享事实读取器。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn shared(db: Database) -> Arc<dyn AccessFactsPort> {
+        Arc::new(Self(db))
+    }
+}
 #[async_trait]
 impl AccessFactsPort for WarehouseFacts {
     async fn load(
@@ -73,20 +84,17 @@ impl AccessMapping for WarehouseMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
         Ok("$id".into())
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> erp_identity::Result<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":0}))
     }
     fn predicate(
         &self,
         fact: &AccessFact,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(match fact {
             AccessFact::WarehouseIn(ids) => doc! {"id":{"$in":ids.iter().cloned().collect::<Vec<_>>() }},
@@ -97,7 +105,7 @@ impl AccessMapping for WarehouseMapping {
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("仓库身份没有来源关系".into()))
     }
@@ -107,32 +115,20 @@ impl AccessMapping for WarehouseMapping {
 #[derive(Clone)]
 pub struct WarehouseAuthorization {
     db: Database,
-    service: AuthorizationService,
-    mapping: Arc<dyn AccessMapping>,
+    service: Arc<AuthorizationService>,
     permission: Permission,
 }
 
 impl WarehouseAuthorization {
     /// 登记一个固定仓库身份入口。
     /// # 参数
-    /// db、rbac 为基础设施；permission 和 required 为服务端固定权限。
+    /// db 为基础设施，service 为共享授权服务；permission 为固定入口权限。
     /// # 返回
     /// 不执行 I/O 的查询入口。
     /// # 错误
-    /// 非法权限或不满足 identity 登记合同返回错误。
-    pub fn new(
-        db: Database,
-        rbac: SharedRbacService,
-        permission: Permission,
-        required: Vec<Permission>,
-    ) -> erp_identity::Result<Self> {
-        let (registry, mapping) = registration(&permission, required, Arc::new(WarehouseFacts(db.clone())))?;
-        Ok(Self {
-            db: db.clone(),
-            service: AuthorizationService::new(db, rbac, registry),
-            mapping,
-            permission,
-        })
+    /// 构造不执行 I/O；固定权限及映射由共享服务在启动时校验。
+    pub fn new(db: Database, service: Arc<AuthorizationService>, permission: Permission) -> Self {
+        Self { db, service, permission }
     }
 
     /// 查询本次展示候选内有权的真实仓库。
@@ -151,9 +147,7 @@ impl WarehouseAuthorization {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let query = self.service.query(actor, &self.permission, AccessSubject::Direct, executor).await?;
-        let compiled = query.compile(self.mapping.as_ref(), executor).await?;
-        self.service.validate(&compiled, executor).await?;
+        let compiled = self.service.query(actor, &self.permission, executor).await?;
         let ids = authorized_ids_in(&self.db, &compiled, ids, executor).await?;
         self.service.validate(&compiled, executor).await?;
         Ok(ids)
@@ -172,14 +166,7 @@ impl WarehouseAuthorization {
         id: &str,
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<()> {
-        self.service
-            .require(
-                actor,
-                &self.permission,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
-            .await
+        self.service.require(actor, &self.permission, AccessTarget::record(id)?, executor).await
     }
 
     /// 编译当前仓库查询，不预载全部授权身份。
@@ -194,11 +181,9 @@ impl WarehouseAuthorization {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<WarehouseQuery> {
-        let query = self.service.query(actor, &self.permission, AccessSubject::Direct, executor).await?;
-        let compiled = query.compile(self.mapping.as_ref(), executor).await?;
-        self.service.validate(&compiled, executor).await?;
+        let compiled = self.service.query(actor, &self.permission, executor).await?;
         let has_rows = authorized_rows_exist(&self.db, &compiled, executor).await?;
-        self.service.validate(&compiled, executor).await?;
+        compiled.ensure_current(executor)?;
         Ok(WarehouseQuery { has_rows, authorization: self.service.clone(), compiled: Arc::new(compiled) })
     }
 }
@@ -207,7 +192,7 @@ impl WarehouseAuthorization {
 #[derive(Clone)]
 pub struct WarehouseQuery {
     has_rows: bool,
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
     compiled: Arc<CompiledAccess>,
 }
 
@@ -256,6 +241,11 @@ impl WarehouseQuery {
         !self.has_rows
     }
 
+    /// 核验当前事务、读取阶段及有效期，不读取数据库。
+    pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
+        self.compiled.ensure_current(executor)
+    }
+
     /// 在实际业务读取前后复验凭证。
     /// # 参数
     /// executor 为产生本凭证的原读取事务。
@@ -268,33 +258,6 @@ impl WarehouseQuery {
     }
 }
 
-/// 固定入口登记仅表达仓库事实和同角色附加功能要求。
-fn registration(
-    permission: &Permission,
-    required: Vec<Permission>,
-    facts: Arc<dyn AccessFactsPort>,
-) -> erp_identity::Result<(AuthorizationRegistry, Arc<dyn AccessMapping>)> {
-    let mapping: Arc<dyn AccessMapping> = Arc::new(WarehouseMapping(QueryModel {
-        key: QueryModelKey::parse(format!("{}_warehouses", permission.resource()))?,
-        resource: permission.resource().into(),
-        collection: <Database as WarehouseExt>::WAREHOUSES.into(),
-        id_field: "id".into(),
-        output: QueryOutput::Object,
-        facts: [FactKind::Warehouse].into(),
-    }));
-    let data = DataAccess {
-        subject: AccessSubject::Direct,
-        required_facts: [FactKind::Warehouse].into(),
-        policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
-    };
-    let registry = AuthorizationRegistry::new(vec![AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: required,
-        access: AccessMode::QueryAndObject { data, mapping: mapping.clone(), facts },
-    }])?;
-    Ok((registry, mapping))
-}
-
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
@@ -302,18 +265,6 @@ mod tests {
 
     use super::*;
 
-    struct UnusedFacts;
-    #[async_trait]
-    impl AccessFactsPort for UnusedFacts {
-        async fn load(
-            &self,
-            _: &AccessContext,
-            _: &ResourceTargets,
-            _: &mut dyn Executor,
-        ) -> erp_identity::Result<Vec<ObjectFacts>> {
-            panic!("目录登记不读对象")
-        }
-    }
     fn mapping() -> WarehouseMapping {
         WarehouseMapping(QueryModel {
             key: QueryModelKey::parse("warehouse_rows").unwrap(),
@@ -337,47 +288,22 @@ mod tests {
     fn warehouse_fact_uses_real_identity_and_rejects_unsupported_dimensions() {
         let mapping = mapping();
         let context = context();
-        let prepared = MappingFacts::default();
+        let prepared = None;
         let fragment = mapping
-            .predicate(&AccessFact::WarehouseIn(["wh-a".into(), "wh-b".into()].into()), &context, &prepared)
+            .predicate(&AccessFact::WarehouseIn(["wh-a".into(), "wh-b".into()].into()), &context, prepared)
             .unwrap();
         assert!(
             matches!(fragment, QueryFragment::Match(filter) if filter == doc! {"id":{"$in":["wh-a","wh-b"]}})
         );
-        assert!(mapping.predicate(&AccessFact::Owned, &context, &prepared).is_err());
-        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, &prepared).is_err());
+        assert!(mapping.predicate(&AccessFact::Owned, &context, prepared).is_err());
+        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, prepared).is_err());
     }
     #[test]
     fn model_records_exclude_deleted_warehouse_identities() {
         let mapping = mapping();
-        assert_eq!(mapping.key(&context(), &MappingFacts::default()).unwrap(), Bson::String("$id".into()));
+        assert_eq!(mapping.key(&context(), None).unwrap(), Bson::String("$id".into()));
         assert!(
-            matches!(mapping.records(&context(), &MappingFacts::default()).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
-        );
-    }
-    #[test]
-    fn known_warehouse_entries_register_and_unknown_actions_fail_closed() {
-        for (code, detail) in [
-            ("warehouse:list", false),
-            ("stock_balance:list", false),
-            ("stock_balance:detail", false),
-            ("stock_movement:list", false),
-            ("stock_reservation:list", false),
-            ("stock_adjustment:list", true),
-            ("stock_adjustment:detail", false),
-            ("stock_adjustment:create", true),
-            ("stock_adjustment:update", true),
-        ] {
-            let required =
-                detail.then(|| Permission::parse("stock_adjustment:detail").unwrap()).into_iter().collect();
-            assert!(
-                registration(&Permission::parse(code).unwrap(), required, Arc::new(UnusedFacts)).is_ok(),
-                "{code}"
-            );
-        }
-        assert!(
-            registration(&Permission::parse("warehouse:update").unwrap(), Vec::new(), Arc::new(UnusedFacts))
-                .is_err()
+            matches!(mapping.records(&context(), None).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
         );
     }
 }

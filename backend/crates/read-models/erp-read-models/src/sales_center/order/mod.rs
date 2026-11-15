@@ -1,4 +1,7 @@
 //! 销售单列表与详情：组合销售、财务、采购与审批公开事实。
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
 mod adapter;
 mod approval_query;
 mod current_work;
@@ -10,7 +13,6 @@ mod scope;
 pub use scope::{SalesListParams, SalesListView};
 mod status;
 
-use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -20,7 +22,7 @@ use crate::{Error, Result};
 /// 销售单列表与详情的跨域只读组合服务。
 pub struct SalesOrderReadService {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    rbac: Option<Arc<AuthorizationService>>,
 }
 impl SalesOrderReadService {
     /// 使用数据库句柄构造只读查询服务。
@@ -48,14 +50,14 @@ impl SalesOrderReadService {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn with_rbac(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac: Some(rbac) }
     }
     fn sales(&self) -> erp_sales::service::sales_order::SalesOrderService {
         erp_sales::service::sales_order::SalesOrderService::new(self.db.clone())
     }
     /// 获取采购访问投影使用的授权源；未注入时保持原错误语义并拒绝放行。
-    fn require_rbac(&self) -> Result<&SharedRbacService> {
+    fn require_rbac(&self) -> Result<&Arc<AuthorizationService>> {
         self.rbac.as_ref().ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
     }
 }

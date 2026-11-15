@@ -1,10 +1,13 @@
 //! 验收独立入口沿来源销售单重验范围，分页前应用授权条件。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_fulfillment::dto::{
     CustomerAcceptanceDetailView, CustomerAcceptanceListParams, CustomerAcceptanceView, PageView,
 };
 use erp_fulfillment::service::FulfillmentService;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::sales_order as sales_order_permissions;
 use mongodb::Database;
 use persistence_core::Transactional;
 
@@ -15,7 +18,7 @@ use crate::sales_center::access::SalesAccess;
 #[derive(Clone)]
 pub struct AcceptanceReadService {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl AcceptanceReadService {
@@ -26,7 +29,7 @@ impl AcceptanceReadService {
     /// 不缓存授权结论的读取服务。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -51,8 +54,12 @@ impl AcceptanceReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let access = SalesAccess::new(this.db.clone(), this.rbac);
-                    let (_, scope) = access.resolve(&actor, "list", &[], executor).await?;
-                    super::repository::acceptance_list(&this.db, &params, &scope, executor).await
+                    let (context, scope) =
+                        access.resolve(&actor, &sales_order_permissions::LIST, executor).await?;
+                    let page =
+                        super::repository::acceptance_list(&this.db, &params, &scope, executor).await?;
+                    context.validate(executor).await?;
+                    Ok(page)
                 })
             })
             .await
@@ -78,7 +85,12 @@ impl AcceptanceReadService {
                         .load_customer_acceptance(&id, executor)
                         .await?;
                     SalesAccess::new(this.db, this.rbac)
-                        .require_object(&actor, "detail", &detail.acceptance.sales_order_id, &[], executor)
+                        .require_object(
+                            &actor,
+                            &sales_order_permissions::DETAIL,
+                            &detail.acceptance.sales_order_id,
+                            executor,
+                        )
                         .await?;
                     Ok(detail)
                 })
@@ -106,7 +118,7 @@ impl AcceptanceReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     SalesAccess::new(this.db.clone(), this.rbac)
-                        .require_object(&actor, "detail", &id, &[], executor)
+                        .require_object(&actor, &sales_order_permissions::DETAIL, &id, executor)
                         .await?;
                     super::FulfillmentReadService::new(this.db)
                         .load_acceptance_eligibility(&id, executor)

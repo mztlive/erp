@@ -13,7 +13,7 @@ use std::borrow::Borrow;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use mongodb::Collection;
-use mongodb::bson::{Document, doc};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::{FindOptions, ReturnDocument};
 use mongodb::results::{DeleteResult, UpdateResult};
 use serde::de::DeserializeOwned;
@@ -97,7 +97,7 @@ where
         }
 
         executor.next_read();
-        exec_with_session!(executor, collection.insert_many(documents));
+        exec_with_session!(executor, collection.insert_many(documents).ordered(true));
         Ok(())
     })
 }
@@ -158,6 +158,29 @@ where
     Box::pin(async move {
         executor.next_read();
         let result = exec_with_session!(executor, collection.update_many(filter, update));
+        Ok(result)
+    })
+}
+
+/// 按执行器语义批量执行聚合更新管道，并在写入尝试前结束旧读取阶段。
+/// # 参数
+/// collection 为目标集合；filter 为前置条件；pipeline 为原子更新管道；executor 为调用方执行器。
+/// # 返回
+/// MongoDB 更新结果，供拥有领域核对完整 CAS 匹配数量。
+/// # 错误
+/// 数据库错误保留原分类，不暴露原始事务会话。
+pub fn update_many_pipeline<'a, T>(
+    collection: &'a Collection<T>,
+    filter: Document,
+    pipeline: Vec<Document>,
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<UpdateResult>>
+where
+    T: Send + Sync + 'a,
+{
+    Box::pin(async move {
+        executor.next_read();
+        let result = exec_with_session!(executor, collection.update_many(filter, pipeline));
         Ok(result)
     })
 }
@@ -379,6 +402,74 @@ where
     Box::pin(async move {
         let count = exec_with_session!(executor, collection.count_documents(filter));
         Ok(count)
+    })
+}
+
+/// 在原执行器中取得字段的去重值，不撤销事务边界。
+/// # 参数
+/// collection、field、filter 为实际集合、字段与条件；executor 为原读取执行器。
+/// # 返回
+/// MongoDB distinct 返回的全部 BSON 值。
+/// # 错误
+/// 数据库读取失败原样传播。
+pub fn distinct<'a, T>(
+    collection: &'a Collection<T>,
+    field: &'a str,
+    filter: Document,
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<Vec<Bson>>>
+where
+    T: Send + Sync + 'a,
+{
+    Box::pin(async move { Ok(exec_with_session!(executor, collection.distinct(field, filter))) })
+}
+
+/// 按固定排序原子更新首个匹配文档，保留原执行器和读取阶段边界。
+/// # 参数
+/// collection、filter、pipeline、sort 为拥有领域的更新条件、管道和排序；executor 为原执行器。
+/// # 返回
+/// 更新后的文档；无匹配时返回 None。
+/// # 错误
+/// 数据库或解码失败原样传播。
+pub fn find_one_and_update_sorted_pipeline<'a, T>(
+    collection: &'a Collection<T>,
+    filter: Document,
+    pipeline: Vec<Document>,
+    sort: Document,
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<Option<T>>>
+where
+    T: DeserializeOwned + Send + Sync + 'a,
+{
+    Box::pin(async move {
+        executor.next_read();
+        let operation = collection
+            .find_one_and_update(filter, pipeline)
+            .sort(sort)
+            .return_document(ReturnDocument::After);
+        Ok(exec_with_session!(executor, operation))
+    })
+}
+
+/// 在原执行器中以聚合管道更新一个文档。
+/// # 参数
+/// collection、filter、pipeline 为实际写入；executor 为原事务执行器。
+/// # 返回
+/// 原始 UpdateResult，保留匹配与修改计数。
+/// # 错误
+/// 数据库写入失败原样传播；写入尝试前结束旧读取阶段。
+pub fn update_one_pipeline<'a, T>(
+    collection: &'a Collection<T>,
+    filter: Document,
+    pipeline: Vec<Document>,
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<UpdateResult>>
+where
+    T: Send + Sync + 'a,
+{
+    Box::pin(async move {
+        executor.next_read();
+        Ok(exec_with_session!(executor, collection.update_one(filter, pipeline)))
     })
 }
 

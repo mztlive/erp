@@ -1,6 +1,7 @@
 use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_sales::dto::sales_order::{SalesOrderDraftRequest, SaveWorkingCopyRequest, WorkingCopyView};
 use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
@@ -9,7 +10,7 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_order::SalesOrderService;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
@@ -26,7 +27,7 @@ impl SalesOrderCommandProcess {
         Ok(self
             .db
             .sales_order_working_copy_lines()
-            .list_lines_by_working_copy(&copy.base.id.clone().into(), &mut NoTransaction)
+            .list_lines_by_working_copy(&copy.base.id.clone().into(), &mut ReadExecutor::default())
             .await?)
     }
 
@@ -61,7 +62,7 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<WorkingCopyView> {
         req.validate()?;
-        let access = self.command_access(actor, "update");
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let this = self.clone();
         let read_access = access.clone();
         let read_actor = actor.clone();
@@ -81,7 +82,7 @@ impl SalesOrderCommandProcess {
         let (mut working_copy, stable, opened_new) =
             self.load_or_reopen_first_submission_working_copy(&order, copy_version, &draft, actor).await?;
         if opened_new {
-            return Ok(self.sales().working_copy_view(&working_copy).await?);
+            return self.working_copy_result(&working_copy, actor).await;
         }
 
         let lines =
@@ -105,7 +106,7 @@ impl SalesOrderCommandProcess {
         let client = write.db.client().clone();
         let working_copy = client.with_transaction(move |executor| Box::pin(write.persist(executor))).await?;
 
-        Ok(self.sales().working_copy_view(&working_copy).await?)
+        self.working_copy_result(&working_copy, actor).await
     }
 
     /// 在同一读取事务内核验当前销售单、所选合同和客户后准备草稿。

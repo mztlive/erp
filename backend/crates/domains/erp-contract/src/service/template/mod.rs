@@ -4,8 +4,10 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use entity_core::BaseModel;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::contract;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use tokio::sync::Semaphore;
 
 use crate::dto::template::{CreateTemplateRequest, TemplateStatusRequest, TemplateView};
@@ -28,6 +30,7 @@ pub struct ContractTemplateService {
     db: Database,
     audit: Arc<dyn ContractAuditPort>,
     companies: Arc<dyn SigningCompanyPort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl ContractTemplateService {
@@ -44,8 +47,9 @@ impl ContractTemplateService {
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
         companies: Arc<dyn SigningCompanyPort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, audit, companies }
+        Self { db, audit, companies, authorization }
     }
 
     /// 校验模板字段并生成不可覆盖的存储身份，尚未写入数据库。
@@ -56,18 +60,38 @@ impl ContractTemplateService {
     /// 待持久化模板。
     /// # 错误
     /// 非启用公司或输入非法时拒绝。
-    pub async fn prepare(&self, request: CreateTemplateRequest, file_name: &str) -> Result<ContractTemplate> {
-        let company_id = text(&request.company_id, "公司主体", true)?;
-        let company_name = self.active_company(&company_id, &mut NoTransaction).await?;
-        Ok(ContractTemplate {
-            base: BaseModel::new(id_generator::next_id()),
-            name: text(&request.name, "模板名称", true)?,
-            company_id,
-            company_name,
-            group: request.group,
-            file_name: text(file_name, "文件名", true)?,
-            enabled: true,
-        })
+    pub async fn prepare(
+        &self,
+        request: CreateTemplateRequest,
+        file_name: &str,
+        actor: &AuditActor,
+    ) -> Result<ContractTemplate> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let file_name = file_name.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .authorization
+                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
+                        .await?;
+
+                    let company_id = text(&request.company_id, "公司主体", true)?;
+                    let company_name = service.active_company(&company_id, executor).await?;
+                    Ok(ContractTemplate {
+                        base: BaseModel::new(id_generator::next_id()),
+                        name: text(&request.name, "模板名称", true)?,
+                        company_id,
+                        company_name,
+                        group: request.group,
+                        file_name: text(&file_name, "文件名", true)?,
+                        enabled: true,
+                    })
+                })
+            })
+            .await
     }
 
     /// 文件写入完成后，原子登记主体编号组、模板及审计。
@@ -79,6 +103,7 @@ impl ContractTemplateService {
     /// # 错误
     /// 主体停用、编号组冲突或事务失败；提交未知时调用方不得删除对象。
     pub async fn create(&self, template: ContractTemplate, actor: &AuditActor) -> Result<TemplateView> {
+        let actor = actor.clone();
         let service = self.clone();
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -90,6 +115,10 @@ impl ContractTemplateService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    service
+                        .authorization
+                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     service.active_company(&template.company_id, executor).await?;
                     service.bind_group(&template, executor).await?;
                     service.db.contract_templates().create(&template, executor).await?;
@@ -135,6 +164,7 @@ impl ContractTemplateService {
         request: TemplateStatusRequest,
         actor: &AuditActor,
     ) -> Result<TemplateView> {
+        let actor = actor.clone();
         let service = self.clone();
         let id = id.to_string();
         let audit = self.audit.resource_log(
@@ -147,6 +177,10 @@ impl ContractTemplateService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    service
+                        .authorization
+                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     let mut template = service.template(&id, executor).await?;
                     if template.base.version != request.version {
                         return Err(Error::ConflictError("模板已变化，请刷新后重试".into()));

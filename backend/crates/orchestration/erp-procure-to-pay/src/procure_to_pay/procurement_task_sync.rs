@@ -1,12 +1,13 @@
 //! 统一供给覆盖变化后的供给分配任务范围校验与生命周期同步。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_core::money::Quantity;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_read_models::Error as ReadModelError;
 use erp_read_models::purchase_center::require_creation_task;
 use erp_read_models::purchase_center::source_impact::load_purchase_source_state;
@@ -43,7 +44,7 @@ use crate::{Error, Result};
 /// 采购创建权限不能只依赖页面筛选；事务内必须重新读取任务事实并校验具体责任行。
 pub(super) async fn load_owned_open_procurement_task(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     work_item_id: &str,
     sales_order_id: &SalesOrderId,
     actor: &AuditActor,

@@ -121,7 +121,7 @@ pub enum WorkItemBriefObjectKind {
     SupplierPortalRequest,
 }
 
-/// 工作项类型、业务对象类型与简报读取权限的固定关系。
+/// 工作项类型与简报业务对象的固定关系；授权政策由 identity 执行。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkItemBriefRelation {
     /// 工作项类型。
@@ -130,8 +130,6 @@ pub struct WorkItemBriefRelation {
     pub object_kind: WorkItemBriefObjectKind,
     /// 持久化业务对象类型。
     pub business_object_type: &'static str,
-    /// 读取该对象所需的权限。
-    pub read_permission: &'static str,
 }
 
 /// 工作项责任形成时采用的岗位分离策略。
@@ -152,295 +150,246 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         work_item_type: WorkItemType::SalesInquiryProcessing,
         object_kind: WorkItemBriefObjectKind::SalesInquiry,
         business_object_type: "sales_inquiry",
-        read_permission: "procurement_inquiry:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::PurchasePaymentArrangement,
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
         business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierPortalReview,
         object_kind: WorkItemBriefObjectKind::SupplierPortalRequest,
         business_object_type: "supplier_portal_request",
-        read_permission: "supplier_portal_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ProcurementOrderCreation,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
-        read_permission: "purchase_order:create",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::PurchaseReturnInvoice,
         business_object_type: "purchase_order",
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::PurchaseReturnRefund,
         business_object_type: "purchase_order",
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::PurchaseSourceUpdate,
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
         business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::FulfillmentOperation,
         object_kind: WorkItemBriefObjectKind::PurchaseReceipt,
         business_object_type: "purchase_receipt",
-        read_permission: "purchase_receipt:post",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::FulfillmentOperation,
         object_kind: WorkItemBriefObjectKind::Delivery,
         business_object_type: "delivery",
-        read_permission: "delivery:post",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::FulfillmentOperation,
         object_kind: WorkItemBriefObjectKind::ElectronicDelivery,
         business_object_type: "electronic_delivery",
-        read_permission: "electronic_delivery:confirm",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::FulfillmentOperation,
         object_kind: WorkItemBriefObjectKind::ServiceFulfillment,
         business_object_type: "service_fulfillment",
-        read_permission: "service_fulfillment:confirm",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::CustomerAcceptanceRegistration,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierPaymentExecution,
         object_kind: WorkItemBriefObjectKind::PurchasePaymentRequest,
         business_object_type: "purchase_payment_request",
-        read_permission: "purchase_payment_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SalesInvoiceExecution,
         object_kind: WorkItemBriefObjectKind::ReceivableAccount,
         business_object_type: "receivable_account",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierSettlementReview,
         object_kind: WorkItemBriefObjectKind::SupplierSettlement,
         business_object_type: "supplier_settlement_statement",
-        read_permission: "supplier_settlement_statement:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ImportBusinessConfirmation,
         object_kind: WorkItemBriefObjectKind::LegacyImportBatch,
         business_object_type: "LEGACY_IMPORT_BATCH",
-        read_permission: "legacy_import_batch:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::IntegrationResultUnknown,
         object_kind: WorkItemBriefObjectKind::IntegrationErrorTask,
         business_object_type: "integration_error_task",
-        read_permission: "integration_error_task:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::BusinessException,
         object_kind: WorkItemBriefObjectKind::IntegrationErrorTask,
         business_object_type: "integration_error_task",
-        read_permission: "integration_error_task:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::BusinessException,
         object_kind: WorkItemBriefObjectKind::ReconciliationDifference,
         business_object_type: "reconciliation_difference",
-        read_permission: "reconciliation_difference:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::IntegrationResultUnknown,
         object_kind: WorkItemBriefObjectKind::ReconciliationDifference,
         business_object_type: "reconciliation_difference",
-        read_permission: "reconciliation_difference:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::IntegrationResultUnknown,
         object_kind: WorkItemBriefObjectKind::SupplierFulfillmentOrder,
         business_object_type: "SUPPLIER_FULFILLMENT_ORDER",
-        read_permission: "supplier_fulfillment_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::BusinessException,
         object_kind: WorkItemBriefObjectKind::SupplierFulfillmentOrder,
         business_object_type: "SUPPLIER_FULFILLMENT_ORDER",
-        read_permission: "supplier_fulfillment_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::BusinessException,
         object_kind: WorkItemBriefObjectKind::SupplierOffering,
         business_object_type: "SUPPLIER_OFFERING",
-        read_permission: "supplier_offering:list",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "voucher_sales_order",
-        read_permission: "sales_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
         business_object_type: "sales_change_order",
-        read_permission: "sales_change_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
         business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::PurchaseChangeOrder,
         business_object_type: "purchase_change_order",
-        read_permission: "purchase_change_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::StockAdjustment,
         business_object_type: "stock_adjustment",
-        read_permission: "stock_adjustment:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::PurchasePaymentRequest,
         business_object_type: "purchase_payment_request",
-        read_permission: "purchase_payment_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SalesInvoiceRequest,
         business_object_type: "sales_invoice_request",
-        read_permission: "sales_invoice_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::CustomerReceipt,
         business_object_type: "customer_receipt",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::CustomerRefund,
         business_object_type: "customer_refund",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::ReceiptReversal,
         business_object_type: "receipt_reversal",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SupplierRefund,
         business_object_type: "supplier_refund",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::PaymentReversal,
         business_object_type: "payment_reversal",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "voucher_sales_order",
-        read_permission: "sales_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
         business_object_type: "sales_change_order",
-        read_permission: "sales_change_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
         business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::PurchaseChangeOrder,
         business_object_type: "purchase_change_order",
-        read_permission: "purchase_change_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::StockAdjustment,
         business_object_type: "stock_adjustment",
-        read_permission: "stock_adjustment:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::PurchasePaymentRequest,
         business_object_type: "purchase_payment_request",
-        read_permission: "purchase_payment_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::SalesInvoiceRequest,
         business_object_type: "sales_invoice_request",
-        read_permission: "sales_invoice_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::CustomerReceipt,
         business_object_type: "customer_receipt",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::CustomerRefund,
         business_object_type: "customer_refund",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::ReceiptReversal,
         business_object_type: "receipt_reversal",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::SupplierRefund,
         business_object_type: "supplier_refund",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::ApprovalRework,
         object_kind: WorkItemBriefObjectKind::PaymentReversal,
         business_object_type: "payment_reversal",
-        read_permission: "purchase_order:detail",
     },
 ];
 
@@ -847,7 +796,6 @@ mod tests {
     fn brief_relations_and_assignment_policies_are_entity_owned() {
         let relation = WorkItemType::DocumentApproval.brief_relation("stock_adjustment").unwrap();
         assert_eq!(relation.object_kind, WorkItemBriefObjectKind::StockAdjustment);
-        assert_eq!(relation.read_permission, "stock_adjustment:detail");
         assert!(WorkItemType::DocumentApproval.brief_relation("unknown").is_none());
         assert_eq!(
             WorkItemType::PurchaseOrderReview.assignment_separation_policy(),
@@ -860,11 +808,9 @@ mod tests {
         let request =
             WorkItemType::SupplierPaymentExecution.brief_relation("purchase_payment_request").unwrap();
         assert_eq!(request.object_kind, WorkItemBriefObjectKind::PurchasePaymentRequest);
-        assert_eq!(request.read_permission, "purchase_payment_request:detail");
         assert!(WorkItemType::SupplierPaymentExecution.brief_relation("payable_account").is_none());
         let acceptance = WorkItemType::CustomerAcceptanceRegistration.brief_relation("sales_order").unwrap();
         assert_eq!(acceptance.object_kind, WorkItemBriefObjectKind::SalesOrder);
-        assert_eq!(acceptance.read_permission, "sales_order:detail");
         assert_eq!(
             WorkItemType::CustomerAcceptanceRegistration.assignment_separation_policy(),
             WorkItemAssignmentSeparationPolicy::RoleAndParticipation

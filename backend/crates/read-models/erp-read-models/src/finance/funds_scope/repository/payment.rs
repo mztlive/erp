@@ -182,6 +182,7 @@ fn pipeline(
 ) -> Vec<Document> {
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(condition));
+    stages.extend(authorization.guard_stages());
     stages.push(allocation_lookup(authorization, condition));
     stages.push(super::whole_facts::fields(Bson::Array(vec![]), "$scope_links.order".into(),
         doc! { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }.into()));
@@ -333,13 +334,21 @@ mod tests {
             } }
         );
         assert_eq!(
-            stages[2].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            stages[2 + authorization().guard_stages().len()]
+                .get_document("$lookup")
+                .unwrap()
+                .get_str("from")
+                .unwrap(),
             Database::PAYMENT_ALLOCATIONS
         );
         let unrestricted =
             pipeline(&SupplierPaymentFilter::default(), &authorization(), &FundsLinkedCondition::default());
         assert_eq!(
-            unrestricted[1].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            unrestricted[1 + authorization().guard_stages().len()]
+                .get_document("$lookup")
+                .unwrap()
+                .get_str("from")
+                .unwrap(),
             Database::PAYMENT_ALLOCATIONS
         );
     }

@@ -1,8 +1,7 @@
 //! 仅为已授权的当前页补齐陈列计数及方案业务编号。
 
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 
 use super::{BOOKLETS, ITEMS, PROPOSALS, SalesSelectionDomainRepository};
@@ -32,20 +31,8 @@ impl SalesSelectionDomainRepository<'_> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let collection = self.db.collection::<Document>(BOOKLETS);
-        let pipeline = summary_pipeline(ids);
-        if let Some(session) = executor.session() {
-            Ok(collection
-                .aggregate(pipeline)
-                .with_type::<BookletSummary>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect()
-                .await?)
-        } else {
-            Ok(collection.aggregate(pipeline).with_type::<BookletSummary>().await?.try_collect().await?)
-        }
+        let collection = self.db.collection::<BookletSummary>(BOOKLETS);
+        aggregate::rows(&collection, summary_pipeline(ids), executor).await
     }
 }
 

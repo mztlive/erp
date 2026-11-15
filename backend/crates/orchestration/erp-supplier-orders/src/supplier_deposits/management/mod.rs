@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
 
@@ -21,7 +21,7 @@ pub use dto::*;
 /// 持有身份授权及敏感资料解码器的预存款跨域管理入口。
 pub struct SupplierDepositManagementProcess {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     codec: SensitiveDataCodec,
     payment_tasks: Arc<dyn OrdersPaymentTasks>,
 }
@@ -38,16 +38,16 @@ impl SupplierDepositManagementProcess {
     pub fn new(
         db: Database,
         codec: SensitiveDataCodec,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         payment_tasks: Arc<dyn OrdersPaymentTasks>,
     ) -> Self {
-        Self { rbac, db, codec, payment_tasks }
+        Self { authorization, db, codec, payment_tasks }
     }
 }
 
 struct DepositManagementContext {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     codec: SensitiveDataCodec,
     payment_tasks: Arc<dyn OrdersPaymentTasks>,
     account: String,
@@ -57,7 +57,7 @@ impl SupplierDepositManagementProcess {
     fn command_context(&self, account: &str, actor: &AuditActor) -> DepositManagementContext {
         DepositManagementContext {
             db: self.db.clone(),
-            rbac: self.rbac.clone(),
+            authorization: self.authorization.clone(),
             codec: self.codec.clone(),
             payment_tasks: self.payment_tasks.clone(),
             account: account.into(),

@@ -46,7 +46,7 @@ impl SupplierAccountRepositoryScopeExt for Repository<'_, SupplierAccount> {
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<SupplierVersion>> {
-        filter.authorized_scope.validate(executor).await?;
+        filter.authorized_scope.ensure_current(executor)?;
         let result = aggregate::find(
             &self.collection().clone_with_type::<SupplierVersion>(),
             filter.to_doc(),
@@ -59,7 +59,7 @@ impl SupplierAccountRepositoryScopeExt for Repository<'_, SupplierAccount> {
             executor,
         )
         .await?;
-        filter.authorized_scope.validate(executor).await?;
+        filter.authorized_scope.ensure_current(executor)?;
         Ok(result)
     }
 }

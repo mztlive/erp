@@ -1,11 +1,10 @@
 //! 供应商商品观察与扫描检查点；所有查询限定连接且使用同一筛选口径。
 use std::str::FromStr;
 
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Bson, Decimal128, Document, doc, serialize_to_bson};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Repository, Result, insert_literal_regex_filter, mongo_ops};
+use persistence_core::{Executor, Repository, Result, aggregate, insert_literal_regex_filter, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use crate::dto::supplier_catalog::{CatalogFilter, CatalogSelectionStatus};
@@ -351,19 +350,10 @@ pub async fn filtered_counts(
         doc! { "$project": { "_id": 0, "product_total": 1, "sku_total": 1 } },
     ];
     let collection = db.collection::<Document>(ITEMS);
-    let counts = match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<CatalogCounts>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_next()
-                .await?
-        },
-        None => collection.aggregate(pipeline).with_type::<CatalogCounts>().await?.try_next().await?,
-    };
+    let counts = aggregate::rows(&collection.clone_with_type::<CatalogCounts>(), pipeline, executor)
+        .await?
+        .into_iter()
+        .next();
     Ok(counts.unwrap_or_default())
 }
 
@@ -396,20 +386,7 @@ pub async fn filter_options(
         doc! { "$project": { "_id": 0, "id": "$_id", "name": { "$ifNull": ["$name", "$_id"] } } },
     ];
     let collection = db.collection::<Document>(ITEMS);
-    match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<CatalogFilterOption>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect()
-                .await
-        },
-        None => collection.aggregate(pipeline).with_type::<CatalogFilterOption>().await?.try_collect().await,
-    }
-    .map_err(persistence_core::Error::from)
+    aggregate::rows(&collection.clone_with_type::<CatalogFilterOption>(), pipeline, executor).await
 }
 
 /// 有界遍历已明确类型的供应商连接，调度方继续核对既往采集授权。

@@ -17,7 +17,7 @@ use erp_procurement::entity::purchase_order::{
 };
 use erp_procurement::repository::purchase_source_update::list_by_sales_order;
 use erp_sales::entity::sales_order::SalesOrder;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use rust_decimal::Decimal;
 
 use super::SalesOrderReadService;
@@ -53,20 +53,22 @@ impl SalesOrderReadService {
         &self,
         order: &SalesOrder,
         actor: Option<&AuditActor>,
+        executor: &mut dyn Executor,
     ) -> Result<SalesProcurementCoverageView> {
         if order.current_revision_id().is_none() {
             return empty_coverage();
         }
-        let state = load_purchase_source_state(&self.db, order, &mut NoTransaction).await?;
-        let records = list_by_sales_order(&self.db, &order.base.id, &mut NoTransaction).await?;
+        let state = load_purchase_source_state(&self.db, order, executor).await?;
+        let records = list_by_sales_order(&self.db, &order.base.id, executor).await?;
         let pending = pending_purchases(&state, &records);
         let awaiting = pending.iter().filter(|purchase| purchase.awaiting_submission).count();
-        let updates =
-            if !pending.is_empty() && can_list_purchases(&self.db, self.require_rbac()?, actor).await? {
-                self.source_update_views(&pending).await?
-            } else {
-                Vec::new()
-            };
+        let updates = if !pending.is_empty()
+            && can_list_purchases(&self.db, self.require_rbac()?, actor, executor).await?
+        {
+            self.source_update_views(&pending, executor).await?
+        } else {
+            Vec::new()
+        };
         Ok(coverage_view(&state.coverage, (state.impacts.len(), awaiting), updates))
     }
 
@@ -74,16 +76,16 @@ impl SalesOrderReadService {
     async fn source_update_views(
         &self,
         pending: &[PendingPurchase<'_>],
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SalesProcurementSourceUpdateView>> {
         let supplier_ids = pending
             .iter()
             .map(|purchase| purchase.order.supplier_id.clone())
             .collect::<Vec<SupplierAccountId>>();
-        let suppliers =
-            current_legal_names_by_account_ids(&self.db, &supplier_ids, &mut NoTransaction).await?;
+        let suppliers = current_legal_names_by_account_ids(&self.db, &supplier_ids, executor).await?;
         let owner_ids =
             pending.iter().filter_map(|purchase| purchase.order.owner_user_id.clone()).collect::<Vec<_>>();
-        let owners = self.db.accounts().names_by_ids(&owner_ids, &mut NoTransaction).await?;
+        let owners = self.db.accounts().names_by_ids(&owner_ids, executor).await?;
         Ok(pending.iter().map(|purchase| source_update_view(purchase, &suppliers, &owners)).collect())
     }
 }

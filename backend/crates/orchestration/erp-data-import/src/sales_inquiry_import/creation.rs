@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use erp_order_to_cash::sales_inquiry::dto::CreateInquiryCommand;
 use erp_sales::entity::sales_inquiry_import::InquiryImportResult;
 use erp_sales::repository::extensions::SalesInquiryImportExt;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::{CreateInquiryImportCommand, SalesInquiryImportProcess};
 use crate::{Error, Result};
@@ -39,10 +39,21 @@ impl SalesInquiryImportProcess {
             })
             .await;
         match result {
-            Err(error) if error.command_may_have_committed() => recover_command(
-                error,
-                self.recover_creation(actor, &command, &receipt, &mut NoTransaction).await,
-            ),
+            Err(error) if error.command_may_have_committed() => {
+                let this = self.clone();
+                let actor = actor.clone();
+                let recovered = self
+                    .db
+                    .client()
+                    .clone()
+                    .with_transaction(move |executor| {
+                        Box::pin(
+                            async move { this.recover_creation(&actor, &command, &receipt, executor).await },
+                        )
+                    })
+                    .await;
+                recover_command(error, recovered)
+            },
             other => other,
         }
     }

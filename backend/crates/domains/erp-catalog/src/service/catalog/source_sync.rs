@@ -7,8 +7,9 @@ use entity_core::BaseModel;
 use erp_core::ids::{
     FileAssetId, ProductId, ProductRevisionId, ProductRevisionMediaId, SkuId, SkuRevisionId,
 };
+use erp_permissions::catalog as catalog_permissions;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::CatalogService;
 use crate::entity::catalog::product_revision::ProductRevisionData;
@@ -35,24 +36,39 @@ impl CatalogService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Option<ProductSourceDiffView>> {
-        let product = self.access().require_product(actor, "detail", id, &mut NoTransaction).await?;
-        let Some(source) = self.db.product_sources().find_by_id(id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        let current = self.source_company_content(id, &mut NoTransaction).await?;
-        let mut view = source.view(product.base.version);
-        view.sku_versions = current.sku_versions;
-        for field in &mut view.fields {
-            field.sku_no = field.sku_id.as_ref().and_then(|id| current.sku_numbers.get(id)).cloned();
-        }
-        for field in &mut view.fields {
-            if let Some((_, _, value)) =
-                current.values.iter().find(|(f, s, _)| *f == field.field && *s == field.sku_id)
-            {
-                field.company = value.clone();
-            }
-        }
-        Ok(Some(view))
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let product = service
+                        .access()
+                        .require_product(&actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, &id, executor)
+                        .await?;
+                    let Some(source) = service.db.product_sources().find_by_id(&id, executor).await? else {
+                        return Ok(None);
+                    };
+                    let current = service.source_company_content(&id, executor).await?;
+                    let mut view = source.view(product.base.version);
+                    view.sku_versions = current.sku_versions;
+                    for field in &mut view.fields {
+                        field.sku_no =
+                            field.sku_id.as_ref().and_then(|id| current.sku_numbers.get(id)).cloned();
+                    }
+                    for field in &mut view.fields {
+                        if let Some((_, _, value)) =
+                            current.values.iter().find(|(f, s, _)| *f == field.field && *s == field.sku_id)
+                        {
+                            field.company = value.clone();
+                        }
+                    }
+                    Ok(Some(view))
+                })
+            })
+            .await
     }
 
     /// 确认用户实际比较过的来源和公司版本，回执与商品修订原子保存。
@@ -367,8 +383,11 @@ struct MongoResolutionStore<'a> {
 #[async_trait]
 impl ResolutionStore for MongoResolutionStore<'_> {
     async fn authorize(&mut self) -> Result<()> {
-        let product =
-            self.service.access().require_product(self.actor, "update", self.id, self.executor).await?;
+        let product = self
+            .service
+            .access()
+            .require_product(self.actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, self.id, self.executor)
+            .await?;
         self.product_version = Some(product.base.version);
         Ok(())
     }

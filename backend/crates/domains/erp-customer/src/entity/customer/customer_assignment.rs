@@ -4,7 +4,7 @@
 //! 重叠；区间与角色冲突由实体判定，P3 只负责事务内加载并持久化冲突行
 //! （§6.2）。负责人变化后只影响新增单据权限，不删除历史参与权（W03 / §11.1）。
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -277,6 +277,49 @@ impl CustomerAssignment {
             }
         }
         Err(Error::from("至少保留一名有效负责销售，请先添加接任人员"))
+    }
+
+    /// 计算提前结束后，被缩短区间内各段实际生效的完整负责人集合。
+    ///
+    /// # 参数
+    /// * `assignments` - 原事务读取的该客户全部归属。
+    /// * `at` - 拟结束日期，按原归属的左闭右开区间解释。
+    /// # 返回
+    /// 返回需要校验目标归属的去重集合；协作归属或未缩短区间时为空。
+    /// # 错误
+    /// 结束窗口非法，或被缩短区间存在无人负责的部分时返回领域错误。
+    pub(crate) fn owners_after_end(
+        &self,
+        assignments: &[Self],
+        at: BusinessDate,
+    ) -> Result<Vec<BTreeSet<String>>> {
+        let mut ended = self.clone();
+        ended.end_directly(at)?;
+        self.ensure_owner_retained(assignments, at)?;
+        if self.assignment_role != AssignmentRole::Owner || self.valid_to == Some(at) {
+            return Ok(Vec::new());
+        }
+        let owners = assignments
+            .iter()
+            .filter(|row| {
+                !row.base.is_deleted()
+                    && row.base.id != self.base.id
+                    && row.customer_id == self.customer_id
+                    && row.assignment_role == AssignmentRole::Owner
+            })
+            .collect::<Vec<_>>();
+        let boundaries = std::iter::once(at)
+            .chain(owners.iter().flat_map(|row| std::iter::once(row.valid_from).chain(row.valid_to)))
+            .filter(|date| *date >= at && self.valid_to.is_none_or(|end| *date < end))
+            .collect::<BTreeSet<_>>();
+        Ok(boundaries
+            .into_iter()
+            .map(|date| {
+                owners.iter().filter(|row| row.is_active_on(date)).map(|row| row.user_id.clone()).collect()
+            })
+            .collect::<BTreeSet<BTreeSet<String>>>()
+            .into_iter()
+            .collect())
     }
 
     /// 校验归属属于指定客户。
@@ -727,6 +770,47 @@ mod tests {
         let finite = window("finite", 1, Some(25));
         assert!(finite.ensure_owner_retained(&[b], date(24)).is_ok());
         assert!(finite.ensure_owner_retained(&[c], date(24)).is_err());
+    }
+
+    #[test]
+    fn ending_owner_checks_each_complete_target_set_in_the_removed_interval() {
+        let current = window("current", 1, None);
+        let b = window("b", 1, Some(25));
+        let c = window("c", 25, None);
+        let shared = window("shared", 1, None);
+        let groups = current.owners_after_end(&[current.clone(), c, b, shared], date(24)).unwrap();
+        assert_eq!(groups, vec![["b".into(), "shared".into()].into(), ["c".into(), "shared".into()].into()]);
+        assert_eq!(current.valid_to, None);
+    }
+
+    #[test]
+    fn ending_owner_excludes_removed_and_ineligible_assignments_from_target_facts() {
+        let current = window("current", 1, Some(25));
+        let mut deleted = window("deleted", 1, None);
+        deleted.base.deleted_at = 1;
+        let mut foreign = window("foreign", 1, None);
+        foreign.customer_id = CustomerAccountId::new("other");
+        let mut collaborator = window("collaborator", 1, None);
+        collaborator.assignment_role = AssignmentRole::Collaborator;
+        let rows = [
+            current.clone(),
+            deleted,
+            foreign,
+            collaborator,
+            window("b", 1, None),
+            window("later", 25, None),
+        ];
+        assert_eq!(current.owners_after_end(&rows, date(24)).unwrap(), vec![["b".into()].into()]);
+        assert!(current.owners_after_end(&rows, date(25)).unwrap().is_empty());
+        assert!(current.owners_after_end(&rows, date(26)).is_err());
+        assert!(current.owners_after_end(&[], date(24)).is_err());
+    }
+
+    #[test]
+    fn ending_collaborator_does_not_generate_owner_changes() {
+        let mut collaborator = window("collaborator", 1, None);
+        collaborator.assignment_role = AssignmentRole::Collaborator;
+        assert!(collaborator.owners_after_end(&[], date(24)).unwrap().is_empty());
     }
 
     #[test]

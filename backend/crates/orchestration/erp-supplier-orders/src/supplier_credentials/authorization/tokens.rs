@@ -7,7 +7,7 @@ use erp_integration::entity::supplier_credential::{
 };
 use erp_integration::indexes::supplier_credential::ensure;
 use erp_integration::repository::SupplierCredentialExt;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 use serde::Deserialize;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -63,7 +63,20 @@ impl JdVopAuthorizationProcess {
     ) -> Result<JdVopAuthorizationStatus> {
         let now = Instant::now();
         let expiry = request.validate(now)?;
-        let connection = self.access.require(id, actor, "authorize", &mut NoTransaction).await?;
+        let access = self.access.clone();
+        let target_id = id.to_string();
+        let current_actor = actor.clone();
+        let connection = self
+            .access
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { access.require(&target_id, &current_actor, "authorize", executor).await },
+                )
+            })
+            .await?;
         self.access.binding(&connection)?;
         let settings = self.access.settings.as_ref().ok_or(AuthorizationError::Unavailable)?;
         let crypto = CredentialCrypto::new(settings).map_err(|_| AuthorizationError::Unavailable)?;

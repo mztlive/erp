@@ -15,10 +15,12 @@ use erp_finance::entity::payable::{PayableAccount, PurchaseInvoiceAllocationPlan
 use erp_finance::entity::receivable::Invoice;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::{self, PayableService as FinancePayableService};
-use erp_identity::SharedRbacService;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::payable as payable_permissions;
 use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
+use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
@@ -82,7 +84,7 @@ impl PayableProcess {
     /// 校验或事务失败返回错误；提交结果未知时保留原错误。
     pub async fn register_purchase_invoice_with_assets(
         &self,
-        mut req: RegisterPurchaseInvoiceRequest,
+        req: RegisterPurchaseInvoiceRequest,
         pending: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<PurchaseInvoiceWithAssetsResult> {
@@ -90,51 +92,24 @@ impl PayableProcess {
         let receipt = purchase_invoice_receipt_with_assets(&req, actor, pending.as_ref())?;
         let port = MongoPurchaseInvoiceCommand {
             db: self.db.clone(),
-            identity: self.authorization_rbac.identity.clone(),
-        };
-        if let Some(invoice_id) = port.receipt_invoice_id(&receipt, &mut NoTransaction).await? {
-            return Ok(PurchaseInvoiceWithAssetsResult {
-                view: port.registered_view(&invoice_id).await,
-                assets_committed: false,
-            });
-        }
-        invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
-        let supplier = self
-            .db
-            .supplier_accounts()
-            .find_by_id(&req.supplier_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        let invoice = payable::prepare_purchase_invoice(&req, supplier.party_id, actor.id())?;
-        let context = BusinessEventContext::new(actor.clone(), PURCHASE_INVOICE_REGISTER)?
-            .with_command_id(Some(receipt.id().to_string()))?;
-        let fresh_invoice_id = (!pending.is_empty()).then(|| invoice.base.id.clone());
-        let registration = PurchaseInvoiceRegistration {
-            req,
-            invoice,
+            authorization: self.authorization_rbac.authorization.clone(),
             actor: actor.clone(),
-            receipt: receipt.clone(),
-            pending,
         };
-        let client = self.db.client().clone();
-        let transaction_port = MongoPurchaseInvoiceCommand {
-            db: self.db.clone(),
-            identity: self.authorization_rbac.identity.clone(),
-        };
-        let result = client
+        let transaction_port = port.clone();
+        let fresh_id = next_id();
+        let fresh_asset_id = (!pending.is_empty()).then(|| fresh_id.clone());
+        let command = receipt.clone();
+        let writer = actor.clone();
+        let result = self
+            .db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let command = RegisterPurchaseInvoiceCommand {
-                        port: &transaction_port,
-                        registration: &registration,
-                        audit_event_id: context.event_id(),
-                    };
-                    let sink = MongoAuditEventSink::new(&transaction_port.db);
-                    execute_audited(&context, &sink, executor, &command).await
+                    transaction_port.register(req, pending, writer, command, fresh_id, executor).await
                 })
             })
             .await;
-        finish_registration(&port, result, &receipt, fresh_invoice_id.as_deref()).await
+        finish_registration(&port, result, &receipt, fresh_asset_id.as_deref()).await
     }
 }
 
@@ -306,9 +281,54 @@ fn registered_event_content(invoice: &Invoice) -> Result<BusinessEventContent> {
     })
 }
 
+#[derive(Clone)]
 struct MongoPurchaseInvoiceCommand {
     db: Database,
-    identity: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
+    actor: AuditActor,
+}
+
+impl MongoPurchaseInvoiceCommand {
+    /// 一次快照内执行当前资格、幂等读取、来源读取和全部写入。
+    async fn register(
+        &self,
+        mut req: RegisterPurchaseInvoiceRequest,
+        pending: Arc<dyn PendingAttachmentBatch>,
+        actor: AuditActor,
+        receipt: CommandReceipt,
+        fresh_id: String,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoiceId> {
+        self.authorization
+            .require(
+                &actor,
+                &payable_permissions::PURCHASE_INVOICE_ALLOCATION_POST,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+        if let Some(invoice_id) = self.receipt_invoice_id(&receipt, executor).await? {
+            return Ok(invoice_id);
+        }
+        invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
+        let supplier = self
+            .db
+            .supplier_accounts()
+            .find_by_id(&req.supplier_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商不存在".into()))?;
+        let mut invoice = payable::prepare_purchase_invoice(&req, supplier.party_id, actor.id())?;
+        invoice.base.id = fresh_id;
+        let context = BusinessEventContext::new(actor.clone(), PURCHASE_INVOICE_REGISTER)?
+            .with_command_id(Some(receipt.id().to_string()))?;
+        let registration = PurchaseInvoiceRegistration { req, invoice, actor, receipt, pending };
+        let command = RegisterPurchaseInvoiceCommand {
+            port: self,
+            registration: &registration,
+            audit_event_id: context.event_id(),
+        };
+        execute_audited(&context, &MongoAuditEventSink::new(&self.db), executor, &command).await
+    }
 }
 
 #[async_trait]
@@ -367,7 +387,7 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
     ) -> Result<()> {
         invoice_attachments::persist(
             &self.db,
-            &self.identity,
+            &self.authorization,
             &invoice.base.id,
             &registration.req.attachment_asset_ids,
             registration.pending.as_ref(),
@@ -390,9 +410,35 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
     }
 
     async fn registered_view(&self, invoice_id: &InvoiceId) -> Result<PurchaseInvoiceRegisteredView> {
-        Ok(FinancePayableService::new(self.db.clone())
-            .purchase_invoice_registered_view(invoice_id.as_ref())
-            .await?)
+        let authorization = self.authorization.clone();
+        let db = self.db.clone();
+        let actor = self.actor.clone();
+        let invoice_id = invoice_id.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &payable_permissions::PURCHASE_INVOICE_ALLOCATION_POST,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    let boundary = executor
+                        .boundary()
+                        .ok_or_else(|| Error::Internal("进项发票回读缺少授权执行边界".into()))?;
+                    let view = FinancePayableService::new(db)
+                        .purchase_invoice_registered_view(invoice_id.as_ref(), executor)
+                        .await?;
+                    if !boundary.is_current(executor) {
+                        return Err(Error::Internal("进项发票回读越过授权读取阶段".into()));
+                    }
+                    Ok::<_, Error>(view)
+                })
+            })
+            .await
     }
 }
 

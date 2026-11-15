@@ -168,6 +168,7 @@ mod tests {
         SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
     };
     use erp_core::money::{Amount, Quantity};
+    use persistence_core::ReadExecutor as TestExecutor;
 
     use super::*;
     use crate::entity::supplier_settlement::{
@@ -175,15 +176,6 @@ mod tests {
         SupplierSettlementDifferenceEvidenceData, SupplierSettlementItemData,
         SupplierSettlementStatementData,
     };
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Step {
@@ -309,7 +301,7 @@ mod tests {
             let mut store = Store::new(status);
             let version = store.statement.as_ref().unwrap().base.version;
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
                 .await
@@ -326,7 +318,7 @@ mod tests {
             let mut store = Store::new(SettlementStatus::Draft);
             store.fail = Some(*step);
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
-            let mut executor = TestExecutor { _identity: 2 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let result =
                 persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
@@ -349,7 +341,7 @@ mod tests {
                 _ => store.statement = None,
             }
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
-            let mut executor = TestExecutor { _identity: 3 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let result =
                 persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
@@ -365,7 +357,7 @@ mod tests {
             let mut store = Store::new(SettlementStatus::PendingReview);
             store.item.as_mut().unwrap().statement_id = SupplierSettlementStatementId::new("other-statement");
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
-            let mut executor = TestExecutor { _identity: 4 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let result = persist_with_store(
                 &mut store,
@@ -398,7 +390,7 @@ mod tests {
         {
             let mut store = Store::new(status);
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
-            let mut executor = TestExecutor { _identity: 5 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let result =
                 persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)

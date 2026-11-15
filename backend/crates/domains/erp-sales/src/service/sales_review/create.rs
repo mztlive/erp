@@ -5,12 +5,15 @@ use erp_core::ids::{
     SalesChangeOrderId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
 };
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::SalesReviewService;
 use crate::dto::sales_review::CreateSalesChangeOrderRequest;
-use crate::entity::sales_order::{SalesContentHash, SalesOrderWorkingCopyLineData, WorkingPurpose};
+use crate::entity::sales_order::{
+    HeaderSnapshotData, SalesContentHash, SalesOrder, SalesOrderRevision, SalesOrderWorkingCopy,
+    SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, WorkingPurpose,
+};
 use crate::entity::sales_review::{SalesChangeOrder, SalesChangeOrderData};
 use crate::repository::prelude::*;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
@@ -109,6 +112,7 @@ impl SalesReviewService {
     /// # 参数
     /// * `req` - 变更意图；表头、合同和行事实不从该请求派生。
     /// * `actor` - 当前认证建单人。
+    /// * `executor` - 入口授权、准备读取和后续写入共用的事务执行器。
     ///
     /// # 返回
     /// 返回尚未持久化的变更单、变更工作副本和行。
@@ -122,34 +126,11 @@ impl SalesReviewService {
         &self,
         req: CreateSalesChangeOrderRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<CreatedChangeWrite> {
         req.validate()?;
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(&req.sales_order_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if let Some(blocker) = order.sales_change_start_blocker() {
-            return Err(Error::BusinessLogicError(blocker.to_string()));
-        }
-        let base_revision_id =
-            SalesOrderRevisionId::new(order.current_revision_id().expect("实体规则已确认当前版本存在"));
-        let base_revision = self
-            .db
-            .sales_order_revisions()
-            .find_by_id(base_revision_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
-        if !base_revision.matches_revision_no(req.expected_base_revision_no) {
-            return Err(Error::ConflictError(format!(
-                "销售单当前版本已变更：期望 {}，实际 {}",
-                req.expected_base_revision_no, base_revision.revision.revision_no
-            )));
-        }
-        if self.has_in_progress_change(&req.sales_order_id, &base_revision_id).await? {
-            return Err(Error::ConflictError("同一基准版本已有进行中的销售变更单".to_string()));
-        }
+        let (order, base_revision) = self.creation_source(&req, executor).await?;
+        let base_revision_id = SalesOrderRevisionId::new(base_revision.base.id.clone());
 
         let change_order = SalesChangeOrder::new(
             SalesChangeOrderId::new(next_id()),
@@ -161,11 +142,8 @@ impl SalesReviewService {
             },
             actor.id(),
         )?;
-        let revision_lines = self
-            .db
-            .sales_order_revision_lines()
-            .list_lines_by_revision(&base_revision_id, &mut NoTransaction)
-            .await?;
+        let revision_lines =
+            self.db.sales_order_revision_lines().list_lines_by_revision(&base_revision_id, executor).await?;
         let revision_line_ids = revision_lines
             .iter()
             .map(|line| SalesOrderRevisionLineId::new(line.base.id.clone()))
@@ -173,52 +151,58 @@ impl SalesReviewService {
         let goods_lines = self
             .db
             .sales_order_goods_service_line_revisions()
-            .list_by_revision_line_ids(&revision_line_ids, &mut NoTransaction)
+            .list_by_revision_line_ids(&revision_line_ids, executor)
             .await?;
         let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
         let (line_datas, lines) =
             build_change_working_copy_lines_from_revision(&working_copy_id, &revision_lines, &goods_lines)?;
-        let (gross, net, tax) = crate::entity::sales_order::SalesOrderWorkingCopyLine::amount_totals(&lines);
-        let working_copy = crate::entity::sales_order::SalesOrderWorkingCopy::new(
+        let working_copy = change_working_copy(
+            order,
+            base_revision,
+            &change_order,
             working_copy_id,
-            crate::entity::sales_order::SalesOrderWorkingCopyData {
-                sales_order_id: req.sales_order_id,
-                working_purpose: WorkingPurpose::SalesChange,
-                sales_change_order_id: Some(change_order.base.id.clone().into()),
-                base_revision_id: Some(base_revision_id),
-                draft_version: 1,
-                content_hash: SalesContentHash::change(&change_order.base.id, 1)?.into_wire(),
-                editor_user_id: actor.id().to_string(),
-                business_type: order.business_type,
-                customer_id: order.customer_id,
-                contract_id: order.contract_id,
-                contract_revision_id: base_revision.contract_revision_id,
-                settlement_party_id: order.settlement_party_id,
-                snapshot: crate::entity::sales_order::HeaderSnapshotData {
-                    customer_name: base_revision.customer_snapshot.customer_name,
-                    contract_no: base_revision.contract_snapshot.map(|snapshot| snapshot.contract_no),
-                    settlement_party_name: base_revision
-                        .settlement_party_snapshot
-                        .map(|snapshot| snapshot.settlement_party_name),
-                    payment_term_code: base_revision.payment_term_snapshot.payment_term_code,
-                    payment_term_name: base_revision.payment_term_snapshot.payment_term_name,
-                    invoice_type: base_revision.invoice_requirement_snapshot.invoice_type,
-                    tax_point: base_revision.invoice_requirement_snapshot.tax_point,
-                },
-                project_name: base_revision.project_name,
-                business_remark: base_revision.business_remark,
-                voucher_category_sku_id: base_revision.voucher_category_sku_id,
-                voucher_expiry_at: base_revision.voucher_expiry_at,
-                receivable_due_date: None,
-                gross_amount: gross,
-                net_amount: net,
-                tax_amount: tax,
-                lines: line_datas,
-            },
-            actor.id(),
+            line_datas,
+            &lines,
+            actor,
         )?;
         Ok(CreatedChangeWrite { change_order, working_copy, lines })
     }
+    /// 在原执行器中核对来源状态、目标正式版本和进行中变更，不提前读取工作副本行。
+    async fn creation_source(
+        &self,
+        req: &CreateSalesChangeOrderRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<(SalesOrder, SalesOrderRevision)> {
+        let order = self
+            .db
+            .sales_orders()
+            .find_by_id(&req.sales_order_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        if let Some(blocker) = order.sales_change_start_blocker() {
+            return Err(Error::BusinessLogicError(blocker.to_string()));
+        }
+        let base_revision_id =
+            SalesOrderRevisionId::new(order.current_revision_id().expect("实体规则已确认当前版本存在"));
+        let base_revision = self
+            .db
+            .sales_order_revisions()
+            .find_by_id(base_revision_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
+        if !base_revision.matches_revision_no(req.expected_base_revision_no) {
+            return Err(Error::ConflictError(format!(
+                "销售单当前版本已变更：期望 {}，实际 {}",
+                req.expected_base_revision_no, base_revision.revision.revision_no
+            )));
+        }
+        if self.has_in_progress_change(&req.sales_order_id, &base_revision_id, executor).await? {
+            return Err(Error::ConflictError("同一基准版本已有进行中的销售变更单".to_string()));
+        }
+
+        Ok((order, base_revision))
+    }
+
     /// 同一销售单同一基准版本是否已有进行中变更。
     ///
     /// # 错误
@@ -227,13 +211,66 @@ impl SalesReviewService {
         &self,
         sales_order_id: &SalesOrderId,
         base_revision_id: &SalesOrderRevisionId,
+        executor: &mut dyn Executor,
     ) -> Result<bool> {
         Ok(self
             .db
             .sales_change_orders()
-            .has_in_progress_by_order_and_base(sales_order_id, base_revision_id, &mut NoTransaction)
+            .has_in_progress_by_order_and_base(sales_order_id, base_revision_id, executor)
             .await?)
     }
+}
+
+/// 将已验证来源的正式快照、原始行和金额组合成新的变更工作副本。
+fn change_working_copy(
+    order: SalesOrder,
+    base_revision: SalesOrderRevision,
+    change_order: &SalesChangeOrder,
+    working_copy_id: SalesOrderWorkingCopyId,
+    line_datas: Vec<SalesOrderWorkingCopyLineData>,
+    lines: &[SalesOrderWorkingCopyLine],
+    actor: &AuditActor,
+) -> Result<SalesOrderWorkingCopy> {
+    let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(lines);
+    SalesOrderWorkingCopy::new(
+        working_copy_id,
+        SalesOrderWorkingCopyData {
+            sales_order_id: change_order.sales_order_id.clone(),
+            working_purpose: WorkingPurpose::SalesChange,
+            sales_change_order_id: Some(change_order.base.id.clone().into()),
+            base_revision_id: Some(SalesOrderRevisionId::new(base_revision.base.id.clone())),
+            draft_version: 1,
+            content_hash: SalesContentHash::change(&change_order.base.id, 1)?.into_wire(),
+            editor_user_id: actor.id().to_string(),
+            business_type: order.business_type,
+            customer_id: order.customer_id,
+            contract_id: order.contract_id,
+            contract_revision_id: base_revision.contract_revision_id,
+            settlement_party_id: order.settlement_party_id,
+            snapshot: HeaderSnapshotData {
+                customer_name: base_revision.customer_snapshot.customer_name,
+                contract_no: base_revision.contract_snapshot.map(|snapshot| snapshot.contract_no),
+                settlement_party_name: base_revision
+                    .settlement_party_snapshot
+                    .map(|snapshot| snapshot.settlement_party_name),
+                payment_term_code: base_revision.payment_term_snapshot.payment_term_code,
+                payment_term_name: base_revision.payment_term_snapshot.payment_term_name,
+                invoice_type: base_revision.invoice_requirement_snapshot.invoice_type,
+                tax_point: base_revision.invoice_requirement_snapshot.tax_point,
+            },
+            project_name: base_revision.project_name,
+            business_remark: base_revision.business_remark,
+            voucher_category_sku_id: base_revision.voucher_category_sku_id,
+            voucher_expiry_at: base_revision.voucher_expiry_at,
+            receivable_due_date: None,
+            gross_amount: gross,
+            net_amount: net,
+            tax_amount: tax,
+            lines: line_datas,
+        },
+        actor.id(),
+    )
+    .map_err(Into::into)
 }
 
 ///

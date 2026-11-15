@@ -4,7 +4,6 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use mongodb::Collection;
 use mongodb::bson::{Bson, Document, doc};
-use mongodb::options::ReturnDocument;
 use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 use crate::entity::approval_integration::{ApprovalNotificationDeliveryStatus, ApprovalNotificationOutbox};
@@ -379,13 +378,7 @@ async fn find_one_and_update_sorted<T>(
 where
     T: serde::de::DeserializeOwned + Send + Sync,
 {
-    let operation =
-        collection.find_one_and_update(filter, pipeline).sort(sort).return_document(ReturnDocument::After);
-    let document = match executor.session() {
-        Some(session) => operation.session(session).await?,
-        None => operation.await?,
-    };
-    Ok(document)
+    mongo_ops::find_one_and_update_sorted_pipeline(collection, filter, pipeline, sort, executor).await
 }
 
 async fn find_one_and_update_pipeline<T>(

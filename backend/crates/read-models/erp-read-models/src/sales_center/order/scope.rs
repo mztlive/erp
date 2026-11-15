@@ -4,8 +4,11 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, PageView};
+use async_trait::async_trait;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_sales::dto::sales_order::SalesOrderListParams;
-use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
+use erp_sales::repository::sales_order::SalesOrderRow;
+use erp_sales::repository::sales_order::scope::SalesVersion;
 use erp_sales::service::sales_order::SalesOrderService;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
@@ -36,100 +39,134 @@ pub struct SalesListView {
     pub scope_summary: &'static str,
 }
 
-pub(super) struct SalesSnapshot {
-    pub page: PageView<SalesOrderRow>,
-    pub context: SalesReadContext,
+/// 授权分页及原始交付上下文；展示补齐完成前不得结束该读取阶段。
+struct SalesListSnapshot<C> {
+    page: PageView<SalesOrderRow>,
+    context: C,
+    scope_version: String,
+    as_of: String,
 }
-impl SalesOrderReadService {
-    /// 在独立授权快照中只重验匹配版本，组织展开与首次列表读取共用同一入口。
-    ///
-    /// # 参数
-    /// * `params` - 与首次读取相同的列表参数
-    /// * `search` - 与首次读取相同的关键词关联事实
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 当前授权范围与全部匹配销售单版本组成的指纹。
-    ///
-    /// # 错误
-    /// 无动作权限、组织筛选非法、查询超限或仓储失败时拒绝。
-    pub(super) async fn scope_fingerprint(
+
+/// 列表用例的三个实际读取阶段；不向各仓储扩散测试专用接口。
+#[async_trait]
+trait SalesListRead: Sync {
+    type Context: Send + Sync;
+
+    /// 在原执行器解析权限、关键词与组织筛选，并读取分页和完整匹配版本。
+    async fn load(
         &self,
         params: &SalesListParams,
-        search: SalesOrderSearch,
         actor: &AuditActor,
-    ) -> Result<String> {
-        let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
-        let params = params.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let access = SalesAccess::new(db.clone(), rbac);
-                    let (context, scope) = access.resolve(&actor, "list", &[], executor).await?;
-                    let org_ids = requested_business_org_units(&access, &params, executor).await?;
-                    let versions = SalesOrderService::new(db)
-                        .list_versions(&params, search, &scope, org_ids, executor)
-                        .await?;
-                    let mut fingerprint = DefaultHasher::new();
-                    context.validate(executor).await?;
-                    versions.hash(&mut fingerprint);
-                    Ok(format!("{}:{:x}", context.scope_version, fingerprint.finish()))
-                })
-            })
-            .await
-    }
+        executor: &mut dyn Executor,
+    ) -> Result<SalesListSnapshot<Self::Context>>;
 
-    /// 授权、总数与业务身份版本全部在同一个事务读取。
+    /// 在原执行器补齐本页金额、任务、账号和客户展示。
+    async fn present(
+        &self,
+        page: PageView<SalesOrderRow>,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SalesOrderView>>;
+
+    /// 所有读取完成后核验原凭证，失败时丢弃完整分页。
+    async fn validate(&self, context: &Self::Context, executor: &mut dyn Executor) -> Result<()>;
+}
+
+impl SalesOrderReadService {
+    /// 在同一事务内完成授权、关键词、列表、全部展示事实与最终交付检查。
     ///
     /// # 参数
-    /// * `params` - 原始列表查询，含组织筛选
-    /// * `search` - 跨域关键词解析结果
-    /// * `actor` - 已认证操作人
-    ///
+    /// params 为原始列表查询；actor 为本次已认证操作人。
     /// # 返回
-    /// 返回授权快照和范围版本，不含负责销售候选。
-    ///
+    /// 返回携带完整匹配版本指纹的列表，不提供负责销售候选。
     /// # 错误
-    /// 无动作权限、组织筛选非法、未知组织或查询超限时拒绝。
-    /// 未注入授权源时返回 `Internal`。仓储或事务失败会返回对应错误。
-    ///
-    /// # 关键业务约束
-    /// 组织筛选按单据 `business_org_unit_id` 收窄；缺范围保持空集。
-    /// 负责人筛选只收窄授权结果，不从销售单收集人员候选。
+    /// 身份、筛选、范围版本、任何事实读取或交付检查失败时拒绝整页。
     pub(super) async fn list_snapshot(
         &self,
-        params: &SalesOrderListParams,
-        search: SalesOrderSearch,
+        params: &SalesListParams,
         actor: &AuditActor,
-    ) -> Result<SalesSnapshot> {
-        let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
+    ) -> Result<SalesListView> {
+        let service = Self::with_rbac(self.db.clone(), self.require_rbac()?.clone());
         let params = params.clone();
         let actor = actor.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let access = SalesAccess::new(db.clone(), rbac);
-                    let (mut context, scope) = access.resolve(&actor, "list", &[], executor).await?;
-                    let org_ids = requested_business_org_units(&access, &params, executor).await?;
-                    let (page, versions) = SalesOrderService::new(db)
-                        .list_rows(&params, search, &scope, org_ids, executor)
-                        .await?;
-                    let mut fingerprint = DefaultHasher::new();
-                    context.validate(executor).await?;
-                    versions.hash(&mut fingerprint);
-                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
-                    Ok(SalesSnapshot { page, context })
-                })
+                Box::pin(async move { read_list(&service, &params, &actor, executor).await })
             })
             .await
     }
+}
+
+#[async_trait]
+impl SalesListRead for SalesOrderReadService {
+    type Context = SalesReadContext;
+
+    /// 签发根凭证后，全部筛选、分页和版本事实使用原事务。
+    async fn load(
+        &self,
+        params: &SalesListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesListSnapshot<Self::Context>> {
+        let access = SalesAccess::new(self.db.clone(), self.require_rbac()?.clone());
+        let (context, scope) = access.resolve(actor, &sales_order_permissions::LIST, executor).await?;
+        let org_ids = requested_business_org_units(&access, params, executor).await?;
+        let search = self.keyword_search(params.q.as_deref(), executor).await?;
+        let (page, versions) = SalesOrderService::new(self.db.clone())
+            .list_rows(params, search, &scope, org_ids, executor)
+            .await?;
+        let scope_version = list_scope_version(&context.scope_version, &versions);
+        let as_of = context.as_of.as_utc().to_rfc3339();
+        Ok(SalesListSnapshot { page, context, scope_version, as_of })
+    }
+
+    /// 使用原列表执行器读取展示事实，保持分页与行序。
+    async fn present(
+        &self,
+        page: PageView<SalesOrderRow>,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SalesOrderView>> {
+        self.list_view(page, executor).await
+    }
+
+    /// 交付前检查根凭证的原事务、阶段与有效期。
+    async fn validate(&self, context: &Self::Context, executor: &mut dyn Executor) -> Result<()> {
+        context.validate(executor).await
+    }
+}
+
+/// 只有完整页面通过原阶段的最终交付检查，才能构造列表响应。
+async fn read_list(
+    reader: &impl SalesListRead,
+    params: &SalesListParams,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<SalesListView> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("销售列表必须使用快照事务".into()));
+    }
+    let snapshot = reader.load(params, actor, executor).await?;
+    if params.scope_version.as_deref().is_some_and(|expected| expected != snapshot.scope_version) {
+        return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
+    }
+    let data = reader.present(snapshot.page, executor).await?;
+    reader.validate(&snapshot.context, executor).await?;
+    Ok(SalesListView {
+        scope_version: snapshot.scope_version,
+        as_of: snapshot.as_of,
+        empty_reason: None,
+        scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
+        ownership_basis: "document_sales_owner",
+        data,
+    })
+}
+
+/// 保留原跨页合同：授权版本与全部匹配销售单身份、版本组成指纹。
+fn list_scope_version(base: &str, versions: &[SalesVersion]) -> String {
+    let mut fingerprint = DefaultHasher::new();
+    versions.hash(&mut fingerprint);
+    format!("{base}:{:x}", fingerprint.finish())
 }
 
 /// 将请求中的组织筛选展开为单据业务组织条件。
@@ -166,6 +203,9 @@ async fn requested_business_org_units(
         .await?;
     Ok(Some(expanded.into_iter().collect()))
 }
+
+#[cfg(test)]
+mod list_tests;
 
 #[cfg(test)]
 mod tests {

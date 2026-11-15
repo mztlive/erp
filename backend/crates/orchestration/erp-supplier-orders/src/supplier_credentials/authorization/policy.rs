@@ -1,15 +1,11 @@
 //! 京东连接的固定入口与真实供应商来源事实。
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
-    AccessContext, ObjectFacts, ReadAccess, RelatedObjects, RelationKey, RelationMatch,
+    AccessContext, FactValue, ObjectFacts, RelatedObjects, RelationKey,
 };
-use erp_identity::{
-    AccessFactsPort, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry,
-    AuthorizationService, DataAccess, Error, Permission, ResourceTargets, Result, SharedRbacService,
-};
+use erp_identity::{AccessFactsPort, ResourceTargets, Result};
 use erp_supplier::SupplierExt;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::repository::SupplierApiExt;
@@ -18,52 +14,18 @@ use persistence_core::Executor;
 
 const SUPPLIER_RELATION: &str = "supplier";
 
-/// 固定登记全部支持的连接动作，保留供应商详情功能的独立角色资格。
-pub(super) fn authorization(
-    db: &Database,
-    rbac: SharedRbacService,
-    connection: &SupplierApiConnection,
-) -> Result<AuthorizationService> {
-    let supplier = Permission::parse("supplier:detail")?;
-    let facts: Arc<dyn AccessFactsPort> = Arc::new(ConnectionFacts {
-        db: db.clone(),
-        connection_id: connection.base.id.clone(),
-        version: connection.base.version,
-    });
-    let mut entries = Vec::new();
-    for action in ["detail", "authorize"] {
-        entries.push(AccessRegistration {
-            permission: Permission::parse(format!("supplier_api_connection:{action}"))?,
-            required_permissions: vec![],
-            access: AccessMode::Object {
-                data: DataAccess {
-                    subject: AccessSubject::Direct,
-                    required_facts: Default::default(),
-                    policy: AccessPolicy::All(vec![
-                        AccessPolicy::Permission(supplier.clone()),
-                        AccessPolicy::Related {
-                            relation: RelationKey::parse(SUPPLIER_RELATION)?,
-                            resource: "supplier".into(),
-                            mode: RelationMatch::AllNonEmpty,
-                            required_facts: Default::default(),
-                            policy: Box::new(AccessPolicy::Scope {
-                                permission: supplier.clone(),
-                                read: ReadAccess::default(),
-                            }),
-                        },
-                    ]),
-                },
-                facts: facts.clone(),
-            },
-        });
-    }
-    Ok(AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::new(entries)?))
+/// 构造连接及其真实供应商来源的持久化事实读取器。
+/// # 参数
+/// db 为连接与供应商所在数据库。
+/// # 返回
+/// 不保存请求对象的共享事实适配器。
+/// # 错误
+/// 构造不执行 I/O。
+pub fn connection_facts_port(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(ConnectionFacts { db })
 }
-
 struct ConnectionFacts {
     db: Database,
-    connection_id: String,
-    version: u64,
 }
 
 #[async_trait]
@@ -79,15 +41,14 @@ impl AccessFactsPort for ConnectionFacts {
             let Some(connection) = self.db.supplier_api_connections().find_by_id(id, executor).await? else {
                 continue;
             };
-            if connection.base.id != self.connection_id || connection.base.version != self.version {
-                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：连接来源已变化".into()));
-            }
             let supplier = self.db.supplier_accounts().find_by_id(&connection.supplier_id, executor).await?;
             let sources = supplier
                 .map(|supplier| ObjectFacts {
                     resource: "supplier".into(),
                     id: supplier.base.id,
                     version: supplier.base.version.to_string(),
+                    owner_id: FactValue::Known(Some(supplier.maintainer_user_id)),
+                    org_unit_id: FactValue::Known(Some(supplier.business_org_unit_id)),
                     ..Default::default()
                 })
                 .into_iter()

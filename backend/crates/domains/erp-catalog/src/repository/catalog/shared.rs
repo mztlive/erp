@@ -138,24 +138,16 @@ pub(super) async fn max_revision_no(
 ) -> Result<Option<u32>> {
     let mut filter = owner_filter;
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-    let row = match executor.session() {
-        Some(session) => {
-            revisions
-                .find_one(filter)
-                .projection(doc! { "revision_no": 1 })
-                .sort(doc! { "revision_no": -1 })
-                .session(session)
-                .await?
-        },
-        None => {
-            revisions
-                .find_one(filter)
-                .projection(doc! { "revision_no": 1 })
-                .sort(doc! { "revision_no": -1 })
-                .await?
-        },
-    };
-    Ok(row.map(|row| row.revision_no))
+    let options = FindOptions::builder()
+        .projection(doc! {"revision_no":1})
+        .sort(doc! {"revision_no":-1})
+        .limit(1)
+        .build();
+    Ok(mongo_ops::find_many(revisions, filter, options, executor)
+        .await?
+        .into_iter()
+        .next()
+        .map(|row| row.revision_no))
 }
 
 /// 当前修订解析的泛型内核（erp-catalog-006）。

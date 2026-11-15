@@ -5,8 +5,11 @@ use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_catalog::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use erp_catalog::service::catalog::prepare_product_list;
 use erp_catalog::{EnableStatus, ProductKind, ProductListingStatus, ProductView};
+use erp_core::AccountKind;
 use erp_core::common::time::BusinessDate;
-use persistence_core::{Executor, NoTransaction, PageResult};
+use erp_identity::testing::unavailable_authorization;
+use persistence_core::testing::SnapshotExecutor;
+use persistence_core::{Executor, NoTransaction, PageResult, ReadExecutor};
 use serde_json::json;
 
 use super::*;
@@ -122,7 +125,10 @@ impl CatalogSupplyQueryPort for RecordingQuery {
         executor: &mut dyn Executor,
     ) -> persistence_core::Result<PageResult<SellableSkuRow>> {
         self.calls.lock().unwrap().push("sellable");
-        assert!(executor.session().is_none());
+        assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
+        if self.fail {
+            return Err(persistence_core::Error::OptimisticLockingError);
+        }
         assert_eq!(filter.keyword.as_deref(), Some("茶礼"));
         assert!(filter.supplier_id.is_none());
         assert_eq!(filter.eligibility_as_of.to_string(), "2026-09-07");
@@ -174,9 +180,62 @@ async fn sellable_query_keeps_normalized_filters_explicit_date_and_default_page(
     let params =
         serde_json::from_value(json!({"q":" 茶礼 ","supplier_id":" ","eligibility_as_of":"2026-09-07"}))
             .unwrap();
-    let (page, supplier_ids) = sellable_sku_page(query.as_ref(), &params).await.unwrap();
+    let mut executor = SnapshotExecutor::default();
+    let boundary = executor.boundary().unwrap();
+    let (page, supplier_ids) = sellable_sku_page(query.as_ref(), &params, &mut executor).await.unwrap();
     assert!(supplier_ids.is_empty());
+    assert!(boundary.is_current(&executor));
     assert_eq!((page.page, page.page_size, page.total), (1, 20, 9));
+    assert_eq!(*query.calls.lock().unwrap(), vec!["sellable"]);
+}
+
+/// 不可用数据库只用于证明拒绝路径不会开始商品或供应商读取。
+async fn sellable_service(query: Arc<RecordingQuery>) -> CatalogCenterReadService {
+    let client =
+        mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+    let db = client.database("sellable_snapshot_contract");
+    let authorization = unavailable_authorization();
+    CatalogCenterReadService::new(
+        db.clone(),
+        query,
+        CatalogAccess::new(db, authorization.clone()),
+        Arc::new(MapProductProcurementOwners { owners: Default::default() }),
+        authorization,
+    )
+}
+
+#[tokio::test]
+async fn sellable_snapshot_rejects_non_snapshot_before_authorization_or_business_reading() {
+    let query = Arc::new(RecordingQuery::default());
+    let service = sellable_service(query.clone()).await;
+    let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+    let result = service
+        .sellable_snapshot(&SellableSkuListParams::default(), &actor, &mut ReadExecutor::default())
+        .await;
+    assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "商品读取必须使用快照事务"));
+    assert!(query.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn sellable_snapshot_stops_before_business_reading_when_authorization_fails() {
+    let query = Arc::new(RecordingQuery::default());
+    let service = sellable_service(query.clone()).await;
+    let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+    let result = service
+        .sellable_snapshot(&SellableSkuListParams::default(), &actor, &mut SnapshotExecutor::default())
+        .await;
+    assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    assert!(query.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn sellable_page_propagates_business_query_failure() {
+    let query = RecordingQuery { fail: true, ..Default::default() };
+    let result =
+        sellable_sku_page(&query, &SellableSkuListParams::default(), &mut SnapshotExecutor::default()).await;
+    assert!(
+        matches!(result, Err(Error::ConflictError(reason)) if reason == "数据已被其他请求修改，请刷新后重试")
+    );
     assert_eq!(*query.calls.lock().unwrap(), vec!["sellable"]);
 }
 

@@ -4,6 +4,7 @@ use erp_supply::dto::supplier_settlement::{
     SettlementDifferenceDecisionResult, SettlementDifferenceEvidenceResult, SettlementPageView,
     SupplierSettlementDifferenceView, SupplierSettlementItemView, SupplierSettlementStatementListView,
 };
+use persistence_core::{Executor, NoTransaction};
 
 use super::display_dto::{
     SettlementEvidenceDisplayView, SettlementItemDisplayView, SettlementStatementDisplayDetail,
@@ -42,7 +43,7 @@ impl SupplierSettlementReadService {
         page: SupplierSettlementStatementListView,
     ) -> Result<SettlementStatementDisplayList> {
         let statements = page.items.iter().collect::<Vec<_>>();
-        let facts = self.statement_display_facts(&statements, Vec::new()).await?;
+        let facts = self.statement_display_facts(&statements, Vec::new(), &mut NoTransaction).await?;
         Ok(SupplierSettlementStatementListView {
             items: page.items.into_iter().map(|statement| facts.statement(statement)).collect(),
             total: page.total,
@@ -73,7 +74,7 @@ impl SupplierSettlementReadService {
         page: SettlementPageView<SupplierSettlementItemView>,
     ) -> Result<SettlementPageView<SettlementItemDisplayView>> {
         Ok(SettlementPageView {
-            items: self.item_display_views(page.items).await?,
+            items: self.item_display_views(page.items, &mut NoTransaction).await?,
             total: page.total,
             page: page.page,
             page_size: page.page_size,
@@ -93,7 +94,7 @@ impl SupplierSettlementReadService {
         page: SettlementPageView<SupplierSettlementDifferenceView>,
     ) -> Result<SettlementPageView<SupplierSettlementDifferenceView<SettlementEvidenceDisplayView>>> {
         let users = evidence_users(&page.items);
-        let facts = self.statement_display_facts(&[], users).await?;
+        let facts = self.statement_display_facts(&[], users, &mut NoTransaction).await?;
         Ok(SettlementPageView {
             items: page.items.into_iter().map(|difference| facts.difference(difference)).collect(),
             total: page.total,
@@ -155,6 +156,7 @@ impl SupplierSettlementReadService {
     ///
     /// # 参数
     /// * `detail` - 原结算、差异及当前正式任务详情。
+    /// * `executor` - 详情授权、主数据和关联名称共用的事务执行器。
     /// # 返回
     /// 返回同一详情的名称视图。
     /// # 错误
@@ -162,19 +164,20 @@ impl SupplierSettlementReadService {
     pub(super) async fn detail_display_view(
         &self,
         mut detail: SupplierSettlementStatementDetailView,
+        executor: &mut dyn Executor,
     ) -> Result<SettlementStatementDisplayDetail> {
         let mut users = evidence_users(&detail.differences);
         if let Some(user) = detail.review_work_item.as_ref().and_then(|item| item.owner_user_id.clone()) {
             users.push(user);
         }
-        let facts = self.statement_display_facts(&[&detail.statement], users).await?;
+        let facts = self.statement_display_facts(&[&detail.statement], users, executor).await?;
         if let Some(work_item) = &mut detail.review_work_item {
             work_item.owner_user_name =
                 work_item.owner_user_id.as_deref().and_then(|id| readable_name(&facts.user_names, id));
         }
         Ok(SupplierSettlementStatementDetailView {
             statement: facts.statement(detail.statement),
-            items: self.item_display_views(detail.items).await?,
+            items: self.item_display_views(detail.items, executor).await?,
             differences: detail
                 .differences
                 .into_iter()

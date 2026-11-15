@@ -1,5 +1,6 @@
 //! 审批抄送：配置资格、事件收件和独立只读授权。
 mod authorization;
+pub use authorization::{authorization_facts, authorization_mapping};
 mod read;
 mod runtime;
 use bpm::graph::DefinitionGraph;

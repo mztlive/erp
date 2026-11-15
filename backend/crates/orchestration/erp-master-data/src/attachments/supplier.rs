@@ -60,39 +60,20 @@ pub async fn supplier_profile_update_with_assets(
 mod tests {
     use std::sync::Arc;
 
-    use async_trait::async_trait;
     use erp_core::AccountKind;
-    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
+    use erp_identity::testing::unavailable_authorization;
     use erp_party::SensitiveDataCodec;
     use erp_supplier::SupplierAccess;
     use erp_support::{RegisterFileAssetRequest, RetentionClass, SensitivityClass};
     use mongodb::Client;
-    use persistence_core::Executor;
     use serde_json::json;
 
     use super::*;
     use crate::Error;
-    struct UnusedIdentityAudit;
-    #[async_trait]
-    impl IdentityAuditPort for UnusedIdentityAudit {
-        fn resource_log(
-            &self,
-            _: AuditActor,
-            _: &str,
-            _: &str,
-            _: String,
-        ) -> erp_identity::Result<PreparedResourceAudit> {
-            Err(erp_identity::Error::Internal("unit test audit must not execute".into()))
-        }
-        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> erp_identity::Result<()> {
-            panic!("input validation must stop before identity audit persistence")
-        }
-    }
-
     /// 只构造惰性客户端；输入校验必须在任何数据库或对象存储读取前返回。
     async fn service() -> SupplierProfileProcess {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let rbac = erp_identity::shared_rbac_service(db.clone(), Arc::new(UnusedIdentityAudit));
+        let rbac = unavailable_authorization();
         let access = SupplierAccess::new(db.clone(), rbac.clone());
         SupplierProfileProcess::new(
             db,

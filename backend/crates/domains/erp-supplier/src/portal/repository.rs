@@ -253,7 +253,7 @@ impl<'a> CooperationRepository<'a> {
         plan: &mut ConfirmedCooperation,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("合作条款确认必须使用调用方事务执行器".into()));
         }
         ensure_confirmed_plan(before, plan)?;

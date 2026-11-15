@@ -8,6 +8,7 @@ use erp_finance::dto::payable::SupplierPaymentListQuery;
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, SupplierPaymentFilter, SupplierPaymentRow};
+use erp_permissions::payable as payable_permissions;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -41,9 +42,13 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(u64, String)> {
-        let (_, authorization) =
-            self.resolve_with_purchase(actor, "supplier_payment", "detail", executor).await?;
-        payment_repository::full_read_qualification(&self.db, id, &authorization, executor).await
+        let (_, authorization) = self
+            .resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_DETAIL, executor)
+            .await?;
+        let result =
+            payment_repository::full_read_qualification(&self.db, id, &authorization, executor).await?;
+        authorization.deliver(executor).await?;
+        Ok(result)
     }
 
     /// 分页查询供应商付款范围行：采购负责人与付款经办人分别查询。
@@ -178,7 +183,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         let (_, authorization) =
-            self.resolve_with_purchase(actor, "supplier_payment", "list", executor).await?;
+            self.resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_LIST, executor).await?;
         let condition = self.payment_condition(query, executor).await?;
         let filter = self.payment_filter(query).await?;
         let snapshot =
@@ -195,6 +200,7 @@ impl FundsAccess {
             .map(|(version, _)| version.id.clone())
             .collect::<BTreeSet<_>>();
         let items = self.payment_page(snapshot.items, &snapshot.versions, &whole_ids, executor).await?;
+        authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
@@ -234,8 +240,9 @@ impl FundsAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (_, authorization) =
-                        this.resolve_with_purchase(&actor, "supplier_payment", "list", executor).await?;
+                    let (_, authorization) = this
+                        .resolve_with_purchase(&actor, &payable_permissions::SUPPLIER_PAYMENT_LIST, executor)
+                        .await?;
                     let condition = this.payment_condition(&query, executor).await?;
                     let filter = this.payment_filter(&query).await?;
                     let versions = payment_repository::versions(
@@ -252,6 +259,7 @@ impl FundsAccess {
                             "付款查询超过上限，请收窄组织或负责人条件".into(),
                         ));
                     }
+                    authorization.deliver(executor).await?;
                     Ok(flow::version(&authorization.context.scope_version, &versions))
                 })
             })
@@ -329,8 +337,10 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
-        let (_access, authorization) =
-            self.resolve_with_purchase(actor, "supplier_payment", "detail", executor).await?;
+        let (_access, authorization) = self
+            .resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_DETAIL, executor)
+            .await?;
+        self.require_visible_root(&authorization, id, executor).await?;
         let filter = SupplierPaymentFilter {
             keyword_ids: Some(vec![id.to_string()]),
             page_size: 1,
@@ -366,6 +376,7 @@ impl FundsAccess {
         for order in matched.iter().filter_map(|id| facts.get(id)) {
             parts.push(format!("{}:{:?}:{}", id, order.owner_user_id, order.version));
         }
+        authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),

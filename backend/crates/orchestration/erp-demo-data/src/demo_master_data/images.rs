@@ -6,11 +6,12 @@ use application_core::AuditActor;
 use erp_catalog::{ProductMediaInput, UpdateProductRequest};
 use erp_core::ids::FileAssetId;
 use erp_master_data::product_update_with_assets;
+use erp_permissions::catalog as catalog_permissions;
 use erp_support::entity::file_asset::content_fingerprint;
 use erp_support::{PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass, SensitivityClass};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Transactional;
 use sha2::{Digest, Sha256};
 
 use super::plan::DemoStep;
@@ -84,13 +85,26 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         actor: &AuditActor,
         product_id: &str,
     ) -> Result<UpdateProductRequest> {
-        let product = self
-            .ports
-            .catalog_access
-            .clone()
-            .require_product(actor, "update", product_id, &mut NoTransaction)
-            .await?;
-        super::repository::images::update_request(&self.db, &product, &mut NoTransaction).await
+        let db = self.db.clone();
+        let access = self.ports.catalog_access.clone();
+        let actor = actor.clone();
+        let product_id = product_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let product = access
+                        .require_product(
+                            &actor,
+                            &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                            &product_id,
+                            executor,
+                        )
+                        .await?;
+                    super::repository::images::update_request(&db, &product, executor).await
+                })
+            })
+            .await
     }
 
     async fn store_demo_image(

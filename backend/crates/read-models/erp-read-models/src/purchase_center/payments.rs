@@ -25,8 +25,10 @@ impl PurchaseOrderReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.access().resolve_detail(&actor, &id, executor).await?;
-                    payment_records(&this.db, &PurchaseOrderId::new(id), executor).await
+                    let (_, _, scope) = this.access().resolve_detail(&actor, &id, executor).await?;
+                    let records = payment_records(&this.db, &PurchaseOrderId::new(id), executor).await?;
+                    scope.validate(executor).await?;
+                    Ok(records)
                 })
             })
             .await

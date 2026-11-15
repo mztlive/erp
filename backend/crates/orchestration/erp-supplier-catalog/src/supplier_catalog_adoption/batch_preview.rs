@@ -57,8 +57,7 @@ impl SupplierCatalogAdoptionProcess {
         let anchors = if work.phase == BatchWorkPhase::Finalizing {
             Default::default()
         } else {
-            self.preview_group_anchor_candidates(&rows, actor, &mut NoTransaction, Some((batch, token)))
-                .await?
+            self.preview_group_anchor_candidates(&rows, actor, Some((batch, token))).await?
         };
         if work.phase != BatchWorkPhase::Finalizing {
             let mut scanned = 0;
@@ -86,7 +85,6 @@ impl SupplierCatalogAdoptionProcess {
             self.finish_review_scan(batch, token, scanned, &after, actor).await?;
         }
         self.persist_batch_conflicts(batch, token, &mut rows, actor).await?;
-        self.ensure_batch_rows_access(actor, &rows, &mut NoTransaction).await?;
         self.publish_batch_preview(batch, token, rows, actor).await
     }
 
@@ -239,6 +237,7 @@ impl SupplierCatalogAdoptionProcess {
                 Box::pin(async move {
                     let mut current =
                         process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
+                    process.ensure_batch_rows_access(&actor, &rows, executor).await?;
                     let work = current.work.as_mut().ok_or_else(|| Error::Internal("核对任务缺失".into()))?;
                     if work.completed != work.total {
                         return Err(Error::ConflictError("本批商品尚未核对完成".into()));

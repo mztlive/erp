@@ -8,7 +8,7 @@ use erp_supply::catalog_adoption::{
     BatchAdoptionExt, BatchItemStatus, BatchValuePatch, BatchWorkStatus, CatalogAdoptionBatch,
     CatalogAdoptionBatchItem, ValueOrigin, has_inflight_batch_items, update_draft_chunk,
 };
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 use sha2::{Digest, Sha256};
 
 use super::batch::batch_summary;
@@ -100,9 +100,8 @@ impl SupplierCatalogAdoptionProcess {
         request: &SaveBatchRequest,
         actor: &AuditActor,
     ) -> Result<()> {
+        let (batch, mut rows) = self.batch_work_rows(batch, token, actor).await?;
         let work = batch.work.as_ref().ok_or_else(|| Error::Internal("草稿任务缺失".into()))?;
-        let mut rows = self.all_batch_items(&batch.base.id, &mut NoTransaction).await?;
-        self.ensure_batch_rows_access(actor, &rows, &mut NoTransaction).await?;
         let before = rows.iter().map(draft_digest).collect::<Result<Vec<_>>>()?;
         let mut desired = batch.clone();
         desired.preview_version = work.previous_preview;
@@ -119,7 +118,7 @@ impl SupplierCatalogAdoptionProcess {
                 })
                 .collect::<Result<Vec<_>>>()?;
             self.persist_draft_chunk(
-                batch,
+                &batch,
                 token,
                 &changed,
                 chunk.len(),
@@ -128,7 +127,28 @@ impl SupplierCatalogAdoptionProcess {
             )
             .await?;
         }
-        self.finish_saved_work(batch, &desired, token, actor).await
+        self.finish_saved_work(&batch, &desired, token, actor).await
+    }
+
+    /// 在同一快照内核对处理标记、当前权限和完整草稿资料。
+    async fn batch_work_rows(
+        &self,
+        batch: &CatalogAdoptionBatch,
+        token: &str,
+        actor: &AuditActor,
+    ) -> Result<(CatalogAdoptionBatch, Vec<CatalogAdoptionBatchItem>)> {
+        let (connection, id, operation, acting) =
+            (batch.connection_id.clone(), batch.base.id.clone(), token.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let batch =
+                    process.check_batch_draft(&connection, &id, &operation, &acting, executor).await?;
+                let rows = process.all_batch_items(&id, executor).await?;
+                process.ensure_batch_rows_access(&acting, &rows, executor).await?;
+                Ok((batch, rows))
+            })
+        })
+        .await
     }
 
     /// 同一短事务批量更新有变化的行并保存扫描进度。

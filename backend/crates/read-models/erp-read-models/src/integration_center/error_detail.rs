@@ -7,7 +7,7 @@ use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BulkJobExt, SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use serde::Serialize;
 
 use super::IntegrationCenterReadService;
@@ -47,13 +47,14 @@ impl IntegrationCenterReadService {
     pub(super) async fn connection_failure(
         &self,
         task: &ErrorTaskView,
+        executor: &mut dyn Executor,
     ) -> Result<Option<ConnectionFailureView>> {
         let Some(connection_id) = connection_task_identity(task) else { return Ok(None) };
         for kind in [SUPPLIER_HEALTH_CHECK_JOB_TYPE, SUPPLIER_CATALOG_SYNC_JOB_TYPE] {
             let candidates = self
                 .db
                 .background_jobs()
-                .connection_failure_candidates(connection_id, kind, task.created_at, &mut NoTransaction)
+                .connection_failure_candidates(connection_id, kind, task.created_at, executor)
                 .await?;
             if let Some(job) = candidates.iter().find(|job| matches_failure(task, job)) {
                 return Ok(Some(ConnectionFailureView::from_job(connection_id, job)));
@@ -72,6 +73,7 @@ impl IntegrationCenterReadService {
         &self,
         task_id: &str,
         work_item_id: Option<&str>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<IntegrationAuditView>> {
         let mut targets = vec![TimelineTarget {
             resource_type: "integration_error_task".into(),
@@ -80,7 +82,7 @@ impl IntegrationCenterReadService {
         if let Some(id) = work_item_id {
             targets.push(TimelineTarget { resource_type: "work_item".into(), resource_id: id.to_string() });
         }
-        let events = self.db.audit_logs().timeline_events(&targets, None, 50, &mut NoTransaction).await?;
+        let events = self.db.audit_logs().timeline_events(&targets, None, 50, executor).await?;
         Ok(events.into_iter().filter_map(IntegrationAuditView::from_log).collect())
     }
 }

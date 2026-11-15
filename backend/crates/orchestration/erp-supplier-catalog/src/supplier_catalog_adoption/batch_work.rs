@@ -186,22 +186,19 @@ impl SupplierCatalogAdoptionProcess {
 
     /// 恢复原请求及真实操作人，保存后按同一任务继续核对。
     async fn execute_batch_work(&self, batch: &CatalogAdoptionBatch, token: &str) -> Result<()> {
-        let work = batch.work.as_ref().ok_or_else(|| Error::Internal("处理任务缺失".into()))?;
-        let request = work_requests(&self.db)
-            .find_by_id(&work.id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Internal("原处理请求缺失".into()))?;
-        let payload: WorkPayload =
-            serde_json::from_value(request.payload).map_err(|error| Error::Internal(error.to_string()))?;
-        let actor = self.batch_actor(&work.actor_id, &mut NoTransaction).await?;
-        if work.phase == BatchWorkPhase::Saving {
+        let (phase, payload, actor) = self.batch_work_request(batch, token).await?;
+        if phase == BatchWorkPhase::Saving {
             let WorkPayload::Save(save) = &payload else {
                 return Err(Error::Internal("保存任务类型不一致".into()));
             };
             self.save_batch_work(batch, token, save, &actor).await?;
         }
-        let current =
-            self.load_batch(&batch.connection_id, &batch.base.id, &actor, &mut NoTransaction).await?;
+        let (connection, id, acting) = (batch.connection_id.clone(), batch.base.id.clone(), actor.clone());
+        let current = self
+            .with_snapshot(move |process, executor| {
+                Box::pin(async move { process.load_batch(&connection, &id, &acting, executor).await })
+            })
+            .await?;
         if current.work.as_ref().is_some_and(|work| work.status == BatchWorkStatus::Running) {
             let ids = match &payload {
                 WorkPayload::Review(request) => request.item_ids.as_deref(),
@@ -212,6 +209,32 @@ impl SupplierCatalogAdoptionProcess {
         Ok(())
     }
 
+    /// 在当前授权快照内读取原处理请求并核对真实操作人及处理标记。
+    async fn batch_work_request(
+        &self,
+        batch: &CatalogAdoptionBatch,
+        token: &str,
+    ) -> Result<(BatchWorkPhase, WorkPayload, AuditActor)> {
+        let work = batch.work.as_ref().ok_or_else(|| Error::Internal("处理任务缺失".into()))?;
+        let (connection, id, actor_id, token) =
+            (batch.connection_id.clone(), batch.base.id.clone(), work.actor_id.clone(), token.to_owned());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let actor = process.batch_actor(&actor_id, executor).await?;
+                let current = process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
+                let work = current.work.as_ref().ok_or_else(|| Error::Internal("处理任务缺失".into()))?;
+                let request = work_requests(&process.db)
+                    .find_by_id(&work.id, executor)
+                    .await?
+                    .ok_or_else(|| Error::Internal("原处理请求缺失".into()))?;
+                let payload = serde_json::from_value(request.payload)
+                    .map_err(|error| Error::Internal(error.to_string()))?;
+                Ok((work.phase, payload, actor))
+            })
+        })
+        .await
+    }
+
     /// 在只读匹配阶段续期当前处理标记，防止长批次被错误接管。
     pub(super) async fn renew_batch_work(
         &self,
@@ -219,12 +242,18 @@ impl SupplierCatalogAdoptionProcess {
         token: &str,
         actor: &AuditActor,
     ) -> Result<()> {
-        let mut current = self
-            .check_batch_draft(&original.connection_id, &original.base.id, token, actor, &mut NoTransaction)
-            .await?;
-        current.draft_started_at = Some(Instant::now().unix_secs());
-        self.db.catalog_adoption_batches().update(&mut current, &mut NoTransaction).await?;
-        Ok(())
+        let (connection, id, token, actor) =
+            (original.connection_id.clone(), original.base.id.clone(), token.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let mut current =
+                    process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
+                current.draft_started_at = Some(Instant::now().unix_secs());
+                process.db.catalog_adoption_batches().update(&mut current, executor).await?;
+                Ok(())
+            })
+        })
+        .await
     }
 
     /// 失败只覆盖仍由原处理标记持有的任务，保留原游标。

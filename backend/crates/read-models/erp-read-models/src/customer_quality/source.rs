@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{TimeZone, Utc};
 use erp_core::ids::{CustomerAccountId, PartyId};
 use erp_customer::repository::prelude::*;
-use erp_customer::{AssignmentRole, CustomerAccess, CustomerExt, CustomerResolvedScope};
+use erp_customer::{AssignmentRole, CustomerExt};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::OrganizationRepository;
 use erp_identity::repository::prelude::*;
@@ -64,25 +64,6 @@ pub(super) struct HistorySnapshot {
 pub(super) struct CurrentSources;
 
 impl CurrentSources {
-    /// 在订单数量上限前求交现任客户与销售授权。
-    /// # 参数
-    /// db、filter 为数据库及期间筛选，customer、port 为客户授权，executor 为原事务。
-    /// # 返回
-    /// 返回有界、同时通过客户与销售授权的期间订单。
-    /// # 错误
-    /// 授权、数据库读取失败或授权交集超过订单上限时整体拒绝。
-    pub async fn load_current_orders(
-        db: &Database,
-        filter: QualityOrderFilter,
-        scope: &SalesReadScope,
-        customer: &CustomerResolvedScope,
-        port: &CustomerAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<QualityOrder>> {
-        let rows = super::repository::current_orders(db, &filter, scope, customer, port, executor).await?;
-        quality_orders(rows)
-    }
-
     /// 有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不把超限集合交给调用方。
     ///
     /// # 参数

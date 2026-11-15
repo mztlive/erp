@@ -15,11 +15,10 @@ use std::collections::HashMap;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionLineId};
 use erp_core::money::Quantity;
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Result, aggregate, mongo_ops};
 use serde::Deserialize;
 
 use crate::entity::fulfillment::PurchaseReceiptState;
@@ -82,26 +81,12 @@ pub(super) async fn load_qualified_received_totals(
     if receipt_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let rows = match executor.session() {
-        Some(session) => {
-            db.collection::<QualifiedReceivedTotalRow>(super::PURCHASE_RECEIPT_LINES)
-                .aggregate(qualified_received_totals_pipeline(&receipt_ids))
-                .with_type::<QualifiedReceivedTotalRow>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect::<Vec<_>>()
-                .await?
-        },
-        None => {
-            db.collection::<QualifiedReceivedTotalRow>(super::PURCHASE_RECEIPT_LINES)
-                .aggregate(qualified_received_totals_pipeline(&receipt_ids))
-                .with_type::<QualifiedReceivedTotalRow>()
-                .await?
-                .try_collect::<Vec<_>>()
-                .await?
-        },
-    };
+    let rows = aggregate::rows(
+        &db.collection::<QualifiedReceivedTotalRow>(super::PURCHASE_RECEIPT_LINES),
+        qualified_received_totals_pipeline(&receipt_ids),
+        executor,
+    )
+    .await?;
     Ok(rows.into_iter().map(|row| (row.purchase_order_revision_line_id, row.total)).collect())
 }
 

@@ -1,11 +1,14 @@
 //! 供应商履约订单对象读取与写入范围；跟进人和业务组织分别解释。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{OrganizationDirectoryService, SharedRbacService};
+use erp_identity::{AuthorizationService, OrganizationDirectoryService};
+use erp_permissions::Permission;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, Authorization, CompiledScope};
+use crate::authorization::{Authorization, CompiledScope};
 use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use crate::error::{Error, Result};
 use crate::repository::SupplierFulfillmentExt;
@@ -29,9 +32,9 @@ impl FulfillmentOrderAccess {
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
         let authorization =
-            Authorization::new(&db, rbac, "supplier_fulfillment_order").expect("固定资源授权目录有效");
+            Authorization::new(service, "supplier_fulfillment_order").expect("固定资源授权目录有效");
         Self { db, authorization: Some(authorization) }
     }
 
@@ -55,7 +58,7 @@ impl FulfillmentOrderAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 内置权限
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -66,17 +69,17 @@ impl FulfillmentOrderAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(self.authorization()?.resolve(actor, action, executor).await?)
+        Ok(self.authorization()?.resolve(actor, permission, executor).await?)
     }
 
     /// 在调用方事务内重验订单对象资格。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 内置权限
     /// * `id` - 订单主键
     /// * `executor` - 调用方执行器
     ///
@@ -88,11 +91,11 @@ impl FulfillmentOrderAccess {
     pub async fn require_order(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrder> {
-        self.authorization()?.require(actor, action, id, executor).await?;
+        self.authorization()?.require(actor, permission, id, executor).await?;
         self.db
             .supplier_fulfillment_orders()
             .find_by_id(id, executor)
@@ -127,7 +130,7 @@ impl FulfillmentOrderAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人。
-    /// * `action` - 已注册动作。
+    /// * `permission` - 内置权限。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -138,11 +141,11 @@ impl FulfillmentOrderAccess {
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let permission = authorization::action_permission("supplier_fulfillment_order", action)?;
-        if !self.authorization()?.service.has_permission(actor, &permission, executor).await? {
+        self.authorization()?.ensure_permission(permission)?;
+        if !self.authorization()?.service.has_permission(actor, permission, executor).await? {
             return Err(Error::Forbidden("没有该操作权限".into()));
         }
         Ok(())

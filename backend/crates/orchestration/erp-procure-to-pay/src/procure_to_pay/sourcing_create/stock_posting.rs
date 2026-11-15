@@ -341,19 +341,9 @@ mod tests {
     use erp_procurement::entity::purchase_order::{
         ProcurementCoverageSummary, RequestedStockLine, SalesProcurementCoverageLine, StockBasisLine,
     };
-    use mongodb::ClientSession;
+    use persistence_core::ReadExecutor as RecordingExecutor;
 
     use super::*;
-
-    struct RecordingExecutor {
-        marker: u64,
-    }
-    impl Executor for RecordingExecutor {
-        fn session(&mut self) -> Option<&mut ClientSession> {
-            self.marker += 1;
-            None
-        }
-    }
     #[derive(Default)]
     struct Calls {
         steps: Vec<&'static str>,
@@ -485,7 +475,7 @@ mod tests {
         fail_at: Option<usize>,
         cas_miss: bool,
     ) -> (Result<Vec<PersistedStockAllocation>>, Vec<&'static str>) {
-        let mut executor = RecordingExecutor { marker: 73 };
+        let mut executor = RecordingExecutor::default();
         let port = RecordingPort {
             executor: (&mut executor as *mut RecordingExecutor) as usize,
             fail_at,
@@ -504,7 +494,7 @@ mod tests {
             &mut executor,
         )
         .await;
-        assert_eq!(executor.marker, 73);
+
         (result, port.calls.into_inner().unwrap().steps)
     }
     /// 同一余额两行汇总一次 CAS 后批量写预占与分录，保持同一非零大小执行器。

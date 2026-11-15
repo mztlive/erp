@@ -1,4 +1,4 @@
-//! 销售详情的独立事实并行读取与冻结提交组装。
+//! 销售详情在原授权执行器中读取事实并组装冻结提交。
 use std::collections::HashMap;
 
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
@@ -16,105 +16,57 @@ use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::SalesOrderReadService;
-use crate::{Error, Result};
+use crate::Result;
 
 impl SalesOrderReadService {
-    /// 并行加载详情第一组事实：稳定行、提交、版本视图与采购数。
-    ///
-    /// # 参数
-    /// * `order_id` - 销售单稳定主键
-    ///
-    /// # 返回
-    /// 返回稳定行、提交头、版本视图与有效采购数。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    /// 在原执行器依次读取稳定行、提交、版本和采购数量。
     async fn load_detail_batch_a(
         &self,
         order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
     ) -> Result<(Vec<SalesOrderLine>, Vec<SalesOrderSubmission>, Vec<RevisionView>, u64)> {
-        tokio::try_join!(
-            async {
-                self.db
-                    .sales_order_lines()
-                    .list_lines_by_order(order_id, &mut NoTransaction)
-                    .await
-                    .map_err(Error::from)
-            },
-            async {
-                self.db
-                    .sales_order_submissions()
-                    .list_by_order_newest_first(order_id, &mut NoTransaction)
-                    .await
-                    .map_err(Error::from)
-            },
-            async { self.sales().load_revision_views(order_id).await.map_err(Error::from) },
-            async {
-                self.db
-                    .purchase_orders()
-                    .count_active_by_sales_order(order_id, &mut NoTransaction)
-                    .await
-                    .map_err(Error::from)
-            },
-        )
+        let lines = self.db.sales_order_lines().list_lines_by_order(order_id, executor).await?;
+        let submissions =
+            self.db.sales_order_submissions().list_by_order_newest_first(order_id, executor).await?;
+        let revisions = self.sales().load_revision_views(order_id, executor).await?;
+        let count = self.db.purchase_orders().count_active_by_sales_order(order_id, executor).await?;
+        Ok((lines, submissions, revisions, count))
     }
 
-    /// 并行加载详情第二组事实：草稿视图、应收摘要与审批绑定。
-    ///
-    /// # 参数
-    /// * `order_id` - 销售单稳定主键
-    /// * `document_id` - 审批绑定查询用的单据主键文本
-    ///
-    /// # 返回
-    /// 返回草稿视图、应收金额摘要与审批定义绑定。
-    ///
-    /// # 错误
-    /// 仓储查询失败时返回错误。
+    /// 在原执行器读取应收摘要、审批绑定和当前工作副本。
     async fn load_detail_batch_b(
         &self,
         order_id: &SalesOrderId,
         document_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<(SalesOrderReceivableAmountSummary, Option<ApprovalDefinitionBinding>, Option<WorkingCopyView>)>
     {
-        tokio::try_join!(
-            async {
-                self.db
-                    .receivable_accounts()
-                    .sales_order_amount_summary(order_id, &mut NoTransaction)
-                    .await
-                    .map_err(Error::from)
+        let summary = self.db.receivable_accounts().sales_order_amount_summary(order_id, executor).await?;
+        let binding = find_approval_binding(&self.db, document_id, executor).await.ok().flatten();
+        let copy = self
+            .db
+            .sales_order_working_copies()
+            .find_active_by_order_and_purpose(order_id, WorkingPurpose::FirstSubmission, executor)
+            .await?;
+        let view = match copy {
+            Some(copy) => {
+                let mut view = self.sales().working_copy_view(&copy, executor).await?;
+                self.enrich_working_copy_prices(&mut view, executor).await?;
+                Some(view)
             },
-            async {
-                // 保留原详情对绑定读取错误回退为空的合同。
-                Ok(find_approval_binding(&self.db, document_id, &mut NoTransaction).await.ok().flatten())
-            },
-            async {
-                let Some(copy) = self
-                    .db
-                    .sales_order_working_copies()
-                    .find_active_by_order_and_purpose(
-                        order_id,
-                        WorkingPurpose::FirstSubmission,
-                        &mut NoTransaction,
-                    )
-                    .await?
-                else {
-                    return Ok(None);
-                };
-                let mut view = self.sales().working_copy_view(&copy).await?;
-                self.enrich_working_copy_prices(&mut view).await?;
-                Ok(Some(view))
-            },
-        )
+            None => None,
+        };
+        Ok((summary, binding, view))
     }
 
-    /// 并行加载相互独立的详情事实，再按提交身份批量读取提交行。
+    /// 在原执行器加载详情事实，再按提交身份批量读取提交行。
     ///
     /// # 参数
     /// * `order` - 已授权的销售稳定单
+    /// * `executor` - 同一授权事务的执行器。
     ///
     /// # 返回
     /// 返回稳定行、草稿视图、提交、版本视图、采购数、应收摘要与审批绑定。
@@ -123,16 +75,17 @@ impl SalesOrderReadService {
     /// 仓储查询失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 仅限 `NoTransaction` 展示查询并行；`&mut Executor` 不可并发借用。
-    pub(super) async fn load_detail_facts(&self, order: &SalesOrder) -> Result<DetailFacts> {
+    /// 全部事实使用同一快照，按顺序借用原执行器。
+    pub(super) async fn load_detail_facts(
+        &self,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<DetailFacts> {
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let (
-            (stable_lines, submissions, revisions, purchase_order_count),
-            (receivable_summary, binding, working_copy_view),
-        ) = tokio::try_join!(
-            self.load_detail_batch_a(&order_id),
-            self.load_detail_batch_b(&order_id, &order.base.id),
-        )?;
+        let (stable_lines, submissions, revisions, purchase_order_count) =
+            self.load_detail_batch_a(&order_id, executor).await?;
+        let (receivable_summary, binding, working_copy_view) =
+            self.load_detail_batch_b(&order_id, &order.base.id, executor).await?;
         let submission_ids = submissions
             .iter()
             .map(|item| SalesOrderSubmissionId::new(item.base.id.clone()))
@@ -140,7 +93,7 @@ impl SalesOrderReadService {
         let submission_lines = self
             .db
             .sales_order_submission_lines()
-            .list_lines_by_submissions(&submission_ids, &mut NoTransaction)
+            .list_lines_by_submissions(&submission_ids, executor)
             .await?;
         Ok(DetailFacts {
             stable_lines: stable_lines

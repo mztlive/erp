@@ -1,20 +1,13 @@
-//! 域 D01 `source_registry` 服务编排。
-//!
-//! 事务边界只在 Service（conventions §6.1）：
-//! - 创建来源系统：单集合无跨步骤原子性要求 → `&mut NoTransaction`；
-//! - 建立外部身份映射：跨集合（map + target + 审计日志）→
-//!   `persistence_core::Transactional::with_transaction`。
-//!
-//! 审计写入参考既有写法（`audit::AuditActor::resource_log` +
-//! `AccessControlExt::audit_logs`）；仓库尚无 `run_audited_transaction` 模板，
-//! 跨集合审计事务按 TRANSACTIONS.md「基本用法」直接编排在 `with_transaction` 内。
+//! 来源系统与外部身份映射入口执行统一功能授权；写入与审计共用原事务。
 
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::source_registry;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::check_expected_version;
@@ -24,8 +17,7 @@ pub use crate::dto::source_registry::{
 };
 use crate::entity::source_registry::{
     ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityMapId, ExternalIdentityTarget,
-    ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystem, SourceSystemUpdate,
-    TargetStatus,
+    ExternalIdentityTargetData, ExternalIdentityTargetId, MappingStatus, SourceSystemUpdate, TargetStatus,
 };
 use crate::error::{Error, Result};
 use crate::ports::SupportAuditPort;
@@ -40,9 +32,11 @@ type ExternalIdentityMapFilter = <mongodb::Database as SourceRegistryExt>::Exter
 /// 来源注册服务。
 ///
 /// 提供来源系统与外部身份映射的创建、查询与更新编排。
+#[derive(Clone)]
 pub struct SourceRegistryService {
     db: Database,
     audit: Arc<dyn SupportAuditPort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl SourceRegistryService {
@@ -51,14 +45,19 @@ impl SourceRegistryService {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
+    /// * `authorization` - 进程共享的统一授权服务。
     ///
     /// # 返回
     /// 返回服务实例。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, audit: Arc<dyn SupportAuditPort>) -> Self {
-        Self { db, audit }
+    pub fn new(
+        db: Database,
+        audit: Arc<dyn SupportAuditPort>,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self { db, audit, authorization }
     }
 
     /// 分页查询来源系统列表。
@@ -67,6 +66,7 @@ impl SourceRegistryService {
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `actor` - 当前认证操作人。
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -77,8 +77,30 @@ impl SourceRegistryService {
     pub async fn source_system_list(
         &self,
         params: &SourceSystemListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<SourceSystemView>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.source_system_page(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 功能资格、分页及计数共用原快照事务。
+    async fn source_system_page(
+        &self,
+        params: &SourceSystemListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<SourceSystemView>> {
         params.validate()?;
+        self.authorization
+            .require(actor, &source_registry::SOURCE_SYSTEM_LIST, AccessTarget::Operation, executor)
+            .await?;
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = SourceSystemFilter {
@@ -90,7 +112,7 @@ impl SourceRegistryService {
             sort_by,
             sort_ascending,
         };
-        let page = self.db.source_systems().search_source_systems(&filter, &mut NoTransaction).await?;
+        let page = self.db.source_systems().search_source_systems(&filter, executor).await?;
         let items = page.items.into_iter().map(SourceSystemView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -121,33 +143,41 @@ impl SourceRegistryService {
         actor: &AuditActor,
     ) -> Result<SourceSystemView> {
         req.validate()?;
-        let mut system = self
-            .db
-            .source_systems()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
-        check_expected_version(system.base.version, req.version)?;
-        system.update(SourceSystemUpdate { name: req.name, status: req.status }, actor.id())?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "source_system.update",
-            "source_system",
-            system.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
+        let (db, audit_port, authorization) =
+            (self.db.clone(), self.audit.clone(), self.authorization.clone());
+        let (id, actor) = (id.to_string(), actor.clone());
+        let updated = db
+            .client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &source_registry::SOURCE_SYSTEM_UPDATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    let mut system = db
+                        .source_systems()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("来源系统不存在".into()))?;
+                    check_expected_version(system.base.version, req.version)?;
+                    system.update(SourceSystemUpdate { name: req.name, status: req.status }, actor.id())?;
+                    let audit = audit_port.resource_log(
+                        actor,
+                        "source_system.update",
+                        "source_system",
+                        system.base.id.clone(),
+                    )?;
                     db.source_systems().update(&mut system, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<SourceSystem, crate::error::Error>(system)
+                    Ok::<_, Error>(system)
                 })
             })
             .await?;
-
         Ok(updated.into())
     }
 
@@ -175,36 +205,39 @@ impl SourceRegistryService {
         actor: &AuditActor,
     ) -> Result<ExternalIdentityMapView> {
         req.validate()?;
-        self.db
-            .source_systems()
-            .find_by_id(&req.source_system_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
-
-        let (map, target) = build_identity_link(req)?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "external_identity_map.create",
-            "external_identity_map",
-            map.base.id.clone(),
-        )?;
-
-        // 跨集合写入必须处于同一事务：仓库方法
-        // `SourceRegistryRepository::create_external_identity_link` 声明
-        // 「必须收到事务执行器」，此处由 Service 开启事务会话传入。
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let map = client
+        let (db, audit_port, authorization) =
+            (self.db.clone(), self.audit.clone(), self.authorization.clone());
+        let actor = actor.clone();
+        let map = db
+            .client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &source_registry::EXTERNAL_IDENTITY_MAP_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    db.source_systems()
+                        .find_by_id(&req.source_system_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("来源系统不存在".into()))?;
+                    let (map, target) = build_identity_link(req)?;
+                    let audit = audit_port.resource_log(
+                        actor,
+                        "external_identity_map.create",
+                        "external_identity_map",
+                        map.base.id.clone(),
+                    )?;
                     db.source_registry().create_external_identity_link(&map, &target, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<_, crate::error::Error>(map)
+                    Ok::<_, Error>(map)
                 })
             })
             .await?;
-
         Ok(map.into())
     }
 
@@ -212,6 +245,7 @@ impl SourceRegistryService {
     ///
     /// # 参数
     /// * `params` - 查询参数（`source_system_id`/`mapping_status` 扁平筛选）
+    /// * `actor` - 当前认证操作人。
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -222,8 +256,30 @@ impl SourceRegistryService {
     pub async fn external_identity_map_list(
         &self,
         params: &ExternalIdentityMapListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<ExternalIdentityMapView>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.external_identity_page(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 功能资格、外部身份映射分页及计数共用原快照事务。
+    async fn external_identity_page(
+        &self,
+        params: &ExternalIdentityMapListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<ExternalIdentityMapView>> {
         params.validate()?;
+        self.authorization
+            .require(actor, &source_registry::EXTERNAL_IDENTITY_MAP_LIST, AccessTarget::Operation, executor)
+            .await?;
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = ExternalIdentityMapFilter {
@@ -234,11 +290,7 @@ impl SourceRegistryService {
             sort_by,
             sort_ascending,
         };
-        let page = self
-            .db
-            .external_identity_maps()
-            .search_external_identity_maps(&filter, &mut NoTransaction)
-            .await?;
+        let page = self.db.external_identity_maps().search_external_identity_maps(&filter, executor).await?;
         let items = page.items.into_iter().map(ExternalIdentityMapView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -284,4 +336,45 @@ fn build_identity_link(
         },
     )?;
     Ok((map, target))
+}
+
+#[cfg(test)]
+mod tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::FailClosedAuditPort;
+
+    #[tokio::test]
+    async fn registry_reads_require_identity_before_loading_systems_or_external_maps() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = SourceRegistryService::new(
+            client.database("source_registry_authorization_test"),
+            Arc::new(FailClosedAuditPort),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let maps = serde_json::from_value::<ExternalIdentityMapListParams>(serde_json::json!({})).unwrap();
+        let errors = [
+            service
+                .source_system_page(
+                    &SourceSystemListParams::default(),
+                    &actor,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .external_identity_page(&maps, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        }
+    }
 }

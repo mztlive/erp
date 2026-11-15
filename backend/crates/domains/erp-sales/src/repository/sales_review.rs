@@ -235,7 +235,7 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
         scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SalesChangeOrderRow>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let stages = authorized_change_stages(filter, scope.related_stages("sales_order_id"));
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
@@ -252,7 +252,7 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
         )
         .await?;
         let total = aggregate::count(&self.collection(), doc! {}, stages, executor).await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let total =
             i64::try_from(total).map_err(|_| crate::Error::ValidationError("销售变更记录数超限".into()))?;
         Ok(PageResult { items, total })
@@ -264,7 +264,7 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
         scope: &SalesReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<SalesChangeVersion>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let versions = aggregate::find(
             &self.collection().clone_with_type::<SalesChangeVersion>(),
             doc! {},
@@ -277,7 +277,7 @@ impl SalesChangeOrderRepositoryExt for Repository<'_, SalesChangeOrder> {
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(versions)
     }
 

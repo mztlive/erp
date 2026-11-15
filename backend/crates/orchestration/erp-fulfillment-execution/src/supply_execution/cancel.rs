@@ -4,6 +4,7 @@ use erp_audit::execution::persist_log;
 use erp_core::ids::SupplierOrderActionId;
 use erp_integration::entity::integration_ops::{InboxMessage, InboxMessageStatus};
 use erp_integration::repository::IntegrationOpsExt;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use erp_supply::entity::supplier_fulfillment::{
@@ -19,7 +20,6 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
-use super::execution::after_intent;
 use super::place::build_action_message;
 use crate::{Error, Result};
 
@@ -30,6 +30,11 @@ struct AfterSalesIntent {
     lines: Vec<SupplierOrderActionLine>,
     message: InboxMessage,
     connection: SupplierApiConnection,
+}
+
+enum AfterSalesSubmission {
+    Replayed(Box<SubmitActionResultView>),
+    Dispatch(Box<AfterSalesIntent>),
 }
 
 impl SupplierFulfillmentProcess {
@@ -83,46 +88,29 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SubmitActionResultView> {
         req.validate()?;
-        let action_name = match action_type {
-            SupplierOrderActionType::Cancel => "cancel",
-            SupplierOrderActionType::Refund => "refund",
-            _ => "cancel",
-        };
-        let order = self.require_scoped_order(id, actor, action_name, &mut NoTransaction).await?;
-        self.ensure_legacy_order(id, &mut NoTransaction).await?;
-        let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str(),);
-        if let Some(existing) = self
+        let process = self.clone();
+        let id = id.to_string();
+        let actor_for_tx = actor.clone();
+        let submission = self
             .db
-            .supplier_order_actions()
-            .find_by_idempotency_key(&idempotency_key, &mut NoTransaction)
-            .await?
-        {
-            tracing::info!(account = %actor.id(), order_id = %id, action_type = %action_type.as_str(), "售后动作幂等命中");
-            return self.replayed_after_sales_result(order, existing).await;
-        }
-        let mut intent = self.prepare_after_sales_intent(order, &req, &idempotency_key, action_type).await?;
-        let audit = actor.clone().resource_log(
-            "supplier_fulfillment.after_sales_action",
-            "supplier_order_action",
-            intent.action.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut intent_for_tx = intent.clone();
-        let intent_write = client.with_transaction(move |executor| {
-            Box::pin(async move {
-                intent_for_tx.persist(&db, executor).await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), Error>(())
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process.prepare_submission(&id, &req, action_type, &actor_for_tx, executor).await
+                })
             })
-        });
-        after_intent(intent_write, || async {
-            tracing::info!(account = %actor.id(), action_id = %intent.action.base.id, "售后动作事务已提交，开始事务外供应商派发");
-            self.settle_dispatch(
-                &mut intent.order, &mut intent.action, &mut intent.message, &intent.connection, actor,
-            )
-            .await
-        })
+            .await?;
+        let mut intent = match submission {
+            AfterSalesSubmission::Replayed(result) => return Ok(*result),
+            AfterSalesSubmission::Dispatch(intent) => *intent,
+        };
+        self.settle_dispatch(
+            &mut intent.order,
+            &mut intent.action,
+            &mut intent.message,
+            &intent.connection,
+            actor,
+        )
         .await?;
         Ok(SubmitActionResultView {
             action: intent.action.into(),
@@ -131,18 +119,50 @@ impl SupplierFulfillmentProcess {
         })
     }
 
+    async fn prepare_submission(
+        &self,
+        id: &str,
+        req: &SubmitAfterSalesActionRequest,
+        action_type: SupplierOrderActionType,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<AfterSalesSubmission> {
+        let permission = match action_type {
+            SupplierOrderActionType::Cancel => &supplier_fulfillment::ORDER_CANCEL,
+            SupplierOrderActionType::Refund => &supplier_fulfillment::ORDER_REFUND,
+            _ => return Err(Error::ValidationError("不支持的售后动作类型".into())),
+        };
+        let order = self.require_scoped_order(id, actor, permission, executor).await?;
+        self.ensure_legacy_order(id, executor).await?;
+        let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str());
+        if let Some(existing) =
+            self.db.supplier_order_actions().find_by_idempotency_key(&idempotency_key, executor).await?
+        {
+            return Ok(AfterSalesSubmission::Replayed(Box::new(
+                self.replayed_after_sales_result(order, existing, executor).await?,
+            )));
+        }
+        let mut intent = self.prepare_after_sales_intent(order, req, &idempotency_key, action_type).await?;
+        let audit = actor.clone().resource_log(
+            "supplier_fulfillment.after_sales_action",
+            "supplier_order_action",
+            intent.action.base.id.clone(),
+        )?;
+        intent.persist(&self.db, executor).await?;
+        persist_log(&self.db, &audit, executor).await?;
+        Ok(AfterSalesSubmission::Dispatch(Box::new(intent)))
+    }
+
     async fn replayed_after_sales_result(
         &self,
         order: SupplierFulfillmentOrder,
         action: SupplierOrderAction,
+        executor: &mut dyn Executor,
     ) -> Result<SubmitActionResultView> {
         let lines = self
             .db
             .supplier_order_action_lines()
-            .find_lines_by_action_ids(
-                &[SupplierOrderActionId::new(action.base.id.as_str())],
-                &mut NoTransaction,
-            )
+            .find_lines_by_action_ids(&[SupplierOrderActionId::new(action.base.id.as_str())], executor)
             .await?;
         Ok(SubmitActionResultView {
             action: action.into(),

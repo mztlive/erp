@@ -2,7 +2,8 @@ use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::approval_process;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -11,9 +12,9 @@ use super::super::policy::ProcessRequiredApprovalPolicy;
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity,
-    RETIRE_DEFINITION_COMMAND_DOMAIN, ensure_definition_admin_permission, ensure_lock, lock_command_identity,
-    map_model_error, now, parse_idempotency_key, participant, policy_for_definition,
-    replay_prepared_definition_receipt, write_definition_audit, write_receipt,
+    RETIRE_DEFINITION_COMMAND_DOMAIN, ensure_lock, lock_command_identity, map_model_error, now,
+    parse_idempotency_key, participant, policy_for_definition, replay_prepared_definition_receipt,
+    require_definition_access, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_with_copies;
 use crate::error::{Error, Result};
@@ -48,16 +49,6 @@ impl ApprovalDefinitionService {
         )?;
         let graph = self.require_graph(&request.definition_id).await?;
         let policy = policy_for_definition(&graph.definition)?;
-        self.ensure_definition_admin(actor, &policy).await?;
-        if let Some(view) = self
-            .replay_prepared_if_receipt(
-                &identity,
-                DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
-            )
-            .await?
-        {
-            return Ok(view);
-        }
         self.commit_retire(graph, policy, request, actor, identity).await
     }
 
@@ -73,9 +64,9 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
 
-        let identity_service = self.identity.clone();
         let audit = std::sync::Arc::clone(&self.audit);
         let transaction_actor = actor.clone();
         let transaction_policy = policy.clone();
@@ -85,7 +76,7 @@ impl ApprovalDefinitionService {
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 retire_tx(
-                    &identity_service,
+                    &authorization,
                     &db,
                     graph,
                     RetireTxInput {
@@ -100,7 +91,15 @@ impl ApprovalDefinitionService {
                 .await
             })
         });
-        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation).await
+        self.recover_definition_command(
+            outcome.await,
+            &policy,
+            &approval_process::RETIRE_DEFINITION,
+            actor,
+            identity,
+            expectation,
+        )
+        .await
     }
 }
 
@@ -139,7 +138,7 @@ struct RetireTxInput<'a> {
 /// 回放收据或退役当前已发布定义并写入审计。
 ///
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
+/// * `authorization` - 共享授权服务。
 /// * `db` - 数据库
 /// * `graph` - 当前定义图
 /// * `input` - 政策、请求、摘要与操作人
@@ -154,14 +153,15 @@ struct RetireTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn retire_tx(
-    identity_service: &SharedRbacService,
+    authorization: &AuthorizationService,
     db: &Database,
     graph: DefinitionGraph,
     input: RetireTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let RetireTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(db, identity_service, actor, &policy, executor).await?;
+    require_definition_access(authorization, actor, &approval_process::RETIRE_DEFINITION, &policy, executor)
+        .await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,

@@ -1,12 +1,14 @@
 //! 任务完成的回执、正式权限与跨域事务。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 use erp_integration::dto::{
     IntegrationTaskCompletionCommand, IntegrationTaskCompletionResult, IntegrationWorkItemStatus,
     PreparedWorkItemTarget,
 };
 use erp_integration::entity::integration_ops::{CompletionReceiptResult, IntegrationCommandIdentity};
 use erp_integration::service::task_decision::complete::complete_domain_item;
+use erp_permissions::integration_ops;
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -119,9 +121,18 @@ impl IntegrationResolutionProcess {
         let work_items = (self.work_items_factory)();
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
+        let authorization = self.authorization.clone();
         let result = self
             .run_audited(move |db, executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &integration_ops::INTEGRATION_TASK_COMPLETION,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     super::execution::run_completion(
                         &mut CompletionCommand {
                             db,

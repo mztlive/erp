@@ -104,7 +104,7 @@ impl SalesOrderCommandProcess {
     /// 在建单原事务中验证并关联首次凭证，供详情与审批材料授权读取。
     ///
     /// # 参数
-    /// * `db` / `rbac` / `executor` - 原建单授权及事务
+    /// * `db` / `authorization` / `executor` - 原建单授权及事务
     /// * `order` / `actor` - 待创建稳定单据及当前用户
     /// # 返回
     /// 原子创建全部凭证与单据的关联。

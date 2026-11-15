@@ -18,7 +18,7 @@ use erp_sales::repository::SalesOrderExt;
 use erp_supply::inquiry::InquirySupplyService;
 use erp_workflow::service::work_item::approval_rework::complete_document_rework;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
@@ -27,7 +27,6 @@ use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::procure_to_pay::inquiry_expense::release_purchase;
 use crate::{Error, Result};
 
-const VOID_PERMISSION: &str = "purchase_order:delete";
 const VOID_RECEIPT_PREFIX: &str = "purchase-order-void-command-";
 
 /// 作废采购草稿幂等命令上下文。
@@ -77,7 +76,6 @@ impl PurchaseOrderProcess {
     ) -> Result<VoidPurchaseOrderResult> {
         let ports = self.ports.clone();
         req.validate()?;
-        self.authorize_actor_permission(actor, VOID_PERMISSION).await?;
         let fingerprint = req.request_fingerprint(id)?;
         let receipt_identity = PurchaseCommandReceipt::<VoidDraftReceipt>::identity(
             VOID_RECEIPT_PREFIX,
@@ -87,11 +85,6 @@ impl PurchaseOrderProcess {
             &req.idempotency_key,
         )?;
         let receipt_id = receipt_identity;
-        if let Some(result) =
-            replay_void_draft(&self.db, &receipt_id, &fingerprint, id, actor, &mut NoTransaction).await?
-        {
-            return Ok(result);
-        }
         execute_void_draft_transaction(
             DraftVoidServices { service: self, ports: ports.as_ref() },
             id,
@@ -144,9 +137,7 @@ async fn execute_void_draft_transaction(
         .clone()
         .with_transaction(move |executor| {
             Box::pin(async move {
-                object_scope
-                    .revalidate(&transaction_order_id, request.expected_lock_version, executor)
-                    .await?;
+                object_scope.current(&transaction_order_id, executor).await?;
                 let command = VoidDraftCommand {
                     purchase_order_id: &transaction_order_id,
                     request: &request,
@@ -158,8 +149,7 @@ async fn execute_void_draft_transaction(
             })
         })
         .await;
-    recover_void_draft(transaction_result, &service.db, &receipt_id, &fingerprint, purchase_order_id, actor)
-        .await
+    recover_void_draft(transaction_result, service, &receipt_id, &fingerprint, purchase_order_id, actor).await
 }
 
 /// 在 MongoDB 事务内校验并作废采购草稿。
@@ -408,7 +398,7 @@ async fn replay_void_draft(
 /// 回读只执行一次，没有收据时必须保留原事务错误。
 async fn recover_void_draft(
     transaction_result: Result<VoidPurchaseOrderResult>,
-    db: &mongodb::Database,
+    service: &PurchaseOrderProcess,
     receipt_id: &PurchaseCommandReceiptIdentity,
     fingerprint: &str,
     purchase_order_id: &str,
@@ -416,11 +406,25 @@ async fn recover_void_draft(
 ) -> Result<VoidPurchaseOrderResult> {
     match transaction_result {
         Ok(result) => Ok(result),
-        Err(error) => recover_command(
-            error,
-            replay_void_draft(db, receipt_id, fingerprint, purchase_order_id, actor, &mut NoTransaction)
-                .await,
-        ),
+        Err(error) => {
+            let db = service.db.clone();
+            let access = service.command_access(actor, "delete");
+            let id = purchase_order_id.to_string();
+            let identity = receipt_id.clone();
+            let fingerprint = fingerprint.to_string();
+            let actor = actor.clone();
+            let recovered = service
+                .db
+                .client()
+                .with_transaction(move |executor| {
+                    Box::pin(async move {
+                        access.current(&id, executor).await?;
+                        replay_void_draft(&db, &identity, &fingerprint, &id, &actor, executor).await
+                    })
+                })
+                .await;
+            recover_command(error, recovered)
+        },
     }
 }
 
@@ -497,15 +501,7 @@ mod tests {
         assert!(result.replayed);
     }
     /// 非零大小执行器用于验证每个生产步骤实际传递的调用方实例。
-    struct TestExecutor {
-        _identity: u8,
-    }
-
-    impl persistence_core::Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use persistence_core::ReadExecutor as TestExecutor;
 
     struct RecordingSteps {
         expected_executor: usize,
@@ -563,7 +559,7 @@ mod tests {
     /// 销售 guard、采购 CAS、任务同步和命令审计按原顺序共用执行器。
     #[tokio::test]
     async fn void_posting_keeps_original_order_and_executor() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = RecordingSteps {
             expected_executor: &mut executor as *mut TestExecutor as usize,
             seen: vec![],
@@ -580,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn void_posting_stops_at_each_failure() {
         for index in 0..4 {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
                 expected_executor: &mut executor as *mut TestExecutor as usize,
                 seen: vec![],

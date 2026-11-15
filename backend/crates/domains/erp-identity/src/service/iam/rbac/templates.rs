@@ -3,37 +3,62 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use application_core::AuditActor;
-use persistence_core::{Executor, NoTransaction};
+use erp_permissions::admin;
+use persistence_core::{Executor, Transactional};
 
 use super::RbacService;
 use super::policy::{permission_pairs, permissions_for_actor, role_key};
 use crate::dto::{BuiltinRoleCatalog, BuiltinRoleOption, GenerateBuiltinRolesRequest, GeneratedBuiltinRole};
 use crate::entity::role_template::{BuiltinRoleState, BuiltinRoleTemplate};
 use crate::entity::role_workbench::RoleWorkbench;
-use crate::entity::{Permission, Role, RoleData};
+use crate::entity::{Role, RoleData};
 use crate::service::iam::builtin_role_templates;
-use crate::{AccessControlExt, Error, Result, RoleId};
+use crate::service::iam::management::ManagementAccess;
+use crate::{AccessControlExt, AuthorizationService, Error, Result, RoleId};
 
 impl RbacService {
     /// 查询可审阅的岗位权限及当前生成状态。
     /// # 参数
-    /// `actor` 为当前操作人。
+    /// actor 为当前操作人，authorization 为应用注入的共享授权服务。
     /// # 返回
     /// 固定目录、可生成标记及权限版本。
     /// # 错误
     /// 读取权限不足、策略变化或存储失败时拒绝。
-    pub async fn builtin_role_catalog(&self, actor: &AuditActor) -> Result<BuiltinRoleCatalog> {
+    pub async fn builtin_role_catalog(
+        self: &Arc<Self>,
+        actor: &AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<BuiltinRoleCatalog> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_LIST_ROLES);
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    let catalog = service.role_catalog(&actor, executor).await?;
+                    access.require(executor).await?;
+                    Ok(catalog)
+                })
+            })
+            .await
+    }
+
+    /// 使用当前读取快照生成岗位模板与允许动作。
+    async fn role_catalog(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<BuiltinRoleCatalog> {
         let (permissions, policy_version) = {
             let enforcer = self.fresh_enforcer().await?.read().await;
             (permissions_for_actor(&enforcer, actor)?, self.loaded_policy_revision.load(Ordering::Acquire))
         };
-        if !permissions.covers_one(&Permission::parse("role:list")?) {
-            return Err(Error::Forbidden("缺少角色查看权限".into()));
-        }
-        let can_create = permissions.covers_one(&Permission::parse("role:create")?);
+        let can_create = permissions.covers_one(&admin::ROLE_CREATE_ROLE);
         let mut templates = Vec::new();
         for template in builtin_role_templates()? {
-            let role = self.db.roles().find_by_id_including_deleted(&template.id, &mut NoTransaction).await?;
+            let role = self.db.roles().find_by_id_including_deleted(&template.id, executor).await?;
             let state = BuiltinRoleState::from_role(role.as_ref());
             templates.push(BuiltinRoleOption {
                 can_generate: can_create
@@ -52,7 +77,7 @@ impl RbacService {
 
     /// 以服务端模板原子生成全部所选岗位，任何既有身份保持不变。
     /// # 参数
-    /// `request` 为已预览的模板选择及版本；`actor` 为发起人。
+    /// request 为已预览的模板选择及版本，actor 为发起人，authorization 为共享授权服务。
     /// # 返回
     /// 每个岗位的新建或保留结果。
     /// # 错误
@@ -61,9 +86,12 @@ impl RbacService {
         self: &Arc<Self>,
         request: GenerateBuiltinRolesRequest,
         actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
     ) -> Result<Vec<GeneratedBuiltinRole>> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_CREATE_ROLE);
+        access.preflight(&self.db).await?;
         let selected = BuiltinRoleTemplate::select(&builtin_role_templates()?, &request.template_ids)?;
-        let mut required = vec![Permission::parse("role:create")?];
+        let mut required = vec![admin::ROLE_CREATE_ROLE];
         required.extend(selected.iter().flat_map(|template| template.permissions.iter().cloned()));
         let authorized = self.authorize_permissions(&actor, required).await?;
         if authorized.policy_revision != request.expected_policy_version {
@@ -72,6 +100,7 @@ impl RbacService {
         let service = Arc::clone(self);
         self.run_authorized_policy_transaction(authorized.policy_revision, move |executor| {
             Box::pin(async move {
+                access.require(executor).await?;
                 let mut results = Vec::new();
                 for template in selected {
                     results.push(service.generate_builtin_role(template, &actor, executor).await?);

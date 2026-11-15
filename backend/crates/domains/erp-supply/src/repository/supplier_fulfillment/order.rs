@@ -182,6 +182,20 @@ impl Pagination for SupplierFulfillmentOrderFilter {
 /// 供应商履约订单仓储的域查询。
 #[allow(async_fn_in_trait)]
 pub trait SupplierFulfillmentOrderRepositoryExt {
+    /// 按当前查询凭证读取精确完整订单。
+    /// # 参数
+    /// id 为真实订单；scope 为本次动作的完整对象条件；executor 为原读取快照。
+    /// # 返回
+    /// 完整条件内的未删除订单；对象缺失或无权时返回 None。
+    /// # 错误
+    /// 模型、边界、有效期或数据库读取失败时拒绝。
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &CompiledScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Option<SupplierFulfillmentOrder>>;
+
     /// 在原连接内按我方单号或外部单号取得订单。
     /// # 参数
     /// 绑定连接、已核验的原单号类型和调用方执行器。
@@ -255,6 +269,25 @@ pub trait SupplierFulfillmentOrderRepositoryExt {
 }
 
 impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepository<'_> {
+    async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &CompiledScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Option<SupplierFulfillmentOrder>> {
+        scope.ensure_model("supplier_fulfillment_order", executor)?;
+        let rows = aggregate::find(
+            &self.collection(),
+            doc! { "id": id },
+            FindOptions::builder().limit(1).build(),
+            scope.stages().to_vec(),
+            executor,
+        )
+        .await?;
+        scope.ensure_model("supplier_fulfillment_order", executor)?;
+        Ok(rows.into_iter().next())
+    }
+
     async fn find_for_connection(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -275,7 +308,7 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SupplierFulfillmentOrderRow>> {
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_fulfillment_order", executor)?;
         }
 
         let options = FindOptions::builder()
@@ -290,7 +323,7 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
         let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
 
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_fulfillment_order", executor)?;
         }
         Ok(PageResult { items, total: total as i64 })
     }

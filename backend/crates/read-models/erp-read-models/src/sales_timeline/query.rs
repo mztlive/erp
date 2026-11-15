@@ -1,4 +1,5 @@
 use application_core::AuditActor;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_workflow::DocumentType;
 use persistence_core::{Executor, Transactional};
 
@@ -29,7 +30,7 @@ impl SalesTimelineReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let order = SalesAccess::new(this.db.clone(), this.rbac.clone())
-                        .require_object(&actor, "detail", &id, &[], executor)
+                        .require_object(&actor, &sales_order_permissions::DETAIL, &id, executor)
                         .await?;
                     let mut sources = discover(&this.db, &id, executor).await?;
                     if let Some(document) = sources.documents.get_mut(&id) {

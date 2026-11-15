@@ -1,4 +1,6 @@
 //! 带调用方执行器的聚合读取；阶段顺序由拥有集合的仓储确定。
+mod cursor;
+pub use cursor::RowCursor;
 use futures_util::TryStreamExt;
 use mongodb::Collection;
 use mongodb::bson::{Document, doc};

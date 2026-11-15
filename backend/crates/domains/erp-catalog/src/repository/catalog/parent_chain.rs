@@ -4,9 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::ProductCategoryId;
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 
 use super::shared::PRODUCT_CATEGORIES;
@@ -207,27 +206,8 @@ async fn aggregate_parent_chain(
     executor: &mut dyn Executor,
 ) -> Result<Option<ParentChainAggregateRow>> {
     let pipeline = parent_chain_pipeline(start_parent_id);
-    let rows = match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<ParentChainAggregateRow>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect::<Vec<_>>()
-                .await?
-        },
-        None => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<ParentChainAggregateRow>()
-                .await?
-                .try_collect::<Vec<_>>()
-                .await?
-        },
-    };
-    Ok(rows.into_iter().next())
+    let collection = collection.clone_with_type::<ParentChainAggregateRow>();
+    Ok(aggregate::rows(&collection, pipeline, executor).await?.into_iter().next())
 }
 
 /// 构造祖先链聚合管道：按稳定主键精确匹配起始父节点，再 `$graphLookup` 上溯。

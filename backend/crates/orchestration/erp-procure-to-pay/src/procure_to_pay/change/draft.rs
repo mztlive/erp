@@ -1,6 +1,7 @@
 //! 采购变更编辑快照只对来源采购单的完整写资格开放成本。
 
 use application_core::AuditActor;
+use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::PurchaseChangeDraftView;
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use persistence_core::Transactional;
@@ -33,21 +34,11 @@ impl PurchaseOrderProcess {
                 Box::pin(async move {
                     let domain = PurchaseOrderService::new(db);
                     let change = domain.load_change(&id, executor).await?;
-                    access
-                        .require_object(
-                            &actor,
-                            "update",
-                            change.purchase_order_id.as_ref(),
-                            &["purchase_order:submit".into()],
-                            executor,
-                        )
-                        .await?;
                     let order = access
-                        .require_object(
+                        .require_entry(
                             &actor,
-                            "submit",
+                            &internal::PURCHASE_CHANGE_SOURCE,
                             change.purchase_order_id.as_ref(),
-                            &["purchase_order:update".into()],
                             executor,
                         )
                         .await?;

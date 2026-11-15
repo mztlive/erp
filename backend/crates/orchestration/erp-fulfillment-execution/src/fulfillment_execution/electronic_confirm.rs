@@ -10,6 +10,7 @@ use erp_core::ids::ElectronicDeliveryId;
 use erp_fulfillment::dto::{ConfirmElectronicDeliveryRequest, ElectronicDeliveryView};
 use erp_fulfillment::entity::fulfillment::{ElectronicDelivery, ElectronicDeliveryData, FulfillmentResult};
 use erp_fulfillment::service::FulfillmentService;
+use erp_identity::AuthorizationService;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_support::PendingAttachmentBatch;
@@ -20,7 +21,6 @@ use validator::Validate;
 use super::FulfillmentProcess;
 use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost};
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable};
-use super::task::FulfillmentIdentityFactory;
 use crate::{Error, Result};
 
 struct Confirmation {
@@ -77,7 +77,7 @@ impl FulfillmentProcess {
 /// 在新事务中确认电子交付；任一步失败则整体回滚。
 async fn persist(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     id: ElectronicDeliveryId,
     confirmation: Confirmation,
     pending: Arc<dyn PendingAttachmentBatch>,
@@ -99,7 +99,7 @@ async fn persist(
 /// 版本、采购资格和凭证通过后才写入确认事实并完成后继。
 async fn confirm(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     id: &ElectronicDeliveryId,
     confirmation: Confirmation,
     pending: &dyn PendingAttachmentBatch,
@@ -152,7 +152,7 @@ async fn purchase_context(
 /// 完成任务并在成功交付时追加实际成本及验收可用事实。
 async fn finish(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     record: &ElectronicDelivery,
     order: &PurchaseOrder,
     actor: &AuditActor,

@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::ids::{CustomerAccountId, PartyId};
+use erp_identity::entity::authorization::ObjectFacts;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
@@ -10,19 +11,19 @@ use crate::error::{Error, Result};
 /// 合同创建所需的真实客户来源资格；在组合层完成跨域查询。
 #[async_trait]
 pub trait ContractCreationPort: Send + Sync {
-    /// 在原事务内检查指定客户是否允许归档合同。
+    /// 在原事务内读取指定客户并构造合同候选归属。
     /// # 参数
     /// actor 为真实操作人，customer_id 为完整客户来源，executor 为原执行器。
     /// # 返回
-    /// 绑定实际客户查询和复验服务的授权阶段凭证。
+    /// 从实际客户当前负责人和组织构造、无持久化版本的合同候选事实。
     /// # 错误
     /// 来源不存在、无权限、版本变化或事实读取失败时拒绝。
-    async fn require_create(
+    async fn candidate(
         &self,
         actor: &AuditActor,
         customer_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<crate::authorization::CompiledScope>;
+    ) -> Result<ObjectFacts>;
 }
 
 /// Minimum customer facts required to archive or list contracts.

@@ -9,6 +9,8 @@ use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_finance::service::receivable::ReceivableService;
 use erp_finance::service::receivable::invoice_commit::ensure_sales_invoice;
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -37,12 +39,26 @@ impl ReceivableProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let sources = invoice_sources(&db, &id, executor).await?;
-                    rbac.funds.require_sales_sources(&actor, "invoice:post", &sources, executor).await?;
+                    invoice_sources(&db, &id, executor).await?;
+                    rbac.authorization
+                        .require(
+                            &actor,
+                            &internal::INVOICE_POSTED_RESULT_READ,
+                            AccessTarget::record(&id)?,
+                            executor,
+                        )
+                        .await?;
                     let view = ReceivableService::new(db.clone())
                         .invoice_detail_with_executor(&id, executor)
                         .await?;
-                    rbac.funds.require_sales_sources(&actor, "invoice:post", &sources, executor).await?;
+                    rbac.authorization
+                        .require(
+                            &actor,
+                            &internal::INVOICE_POSTED_RESULT_READ,
+                            AccessTarget::record(&id)?,
+                            executor,
+                        )
+                        .await?;
                     Ok(view)
                 })
             })

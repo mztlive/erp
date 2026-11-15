@@ -5,7 +5,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use persistence_core::Executor;
 
-use super::{WorkItemAuthorization, WorkItemService};
+use super::WorkItemService;
 use crate::entity::work_item::{
     SupplierPortalReviewIdentity, SupplierPortalReviewTaskData, WorkItem, WorkItemStatus,
 };
@@ -34,9 +34,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let task = WorkItem::new_supplier_portal_review(task_id, data)?;
         let actor =
             self.supplier_portal_reviewer(task.owner_user_id.as_deref().unwrap_or(""), executor).await?;
-        let authorization = WorkItemAuthorization::proposed(self.db.clone(), self.identity.clone(), &task);
-        self.ensure_decision_access(&actor, &task, &authorization, executor).await?;
         self.db.work_items().create(&task, executor).await?;
+        self.ensure_decision_access(&actor, &task, executor).await?;
         Ok(task)
     }
 
@@ -58,6 +57,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<WorkItem> {
         let task = self.load_supplier_portal_review(identity, executor).await?;
         self.authorization.require_assigned(actor, &task.base.id, executor).await?;
+        if task.owner_user_id.as_deref() != Some(actor.id()) {
+            return Err(Error::Forbidden("当前任务已指派给其他人".into()));
+        }
         self.ensure_domain_decision_access(actor, &task, executor).await?;
         Ok(task)
     }

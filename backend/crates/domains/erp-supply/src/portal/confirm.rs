@@ -319,7 +319,7 @@ fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
 }
 /// 没有调用方事务会话时拒绝正式供给写入。
 fn ensure_transaction(executor: &mut dyn Executor) -> Result<()> {
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("门户正式供给写入必须使用调用方事务".into()));
     }
     Ok(())

@@ -22,8 +22,8 @@ use super::adapter::{
 pub use super::cancel_persist::cancel_stock_adjustment_approval_apply;
 use super::cancel_persist::{StockAdjustmentCancelPersistInput, persist_stock_adjustment_cancel};
 pub(crate) use super::cancel_runtime::{
-    LoadedCancelRuntime, build_stock_adjustment_cancel_input, committed_cancel_replay,
-    ensure_cancel_authorized, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
+    LoadedCancelRuntime, build_stock_adjustment_cancel_input, cancel_authority_facts,
+    committed_cancel_replay, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
     ensure_cancel_runtime_versions, ensure_expected_version, load_cancel_instance, load_cancel_runtime,
     normalize_cancel_reason, normalize_document_cancel_notification, recover_cancel_replay,
 };
@@ -87,7 +87,7 @@ async fn load_cancel_target(
 ) -> Result<LoadedCancelTarget> {
     let instance = load_cancel_instance(&service.db, &req.approval_process_instance_id).await?;
     ensure_cancel_instance_subject(&instance, id, req.expected_subject_version)?;
-    let authorization = ensure_cancel_authorized(service, &instance, actor).await?;
+    let authorization = cancel_authority_facts(service, &instance, actor).await?;
     let adjustment = service.inventory().load_stock_adjustment(id).await?;
     ensure_expected_version("库存调整单", req.expected_version, adjustment.base.version)?;
     if adjustment.approval_subject_version != req.expected_subject_version {

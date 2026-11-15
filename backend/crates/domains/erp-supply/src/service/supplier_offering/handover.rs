@@ -1,6 +1,7 @@
 //! 供给维护人交接：范围重验、CAS 与责任字段。
 
 use application_core::AuditActor;
+use erp_permissions::supplier_offering;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -58,7 +59,7 @@ async fn persist_handover(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(SupplierOffering, HandoverSupplierOfferingView)> {
-    let mut offering = access.require_offering(actor, "update", id, executor).await?;
+    let mut offering = access.require_offering(actor, &supplier_offering::REVISE, id, executor).await?;
     if offering.base.version != req.expected_version {
         return Err(Error::ConflictError("供给责任或版本已变化，请刷新后重试".into()));
     }

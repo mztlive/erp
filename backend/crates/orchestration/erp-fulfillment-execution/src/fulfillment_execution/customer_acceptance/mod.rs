@@ -12,11 +12,10 @@ pub mod task;
 use std::sync::Arc;
 
 use erp_fulfillment::service::FulfillmentService;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_read_models::fulfillment_center::FulfillmentReadService;
 use mongodb::Database;
 
-use super::task::FulfillmentIdentityFactory;
 use crate::workflow::FulfillmentWorkflow;
 
 /// 持有验收根事务，组合履约事实、销售进度、责任任务及原命令审计。
@@ -25,8 +24,8 @@ pub struct CustomerAcceptanceProcess {
     db: Database,
     domain: FulfillmentService,
     read: FulfillmentReadService,
-    rbac: SharedRbacService,
-    task_identity: FulfillmentIdentityFactory,
+    rbac: Arc<AuthorizationService>,
+    task_identity: Arc<AuthorizationService>,
 }
 impl CustomerAcceptanceProcess {
     /// 使用入口已有配置构造流程；领域查询与跨域工作台分别持有实际读取接口。
@@ -35,7 +34,7 @@ impl CustomerAcceptanceProcess {
     /// * `db` - 业务数据库。读模型由此新建。
     /// * `read` - 已构造的履约领域服务，存为领域写入端。
     /// * `rbac` - 调用方授权源。
-    /// * `task_identity` - 每次任务资格核验独立创建身份的工厂。
+    /// * `task_identity` - 进程共享授权服务。
     /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
     ///
     /// # 返回
@@ -46,8 +45,8 @@ impl CustomerAcceptanceProcess {
     pub fn new(
         db: Database,
         read: FulfillmentService,
-        rbac: SharedRbacService,
-        task_identity: FulfillmentIdentityFactory,
+        rbac: Arc<AuthorizationService>,
+        task_identity: Arc<AuthorizationService>,
         workflow: Arc<dyn FulfillmentWorkflow>,
     ) -> Self {
         Self {

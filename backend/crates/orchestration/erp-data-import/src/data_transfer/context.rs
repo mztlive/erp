@@ -4,7 +4,8 @@ use erp_core::common::time::Instant;
 use erp_order_to_cash::sales_inquiry::read::InquiryReadService;
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use erp_support::{BackgroundJob, BulkJobExt};
-use persistence_core::NoTransaction;
+use mongodb::Database;
+use persistence_core::{Executor, ReadExecutor, Transactional};
 use serde_json::{Value, json};
 
 use super::imports::required;
@@ -13,6 +14,7 @@ use super::{
     BusinessTransfers, DataTransferProcess, TransferContext, TransferKind, TransferResult,
     TransferResumeState,
 };
+use crate::sales_inquiry_import::SalesInquiryImportProcess;
 use crate::{Error, Result};
 
 impl DataTransferProcess {
@@ -55,7 +57,7 @@ impl DataTransferProcess {
         let job = self
             .db
             .background_jobs()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         if job.domain_job_type.as_deref() != Some(DOMAIN) {
@@ -117,45 +119,31 @@ impl BusinessTransfers {
         result: Option<&Value>,
         actor: &AuditActor,
     ) -> Result<()> {
+        let db = self.db.clone();
         let service = self.services.inquiry.clone();
-        let current = if view.kind == TransferKind::InquiryCreationPreview {
-            service.creation_header(actor, required(input, "customer_id")?, &mut NoTransaction).await?;
-            None
-        } else {
-            let inquiry =
-                service.require_import(actor, required(input, "inquiry_id")?, &mut NoTransaction).await?;
-            view.context["inquiry_no"] = json!(inquiry.inquiry_no);
-            Some(inquiry)
-        };
-        let Some(result) = result else {
-            view.state(TransferResumeState::Unavailable, "尚无可继续处理的预览结果");
-            return Ok(());
-        };
-        let preview = self
+        let actor = actor.clone();
+        let input = input.clone();
+        let result = result.cloned();
+        let mut snapshot = view.clone();
+        *view = self
             .db
-            .inquiry_import_previews()
-            .find_by_id(required(result, "preview_id")?, &mut NoTransaction)
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    inquiry_context_read(
+                        &db,
+                        &service,
+                        &mut snapshot,
+                        &input,
+                        result.as_ref(),
+                        &actor,
+                        executor,
+                    )
+                    .await?;
+                    Ok::<_, Error>(snapshot)
+                })
+            })
             .await?;
-        let Some(preview) = preview else {
-            view.state(TransferResumeState::Expired, "业务预览已过期，请重新上传文件");
-            return Ok(());
-        };
-        service.require_preview(actor, &preview.base.id, &mut NoTransaction).await?;
-        view.preview_expires_at = Some(preview.expires_at);
-        if let Some(confirmed) = preview.result {
-            let inquiry = service.require_import(actor, &confirmed.inquiry_id, &mut NoTransaction).await?;
-            view.context["inquiry_id"] = json!(confirmed.inquiry_id);
-            view.context["inquiry_no"] = json!(inquiry.inquiry_no);
-            view.state(TransferResumeState::Confirmed, "该预览已确认写入询价草稿，可查看原询价");
-        } else if preview.expires_at <= Instant::now().unix_secs() {
-            view.state(TransferResumeState::Expired, "业务预览已过期，请重新上传文件");
-        } else if current.as_ref().is_some_and(|inquiry| inquiry.base.version != preview.expected_version) {
-            view.state(TransferResumeState::Stale, "询价版本已变化，请返回业务页重新预览");
-        } else if !preview.errors.is_empty() {
-            view.state(TransferResumeState::Invalid, "预览存在校验问题，请修正文件后重新上传");
-        } else {
-            view.state(TransferResumeState::Ready, "预览已生成，核对后仍需确认写入询价草稿");
-        }
         Ok(())
     }
 
@@ -166,7 +154,7 @@ impl BusinessTransfers {
         result: Option<&Value>,
         actor: &AuditActor,
     ) -> Result<()> {
-        let service = InquiryReadService::new(self.db.clone(), self.rbac.clone());
+        let service = InquiryReadService::new(self.db.clone(), self.authorization.clone());
         let inquiry = required(input, "inquiry_id")?;
         let task = required(input, "task_id")?;
         let detail = serde_json::to_value(service.procurement_detail(actor, inquiry, task).await?)
@@ -204,6 +192,52 @@ impl BusinessTransfers {
         }
         Ok(())
     }
+}
+
+/// 恢复用到的询价、预览及确认结果共用同一快照。
+async fn inquiry_context_read(
+    db: &Database,
+    service: &SalesInquiryImportProcess,
+    view: &mut TransferContext,
+    input: &Value,
+    result: Option<&Value>,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let current = if view.kind == TransferKind::InquiryCreationPreview {
+        service.creation_header(actor, required(input, "customer_id")?, executor).await?;
+        None
+    } else {
+        let inquiry = service.require_import(actor, required(input, "inquiry_id")?, executor).await?;
+        view.context["inquiry_no"] = json!(inquiry.inquiry_no);
+        Some(inquiry)
+    };
+    let Some(result) = result else {
+        view.state(TransferResumeState::Unavailable, "尚无可继续处理的预览结果");
+        return Ok(());
+    };
+    let preview = db.inquiry_import_previews().find_by_id(required(result, "preview_id")?, executor).await?;
+    let Some(preview) = preview else {
+        view.state(TransferResumeState::Expired, "业务预览已过期，请重新上传文件");
+        return Ok(());
+    };
+    service.require_preview(actor, &preview.base.id, executor).await?;
+    view.preview_expires_at = Some(preview.expires_at);
+    if let Some(confirmed) = preview.result {
+        let inquiry = service.require_import(actor, &confirmed.inquiry_id, executor).await?;
+        view.context["inquiry_id"] = json!(confirmed.inquiry_id);
+        view.context["inquiry_no"] = json!(inquiry.inquiry_no);
+        view.state(TransferResumeState::Confirmed, "该预览已确认写入询价草稿，可查看原询价");
+    } else if preview.expires_at <= Instant::now().unix_secs() {
+        view.state(TransferResumeState::Expired, "业务预览已过期，请重新上传文件");
+    } else if current.as_ref().is_some_and(|inquiry| inquiry.base.version != preview.expected_version) {
+        view.state(TransferResumeState::Stale, "询价版本已变化，请返回业务页重新预览");
+    } else if !preview.errors.is_empty() {
+        view.state(TransferResumeState::Invalid, "预览存在校验问题，请修正文件后重新上传");
+    } else {
+        view.state(TransferResumeState::Ready, "预览已生成，核对后仍需确认写入询价草稿");
+    }
+    Ok(())
 }
 
 fn quotes_confirmed(result: &Value, prior: &Value) -> bool {

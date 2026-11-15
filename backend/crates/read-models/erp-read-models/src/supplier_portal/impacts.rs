@@ -6,6 +6,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::ids::SupplierOfferingId;
 use erp_identity::repository::{AccessControlExt, AccountCoreRepositoryExt};
+use erp_permissions::internal;
 use erp_procurement::PurchaseAccess;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::purchase_order::PurchaseOfferingUsageFact;
@@ -177,10 +178,8 @@ impl PortalOfferingImpactReadService {
         query: &PortalQuery,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchaseOfferingUsageFact>> {
-        let (_access, scope) = self
-            .purchase
-            .resolve_permissions(actor, "detail", &["purchase_order:list".into()], executor)
-            .await?;
+        let (_access, scope) =
+            self.purchase.resolve_entry(actor, &internal::PURCHASE_PORTAL_IMPACT_READ, executor).await?;
         let facts = self
             .db
             .purchase_order()
@@ -199,6 +198,7 @@ impl PortalOfferingImpactReadService {
                 visible.push(fact);
             }
         }
+        scope.validate(executor).await?;
         Ok(visible)
     }
 

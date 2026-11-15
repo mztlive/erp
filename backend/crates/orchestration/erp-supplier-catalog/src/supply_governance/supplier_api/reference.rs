@@ -1,5 +1,6 @@
 //! 外部引用解析位于两次本域校验之间；提交事务始终重新读取连接。
 use application_core::AuditActor;
+use erp_identity::AccessTarget;
 use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
 use erp_supply::entity::supplier_api::{SupplierCommandOutcome, SupplierConnectionAction};
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
@@ -8,6 +9,7 @@ use erp_supply::ports::supplier_reference_registry::{
 };
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
+use erp_supply::service::supplier_api::context::action_permission;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::SupplierApiGovernanceProcess;
@@ -58,6 +60,7 @@ impl SupplierApiGovernanceProcess {
         resolved: ResolvedSupplierReference,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -65,6 +68,9 @@ impl SupplierApiGovernanceProcess {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &action_permission(action), AccessTarget::Operation, executor)
+                        .await?;
                     let connection = SupplierApiService::new(db.clone())
                         .apply_reference(
                             &connection_id_value,

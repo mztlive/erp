@@ -1,51 +1,46 @@
 //! 采购责任授权快照与事务内重验；真实 RBAC 适配器和纯测试共用顺序函数。
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, MongoCasbinAdapter};
+use erp_permissions::purchase_order;
 use erp_procurement::service::procurement_responsibility::CandidateResolution;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
-use super::resolver::{
-    AuthorizedResolutionPlan, authorized_line, plan_identities, purchase_create_permission,
-};
+use super::resolver::{AuthorizedResolutionPlan, authorized_line, plan_identities};
 use crate::{Error, Result};
 
 #[async_trait]
 trait ResponsibilityPolicy: Send + Sync {
-    async fn revision(&self) -> Result<u64>;
-    async fn enforce_owner(&self, owner_id: &str) -> Result<bool>;
-    async fn revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64>;
+    async fn revision(&self, executor: &mut dyn Executor) -> Result<u64>;
+    async fn enforce_owner(&self, owner_id: &str, executor: &mut dyn Executor) -> Result<bool>;
 }
 
-struct RbacPolicy<'a>(&'a SharedRbacService, &'a Database);
+struct RbacPolicy<'a>(&'a Arc<AuthorizationService>, &'a Database);
 
 #[async_trait]
 impl ResponsibilityPolicy for RbacPolicy<'_> {
-    async fn revision(&self) -> Result<u64> {
-        Ok(self.0.current_policy_revision().await?)
+    async fn revision(&self, executor: &mut dyn Executor) -> Result<u64> {
+        Ok(MongoCasbinAdapter::new(self.1.clone()).policy_revision(executor).await?)
     }
-    async fn enforce_owner(&self, owner_id: &str) -> Result<bool> {
-        let permission = purchase_create_permission()?;
+    async fn enforce_owner(&self, owner_id: &str, executor: &mut dyn Executor) -> Result<bool> {
+        let permission = purchase_order::CREATE;
         let actor = AuditActor::new(owner_id.into(), owner_id.into(), AccountKind::Admin);
-        Ok(crate::authorization::features(self.1.clone(), self.0.clone())
-            .has_permission(&actor, &permission, &mut NoTransaction)
-            .await?)
-    }
-    async fn revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
-        Ok(self.0.policy_revision_with_executor(executor).await?)
+        Ok(self.0.has_permission(&actor, &permission, executor).await?)
     }
 }
 
-/// 事务外按负责人去重校验建单权限，并冻结当时的策略版本。
+/// 按负责人去重校验建单权限，并冻结原执行器中的策略版本。
 ///
 /// # 参数
 /// * `rbac` - 共享授权服务。
 /// * `candidates` - 待授权的采购负责人候选。
+/// * `executor` - 候选解析使用的原执行器。
 ///
 /// # 返回
 /// 返回带策略版本的授权计划。
@@ -54,10 +49,11 @@ impl ResponsibilityPolicy for RbacPolicy<'_> {
 /// 负责人缺少 `purchase_order:create`、策略版本在校验期间变化，或授权读取失败时返回错误。
 pub(super) async fn authorize_candidates(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     candidates: Vec<CandidateResolution>,
+    executor: &mut dyn Executor,
 ) -> Result<AuthorizedResolutionPlan> {
-    authorize(&RbacPolicy(rbac, db), candidates).await
+    authorize(&RbacPolicy(rbac, db), candidates, executor).await
 }
 
 /// 在调用方事务内重验候选身份与已冻结的策略版本。
@@ -75,7 +71,7 @@ pub(super) async fn authorize_candidates(
 /// 候选身份与冻结计划不一致，或事务内策略版本已变化时返回冲突；策略读取失败时返回对应错误。
 pub(super) async fn revalidate_candidates(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     candidates: &[CandidateResolution],
     expected: &AuthorizedResolutionPlan,
     executor: &mut dyn Executor,
@@ -87,12 +83,14 @@ pub(super) async fn revalidate_candidates(
 async fn authorize(
     policy: &dyn ResponsibilityPolicy,
     candidates: Vec<CandidateResolution>,
+    executor: &mut dyn Executor,
 ) -> Result<AuthorizedResolutionPlan> {
-    let policy_revision = policy.revision().await?;
+    let snapshot = executor.boundary().is_some_and(|boundary| boundary.is_snapshot());
+    let policy_revision = policy.revision(executor).await?;
     let mut owners = HashSet::new();
     for candidate in &candidates {
         if owners.insert(candidate.owner_user_id.as_str())
-            && !policy.enforce_owner(candidate.owner_user_id.as_str()).await?
+            && !policy.enforce_owner(candidate.owner_user_id.as_str(), executor).await?
         {
             return Err(Error::ValidationError(format!(
                 "采购负责人 {} 缺少 purchase_order:create 权限",
@@ -100,8 +98,7 @@ async fn authorize(
             )));
         }
     }
-    let after = policy.revision().await?;
-    if after != policy_revision {
+    if !snapshot && policy.revision(executor).await? != policy_revision {
         return Err(Error::ConflictError("采购负责人授权策略正在变化，请重试".to_string()));
     }
     let mut lines = Vec::with_capacity(candidates.len());
@@ -123,7 +120,7 @@ async fn revalidate(
     if actual != expected_identity {
         return Err(Error::ConflictError("采购责任规则或目录事实已变化，请重新提交审批".to_string()));
     }
-    let revision = policy.revision_with_executor(executor).await?;
+    let revision = policy.revision(executor).await?;
     if revision != expected.policy_revision {
         return Err(Error::ConflictError("采购负责人授权策略已变化，请重新提交审批".to_string()));
     }
@@ -136,14 +133,14 @@ mod tests {
     use std::sync::Mutex;
 
     use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRuleType;
-    use mongodb::ClientSession;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
 
     struct Fixture {
         revisions: Mutex<VecDeque<u64>>,
         events: Mutex<Vec<String>>,
-        executor: Mutex<Option<usize>>,
+        executors: Mutex<Vec<usize>>,
         denied: Option<&'static str>,
     }
     impl Fixture {
@@ -151,38 +148,25 @@ mod tests {
             Self {
                 revisions: Mutex::new(revisions.iter().copied().collect()),
                 events: Mutex::new(Vec::new()),
-                executor: Mutex::new(None),
+                executors: Mutex::new(Vec::new()),
                 denied: None,
             }
         }
     }
     #[async_trait]
     impl ResponsibilityPolicy for Fixture {
-        async fn revision(&self) -> Result<u64> {
+        async fn revision(&self, executor: &mut dyn Executor) -> Result<u64> {
             self.events.lock().unwrap().push("revision".into());
+            self.executors.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
             Ok(self.revisions.lock().unwrap().pop_front().expect("固定查询次数"))
         }
-        async fn enforce_owner(&self, owner_id: &str) -> Result<bool> {
+        async fn enforce_owner(&self, owner_id: &str, executor: &mut dyn Executor) -> Result<bool> {
             self.events.lock().unwrap().push(format!("enforce:{owner_id}"));
+            self.executors.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
             Ok(self.denied != Some(owner_id))
         }
-        async fn revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
-            self.events.lock().unwrap().push("transaction.revision".into());
-            *self.executor.lock().unwrap() = Some(executor as *mut dyn Executor as *mut () as usize);
-            assert!(executor.session().is_none());
-            Ok(self.revisions.lock().unwrap().pop_front().expect("固定查询次数"))
-        }
     }
-    #[derive(Default)]
-    struct RecordingExecutor {
-        visits: usize,
-    }
-    impl Executor for RecordingExecutor {
-        fn session(&mut self) -> Option<&mut ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
+    use persistence_core::ReadExecutor as RecordingExecutor;
     fn candidate(line: &str, owner: &str, name: &str) -> CandidateResolution {
         CandidateResolution {
             line_key: line.into(),
@@ -201,7 +185,9 @@ mod tests {
 
     #[tokio::test]
     async fn authorization_freezes_revision_and_checks_each_owner_once_in_first_order() {
-        let fixture = Fixture::new(&[7, 7]);
+        let fixture = Fixture::new(&[7]);
+        let mut executor = SnapshotExecutor::default();
+        let expected = &mut executor as *mut SnapshotExecutor as usize;
         let plan = authorize(
             &fixture,
             vec![
@@ -209,6 +195,7 @@ mod tests {
                 candidate("line-1", "owner-1", "张三"),
                 candidate("line-3", "owner-2", "李四"),
             ],
+            &mut executor,
         )
         .await
         .unwrap();
@@ -217,10 +204,8 @@ mod tests {
             plan.lines.iter().map(|line| line.identity.line_key.as_str()).collect::<Vec<_>>(),
             ["line-2", "line-1", "line-3"]
         );
-        assert_eq!(
-            *fixture.events.lock().unwrap(),
-            ["revision", "enforce:owner-2", "enforce:owner-1", "revision"]
-        );
+        assert_eq!(*fixture.events.lock().unwrap(), ["revision", "enforce:owner-2", "enforce:owner-1"]);
+        assert_eq!(*fixture.executors.lock().unwrap(), [expected; 3]);
     }
 
     #[tokio::test]
@@ -230,6 +215,7 @@ mod tests {
         let error = authorize(
             &fixture,
             vec![candidate("line-1", "owner-1", "管理员"), candidate("line-2", "owner-2", "李四")],
+            &mut RecordingExecutor::default(),
         )
         .await
         .unwrap_err();
@@ -242,7 +228,13 @@ mod tests {
     #[tokio::test]
     async fn policy_change_prevents_creation_of_authorized_plan() {
         let fixture = Fixture::new(&[7, 8]);
-        let error = authorize(&fixture, vec![candidate("line-1", "owner-1", "张三")]).await.unwrap_err();
+        let error = authorize(
+            &fixture,
+            vec![candidate("line-1", "owner-1", "张三")],
+            &mut RecordingExecutor::default(),
+        )
+        .await
+        .unwrap_err();
         assert!(
             matches!(error, Error::ConflictError(message) if message == "采购负责人授权策略正在变化，请重试")
         );
@@ -256,9 +248,8 @@ mod tests {
         revalidate(&fixture, &[candidate("line-1", "owner-1", "新姓名")], &plan(), &mut executor)
             .await
             .unwrap();
-        assert_eq!(*fixture.events.lock().unwrap(), ["transaction.revision"]);
-        assert_eq!(*fixture.executor.lock().unwrap(), Some(address));
-        assert_eq!(executor.visits, 1);
+        assert_eq!(*fixture.events.lock().unwrap(), ["revision"]);
+        assert_eq!(*fixture.executors.lock().unwrap(), [address]);
     }
 
     #[tokio::test]

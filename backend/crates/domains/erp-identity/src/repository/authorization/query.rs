@@ -1,25 +1,41 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::work_item;
 use mongodb::bson::{Bson, Document};
 use persistence_core::{ExecutionBoundary, Executor};
 
-use crate::entity::authorization::{AccessContext, AccessRule, MappingFacts, QueryModel};
+use crate::entity::authorization::{AccessContext, AccessRule, MappingFacts, QueryModel, RelationKey};
 use crate::ports::AccessMapping;
-use crate::{Error, Permission, Result};
+use crate::service::authorization::rules::sources;
+use crate::service::authorization::work_items;
+use crate::{Error, Permission, QualifiedPermissions, Result};
 
 #[derive(Clone)]
 pub(crate) struct AccessProof {
     pub context: AccessContext,
+    pub qualified: QualifiedPermissions,
+    pub approval_source: Option<ApprovalSource>,
+    pub task: bool,
     pub rule: AccessRule,
+    pub whole_rule: Option<AccessRule>,
+    pub management_rule: Option<AccessRule>,
+    pub has_role_scope: bool,
     pub version: String,
     pub valid_until: Option<Instant>,
     pub policy_version: u64,
     pub organization_version: u64,
     pub boundary: ExecutionBoundary,
     pub service: Arc<()>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ApprovalSource {
+    pub source: Permission,
+    pub required: Vec<Permission>,
 }
 
 impl AccessProof {
@@ -45,14 +61,19 @@ impl AccessProof {
 }
 
 /// 编译器生成的查询计划；业务不能自行构造。
+#[derive(Clone)]
 pub struct CompiledAccess {
     pub(crate) proof: AccessProof,
     pub(crate) model: QueryModel,
     pub(crate) stages: Vec<Document>,
     pub(crate) dependencies: Vec<MappingDependency>,
     pub(crate) version: String,
+    pub(crate) sources: BTreeMap<RelationKey, SourcePlan>,
+    pub(crate) whole: Option<Vec<Document>>,
+    pub(crate) management: Option<Vec<Document>>,
 }
 
+#[derive(Clone)]
 pub(crate) struct MappingDependency {
     pub mapping: Arc<dyn AccessMapping>,
     pub model: QueryModel,
@@ -81,7 +102,121 @@ impl MappingDependency {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct SourcePlan {
+    pub model: QueryModel,
+    pub stages: Vec<Document>,
+}
+
 impl CompiledAccess {
+    /// 返回本次工作项展示批次的固定完整执行资格。
+    /// # 参数
+    /// kind、source 为已授权任务的真实种类和来源类型；executor 为原读取执行器。
+    /// # 返回
+    /// 同次查询的启用角色完整覆盖该种类的固定资格时为 true；不证明任务可办理。
+    /// # 错误
+    /// 非工作项展示查询、未知种类、跨阶段或到期时拒绝；交付前仍须 validate 原查询。
+    pub fn execution_qualified(&self, kind: &str, source: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.ensure_work_item_view(executor)?;
+        work_items::execution_qualified(kind, source, &self.proof.qualified)
+    }
+
+    /// 返回本次工作项展示批次的固定审批决定资格。
+    /// # 参数
+    /// executor 为生成当前查询的原读取执行器。
+    /// # 返回
+    /// 同次查询的启用角色同时覆盖抄送历史与提交决定时为 true；不签发办理凭证。
+    /// # 错误
+    /// 非工作项展示查询、跨阶段或到期时拒绝；交付前仍须 validate 原查询。
+    pub fn decision_qualified(&self, executor: &mut dyn Executor) -> Result<bool> {
+        self.ensure_work_item_view(executor)?;
+        Ok(work_items::decision_qualified(&self.proof.qualified))
+    }
+
+    /// 展示资格和原查询的身份依赖、最早有效期及读取阶段不可分离。
+    fn ensure_work_item_view(&self, executor: &mut dyn Executor) -> Result<()> {
+        if !work_items::view_permission(&self.proof.context.permission) {
+            return Err(Error::ValidationError("此查询不提供工作项操作展示资格".into()));
+        }
+        self.ensure_current(executor)
+    }
+
+    /// 返回工作项当前读取阶段内固定的管理动作过滤。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 与根读取共用资格、范围依赖及有效期的过滤；仅用于当前批次按钮展示。
+    /// # 错误
+    /// 非工作项入口拒绝；办理命令仍必须单独 require。
+    pub fn management_stages(&self) -> Result<&[Document]> {
+        if self.proof.context.permission == work_item::MANAGE {
+            return Ok(&self.stages);
+        }
+        self.management.as_deref().ok_or_else(|| Error::ValidationError("此查询没有管理动作过滤".into()))
+    }
+
+    /// 取得固定来源模型的只读描述，不签发来源对象凭证。
+    /// # 参数
+    /// relation 为启动时绑定的来源关系。
+    /// # 返回
+    /// 集合、主键及静态能力描述；来源阶段仅供原根用例的固定投影使用。
+    /// # 错误
+    /// 不提供该来源份额时返回接入错误。
+    pub fn source_model(&self, relation: &RelationKey) -> Result<&QueryModel> {
+        self.sources
+            .get(relation)
+            .map(|source| &source.model)
+            .ok_or_else(|| Error::ValidationError("本查询不提供此来源份额".into()))
+    }
+
+    /// 取得固定来源的数据库过滤阶段。
+    /// # 参数
+    /// relation 为启动时绑定的完整来源关系。
+    /// # 返回
+    /// 同次取证生成的来源阶段，不改变根输出边界。
+    /// # 错误
+    /// 本入口不能输出该来源时拒绝。
+    pub fn source_stages(&self, relation: &RelationKey) -> Result<&[Document]> {
+        self.sources
+            .get(relation)
+            .map(|source| source.stages.as_slice())
+            .ok_or_else(|| Error::ValidationError("本查询不提供此来源份额".into()))
+    }
+
+    /// 取得同次资格及范围生成的完整根过滤。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 整账资格与全部真实来源均满足时才命中的固定阶段。
+    /// # 错误
+    /// 非复合资金入口或来源子凭证不能用于整账读取。
+    pub fn whole_stages(&self) -> Result<&[Document]> {
+        self.whole.as_deref().ok_or_else(|| Error::ValidationError("此查询没有完整根读取计划".into()))
+    }
+
+    /// 身份域展示是否存在正向角色范围。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 本次范围取证存在正向角色条款时为 true。
+    /// # 错误
+    /// 无；个人限制和查询结果为空不能替代本标记。
+    pub(crate) fn has_role_scope(&self) -> bool {
+        self.proof.has_role_scope
+    }
+
+    /// 返回同次取证的完整金额功能资格，不授予来源对象访问。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前固定复合入口的完整功能资格成立时为 true，仍须执行完整来源过滤。
+    /// # 错误
+    /// 无；此只读信息不能代替查询边界、来源条件及最终交付检查。
+    pub fn has_whole_qualification(&self) -> bool {
+        self.whole.is_some()
+            && sources::whole_qualified(&self.proof.context.permission, &self.proof.qualified)
+    }
+
     /// 返回查询凭证绑定的真实账号。
     /// # 参数
     /// 无。

@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductId, SkuId};
+use erp_permissions::catalog as catalog_permissions;
 use id_generator::next_id;
 use persistence_core::Executor;
 use validator::Validate;
@@ -31,7 +32,10 @@ impl CatalogService {
     ) -> Result<Sku> {
         input.validate()?;
         ensure_source_input(&input)?;
-        let mut product = self.access().require_product(actor, "update", product_id, executor).await?;
+        let mut product = self
+            .access()
+            .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, product_id, executor)
+            .await?;
         if !product.is_active() {
             return Err(Error::BusinessLogicError("来源对应公司商品已停用".into()));
         }

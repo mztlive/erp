@@ -7,7 +7,7 @@ use erp_support::{
     RegisterFileAssetRequest, RetentionClass, SensitivityClass, content_fingerprint,
 };
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
@@ -30,7 +30,7 @@ impl DataTransferProcess {
         let job = self
             .db
             .background_jobs()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         if job.domain_job_type.as_deref() != Some(DOMAIN) {
@@ -85,7 +85,7 @@ impl DataTransferProcess {
         let asset = self
             .db
             .file_assets()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("任务文件不存在".into()))?;
         if asset.created_by != owner

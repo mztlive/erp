@@ -6,8 +6,6 @@ use erp_core::ids::ReceivableEntryId;
 use erp_finance::entity::receivable::{CustomerReceiptStatus, PendingReceiptAllocation};
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{CustomerReceiptRow, ReceivableExt};
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::prelude::*;
 use persistence_core::Executor;
 
 use super::{FundsAccess, FundsAuthorization, ScopedCustomerReceiptRow};
@@ -78,11 +76,7 @@ impl FundsAccess {
             .collect::<Vec<_>>();
         let mut visible_orders = HashSet::new();
         for chunk in order_ids.chunks(500) {
-            let orders = self
-                .db
-                .sales_orders()
-                .scope_order_versions(chunk, authorization.sales_scope()?, executor)
-                .await?;
+            let orders = authorization.sales_scope()?.versions_in(&self.db, chunk, executor).await?;
             visible_orders.extend(orders.into_iter().map(|order| order.id));
         }
         let visible_accounts = accounts

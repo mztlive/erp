@@ -6,6 +6,7 @@ use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageId, IntegrationErrorTask,
@@ -13,6 +14,7 @@ use erp_integration::entity::integration_ops::{
 use erp_integration::repository::IntegrationOpsExt;
 use erp_integration::service::inbox_message::*;
 use erp_integration::service::validation::ensure_version;
+use erp_permissions::integration_ops;
 use erp_support::SourceRegistryExt;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
@@ -58,8 +60,18 @@ impl IntegrationResolutionProcess {
         let audit =
             actor.clone().resource_log("inbox_message.register", "inbox_message", message.base.id.clone())?;
         let stored = message.clone();
+        let authorization = self.authorization.clone();
+        let current_actor = actor.clone();
         self.run_audited(move |db, executor| {
             Box::pin(async move {
+                authorization
+                    .require(
+                        &current_actor,
+                        &integration_ops::INBOX_MESSAGE_REGISTER,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 persist_inbox_message(db, &stored, executor).await?;
                 persist_log(db, &audit, executor).await?;
                 Ok(())
@@ -111,8 +123,22 @@ impl IntegrationResolutionProcess {
                 self.prepare_failed_message(message, error_class, attempt_summary, attempt_at, actor).await?
             },
         };
+        let authorization = self.authorization.clone();
+        let current_actor = actor.clone();
         let stored = self
-            .run_audited(move |db, executor| Box::pin(async move { write.persist(db, executor).await }))
+            .run_audited(move |db, executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(
+                            &current_actor,
+                            &integration_ops::INBOX_MESSAGE_WRITE_BACK,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    write.persist(db, executor).await
+                })
+            })
             .await?;
         Ok(stored.into())
     }

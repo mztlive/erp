@@ -1,4 +1,6 @@
 //! 反向验收的幂等根事务；事实逆转后刷新销售、按剩余事实重开任务并写独立回执。
+use std::sync::Arc;
+
 use application_core::command_recovery::recover_resource;
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::ids::CustomerAcceptanceId;
@@ -7,14 +9,14 @@ use erp_fulfillment::dto::{CustomerAcceptanceView, ReverseCustomerAcceptanceRequ
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
 use erp_fulfillment::repository::extensions::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_read_models::fulfillment_center::access::AcceptanceReadService;
 use erp_read_models::sales_center::access::SalesAccess;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::super::task::FulfillmentIdentityFactory;
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
 use crate::{Error, Result};
@@ -118,7 +120,7 @@ impl CustomerAcceptanceProcess {
 /// 按原顺序重验验收归属授权，再读取同一执行器上的冲正命令结果。
 async fn replay_reverse(
     db: &Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     original_id: &CustomerAcceptanceId,
     actor: &AuditActor,
     receipt: &CommandReceipt,
@@ -127,7 +129,12 @@ async fn replay_reverse(
     let original =
         FulfillmentService::new(db.clone()).load_customer_acceptance(original_id.as_ref(), executor).await?;
     SalesAccess::new(db.clone(), rbac)
-        .require_object(actor, "detail", &original.acceptance.sales_order_id, &[], executor)
+        .require_object(
+            actor,
+            &sales_order_permissions::DETAIL,
+            &original.acceptance.sales_order_id,
+            executor,
+        )
         .await?;
     let Some(result_id) =
         FulfillmentCommandReceiptService::new(db.clone()).committed_resource_id(receipt, executor).await?
@@ -142,8 +149,8 @@ async fn replay_reverse(
 }
 
 struct ReverseAuthorization {
-    rbac: SharedRbacService,
-    task_identity: FulfillmentIdentityFactory,
+    rbac: Arc<AuthorizationService>,
+    task_identity: Arc<AuthorizationService>,
 }
 
 /// 重验授权和回执后，沿用当前事务依次写反向事实与后续任务。

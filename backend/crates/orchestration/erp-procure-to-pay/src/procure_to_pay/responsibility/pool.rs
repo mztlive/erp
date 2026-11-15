@@ -3,12 +3,12 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::Permission;
+use erp_permissions::purchase_order;
 use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::entity::procurement_responsibility::{
     ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType, ResolutionPurpose,
 };
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::ProcurementResponsibilityProcess;
 use super::resolver::ResolutionInput;
@@ -35,8 +35,9 @@ impl ProcurementResponsibilityProcess {
                     .await?;
             } else {
                 let actor = AuditActor::new(owner.clone(), owner.clone(), AccountKind::Admin);
-                let permission = Permission::parse("purchase_order:create")?;
-                let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+                let permission = purchase_order::CREATE;
+                let qualified = self
+                    .rbac
                     .permissions(&actor, std::slice::from_ref(&permission), executor)
                     .await?
                     .ok_or_else(|| {
@@ -56,7 +57,7 @@ impl ProcurementResponsibilityProcess {
 impl ProcurementResponsibilityProcess {
     /// 按指定场景只读预览，询价候选使用询价执行资格。
     /// # 参数
-    /// `inputs` 为整单商品；`purpose` 区分普通采购与询价。
+    /// `inputs` 为整单商品；`purpose` 区分普通采购与询价，`executor` 为原预览事务。
     /// # 返回
     /// 返回已检查人员资格的逐行预览，不推进任何池。
     /// # 错误
@@ -65,16 +66,18 @@ impl ProcurementResponsibilityProcess {
         &self,
         inputs: &[ResolutionInput],
         purpose: ResolutionPurpose,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<ProcurementResponsibilityResolutionView>> {
         if purpose == ResolutionPurpose::Procurement {
-            return Ok(self.resolve_strict(inputs).await?.views());
+            let candidates = self.resolve_candidates(inputs, executor).await?;
+            return Ok(self.authorize_candidates(candidates, executor).await?.views());
         }
-        let candidates = self.resolve_inquiry_candidates(inputs, &mut NoTransaction).await?;
+        let candidates = self.resolve_inquiry_candidates(inputs, executor).await?;
         let access = ProcurementInquiryEligibility::new(self.db.clone(), self.rbac.clone());
         let mut checked = HashSet::new();
         for candidate in &candidates {
             if checked.insert(candidate.owner_user_id.as_str()) {
-                access.assignment_owner(&candidate.owner_user_id, &mut NoTransaction).await?;
+                access.assignment_owner(&candidate.owner_user_id, executor).await?;
             }
         }
         Ok(candidates

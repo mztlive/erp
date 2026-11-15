@@ -1,7 +1,8 @@
 //! 人员姓名与组织关系共用同一个提交事务。
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use persistence_core::{Executor, NoTransaction};
+use erp_permissions::{internal, organization};
+use persistence_core::{Executor, Transactional};
 
 use super::OrganizationService;
 use super::access::replay;
@@ -10,8 +11,8 @@ use crate::entity::organization_change::{
     OrganizationChangeReceipt, OrganizationChangeRequest, OrganizationOperation,
 };
 use crate::repository::OrganizationRepository;
-use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use crate::{AccessControlExt, Error, Permission, Result};
+use crate::service::authorization::OrganizationScope;
+use crate::{AccessControlExt, Error, Result};
 
 impl OrganizationService {
     /// 按变更内容重验组织配置权及账号管理边界，幂等回放也不能绕过撤权。
@@ -31,13 +32,23 @@ impl OrganizationService {
         actor: &AuditActor,
         change: &OrganizationOperation,
         executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let mut required = Vec::new();
+    ) -> Result<OrganizationScope> {
+        let profile = match change {
+            OrganizationOperation::UpdatePersonProfile { profile }
+                if profile.name.is_some() || profile.role_ids.is_some() =>
+            {
+                Some(profile)
+            },
+            _ => None,
+        };
+        let permission = if profile.is_some() {
+            &internal::ORGANIZATION_PERSON_PROFILE_CHANGE
+        } else {
+            &organization::CHANGE
+        };
+        let access = self.authorization.organization_scope(actor, permission, executor).await?;
         let mut account_revision = None;
-        if let OrganizationOperation::UpdatePersonProfile { profile } = change
-            && (profile.name.is_some() || profile.role_ids.is_some())
-        {
-            required.push(Permission::parse("admin:update")?);
+        if let Some(profile) = profile {
             account_revision = Some(
                 self.rbac
                     .authorize_target_management(
@@ -50,12 +61,10 @@ impl OrganizationService {
                     .policy_revision(),
             );
         }
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, &Permission::parse("org_unit:manage")?, &required, executor)
-            .await?;
         if account_revision.is_some_and(|revision| revision != access.policy_version) {
             return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
         }
+        access.ensure_current(executor)?;
         Ok(access)
     }
 
@@ -75,20 +84,44 @@ impl OrganizationService {
         actor: &AuditActor,
         request: OrganizationChangeRequest,
     ) -> Result<OrganizationChangeReceipt> {
-        let access = self.profile_access(actor, &request.change, &mut NoTransaction).await?;
-        let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
-        if let Some(receipt) =
-            OrganizationRepository::new(&self.db).receipt(&receipt_id, &mut NoTransaction).await?
-        {
-            return replay(receipt, &request, &access);
+        let this = self.clone();
+        let precheck_actor = actor.clone();
+        let precheck_request = request.clone();
+        let (revision, receipt) = self
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.profile_roles_precheck(&precheck_actor, &precheck_request, executor).await
+                })
+            })
+            .await?;
+        if let Some(receipt) = receipt {
+            return Ok(receipt);
         }
         let this = self.clone();
         let actor = actor.clone();
         self.rbac
-            .run_authorized_policy_transaction(access.policy_version, move |executor| {
+            .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move { this.execute_change(&actor, request, false, executor).await })
             })
             .await
+    }
+
+    /// 预检只向后续 policy 事务交付修订，范围凭证不跨事务复用。
+    async fn profile_roles_precheck(
+        &self,
+        actor: &AuditActor,
+        request: &OrganizationChangeRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<(u64, Option<OrganizationChangeReceipt>)> {
+        let access = self.profile_access(actor, &request.change, executor).await?;
+        let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
+        let receipt = OrganizationRepository::new(&self.db).receipt(&receipt_id, executor).await?;
+        let receipt = receipt.map(|receipt| replay(receipt, request, &access)).transpose()?;
+        access.ensure_current(executor)?;
+        Ok((access.policy_version, receipt))
     }
 
     /// 在账号资料事务内替换完整角色集，不另行提交。

@@ -6,9 +6,8 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_approval_runtime::ApprovalRuntimePort;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_read_models::finance::funds_scope::FundsAccess;
-use erp_read_models::finance::payment_request::PurchasePaymentRequestReadService;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::ports::FinanceResponsibilityPort;
 use erp_workflow::{WorkItemService, WorkflowAuthorizationPort};
@@ -67,97 +66,32 @@ impl<A: WorkflowAuthorizationPort> FinanceTaskPort for WorkItemService<A> {
     }
 }
 
-type ReceivableFactory = Arc<dyn Fn() -> FinancePostingPorts + Send + Sync>;
-type FreshTaskFactory = Arc<dyn Fn() -> Arc<dyn FinanceTaskPort> + Send + Sync>;
-
 /// 财务过账需要的身份、审批运行、来源访问和正式任务提供者。
 #[derive(Clone)]
 pub struct FinancePostingPorts {
     pub(crate) identity: SharedRbacService,
+    pub(crate) authorization: Arc<AuthorizationService>,
     pub(crate) runtime: Arc<dyn ApprovalRuntimePort>,
     pub(crate) funds: FundsAccess,
-    pub(crate) payment_request_read: PurchasePaymentRequestReadService,
     pub(crate) tasks: Arc<dyn FinanceTaskPort>,
-    receivable_factory: Option<ReceivableFactory>,
-    fresh_tasks_factory: Option<FreshTaskFactory>,
 }
 
 impl FinancePostingPorts {
     /// 注入身份、统一来源授权及财务任务事实提供者。
     /// # 参数
-    /// 各参数为应用共享身份、审批运行、资金来源访问、付款申请读取及任务能力。
+    /// 各参数为应用共享身份、审批运行、资金来源访问及任务能力。
     /// # 返回
     /// 返回无I/O的财务能力集合。
     /// # 错误
     /// 构造时不返回错误；业务校验仍在原调用位置执行。
     pub fn new(
         identity: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         runtime: Arc<dyn ApprovalRuntimePort>,
         funds: FundsAccess,
-        payment_request_read: PurchasePaymentRequestReadService,
         tasks: Arc<dyn FinanceTaskPort>,
     ) -> Self {
-        Self {
-            identity,
-            runtime,
-            funds,
-            payment_request_read,
-            tasks,
-            receivable_factory: None,
-            fresh_tasks_factory: None,
-        }
-    }
-
-    /// 注入客户往来内部新命令所需的独立能力构造器。
-    /// # 参数
-    /// `factory` 每次必须创建新的局部身份实例，不能捕获共享应用身份。
-    /// # 返回
-    /// 返回已具备局部命令再创建能力的提供者集合。
-    /// # 错误
-    /// 不返回错误，构造器不执行数据库或外部服务I/O。
-    pub fn with_receivable_factory(mut self, factory: ReceivableFactory) -> Self {
-        self.receivable_factory = Some(factory);
-        self
-    }
-
-    /// 为原客户往来内部新命令重新创建独立身份和审批提供者。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回与当前实例和应用全局权限状态隔离的新提供者集合。
-    /// # 错误
-    /// 应用未装配局部构造器时失败关闭，不以共享身份代替。
-    pub fn fresh_receivable(&self) -> crate::Result<Self> {
-        self.receivable_factory
-            .as_ref()
-            .map(|factory| factory())
-            .ok_or_else(|| crate::Error::Internal("客户往来局部身份构造器未装配".into()))
-    }
-
-    /// 注入需要独立身份的原任务资格检查构造器。
-    /// # 参数
-    /// `factory` 每次创建独立的局部身份和正式任务资格提供者。
-    /// # 返回
-    /// 返回已装配独立任务资格能力的财务提供者集合。
-    /// # 错误
-    /// 不返回错误，构造器不得执行I/O。
-    pub fn with_fresh_tasks_factory(mut self, factory: FreshTaskFactory) -> Self {
-        self.fresh_tasks_factory = Some(factory);
-        self
-    }
-
-    /// 在原检查位置创建独立身份的任务资格提供者。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 返回与调用者和应用全局权限状态隔离的任务能力。
-    /// # 错误
-    /// 未装配独立构造器时失败关闭，不以调用者身份替代。
-    pub(crate) fn fresh_tasks(&self) -> crate::Result<Arc<dyn FinanceTaskPort>> {
-        self.fresh_tasks_factory
-            .as_ref()
-            .map(|factory| factory())
-            .ok_or_else(|| crate::Error::Internal("财务局部任务资格构造器未装配".into()))
+        Self { identity, authorization, runtime, funds, tasks }
     }
 }
 

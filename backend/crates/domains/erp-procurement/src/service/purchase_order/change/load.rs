@@ -1,5 +1,5 @@
 //! 采购变更命令的本域读取；来源采购单范围必须由调用方在本模块校验之前证明。
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseOrder, PurchaseOrderRevision};
 use crate::repository::PurchaseOrderExt;
@@ -12,6 +12,7 @@ impl PurchaseOrderService {
     /// # 参数
     /// * `order` - 调用方已用 `require_object` / `command_access.current` 证明的来源采购单
     /// * `expected_lock_version` - 调用方持有的乐观锁版本
+    /// * `executor` - 授权、变更资格读取与后续写入共用的事务执行器
     ///
     /// # 返回
     /// 返回原采购单及其当前可变更基准版本。
@@ -25,6 +26,7 @@ impl PurchaseOrderService {
         &self,
         order: PurchaseOrder,
         expected_lock_version: u64,
+        executor: &mut dyn Executor,
     ) -> Result<(PurchaseOrder, PurchaseOrderRevision)> {
         order
             .ensure_expected_version(expected_lock_version)
@@ -34,7 +36,7 @@ impl PurchaseOrderService {
         let base_revision = self
             .db
             .purchase_order_revisions()
-            .find_by_id(&base_revision_id, &mut NoTransaction)
+            .find_by_id(&base_revision_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("基准版本不存在".to_string()))?;
         Ok((order, base_revision))
@@ -44,6 +46,7 @@ impl PurchaseOrderService {
     ///
     /// # 参数
     /// * `purchase_order_id` - 已证明可见的来源采购单主键
+    /// * `executor` - 原用例事务执行器
     ///
     /// # 返回
     /// 无进行中变更时返回 `Ok(())`。
@@ -53,11 +56,15 @@ impl PurchaseOrderService {
     ///
     /// # 关键业务约束
     /// 调用方必须先按来源采购单写动作证明可见性，避免越权请求读到进行中冲突。
-    pub async fn ensure_no_in_progress_change(&self, purchase_order_id: &str) -> Result<()> {
+    pub async fn ensure_no_in_progress_change(
+        &self,
+        purchase_order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let has_in_progress = self
             .db
             .purchase_order()
-            .has_in_progress_change(&purchase_order_id.to_string().into(), &mut NoTransaction)
+            .has_in_progress_change(&purchase_order_id.to_string().into(), executor)
             .await?;
         if has_in_progress {
             return Err(Error::ConflictError("存在进行中的采购变更，不能重复发起".to_string()));

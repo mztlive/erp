@@ -1,10 +1,13 @@
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, WarehouseId};
 use erp_core::region::RegionCode;
-use erp_identity::SharedRbacService;
 use erp_identity::service::business_ownership::required_business_org;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::{
     CREATE_ACTION, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
 };
@@ -32,13 +35,12 @@ use erp_workflow::service::approval::business_adapter::BindingRevalidationContex
 use erp_workflow::service::document_registry::new_registered_document;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::PurchaseOrderProcess;
 use super::super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::super::adapters::payment_term::parse;
-use super::super::authorization::PurchaseOrderAuthorization;
 use super::super::create_submit::{CreatedDraftBundle, submit_created_draft};
 use super::super::inquiry_supply::reserve_selected_quotes;
 use super::super::payment_subject::load_payment_subject;
@@ -51,7 +53,6 @@ use super::{procurement_quantity_changed, validate_requested_quantities};
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::{Error, Result};
 
-const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
 
 /// 事务内采购创建命令上下文。
@@ -141,13 +142,7 @@ impl PurchaseOrderProcess {
             None,
             &req.idempotency_key,
         )?;
-        let authorization = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
-        if let Some(result) =
-            replay_creation(&self.db, &receipt_identity, &request_fingerprint, actor, &mut NoTransaction)
-                .await?
-        {
-            return Ok(result);
-        }
+        let authorization = self.require_rbac()?.clone();
         let sales_order_id = parse_basis_sales_order_id(&req.basis_id)?;
         let transaction_result = self
             .basis_transaction(
@@ -166,8 +161,7 @@ impl PurchaseOrderProcess {
             Ok(result) => Ok(result),
             Err(error) => recover_command(
                 error,
-                replay_creation(&self.db, &receipt_identity, &request_fingerprint, actor, &mut NoTransaction)
-                    .await,
+                self.replay_created_result(&receipt_identity, &request_fingerprint, actor).await,
             ),
         }
     }
@@ -176,10 +170,10 @@ impl PurchaseOrderProcess {
     async fn basis_transaction(
         &self,
         input: BasisTransactionInput<'_>,
-        authorization: PurchaseOrderAuthorization,
+        authorization: Arc<AuthorizationService>,
     ) -> Result<CreatePurchaseOrderResult> {
         let ports = self.ports.clone();
-        let rbac = authorization.rbac.clone();
+        let rbac = authorization;
         let BasisTransactionInput {
             req,
             requested_lines,
@@ -199,7 +193,6 @@ impl PurchaseOrderProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    authorization.require(&transaction_actor, executor).await?;
                     let command = CreateBasisCommand {
                         sales_order_id: &sales_order_id,
                         req: &transaction_req,
@@ -236,13 +229,19 @@ impl PurchaseOrderProcess {
 async fn create_from_basis_apply(
     db: &mongodb::Database,
     ports: &PurchaseOrderPorts,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     command: &CreateBasisCommand<'_>,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
-    if let Some(result) =
-        replay_creation(db, command.receipt_identity, command.request_fingerprint, command.actor, executor)
-            .await?
+    if let Some(result) = replay_creation(
+        db,
+        rbac,
+        command.receipt_identity,
+        command.request_fingerprint,
+        command.actor,
+        executor,
+    )
+    .await?
     {
         return Ok(result);
     }
@@ -324,7 +323,7 @@ pub struct VerifiedBasisInput<'a> {
 pub async fn persist_basis_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
     executor: &mut dyn Executor,
@@ -369,7 +368,7 @@ pub async fn persist_basis_draft(
 async fn prepare_basis_draft(
     db: &Database,
     ports: &PurchaseOrderPorts,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     input: &VerifiedBasisInput<'_>,
     command: &CreateBasisCommand<'_>,
     executor: &mut dyn Executor,
@@ -605,7 +604,7 @@ pub(in crate::procure_to_pay) fn creation_audit(
 /// 责任人账号不可用、缺少对应完整履约权限，或账号与 RBAC 查询失败时返回错误。
 async fn ensure_initial_purchase_order_owner(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     responsibility: FulfillmentResponsibility,
     owner_user_id: &str,
     executor: &mut dyn Executor,
@@ -646,7 +645,7 @@ async fn ensure_initial_purchase_order_owner(
 /// 或非仓库履约携带目标仓时返回错误。
 async fn resolve_target_warehouse(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     responsibility: FulfillmentResponsibility,
     requested_id: Option<&str>,
     executor: &mut dyn Executor,
@@ -747,9 +746,10 @@ fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
 /// 事务前、事务内和事务失败后均复用同一校验逻辑。
 pub(in crate::procure_to_pay) async fn replay_creation(
     db: &mongodb::Database,
+    authorization: &AuthorizationService,
     receipt_identity: &PurchaseCommandReceiptIdentity,
     expected_fingerprint: &str,
-    _actor: &AuditActor,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<CreatePurchaseOrderResult>> {
     let Some(record) = db
@@ -772,6 +772,9 @@ pub(in crate::procure_to_pay) async fn replay_creation(
             return Err(Error::Internal(message));
         },
     };
+    if receipt_identity.actor_id != actor.id() {
+        return Err(Error::ConflictError("采购创建回执与操作人不一致".into()));
+    }
     let order = db
         .purchase_orders()
         .find_by_id(&receipt.payload().purchase_order_id, executor)
@@ -780,7 +783,39 @@ pub(in crate::procure_to_pay) async fn replay_creation(
     if order.base.id != receipt.payload().purchase_order_id {
         return Err(Error::ConflictError("采购创建幂等收据与当前采购单不一致".to_string()));
     }
+    authorization
+        .require(
+            actor,
+            &internal::PURCHASE_CREATED_RESULT_READ,
+            AccessTarget::record(&order.base.id)?,
+            executor,
+        )
+        .await?;
     Ok(Some(receipt.into_payload().into_result(true)))
+}
+
+impl PurchaseOrderProcess {
+    /// 仅在原创建可能已提交后，用单次快照授权并读取精确原命令结果。
+    pub(in crate::procure_to_pay) async fn replay_created_result(
+        &self,
+        identity: &PurchaseCommandReceiptIdentity,
+        fingerprint: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<CreatePurchaseOrderResult>> {
+        let db = self.db.clone();
+        let authorization = self.require_rbac()?.clone();
+        let identity = identity.clone();
+        let fingerprint = fingerprint.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_creation(&db, &authorization, &identity, &fingerprint, &actor, executor).await
+                })
+            })
+            .await
+    }
 }
 
 #[cfg(test)]

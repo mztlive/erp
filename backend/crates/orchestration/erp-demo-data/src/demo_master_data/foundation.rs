@@ -41,6 +41,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 环境未开放、必要权限缺失、已发布审批链不一致，或基础写入失败时返回错误。
     pub async fn ensure_foundation(&self, actor: &AuditActor) -> Result<DemoFoundationReport> {
         self.ensure_enabled()?;
+        self.authorize_apply(actor).await?;
         spec::foundation_spec().validate()?;
         let mut report = DemoFoundationReport {
             accounts_created: 0,

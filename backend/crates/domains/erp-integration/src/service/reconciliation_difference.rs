@@ -1,5 +1,6 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
 use application_core::AuditActor;
+use erp_permissions::integration_ops;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -57,7 +58,7 @@ impl IntegrationOpsService {
         let scope = resolve_list_scope(
             &access,
             actor,
-            "reconciliation_difference",
+            &integration_ops::DIFFERENCE_LIST,
             &query.org_unit_ids,
             query.include_descendants,
             query.scope_version.as_deref(),
@@ -67,7 +68,6 @@ impl IntegrationOpsService {
         let operator_difference_ids =
             self.operator_difference_ids(&query.operator_user_ids, executor).await?;
         let filter = difference_filter(query, scope.owner_org_unit_ids, operator_difference_ids);
-        access.validate(&scope.read_scope, executor).await?;
         let page = self
             .db
             .reconciliation_differences()

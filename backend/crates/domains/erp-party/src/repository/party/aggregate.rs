@@ -358,11 +358,12 @@ impl PartyDomainRepository<'_> {
         let collection = self.db.collection::<mongodb::bson::Document>(PARTIES);
         let mut filter = doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON };
         persistence_core::insert_literal_regex_filter(&mut filter, "unified_credit_code", Some(keyword));
-        let mut query = collection.distinct("id", filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        ids.extend(query.await?.into_iter().filter_map(|id| id.as_str().map(|s| PartyId::new(s.to_owned()))));
+        ids.extend(
+            mongo_ops::distinct(&collection, "id", filter, executor)
+                .await?
+                .into_iter()
+                .filter_map(|id| id.as_str().map(|s| PartyId::new(s.to_owned()))),
+        );
         ids.sort_by_key(ToString::to_string);
         ids.dedup();
         Ok(ids)

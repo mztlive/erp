@@ -4,6 +4,7 @@ use erp_catalog::repository::prelude::*;
 use erp_catalog::service::catalog::ProductDraft;
 use erp_catalog::{CatalogExt, CreateProductBrandRequest, ProductSkuInput, Sku};
 use erp_core::ids::ProductId;
+use erp_permissions::catalog as catalog_permissions;
 use erp_supply::catalog_adoption::{
     AdoptionRow, AdoptionTarget, BatchMatchAnchor, CatalogAdoptionExt, CatalogAdoptionProduct,
     adoption_identity,
@@ -56,36 +57,31 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<PreparedAdoption> {
         let mut materialized_item = item.clone();
         media.apply_to(&mut materialized_item)?;
-        let mut resolved_row =
-            self.automatic_row_with_anchor(item, row, actor, command, anchor, &mut NoTransaction).await?;
+        let (source, target, acting, command_id, parent) =
+            (item.clone(), row.clone(), actor.clone(), command.to_owned(), anchor.cloned());
+        let mut resolved_row = self
+            .with_snapshot(move |process, executor| {
+                Box::pin(async move {
+                    process
+                        .automatic_row_with_anchor(
+                            &source,
+                            &target,
+                            &acting,
+                            &command_id,
+                            parent.as_ref(),
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await?;
         self.prepare_source_unit(item, row, &resolved_row, actor).await?;
         if let AdoptionTarget::Create { brand_id, .. } = &mut resolved_row.target
             && brand_id.is_empty()
         {
             *brand_id = self.resolve_source_brand(item, actor).await?;
         }
-        let (draft, input) = if matches!(resolved_row.target, AdoptionTarget::Create { .. }) {
-            let request = product_request(item, &resolved_row, &media)?;
-            let input = sku_input(item, &resolved_row, &media)?;
-            let mapping = self
-                .db
-                .catalog_adoption_products()
-                .find_by_id(&product_binding_id(item), &mut NoTransaction)
-                .await?;
-            let draft = match mapping {
-                Some(_) => None,
-                None if anchor.is_none() => Some(
-                    self.services
-                        .catalog
-                        .prepare_product_create(request, &media.pending_assets, actor)
-                        .await?,
-                ),
-                None => None,
-            };
-            (draft, Some(input))
-        } else {
-            (None, None)
-        };
+        let (draft, input) = self.prepare_product_target(item, &resolved_row, &media, actor, anchor).await?;
         Ok(PreparedAdoption {
             media,
             materialized_item,
@@ -95,6 +91,35 @@ impl SupplierCatalogAdoptionProcess {
             resolved_row,
             parent_product_id: anchor.map(|value| value.target.product_id.clone()),
         })
+    }
+
+    /// 在匹配快照外准备新商品草稿及规格输入，既有同源商品保留原映射。
+    async fn prepare_product_target(
+        &self,
+        item: &SupplierCatalogItem,
+        row: &AdoptionRow,
+        media: &PreparedSourceMedia,
+        actor: &AuditActor,
+        anchor: Option<&BatchMatchAnchor>,
+    ) -> Result<(Option<ProductDraft>, Option<ProductSkuInput>)> {
+        if !matches!(row.target, AdoptionTarget::Create { .. }) {
+            return Ok((None, None));
+        }
+        let request = product_request(item, row, media)?;
+        let input = sku_input(item, row, media)?;
+        let mapping = self
+            .db
+            .catalog_adoption_products()
+            .find_by_id(&product_binding_id(item), &mut NoTransaction)
+            .await?;
+        let draft = match mapping {
+            Some(_) => None,
+            None if anchor.is_none() => Some(
+                self.services.catalog.prepare_product_create(request, &media.pending_assets, actor).await?,
+            ),
+            None => None,
+        };
+        Ok((draft, Some(input)))
     }
 
     async fn prepare_source_unit(
@@ -112,7 +137,18 @@ impl SupplierCatalogAdoptionProcess {
             AdoptionTarget::Auto { .. } => return Err(Error::Internal("计量单位尚未解析".into())),
         };
         if matches!(&resolved.target, AdoptionTarget::Create { brand_id, .. } if brand_id.is_empty()) {
-            self.services.catalog_access.resolve(actor, "create", &mut NoTransaction).await?;
+            let actor = actor.clone();
+            self.with_snapshot(move |process, executor| {
+                Box::pin(async move {
+                    process
+                        .services
+                        .catalog_access
+                        .ensure_writable(&actor, &catalog_permissions::PRODUCT_PRODUCT_CREATE, executor)
+                        .await
+                        .map_err(Error::from)
+                })
+            })
+            .await?;
         }
         let name = item.suggested_unit().ok_or_else(|| Error::ValidationError("无法确定商品单位".into()))?;
         self.services.catalog.ensure_source_unit(&name, unit_id, actor).await?;
@@ -219,7 +255,12 @@ impl SupplierCatalogAdoptionProcess {
         let product = self
             .services
             .catalog_access
-            .require_product(actor, "update", sku.product_id.as_ref(), executor)
+            .require_product(
+                actor,
+                &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                sku.product_id.as_ref(),
+                executor,
+            )
             .await?;
         if !sku.is_active()
             || !product.is_active()
@@ -320,7 +361,12 @@ impl SupplierCatalogAdoptionProcess {
         let product = self
             .services
             .catalog_access
-            .require_product(actor, "update", &mapping.product_id, executor)
+            .require_product(
+                actor,
+                &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                &mapping.product_id,
+                executor,
+            )
             .await?;
         let revision = self
             .db

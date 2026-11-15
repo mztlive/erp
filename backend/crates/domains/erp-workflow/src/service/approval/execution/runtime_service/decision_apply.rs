@@ -1,6 +1,7 @@
 //! 审批决定提交、回放与事务写入。
 
-use erp_identity::SharedRbacService;
+use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
+use erp_permissions::approval_instance;
 
 use crate::ports::WorkflowAuthorizationPort;
 use crate::service::approval::copies::persist_copies;
@@ -71,6 +72,14 @@ struct RuntimeDecisionOutcome {
     blocked: bool,
 }
 
+/// 决定取证共用的数据库、账号目录、统一授权与业务来源读取端口。
+struct DecisionServices<'a, A> {
+    authorization: &'a AuthorizationService,
+    identity_service: &'a SharedRbacService,
+    db: &'a Database,
+    rbac: &'a A,
+}
+
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 提交当前开放任务的通过或驳回。
     ///
@@ -135,6 +144,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         command: RuntimeDecisionCommand,
     ) -> Result<RuntimeDecisionOutcome> {
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
         let rbac = self.auth.clone();
         let identity_service = self.identity.clone();
@@ -147,6 +157,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     submit_decision_apply(
+                        &authorization,
                         &identity_service,
                         &db,
                         &rbac,
@@ -170,6 +181,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         original_error: Error,
     ) -> Result<RuntimeDecisionOutcome> {
         recover_by_replay(original_error, || async {
+            let authorization = self.authorization.clone();
             let db = self.db.clone();
             let rbac = self.auth.clone();
             let identity_service = self.identity.clone();
@@ -180,7 +192,16 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        replay_decision(&identity_service, &db, &rbac, &actor, &command, executor).await
+                        replay_decision(
+                            &authorization,
+                            &identity_service,
+                            &db,
+                            &rbac,
+                            &actor,
+                            &command,
+                            executor,
+                        )
+                        .await
                     })
                 })
                 .await
@@ -233,6 +254,7 @@ pub(super) fn decision_terminal_fresh_error() -> Error {
 
 /// 决定回放先执行与 Fresh 相同的任务前置和当前授权，再允许查询和比较收据。
 async fn replay_decision(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl WorkflowAuthorizationPort,
@@ -260,8 +282,14 @@ async fn replay_decision(
     if original_actor_id != actor.id() {
         return Err(decision_terminal_fresh_error());
     }
-    match authorize_decision_terminal_replay(identity_service, db, rbac, actor, &item, &execution, executor)
-        .await
+    match authorize_decision_terminal_replay(
+        &DecisionServices { authorization, identity_service, db, rbac },
+        actor,
+        &item,
+        &execution,
+        executor,
+    )
+    .await
     {
         Ok(()) => {},
         Err(Error::Forbidden(_)) => {
@@ -327,6 +355,7 @@ async fn replay_terminal_receipt_view(
 // 决定事务 8 参数：与受阻取消/恢复入口同形以便统一分派，顺序由调用点锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
 async fn submit_decision_apply(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     rbac: &impl WorkflowAuthorizationPort,
@@ -336,13 +365,48 @@ async fn submit_decision_apply(
     command: &RuntimeDecisionCommand,
     executor: &mut dyn Executor,
 ) -> Result<RuntimeDecisionOutcome> {
-    if let Some(replay) = replay_decision(identity_service, db, rbac, actor, command, executor).await? {
+    if let Some(replay) =
+        replay_decision(authorization, identity_service, db, rbac, actor, command, executor).await?
+    {
         return Ok(replay);
     }
     let loaded = load_open_decision_runtime(db, actor, command, executor).await?;
-    let prepared =
-        prepare_open_decision(identity_service, db, rbac, actor, command, &loaded, executor).await?;
+    authorization
+        .require(
+            actor,
+            &approval_instance::SUBMIT_DECISION,
+            AccessTarget::Task {
+                id: loaded.item.base.id.clone(),
+                version: loaded.item.base.version.to_string(),
+            },
+            executor,
+        )
+        .await?;
+    let services = DecisionServices { authorization, identity_service, db, rbac };
+    let prepared = prepare_open_decision(&services, actor, command, &loaded, executor).await?;
+    persist_open_decision(
+        &services,
+        (action_port, audit_port),
+        actor,
+        command,
+        (&loaded, &prepared),
+        executor,
+    )
+    .await
+}
 
+/// 唯一收据先仲裁，领域动作、实例推进、指派授权及抄送沿原事务原子保存。
+async fn persist_open_decision(
+    services: &DecisionServices<'_, impl WorkflowAuthorizationPort>,
+    ports: (&dyn ApprovalDomainActionPort, &dyn crate::ports::WorkflowAuditPort),
+    actor: &AuditActor,
+    command: &RuntimeDecisionCommand,
+    runtime: (&OpenDecisionRuntime, &PreparedOpenDecision),
+    executor: &mut dyn Executor,
+) -> Result<RuntimeDecisionOutcome> {
+    let DecisionServices { identity_service, db, rbac, .. } = *services;
+    let (action_port, audit_port) = ports;
+    let (loaded, prepared) = runtime;
     // 收据唯一键先于任何领域写入仲裁同键并发；后续失败会随事务整体回滚。
     db.bpm_workflow()
         .insert_command_receipt(&prepared.writes.receipt, executor)
@@ -353,11 +417,19 @@ async fn submit_decision_apply(
     } else if prepared.writes.domain_action == Some(DomainActionKind::Reject) {
         action_port.execute(loaded.spec.on_reject, &prepared.action_context, actor, executor).await?;
     }
-    persist_decision_writes(db, persist_decision_input(&loaded, &prepared, command, audit_port), executor)
+    persist_decision_writes(db, persist_decision_input(loaded, prepared, command, audit_port), executor)
         .await?;
     rbac.append_assignment_grants(&prepared.writes, executor).await?;
     persist_copies(identity_service, db, &prepared.writes.instance, &prepared.writes.events, executor)
         .await?;
+    Ok(decision_outcome(prepared, command))
+}
+
+/// 从已经持久化的决定计划形成既有返回视图，不再查询或选择授权规则。
+fn decision_outcome(
+    prepared: &PreparedOpenDecision,
+    command: &RuntimeDecisionCommand,
+) -> RuntimeDecisionOutcome {
     let blocked = prepared.writes.commit == CommitRequired::Blocked;
     let view = map_command_view(
         &prepared.writes.instance,
@@ -368,7 +440,7 @@ async fn submit_decision_apply(
         prepared.writes.commit,
         false,
     );
-    Ok(RuntimeDecisionOutcome { view, blocked })
+    RuntimeDecisionOutcome { view, blocked }
 }
 
 fn persist_decision_input<'a>(
@@ -571,14 +643,13 @@ pub(super) fn terminal_task_subject_matches(
 
 /// 回放只使用冻结运行事实证明原决定人当前仍具备动作权限，不信任收据或 WorkItem owner 投影。
 async fn authorize_decision_terminal_replay(
-    identity_service: &SharedRbacService,
-    db: &Database,
-    rbac: &impl WorkflowAuthorizationPort,
+    services: &DecisionServices<'_, impl WorkflowAuthorizationPort>,
     actor: &AuditActor,
     item: &WorkItem,
     execution: &ApprovalNodeExecution,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let DecisionServices { authorization, identity_service, db, rbac } = *services;
     let (snapshot, spec, assignee, document_type) =
         load_decision_terminal_replay_facts(db, execution, executor).await?;
     if !terminal_task_subject_matches(item, execution, &snapshot)
@@ -589,6 +660,7 @@ async fn authorize_decision_terminal_replay(
         return Err(hidden_forbidden());
     }
     let eligibility = revalidate_decision_approver(
+        authorization,
         db,
         identity_service,
         rbac,

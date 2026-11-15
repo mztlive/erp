@@ -19,7 +19,8 @@ use erp_core::ids::{CustomerAccountId, PartyId};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Repository, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, aggregate,
+    insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -357,11 +358,11 @@ impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         filter.insert("party_id", doc! { "$in": party_ids });
         let collection = self.collection();
-        let mut query = collection.distinct("id", filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+        Ok(mongo_ops::distinct(&collection, "id", filter, executor)
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect())
     }
 }
 
@@ -673,24 +674,7 @@ impl CustomerAssignmentRepositoryExt for Repository<'_, CustomerAssignment> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<CustomerAssignment>> {
         let pipeline = current_owner_pipeline(customer_ids, owner_ids, as_of);
-        let collection = self.collection();
-        let mut result = Vec::new();
-        if let Some(session) = executor.session() {
-            let mut cursor = collection
-                .aggregate(pipeline)
-                .with_type::<CustomerAssignment>()
-                .session(&mut *session)
-                .await?;
-            while cursor.advance(session).await? {
-                result.push(cursor.deserialize_current()?);
-            }
-            return Ok(result);
-        }
-        let mut cursor = collection.aggregate(pipeline).with_type::<CustomerAssignment>().await?;
-        while cursor.advance().await? {
-            result.push(cursor.deserialize_current()?);
-        }
-        Ok(result)
+        aggregate::rows(&self.collection(), pipeline, executor).await
     }
 
     async fn has_active_assignment_for_customer_user(

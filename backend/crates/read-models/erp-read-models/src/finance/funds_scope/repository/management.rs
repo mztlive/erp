@@ -1,198 +1,270 @@
-//! 审批管理入口及其全部功能资格，沿真实财务根和全部实际来源统一授权。
-
+//! 财务真实对象事实及共享入口调用；授权组合由 identity 固定。
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_finance::entity::receivable::{Invoice, InvoiceStatus};
 use erp_identity::entity::authorization::{
-    AccessContext, FactKind, FactValue, ObjectFacts, ReadAccess, RelatedObjects, RelationKey, RelationMatch,
+    AccessContext, FactValue, ObjectFacts, RelatedObjects, RelationKey,
 };
-use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
 use erp_identity::{
-    AccessFactsPort, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget,
-    AuthorizationRegistry, AuthorizationService, DataAccess, Error as IdentityError, Permission,
-    ResourceTargets, Result as IdentityResult, SharedRbacService,
+    AccessFactsPort, AccessTarget, Error as IdentityError, Permission, ResourceTargets,
+    Result as IdentityResult,
 };
+use erp_permissions::internal;
 use erp_procurement::authorization::PurchaseFacts;
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::Executor;
+use mongodb::bson::{Bson, Document, deserialize_from_document, doc};
+use persistence_core::{Executor, aggregate};
 
 use super::super::FundsAccess;
-use super::management_facts::{self, ManagementFacts};
-use crate::sales_center::access::approval_source_permissions;
+use super::mapping::{collection, source_projection};
+use crate::Result;
 use crate::sales_center::repository::authorization::SalesFacts;
-use crate::{Error, Result};
 
 impl FundsAccess {
-    /// 用同次 identity 检查证明管理入口、全部附加权限及真实财务根的全部来源。
+    /// 使用真实审批实例或任务身份执行固定管理入口。
     /// # 参数
-    /// actor 为真实账号，resource/id 为服务端关系解析得到的财务根；entry/required 为固定管理目录。
-    /// executor 为原事务执行器。
+    /// actor 为已认证账号，id 必须是 entry 对应的真实对象身份，executor 为原执行器。
     /// # 返回
-    /// 完整根及全部实际来源获准时成功；真实零分配沿财务整账 Operation 检查。
+    /// 固定入口的全部基础及来源要求满足时成功。
     /// # 错误
-    /// 未登记入口、来源缺损、功能资格失效或任一实际来源无权时整体拒绝。
+    /// 对象、资格或完整来源不满足时拒绝。
     pub async fn require_source_operation(
         &self,
         actor: &AuditActor,
-        resource: &str,
         id: &str,
         entry: &Permission,
-        required: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        ensure_entry(entry, required)?;
-        let mut required = required.to_vec();
-        if matches!(resource, "customer_receipt" | "supplier_payment") {
-            required.push(Permission::parse(FINANCE_LEDGER_READ)?);
-        }
-        let facts = management_facts::load(&self.db, resource, id, executor).await?;
-        if partition(&facts) == 0 {
-            return zero_source(&self.db, &self.rbac, actor, &facts, entry, required, executor).await;
-        }
-        let subject = AccessSubject::Source(RelationKey::parse("finance_root")?);
-        let access = AccessMode::Object {
-            data: DataAccess {
-                subject: subject.clone(),
-                required_facts: BTreeSet::new(),
-                policy: root_policy(&facts)?,
-            },
-            facts: Arc::new(ManagementPort {
-                db: self.db.clone(),
-                resource: resource.into(),
-                partition: partition(&facts),
-            }),
-        };
-        let service = AuthorizationService::new(
-            self.db.clone(),
-            self.rbac.clone(),
-            AuthorizationRegistry::new(vec![AccessRegistration {
-                permission: entry.clone(),
-                required_permissions: required,
-                access,
-            }])?,
-        );
-        service
-            .require(
-                actor,
-                entry,
-                AccessTarget::Records { subject, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
-            .await?;
+        self.rbac.require(actor, entry, AccessTarget::record(id)?, executor).await?;
         Ok(())
     }
 }
 
-fn ensure_entry(entry: &Permission, required: &[Permission]) -> Result<()> {
-    if matches!(
-        entry.action(),
-        "read" | "decide" | "resume" | "cancel" | "cancel_blocked" | "upgrade_binding"
-    ) && !required.is_empty()
-        && approval_source_permissions(entry.resource(), entry.action(), required)?
-    {
-        return Ok(());
-    }
-    Err(Error::ValidationError("未登记的财务审批管理完整权限组合".into()))
-}
-
-fn groups(facts: &ManagementFacts) -> [(&'static str, &'static str, &BTreeSet<String>); 3] {
-    [
-        ("sales_order", "sales", &facts.sales_ids),
-        ("purchase_order", "purchase", &facts.purchase_ids),
-        ("supplier_settlement_statement", "settlement", &facts.settlement_ids),
-    ]
-}
-
-fn partition(facts: &ManagementFacts) -> u8 {
-    groups(facts)
-        .iter()
-        .enumerate()
-        .fold(0, |mask, (index, (_, _, ids))| mask | if ids.is_empty() { 0 } else { 1 << index })
-}
-
-fn root_policy(facts: &ManagementFacts) -> Result<AccessPolicy> {
-    let policies = groups(facts)
-        .into_iter()
-        .filter(|(_, _, ids)| !ids.is_empty())
-        .map(|(resource, relation, _)| {
-            Ok(AccessPolicy::Related {
-                relation: RelationKey::parse(relation)?,
-                resource: resource.into(),
-                mode: RelationMatch::AllNonEmpty,
-                required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                policy: Box::new(AccessPolicy::Scope {
-                    permission: Permission::parse(format!(
-                        "{resource}:{}",
-                        if resource == "supplier_settlement_statement" { "list" } else { "detail" }
-                    ))?,
-                    read: ReadAccess {
-                        history: false,
-                        records: matches!(resource, "sales_order" | "purchase_order"),
-                    },
-                }),
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(AccessPolicy::Related {
-        relation: RelationKey::parse("finance_root")?,
-        resource: facts.root.resource.clone(),
-        mode: RelationMatch::AllNonEmpty,
-        required_facts: BTreeSet::new(),
-        policy: Box::new(AccessPolicy::All(policies)),
-    })
-}
-
-struct ManagementPort {
+/// 组合根为一个固定财务资源绑定的真实对象读取器。
+pub struct FinancialFacts {
     db: Database,
     resource: String,
-    partition: u8,
 }
-
+impl FinancialFacts {
+    /// 绑定固定资源，不接收请求中的事实。
+    /// # 参数
+    /// db 为共享数据库，resource 为已接入资源。
+    /// # 返回
+    /// 读取真实根及完整来源的端口。
+    /// # 错误
+    /// 无；不支持资源在读取时拒绝。
+    pub fn new(db: Database, resource: &str) -> Self {
+        Self { db, resource: resource.into() }
+    }
+}
 #[async_trait]
-impl AccessFactsPort for ManagementPort {
+impl AccessFactsPort for FinancialFacts {
     async fn load(
         &self,
         context: &AccessContext,
         targets: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> IdentityResult<Vec<ObjectFacts>> {
+        if matches!(self.resource.as_str(), "customer_refund" | "supplier_refund") {
+            return self.refunds(context, targets, executor).await;
+        }
+        if matches!(self.resource.as_str(), "receipt_reversal" | "payment_reversal") {
+            return self.reversals(context, targets, executor).await;
+        }
+        let collection_name = collection(&self.resource)?;
+        let mut pipeline = vec![
+            doc! { "$match": { "id": { "$in": targets.ids().iter().collect::<Vec<_>>() }, "deleted_at": 0 } },
+        ];
+        pipeline.extend(source_projection(&self.resource)?);
+        let rows: Vec<Document> =
+            aggregate::rows(&self.db.collection(collection_name), pipeline, executor).await?;
         let mut result = Vec::new();
-        for id in targets.ids() {
-            let mut facts = management_facts::load(&self.db, &self.resource, id, executor)
-                .await
-                .map_err(identity_error)?;
-            if partition(&facts) != self.partition {
-                return Err(IdentityError::ConflictError("DATA_SCOPE_CHANGED：财务来源结构已变化".into()));
+        for row in rows {
+            invoice_result_state(&context.permission, &row)?;
+            if !matches!(row.get_bool("__funds_sources_valid"), Ok(true)) {
+                return Err(IdentityError::ValidationError("财务实际来源引用不完整".into()));
             }
-            let groups = groups(&facts).map(|(resource, relation, ids)| (resource, relation, ids.clone()));
-            for (resource, relation, ids) in groups {
-                if ids.is_empty() {
-                    continue;
-                }
+            let mut root = root_facts(&self.resource, &row)?;
+            for (resource, relation, field) in [
+                ("sales_order", "sales_source", "__funds_sales_ids"),
+                ("purchase_order", "purchase_source", "__funds_purchase_ids"),
+                ("supplier_settlement_statement", "settlement_source", "__funds_settlement_ids"),
+            ] {
+                let ids = source_ids(&row, field)?;
                 let objects = source_objects(&self.db, context, resource, &ids, executor).await?;
-                facts.root.relations.insert(
-                    RelationKey::parse(relation)?,
-                    RelatedObjects { expected_ids: ids.clone(), objects },
-                );
+                root.relations
+                    .insert(RelationKey::parse(relation)?, RelatedObjects { expected_ids: ids, objects });
             }
-            result.push(ObjectFacts {
-                resource: context.resource.clone(),
-                id: id.clone(),
-                version: facts.root.version.clone(),
-                relations: [(
-                    RelationKey::parse("finance_root")?,
-                    RelatedObjects { expected_ids: [id.clone()].into(), objects: vec![facts.root] },
-                )]
-                .into(),
-                ..Default::default()
-            });
+            result.push(root);
         }
         Ok(result)
     }
+}
+
+/// 已登记回执的状态只取持久化实体，不以调用方事实或未知字符串推断。
+fn invoice_result_state(permission: &Permission, row: &Document) -> IdentityResult<()> {
+    if permission != &internal::INVOICE_POSTED_RESULT_READ {
+        return Ok(());
+    }
+    let invoice: Invoice = deserialize_from_document(row.clone())
+        .map_err(|_| IdentityError::ValidationError("发票真实登记状态无效".into()))?;
+    if !invoice.is_registered() && invoice.stable.status() != InvoiceStatus::RedInvoiced {
+        return Err(IdentityError::Forbidden("只有已登记或已红冲发票可读取登记结果".into()));
+    }
+    Ok(())
+}
+
+impl FinancialFacts {
+    async fn reversals(
+        &self,
+        context: &AccessContext,
+        targets: &ResourceTargets,
+        executor: &mut dyn Executor,
+    ) -> IdentityResult<Vec<ObjectFacts>> {
+        let collection =
+            if self.resource == "receipt_reversal" { "receipt_reversals" } else { "payment_reversals" };
+        let pipeline = vec![
+            doc! { "$match": { "id": { "$in": targets.ids().iter().collect::<Vec<_>>() }, "deleted_at": 0 } },
+        ];
+        let rows: Vec<Document> =
+            aggregate::rows(&self.db.collection(collection), pipeline, executor).await?;
+        let mut result = Vec::new();
+        for row in rows {
+            let ReversalSourceFacts { mut root, source_resource, relation, ids } =
+                reversal_facts(&self.resource, &row)?;
+            let targets = ResourceTargets::new(&ids.iter().map(String::as_str).collect::<Vec<_>>())?;
+            let source = Self::new(self.db.clone(), source_resource);
+            let objects = source.load(context, &targets, executor).await?;
+            root.relations.insert(relation, RelatedObjects { expected_ids: ids, objects });
+            result.push(root);
+        }
+        Ok(result)
+    }
+
+    async fn refunds(
+        &self,
+        context: &AccessContext,
+        targets: &ResourceTargets,
+        executor: &mut dyn Executor,
+    ) -> IdentityResult<Vec<ObjectFacts>> {
+        let customer = self.resource == "customer_refund";
+        let collection = if customer { "customer_refunds" } else { "supplier_refunds" };
+        let pipeline = vec![
+            doc! { "$match": { "id": { "$in": targets.ids().iter().collect::<Vec<_>>() }, "deleted_at": 0 } },
+        ];
+        let rows: Vec<Document> =
+            aggregate::rows(&self.db.collection(collection), pipeline, executor).await?;
+        let mut objects = Vec::new();
+        for row in rows {
+            let mut root = root_facts(&self.resource, &row)?;
+            root.owner_id = FactValue::Known(row.get_str("handled_by").ok().map(str::to_owned));
+            for (relation, resource) in if customer {
+                [("receipt_source", "customer_receipt"), ("receivable_source", "receivable_account")]
+            } else {
+                [("payment_source", "supplier_payment"), ("payable_source", "payable_account")]
+            } {
+                let id = self.refund_source(&row, resource, executor).await?;
+                let ids = id.into_iter().collect::<BTreeSet<_>>();
+                let targets = ResourceTargets::new(&ids.iter().map(String::as_str).collect::<Vec<_>>())?;
+                let source = Self::new(self.db.clone(), resource);
+                let nested = source.load(context, &targets, executor).await?;
+                root.relations.insert(
+                    RelationKey::parse(relation)?,
+                    RelatedObjects { expected_ids: ids, objects: nested },
+                );
+            }
+            objects.push(root);
+        }
+        Ok(objects)
+    }
+
+    async fn refund_source(
+        &self,
+        row: &Document,
+        resource: &str,
+        executor: &mut dyn Executor,
+    ) -> IdentityResult<Option<String>> {
+        let (field, entries, account_field) = match resource {
+            "customer_receipt" => return Ok(row.get_str("original_receipt_id").ok().map(str::to_owned)),
+            "supplier_payment" => return Ok(row.get_str("original_payment_id").ok().map(str::to_owned)),
+            "receivable_account" => {
+                ("original_receivable_entry_id", "receivable_entries", "receivable_account_id")
+            },
+            "payable_account" => ("original_payable_entry_id", "payable_entries", "payable_account_id"),
+            _ => return Err(IdentityError::ValidationError("未知退款来源".into())),
+        };
+        let Some(id) = row.get_str(field).ok() else {
+            return Ok(None);
+        };
+        let pipeline = vec![doc! { "$match": { "id": id, "deleted_at": 0 } }];
+        let rows: Vec<Document> = aggregate::rows(&self.db.collection(entries), pipeline, executor).await?;
+        rows.first()
+            .and_then(|entry| entry.get_str(account_field).ok())
+            .map(|id| Some(id.to_owned()))
+            .ok_or_else(|| IdentityError::ValidationError("退款原资金分录不存在".into()))
+    }
+}
+
+struct ReversalSourceFacts {
+    root: ObjectFacts,
+    source_resource: &'static str,
+    relation: RelationKey,
+    ids: BTreeSet<String>,
+}
+
+/// 冲正归属和来源只取当前真实记录，缺少原款单身份时拒绝。
+fn reversal_facts(resource: &str, row: &Document) -> IdentityResult<ReversalSourceFacts> {
+    let (source_resource, relation, field) = match resource {
+        "receipt_reversal" => ("customer_receipt", "receipt_source", "original_customer_receipt_id"),
+        "payment_reversal" => ("supplier_payment", "payment_source", "original_supplier_payment_id"),
+        _ => return Err(IdentityError::ValidationError("未知资金冲正资源".into())),
+    };
+    let id = row
+        .get_str(field)
+        .ok()
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| IdentityError::ValidationError("冲正原款单身份缺失或无效".into()))?;
+    let mut root = root_facts(resource, row)?;
+    root.owner_id = FactValue::Known(row.get_str("handled_by").ok().map(str::to_owned));
+    Ok(ReversalSourceFacts {
+        root,
+        source_resource,
+        relation: RelationKey::parse(relation)?,
+        ids: [id.into()].into(),
+    })
+}
+
+fn root_facts(resource: &str, row: &Document) -> IdentityResult<ObjectFacts> {
+    let id = row.get_str("id").map_err(|_| IdentityError::ValidationError("财务对象缺少身份".into()))?;
+    let version = match row.get("version") {
+        Some(Bson::Int64(v)) => v.to_string(),
+        Some(Bson::Int32(v)) => v.to_string(),
+        _ => return Err(IdentityError::ValidationError("财务对象缺少有效版本".into())),
+    };
+    Ok(ObjectFacts {
+        resource: resource.into(),
+        id: id.into(),
+        version,
+        owner_id: FactValue::Known(row.get_str("created_by").ok().map(str::to_owned)),
+        ..Default::default()
+    })
+}
+fn source_ids(row: &Document, field: &str) -> IdentityResult<BTreeSet<String>> {
+    row.get_array(field)
+        .map_err(|_| IdentityError::ValidationError("财务来源集合未读取".into()))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| IdentityError::ValidationError("财务来源身份非法".into()))
+        })
+        .collect()
 }
 
 async fn source_objects(
@@ -205,7 +277,7 @@ async fn source_objects(
     let context = AccessContext { resource: resource.into(), model: None, ..context.clone() };
     let targets = ResourceTargets::new(&ids.iter().map(String::as_str).collect::<Vec<_>>())?;
     match resource {
-        "sales_order" => SalesFacts(db.clone(), false).load(&context, &targets, executor).await,
+        "sales_order" => SalesFacts(db.clone()).load(&context, &targets, executor).await,
         "purchase_order" => PurchaseFacts::new(db.clone()).load(&context, &targets, executor).await,
         "supplier_settlement_statement" => settlement_objects(db, &targets, executor).await,
         _ => Err(IdentityError::ValidationError("未知财务实际来源".into())),
@@ -234,142 +306,112 @@ async fn settlement_objects(
         .collect())
 }
 
-async fn zero_source(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    facts: &ManagementFacts,
-    entry: &Permission,
-    mut required: Vec<Permission>,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    if !matches!(facts.root.resource.as_str(), "customer_receipt" | "supplier_payment") {
-        return Err(Error::NotFound("财务根缺少必要实际来源".into()));
-    }
-    required.push(entry.clone());
-    let ledger = Permission::parse(FINANCE_LEDGER_READ)?;
-    required.retain(|permission| permission != &ledger);
-    let service = AuthorizationService::new(
-        db.clone(),
-        rbac.clone(),
-        AuthorizationRegistry::new(vec![AccessRegistration {
-            permission: ledger.clone(),
-            required_permissions: required,
-            access: AccessMode::Operation,
-        }])?,
-    );
-    service.require(actor, &ledger, AccessTarget::Operation, executor).await?;
-    let current = management_facts::load(db, &facts.root.resource, &facts.root.id, executor).await?;
-    if current.root != facts.root || partition(&current) != 0 {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：财务来源结构已变化".into()));
-    }
-    Ok(())
-}
-
-fn identity_error(error: Error) -> IdentityError {
-    match error {
-        Error::Internal(v) => IdentityError::Internal(v),
-        Error::NotFound(v) => IdentityError::NotFound(v),
-        Error::ValidationError(v) => IdentityError::ValidationError(v),
-        Error::InvalidInput(v) => IdentityError::InvalidInput(v),
-        Error::BusinessLogicError(v) => IdentityError::BusinessLogicError(v),
-        Error::ConflictError(v) => IdentityError::ConflictError(v),
-        Error::ReceiptDuplicate(v) => IdentityError::ReceiptDuplicate(v),
-        Error::TransientTransaction(v) => IdentityError::TransientTransaction(v),
-        Error::Forbidden(v) => IdentityError::Forbidden(v),
-        Error::Unauthenticated(v) => IdentityError::Unauthenticated(v),
-        Error::Logic(v) => IdentityError::Logic(v),
-        Error::Rbac(v) => IdentityError::Rbac(v),
-        Error::OutcomeUnknown(v) => IdentityError::OutcomeUnknown(v),
-        Error::RepositoryError(v) => IdentityError::RepositoryError(v),
-        Error::Coded(v) => IdentityError::Internal(v.to_string()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use erp_workflow::DocumentType;
-    use erp_workflow::service::approval::policy::{DocumentApprovalPolicy, policy_of};
+    use erp_core::common::time::BusinessDate;
+    use erp_core::ids::{InvoiceId, PartyId};
+    use erp_finance::entity::receivable::{InvoiceData, InvoiceDirection, InvoiceKind};
+    use erp_permissions::receivable;
+    use mongodb::bson::serialize_to_document;
 
     use super::*;
 
-    fn facts() -> ManagementFacts {
-        ManagementFacts {
-            root: ObjectFacts {
-                resource: "supplier_payment".into(),
-                id: "payment".into(),
-                version: "1".into(),
-                ..Default::default()
+    #[test]
+    fn reversal_facts_keep_real_identity_handler_and_exact_original_fund() {
+        for (resource, source, relation, field) in [
+            ("receipt_reversal", "customer_receipt", "receipt_source", "original_customer_receipt_id"),
+            ("payment_reversal", "supplier_payment", "payment_source", "original_supplier_payment_id"),
+        ] {
+            let mut row = doc! {
+                "id": "reversal", "version": 4_i64,
+                "handled_by": "handler", "created_by": "different-creator",
+                "original_receipt_id": "unrelated-receipt", "original_payment_id": "unrelated-payment"
+            };
+            row.insert(field, "original-fund");
+            let facts = reversal_facts(resource, &row).unwrap();
+            assert_eq!(facts.root.resource, resource);
+            assert_eq!(facts.root.id, "reversal");
+            assert_eq!(facts.root.version, "4");
+            assert_eq!(facts.root.owner_id, FactValue::Known(Some("handler".into())));
+            assert_eq!(facts.source_resource, source);
+            assert_eq!(facts.relation, RelationKey::parse(relation).unwrap());
+            assert_eq!(facts.ids, BTreeSet::from(["original-fund".into()]));
+            row.remove("handled_by");
+            assert_eq!(reversal_facts(resource, &row).unwrap().root.owner_id, FactValue::Known(None));
+            for invalid in [Bson::Null, Bson::String(String::new()), Bson::String("  ".into())] {
+                row.insert(field, invalid);
+                assert!(reversal_facts(resource, &row).is_err());
+            }
+            row.remove(field);
+            assert!(reversal_facts(resource, &row).is_err());
+        }
+        assert!(reversal_facts("unknown", &doc! {}).is_err());
+    }
+
+    #[test]
+    fn posted_invoice_result_requires_real_registered_state() {
+        let mut invoice = Invoice::new(
+            InvoiceId::new("invoice"),
+            InvoiceData {
+                invoice_direction: InvoiceDirection::Sales,
+                invoice_kind: InvoiceKind::Blue,
+                party_id: PartyId::new("customer-party"),
+                invoice_code: None,
+                invoice_no: "INV-1".into(),
+                invoice_date: BusinessDate::from_ymd(2026, 11, 13).unwrap(),
+                gross_amount: "10.00".parse().unwrap(),
+                net_amount: "8.00".parse().unwrap(),
+                tax_amount: "2.00".parse().unwrap(),
+                rounding_adjustment_amount: "0.00".parse().unwrap(),
+                rounding_reason: None,
+                original_invoice_id: None,
             },
-            sales_ids: ["same".into()].into(),
-            purchase_ids: ["same".into()].into(),
-            settlement_ids: ["settlement".into()].into(),
+            "issuer",
+        )
+        .unwrap();
+        let permission = &internal::INVOICE_POSTED_RESULT_READ;
+        let draft = serialize_to_document(&invoice).unwrap();
+        assert!(matches!(invoice_result_state(permission, &draft), Err(IdentityError::Forbidden(_))));
+        invoice_result_state(&receivable::INVOICE_DETAIL, &draft).unwrap();
+        invoice.mark_registered("issuer").unwrap();
+        invoice_result_state(permission, &serialize_to_document(&invoice).unwrap()).unwrap();
+        invoice.mark_red_invoiced("issuer").unwrap();
+        let red = serialize_to_document(&invoice).unwrap();
+        invoice_result_state(permission, &red).unwrap();
+        for status in [Bson::String("unknown".into()), Bson::Null] {
+            let mut invalid = red.clone();
+            invalid.insert("status", status);
+            assert!(matches!(
+                invoice_result_state(permission, &invalid),
+                Err(IdentityError::ValidationError(_))
+            ));
         }
     }
 
     #[test]
-    fn every_nonempty_actual_resource_is_required_without_any_source_fallback() {
-        let data = facts();
-        assert_eq!(partition(&data), 7);
-        let AccessPolicy::Related { resource, mode, policy, .. } = root_policy(&data).unwrap() else {
-            panic!("必须先验证真实财务根");
-        };
-        assert_eq!(resource, "supplier_payment");
-        assert_eq!(mode, RelationMatch::AllNonEmpty);
-        let AccessPolicy::All(policies) = *policy else {
-            panic!("全部实际来源必须同时成立");
-        };
-        assert_eq!(policies.len(), 3);
-        for (policy, (resource, _, _)) in policies.into_iter().zip(groups(&data)) {
-            let AccessPolicy::Related { resource: actual, mode, required_facts, policy, .. } = policy else {
-                panic!("来源必须通过关联政策");
-            };
-            assert_eq!(actual, resource);
-            assert_eq!(mode, RelationMatch::AllNonEmpty);
-            assert_eq!(required_facts, [FactKind::Owner, FactKind::Organization].into());
-            let AccessPolicy::Scope { permission, read } = *policy else {
-                panic!("来源范围必须由identity执行");
-            };
-            assert_eq!(permission.resource(), resource);
-            assert!(!read.history);
-            assert_eq!(read.records, resource != "supplier_settlement_statement");
-        }
+    fn financial_root_uses_persisted_identity_version_and_creator() {
+        let facts = root_facts(
+            "customer_receipt",
+            &doc! { "id": "receipt", "version": 7_i64, "created_by": "clerk" },
+        )
+        .unwrap();
+        assert_eq!(facts.resource, "customer_receipt");
+        assert_eq!(facts.id, "receipt");
+        assert_eq!(facts.version, "7");
+        assert_eq!(facts.owner_id, FactValue::Known(Some("clerk".into())));
+        assert!(root_facts("customer_receipt", &doc! { "id": "receipt" }).is_err());
+        assert!(root_facts("customer_receipt", &doc! { "version": 1 }).is_err());
     }
 
     #[test]
-    fn empty_and_mixed_source_structure_remains_distinguishable() {
-        let mut data = facts();
-        data.sales_ids.clear();
-        assert_eq!(partition(&data), 6);
-        data.purchase_ids.clear();
-        assert_eq!(partition(&data), 4);
-        data.settlement_ids.clear();
-        assert_eq!(partition(&data), 0);
-    }
-
-    #[test]
-    fn management_catalog_rejects_other_resources_and_preserves_failure_classes() {
-        let DocumentApprovalPolicy::ProcessRequired(policy) =
-            policy_of(DocumentType::CustomerReceipt).unwrap()
-        else {
-            panic!("回款使用正式审批政策");
-        };
-        for action in ["read", "decide", "resume", "cancel", "cancel_blocked", "upgrade_binding"] {
-            let required = [
-                Permission::parse("approval_instance:read").unwrap(),
-                Permission::parse(policy.runtime_admin_permission.clone()).unwrap(),
-            ];
-            assert!(
-                ensure_entry(&Permission::parse(format!("approval_instance:{action}")).unwrap(), &required)
-                    .is_ok()
-            );
+    fn known_empty_sources_remain_distinct_from_missing_or_invalid_references() {
+        assert!(source_ids(&doc! { "ids": [] }, "ids").unwrap().is_empty());
+        assert_eq!(
+            source_ids(&doc! { "ids": ["b", "a", "b"] }, "ids").unwrap(),
+            ["a".into(), "b".into()].into()
+        );
+        for row in [doc! {}, doc! { "ids": null }, doc! { "ids": [null] }, doc! { "ids": [""] }] {
+            assert!(source_ids(&row, "ids").is_err());
         }
-        assert!(ensure_entry(&Permission::parse("invoice:detail").unwrap(), &[]).is_err());
-        assert!(ensure_entry(&Permission::parse("approval_instance:create").unwrap(), &[]).is_err());
-        assert!(matches!(identity_error(Error::NotFound("missing".into())), IdentityError::NotFound(_)));
-        assert!(matches!(
-            identity_error(Error::ConflictError("DATA_SCOPE_CHANGED".into())),
-            IdentityError::ConflictError(_)
-        ));
     }
 }

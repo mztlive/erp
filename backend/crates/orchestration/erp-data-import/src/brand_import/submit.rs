@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use application_core::command::CommandFingerprint;
 use erp_catalog::dto::BrandImportJobRequest;
+use erp_identity::AuthorizationService;
 use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
@@ -9,9 +10,10 @@ use erp_support::{
     JobType,
 };
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
-use super::{BRAND_IMPORT_DOMAIN, BrandImportProcess, job_actor};
+use super::{BRAND_IMPORT_DOMAIN, BrandImportProcess, authorize};
 use crate::{Error, Result};
 
 impl BrandImportProcess {
@@ -32,7 +34,6 @@ impl BrandImportProcess {
         actor: &AuditActor,
     ) -> Result<BackgroundJobView> {
         request.key()?;
-        self.authorize(actor, &mut NoTransaction).await?;
         let json = serde_json::to_string(&request).map_err(|_| Error::Internal("导入内容编码失败".into()))?;
         if json.len() > 5 * 1024 * 1024 {
             return Err(Error::ValidationError("导入内容不能超过 5 MB".into()));
@@ -45,7 +46,7 @@ impl BrandImportProcess {
         .digest_hex()
         .to_string();
         let (job, items) = build_job(&request, actor.id(), &source)?;
-        if let Some(existing) = self.replay(&job).await? {
+        if let Some(existing) = self.replay(&job, actor).await? {
             return Ok(existing.into());
         }
         let encrypted = self.codec.encrypt(&json)?;
@@ -57,30 +58,42 @@ impl BrandImportProcess {
             )
             .await
             .map_err(|_| Error::Internal("保存品牌导入文件失败，请重试".into()))?;
-        self.persist(job, items).await
+        self.persist(job, items, actor).await
     }
 
-    /// 查询原提交并验证操作者与完整内容；旧记录无指纹时拒绝重放。
-    async fn replay(&self, proposed: &BackgroundJob) -> Result<Option<BackgroundJob>> {
-        let existing =
-            self.db.background_jobs().find_by_request_id(&proposed.request_id, &mut NoTransaction).await?;
-        if let Some(job) = &existing {
-            ensure_replay(job, proposed)?;
-        }
-        Ok(existing)
+    /// 在同一快照内先证明当前入口资格，再读取并核验原提交。
+    async fn replay(&self, proposed: &BackgroundJob, actor: &AuditActor) -> Result<Option<BackgroundJob>> {
+        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let proposed = proposed.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_registration(&db, &authorization, &actor, &proposed, executor).await
+                })
+            })
+            .await
     }
 
     /// 任务与行明细在同一事务内落库；唯一竞争和未知提交结果回读原任务。
-    async fn persist(&self, job: BackgroundJob, items: Vec<BackgroundJobItem>) -> Result<BackgroundJobView> {
+    async fn persist(
+        &self,
+        job: BackgroundJob,
+        items: Vec<BackgroundJobItem>,
+        actor: &AuditActor,
+    ) -> Result<BackgroundJobView> {
         let db = self.db.clone();
         let copy = job.clone();
-        let process = self.clone();
+        let authorization = self.authorization.clone();
+        let operator = actor.clone();
         let result = db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    process.authorize(&job_actor(&copy), executor).await?;
+                    authorize(&authorization, &operator, executor).await?;
                     Ok::<_, Error>(db.bulk_job().create_job_with_items(&copy, items, executor).await?)
                 })
             })
@@ -94,13 +107,37 @@ impl BrandImportProcess {
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(conflict()),
             Err(error @ (Error::Forbidden(_) | Error::Unauthenticated(_))) => Err(error),
             Err(error) => {
-                if let Some(existing) = self.replay(&job).await? {
+                if let Some(existing) = self.replay(&job, actor).await? {
                     return Ok(existing.into());
                 }
                 Err(error)
             },
         }
     }
+}
+
+/// 首次回放与提交结果未知后的查证使用相同授权及载荷校验。
+async fn replay_registration(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    proposed: &BackgroundJob,
+    executor: &mut dyn Executor,
+) -> Result<Option<BackgroundJob>> {
+    authorize(authorization, actor, executor).await?;
+    let existing = db.background_jobs().find_by_request_id(&proposed.request_id, executor).await?;
+    checked_replay(existing, proposed)
+}
+
+/// 返回经过原提交身份和完整输入指纹校验的既有任务，保留其最新状态。
+fn checked_replay(
+    existing: Option<BackgroundJob>,
+    proposed: &BackgroundJob,
+) -> Result<Option<BackgroundJob>> {
+    if let Some(job) = &existing {
+        ensure_replay(job, proposed)?;
+    }
+    Ok(existing)
 }
 
 /// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
@@ -204,6 +241,11 @@ fn conflict() -> Error {
 #[cfg(test)]
 pub(super) mod tests {
     use erp_catalog::dto::BrandImportRow;
+    use erp_core::AccountKind;
+    use erp_core::common::time::Instant;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     pub(crate) fn request() -> BrandImportJobRequest {
@@ -221,6 +263,51 @@ pub(super) mod tests {
     pub(crate) fn fixture() -> (BackgroundJob, Vec<BackgroundJobItem>) {
         build_job(&request(), "actor-1", &"a".repeat(64)).unwrap()
     }
+
+    /// 回放交付已有任务的真实状态及版本，不使用本次候选任务覆盖原结果。
+    #[test]
+    fn replay_returns_existing_job_state_and_rejects_another_payload_for_the_same_request() {
+        let (mut existing, _) = fixture();
+        existing.cancel(Instant::from_unix_secs(100)).unwrap();
+        existing.base.version = 7;
+        let (proposed, _) = fixture();
+        assert_eq!(existing.request_id, proposed.request_id);
+        assert_ne!(existing.base.id, proposed.base.id);
+        let replayed = checked_replay(Some(existing.clone()), &proposed).unwrap().unwrap();
+        assert_eq!(replayed.base.id, existing.base.id);
+        assert_eq!(replayed.base.version, 7);
+        assert_eq!(replayed.status, existing.status);
+        assert_eq!(replayed.finished_at, existing.finished_at);
+        assert!(checked_replay(None, &proposed).unwrap().is_none());
+
+        let (different, _) = build_job(&request(), "actor-1", &"b".repeat(64)).unwrap();
+        assert_eq!(existing.request_id, different.request_id);
+        let error = checked_replay(Some(existing), &different).unwrap_err();
+        assert!(matches!(error, Error::ConflictError(reason)
+            if reason == "该提交已用于其他导入内容，请重新选择文件"));
+    }
+
+    /// 身份取证失败必须在读取原回执前结束；非快照执行器不能用于该回放。
+    #[tokio::test]
+    async fn replay_authorizes_in_the_original_snapshot_before_reading_any_job() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("brand_import_replay_authorization");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
+        let (proposed, _) = fixture();
+        let error =
+            replay_registration(&db, &authorization, &actor, &proposed, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("授权设施失败时不得读取回执");
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        let error = replay_registration(&db, &authorization, &actor, &proposed, &mut ReadExecutor::default())
+            .await
+            .expect_err("回放必须使用同一快照授权和读取");
+        assert!(matches!(error, Error::ValidationError(reason) if reason == "写入授权必须使用快照事务"));
+    }
+
     #[test]
     fn persists_all_rows_and_replays_only_identical_identity_and_source() {
         let (job, items) = fixture();

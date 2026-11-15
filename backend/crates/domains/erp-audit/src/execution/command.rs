@@ -215,12 +215,7 @@ mod tests {
         allowed_fields: &[],
     };
 
-    struct TestExecutor;
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use persistence_core::NoTransaction;
 
     struct RecordingBoundary {
         identity: usize,
@@ -297,9 +292,9 @@ mod tests {
         .unwrap()
     }
 
-    fn boundary(executor: &mut TestExecutor) -> RecordingBoundary {
+    fn boundary(executor: &mut NoTransaction) -> RecordingBoundary {
         RecordingBoundary {
-            identity: executor as *mut TestExecutor as usize,
+            identity: executor as *mut NoTransaction as usize,
             fail_write: false,
             unknown_write: false,
             fail_audit: false,
@@ -313,7 +308,7 @@ mod tests {
 
     #[tokio::test]
     async fn fresh_execution_records_once_and_passes_same_executor() {
-        let mut executor = TestExecutor;
+        let mut executor = NoTransaction;
         let boundary = boundary(&mut executor);
         let context = context();
         assert_eq!(execute_audited(&context, &boundary, &mut executor, &boundary).await.unwrap(), 17);
@@ -329,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn replay_does_not_write_a_second_business_event() {
-        let mut executor = TestExecutor;
+        let mut executor = NoTransaction;
         let mut boundary = boundary(&mut executor);
         boundary.replay = true;
         assert_eq!(execute_audited(&context(), &boundary, &mut executor, &boundary).await.unwrap(), 17);
@@ -342,7 +337,7 @@ mod tests {
         for (fail_write, expected, steps) in
             [(true, "原业务错误", vec!["execute"]), (false, "原审计错误", vec!["execute", "audit"])]
         {
-            let mut executor = TestExecutor;
+            let mut executor = NoTransaction;
             let mut boundary = boundary(&mut executor);
             boundary.fail_write = fail_write;
             boundary.fail_audit = !fail_write;
@@ -355,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_result_projection_stops_before_audit_write() {
-        let mut executor = TestExecutor;
+        let mut executor = NoTransaction;
         let mut boundary = boundary(&mut executor);
         boundary.invalid_content = true;
         assert!(execute_audited(&context(), &boundary, &mut executor, &boundary).await.is_err());
@@ -365,7 +360,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_or_rejected_is_not_relabelled_as_success() {
         for result in [BusinessEventResult::Unknown, BusinessEventResult::Rejected] {
-            let mut executor = TestExecutor;
+            let mut executor = NoTransaction;
             let mut boundary = boundary(&mut executor);
             boundary.result = result;
             assert!(execute_audited(&context(), &boundary, &mut executor, &boundary).await.is_err());
@@ -375,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_business_outcome_preserves_original_source_and_never_reexecutes() {
-        let mut executor = TestExecutor;
+        let mut executor = NoTransaction;
         let mut boundary = boundary(&mut executor);
         boundary.unknown_write = true;
         let error = execute_audited(&context(), &boundary, &mut executor, &boundary).await.unwrap_err();
@@ -396,15 +391,10 @@ mod ordinary_boundary_tests {
 
     use application_core::AuditActor;
     use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
 
     use super::*;
     use crate::AuditActorLogs;
-    struct TestExecutor;
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct Sink {
         identity: usize,
         fail: bool,
@@ -432,8 +422,8 @@ mod ordinary_boundary_tests {
     #[tokio::test]
     async fn ordinary_production_wrapper_validates_before_write_and_keeps_same_executor() {
         for invalid in [false, true] {
-            let mut executor = TestExecutor;
-            let identity = &mut executor as *mut TestExecutor as usize;
+            let mut executor = NoTransaction;
+            let identity = &mut executor as *mut NoTransaction as usize;
             let sink = Sink {
                 identity,
                 fail: false,
@@ -465,8 +455,8 @@ mod ordinary_boundary_tests {
     #[tokio::test]
     async fn ordinary_write_and_audit_failures_keep_first_error_and_stop() {
         for fail_write in [false, true] {
-            let mut executor = TestExecutor;
-            let identity = &mut executor as *mut TestExecutor as usize;
+            let mut executor = NoTransaction;
+            let identity = &mut executor as *mut NoTransaction as usize;
             let sink = Sink {
                 identity,
                 fail: !fail_write,
@@ -506,9 +496,9 @@ mod ordinary_boundary_tests {
     #[tokio::test]
     async fn consumer_error_remains_typed_and_sink_error_converts_only_at_the_boundary() {
         for fail_write in [false, true] {
-            let mut executor = TestExecutor;
+            let mut executor = NoTransaction;
             let sink = Sink {
-                identity: &mut executor as *mut TestExecutor as usize,
+                identity: &mut executor as *mut NoTransaction as usize,
                 fail: true,
                 calls: Arc::new(Mutex::new(Vec::new())),
                 events: Mutex::new(Vec::new()),

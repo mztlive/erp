@@ -1,7 +1,10 @@
 //! SalesReturnCase 详情与分页视图装配。
+use application_core::AuditActor;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_returns::repository::ReturnsExt;
 use erp_returns::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ReturnsReadService;
@@ -16,6 +19,7 @@ impl ReturnsReadService {
     /// 分页查询销售退货/拒收处理单列表。
     ///
     /// # 参数
+    /// * `actor` - 本次已认证账号，按固定列表入口检查功能资格。
     /// * `params` - 查询参数（`return_no`/`sales_order_id`/`status` 扁平筛选）
     ///
     /// # 返回
@@ -25,8 +29,31 @@ impl ReturnsReadService {
     /// 参数校验或排序白名单失败时返回 `ValidationError`。处理单或明细读取失败时返回对应错误。
     pub async fn sales_return_case_list(
         &self,
+        actor: &AuditActor,
         params: &SalesReturnCaseListParams,
     ) -> Result<PageView<SalesReturnCaseView>> {
+        let this = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.sales_return_case_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 功能资格、分页计数及每条明细沿用调用方同一快照。
+    async fn sales_return_case_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &SalesReturnCaseListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SalesReturnCaseView>> {
+        self.authorization
+            .require(actor, &returns::SALES_RETURN_SALES_RETURN_CASE_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = SalesReturnCaseFilter {
@@ -38,11 +65,10 @@ impl ReturnsReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.sales_return_cases().search_sales_return_cases(&filter, &mut NoTransaction).await?;
+        let page = self.db.sales_return_cases().search_sales_return_cases(&filter, executor).await?;
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
-            views.push(self.sales_return_case_view(row.id).await?);
+            views.push(self.load_sales_return_case_view(&row.id, executor).await?);
         }
         Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -50,6 +76,7 @@ impl ReturnsReadService {
     /// 查询销售退货/拒收处理单详情（处理单 + 明细行）。
     ///
     /// # 参数
+    /// * `actor` - 本次已认证账号，按固定详情入口检查功能资格。
     /// * `id` - 处理单 ID
     ///
     /// # 返回
@@ -59,8 +86,39 @@ impl ReturnsReadService {
     /// * `NotFound` - 处理单不存在
     ///
     /// 仓储读取失败时返回对应错误。
-    pub async fn sales_return_case_detail(&self, id: &str) -> Result<SalesReturnCaseView> {
-        self.sales_return_case_view(id.to_string()).await
+    pub async fn sales_return_case_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<SalesReturnCaseView> {
+        let this = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.sales_return_case_detail_snapshot(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 功能资格、处理单和明细沿用调用方同一快照。
+    async fn sales_return_case_detail_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesReturnCaseView> {
+        self.authorization
+            .require(
+                actor,
+                &returns::SALES_RETURN_SALES_RETURN_CASE_DETAIL,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+        self.load_sales_return_case_view(id, executor).await
     }
 
     // -----------------------------------------------------------------------
@@ -69,9 +127,11 @@ impl ReturnsReadService {
     // 私有视图装配
     // -----------------------------------------------------------------------
 
+    /// 调用方必须先完成所属命令授权，并传入原执行器。
     /// 装配销售退货/拒收处理单视图。
     ///
     /// # 参数
+    /// * `executor` - 已完成所属命令授权的原读取或事务执行器。
     /// * `id` - 处理单 ID
     ///
     /// # 返回
@@ -81,17 +141,22 @@ impl ReturnsReadService {
     /// * `NotFound` - 处理单不存在
     ///
     /// 仓储读取失败时返回对应错误。
-    async fn sales_return_case_view(&self, id: String) -> Result<SalesReturnCaseView> {
+    pub async fn load_sales_return_case_view(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesReturnCaseView> {
+        let id = id.to_owned();
         let case = self
             .db
             .sales_return_cases()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售退货处理单不存在".to_string()))?;
         let lines = self
             .db
             .sales_return_lines()
-            .find_lines_by_cases(&[case.base.id.clone().into()], &mut NoTransaction)
+            .find_lines_by_cases(&[case.base.id.clone().into()], executor)
             .await?
             .into_iter()
             .map(|line| super::dto::SalesReturnLineView {
@@ -117,5 +182,41 @@ impl ReturnsReadService {
             created_at: case.base.created_at,
             lines,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 授权设施故障必须中止原快照中的列表和详情，不继续读取业务集合。
+    #[tokio::test]
+    async fn authorization_failure_stops_list_and_detail_before_business_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("sales_return_snapshot_test");
+        let service = ReturnsReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let list_error = service
+            .sales_return_case_list_snapshot(
+                &actor,
+                &SalesReturnCaseListParams::default(),
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        let detail_error = service
+            .sales_return_case_detail_snapshot("return", &actor, &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        for error in [list_error, detail_error] {
+            assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        }
     }
 }

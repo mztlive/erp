@@ -122,12 +122,9 @@ impl ContractImportProcess {
         executor: &mut dyn Executor,
     ) -> Result<CustomerAccount> {
         let (customer, owner) = customer_records(party_id, actor.id())?;
+        self.services.customer_access.require_candidate(actor, &customer.base.id, executor).await?;
         self.db.customer_accounts().create(&customer, executor).await?;
         self.db.customer_assignments().create(&owner, executor).await?;
-        self.services
-            .customer_access
-            .require_with(actor.clone(), "create", &customer.base.id, executor)
-            .await?;
         persist_log(
             &self.db,
             &actor.clone().resource_log(

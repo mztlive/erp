@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::{CompiledAccess, Permission};
+use erp_identity::CompiledAccess;
+use erp_permissions::{Permission, work_item};
 use persistence_core::Executor;
 
 use super::{WorkItemFilter, WorkItemReadService, WorkItemScope, dto};
@@ -14,7 +15,6 @@ use crate::error::{Error, Result};
 #[derive(Clone)]
 pub struct QueueAccess {
     pub task: TaskAccess,
-    pub(super) manage: Option<Arc<CompiledAccess>>,
     read: Arc<CompiledAccess>,
 }
 
@@ -30,7 +30,7 @@ impl QueueAccess {
     /// # 错误
     /// 缺少列表权限时返回 `Error::Forbidden`。
     pub(super) fn scope_filter(&self, query: &dto::WorkItemListQuery) -> Result<WorkItemFilter> {
-        if self.read.permission() != &Permission::parse("work_item:list")? {
+        if self.read.permission() != &work_item::LIST.clone() {
             return Err(Error::Forbidden("没有待办列表权限".into()));
         }
         let mut filter = WorkItemFilter {
@@ -64,7 +64,7 @@ impl QueueAccess {
     /// 无。
     pub(super) fn new(read: Arc<CompiledAccess>) -> Self {
         let task = TaskAccess::new(read.actor().id().to_owned());
-        Self { task, manage: None, read }
+        Self { task, read }
     }
 
     /// 取得已编译的任务读取约束。
@@ -86,18 +86,14 @@ impl QueueAccess {
     /// # 错误
     /// 无。
     pub fn version(&self) -> String {
-        format!(
-            "{}:{}",
-            self.read.version(),
-            self.manage.as_ref().map(|value| value.version()).unwrap_or_default()
-        )
+        self.read.version()
     }
 }
 
 impl WorkItemReadService {
-    /// 分别编译读取和管理动作的授权条件，操作权限缺失不影响读取。
+    /// 一次编译读取及固定管理动作条件，操作权限缺失不影响读取。
     /// # 参数
-    /// `actor` 为真实账号，`action` 为当前读取动作，`executor` 为同一执行器。
+    /// `actor` 为真实账号，`permission` 为固定读取权限，`executor` 为同一执行器。
     /// # 返回
     /// 返回相互独立的读取范围和管理范围。
     /// # 错误
@@ -105,20 +101,9 @@ impl WorkItemReadService {
     pub async fn task_access(
         &self,
         actor: &AuditActor,
-        action: &'static str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<QueueAccess> {
-        let read = self.authorization.query(actor, action, executor).await?;
-        let mut access = QueueAccess::new(read);
-        access.manage = if action == "manage" {
-            Some(access.read.clone())
-        } else {
-            match self.authorization.query(actor, "manage", executor).await {
-                Ok(manage) => Some(manage),
-                Err(Error::Forbidden(_)) => None,
-                Err(error) => return Err(error),
-            }
-        };
-        Ok(access)
+        Ok(QueueAccess::new(self.authorization.query(actor, permission, executor).await?))
     }
 }

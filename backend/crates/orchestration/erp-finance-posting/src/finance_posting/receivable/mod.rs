@@ -58,8 +58,6 @@ pub use self::customer_receipt::{
 /// 提供应收台账、回款与销项发票的查询与过账编排。
 pub struct ReceivableProcess {
     db: Database,
-    read: erp_read_models::finance::receivable::ReceivableReadService,
-    finance: erp_finance::service::receivable::ReceivableService,
     rbac: FinancePostingPorts,
 }
 
@@ -75,11 +73,6 @@ impl ReceivableProcess {
     /// # 错误
     /// 不返回错误。
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
-        Self {
-            read: erp_read_models::finance::receivable::ReceivableReadService::new(db.clone()),
-            finance: erp_finance::service::receivable::ReceivableService::new(db.clone()),
-            db,
-            rbac,
-        }
+        Self { db, rbac }
     }
 }

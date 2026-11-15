@@ -6,6 +6,7 @@
 
 //! 供给单域命令：身份、商业修订、实时可供及命令重放。
 mod history;
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierDeliveryTemplateId, SupplierOfferingId, SupplierOfferingRevisionId};
 use id_generator::next_id;
@@ -39,7 +40,7 @@ mod write;
 
 pub use access::OfferingAccess;
 
-/// 单域命令准备结果；回放不继续读取当前事实。
+/// 单域命令准备结果；回放已经核验当前资格与真实供给。
 pub enum CommandPreparation<P, R> {
     Replay(R),
     Apply(P),
@@ -122,8 +123,8 @@ impl SupplierOfferingService {
     pub(crate) fn access(&self) -> OfferingAccess {
         self.data_scope.clone()
     }
-    /// 按原validate/replay/identity/source/terms/qualification顺序准备创建。
-    /// 回放返回原结果；任何错误停止后续读取，执行器由调用方决定。
+    /// 当前创建资格成立后读取回执，回放核验真实供给；新建核验候选及来源。
+    /// 任一授权或业务错误立即停止，所有读取使用原事务执行器。
     ///
     /// # 参数
     /// * `req` - 创建供给请求。
@@ -139,20 +140,14 @@ impl SupplierOfferingService {
     pub async fn prepare_create<P: QualificationPort + ?Sized>(
         &self,
         req: &CreateSupplierOfferingRequest,
-        actor: &application_core::AuditActor,
+        actor: &AuditActor,
         qualification: &P,
         executor: &mut dyn Executor,
     ) -> std::result::Result<CommandPreparation<PreparedCreate, CreateSupplierOfferingResult>, P::Error> {
         req.validate()?;
         let fingerprint = req.command_fingerprint()?;
-        if let Some(command) = self.command_record(&req.idempotency_key, executor).await? {
-            command
-                .ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint)
-                .map_err(|e| Error::ConflictError(e.to_string()))?;
-            return command
-                .replay_result()
-                .map(CommandPreparation::Replay)
-                .map_err(|e| Error::Internal(e.to_string()).into());
+        if let recovery::Replay::Stored(result) = recovery::created(self, req, actor, executor).await? {
+            return Ok(CommandPreparation::Replay(result));
         }
         let mut offering = self.prepare_initial_offering(req, actor, executor).await?;
         let offering_id = SupplierOfferingId::new(offering.base.id.clone());
@@ -227,23 +222,19 @@ impl SupplierOfferingService {
         &self,
         id: &str,
         req: &ReviseSupplierOfferingRequest,
-        actor: &application_core::AuditActor,
+        actor: &AuditActor,
         qualification: &P,
         executor: &mut dyn Executor,
     ) -> std::result::Result<CommandPreparation<PreparedRevision, ReviseSupplierOfferingResult>, P::Error>
     {
         req.validate()?;
         let fingerprint = req.command_fingerprint(id)?;
-        if let Some(command) = self.command_record(&req.idempotency_key, executor).await? {
-            command
-                .ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint)
-                .map_err(|e| Error::ConflictError(e.to_string()))?;
-            return command
-                .replay_result()
-                .map(CommandPreparation::Replay)
-                .map_err(|e| Error::Internal(e.to_string()).into());
-        }
-        let mut offering = self.access().require_offering(actor, "update", id, executor).await?;
+        let mut offering = match recovery::revised(self, id, req, actor, executor).await? {
+            recovery::Replay::Stored(result) => return Ok(CommandPreparation::Replay(result)),
+            recovery::Replay::Absent(offering) => {
+                offering.ok_or_else(|| Error::Internal("修订命令缺少已授权供给".into()))?
+            },
+        };
         if !offering.has_responsibility() {
             return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()).into());
         }
@@ -318,21 +309,17 @@ impl SupplierOfferingService {
         &self,
         id: &str,
         req: &UpdateSupplierOfferingAvailabilityRequest,
-        actor: &application_core::AuditActor,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<CommandPreparation<PreparedAvailability, UpdateSupplierOfferingAvailabilityResult>> {
         req.validate()?;
         let fingerprint = req.command_fingerprint(id)?;
-        if let Some(command) = self.command_record(&req.idempotency_key, executor).await? {
-            command
-                .ensure_replayable(UPDATE_OFFERING_AVAILABILITY_COMMAND, &fingerprint)
-                .map_err(|e| Error::ConflictError(e.to_string()))?;
-            return command
-                .replay_result()
-                .map(CommandPreparation::Replay)
-                .map_err(|e| Error::Internal(e.to_string()));
-        }
-        let offering = self.access().require_offering(actor, "update", id, executor).await?;
+        let offering = match recovery::availability(self, id, req, actor, executor).await? {
+            recovery::Replay::Stored(result) => return Ok(CommandPreparation::Replay(result)),
+            recovery::Replay::Absent(offering) => {
+                offering.ok_or_else(|| Error::Internal("可供更新缺少已授权供给".into()))?
+            },
+        };
         offering.ensure_manual_availability_writable()?;
         if !offering.has_responsibility() {
             return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()));
@@ -495,75 +482,66 @@ impl SupplierOfferingService {
             .await
             .map_err(Into::into)
     }
-    /// 回收任意事务错误后读取原命令；重读失败优先于原事务错误。
-    ///
-    /// 事务成功时返回 `intended_result`，不读取命令。
-    ///
+    /// 在调用方的新快照内恢复创建命令的已提交结果。
     /// # 参数
-    /// * `transaction_result` - 事务提交结果；成功值为 `()`。
-    /// * `intended_result` - 事务成功时直接返回的结果。
-    /// * `idempotency_key` - 原命令幂等键。
-    /// * `operation` - 期望的命令操作名。
-    /// * `fingerprint` - 本次请求指纹。
-    /// * `executor` - 调用方执行器。
-    ///
+    /// request、actor 为原请求和当前身份，executor 为新的快照事务。
     /// # 返回
-    /// 事务成功或找到可重放命令时返回 `intended_result` 或已存结果。
-    ///
+    /// 当前资格及原供给授权通过时返回原回执；没有回执时返回 None。
     /// # 错误
-    /// 没有原命令时返回原事务错误。重读失败、指纹冲突或结果无法解码时，该错误优先于原事务错误。
-    pub async fn resolve_command_result<T, E>(
+    /// 当前身份、范围、回执指纹或读取失效时拒绝。
+    pub async fn created_result(
         &self,
-        transaction_result: std::result::Result<(), E>,
-        intended_result: T,
-        idempotency_key: &str,
-        operation: &str,
-        fingerprint: &str,
+        request: &CreateSupplierOfferingRequest,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> std::result::Result<T, E>
-    where
-        T: DeserializeOwned,
-        E: From<Error>,
-    {
-        recovery::resolve(
-            self,
-            transaction_result.map(|()| intended_result),
-            idempotency_key,
-            operation,
-            fingerprint,
-            executor,
-        )
-        .await
+    ) -> Result<Option<CreateSupplierOfferingResult>> {
+        request.validate()?;
+        Ok(match recovery::created(self, request, actor, executor).await? {
+            recovery::Replay::Stored(result) => Some(result),
+            recovery::Replay::Absent(_) => None,
+        })
     }
-    /// 回收任意事务错误后读取原命令；重读失败优先于原事务错误。
-    ///
-    /// 与 [`Self::resolve_command_result`] 不同，成功值来自事务结果本身。
-    ///
+
+    /// 在调用方的新快照内恢复修订命令的已提交结果。
     /// # 参数
-    /// * `transaction_result` - 事务提交结果；成功时即返回该值。
-    /// * `idempotency_key` - 原命令幂等键。
-    /// * `operation` - 期望的命令操作名。
-    /// * `fingerprint` - 本次请求指纹。
-    /// * `executor` - 调用方执行器。
-    ///
+    /// id、request 为原目标与请求，actor 为当前身份，executor 为新的快照事务。
     /// # 返回
-    /// 事务成功时返回其成功值；失败但找到可重放命令时返回已存结果。
-    ///
+    /// 当前修订授权通过时返回原回执；没有回执时返回 None。
     /// # 错误
-    /// 没有原命令时返回原事务错误。重读失败、指纹冲突或结果无法解码时，该错误优先于原事务错误。
-    pub async fn resolve_written_result<T, E>(
+    /// 当前身份、对象、回执指纹或读取失效时拒绝。
+    pub async fn revised_result(
         &self,
-        transaction_result: std::result::Result<T, E>,
-        idempotency_key: &str,
-        operation: &str,
-        fingerprint: &str,
+        id: &str,
+        request: &ReviseSupplierOfferingRequest,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> std::result::Result<T, E>
-    where
-        T: DeserializeOwned,
-        E: From<Error>,
-    {
-        recovery::resolve(self, transaction_result, idempotency_key, operation, fingerprint, executor).await
+    ) -> Result<Option<ReviseSupplierOfferingResult>> {
+        request.validate()?;
+        Ok(match recovery::revised(self, id, request, actor, executor).await? {
+            recovery::Replay::Stored(result) => Some(result),
+            recovery::Replay::Absent(_) => None,
+        })
+    }
+
+    /// 在调用方的新快照内恢复可供更新命令的已提交结果。
+    /// # 参数
+    /// id、request 为原目标与请求，actor 为当前身份，executor 为新的快照事务。
+    /// # 返回
+    /// 完整可供更新授权通过时返回原回执；没有回执时返回 None。
+    /// # 错误
+    /// 当前身份、对象、回执指纹或读取失效时拒绝。
+    pub async fn availability_result(
+        &self,
+        id: &str,
+        request: &UpdateSupplierOfferingAvailabilityRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<UpdateSupplierOfferingAvailabilityResult>> {
+        request.validate()?;
+        Ok(match recovery::availability(self, id, request, actor, executor).await? {
+            recovery::Replay::Stored(result) => Some(result),
+            recovery::Replay::Absent(_) => None,
+        })
     }
 }
 #[cfg(test)]

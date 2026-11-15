@@ -10,6 +10,7 @@ use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::SupplierCapabilityId;
 use erp_identity::AccountDirectoryService;
+use erp_permissions::supplier;
 use list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -142,9 +143,8 @@ impl SupplierService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.data_scope.require_with(&actor, "detail", &id, executor).await?;
+                    service.data_scope.require_with(&actor, &supplier::DETAIL, &id, executor).await?;
                     let view = service.load_supplier_detail(&id, executor).await?;
-                    service.data_scope.require_with(&actor, "detail", &id, executor).await?;
                     Ok(view)
                 })
             })

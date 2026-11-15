@@ -1,5 +1,4 @@
 //! 销售事实映射与 identity 授权入口；业务不解释权限条款。
-mod registry;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -7,16 +6,19 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::repository::OrganizationRepository;
-use erp_identity::{AccessTarget, Permission, ResourceTargets, SharedRbacService};
+use erp_identity::{AccessTarget, AuthorizationService, CompiledAccess};
+use erp_permissions::{
+    Permission as AccessPermission, internal as internal_permissions, sales_order as sales_order_permissions,
+    sales_order,
+};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
-pub(crate) use registry::approval_permissions as approval_source_permissions;
 
-use super::repository::authorization::LoadedSales;
+use super::repository::authorization::sales_facts;
 use crate::{Error, Result};
 
 /// 当前读取阶段的展示版本和不可伪造凭证。
@@ -24,9 +26,20 @@ use crate::{Error, Result};
 pub struct SalesReadContext {
     pub scope_version: String,
     pub as_of: Instant,
-    scope: SalesReadScope,
+    access: Arc<CompiledAccess>,
+    authorization: Arc<AuthorizationService>,
 }
 impl SalesReadContext {
+    /// 记录同次解析的根交付凭证。
+    /// # 参数
+    /// access 为原始根凭证，authorization 为共享服务。
+    /// # 返回
+    /// 展示元信息及最终交付检查载体。
+    /// # 错误
+    /// 无；交付时复验原根凭证。
+    pub(crate) fn from_access(access: Arc<CompiledAccess>, authorization: Arc<AuthorizationService>) -> Self {
+        Self { scope_version: access.version(), as_of: access.as_of(), access, authorization }
+    }
     /// 组合业务版本，不改变 identity 凭证。
     /// # 参数
     /// map 为业务版本组合器。
@@ -45,7 +58,18 @@ impl SalesReadContext {
     /// # 错误
     /// 返回 identity 的原始分类。
     pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.scope.validate(executor).await?;
+        self.authorization.validate(&self.access, executor).await?;
+        Ok(())
+    }
+    /// 核验边界及期限，不结束本次读取阶段。
+    /// # 参数
+    /// executor 为原执行器。
+    /// # 返回
+    /// 本阶段仍有效时成功。
+    /// # 错误
+    /// 跨阶段或到期拒绝。
+    pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.access.ensure_current(executor)?;
         Ok(())
     }
 }
@@ -54,7 +78,7 @@ impl SalesReadContext {
 #[derive(Clone)]
 pub struct SalesAccess {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 impl SalesAccess {
     /// 绑定销售及历史参与事实所在数据库和共享身份设施。
@@ -64,7 +88,7 @@ impl SalesAccess {
     /// 无缓存访问器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -84,7 +108,8 @@ impl SalesAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (context, scope) = this.resolve(&actor, "detail", &[], executor).await?;
+                    let (context, scope) =
+                        this.resolve(&actor, &sales_order_permissions::DETAIL, executor).await?;
                     let order = this
                         .db
                         .sales_orders()
@@ -93,6 +118,7 @@ impl SalesAccess {
                         .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
                     let version =
                         format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
+                    context.validate(executor).await?;
                     Ok((order, version))
                 })
             })
@@ -100,7 +126,7 @@ impl SalesAccess {
     }
     /// 生成完整销售查询凭证。
     /// # 参数
-    /// actor 为当前操作人，action 为固定登记动作，permissions 为同角色附加功能权限，executor 为原执行器。
+    /// actor 为当前操作人，permission 为公共权限常量，executor 为原执行器。
     /// # 返回
     /// 展示上下文及仓储执行载体。
     /// # 错误
@@ -108,53 +134,17 @@ impl SalesAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        action: &str,
-        permissions: &[Permission],
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<(SalesReadContext, SalesReadScope)> {
-        self.query(actor, "sales_order", action, permissions, false, executor).await
-    }
-    /// 为固定业务入口读取实际销售来源；不额外要求来源详情功能权限。
-    /// # 参数
-    /// actor 为当前账号，entry 为服务端固定入口，executor 为原执行器。
-    /// # 返回
-    /// 来源销售的完整读取凭证。
-    /// # 错误
-    /// 未登记来源入口及授权错误返回原始分类。
-    pub async fn resolve_source(
-        &self,
-        actor: &AuditActor,
-        entry: &Permission,
-        executor: &mut dyn Executor,
-    ) -> Result<(SalesReadContext, SalesReadScope)> {
-        self.query(actor, entry.resource(), entry.action(), &[], true, executor).await
-    }
-    async fn query(
-        &self,
-        actor: &AuditActor,
-        resource: &str,
-        action: &str,
-        permissions: &[Permission],
-        source: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<(SalesReadContext, SalesReadScope)> {
-        let (authorization, mapping, subject) =
-            registry::service(&self.db, &self.rbac, resource, action, permissions, source)?;
-        let permission = Permission::parse(format!("{resource}:{action}"))?;
-        let query = authorization.query(actor, &permission, subject, executor).await?;
-        let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
-        authorization.validate(&compiled, executor).await?;
-        let scope = SalesReadScope::from_compiled(compiled.clone(), authorization);
-        let context = SalesReadContext {
-            scope_version: compiled.version(),
-            as_of: Instant::now(),
-            scope: scope.clone(),
-        };
-        Ok((context, scope))
+        ensure_sales_permission(permission)?;
+        let compiled = Arc::new(self.rbac.query(actor, permission, executor).await?);
+        let scope = SalesReadScope::from_compiled(compiled.clone(), self.rbac.clone());
+        Ok((SalesReadContext::from_access(compiled, self.rbac.clone()), scope))
     }
     /// 在当前写事务验证完整销售对象；状态校验由业务执行。
     /// # 参数
-    /// actor、action、id 为实际操作目标；permissions 为固定同角色附加权限；executor 为原事务。
+    /// actor、permission、id 为实际操作目标；executor 为原事务。
     /// # 返回
     /// 已授权的完整销售单。
     /// # 错误
@@ -162,21 +152,12 @@ impl SalesAccess {
     pub async fn require_object(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         id: &str,
-        permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<SalesOrder> {
-        let (authorization, _, subject) =
-            registry::service(&self.db, &self.rbac, "sales_order", action, permissions, false)?;
-        authorization
-            .require(
-                actor,
-                &Permission::parse(format!("sales_order:{action}"))?,
-                AccessTarget::Records { subject, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
-            .await?;
+        ensure_sales_permission(permission)?;
+        self.rbac.require(actor, permission, AccessTarget::record(id)?, executor).await?;
         self.db
             .sales_orders()
             .find_by_id(id, executor)
@@ -185,7 +166,7 @@ impl SalesAccess {
     }
     /// 检查本次命令已经确定的完整销售责任事实。
     /// # 参数
-    /// actor、action 为当前操作，order 为服务端组装的完整候选，permissions 为固定同角色权限，executor 为原事务。
+    /// actor、permission 为当前操作，order 为服务端组装的完整候选，executor 为原事务。
     /// # 返回
     /// 候选事实满足 identity 政策时成功。
     /// # 错误
@@ -193,76 +174,31 @@ impl SalesAccess {
     pub async fn require_loaded(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         order: &SalesOrder,
-        permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let facts = Arc::new(LoadedSales(order.clone()));
-        let (service, _, subject) = registry::service_facts(
-            &self.db,
-            &self.rbac,
-            "sales_order",
-            action,
-            permissions,
-            false,
-            Some(facts),
-        )?;
-        service
-            .require(
-                actor,
-                &Permission::parse(format!("sales_order:{action}"))?,
-                AccessTarget::Records { subject, ids: ResourceTargets::new(&[&order.base.id])? },
-                executor,
-            )
-            .await?;
+        ensure_sales_permission(permission)?;
+        let mut candidate = sales_facts(order);
+        candidate.version.clear();
+        if permission == &internal_permissions::SALES_ORDER_HANDOVER_RECIPIENT {
+            candidate.id.clear();
+        }
+        let target = if permission == &sales_order::CREATE
+            || permission == &sales_order::SUBMIT
+            || permission == &internal_permissions::SALES_CREATE_AND_SUBMIT
+        {
+            AccessTarget::Candidate(candidate)
+        } else if permission == &sales_order::HANDOVER {
+            AccessTarget::OwnershipChange { id: order.base.id.clone(), candidate }
+        } else if permission == &internal_permissions::SALES_ORDER_HANDOVER_RECIPIENT {
+            AccessTarget::Candidate(candidate)
+        } else {
+            AccessTarget::record(&order.base.id)?
+        };
+        self.rbac.require(actor, permission, target, executor).await?;
         Ok(())
     }
-    /// 以业务入口检查本次完整来源集合。
-    /// # 参数
-    /// actor 为当前账号，entry 为固定入口，ids 为本次来源目标，executor 为原事务。
-    /// # 返回
-    /// 所有来源有权时成功。
-    /// # 错误
-    /// 缺失、无权或过量目标返回错误。
-    pub async fn require_source(
-        &self,
-        actor: &AuditActor,
-        entry: &Permission,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.require_source_permissions(actor, entry, ids, &[], executor).await
-    }
-    /// 按固定审批管理组合在同一次来源授权中证明同角色完整资格。
-    /// # 参数
-    /// actor、entry、ids 为当前真实入口和完整销售来源；required 为服务端审批政策要求，executor 为原事务。
-    /// # 返回
-    /// 同一角色同时满足全部功能权限和来源范围时成功。
-    /// # 错误
-    /// 未登记权限组合、无权、目标缺失或存储错误均失败。
-    pub async fn require_source_permissions(
-        &self,
-        actor: &AuditActor,
-        entry: &Permission,
-        ids: &[String],
-        required: &[Permission],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let (service, _, subject) =
-            registry::service(&self.db, &self.rbac, entry.resource(), entry.action(), required, true)?;
-        let ids = ids.iter().map(String::as_str).collect::<Vec<_>>();
-        service
-            .require(
-                actor,
-                entry,
-                AccessTarget::Records { subject, ids: ResourceTargets::new(&ids)? },
-                executor,
-            )
-            .await?;
-        Ok(())
-    }
-
     /// 展开请求中的内部组织及其可选有效下级。
     ///
     /// # 参数
@@ -297,7 +233,7 @@ impl SalesAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册的销售动作
+    /// * `permission` - 固定销售权限常量
     /// * `document_id` - 业务单据主键
     ///
     /// # 返回
@@ -311,19 +247,19 @@ impl SalesAccess {
     pub async fn require_attachment(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         document_id: &str,
     ) -> Result<()> {
         let this = self.clone();
         let actor = actor.clone();
-        let action = action.to_string();
+        let permission = permission.clone();
         let document_id = document_id.to_string();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.require_attached_document(&actor, &action, &document_id, executor).await
+                    this.require_attached_document(&actor, &permission, &document_id, executor).await
                 })
             })
             .await
@@ -333,7 +269,7 @@ impl SalesAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册的销售读取或写动作
+    /// * `permission` - 固定销售读取或写权限常量
     /// * `document_id` - 业务单据主键
     /// * `executor` - 调用方执行器
     ///
@@ -348,7 +284,7 @@ impl SalesAccess {
     pub async fn require_attached_document(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         document_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
@@ -369,7 +305,31 @@ impl SalesAccess {
         else {
             return Ok(());
         };
-        self.require_object(actor, action, object_id, &[], executor).await?;
+        self.require_object(actor, permission, object_id, executor).await?;
         Ok(())
+    }
+}
+
+pub use super::repository::authorization::{SalesFacts, SalesMapping};
+
+/// 访问器只解释销售根，其他资源的许可不能用来读取同名销售身份。
+fn ensure_sales_permission(permission: &AccessPermission) -> Result<()> {
+    if permission.resource() != sales_order::DETAIL.resource() {
+        return Err(Error::ValidationError("销售访问器收到其他资源权限".into()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use erp_permissions::customer;
+
+    use super::*;
+
+    #[test]
+    fn sales_root_rejects_another_resources_permission() {
+        assert!(ensure_sales_permission(&sales_order::DETAIL).is_ok());
+        assert!(ensure_sales_permission(&internal_permissions::PURCHASE_EXPENSE_SOURCE).is_ok());
+        assert!(matches!(ensure_sales_permission(&customer::DETAIL), Err(Error::ValidationError(_))));
     }
 }

@@ -1,6 +1,6 @@
 //! 已完成实例读取授权后的销售审批链条查询。
 
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::super::runtime_route::RuntimeApprovalRoute;
 use super::ApprovalRuntimeService;
@@ -23,6 +23,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     pub(super) async fn sales_approval_route(
         &self,
         subject: &RuntimeReadSubject,
+        executor: &mut dyn Executor,
     ) -> Result<Option<RuntimeApprovalRoute>> {
         if !matches!(
             subject.document_type,
@@ -32,15 +33,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         }
         let repository = self.db.bpm_workflow();
         let graph = repository
-            .load_instance_graph(&subject.instance, &mut NoTransaction)
+            .load_instance_graph(&subject.instance, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("本次审批路线不存在，请刷新后重试".into()))?;
         let executions = repository
-            .latest_node_executions(
-                &subject.instance.typed_id(),
-                subject.instance.current_round_no,
-                &mut NoTransaction,
-            )
+            .latest_node_executions(&subject.instance.typed_id(), subject.instance.current_round_no, executor)
             .await?;
         RuntimeApprovalRoute::from_runtime(&subject.instance, &graph, &executions).map(Some)
     }

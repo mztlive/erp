@@ -2,6 +2,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::{SupplierFulfillmentOrderId, SupplierOrderActionId};
+use erp_permissions::supplier_fulfillment;
 use erp_supply::after_sales::{
     AfterSalesExt, RefundExecution, RefundExecutionState, refunds_due, refunds_for_order,
 };
@@ -12,15 +13,13 @@ use erp_supply::entity::supplier_fulfillment::{
     SupplierOrderActionData, SupplierOrderActionType,
 };
 use erp_supply::ports::connector::order::OrderReference;
-use erp_supply::repository::{
-    SupplierFulfillmentExt, SupplierFulfillmentItemRepositoryExt, SupplierOrderActionLineRepositoryExt,
-};
+use erp_supply::repository::{SupplierFulfillmentExt, SupplierFulfillmentItemRepositoryExt};
 use erp_supply::service::supplier_api::SupplierApiService;
-use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
 use erp_supply::service::supplier_fulfillment::{FulfillmentOrderAccess, SupplierFulfillmentService};
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use super::action_result::{ActionResult, MongoActionResultRead, read_result};
 use super::refund_dispatch::RefundStore;
 use super::refund_store::{MongoRefundStore, project};
 use super::{SupplierAfterSalesProcess, refund_dispatch};
@@ -41,26 +40,45 @@ impl SupplierAfterSalesProcess {
         actor: &AuditActor,
         access: &FulfillmentOrderAccess,
     ) -> Result<Option<SubmitActionResultView>> {
-        access.require_order(actor, "refund", id, &mut NoTransaction).await?;
-        if self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?.is_none() {
-            return Ok(None);
-        }
-        request.validate()?;
         let process = self.clone();
-        let id = id.to_string();
-        let actor = actor.clone();
-        let access = access.clone();
+        let order_id = id.to_string();
+        let command_actor = actor.clone();
+        let command_access = access.clone();
         let action_id = self
             .db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { process.enqueue_refund(&id, &request, &actor, &access, executor).await },
-                )
+                Box::pin(async move {
+                    let order = command_access
+                        .require_order(
+                            &command_actor,
+                            &supplier_fulfillment::ORDER_REFUND,
+                            &order_id,
+                            executor,
+                        )
+                        .await?;
+                    if process
+                        .db
+                        .supplier_api_order_executions()
+                        .find_by_id(&order_id, executor)
+                        .await?
+                        .is_none()
+                    {
+                        return Ok(None);
+                    }
+                    request.validate()?;
+                    process
+                        .enqueue_refund(&order_id, &request, &command_actor, order, executor)
+                        .await
+                        .map(Some)
+                })
             })
             .await?;
-        Ok(Some(self.refund_view(&action_id).await?))
+        match action_id {
+            Some(action_id) => Ok(Some(self.refund_view(id, &action_id, actor, access).await?)),
+            None => Ok(None),
+        }
     }
 
     async fn enqueue_refund(
@@ -68,10 +86,9 @@ impl SupplierAfterSalesProcess {
         id: &str,
         request: &SubmitAfterSalesActionRequest,
         actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
+        mut order: SupplierFulfillmentOrder,
         executor: &mut dyn Executor,
     ) -> Result<String> {
-        let mut order = access.require_order(actor, "refund", id, executor).await?;
         let execution = self
             .db
             .supplier_api_order_executions()
@@ -188,29 +205,24 @@ impl SupplierAfterSalesProcess {
         Ok(())
     }
 
-    async fn refund_view(&self, id: &str) -> Result<SubmitActionResultView> {
-        let action = self
-            .db
-            .supplier_order_actions()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("原退款动作不存在".into()))?;
-        let order = self
-            .db
-            .supplier_fulfillment_orders()
-            .find_by_id(action.supplier_fulfillment_order_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("原退款订单不存在".into()))?;
-        let lines = self
-            .db
-            .supplier_order_action_lines()
-            .find_lines_by_action_ids(&[SupplierOrderActionId::new(id)], &mut NoTransaction)
-            .await?;
-        Ok(SubmitActionResultView {
-            action: action.into(),
-            order: order.into(),
-            lines: lines.into_iter().map(action_line_view).collect(),
-        })
+    /// 原写事务结束后，以当前退款资格在新快照中读取完整结果。
+    async fn refund_view(
+        &self,
+        order_id: &str,
+        action_id: &str,
+        actor: &AuditActor,
+        access: &FulfillmentOrderAccess,
+    ) -> Result<SubmitActionResultView> {
+        let port = MongoActionResultRead { db: self.db.clone(), access: access.clone() };
+        let order_id = order_id.to_owned();
+        let target = ActionResult::Refund(action_id.to_owned());
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { read_result(&port, &actor, &order_id, &target, executor).await })
+            })
+            .await
     }
 
     /// 有界恢复退款动作；失败不重放已发送请求。

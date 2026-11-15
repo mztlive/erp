@@ -126,16 +126,11 @@ mod tests {
 
     use async_trait::async_trait;
     use erp_core::ids::SupplierOfferingAvailabilityId;
+    use persistence_core::ReadExecutor as Marker;
 
     use super::*;
     use crate::dto::supplier_offering::SupplierOfferingTermsWrite;
     use crate::entity::supplier_offering::{AvailabilityStatus, OfferingSourceType};
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct Recorder {
         pointer: usize,
         calls: Mutex<Vec<&'static str>>,
@@ -275,7 +270,7 @@ mod tests {
         PreparedCreate { offering, revision, availability, command, result, fingerprint }
     }
     async fn invoke(kind: u8, fail: Option<usize>) -> (Result<()>, Vec<&'static str>) {
-        let mut executor = Marker(163);
+        let mut executor = Marker::default();
         let port =
             Recorder { pointer: &mut executor as *mut Marker as usize, calls: Mutex::new(vec![]), fail };
         let f = fixture();
@@ -314,7 +309,6 @@ mod tests {
                 })
             },
         };
-        assert_eq!(executor.0, 163);
         (result, port.calls.into_inner().unwrap())
     }
     #[tokio::test]

@@ -4,7 +4,7 @@ use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_integration::dto::{ControlledEvidenceRef, DifferenceView, ErrorTaskView};
 use erp_integration::entity::integration_ops::CanonicalEvidenceReference;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::IntegrationCenterReadService;
 use super::error_labels::integration_error_labels;
@@ -16,16 +16,21 @@ impl IntegrationCenterReadService {
     ///
     /// # 参数
     /// * `items` - 当前查询已授权的任务集合。
+    /// * `executor` - 原授权查询的读取快照执行器。
     ///
     /// # 返回
     /// 原位填入责任人姓名和入站消息名称，未知业务对象类型保持空名称。
     ///
     /// # 错误
     /// 关联事实查询失败时返回仓储错误。
-    pub async fn error_task_names(&self, items: &mut [ErrorTaskView]) -> Result<()> {
+    pub async fn error_task_names(
+        &self,
+        items: &mut [ErrorTaskView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let ids = items.iter().filter_map(|item| item.owner_user_id.clone()).collect::<Vec<_>>();
-        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
-        let mut labels = integration_error_labels(&self.db, items, &mut NoTransaction).await?;
+        let names = self.db.accounts().names_by_ids(&ids, executor).await?;
+        let mut labels = integration_error_labels(&self.db, items, executor).await?;
         for item in items {
             item.owner_user_name = item.owner_user_id.as_ref().and_then(|id| names.get(id).cloned());
             if let Some(labels) = labels.remove(&item.id) {
@@ -40,16 +45,21 @@ impl IntegrationCenterReadService {
     ///
     /// # 参数
     /// * `items` - 当前查询已授权的差异集合。
+    /// * `executor` - 原授权查询的读取快照执行器。
     ///
     /// # 返回
     /// 原位补齐可读名称，缺失关联和未知类型保留空值。
     ///
     /// # 错误
     /// 关联事实查询失败时返回仓储错误。
-    pub async fn difference_names(&self, items: &mut [DifferenceView]) -> Result<()> {
+    pub async fn difference_names(
+        &self,
+        items: &mut [DifferenceView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let ids = items.iter().map(|item| item.owner_user_id.clone()).collect::<Vec<_>>();
-        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
-        let labels = object_labels(&self.db, items, &mut NoTransaction).await?;
+        let names = self.db.accounts().names_by_ids(&ids, executor).await?;
+        let labels = object_labels(&self.db, items, executor).await?;
         for item in items {
             item.owner_user_name = names.get(&item.owner_user_id).cloned();
             item.business_object_label =

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -8,7 +9,9 @@ use futures_util::StreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc, serialize_to_document};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, ResetRetention, Result, Transactional, mongo_ops};
+use persistence_core::{
+    Error as PersistenceError, Executor, ResetRetention, Result, Transactional, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::role::ROOT_ROLE_ID;
@@ -49,6 +52,13 @@ impl CasbinRule {
 pub struct MongoCasbinAdapter {
     db: Database,
     filtered: bool,
+}
+
+/// 同一执行器读取的主体直接策略，不包含缓存或跨事务证明。
+#[derive(Default)]
+pub(crate) struct SubjectPolicy {
+    pub(crate) roles: Vec<String>,
+    pub(crate) permissions: Vec<(String, String)>,
 }
 
 impl MongoCasbinAdapter {
@@ -269,7 +279,7 @@ impl MongoCasbinAdapter {
             return Ok(0);
         };
         u64::try_from(state.revision)
-            .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("casbin policy revision"))
+            .map_err(|_| PersistenceError::EntityMetadataOutOfRange("casbin policy revision"))
     }
 
     /// 读取指定主体的 Casbin 角色绑定。
@@ -297,6 +307,61 @@ impl MongoCasbinAdapter {
         Ok(Self::subject_role_keys(rules))
     }
 
+    /// 批量读取指定主体的直接权限及父角色，继承展开由调用方按层执行。
+    /// # 参数
+    /// subjects 为本批主体键，executor 为原事务执行器。
+    /// # 返回
+    /// 按主体分组且去重的直接策略；无规则的主体不出现在映射中。
+    /// # 错误
+    /// 数据库失败或任一策略行损坏时返回错误；空主体不发起读取。
+    pub(crate) async fn subject_policies(
+        &self,
+        subjects: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, SubjectPolicy>> {
+        if subjects.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "values.0": { "$in": subjects },
+                "$or": [{ "sec": "p", "ptype": "p" }, { "sec": "g", "ptype": "g" }],
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await?;
+        Self::group_subject_policies(rows)
+    }
+
+    /// 保留每条规则的真实主体，损坏行不得变为空权限。
+    fn group_subject_policies(rows: Vec<CasbinRule>) -> Result<HashMap<String, SubjectPolicy>> {
+        let mut grouped: HashMap<String, SubjectPolicy> = HashMap::new();
+        for row in rows {
+            match (row.sec.as_str(), row.ptype.as_str(), row.values.as_slice()) {
+                ("p", "p", [subject, resource, action]) => {
+                    grouped
+                        .entry(subject.clone())
+                        .or_default()
+                        .permissions
+                        .push((resource.clone(), action.clone()));
+                },
+                ("g", "g", [subject, parent]) => {
+                    grouped.entry(subject.clone()).or_default().roles.push(parent.clone());
+                },
+                _ => return Err(PersistenceError::EntityMetadataOutOfRange("Casbin subject policy")),
+            }
+        }
+        for policy in grouped.values_mut() {
+            policy.roles.sort();
+            policy.roles.dedup();
+            policy.permissions.sort();
+            policy.permissions.dedup();
+        }
+        Ok(grouped)
+    }
+
     /// 在原事务中读取直接绑定角色的主体事实。
     /// # 参数
     /// role_key 为角色键，executor 为原执行器。
@@ -319,7 +384,7 @@ impl MongoCasbinAdapter {
         let mut ids = Vec::new();
         for row in rows {
             let Some(subject) = row.values.first() else {
-                return Err(persistence_core::Error::EntityMetadataOutOfRange("Casbin role binding"));
+                return Err(PersistenceError::EntityMetadataOutOfRange("Casbin role binding"));
             };
             ids.push(subject.to_owned());
         }
@@ -350,7 +415,7 @@ impl MongoCasbinAdapter {
         let mut permissions = Vec::new();
         for row in rows {
             let [_, resource, action] = row.values.as_slice() else {
-                return Err(persistence_core::Error::EntityMetadataOutOfRange("Casbin role permission"));
+                return Err(PersistenceError::EntityMetadataOutOfRange("Casbin role permission"));
             };
             permissions.push((resource.clone(), action.clone()));
         }
@@ -404,7 +469,7 @@ impl MongoCasbinAdapter {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let expected_revision = i64::try_from(expected_revision)
-            .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("casbin policy revision"))?;
+            .map_err(|_| PersistenceError::EntityMetadataOutOfRange("casbin policy revision"))?;
         let result = mongo_ops::update_one(
             &self.policy_state_collection(),
             doc! {
@@ -417,7 +482,7 @@ impl MongoCasbinAdapter {
         )
         .await?;
         if result.matched_count == 0 && result.upserted_id.is_none() {
-            return Err(persistence_core::Error::OptimisticLockingError);
+            return Err(PersistenceError::OptimisticLockingError);
         }
         Ok(())
     }
@@ -719,6 +784,7 @@ impl Adapter for MongoCasbinAdapter {
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
+    use persistence_core::Error as PersistenceError;
 
     use super::{CasbinRule, MongoCasbinAdapter};
 
@@ -775,6 +841,42 @@ mod tests {
         ]);
 
         assert_eq!(roles, ["role:finance", "role:sales"]);
+    }
+
+    /// 批量结果按真实主体拆开父角色与直接权限，并排序去重。
+    #[test]
+    fn subject_policy_batch_preserves_each_subject_and_rule_kind() {
+        let binding = CasbinRule::new("g", "g", vec!["user:admin:actor".into(), "role:sales".into()]);
+        let permission =
+            CasbinRule::new("p", "p", vec!["role:sales".into(), "customer".into(), "list".into()]);
+        let rows = MongoCasbinAdapter::group_subject_policies(vec![
+            binding.clone(),
+            permission.clone(),
+            binding,
+            permission,
+            CasbinRule::new("g", "g", vec!["role:sales".into(), "role:base".into()]),
+        ])
+        .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows["user:admin:actor"].roles, ["role:sales"]);
+        assert!(rows["user:admin:actor"].permissions.is_empty());
+        assert_eq!(rows["role:sales"].roles, ["role:base"]);
+        assert_eq!(rows["role:sales"].permissions, [("customer".into(), "list".into())]);
+    }
+
+    /// 行长度或规则种类损坏时拒绝整批，不解释为空策略。
+    #[test]
+    fn subject_policy_batch_rejects_malformed_permission_or_binding_rows() {
+        for rule in [
+            CasbinRule::new("p", "p", vec!["role:sales".into(), "customer".into()]),
+            CasbinRule::new("g", "g", vec!["role:sales".into()]),
+            CasbinRule::new("p", "g", vec!["role:sales".into(), "role:base".into()]),
+        ] {
+            assert!(matches!(
+                MongoCasbinAdapter::group_subject_policies(vec![rule]),
+                Err(PersistenceError::EntityMetadataOutOfRange("Casbin subject policy"))
+            ));
+        }
     }
 
     #[test]

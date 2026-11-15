@@ -11,6 +11,7 @@ use erp_finance::entity::receivable::{InvoiceDirection, InvoiceKind, SalesInvoic
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{InvoiceFilter, InvoiceRow, ReceivableExt};
+use erp_permissions::receivable as receivable_permissions;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -198,6 +199,7 @@ impl FundsAccess {
                 )
             })
             .collect();
+        authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
             total: snapshot.total(),
@@ -220,7 +222,8 @@ impl FundsAccess {
         materialize: bool,
         executor: &mut dyn Executor,
     ) -> Result<(FundsAuthorization, InvoiceSnapshot)> {
-        let (_, authorization) = self.resolve_dual(actor, "invoice", "list", executor).await?;
+        let (_, authorization) =
+            self.resolve_dual(actor, &receivable_permissions::INVOICE_LIST, executor).await?;
         let target = match query.invoice_direction {
             Some(InvoiceDirection::Purchase) => FinanceSearchTarget::PurchaseInvoice,
             _ => FinanceSearchTarget::SalesInvoice,
@@ -258,6 +261,7 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (authorization, snapshot) =
                         this.invoice_projection(&query, &actor, false, executor).await?;
+                    authorization.deliver(executor).await?;
                     Ok(invoice_scope_version(&authorization, &snapshot.versions))
                 })
             })
@@ -415,7 +419,9 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
-        let (_access, authorization) = self.resolve_dual(actor, "invoice", "detail", executor).await?;
+        let (_access, authorization) =
+            self.resolve_dual(actor, &receivable_permissions::INVOICE_DETAIL, executor).await?;
+        self.require_visible_root(&authorization, id, executor).await?;
         let filter =
             InvoiceFilter { invoice_ids: Some(vec![id.to_string()]), page_size: 1, ..Default::default() };
         let page = self.db.invoices().search_invoices(&filter, executor).await?;
@@ -461,6 +467,7 @@ impl FundsAccess {
         let data = Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
         let parts =
             invoice_detail_parts(&row, &sales_matched, &purchase_matched, &sales_facts, &purchase_facts);
+        authorization.deliver(executor).await?;
         Ok(invoice_detail_result(&authorization, data, &parts))
     }
 }

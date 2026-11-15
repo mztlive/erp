@@ -1,4 +1,5 @@
 //! 充值申请、独立批准、真实银行支付和供应商到账分别执行。
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
@@ -9,7 +10,7 @@ use erp_finance::entity::supplier_deposit::{
 };
 use erp_finance::repository::{PayableExt, SupplierDepositExt};
 use erp_finance::service::supplier_deposit::{DepositRechargePaymentTarget, SupplierDepositService};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_party::PartyExt;
 use erp_party::repository::prelude::PartyBankAccountRepositoryExt;
 use erp_read_models::finance::supplier_deposits::account_row;
@@ -130,7 +131,7 @@ impl SupplierDepositManagementProcess {
 
 async fn validate_bank_evidence(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     supplier: &str,
     command: &PayDepositRecharge,
     actor: &AuditActor,
@@ -162,7 +163,7 @@ async fn validate_bank_evidence(
     if !asset.is_usable_at(Instant::now()) {
         return Err(Error::Forbidden("银行回单已不可用".into()));
     }
-    require_owned(db, rbac, actor, &[&command.bank_receipt_asset_id], executor).await?;
+    require_owned(authorization, actor, &[&command.bank_receipt_asset_id], executor).await?;
     Ok(())
 }
 
@@ -171,9 +172,9 @@ async fn apply_request_recharge(
     command: RequestDepositRecharge,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositRechargeRequest> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "recharge_request", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "recharge_request", executor).await?;
     let result = SupplierDepositService::new(db.clone())
         .request_recharge(
             &account,
@@ -194,9 +195,9 @@ async fn apply_approve_recharge(
     request: String,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositRechargeRequest> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "approve_recharge", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "approve_recharge", executor).await?;
     let result = SupplierDepositService::new(db.clone())
         .approve_recharge(
             &account,
@@ -217,9 +218,9 @@ async fn apply_pay_recharge(
     request: String,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositRechargeRequest> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    let source = account_access(&db, &rbac, &account, &actor, "pay_recharge", executor).await?;
+    let source = account_access(&db, &authorization, &account, &actor, "pay_recharge", executor).await?;
     let row = account_row(&db, source.clone(), executor).await?;
     let recharge = db
         .supplier_deposit_recharge_requests()
@@ -227,7 +228,8 @@ async fn apply_pay_recharge(
         .await?
         .filter(|request| request.account_id == account)
         .ok_or_else(|| Error::NotFound("充值申请不存在".into()))?;
-    validate_bank_evidence(&db, &rbac, &source.identity.supplier_id, &command, &actor, executor).await?;
+    validate_bank_evidence(&db, &authorization, &source.identity.supplier_id, &command, &actor, executor)
+        .await?;
     let data = SupplierPaymentData {
         payment_no: format!("CZFK-{}", recharge.request_no),
         supplier_id: SupplierAccountId::new(source.identity.supplier_id),
@@ -259,9 +261,9 @@ async fn apply_receive_recharge(
     command: ReceiveDepositRecharge,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositBatch> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "receive_recharge", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "receive_recharge", executor).await?;
     let request = db
         .supplier_deposit_recharge_requests()
         .find_by_id(&command.recharge_request_id, executor)

@@ -6,7 +6,8 @@ use application_core::AuditActor;
 use bpm::engine::TaskIntent;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::internal as internal_permissions;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -145,8 +146,8 @@ pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_i
 /// # 错误
 /// 账号、权限或来源可读性读取失败时返回对应错误。
 pub(super) async fn runtime_admin_notification_recipients(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
@@ -160,11 +161,11 @@ pub(super) async fn runtime_admin_notification_recipients(
         }
         let actor = AuditActor::new(account.id.clone(), account.id.clone(), account.kind);
         match require_approval_management_with_executor(
-            rbac,
+            authorization,
             &actor,
-            "approval_instance:read",
+            &internal_permissions::APPROVAL_MANAGEMENT_READ,
             document_type,
-            &snapshot.business_object_id,
+            snapshot.approval_process_instance_id.as_ref(),
             executor,
         )
         .await

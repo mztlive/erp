@@ -6,13 +6,11 @@ use erp_finance::entity::supplier_deposit::DepositAccountIdentity;
 use erp_finance::repository::SupplierDepositExt;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, ReadAccess, RelationKey,
+    QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
-    AccessFactsPort, AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject,
-    AuthorizationRegistry, AuthorizationService, DataAccess, Error as IdentityError, Permission,
-    ResourceTargets, Result as IdentityResult, SharedRbacService,
+    AccessFactsPort, AccessMapping, Error as IdentityError, ResourceTargets, Result as IdentityResult,
 };
 use erp_party::{PartyExt, PartyStatus};
 use erp_supplier::SupplierExt;
@@ -20,58 +18,19 @@ use mongodb::Database;
 use mongodb::bson::{Bson, doc};
 use persistence_core::Executor;
 
-const ACTIONS: &[&str] = &[
-    "list",
-    "detail",
-    "create",
-    "recharge_request",
-    "approve_recharge",
-    "pay_recharge",
-    "receive_recharge",
-    "authorize",
-    "revoke",
-    "reconcile",
-    "resolve",
-    "release",
-    "reserve",
-    "use",
-    "refund",
-    "bind",
-];
-
-pub(in crate::supplier_deposits) fn authorization(
-    db: &Database,
-    rbac: &SharedRbacService,
-    candidate: Option<(String, DepositAccountIdentity)>,
-) -> (AuthorizationService, Arc<dyn AccessMapping>) {
-    let mapping: Arc<dyn AccessMapping> = Arc::new(DepositMapping::new());
-    let facts: Arc<dyn AccessFactsPort> = Arc::new(DepositFacts { db: db.clone(), candidate });
-    let entries = ACTIONS
-        .iter()
-        .map(|action| {
-            let permission = Permission::parse(format!("supplier_deposit:{action}")).expect("固定预存款权限");
-            AccessRegistration {
-                permission: permission.clone(),
-                required_permissions: vec![],
-                access: AccessMode::QueryAndObject {
-                    data: DataAccess {
-                        subject: AccessSubject::Direct,
-                        required_facts: [FactKind::Organization, FactKind::SettlementParty].into(),
-                        policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
-                    },
-                    mapping: mapping.clone(),
-                    facts: facts.clone(),
-                },
-            }
-        })
-        .collect();
-    let registry = AuthorizationRegistry::new(entries).expect("固定预存款授权登记完整");
-    (AuthorizationService::new(db.clone(), rbac.clone(), registry), mapping)
+/// 绑定持久化账户事实和固定查询映射。
+/// # 参数
+/// db 为账户及来源数据所在数据库。
+/// # 返回
+/// 可供组合根按资源和查询权限复用的事实与映射。
+/// # 错误
+/// 构造不执行读取。
+pub fn deposit_bindings(db: Database) -> (Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>) {
+    (Arc::new(DepositFacts { db }), Arc::new(DepositMapping::new()))
 }
 
 struct DepositFacts {
     db: Database,
-    candidate: Option<(String, DepositAccountIdentity)>,
 }
 
 #[async_trait]
@@ -84,28 +43,19 @@ impl AccessFactsPort for DepositFacts {
     ) -> IdentityResult<Vec<ObjectFacts>> {
         let mut objects = Vec::new();
         for id in ids.ids() {
-            let (identity, version) = match &self.candidate {
-                Some((key, identity)) if key == id => (identity.clone(), key.clone()),
-                _ => {
-                    let Some(account) = self
-                        .db
-                        .supplier_deposit_accounts()
-                        .find_by_id(id, executor)
-                        .await
-                        .map_err(identity_error)?
-                    else {
-                        continue;
-                    };
-                    (account.identity, account.base.version.to_string())
-                },
+            let Some(account) =
+                self.db.supplier_deposit_accounts().find_by_id(id, executor).await.map_err(identity_error)?
+            else {
+                continue;
             };
+            let (identity, version) = (account.identity, account.base.version.to_string());
             objects.push(identity_facts(&self.db, id, &identity, &version, executor).await?);
         }
         Ok(objects)
     }
 }
 
-async fn identity_facts(
+pub(in crate::supplier_deposits) async fn identity_facts(
     db: &Database,
     id: &str,
     identity: &DepositAccountIdentity,
@@ -131,7 +81,9 @@ async fn identity_facts(
         resource: "supplier_deposit".into(),
         id: id.into(),
         version: format!("{version}:{}:{}", payer.base.version, supplier.base.version),
+        owner_id: FactValue::Known(Some(supplier.maintainer_user_id)),
         org_unit_id: FactValue::Known(Some(supplier.business_org_unit_id)),
+        collaborators: FactValue::Known(Default::default()),
         settlement_party_id: FactValue::Known(Some(identity.payer_party_id.clone())),
         ..Default::default()
     })
@@ -150,7 +102,13 @@ impl DepositMapping {
                 collection: "supplier_deposit_accounts".into(),
                 id_field: "id".into(),
                 output: QueryOutput::Object,
-                facts: [FactKind::Organization, FactKind::SettlementParty].into(),
+                facts: [
+                    FactKind::Owner,
+                    FactKind::Organization,
+                    FactKind::SettlementParty,
+                    FactKind::Collaborators,
+                ]
+                .into(),
             },
         }
     }
@@ -161,13 +119,10 @@ impl AccessMapping for DepositMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Exists {
             collection: Database::PARTIES.into(),
             bindings: doc! {
@@ -201,10 +156,18 @@ impl AccessMapping for DepositMapping {
     fn predicate(
         &self,
         fact: &AccessFact,
-        _: &AccessContext,
-        _: &MappingFacts,
+        context: &AccessContext,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<QueryFragment> {
         match fact {
+            AccessFact::Owned => Ok(QueryFragment::Exists {
+                collection: Database::SUPPLIER_ACCOUNTS.into(),
+                bindings: doc! {"supplier": "$identity.supplier_id"},
+                pipeline: vec![
+                    doc! {"$match": {"deleted_at": 0_i64, "maintainer_user_id": context.actor.id(), "$expr": {"$eq": ["$id", "$$supplier"]}}},
+                ],
+            }),
+            AccessFact::Collaborating => Ok(QueryFragment::Match(doc! {"$expr": false})),
             AccessFact::SettlementPartyIn(ids) => Ok(QueryFragment::Match(
                 doc! {"identity.payer_party_id": {"$in": ids.iter().cloned().collect::<Vec<_>>()}},
             )),
@@ -222,7 +185,7 @@ impl AccessMapping for DepositMapping {
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("预存款账户没有来源授权关系".into()))
     }
@@ -254,13 +217,14 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
+    use erp_permissions::supplier_deposit;
 
     use super::*;
 
     fn context() -> AccessContext {
         AccessContext {
             actor: AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin),
-            permission: Permission::parse("supplier_deposit:list").unwrap(),
+            permission: supplier_deposit::LIST,
             resource: "supplier_deposit".into(),
             model: None,
             as_of: Instant::from_unix_secs(1),
@@ -270,16 +234,14 @@ mod tests {
     #[test]
     fn payer_and_supplier_organization_use_their_actual_foreign_keys() {
         let mapping = DepositMapping::new();
-        let facts = MappingFacts::default();
         let payer = mapping
-            .predicate(&AccessFact::SettlementPartyIn(["payer".into()].into()), &context(), &facts)
+            .predicate(&AccessFact::SettlementPartyIn(["payer".into()].into()), &context(), None)
             .unwrap();
         assert!(
             matches!(payer, QueryFragment::Match(filter) if filter == doc! {"identity.payer_party_id": {"$in": ["payer"]}})
         );
-        let organization = mapping
-            .predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context(), &facts)
-            .unwrap();
+        let organization =
+            mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context(), None).unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } = organization else {
             panic!("组织事实必须从实际供应商读取")
         };
@@ -297,14 +259,10 @@ mod tests {
     fn unsupported_fact_and_relation_fail_closed() {
         let mapping = DepositMapping::new();
         assert!(matches!(
-            mapping.predicate(&AccessFact::Owned, &context(), &MappingFacts::default()),
+            mapping.predicate(&AccessFact::AssignedTo, &context(), None),
             Err(IdentityError::ValidationError(_))
         ));
-        assert!(
-            mapping
-                .relation(&RelationKey::parse("sales").unwrap(), &context(), &MappingFacts::default())
-                .is_err()
-        );
+        assert!(mapping.relation(&RelationKey::parse("sales").unwrap(), &context(), None).is_err());
         assert!(mapping.model().validate().is_ok());
     }
 
@@ -320,7 +278,7 @@ mod tests {
 
     #[test]
     fn record_eligibility_requires_the_same_actual_payer_and_supplier_as_object_facts() {
-        let fragment = DepositMapping::new().records(&context(), &MappingFacts::default()).unwrap();
+        let fragment = DepositMapping::new().records(&context(), None).unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } = fragment else {
             panic!("资金账户必须校验真实来源资料");
         };

@@ -2,7 +2,7 @@
 
 use erp_core::ids::DeliveryId;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::FulfillmentService;
@@ -36,9 +36,10 @@ impl FulfillmentService {
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "delivery_list")
     )]
-    pub async fn delivery_list(
+    pub(super) async fn load_deliveries(
         &self,
         params: &DeliveryListParams,
+        executor: &mut dyn Executor,
     ) -> Result<crate::dto::PageView<DeliveryView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -51,7 +52,7 @@ impl FulfillmentService {
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         super::map_search_page(
-            self.db.deliveries().search_deliveries(&filter, &mut NoTransaction),
+            self.db.deliveries().search_deliveries(&filter, executor),
             |row| DeliveryView {
                 id: row.id,
                 delivery_no: row.delivery_no,
@@ -73,6 +74,8 @@ impl FulfillmentService {
 
     /// 查询发货单详情（表头 + 行）。
     ///
+    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
+    ///
     /// # 参数
     /// * `id` - 发货单主键
     ///
@@ -82,21 +85,26 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 发货单不存在
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.delivery_detail",
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "delivery_detail")
     )]
-    pub async fn delivery_detail(&self, id: &str) -> Result<DeliveryDetailView> {
-        let delivery = super::find_header_or_not_found(
-            self.db.deliveries().find_by_id(id, &mut NoTransaction),
-            "发货单不存在",
-        )
-        .await?;
+    pub async fn load_delivery_view(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<DeliveryDetailView> {
+        let delivery =
+            super::find_header_or_not_found(self.db.deliveries().find_by_id(id, executor), "发货单不存在")
+                .await?;
         let lines = self
             .db
             .fulfillment()
-            .delivery_lines_by_delivery_ids(&[delivery.base.id.clone().into()], &mut NoTransaction)
+            .delivery_lines_by_delivery_ids(&[delivery.base.id.clone().into()], executor)
             .await?;
         Ok(DeliveryDetailView {
             packing_unavailable_reason: None,

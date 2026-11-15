@@ -1,9 +1,11 @@
 //! 销售单撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
 use bpm::model::{IdempotencyKey, SubjectRef};
+use erp_approval_runtime::ApprovalRuntimePort;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::service::sales_order::SalesOrderService;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
 pub(super) use erp_workflow::service::approval::execution::cancel_prepare::DocumentCancelRuntime as LoadedCancelRuntime;
@@ -12,7 +14,7 @@ use erp_workflow::service::approval::execution::{
     CancelExecutionInput, PreparedExecution, claim_and_persist_document_cancel_runtime,
 };
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use crate::Result;
 
@@ -25,6 +27,7 @@ use crate::Result;
 /// * `binding` - 创建时冻结的定义绑定
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
+/// * `executor` - 授权、取消准备和写入共用的事务执行器
 ///
 /// # 返回
 /// 返回定义图、实例、当前执行、任务关闭策略与开放任务快照。
@@ -36,16 +39,10 @@ pub(super) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     subject: &SubjectRef,
     subject_version: u32,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
-    Ok(document_cancel_runtime(
-        db,
-        binding,
-        subject,
-        subject_version,
-        "销售单绑定的审批定义不存在",
-        &mut NoTransaction,
-    )
-    .await?)
+    Ok(document_cancel_runtime(db, binding, subject, subject_version, "销售单绑定的审批定义不存在", executor)
+        .await?)
 }
 
 /// 构造统一 `cancel_approval` 输入。
@@ -116,9 +113,9 @@ pub(super) struct SalesOrderCancelPersistInput {
 ///
 /// # 参数
 /// * `db` - 数据库。
-/// * `access` - 原命令授权检查器，事务内重验责任与版本。
-/// * `expected_order_version` - 预读时的销售单版本。
+/// * `approvals` - 原用例装配的审批写入能力。
 /// * `input` - 销售单、取消计划与开放任务。
+/// * `executor` - 已完成对象授权和取消准备的原事务执行器。
 ///
 /// # 返回
 /// 成功时无返回值。
@@ -130,42 +127,21 @@ pub(super) struct SalesOrderCancelPersistInput {
 /// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_sales_order_cancel(
     db: &Database,
-    access: super::authorization::SalesCommandAccess,
-    expected_order_version: u64,
+    approvals: &dyn ApprovalRuntimePort,
     input: SalesOrderCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let SalesOrderCancelPersistInput { mut order, prepared, open_tasks, actor_id, reason, now, audit } =
         input;
-    let approvals = access.services.approvals.clone();
-    let check = access.clone();
-    let check_id = order.base.id.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move { check.revalidate(&check_id, expected_order_version, executor).await })
-        })
-        .await?;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
     };
     let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                access.revalidate(&order.base.id, expected_order_version, executor).await?;
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, &actor_id, executor)
-                    .await?;
-                approvals.persist_cancel_copies(&db, &writes, executor).await?;
-                erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-                    .persist_order(&mut order, executor)
-                    .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    claim_and_persist_document_cancel_runtime(db, &writes, &closed_tasks, &actor_id, executor).await?;
+    approvals.persist_cancel_copies(db, &writes, executor).await?;
+    SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }
 
 #[cfg(test)]

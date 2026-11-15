@@ -3,14 +3,16 @@
 //! 分组只用现任归属（客户当前主责与主责所属组织），永不读取冻结归属快照。
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use erp_customer::repository::CustomerAccountFilter;
 use erp_customer::repository::scope::authorized_versions;
 use erp_customer::{CustomerAccess, CustomerResolvedScope};
+use erp_permissions::internal;
+use erp_sales::repository::sales_order::scope::SalesReadScope;
 use persistence_core::{Executor, Transactional};
 use rust_decimal::Decimal;
 
-use super::QualityAccess;
 use super::dto::{
     CurrentQualityQuery, CurrentQualityRow, CurrentQualityView, QualityPeriod, QualityRows, QualityScope,
     QualityTotals,
@@ -18,6 +20,7 @@ use super::dto::{
 use super::query::{BASIS_LABEL, PERIOD_BASIS};
 use super::source::{CustomerFact, QualityOrder, effective_label};
 use crate::Result;
+use crate::sales_center::access::SalesReadContext;
 
 /// 同一快照产生的当前视图与请求问询；版本校验需要原查询。
 pub(super) struct CurrentSnapshotOutput {
@@ -49,23 +52,26 @@ impl super::CustomerQualityReadModel {
         export: bool,
         executor: &mut dyn Executor,
     ) -> Result<(CurrentSnapshotOutput, String)> {
-        let access = QualityAccess::new(self.db.clone(), self.rbac.clone(), self.customer_scope.clone());
-        let (customer_context, sales_context, sales_scope) = access.resolve_current(actor, executor).await?;
+        let compiled = Arc::new(self.rbac.query(actor, &internal::CUSTOMER_QUALITY_CURRENT, executor).await?);
+        let sales_scope = SalesReadScope::from_compiled(compiled.clone(), self.rbac.clone());
+        let sales_context = SalesReadContext::from_access(compiled, self.rbac.clone());
         let expanded = expand_requested_orgs(&self.customer_scope, query, executor).await?;
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
         let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids);
-        let raw_orders = super::source::CurrentSources::load_current_orders(
-            &self.db,
-            order_filter,
-            &sales_scope,
-            &customer_context,
-            &self.customer_scope,
-            executor,
-        )
-        .await?;
+        let raw_orders =
+            super::source::CurrentSources::load_orders(&self.db, order_filter, &sales_scope, executor)
+                .await?;
+        sales_context.validate(executor).await?;
+        let compiled =
+            Arc::new(self.rbac.query(actor, &internal::CUSTOMER_QUALITY_CUSTOMERS, executor).await?);
+        let customer_context = CustomerResolvedScope {
+            user_id: actor.id().into(),
+            scope_version: compiled.version(),
+            as_of: compiled.as_of(),
+            compiled,
+        };
         let mut sources = self.current_sources(query, &customer_context, &raw_orders, executor).await?;
         self.customer_scope.validate(&customer_context, executor).await?;
-        sales_context.validate(executor).await?;
         apply_request_filters(&mut sources, query, expanded.as_ref());
         let mut view = project_current(query, sources);
         apply_context(&mut view, &customer_context);
@@ -91,12 +97,16 @@ impl super::CustomerQualityReadModel {
             customer_ids: Some(candidates.into_iter().collect()),
             ..Default::default()
         };
-        let authorized = authorized_versions(&self.db, &filter, customer, &self.customer_scope, executor)
-            .await?
-            .into_iter()
-            .map(|customer| customer.id)
-            .collect();
-        super::source::CurrentSources::load_customers(&self.db, authorized, orders, executor).await
+        let authorized: Vec<String> =
+            authorized_versions(&self.db, &filter, customer, &self.customer_scope, executor)
+                .await?
+                .into_iter()
+                .map(|customer| customer.id)
+                .collect();
+        let allowed: BTreeSet<_> = authorized.iter().cloned().collect();
+        let visible_orders =
+            orders.iter().filter(|order| allowed.contains(&order.customer_id)).cloned().collect::<Vec<_>>();
+        super::source::CurrentSources::load_customers(&self.db, authorized, &visible_orders, executor).await
     }
 
     /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。

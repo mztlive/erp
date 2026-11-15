@@ -1,19 +1,20 @@
 //! 财务责任规则管理、负责人候选与任务生产时的严格解析。
 
 use std::future::Future;
-use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_core::AccountKind;
 use erp_core::assignment::AssignmentStrategy;
-use erp_core::{AccountKind, Result as CoreResult};
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{AccessTarget, Error as IdentityError};
+use erp_permissions::{internal, work_item};
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::WorkItemService;
+use super::authorization::execution_target;
 use crate::entity::work_item::{
     EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope, WorkItemType,
@@ -173,24 +174,49 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 查询全部财务责任规则。
     ///
     /// # 参数
-    /// 无。
+    /// * `actor` - 需要具备财务责任管理功能权限的操作人。
     ///
     /// # 返回
     /// 返回除卡资金复核以外的规则视图。
     ///
     /// # 错误
     /// 规则、账号或往来方读取失败时返回错误。
-    pub async fn finance_responsibility_rule_list(self) -> Result<Vec<FinanceResponsibilityRuleView>> {
-        let rules = self
-            .db
-            .finance_responsibility_rules()
-            .list_finance_responsibility_rules(&mut NoTransaction)
+    pub async fn finance_responsibility_rule_list(
+        self,
+        actor: &AuditActor,
+    ) -> Result<Vec<FinanceResponsibilityRuleView>> {
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { self.finance_rule_views(&actor, executor).await })
+            })
+            .await
+    }
+
+    /// 规则、人员姓名和往来方编号全部读取同一授权快照。
+    async fn finance_rule_views(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FinanceResponsibilityRuleView>> {
+        self.authorization
+            .service
+            .require(
+                actor,
+                &work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_LIST,
+                AccessTarget::Operation,
+                executor,
+            )
             .await?;
+        let rules =
+            self.db.finance_responsibility_rules().list_finance_responsibility_rules(executor).await?;
         let rules = rules
             .into_iter()
             .filter(|rule| rule.operation != FinanceResponsibilityOperation::CardFundsReview)
             .collect();
-        self.finance_responsibility_views(rules).await
+        self.finance_responsibility_views(rules, executor).await
     }
 
     /// 创建财务责任规则并记录审计。
@@ -214,6 +240,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: AuditActor,
     ) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
         async move {
+            let operator = actor.clone();
             let data = request.into_data();
             let rule = FinanceResponsibilityRule::new(next_id(), data.clone(), actor.id())
                 .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -228,27 +255,37 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             let facts = Arc::clone(&self.facts);
             let audit_port = Arc::clone(&self.audit);
             let identity = self.identity.clone();
-            let rule = self
-                .db
+            let authorization = self.authorization.service.clone();
+            self.db
                 .client()
                 .clone()
                 .with_transaction(move |executor| {
                     let service = WorkItemService::with_ports(
                         db.clone(),
                         identity,
+                        authorization,
                         rbac,
                         facts,
                         Arc::clone(&audit_port),
                     );
                     Box::pin(async move {
+                        service
+                            .authorization
+                            .service
+                            .require(
+                                &operator,
+                                &work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_CREATE,
+                                AccessTarget::Operation,
+                                executor,
+                            )
+                            .await?;
                         service.validate_finance_rule_data(&data, true, true, executor).await?;
                         db.finance_responsibility_rules().create(&rule, executor).await?;
                         audit_port.persist(&audit, executor).await?;
-                        Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
+                        service.single_finance_responsibility_view(rule, executor).await
                     })
                 })
-                .await?;
-            self.single_finance_responsibility_view(rule).await
+                .await
         }
     }
 
@@ -275,6 +312,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: AuditActor,
     ) -> impl Future<Output = Result<FinanceResponsibilityRuleView>> + Send {
         async move {
+            let operator = actor.clone();
             let (version, data) = request.into_parts();
             let updated_by = actor.id().to_string();
             let audit = PreparedWorkflowAudit::resource(
@@ -288,22 +326,37 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             let facts = Arc::clone(&self.facts);
             let audit_port = Arc::clone(&self.audit);
             let identity = self.identity.clone();
-            let rule = self
-                .db
+            let authorization = self.authorization.service.clone();
+            self.db
                 .client()
                 .clone()
                 .with_transaction(move |executor| {
-                    let service =
-                        WorkItemService::with_ports(db, identity, rbac, facts, Arc::clone(&audit_port));
+                    let service = WorkItemService::with_ports(
+                        db,
+                        identity,
+                        authorization,
+                        rbac,
+                        facts,
+                        Arc::clone(&audit_port),
+                    );
                     Box::pin(async move {
+                        service
+                            .authorization
+                            .service
+                            .require(
+                                &operator,
+                                &work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_RULE_UPDATE,
+                                AccessTarget::Operation,
+                                executor,
+                            )
+                            .await?;
                         let rule =
                             service.update_finance_rule(&id, version, data, updated_by, executor).await?;
                         audit_port.persist(&audit, executor).await?;
-                        Ok::<FinanceResponsibilityRule, crate::error::Error>(rule)
+                        service.single_finance_responsibility_view(rule, executor).await
                     })
                 })
-                .await?;
-            self.single_finance_responsibility_view(rule).await
+                .await
         }
     }
 
@@ -354,7 +407,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 列出可作为付款或销项开票负责人的有效管理账号。
     ///
     /// # 参数
-    /// 无。
+    /// * `actor` - 需要具备财务责任管理功能权限的操作人。
     ///
     /// # 返回
     /// 返回至少具备付款或销项开票所需权限的有效管理账号，按显示名与账号 ID 排序。
@@ -363,22 +416,43 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 账号或权限数据读取失败时返回错误。
     pub async fn finance_responsibility_owner_options(
         self,
+        actor: &AuditActor,
     ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
-        let payment = required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)?;
-        let invoice = required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)?;
-        let accounts =
-            self.identity.directory().accounts_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
-        let requested = payment.union(&invoice).into_vec();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { self.finance_owner_options(&actor, executor).await })
+            })
+            .await
+    }
+
+    /// 候选账号及逐人的完整功能资格使用原读取事务。
+    async fn finance_owner_options(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
+        self.authorization
+            .service
+            .require(
+                actor,
+                &work_item::FINANCE_RESPONSIBILITY_FINANCE_RESPONSIBILITY_OWNER_OPTIONS,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+        let accounts = self.identity.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
         let mut options = Vec::new();
         for account in accounts {
             let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-            let Some(qualified) =
-                self.authorization.service.permissions(&actor, &requested, &mut NoTransaction).await?
-            else {
-                continue;
-            };
-            let supplier_payment_eligible = qualified.same_role(&payment.clone().into_vec());
-            let sales_invoice_eligible = qualified.same_role(&invoice.clone().into_vec());
+            let supplier_payment_eligible = self
+                .finance_owner_qualified(FinanceResponsibilityOperation::SupplierPayment, &actor, executor)
+                .await?;
+            let sales_invoice_eligible = self
+                .finance_owner_qualified(FinanceResponsibilityOperation::SalesInvoice, &actor, executor)
+                .await?;
             if !supplier_payment_eligible && !sales_invoice_eligible {
                 continue;
             }
@@ -458,17 +532,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             _ => return Err(Error::ValidationError("不是退货财务任务".into())),
         };
         let resolved = self.resolve_finance_responsibility(operation, counterparty_id, executor).await?;
-        let required = task_type
-            .required_execution_permissions("purchase_order")
-            .ok_or_else(|| Error::BusinessLogicError("退货财务权限未登记".into()))?;
         let actor = AuditActor::new(
             resolved.owner_user_id.clone(),
             resolved.owner_user_id.clone(),
             AccountKind::Admin,
         );
-        let requested = required.iter().map(Permission::parse).collect::<CoreResult<Vec<_>>>()?;
-        let qualified = self.authorization.service.permissions(&actor, &requested, executor).await?;
-        if qualified.is_none_or(|qualified| !qualified.same_role(&requested)) {
+        if !self.execution_qualified(&actor, task_type, "purchase_order", executor).await? {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少退货处理权限，请调整财务责任配置",
                 operation.label()
@@ -531,20 +600,17 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         owner_user_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let required = required_finance_permissions(operation)?;
-        let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-        let qualified =
-            self.authorization.service.permissions(&actor, &required.clone().into_vec(), executor).await?;
-        let Some(qualified) = qualified else {
-            // 仅拒绝路径读取目录以保留缺失与停用的既有提示，不重复读取成功账号。
-            let exists = self.identity.directory().account(owner_user_id, executor).await?.is_some();
-            let reason = if exists { "不可用" } else { "不存在" };
+        let account = self.identity.directory().account(owner_user_id, executor).await?.ok_or_else(|| {
+            Error::BusinessLogicError(format!("{}负责人账号不存在，请重新选择", operation.label()))
+        })?;
+        if !account.is_active_backoffice() {
             return Err(Error::BusinessLogicError(format!(
-                "{}负责人账号{reason}，请重新选择",
+                "{}负责人账号不可用，请重新选择",
                 operation.label()
             )));
-        };
-        if !qualified.same_role(&required.into_vec()) {
+        }
+        let actor = AuditActor::new(account.id, account.login_account, account.kind);
+        if !self.finance_owner_qualified(operation, &actor, executor).await? {
             return Err(Error::BusinessLogicError(format!(
                 "{}负责人缺少完整执行权限，请先调整财务角色或重新选择",
                 operation.label()
@@ -553,20 +619,59 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(())
     }
 
+    /// 将财务操作的真实任务身份交由固定入口判断功能资格。
+    async fn finance_owner_qualified(
+        &self,
+        operation: FinanceResponsibilityOperation,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let (kind, source) =
+            operation.task_identity().ok_or_else(|| Error::Internal("财务任务业务身份未注册".into()))?;
+        self.execution_qualified(actor, kind, source, executor).await
+    }
+
+    /// 资格拒绝只影响候选标记；接入及仓储错误保持失败。
+    async fn execution_qualified(
+        &self,
+        actor: &AuditActor,
+        kind: WorkItemType,
+        source: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        match self
+            .authorization
+            .service
+            .require(
+                actor,
+                &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                execution_target(kind, source),
+                executor,
+            )
+            .await
+        {
+            Ok(()) => Ok(true),
+            Err(IdentityError::Forbidden(_)) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     async fn single_finance_responsibility_view(
         &self,
         rule: FinanceResponsibilityRule,
+        executor: &mut dyn Executor,
     ) -> Result<FinanceResponsibilityRuleView> {
-        let mut views = self.finance_responsibility_views(vec![rule]).await?;
+        let mut views = self.finance_responsibility_views(vec![rule], executor).await?;
         views.pop().ok_or_else(|| Error::Internal("财务责任规则视图未形成".to_string()))
     }
 
     async fn finance_responsibility_views(
         &self,
         rules: Vec<FinanceResponsibilityRule>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<FinanceResponsibilityRuleView>> {
         let owner_ids = rules.iter().flat_map(|rule| rule.owner_user_ids.iter().cloned()).collect::<Vec<_>>();
-        let owner_names = self.identity.directory().names(&owner_ids, &mut NoTransaction).await?;
+        let owner_names = self.identity.directory().names(&owner_ids, executor).await?;
         let supplier_ids = rules
             .iter()
             .filter(|rule| rule.operation == FinanceResponsibilityOperation::SupplierPayment)
@@ -583,10 +688,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             })
             .filter_map(|rule| rule.counterparty_id.clone())
             .collect::<Vec<_>>();
-        let supplier_numbers =
-            self.facts.counterparty_numbers("supplier", &supplier_ids, &mut NoTransaction).await?;
-        let customer_numbers =
-            self.facts.counterparty_numbers("customer", &customer_ids, &mut NoTransaction).await?;
+        let supplier_numbers = self.facts.counterparty_numbers("supplier", &supplier_ids, executor).await?;
+        let customer_numbers = self.facts.counterparty_numbers("customer", &customer_ids, executor).await?;
         let mut views = Vec::with_capacity(rules.len());
         for rule in rules {
             let counterparty_no =
@@ -609,30 +712,55 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     }
 }
 
-fn required_finance_permissions(operation: FinanceResponsibilityOperation) -> Result<PermissionSet> {
-    let codes = operation
-        .required_permission_codes()
-        .ok_or_else(|| Error::Internal("财务执行权限合同未注册".to_string()))?;
-    Ok(PermissionSet::new(codes.iter().map(Permission::parse).collect::<StdResult<Vec<_>, _>>()?))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Permission, required_finance_permissions};
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::unavailable_service;
+    use super::*;
     use crate::entity::work_item::FinanceResponsibilityOperation;
 
-    #[test]
-    fn operation_permissions_cover_formal_execution_actions() {
-        assert!(
-            required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)
-                .unwrap()
-                .covers_one(&Permission::parse("purchase_payment_request:pay").unwrap())
-        );
-        assert!(
-            required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)
-                .unwrap()
-                .covers_one(&Permission::parse("invoice:post").unwrap())
-        );
-        assert!(required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview).is_err());
+    #[tokio::test]
+    async fn finance_candidate_qualification_uses_the_central_entry_and_original_snapshot() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("finance".into(), "finance".into(), AccountKind::Admin);
+        let error = service
+            .finance_owner_qualified(
+                FinanceResponsibilityOperation::SupplierPayment,
+                &actor,
+                &mut NoTransaction,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(_)));
+        let error = service
+            .finance_owner_qualified(
+                FinanceResponsibilityOperation::SupplierPayment,
+                &actor,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn finance_rule_and_owner_reads_stop_before_loading_rows_when_identity_is_unavailable() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("operator".into(), "operator".into(), AccountKind::Admin);
+        let errors = [
+            service
+                .finance_rule_views(&actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("未授权不得读取规则或展示资料"),
+            service
+                .finance_owner_options(&actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("未授权不得读取候选账号"),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        }
     }
 }

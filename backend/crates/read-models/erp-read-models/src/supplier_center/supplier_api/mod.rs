@@ -1,8 +1,7 @@
 //! 供应连接详情、动作权限和后台任务只读投影。
 use std::sync::Arc;
 
-use erp_identity::{AuthorizationRegistry, AuthorizationService, SharedRbacService};
-use erp_supplier::SupplierAccess;
+use erp_identity::AuthorizationService;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
@@ -15,41 +14,30 @@ mod jobs;
 mod query;
 mod references;
 /// 供应连接跨域只读入口。
+#[derive(Clone)]
 pub struct SupplierApiReadService {
     db: Database,
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
     reference_registry: Option<Arc<dyn SupplierReferenceRegistry>>,
-    supplier_access: Option<SupplierAccess>,
     gateway: Option<Arc<dyn SupplierApiGateway>>,
 }
+
 impl SupplierApiReadService {
     /// 复用应用数据库与权威身份服务。
     ///
     /// # 参数
     /// * `db` - 应用数据库。
-    /// * `rbac` - 当前身份服务。
+    /// * `authorization` - 当前共享授权服务。
     ///
     /// # 返回
     /// 返回已绑定身份服务的读取服务。构造不执行查询。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let authorization = AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::default());
-        Self { db, authorization, reference_registry: None, supplier_access: None, gateway: None }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization, reference_registry: None, gateway: None }
     }
 
-    /// 注入供应商对象范围，目录读取不得因具有连接角色而扩大数据范围。
-    /// # 参数
-    /// `access` 为组合根装配的当前供应商范围服务。
-    /// # 返回
-    /// 保留当前配置并绑定供应商对象授权。
-    /// # 错误
-    /// 不返回错误；实际读取时重新检查授权。
-    pub fn with_supplier_access(mut self, access: SupplierAccess) -> Self {
-        self.supplier_access = Some(access);
-        self
-    }
     /// 复用组合根的引用注册表；不创建新的外部连接器。
     ///
     /// # 参数
@@ -78,5 +66,61 @@ impl SupplierApiReadService {
 
     fn domain(&self) -> SupplierApiService {
         SupplierApiService::new(self.db.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_supply::dto::supplier_api::SupplierApiConnectionListParams;
+    use erp_supply::ports::supplier_reference_registry::SupplierReferenceKind;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::{CatalogQuery, SupplierApiReadService};
+    use crate::Error;
+
+    async fn service() -> SupplierApiReadService {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        SupplierApiReadService::new(client.database("connection_authorization"), unavailable_authorization())
+    }
+
+    fn actor() -> AuditActor {
+        AuditActor::new("buyer".into(), "采购".into(), AccountKind::Admin)
+    }
+
+    #[tokio::test]
+    async fn list_and_detail_reject_missing_authorization_before_loading_connections() {
+        let service = service().await;
+        let list = service
+            .connection_list_snapshot(
+                &SupplierApiConnectionListParams::default(),
+                &actor(),
+                &mut SnapshotExecutor::default(),
+            )
+            .await;
+        assert!(matches!(list, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+        let detail = service.connection_detail_for_actor("connection", &actor()).await;
+        assert!(matches!(detail, Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"));
+    }
+
+    #[tokio::test]
+    async fn catalog_rejects_missing_authorization_before_loading_items_or_jobs() {
+        let query = serde_json::from_value::<CatalogQuery>(serde_json::json!({})).unwrap();
+        let result = service().await.catalog("connection", query, &actor()).await;
+        assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"));
+    }
+
+    #[tokio::test]
+    async fn reference_options_require_binding_qualification_before_resolving_registry_options() {
+        let service = service().await;
+        for kind in [SupplierReferenceKind::Endpoint, SupplierReferenceKind::Credential] {
+            let result = service
+                .reference_options_snapshot("connection", kind, &actor(), &mut SnapshotExecutor::default())
+                .await;
+            assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+        }
     }
 }

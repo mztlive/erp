@@ -1,65 +1,78 @@
-//! 原经办人作为完整所有者事实交给 identity 判断。
-
-use std::sync::Arc;
-
+//! 退款和冲正的真实单据提交入口只消费 identity 固定规则。
 use application_core::AuditActor;
-use async_trait::async_trait;
-use erp_identity::entity::authorization::{AccessContext, FactKind, ObjectFacts};
-use erp_identity::ports::AccessFactsPort;
-use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget, AuthorizationRegistry,
-    AuthorizationService, DataAccess, Permission, ResourceTargets, SharedRbacService,
-};
-use mongodb::Database;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, returns};
+use erp_workflow::entity::document_registry::DocumentType;
 use persistence_core::Executor;
 
-use crate::Result;
+use crate::{Error, Result};
 
-struct LoadedOwnerFacts(ObjectFacts);
-
-#[async_trait]
-impl AccessFactsPort for LoadedOwnerFacts {
-    async fn load(
-        &self,
-        _: &AccessContext,
-        _: &ResourceTargets,
-        _: &mut dyn Executor,
-    ) -> erp_identity::Result<Vec<ObjectFacts>> {
-        Ok(vec![self.0.clone()])
+/// 取得真实单据类型对应的公共固定提交权限。
+/// # 参数
+/// kind 为退款或冲正单据类型。
+/// # 返回
+/// 返回公共权限目录中的固定提交权限。
+/// # 错误
+/// 未登记的单据类型返回校验错误。
+pub(super) fn submit_permission(kind: DocumentType) -> Result<Permission> {
+    match kind {
+        DocumentType::CustomerRefund => Ok(returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT),
+        DocumentType::SupplierRefund => Ok(returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT),
+        DocumentType::ReceiptReversal => Ok(returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT),
+        DocumentType::PaymentReversal => Ok(returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT),
+        _ => Err(Error::ValidationError("未登记退款或冲正提交入口".into())),
     }
 }
 
-/// 在原事务内按退款或冲正单的真实经办人事实证明提交资格。
+/// 使用真实单据主键执行固定完整提交规则。
 /// # 参数
-/// db、rbac 为身份设施，actor 为当前账号，facts 为本事务读取的完整所有者事实。
-/// executor 为原业务事务。
+/// authorization 为共享授权服务，actor 为当前账号，kind、id 为真实单据身份。
+/// executor 必须是调用方持有的原快照事务。
 /// # 返回
-/// 功能权限和原经办人身份均成立时成功。
+/// 固定的提交资格、完整资金来源与原经办人条件均满足时成功。
 /// # 错误
-/// 账号、功能权限、所有者事实或对象身份不满足时返回 identity 原错误。
-pub(super) async fn require_owner(
-    db: Database,
-    rbac: SharedRbacService,
+/// 非事务执行器、未知类型、缺少资格或越权时拒绝。
+pub(super) async fn require_submission(
+    authorization: &AuthorizationService,
     actor: &AuditActor,
-    facts: ObjectFacts,
+    kind: DocumentType,
+    id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let permission = Permission::parse(format!("{}:submit", facts.resource))?;
-    let ids = ResourceTargets::new(&[facts.id.as_str()])?;
-    let registration = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Owner].into(),
-                policy: AccessPolicy::Owned,
-            },
-            facts: Arc::new(LoadedOwnerFacts(facts)),
-        },
-    };
-    AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![registration])?)
-        .require(actor, &permission, AccessTarget::Records { subject: AccessSubject::Direct, ids }, executor)
-        .await?;
+    authorization.require(actor, &submit_permission(kind)?, AccessTarget::record(id)?, executor).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+
+    use super::*;
+
+    /// 四种真实提交入口必须由中央规则在身份或对象取证前拒绝普通读取执行器。
+    #[tokio::test]
+    async fn submissions_require_snapshot_before_loading_identity_or_source() {
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        for kind in [
+            DocumentType::CustomerRefund,
+            DocumentType::SupplierRefund,
+            DocumentType::ReceiptReversal,
+            DocumentType::PaymentReversal,
+        ] {
+            let result = require_submission(
+                &authorization,
+                &actor,
+                kind,
+                "actual_document",
+                &mut ReadExecutor::default(),
+            )
+            .await;
+            assert!(
+                matches!(result, Err(Error::ValidationError(reason)) if reason == "写入授权必须使用快照事务")
+            );
+        }
+    }
 }

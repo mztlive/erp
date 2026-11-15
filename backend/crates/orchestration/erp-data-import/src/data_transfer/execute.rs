@@ -5,7 +5,7 @@ use erp_core::ids::BackgroundJobId;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, FileAssetExt, JobUpdate};
 use futures_util::{StreamExt, stream};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 use tokio::time::{MissedTickBehavior, interval};
 
 use super::outcome::apply as apply_outcome;
@@ -25,7 +25,7 @@ impl DataTransferProcess {
         let jobs = self
             .db
             .background_jobs()
-            .claimable_jobs(DOMAIN, Instant::now().unix_secs() - 120, 8, &mut NoTransaction)
+            .claimable_jobs(DOMAIN, Instant::now().unix_secs() - 120, 8, &mut ReadExecutor::default())
             .await?;
         let count = jobs.len();
         stream::iter(jobs)
@@ -41,14 +41,14 @@ impl DataTransferProcess {
         if !job.claim_execution(Instant::now())? {
             return Ok(());
         }
-        self.db.background_jobs().update(&mut job, &mut NoTransaction).await?;
+        self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await?;
         let result = self.execute_with_heartbeat(&mut job).await;
         match result {
             Ok(result) => self.complete(job, result).await,
 
             Err(error) => {
                 job.mark_failed(Some(safe_failure(&error)), Instant::now())?;
-                self.db.background_jobs().update(&mut job, &mut NoTransaction).await?;
+                self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await?;
                 Ok(())
             },
         }
@@ -79,7 +79,7 @@ impl DataTransferProcess {
     }
     async fn heartbeat(&self, job: &mut BackgroundJob) -> Result<()> {
         job.heartbeat_execution(Instant::now())?;
-        self.db.background_jobs().update(job, &mut NoTransaction).await?;
+        self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         Ok(())
     }
     async fn complete(&self, mut job: BackgroundJob, result: TransferResult) -> Result<()> {
@@ -92,7 +92,7 @@ impl DataTransferProcess {
         let mut items = self
             .db
             .background_job_items()
-            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
+            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut ReadExecutor::default())
             .await?;
         apply_outcome(&mut job, &mut items, &result)?;
         job.update(JobUpdate {

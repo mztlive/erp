@@ -23,6 +23,7 @@ impl PayableService {
     ///
     /// # 参数
     /// * `invoice_id` - 首次命令收据记录的进项发票主键
+    /// * `executor` - 调用方授权读取快照的执行器
     ///
     /// # 返回
     /// 返回发票号码、金额和正式分配行。
@@ -32,18 +33,19 @@ impl PayableService {
     pub async fn purchase_invoice_registered_view(
         &self,
         invoice_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<PurchaseInvoiceRegisteredView> {
         let invoice_id = InvoiceId::new(invoice_id);
         let invoice = self
             .db
             .invoices()
-            .find_by_id(&invoice_id, &mut NoTransaction)
+            .find_by_id(&invoice_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("进项发票命令收据引用不存在".to_string()))?;
         let allocations = self
             .db
             .purchase_invoice_allocations()
-            .find_allocations_by_invoices(std::slice::from_ref(&invoice_id), &mut NoTransaction)
+            .find_allocations_by_invoices(std::slice::from_ref(&invoice_id), executor)
             .await?;
         let views = allocations.iter().map(purchase_invoice_allocation_view).collect();
         Ok(PurchaseInvoiceRegisteredView {

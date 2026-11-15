@@ -12,6 +12,7 @@ entity-core = { workspace = true }
 entity-macros = { workspace = true }
 erp-core = { workspace = true }
 erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 hex = { workspace = true }
 id-generator = { workspace = true }
 mongodb = { workspace = true }
@@ -22,3 +23,7 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 validator = { workspace = true }
+
+[dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }
+persistence-core = { workspace = true, features = ["test-support"] }

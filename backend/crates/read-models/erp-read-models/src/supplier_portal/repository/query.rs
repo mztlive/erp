@@ -1,10 +1,9 @@
 //! 有界分页、外部筛选及同执行器聚合。
 
 use application_core::{page_or_default, page_size_or_default};
-use futures_util::TryStreamExt;
 use mongodb::Collection;
 use mongodb::bson::{Document, deserialize_from_document};
-use persistence_core::{Error as PersistenceError, Executor};
+use persistence_core::Executor;
 use serde::de::DeserializeOwned;
 
 use super::super::PortalListParams;
@@ -85,29 +84,7 @@ pub(in crate::supplier_portal) async fn aggregate<T: DeserializeOwned>(
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<T>> {
-    let documents = match executor.session() {
-        Some(session) => {
-            let mut cursor = collection
-                .aggregate(pipeline)
-                .session(&mut *session)
-                .await
-                .map_err(PersistenceError::from)?;
-            let mut documents = Vec::new();
-            while let Some(document) =
-                cursor.next(&mut *session).await.transpose().map_err(PersistenceError::from)?
-            {
-                documents.push(document);
-            }
-            documents
-        },
-        None => collection
-            .aggregate(pipeline)
-            .await
-            .map_err(PersistenceError::from)?
-            .try_collect::<Vec<Document>>()
-            .await
-            .map_err(PersistenceError::from)?,
-    };
+    let documents: Vec<Document> = persistence_core::aggregate::rows(&collection, pipeline, executor).await?;
     documents
         .into_iter()
         .map(|document| {

@@ -1,14 +1,15 @@
 //! 选品拥有领域提供字段映射与对象事实，不决定授权组合。
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey, ResourceTargets,
+    QueryOutput, RelatedObjects, RelationKey, ResourceTargets,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{Error as IdentityError, Result as IdentityResult};
+use erp_permissions::customer;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
@@ -89,13 +90,18 @@ impl AccessMapping for SelectionMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
+    fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
+        self.customer
+            .as_ref()
+            .map(|customer| {
+                [(RelationKey::parse("customer").expect("固定客户来源标识"), customer.clone())].into()
+            })
+            .unwrap_or_default()
+    }
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
         if self.model.resource == "sales_selection_proposal" {
             Ok(self.responsibility(doc! {}))
         } else {
@@ -106,7 +112,7 @@ impl AccessMapping for SelectionMapping {
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<QueryFragment> {
         let condition = match fact {
             AccessFact::Owned => doc! { "sales_owner_user_id": context.actor.id() },
@@ -122,7 +128,7 @@ impl AccessMapping for SelectionMapping {
         &self,
         relation: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<RelationMapping> {
         if relation.as_str() != "customer" {
             return Err(IdentityError::ValidationError("选品模型未登记该来源关系".into()));
@@ -138,29 +144,18 @@ impl AccessMapping for SelectionMapping {
 /// 选品对象事实；创建命令可提供已校验的拟写入责任事实。
 pub struct SelectionFacts {
     db: Database,
-    proposed: Option<ObjectFacts>,
+    customers: Arc<dyn AccessFactsPort>,
 }
 impl SelectionFacts {
     /// 绑定本域集合。
     /// # 参数
-    /// db 为选品数据库。
+    /// db 为选品数据库，customers 为客户拥有领域的事实读取器。
     /// # 返回
     /// 不执行查询的事实端口。
     /// # 错误
     /// 无。
-    pub fn new(db: Database) -> Self {
-        Self { db, proposed: None }
-    }
-    /// 绑定创建命令的拟写入责任。
-    /// # 参数
-    /// db 为数据库，owner/org 为已经校验的责任字段。
-    /// # 返回
-    /// 仅能读取固定创建目标的事实端口。
-    /// # 错误
-    /// 不执行 I/O。
-    pub fn proposed(db: Database, owner: &str, org: &str) -> Self {
-        let facts = object("sales_selection_booklet", "selection_new", "proposed".into(), owner, org);
-        Self { db, proposed: Some(facts) }
+    pub fn new(db: Database, customers: Arc<dyn AccessFactsPort>) -> Self {
+        Self { db, customers }
     }
 }
 #[async_trait]
@@ -171,9 +166,6 @@ impl AccessFactsPort for SelectionFacts {
         ids: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> IdentityResult<Vec<ObjectFacts>> {
-        if let Some(facts) = &self.proposed {
-            return Ok(vec![facts.clone()]);
-        }
         let mut result = Vec::new();
         for id in ids.ids() {
             let (book, version) = if context.resource == "sales_selection_booklet" {
@@ -198,7 +190,25 @@ impl AccessFactsPort for SelectionFacts {
                 let version = format!("{}:{}:{}", proposal.base.version, book.base.id, book.base.version);
                 (book, version)
             };
-            result.push(book_object(&context.resource, id, version, &book));
+            let mut root = book_object(&context.resource, id, version, &book);
+            let customer_id = book.customer_id.to_string();
+            let source_context = AccessContext {
+                resource: "customer".into(),
+                permission: if context.permission.action() == "list" {
+                    customer::LIST
+                } else {
+                    customer::DETAIL
+                },
+                model: None,
+                ..context.clone()
+            };
+            let targets = ResourceTargets::new(&[&customer_id])?;
+            let objects = self.customers.load(&source_context, &targets, executor).await?;
+            root.relations.insert(
+                RelationKey::parse("customer")?,
+                RelatedObjects { expected_ids: [customer_id].into(), objects },
+            );
+            result.push(root);
         }
         Ok(result)
     }
@@ -206,6 +216,30 @@ impl AccessFactsPort for SelectionFacts {
 fn book_object(resource: &str, id: &str, version: String, book: &SalesSelectionBooklet) -> ObjectFacts {
     object(resource, id, version, &book.sales_owner_user_id, &book.business_org_unit_id)
 }
+/// 构造选品册拟创建责任，候选不携带任何持久化身份版本。
+/// # 参数
+/// customer_id 为实际客户身份；owner、org 为创建用例已校验的销售负责人和业务组织。
+/// # 返回
+/// 固定选品册资源、空记录身份及空版本的创建候选。
+/// # 错误
+/// 客户身份为空、未规范化或超过上限时拒绝。
+pub fn candidate(customer_id: &str, owner: &str, org: &str) -> IdentityResult<ObjectFacts> {
+    let targets = ResourceTargets::new(&[customer_id])?;
+    let mut candidate = object("sales_selection_booklet", "", String::new(), owner, org);
+    candidate.relations.insert(
+        RelationKey::parse("customer")?,
+        RelatedObjects { expected_ids: targets.ids().iter().cloned().collect(), objects: vec![] },
+    );
+    Ok(candidate)
+}
+
+/// 将已经读取或校验的责任字段转换为选品事实。
+/// # 参数
+/// resource、id、version 为业务身份，owner、org 为已校验的销售责任。
+/// # 返回
+/// 保留原始身份、版本和当前责任的对象事实。
+/// # 错误
+/// 不执行 I/O，字段合法性由创建用例保证。
 fn object(resource: &str, id: &str, version: String, owner: &str, org: &str) -> ObjectFacts {
     ObjectFacts {
         resource: resource.into(),
@@ -251,22 +285,13 @@ mod tests {
         let customer = customer_mapping();
         for resource in ["sales_selection_booklet", "sales_selection_proposal"] {
             let mapping = SelectionMapping::with_customer(resource, customer.clone()).unwrap();
-            let relation = mapping
-                .relation(
-                    &RelationKey::parse("customer").unwrap(),
-                    &context(resource),
-                    &MappingFacts::default(),
-                )
-                .unwrap();
+            let relation =
+                mapping.relation(&RelationKey::parse("customer").unwrap(), &context(resource), None).unwrap();
             assert_eq!(relation.expected_ids, Bson::Array(vec!["$customer_id".into()]));
             assert!(Arc::ptr_eq(&relation.mapping, &customer));
             assert!(
                 mapping
-                    .relation(
-                        &RelationKey::parse("unregistered").unwrap(),
-                        &context(resource),
-                        &MappingFacts::default(),
-                    )
+                    .relation(&RelationKey::parse("unregistered").unwrap(), &context(resource), None,)
                     .is_err()
             );
         }
@@ -280,7 +305,7 @@ mod tests {
                 .relation(
                     &RelationKey::parse("customer").unwrap(),
                     &context("sales_selection_booklet"),
-                    &MappingFacts::default(),
+                    None,
                 )
                 .is_err()
         );
@@ -290,16 +315,15 @@ mod tests {
     #[test]
     fn booklet_maps_current_owner_and_organization_fields() {
         let mapping = SelectionMapping::new("sales_selection_booklet").unwrap();
-        let facts = MappingFacts::default();
+        let facts = None;
         let context = context("sales_selection_booklet");
-        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, &facts).unwrap()
+        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
         else {
             panic!("册责任必须使用本行字段");
         };
         assert_eq!(owner, doc! { "sales_owner_user_id": "sales-a" });
-        let QueryFragment::Match(org) = mapping
-            .predicate(&AccessFact::OrganizationIn(["org-a".into()].into()), &context, &facts)
-            .unwrap()
+        let QueryFragment::Match(org) =
+            mapping.predicate(&AccessFact::OrganizationIn(["org-a".into()].into()), &context, facts).unwrap()
         else {
             panic!("册组织必须使用本行字段");
         };
@@ -309,9 +333,8 @@ mod tests {
     #[test]
     fn proposal_responsibility_uses_live_parent_instead_of_snapshot_fields() {
         let mapping = SelectionMapping::new("sales_selection_proposal").unwrap();
-        let QueryFragment::Exists { collection, bindings, pipeline } = mapping
-            .predicate(&AccessFact::Owned, &context("sales_selection_proposal"), &MappingFacts::default())
-            .unwrap()
+        let QueryFragment::Exists { collection, bindings, pipeline } =
+            mapping.predicate(&AccessFact::Owned, &context("sales_selection_proposal"), None).unwrap()
         else {
             panic!("方案责任必须关联实际父册");
         };
@@ -331,7 +354,7 @@ mod tests {
                 .predicate(
                     &AccessFact::WarehouseIn(["warehouse".into()].into()),
                     &context("sales_selection_booklet"),
-                    &MappingFacts::default()
+                    None
                 )
                 .is_err()
         );
@@ -339,13 +362,17 @@ mod tests {
 
     #[test]
     fn proposed_object_keeps_known_empty_supplements_and_explicit_responsibility() {
-        let proposed =
-            object("sales_selection_booklet", "selection_new", "proposed".into(), "sales-a", "org-a");
+        let proposed = candidate("customer", "sales-a", "org-a").unwrap();
         assert_eq!(proposed.owner_id, FactValue::Known(Some("sales-a".into())));
         assert_eq!(proposed.org_unit_id, FactValue::Known(Some("org-a".into())));
         assert_eq!(proposed.collaborators, FactValue::Known(BTreeSet::new()));
         assert_eq!(proposed.history_participants, FactValue::Known(BTreeSet::new()));
         assert_eq!(proposed.resource, "sales_selection_booklet");
-        assert_eq!(proposed.id, "selection_new");
+        assert!(proposed.id.is_empty());
+        assert!(proposed.version.is_empty());
+        let relation = proposed.relations.get(&RelationKey::parse("customer").unwrap()).unwrap();
+        assert_eq!(relation.expected_ids, ["customer".into()].into());
+        assert!(relation.objects.is_empty());
+        assert!(candidate("", "sales-a", "org-a").is_err());
     }
 }

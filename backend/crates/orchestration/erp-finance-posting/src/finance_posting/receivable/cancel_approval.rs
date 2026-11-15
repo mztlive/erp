@@ -1,10 +1,14 @@
 //! 客户回款撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
+use application_core::AuditActor;
 use bpm::model::{IdempotencyKey, SubjectRef};
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
+use erp_identity::AccessTarget;
+use erp_permissions::receivable;
+use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
 pub(crate) use erp_workflow::service::approval::execution::cancel_prepare::DocumentCancelRuntime as LoadedCancelRuntime;
@@ -15,6 +19,7 @@ use erp_workflow::service::approval::execution::{
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
+use super::customer_receipt::receipt_command_result;
 use crate::{FinancePostingPorts, Result};
 
 /// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
@@ -101,7 +106,7 @@ pub(crate) struct CustomerReceiptCancelPersistInput {
     /// 待关闭的开放任务。
     pub open_tasks: Vec<WorkItem>,
     /// 撤回人。
-    pub actor_id: String,
+    pub actor: AuditActor,
     /// 撤回原因。
     pub reason: String,
     /// 调用方时间。
@@ -120,7 +125,7 @@ pub(crate) struct CustomerReceiptCancelPersistInput {
 /// * `input` - 回款单、取消计划与开放任务
 ///
 /// # 返回
-/// 成功时无返回值。
+/// 返回在原事务重验撤回资格后读取的回款视图。
 ///
 /// # 错误
 /// CAS 冲突或仓储失败时返回错误，事务回滚。
@@ -131,25 +136,49 @@ pub(crate) async fn persist_customer_receipt_cancel(
     db: &Database,
     rbac: &FinancePostingPorts,
     input: CustomerReceiptCancelPersistInput,
-) -> Result<()> {
-    let CustomerReceiptCancelPersistInput { mut receipt, prepared, open_tasks, actor_id, reason, now, audit } =
+) -> Result<CustomerReceiptView> {
+    let CustomerReceiptCancelPersistInput { mut receipt, prepared, open_tasks, actor, reason, now, audit } =
         input;
-    let PreparedExecution::Apply(writes) = prepared else {
-        return Ok(());
-    };
-    let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
     let db = db.clone();
     let rbac = rbac.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, &actor_id, executor)
+                rbac.authorization
+                    .require(
+                        &actor,
+                        &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
+                        AccessTarget::Operation,
+                        executor,
+                    )
                     .await?;
-                rbac.runtime.persist_cancel_copies(&db, &writes, executor).await?;
-                db.customer_receipts().update(&mut receipt, executor).await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
+                if let PreparedExecution::Apply(writes) = prepared {
+                    let actor_id = actor.id().to_string();
+                    let closed_tasks =
+                        WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
+                    claim_and_persist_document_cancel_runtime(
+                        &db,
+                        &writes,
+                        &closed_tasks,
+                        &actor_id,
+                        executor,
+                    )
+                    .await?;
+                    rbac.runtime.persist_cancel_copies(&db, &writes, executor).await?;
+                    db.customer_receipts().update(&mut receipt, executor).await?;
+                    persist_log(&db, &audit, executor).await?;
+                }
+                receipt_command_result(
+                    &db,
+                    &rbac.authorization,
+                    &actor,
+                    &receipt.base.id,
+                    &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
+                    AccessTarget::Operation,
+                    executor,
+                )
+                .await
             })
         })
         .await

@@ -8,6 +8,7 @@ use erp_core::ids::SalesOrderId;
 use erp_finance::entity::receivable::SalesInvoiceRequest;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
+use erp_permissions::receivable as receivable_permissions;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_workflow::ErrorCode;
@@ -142,7 +143,9 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedInvoiceRequestRow>> {
-        let (_, authorization) = self.resolve(actor, "sales_invoice_request", "list", executor).await?;
+        let (_, authorization) = self
+            .resolve(actor, &receivable_permissions::INVOICE_REQUEST_INVOICE_REQUEST_LIST, executor)
+            .await?;
         if let Some(task_id) = &query.work_item_id
             && let Some(request) = self.db.sales_invoice_requests().find_for_task(task_id, executor).await?
         {
@@ -155,6 +158,7 @@ impl FundsAccess {
             snapshot.decided.iter().map(|(row, _)| row),
             &snapshot.facts,
         );
+        authorization.deliver(executor).await?;
         finish_requests(query, snapshot, authorization, version)
     }
 
@@ -196,11 +200,17 @@ impl FundsAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (_, authorization) =
-                        this.resolve(&actor, "sales_invoice_request", "list", executor).await?;
+                    let (_, authorization) = this
+                        .resolve(
+                            &actor,
+                            &receivable_permissions::INVOICE_REQUEST_INVOICE_REQUEST_LIST,
+                            executor,
+                        )
+                        .await?;
                     let rows = this.request_candidates(&query, &authorization, executor).await?;
                     let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
                     let (facts, _) = this.request_sales_context(&order_ids, executor).await?;
+                    authorization.deliver(executor).await?;
                     Ok(request_version(&authorization.context, rows.iter(), &facts))
                 })
             })
@@ -282,8 +292,10 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedInvoiceRequestRow>> {
-        let (_access, authorization) =
-            self.resolve(actor, "sales_invoice_request", "detail", executor).await?;
+        let (_access, authorization) = self
+            .resolve(actor, &receivable_permissions::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL, executor)
+            .await?;
+        self.require_visible_root(&authorization, id, executor).await?;
         let row = self
             .db
             .sales_invoice_requests()
@@ -308,6 +320,7 @@ impl FundsAccess {
         let row_facts = request_linked_facts(&row, fact, handler.as_deref());
         let data = request_row(&row, handler, &facts, &order_nos);
         let parts = vec![format!("{}:{}", row.base.id, row.base.version), row_facts.version_part()];
+        authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),

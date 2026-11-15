@@ -1,13 +1,10 @@
 //! 决定写入的身份、供应商启用与内部对象范围重验。
-
-use std::slice;
-
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::{
-    AccountDirectoryService, AuthorizationRegistry, AuthorizationService, Permission, PermissionSet,
-    PortalActor, PortalIdentityService,
+    AccessTarget, AccountDirectoryService, PermissionSet, PortalActor, PortalIdentityService,
 };
+use erp_permissions::Permission;
 use erp_supplier::{Error as SupplierError, SupplierAccount, SupplierExt};
 use persistence_core::Executor;
 
@@ -73,7 +70,7 @@ impl SupplierPortalProcess {
     ///
     /// # 参数
     /// * `actor` - 内部操作人。
-    /// * `action` - 供应商对象动作。
+    /// * `permission` - 供应商内置权限。
     /// * `supplier_id` - 供应商角色 ID。
     /// * `executor` - 调用方执行器。
     ///
@@ -85,11 +82,13 @@ impl SupplierPortalProcess {
     pub(super) async fn internal_supplier(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         supplier_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierAccount> {
-        if let Err(error) = self.services.suppliers.require_with(actor, action, supplier_id, executor).await {
+        if let Err(error) =
+            self.services.suppliers.require_with(actor, permission, supplier_id, executor).await
+        {
             if matches!(&error, SupplierError::Forbidden(_)) {
                 self.internal_actor(actor, executor).await?;
             }
@@ -163,31 +162,21 @@ impl SupplierPortalProcess {
     ///
     /// # 参数
     /// * `actor` - 内部操作人。
-    /// * `action` - 门户命令动作；未知动作按申请审核权限检查。
+    /// * `permission` - 当前入口直接引用的门户权限常量。
     /// * `executor` - 调用方执行器，用于核对策略快照。
     ///
     /// # 返回
     /// 权限存在且策略快照未漂移时无返回值。
     ///
     /// # 错误
-    /// 权限码无法解析时返回 `ValidationError`；没有权限时返回 `Forbidden`。策略读取或快照核对失败时返回对应错误。
+    /// 无入口资格或写入缺少快照事务时拒绝；身份取证失败原样传播。
     pub(super) async fn internal_permission(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let permission = portal_permission(action)?;
-        let service =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
-        let Some(qualified) = service.permissions(actor, slice::from_ref(&permission), executor).await?
-        else {
-            self.internal_actor(actor, executor).await?;
-            return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
-        };
-        if !qualified.same_role(slice::from_ref(&permission)) {
-            return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
-        }
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
         Ok(())
     }
 
@@ -195,7 +184,7 @@ impl SupplierPortalProcess {
     ///
     /// # 参数
     /// * `owner` - 内部处理人账号 ID。
-    /// * `actions` - 须由有效角色逐项授予的门户动作，可分别来自不同角色。
+    /// * `permissions` - 须由有效角色逐项授予的门户权限，可分别来自不同角色。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -206,33 +195,19 @@ impl SupplierPortalProcess {
     pub(super) async fn reviewer_actor(
         &self,
         owner: &str,
-        actions: &[&str],
+        permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<AuditActor> {
         let actor = AuditActor::new(owner.into(), owner.into(), AccountKind::Admin);
-        let service =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
-        let permissions =
-            actions.iter().map(|action| portal_permission(action)).collect::<Result<Vec<_>>>()?;
+        let service = &self.authorization;
         let qualified = service
-            .permissions(&actor, &permissions, executor)
+            .permissions(&actor, permissions, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("请先配置当前启用且具确认资格的内部处理人".into()))?;
-        if !qualified.permissions().covers(&PermissionSet::new(permissions)) {
+        if !qualified.permissions().covers(&PermissionSet::new(permissions.to_vec())) {
             return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
         }
         let account = qualified.account();
         Ok(AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind))
     }
-}
-
-fn portal_permission(action: &str) -> Result<Permission> {
-    let code = match action {
-        "supplier_portal.account_create" => "supplier_portal_account:create",
-        "supplier_portal.account_update" => "supplier_portal_account:update",
-        "supplier_portal.quote_access_update" => "supplier_portal_catalog:update",
-        "supplier_portal.application_detail" => "supplier_portal_request:detail",
-        _ => "supplier_portal_request:review",
-    };
-    Permission::parse(code).map_err(|error| Error::ValidationError(error.to_string()))
 }

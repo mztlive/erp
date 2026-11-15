@@ -1,5 +1,4 @@
 //! 供应商门户命令：重验身份和资格，同一执行器提交申请、正式事实、任务与回执。
-// TODO: 重做供应商门户及 PortalBatch 的权限接入，统一门户会话、岗位和本人任务授权。
 
 use std::sync::Arc;
 
@@ -19,6 +18,7 @@ mod new_products;
 mod offerings;
 mod qualification;
 mod request_access;
+pub use request_access::material_facts_port;
 mod tasks;
 
 pub use assets::{PortalAssetKind, PortalAssetView, PortalCatalogAssetAccess, PreparedPortalAsset};
@@ -27,7 +27,7 @@ pub use batch::{
     PortalBatchRowResult,
 };
 pub use dto::*;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
 pub use qualification::request_reviewable;
 
@@ -36,20 +36,24 @@ pub use qualification::request_reviewable;
 pub struct SupplierPortalProcess {
     services: Arc<CatalogServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl SupplierPortalProcess {
     /// 装配门户命令服务。
     /// # 参数
     /// * `db` - 各拥有域共享的数据库。
-    /// * `rbac` - 当前内部权限与范围来源。
+    /// * `authorization` - 当前内部权限与范围来源。
     /// * `services` - 应用已装配的领域服务、对象范围与正式任务操作。
     /// # 返回
     /// 返回未执行I/O的过程。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<CatalogServices>) -> Self {
-        Self { db, rbac, services }
+    pub fn new(
+        db: Database,
+        authorization: Arc<AuthorizationService>,
+        services: Arc<CatalogServices>,
+    ) -> Self {
+        Self { db, authorization, services }
     }
 }

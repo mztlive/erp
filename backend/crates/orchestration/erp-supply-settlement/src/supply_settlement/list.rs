@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_core::ids::SupplierAccountId;
 use erp_party::PartyExt;
+use erp_permissions::supplier_settlement;
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
 use erp_supply::dto::supplier_settlement::{
@@ -12,7 +13,7 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::repository::prelude::*;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{NoTransaction, ReadExecutor, Transactional};
 
 use super::SupplierSettlementProcess;
 use crate::{Error, Result};
@@ -30,7 +31,15 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// # 错误
     /// 不可见对象返回 NotFound。
     pub async fn require_detail(&self, actor: &AuditActor, id: &str) -> Result<()> {
-        self.domain().access().require_statement(actor, "detail", id, &mut NoTransaction).await?;
+        self.domain()
+            .access()
+            .require_statement(
+                actor,
+                &supplier_settlement::STATEMENT_DETAIL,
+                id,
+                &mut ReadExecutor::default(),
+            )
+            .await?;
         Ok(())
     }
 

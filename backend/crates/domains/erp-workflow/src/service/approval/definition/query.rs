@@ -1,30 +1,56 @@
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
-use persistence_core::NoTransaction;
+use erp_identity::AccessTarget;
+use erp_permissions::approval_process;
+use persistence_core::{Executor, Transactional};
 
 use super::super::definition_dto::{DefinitionCatalogItem, DefinitionDetailView, DefinitionVersionItem};
 use super::super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of, require_process_required};
 use super::super::process_kind::{document_type_of, process_kind_of};
-use super::command::definition_not_found;
+use super::super::scope::definition_management_visibility_with_executor;
+use super::ApprovalDefinitionService;
+use super::command::{definition_not_found, require_definition_access};
 use super::mapping::{catalog_facts_by_kind, catalog_item, detail_with_copies, version_item};
-use super::{ApprovalDefinitionService, DefinitionManagementVisibility, definition_management_visibility};
 use crate::entity::document_registry::DocumentType;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::repository::BpmExt;
 
 impl ApprovalDefinitionService {
-    /// 返回固定 21 行非敏感目录。
-    ///
+    /// 返回固定单据类型的非敏感目录。
     /// # 参数
-    /// * `actor` - 已认证操作人
-    ///
+    /// actor 为当前认证操作人。
     /// # 返回
-    /// 返回 `ALL_DOCUMENT_TYPES` 每一类型一行目录。
-    ///
+    /// 同一授权快照内的类型目录及可执行动作。
     /// # 错误
-    /// 政策或仓储读取失败时返回错误。
+    /// 缺少读取资格、政策或仓储读取失败时拒绝。
     pub async fn definition_catalog(&self, actor: &AuditActor) -> Result<Vec<DefinitionCatalogItem>> {
-        let visibility = definition_management_visibility(&self.db, &self.identity, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.catalog_view(&actor, executor).await })
+            })
+            .await
+    }
+
+    async fn catalog_view(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DefinitionCatalogItem>> {
+        self.authorization
+            .require(actor, &approval_process::DEFINITION_DETAIL, AccessTarget::Operation, executor)
+            .await?;
+        let visibility = definition_management_visibility_with_executor(
+            &self.authorization,
+            &self.db,
+            &self.identity,
+            actor,
+            executor,
+        )
+        .await?;
         let mut required_kinds = Vec::new();
         let mut policies = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
@@ -34,8 +60,7 @@ impl ApprovalDefinitionService {
             }
             policies.push((document_type, policy));
         }
-        let facts =
-            self.db.bpm_workflow().definition_catalog_facts(&required_kinds, &mut NoTransaction).await?;
+        let facts = self.db.bpm_workflow().definition_catalog_facts(&required_kinds, executor).await?;
         let by_kind = catalog_facts_by_kind(facts);
         Ok(policies
             .into_iter()
@@ -44,96 +69,144 @@ impl ApprovalDefinitionService {
     }
 
     /// 列出某单据类型的定义版本。
-    ///
     /// # 参数
-    /// * `document_type` - 固定单据类型
-    /// * `actor` - 已认证操作人
-    ///
+    /// document_type 为服务端单据类型，actor 为当前认证操作人。
     /// # 返回
-    /// 返回该类型的版本摘要。
-    ///
+    /// 同一授权快照内的版本摘要。
     /// # 错误
-    /// 无读取权或类型无需审批时返回错误；授权重验或仓储读取失败时返回对应错误。
+    /// 缺少入口或类型读取资格、类型无需审批及仓储失败时拒绝。
     pub async fn definition_versions(
         &self,
         document_type: DocumentType,
         actor: &AuditActor,
     ) -> Result<Vec<DefinitionVersionItem>> {
-        let visibility = definition_management_visibility(&self.db, &self.identity, actor).await?;
-        require_process_required(document_type)?;
-        ensure_can_read_detail(&visibility, document_type)?;
-        let versions = self
-            .db
-            .bpm_workflow()
-            .list_definition_versions(process_kind_of(document_type), &mut NoTransaction)
-            .await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.version_list(document_type, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn version_list(
+        &self,
+        document_type: DocumentType,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DefinitionVersionItem>> {
+        let policy = require_process_required(document_type)?;
+        require_definition_access(
+            &self.authorization,
+            actor,
+            &approval_process::DEFINITION_DETAIL,
+            &policy,
+            executor,
+        )
+        .await
+        .map_err(detail_access_error)?;
+        let versions =
+            self.db.bpm_workflow().list_definition_versions(process_kind_of(document_type), executor).await?;
         Ok(versions.iter().map(version_item).collect())
     }
 
     /// 返回定义详情。
-    ///
     /// # 参数
-    /// * `definition_id` - 定义主键
-    /// * `actor` - 已认证操作人
-    ///
+    /// definition_id 为定义主键，actor 为当前认证操作人。
     /// # 返回
-    /// 返回定义详情。
-    ///
+    /// 同一授权快照中的定义、节点及抄送配置。
     /// # 错误
-    /// 不存在或无权读取时返回不泄露存在性的错误；仓储读取失败时返回对应错误。
+    /// 缺少入口资格、目标不存在或类型无权、仓储读取失败时拒绝。
     pub async fn definition_detail(
         &self,
         definition_id: &str,
         actor: &AuditActor,
     ) -> Result<DefinitionDetailView> {
-        let visibility = definition_management_visibility(&self.db, &self.identity, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = definition_id.to_string();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.detail_view(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn detail_view(
+        &self,
+        definition_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<DefinitionDetailView> {
+        self.authorization
+            .require(actor, &approval_process::DEFINITION_DETAIL, AccessTarget::Operation, executor)
+            .await?;
         let graph = self
             .db
             .bpm_workflow()
-            .load_definition_graph(
-                &ApprovalProcessDefinitionId::new(definition_id.to_string()),
-                &mut NoTransaction,
-            )
+            .load_definition_graph(&ApprovalProcessDefinitionId::new(definition_id.to_string()), executor)
             .await?
             .ok_or_else(definition_not_found)?;
-        let document_type = document_type_of(graph.definition.process_kind);
-        ensure_can_read_detail(&visibility, document_type)?;
-        detail_with_copies(&self.db, &graph, &mut NoTransaction).await
+        let policy = require_process_required(document_type_of(graph.definition.process_kind))?;
+        require_definition_access(
+            &self.authorization,
+            actor,
+            &approval_process::DEFINITION_DETAIL,
+            &policy,
+            executor,
+        )
+        .await
+        .map_err(detail_access_error)?;
+        detail_with_copies(&self.db, &graph, executor).await
     }
 }
 
-/// 详情读取权。
-fn ensure_can_read_detail(
-    visibility: &DefinitionManagementVisibility,
-    document_type: DocumentType,
-) -> Result<()> {
-    if visibility.can_read_detail(document_type) {
-        return Ok(());
-    }
-    Err(definition_not_found())
+/// 类型读取拒绝沿用不存在语义，不泄露无权类型的定义身份。
+fn detail_access_error(error: Error) -> Error {
+    if matches!(error, Error::Forbidden(_)) { definition_not_found() } else { error }
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::super::definition_dto::DefinitionAllowedAction;
     use super::super::super::policy::ApprovalRequirement;
-    use super::super::command::ensure_definition_admin_allowed;
+    use super::super::DefinitionManagementVisibility;
     use super::super::mapping::definition_allowed_actions;
     use super::*;
-    use crate::error::Error;
 
-    /// 类型级权限由 Service 强制：无管理权不得进入写端口。
+    #[tokio::test]
+    async fn reads_reject_before_loading_definition_data() {
+        use persistence_core::testing::SnapshotExecutor;
+
+        use super::super::test_support::unavailable_service;
+
+        let (service, actor) = unavailable_service().await;
+        let errors = [
+            service.catalog_view(&actor, &mut SnapshotExecutor::default()).await.unwrap_err(),
+            service
+                .version_list(DocumentType::SalesOrder, &actor, &mut SnapshotExecutor::default())
+                .await
+                .unwrap_err(),
+            service.detail_view("definition", &actor, &mut SnapshotExecutor::default()).await.unwrap_err(),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    /// 类型可见范围与已有定义状态共同决定展示动作。
     #[test]
-    fn type_level_permission_is_enforced_by_helpers() {
-        let denied = ensure_definition_admin_allowed(false).unwrap_err();
-        assert!(matches!(denied, Error::Forbidden(message) if message.contains("流程定义管理权限")));
-        ensure_definition_admin_allowed(true).unwrap();
+    fn type_visibility_controls_definition_actions() {
         let visibility = DefinitionManagementVisibility::from_type_permissions(
             vec![DocumentType::StockAdjustment],
             Vec::new(),
         );
-        assert!(ensure_can_read_detail(&visibility, DocumentType::StockAdjustment).is_ok());
-        assert!(ensure_can_read_detail(&visibility, DocumentType::SalesOrder).is_err());
+        assert!(visibility.can_read_detail(DocumentType::StockAdjustment));
+        assert!(!visibility.can_read_detail(DocumentType::SalesOrder));
         assert_eq!(
             definition_allowed_actions(ApprovalRequirement::ProcessRequired, false, None, None),
             Vec::new()

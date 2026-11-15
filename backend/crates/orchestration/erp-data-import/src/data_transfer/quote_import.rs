@@ -21,7 +21,7 @@ use crate::{Error, Result};
 impl BusinessTransfers {
     pub(super) async fn quote_preview(&self, input: &Value, actor: &AuditActor) -> Result<Value> {
         let source = self.quote_source(input, actor).await?;
-        let prior = InquiryReadService::new(self.db.clone(), self.rbac.clone())
+        let prior = InquiryReadService::new(self.db.clone(), self.authorization.clone())
             .internal_quotes(actor, required(input, "inquiry_id")?, required(input, "task_id")?)
             .await?;
         let prior = serde_json::to_value(prior).map_err(|_| invalid("报价数据格式无效"))?;

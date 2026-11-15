@@ -1,12 +1,13 @@
 //! 供应商商品回调：有界领取、当前事实补查及逐规格原子检查点。
 use erp_catalog::CatalogService;
+use erp_permissions::supplier_api;
 mod query;
 mod store;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
 use erp_integration::entity::supplier_callback::SupplierCallbackReceipt;
 use erp_integration::repository::pending_catalog_callbacks;
 use erp_supply::connector_registry::SupplierConnectorRegistry;
@@ -14,7 +15,7 @@ use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::service::supplier_api::SupplierApiService;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 pub use query::{CatalogUpdate, query_current};
 
 use crate::supplier_connection_execution::catalog_refresh_actor;
@@ -24,7 +25,7 @@ pub struct SupplierCatalogCallbackProcess {
     catalog: CatalogService,
     db: Database,
     registry: Arc<SupplierConnectorRegistry>,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 struct Context {
@@ -44,10 +45,10 @@ impl SupplierCatalogCallbackProcess {
     pub fn new(
         db: Database,
         registry: Arc<SupplierConnectorRegistry>,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         catalog: CatalogService,
     ) -> Self {
-        Self { db, registry, rbac, catalog }
+        Self { db, registry, authorization, catalog }
     }
 
     /// 每轮至多五条通知，每条至多十个步骤；失败保留检查点并延期。
@@ -58,7 +59,7 @@ impl SupplierCatalogCallbackProcess {
     /// # 错误
     /// 队列读取失败返回错误；单项失败隔离并继续下一项。
     pub async fn run_once(&self) -> Result<usize> {
-        let candidates = pending_catalog_callbacks(&self.db, &mut NoTransaction).await?;
+        let candidates = pending_catalog_callbacks(&self.db, &mut ReadExecutor::default()).await?;
         let mut count = 0;
         for candidate in candidates {
             let mut receipt = match self.claim(&candidate).await {
@@ -83,7 +84,7 @@ impl SupplierCatalogCallbackProcess {
 
     async fn context(&self, receipt: &SupplierCallbackReceipt) -> Result<Context> {
         let connection = SupplierApiService::new(self.db.clone())
-            .load_connection(receipt.connection_id.as_ref(), &mut NoTransaction)
+            .load_connection(receipt.connection_id.as_ref(), &mut ReadExecutor::default())
             .await?;
         let connector = self
             .registry
@@ -98,11 +99,8 @@ impl SupplierCatalogCallbackProcess {
     }
 
     async fn authorize(&self, actor: &AuditActor) -> Result<()> {
-        let permission = Permission::parse("supplier_api_connection:catalog_sync")?;
-        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
-            .has_permission(actor, &permission, &mut NoTransaction)
-            .await?
-        {
+        let permission = supplier_api::ADOPTIONS_PREVIEW;
+        if !self.authorization.has_permission(actor, &permission, &mut ReadExecutor::default()).await? {
             return Err(Error::Forbidden("商品采集授权人已无同步权限，请重新授权同步".into()));
         }
         Ok(())

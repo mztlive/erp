@@ -1,6 +1,7 @@
 //! 销售变更命令沿原销售单动作在原事务内重验对象范围。
 
 use application_core::AuditActor;
+use erp_permissions::Permission;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_order::SalesOrder;
 use persistence_core::Executor;
@@ -16,7 +17,7 @@ pub(super) struct SalesChangeCommandAccess {
     /// 已认证操作人。
     actor: AuditActor,
     /// 本次命令对应的来源销售单动作。
-    action: &'static str,
+    permission: Permission,
 }
 
 impl SalesChangeProcess {
@@ -24,7 +25,7 @@ impl SalesChangeProcess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册的销售单动作
+    /// * `permission` - 对应的公共销售单权限常量。
     ///
     /// # 返回
     /// 返回可在事务内重验来源销售单范围的检查器。
@@ -37,12 +38,12 @@ impl SalesChangeProcess {
     pub(super) fn command_access(
         &self,
         actor: &AuditActor,
-        action: &'static str,
+        permission: &Permission,
     ) -> SalesChangeCommandAccess {
         SalesChangeCommandAccess {
-            access: SalesAccess::new(self.db.clone(), self.rbac.clone()),
+            access: SalesAccess::new(self.db.clone(), self.authorization.clone()),
             actor: actor.clone(),
-            action,
+            permission: permission.clone(),
         }
     }
 }
@@ -64,7 +65,7 @@ impl SalesChangeCommandAccess {
     /// 写命令必须在原事务重验，不得把入口事前检查当作凭证。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
         self.access
-            .require_object(&self.actor, self.action, id, &[], executor)
+            .require_object(&self.actor, &self.permission, id, executor)
             .await
             .map_err(crate::Error::from)
     }

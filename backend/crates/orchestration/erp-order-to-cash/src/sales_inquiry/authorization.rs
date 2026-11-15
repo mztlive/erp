@@ -1,212 +1,123 @@
-//! 询价对象事实、字段映射与 identity 授权登记。
+//! 询价用例调用固定授权入口；资源实现由 server 一次绑定。
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::entity::authorization::{FactKind, QueryModel, QueryModelKey, QueryOutput, ReadAccess};
-use erp_identity::ports::AccessMapping;
-use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget, AuthorizationRegistry,
-    AuthorizationService, CompiledAccess, DataAccess, Permission, ResourceTargets, SharedRbacService,
-};
+use erp_identity::{AccessTarget, AuthorizationService, CompiledAccess};
+use erp_permissions::{Permission, internal, sales_inquiry};
 use erp_sales::entity::sales_inquiry::SalesInquiry;
-use erp_workflow::entity::work_item::WorkItemStatus;
-use mongodb::Database;
+use erp_workflow::entity::work_item::WorkItem;
 use persistence_core::Executor;
 
-use crate::repository::sales_inquiry_access::{InquiryFacts, InquiryMapping, TaskFacts, TaskInquiryMapping};
+use crate::repository::sales_inquiry_access::inquiry_candidate;
 use crate::{Error, Result};
 
-/// 查询和对象检查复用同一固定范围政策，各自只装配实际消费的能力。
-fn data(permission: &Permission) -> DataAccess {
-    DataAccess {
-        subject: AccessSubject::Direct,
-        required_facts: [FactKind::Owner, FactKind::Organization].into(),
-        policy: AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() },
-    }
-}
-
-fn permission(action: &str) -> Result<Permission> {
-    if !matches!(
-        action,
-        "list"
-            | "detail"
-            | "create"
-            | "update"
-            | "submit"
-            | "accept"
-            | "reinquire"
-            | "close"
-            | "import"
-            | "convert_sales"
-            | "recover"
-    ) {
-        return Err(Error::ValidationError("未登记的销售询价动作".into()));
-    }
-    Ok(Permission::parse(format!("sales_inquiry:{action}"))?)
-}
-
-/// 使用可信完整询价事实检查当前对象动作，不构造查询模型。
+/// 检查询价的当前对象或创建候选。
 /// # 参数
-/// db、rbac 为身份设施；actor、action 为真实入口；inquiry 为原事务事实，extra 为同角色附加资格。
+/// authorization 为共享服务，actor/permission 为入口身份和动作，inquiry 为业务事实，executor 为原事务。
 /// # 返回
-/// 账号、完整功能资格与对象范围成立时成功。
+/// 固定权限和对象检查通过时成功。
 /// # 错误
-/// 动作未登记、事实缺失、无权或授权变化时拒绝。
+/// 缺少资格、范围、事实或执行边界时拒绝。
 pub(super) async fn require(
-    db: Database,
-    rbac: SharedRbacService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
-    action: &str,
+    permission: &Permission,
     inquiry: &SalesInquiry,
-    extra: &[Permission],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let permission = permission(action)?;
-    let entry = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: extra.to_vec(),
-        access: AccessMode::Object {
-            data: data(&permission),
-            facts: Arc::new(InquiryFacts { db: db.clone(), candidate: Some(inquiry.clone()) }),
-        },
+    ensure_sales_permission(permission)?;
+    let target = if permission == &sales_inquiry::COMMANDS_SALES_CREATE
+        || permission == &internal::SALES_INQUIRY_IMPORT_CREATE
+    {
+        AccessTarget::Candidate(inquiry_candidate(inquiry))
+    } else {
+        AccessTarget::record(&inquiry.base.id)?
     };
-    let authorization = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
+    authorization.require(actor, permission, target, executor).await?;
+    Ok(())
+}
+
+/// 编译销售询价固定查询。
+/// # 参数
+/// authorization 为共享服务，actor/permission 为当前查询入口，executor 为原读取阶段。
+/// # 返回
+/// 查询凭证和原共享服务。
+/// # 错误
+/// 缺少资格、范围、事实或执行边界时拒绝。
+pub(super) async fn query(
+    authorization: &Arc<AuthorizationService>,
+    actor: &AuditActor,
+    permission: &Permission,
+    executor: &mut dyn Executor,
+) -> Result<(Arc<CompiledAccess>, Arc<AuthorizationService>)> {
+    ensure_sales_permission(permission)?;
+    let compiled = authorization.query(actor, permission, executor).await?;
+    Ok((Arc::new(compiled), authorization.clone()))
+}
+
+/// 编译实际采购任务查询。
+/// # 参数
+/// authorization 为共享服务，actor 为当前采购，executor 为原读取阶段。
+/// # 返回
+/// 采购询价查询凭证和原共享服务。
+/// # 错误
+/// 缺少资格、范围、事实或执行边界时拒绝。
+pub(super) async fn task_query(
+    authorization: &Arc<AuthorizationService>,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<(Arc<CompiledAccess>, Arc<AuthorizationService>)> {
+    let compiled = authorization.query(actor, &sales_inquiry::QUERY_PROCUREMENT_LIST, executor).await?;
+    Ok((Arc::new(compiled), authorization.clone()))
+}
+
+/// 检查精确采购任务及版本。
+/// # 参数
+/// authorization 为共享服务，actor/permission 为当前入口，task 为读取的精确任务，executor 为原事务。
+/// # 返回
+/// 任务、版本和操作关系均符合时成功。
+/// # 错误
+/// 缺少资格、范围、事实或执行边界时拒绝。
+pub(super) async fn require_task_owner(
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    permission: &Permission,
+    task: &WorkItem,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if permission.resource() != sales_inquiry::QUERY_PROCUREMENT_LIST.resource() {
+        return Err(Error::ValidationError("采购询价任务不能使用其他资源权限".into()));
+    }
     authorization
         .require(
             actor,
-            &permission,
-            AccessTarget::Records {
-                subject: AccessSubject::Direct,
-                ids: ResourceTargets::new(&[inquiry.base.id.as_str()])?,
-            },
+            permission,
+            AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() },
             executor,
         )
         .await?;
     Ok(())
 }
 
-/// 编译询价列表本阶段的完整授权条件。
-/// # 参数
-/// db、rbac 为身份设施；actor、action 为真实入口，executor 为原执行器。
-/// # 返回
-/// 本阶段凭证及用于读取前后复验的同一授权服务。
-/// # 错误
-/// 动作未登记、无权、模型错误或授权变化时拒绝。
-pub(super) async fn query(
-    db: Database,
-    rbac: SharedRbacService,
-    actor: &AuditActor,
-    action: &str,
-    executor: &mut dyn Executor,
-) -> Result<(Arc<CompiledAccess>, AuthorizationService)> {
-    let permission = permission(action)?;
-    let mapping: Arc<dyn AccessMapping> = Arc::new(InquiryMapping(QueryModel {
-        key: QueryModelKey::parse("sales_inquiries")?,
-        resource: "sales_inquiry".into(),
-        collection: "sales_inquiries".into(),
-        id_field: "id".into(),
-        output: QueryOutput::Object,
-        facts: [FactKind::Owner, FactKind::Organization, FactKind::Collaborators].into(),
-    }));
-    let entry = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Query { data: data(&permission), mapping: mapping.clone() },
-    };
-    let authorization = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
-    let query = authorization.query(actor, &permission, AccessSubject::Direct, executor).await?;
-    let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
-    authorization.validate(&compiled, executor).await?;
-    Ok((compiled, authorization))
-}
-
-pub(super) async fn task_query(
-    db: Database,
-    rbac: SharedRbacService,
-    actor: &AuditActor,
-    tasks: &[erp_workflow::entity::work_item::WorkItem],
-    executor: &mut dyn Executor,
-) -> Result<(Arc<CompiledAccess>, AuthorizationService)> {
-    let permission = Permission::parse("procurement_inquiry:list")?;
-    let mut parts = tasks
-        .iter()
-        .map(|task| format!("{}:{}:{}", task.base.id, task.base.version, task.subject_version))
-        .collect::<Vec<_>>();
-    parts.sort();
-    let version = application_core::CommandFingerprint::from_parts(parts).as_str().to_owned();
-    let mapping: Arc<dyn AccessMapping> = Arc::new(TaskInquiryMapping {
-        model: QueryModel {
-            key: QueryModelKey::parse("procurement_inquiries")?,
-            resource: "procurement_inquiry".into(),
-            collection: "sales_inquiries".into(),
-            id_field: "id".into(),
-            output: QueryOutput::Object,
-            facts: [FactKind::Assignee].into(),
-        },
-        ids: tasks
-            .iter()
-            .filter(|task| task.owner_user_id.as_deref() == Some(actor.id()))
-            .map(|task| task.business_object_id.clone())
-            .collect(),
-        version,
-    });
-    let entry = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Query {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Assignee].into(),
-                policy: AccessPolicy::Assigned,
-            },
-            mapping: mapping.clone(),
-        },
-    };
-    let authorization = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
-    let query = authorization.query(actor, &permission, AccessSubject::Direct, executor).await?;
-    let compiled = Arc::new(query.compile(mapping.as_ref(), executor).await?);
-    authorization.validate(&compiled, executor).await?;
-    Ok((compiled, authorization))
-}
-
-pub(super) async fn require_task_owner(
-    db: Database,
-    rbac: SharedRbacService,
-    actor: &AuditActor,
-    action: &str,
-    task: &erp_workflow::entity::work_item::WorkItem,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let permission = Permission::parse(format!("procurement_inquiry:{action}"))?;
-    let data = if task.status == WorkItemStatus::Completed {
-        DataAccess {
-            subject: AccessSubject::Direct,
-            required_facts: [FactKind::Assignee, FactKind::Participants].into(),
-            policy: AccessPolicy::All(vec![AccessPolicy::Assigned, AccessPolicy::Participant]),
-        }
-    } else {
-        DataAccess {
-            subject: AccessSubject::Direct,
-            required_facts: [FactKind::Assignee].into(),
-            policy: AccessPolicy::Assigned,
-        }
-    };
-    let entry = AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Object { data, facts: Arc::new(TaskFacts(task.clone())) },
-    };
-    let service = AuthorizationService::new(db, rbac, AuthorizationRegistry::new(vec![entry])?);
-    service
-        .require(
-            actor,
-            &permission,
-            AccessTarget::Records {
-                subject: AccessSubject::Direct,
-                ids: ResourceTargets::new(&[task.base.id.as_str()])?,
-            },
-            executor,
-        )
-        .await?;
+/// 销售读取器只接受销售询价根，禁止用其他资源的同名记录放行。
+fn ensure_sales_permission(permission: &Permission) -> Result<()> {
+    if permission.resource() != sales_inquiry::QUERY_SALES_LIST.resource() {
+        return Err(Error::ValidationError("销售询价访问器收到其他资源权限".into()));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sales_inquiry_bridge_keeps_procurement_permissions_on_the_task_path() {
+        assert!(ensure_sales_permission(&sales_inquiry::COMMANDS_SALES_SAVE).is_ok());
+        assert!(ensure_sales_permission(&internal::SALES_INQUIRY_IMPORT_CREATE).is_ok());
+        assert!(matches!(
+            ensure_sales_permission(&sales_inquiry::QUERY_PROCUREMENT_DETAIL),
+            Err(Error::ValidationError(_))
+        ));
+    }
 }

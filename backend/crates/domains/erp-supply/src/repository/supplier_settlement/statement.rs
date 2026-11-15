@@ -462,7 +462,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierSettlementStatement>> {
-        scope.validate(executor).await?;
+        scope.ensure_model("supplier_settlement_statement", executor)?;
         let result = aggregate::find(
             &self.collection(),
             doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
@@ -473,7 +473,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         .await?
         .into_iter()
         .next();
-        scope.validate(executor).await?;
+        scope.ensure_model("supplier_settlement_statement", executor)?;
         Ok(result)
     }
 
@@ -526,7 +526,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SupplierSettlementStatementRow>> {
         if let Some(scope) = &filter.authorized_scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_settlement_statement", executor)?;
         }
 
         let options = FindOptions::builder()
@@ -541,7 +541,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
 
         if let Some(scope) = &filter.authorized_scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_settlement_statement", executor)?;
         }
         Ok(PageResult { items, total: total as i64 })
     }
@@ -568,14 +568,14 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierSettlementStatementStatsRow>> {
         if let Some(scope) = &filter.authorized_scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_settlement_statement", executor)?;
         }
         let authorization = filter.authorized_scope.as_ref().map_or(&[][..], |scope| scope.stages());
         let collection = self.collection().clone_with_type::<SupplierSettlementStatementStatsRow>();
         let rows =
             aggregate::rows(&collection, statement_stats_pipeline(filter, authorization), executor).await?;
         if let Some(scope) = &filter.authorized_scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_settlement_statement", executor)?;
         }
         Ok(rows.into_iter().next())
     }
@@ -593,13 +593,22 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
                 clause
             })
             .collect::<Vec<_>>();
-        let collection = self.collection();
-        let mut query =
-            collection.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses });
-        if let Some(session) = executor.session() {
-            query = query.session(session);
+        #[derive(Deserialize)]
+        struct Row {
+            id: String,
         }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+        let collection = self.collection().clone_with_type::<Row>();
+        let rows = aggregate::rows(
+            &collection,
+            vec![
+                doc! {"$match": {"deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses, "id": {"$type": "string"}}},
+                doc! {"$group": {"_id": "$id"}},
+                doc! {"$project": {"_id": 0, "id": "$_id"}},
+            ],
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| row.id).collect())
     }
 }
 

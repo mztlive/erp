@@ -6,20 +6,22 @@ use std::sync::Arc;
 use application_core::{AuditActor, EmptyScopeVersion, PageView, ScopeVersion};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::sales_selection;
 use erp_sales::dto::sales_selection::{
     DeleteDisplayItemRequest, PrepareSalesSelectionRequest, PublishSalesSelectionRequest,
     SalesSelectionBookletListParams, SalesSelectionBookletView, SalesSelectionCommandRequest,
     SalesSelectionProposalListParams, SalesSelectionSessionView,
 };
 use erp_sales::entity::sales_selection::{FirstNonEmptyMemberImage, LinkTokenCrypto};
+use erp_sales::repository::sales_selection::SalesSelectionDomainRepository;
 use erp_sales::service::sales_selection::{SalesSelectionService, SelectionAccess};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use storage::S3Storage;
 use validator::Validate;
 
 use super::adapters::{CatalogAdapter, ImageAdapter};
-use super::{SelectionBookletListView, SelectionProposalListView};
+use super::{SelectionBookletListView, SelectionProposalListView, read};
 use crate::services::SalesServices;
 use crate::{Error, Result};
 
@@ -75,7 +77,7 @@ pub(crate) async fn booklet_list_snapshot(
 ) -> Result<SelectionBookletListView> {
     ensure_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
     params.validate()?;
-    let scope = access.resolve(actor, "sales_selection_booklet", "list", executor).await?;
+    let scope = access.resolve(actor, &sales_selection::BOOKLET_LIST, executor).await?;
     ensure_version(params.scope_version.as_deref(), &scope.version())?;
     let orgs =
         expanded_orgs(access, params.org_unit_ids.as_deref(), params.include_descendants, executor).await?;
@@ -118,7 +120,7 @@ pub(crate) async fn proposal_list_snapshot(
 ) -> Result<SelectionProposalListView> {
     ensure_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
     params.validate()?;
-    let scope = access.resolve(actor, "sales_selection_proposal", "list", executor).await?;
+    let scope = access.resolve(actor, &sales_selection::PROPOSAL_LIST, executor).await?;
     ensure_version(params.scope_version.as_deref(), &scope.version())?;
     let orgs =
         expanded_orgs(access, params.org_unit_ids.as_deref(), params.include_descendants, executor).await?;
@@ -149,8 +151,12 @@ pub(crate) async fn proposal_list_snapshot(
 ///
 /// # 错误
 /// 仓储失败时拒绝。
-pub(crate) async fn owner_display_names(db: &Database, ids: &[String]) -> Result<HashMap<String, String>> {
-    Ok(db.accounts().names_by_ids(ids, &mut NoTransaction).await?)
+pub(crate) async fn owner_display_names(
+    db: &Database,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, String>> {
+    Ok(db.accounts().names_by_ids(ids, executor).await?)
 }
 
 /// 启动准备，并在实际写事务内重验统一授权。
@@ -244,7 +250,6 @@ pub(crate) async fn publish_checked(
     req: PublishSalesSelectionRequest,
     actor: AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(&access, &actor, "publish", &id).await?;
     let catalog = CatalogAdapter { query: services.catalog.clone() };
     let actor_id = actor.id().to_string();
     Ok(SalesSelectionService::new(db.clone())
@@ -274,19 +279,43 @@ pub(crate) async fn copy_link_checked(
     id: &str,
     actor: &AuditActor,
 ) -> Result<SalesSelectionBookletView> {
-    require_action(&access, actor, "copy_link", id).await?;
-    let service = SalesSelectionService::new(db.clone());
-    let token = service.copy_link(id, crypto).await?;
-    let mut view = service.booklet_detail(id).await?;
-    let path = format!("/s/{token}");
-    view.public_path = Some(path.clone());
-    view.public_url = Some(path);
-    Ok(view)
+    let owned = db.clone();
+    let id = id.to_owned();
+    let actor = actor.clone();
+    let crypto = crypto.clone();
+    db.client()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                read::checked(
+                    &access,
+                    &actor,
+                    &sales_selection::BOOKLET_COPY_LINK,
+                    executor,
+                    move |scope, executor| {
+                        Box::pin(async move {
+                            let book = SalesSelectionDomainRepository::new(&owned)
+                                .find_authorized_booklet(&id, scope, executor)
+                                .await?
+                                .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                            let service = SalesSelectionService::new(owned);
+                            let token = service.copy_link(&id, &crypto, executor).await?;
+                            let mut view = service.detail_view(&book, None, executor).await?;
+                            let path = format!("/s/{token}");
+                            view.public_path = Some(path.clone());
+                            view.public_url = Some(path);
+                            Ok(view)
+                        })
+                    },
+                )
+                .await
+            })
+        })
+        .await
 }
 
 /// 授权后读取内部会话。
 ///
-/// 纯读快照不开启事务会话，直接用无事务执行器读取。
+/// 授权和业务资料使用同一快照执行器。
 ///
 /// # 参数
 /// * `db` - 选品数据库
@@ -305,9 +334,31 @@ pub(crate) async fn session_checked(
     id: &str,
     actor: &AuditActor,
 ) -> Result<SalesSelectionSessionView> {
-    let mut executor = NoTransaction;
-    access.require_booklet(actor, "get", id, &mut executor).await?;
-    SalesSelectionService::new(db.clone()).session_of(id, &mut executor).await.map_err(Error::from)
+    let owned = db.clone();
+    let id = id.to_owned();
+    let actor = actor.clone();
+    db.client()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                read::checked(
+                    &access,
+                    &actor,
+                    &sales_selection::BOOKLET_DETAIL,
+                    executor,
+                    move |scope, executor| {
+                        Box::pin(async move {
+                            let book = SalesSelectionDomainRepository::new(&owned)
+                                .find_authorized_booklet(&id, scope, executor)
+                                .await?
+                                .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                            Ok(SalesSelectionService::new(owned).session_of(&book.base.id, executor).await?)
+                        })
+                    },
+                )
+                .await
+            })
+        })
+        .await
 }
 
 /// 授权后更换链接。
@@ -342,7 +393,7 @@ pub(crate) async fn rotate_link_checked(
 
 /// 授权后读取册图片对象键；同一执行器内重验。
 ///
-/// 纯读快照不开启事务会话，直接用无事务执行器读取。
+/// 授权和业务资料使用同一快照执行器。
 ///
 /// # 参数
 /// * `db` - 选品数据库
@@ -363,34 +414,34 @@ pub(crate) async fn image_key_checked(
     asset_id: &str,
     actor: &AuditActor,
 ) -> Result<String> {
-    let mut executor = NoTransaction;
-    access.require_booklet(actor, "get", id, &mut executor).await?;
-    SalesSelectionService::new(db.clone())
-        .image_key_of(id, asset_id, &mut executor)
+    let owned = db.clone();
+    let id = id.to_owned();
+    let asset_id = asset_id.to_owned();
+    let actor = actor.clone();
+    db.client()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                read::checked(
+                    &access,
+                    &actor,
+                    &sales_selection::BOOKLET_DETAIL,
+                    executor,
+                    move |scope, executor| {
+                        Box::pin(async move {
+                            let book = SalesSelectionDomainRepository::new(&owned)
+                                .find_authorized_booklet(&id, scope, executor)
+                                .await?
+                                .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                            Ok(SalesSelectionService::new(owned)
+                                .image_key_of(&book.base.id, &asset_id, executor)
+                                .await?)
+                        })
+                    },
+                )
+                .await
+            })
+        })
         .await
-        .map_err(Error::from)
-}
-
-/// 在调用方事务外证明单对象动作；写命令前必须调用。
-///
-/// 纯读快照不开启事务会话，直接用无事务执行器读取。
-///
-/// # 参数
-/// * `db` - 选品数据库
-/// * `access` - 选品范围访问器
-/// * `actor` - 已认证操作人
-/// * `action` - 已注册动作
-/// * `id` - 选品册
-///
-/// # 返回
-/// 授权通过时成功。
-///
-/// # 错误
-/// 不可见对象返回未找到。
-async fn require_action(access: &SelectionAccess, actor: &AuditActor, action: &str, id: &str) -> Result<()> {
-    let mut executor = NoTransaction;
-    access.require_booklet(actor, action, id, &mut executor).await?;
-    Ok(())
 }
 
 /// 展开组织筛选；包含下级时必须提供组织。

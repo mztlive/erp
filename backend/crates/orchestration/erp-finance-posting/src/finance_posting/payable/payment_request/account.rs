@@ -2,8 +2,8 @@
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_finance::dto::payable::{PaymentRecipientRevealView, RevealPaymentRecipientRequest};
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_party::{PartyExt, SensitiveDataCodec};
+use erp_permissions::payable;
 use erp_workflow::service::work_item::expected_task_version;
 use erp_workflow::{WorkItemExt, WorkItemStatus, WorkItemType};
 use persistence_core::Transactional;
@@ -70,12 +70,8 @@ async fn reveal(
     executor: &mut dyn Executor,
 ) -> Result<PaymentRecipientRevealView> {
     let RevealInput { id, req, task_version, actor, codec } = input;
-    let authorization =
-        AuthorizationService::new(db.clone(), rbac.identity.clone(), AuthorizationRegistry::default());
-    if !authorization
-        .has_permission(actor, &Permission::parse("party_bank_account:reveal")?, executor)
-        .await?
-    {
+    let authorization = &rbac.authorization;
+    if !authorization.has_permission(actor, &payable::PAYMENT_RECIPIENT_REVEAL, executor).await? {
         return Err(Error::Forbidden("没有完整银行账号揭示权限".into()));
     }
     let request = load(db, id, executor).await?;

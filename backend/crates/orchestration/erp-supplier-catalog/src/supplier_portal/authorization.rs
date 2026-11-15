@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::{supplier, supplier_offering};
 use erp_read_models::supplier_portal::PortalReadAuthorizationPort;
 use erp_read_models::{Error as ReadError, Result as ReadResult};
 use erp_supplier::Error as SupplierError;
@@ -20,7 +21,7 @@ use crate::{Error, Result};
 pub struct PortalReadAuthorization {
     services: Arc<CatalogServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 impl PortalReadAuthorization {
     /// 装配内部门户申请读权限。
@@ -30,8 +31,12 @@ impl PortalReadAuthorization {
     /// 返回未缓存对象授权的适配器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<CatalogServices>) -> Self {
-        Self { db, rbac, services }
+    pub fn new(
+        db: Database,
+        authorization: Arc<AuthorizationService>,
+        services: Arc<CatalogServices>,
+    ) -> Self {
+        Self { db, authorization, services }
     }
 }
 #[async_trait]
@@ -42,7 +47,12 @@ impl PortalReadAuthorizationPort for PortalReadAuthorization {
         offering_id: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        match self.services.offering_access.require_offering(actor, "list", offering_id, executor).await {
+        match self
+            .services
+            .offering_access
+            .require_offering(actor, &supplier_offering::LIST, offering_id, executor)
+            .await
+        {
             Ok(_) => Ok(true),
             Err(SupplyError::NotFound(_) | SupplyError::Forbidden(_)) => Ok(false),
             Err(error) => Err(map_read_error(error.into())),
@@ -54,7 +64,9 @@ impl PortalReadAuthorizationPort for PortalReadAuthorization {
         request_id: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        request_readable(&self.db, &self.rbac, actor, request_id, executor).await.map_err(map_read_error)
+        request_readable(&self.db, &self.authorization, actor, request_id, executor)
+            .await
+            .map_err(map_read_error)
     }
     async fn supplier_readable(
         &self,
@@ -62,7 +74,7 @@ impl PortalReadAuthorizationPort for PortalReadAuthorization {
         supplier_id: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        match self.services.suppliers.require_with(actor, "detail", supplier_id, executor).await {
+        match self.services.suppliers.require_with(actor, &supplier::DETAIL, supplier_id, executor).await {
             Ok(_) => Ok(true),
             Err(SupplierError::NotFound(_) | SupplierError::Forbidden(_)) => Ok(false),
             Err(error) => Err(map_read_error(error.into())),
@@ -99,7 +111,7 @@ fn map_read_error(error: Error) -> ReadError {
 /// 授权漂移、配置或基础设施错误保持失败关闭。
 pub async fn request_readable(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     actor: &AuditActor,
     id: &str,
     executor: &mut dyn Executor,
@@ -107,7 +119,7 @@ pub async fn request_readable(
     let Some(target) = RequestTarget::load(db, id, executor).await? else {
         return Ok(false);
     };
-    match require_request(db, rbac, actor, target, RequestAction::Read, executor).await {
+    match require_request(authorization, actor, target, RequestAction::Read, executor).await {
         Ok(()) => Ok(true),
         Err(Error::Forbidden(_) | Error::NotFound(_)) => Ok(false),
         Err(error) => Err(error),

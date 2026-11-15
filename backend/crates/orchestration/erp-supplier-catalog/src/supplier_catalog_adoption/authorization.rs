@@ -3,12 +3,9 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_identity::entity::authorization::{AccessContext, FactKind, FactValue, ObjectFacts};
-use erp_identity::{
-    AccessFactsPort, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget,
-    AuthorizationRegistry, AuthorizationService, DataAccess, Permission, ResourceTargets,
-    Result as IdentityResult,
-};
+use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts};
+use erp_identity::{AccessFactsPort, AccessTarget, ResourceTargets, Result as IdentityResult};
+use erp_permissions::internal;
 use erp_supply::catalog_adoption::{CatalogAdoptionExt, CatalogAdoptionPreview};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -17,8 +14,6 @@ use super::SupplierCatalogAdoptionProcess;
 use crate::Result;
 
 const PREVIEW_RESOURCE: &str = "supplier_catalog_adoption_preview";
-const PREVIEW_ENTRY: &str = "supplier_catalog_adoption_preview:detail";
-
 impl SupplierCatalogAdoptionProcess {
     /// 在当前读取或写事务内核验真实冻结预览的创建人。
     /// # 参数
@@ -33,28 +28,22 @@ impl SupplierCatalogAdoptionProcess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let permission = Permission::parse(PREVIEW_ENTRY)?;
-        let registry = AuthorizationRegistry::new(vec![AccessRegistration {
-            permission: permission.clone(),
-            required_permissions: vec![],
-            access: AccessMode::Object {
-                data: DataAccess {
-                    subject: AccessSubject::Direct,
-                    required_facts: [FactKind::Owner].into(),
-                    policy: AccessPolicy::Account { policy: Box::new(AccessPolicy::Owned) },
-                },
-                facts: Arc::new(PreviewFacts(self.db.clone())),
-            },
-        }])?;
-        Ok(AuthorizationService::new(self.db.clone(), self.rbac.clone(), registry)
-            .require(
-                actor,
-                &permission,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
+        Ok(self
+            .authorization
+            .require(actor, &internal::CATALOG_PREVIEW_DETAIL, AccessTarget::record(id)?, executor)
             .await?)
     }
+}
+
+/// 构造冻结预览的持久化事实读取器。
+/// # 参数
+/// db 为预览所在数据库。
+/// # 返回
+/// 不缓存请求目标的资源事实读取器。
+/// # 错误
+/// 不执行读取。
+pub fn preview_facts_port(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(PreviewFacts(db))
 }
 
 struct PreviewFacts(Database);

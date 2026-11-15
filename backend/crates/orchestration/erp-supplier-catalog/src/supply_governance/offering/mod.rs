@@ -14,6 +14,7 @@ mod commit;
 mod exception;
 mod qualification;
 mod quote_target;
+mod recovery;
 pub use qualification::MongoOfferingQualification;
 /// 供给治理流程。资格适配器构造不读取事实。
 pub struct SupplierOfferingProcess {

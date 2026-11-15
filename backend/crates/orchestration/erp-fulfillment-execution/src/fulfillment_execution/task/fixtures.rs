@@ -4,19 +4,7 @@ use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryData, DeliveryType}
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
 };
-use mongodb::ClientSession;
-use persistence_core::Executor;
-
-pub(super) struct TestExecutor {
-    pub(super) marker: u64,
-}
-
-impl Executor for TestExecutor {
-    fn session(&mut self) -> Option<&mut ClientSession> {
-        self.marker += 1;
-        None
-    }
-}
+pub(super) use persistence_core::ReadExecutor as TestExecutor;
 
 pub(super) fn task() -> WorkItem {
     WorkItem::new_with_responsibility_key(

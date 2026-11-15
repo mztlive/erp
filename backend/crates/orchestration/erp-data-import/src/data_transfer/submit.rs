@@ -11,16 +11,24 @@ use erp_support::{
     content_fingerprint,
 };
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::context_input::ContextInput;
+use super::submission_access::authorize_registration;
 use super::types::Envelope;
 use super::{DataTransferProcess, TransferKind, TransferRequest};
 use crate::{Error, Result};
 
 pub(super) const DOMAIN: &str = "DATA_TRANSFER";
+
+struct Submission {
+    job: BackgroundJob,
+    items: Vec<BackgroundJobItem>,
+    source: FileAsset,
+    context: BackgroundJobInput,
+}
 impl DataTransferProcess {
     /// 校验并保存私有输入，原子登记任务与源文件资产。
     /// # 参数
@@ -36,16 +44,16 @@ impl DataTransferProcess {
         let digest = content_fingerprint(&encoded, self.codec.fingerprint_key());
         let identity = CommandFingerprint::from_parts([actor.id().into(), request.request_id.clone()]);
         let request_id = format!("transfer:{}", identity.digest_hex());
-        if let Some(existing) = self.replay(&request_id, &digest, actor.id()).await? {
-            return Ok(existing.into());
-        }
-        let input = self.handler.prepare(request.kind, request.input, actor).await?;
-        let envelope = Envelope {
+        let mut envelope = Envelope {
             kind: request.kind,
-            input,
+            input: request.input,
             account: actor.account().into(),
             account_kind: actor.kind(),
         };
+        if let Some(existing) = self.replay(&request_id, &digest, &envelope, actor).await? {
+            return Ok(existing.into());
+        }
+        envelope.input = self.handler.prepare(request.kind, envelope.input, actor).await?;
         let id = next_id();
         let source =
             self.save_private(&format!("data-transfer/{id}/source.enc"), &envelope, actor.id()).await?;
@@ -56,14 +64,16 @@ impl DataTransferProcess {
             source.expires_at.ok_or_else(|| Error::Internal("任务输入有效期缺失".into()))?,
         )
         .record()?;
-        match self.persist_submission(job, items, source, context, actor).await {
+        let submission = Submission { job, items, source, context };
+        match self.persist_submission(submission, &envelope, actor).await {
             Ok(view) => Ok(view),
             Err(error) => {
                 if let Some(existing) = self
                     .replay(
                         &format!("transfer:{}", identity.digest_hex()),
                         &content_fingerprint(&encoded, self.codec.fingerprint_key()),
-                        actor.id(),
+                        &envelope,
+                        actor,
                     )
                     .await?
                 {
@@ -73,32 +83,53 @@ impl DataTransferProcess {
             },
         }
     }
-    async fn replay(&self, request_id: &str, digest: &str, actor: &str) -> Result<Option<BackgroundJob>> {
-        let found = self.db.background_jobs().find_by_request_id(request_id, &mut NoTransaction).await?;
-        if found.as_ref().is_some_and(|job| {
-            job.requested_by != actor
-                || job.domain_job_type.as_deref() != Some(DOMAIN)
-                || job.domain_job_id.as_deref() != Some(digest)
-        }) {
-            return Err(Error::ConflictError("该操作号已用于其他内容，请核对原任务".into()));
-        }
-        Ok(found)
+    async fn replay(
+        &self,
+        request_id: &str,
+        digest: &str,
+        envelope: &Envelope,
+        actor: &AuditActor,
+    ) -> Result<Option<BackgroundJob>> {
+        let db = self.db.clone();
+        let handler = self.handler.clone();
+        let request_id = request_id.to_owned();
+        let digest = digest.to_owned();
+        let actor = actor.clone();
+        let kind = envelope.kind;
+        let input = envelope.input.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let found = db.background_jobs().find_by_request_id(&request_id, executor).await?;
+                    if let Some(job) = &found {
+                        ensure_replay(job, &digest, actor.id())?;
+                        authorize_registration(handler.as_ref(), kind, &input, &actor, executor).await?;
+                    }
+                    Ok(found)
+                })
+            })
+            .await
     }
     async fn persist_submission(
         &self,
-        job: BackgroundJob,
-        items: Vec<BackgroundJobItem>,
-        source: FileAsset,
-        context: BackgroundJobInput,
+        submission: Submission,
+        envelope: &Envelope,
         actor: &AuditActor,
     ) -> Result<BackgroundJobView> {
+        let Submission { job, items, source, context } = submission;
         let audit = submission_log(&job, actor)?;
         let db = self.db.clone();
         let copy = job.clone();
+        let handler = self.handler.clone();
+        let kind = envelope.kind;
+        let input = envelope.input.clone();
+        let actor = actor.clone();
         db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorize_registration(handler.as_ref(), kind, &input, &actor, executor).await?;
                     db.file_assets().create(&source, executor).await?;
                     db.bulk_job().create_job_with_items(&copy, items, executor).await?;
                     db.bulk_job()
@@ -111,6 +142,17 @@ impl DataTransferProcess {
             .await?;
         Ok(job.into())
     }
+}
+
+/// 命中回执仍须保持原任务内容和原提交人，当前业务资格另由事务内入口核验。
+fn ensure_replay(job: &BackgroundJob, digest: &str, actor: &str) -> Result<()> {
+    if job.requested_by != actor
+        || job.domain_job_type.as_deref() != Some(DOMAIN)
+        || job.domain_job_id.as_deref() != Some(digest)
+    {
+        return Err(Error::ConflictError("该操作号已用于其他内容，请核对原任务".into()));
+    }
+    Ok(())
 }
 fn submission_log(job: &BackgroundJob, actor: &AuditActor) -> Result<AuditLog> {
     Ok(actor.clone().resource_log("background_job.create", "background_job", job.base.id.clone())?)
@@ -244,5 +286,15 @@ mod tests {
         assert!(validate_request(&request("", json!({}))).is_err());
         assert!(validate_request(&request("x", json!([]))).is_err());
         assert!(validate_request(&request("x", json!({"customer_id":"c"}))).is_ok());
+    }
+
+    #[test]
+    fn replay_rejects_a_different_actor_payload_or_job_domain() {
+        let (mut job, _) = test_batch();
+        assert!(ensure_replay(&job, "hash", "user").is_ok());
+        assert!(matches!(ensure_replay(&job, "changed", "user"), Err(Error::ConflictError(_))));
+        assert!(matches!(ensure_replay(&job, "hash", "other"), Err(Error::ConflictError(_))));
+        job.domain_job_type = Some("OTHER_IMPORT".into());
+        assert!(matches!(ensure_replay(&job, "hash", "user"), Err(Error::ConflictError(_))));
     }
 }

@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
 use erp_audit::{BusinessEventContent, BusinessEventContext, BusinessEventResult, registered_action};
+use erp_permissions::sales_selection;
 use erp_sales::dto::sales_selection::{SalesSelectionBookletView, SalesSelectionPasswordRequest};
 use erp_sales::entity::sales_selection::SelectionRequestFingerprint;
 use erp_sales::service::sales_selection::{SalesSelectionService, SelectionAccess};
@@ -55,7 +56,9 @@ impl AuditedCommand for PasswordCommand {
     type Output = SalesSelectionBookletView;
 
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
-        self.access.require_booklet(&self.actor, "maintain", &self.id, executor).await?;
+        self.access
+            .require_booklet(&self.actor, &sales_selection::BOOKLET_DELETE_ITEM, &self.id, executor)
+            .await?;
         let (result, fresh) = SalesSelectionService::new(self.db.clone())
             .set_access_password(
                 &self.id,

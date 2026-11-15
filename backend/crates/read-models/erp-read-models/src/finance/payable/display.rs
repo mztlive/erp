@@ -408,7 +408,8 @@ fn map_allocation_sources(
 ///
 /// # 参数
 /// * `db` - 数据库实例
-/// * `supplier_id` - 供应商账号 ID
+/// * `supplier_id` - 供应商账号 ID。
+/// * `executor` - 调用方原事务执行器。
 ///
 /// # 返回
 /// 返回 `(供应商编号, 供应商名称)`。
@@ -418,20 +419,21 @@ fn map_allocation_sources(
 pub(super) async fn resolve_supplier_display(
     db: &mongodb::Database,
     supplier_id: &str,
+    executor: &mut dyn Executor,
 ) -> Result<(Option<String>, Option<String>)> {
-    let account = db.supplier_accounts().find_by_id(supplier_id, &mut NoTransaction).await?;
+    let account = db.supplier_accounts().find_by_id(supplier_id, executor).await?;
     let Some(account) = account else {
         return Ok((None, None));
     };
     let supplier_no = Some(account.supplier_no.clone());
-    let party = db.parties().find_by_id(account.party_id.as_ref(), &mut NoTransaction).await?;
+    let party = db.parties().find_by_id(account.party_id.as_ref(), executor).await?;
     let Some(party) = party else {
         return Ok((supplier_no, None));
     };
     let Some(revision_id) = party.stable.current_revision_id.clone() else {
         return Ok((supplier_no, None));
     };
-    let revision = db.party_revisions().find_by_id(&revision_id, &mut NoTransaction).await?;
+    let revision = db.party_revisions().find_by_id(&revision_id, executor).await?;
     Ok((supplier_no, revision.map(|value| value.legal_name)))
 }
 
@@ -441,7 +443,8 @@ pub(super) async fn resolve_supplier_display(
 ///
 /// # 参数
 /// * `db` - 数据库实例
-/// * `account` - 应付子账
+/// * `account` - 应付子账。
+/// * `executor` - 调用方原事务执行器。
 ///
 /// # 返回
 /// 返回业务单号；未知来源或单据缺失时返回 `None`，不得回退内部 ID。
@@ -451,16 +454,17 @@ pub(super) async fn resolve_supplier_display(
 pub(super) async fn resolve_source_document_no(
     db: &mongodb::Database,
     account: &PayableAccount,
+    executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     let document_no = match account.source_type {
         erp_finance::entity::payable::PayableSourceType::PurchaseOrder => db
             .purchase_orders()
-            .find_by_id(&account.source_document_id, &mut NoTransaction)
+            .find_by_id(&account.source_document_id, executor)
             .await?
             .map(|value| value.purchase_no),
         erp_finance::entity::payable::PayableSourceType::SupplierSettlement => db
             .supplier_settlement_statements()
-            .find_by_id(&account.source_document_id, &mut NoTransaction)
+            .find_by_id(&account.source_document_id, executor)
             .await?
             .map(|value| value.statement_no),
     };

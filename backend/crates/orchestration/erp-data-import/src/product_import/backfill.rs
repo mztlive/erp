@@ -8,7 +8,7 @@ use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SpecEntryInput, UpdateProductRequest};
 use erp_core::ids::{FileAssetId, ProductId, SkuId, SkuRevisionId};
 use erp_master_data::product_update_with_assets;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::ProductImportProcess;
 use super::images::{RowMedia, RowMediaSource, resolve_row_media};
@@ -68,7 +68,7 @@ impl ProductImportProcess {
         let snapshot = self
             .db
             .catalog()
-            .product_disable_snapshot(&product.base.id, &mut NoTransaction)
+            .product_disable_snapshot(&product.base.id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("商品不存在".into()))?;
         if !snapshot.media.is_empty() {
@@ -77,9 +77,9 @@ impl ProductImportProcess {
         let skus = self
             .db
             .skus()
-            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
+            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut ReadExecutor::default())
             .await?;
-        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
         Ok(revisions.values().any(|revision| revision.source_main_image_asset_id.is_some()))
     }
 
@@ -91,7 +91,7 @@ impl ProductImportProcess {
         let snapshot = self
             .db
             .catalog()
-            .product_disable_snapshot(&product.base.id, &mut NoTransaction)
+            .product_disable_snapshot(&product.base.id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("商品不存在".into()))?;
         let revision = snapshot
@@ -100,9 +100,9 @@ impl ProductImportProcess {
         let skus = self
             .db
             .skus()
-            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
+            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut ReadExecutor::default())
             .await?;
-        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
         let sku_inputs = sku_inputs_with_main_image(&skus, &revisions, media.main_image)?;
         Ok(UpdateProductRequest {
             version: product.base.version,

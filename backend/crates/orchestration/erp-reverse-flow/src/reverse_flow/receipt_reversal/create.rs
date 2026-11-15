@@ -3,6 +3,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::dto::CreateReceiptReversalRequest;
 use erp_returns::entity::returns::ReceiptReversal;
@@ -44,7 +46,13 @@ impl ReturnsProcess {
         req.validate()?;
         let reversal = build_create(req, actor.id())?;
         persist_created_receipt_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
-        self.reads().receipt_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
+        self.receipt_reversal_result(
+            &reversal.base.id,
+            actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
+            AccessTarget::Operation,
+        )
+        .await
     }
 }
 
@@ -86,6 +94,14 @@ async fn persist_created_receipt_reversal(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.identity
+                    .require(
+                        &actor,
+                        &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 persist_bound_receipt_reversal_document(
                     &db,
                     &rbac,

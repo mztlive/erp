@@ -10,8 +10,11 @@ use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
+use erp_finance::service::receivable::ReceivableService;
 use erp_finance::service::receivable::invoice_commit::{convert_post_allocations, ensure_sales_invoice};
 use erp_finance::service::receivable::mapping::zero_amount;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::receivable;
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
@@ -80,7 +83,6 @@ impl ReceivableProcess {
         req.validate()?;
         super::invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let attachment_ids = req.attachment_asset_ids;
-        let has_pending = !pending.is_empty();
 
         let invoice = Invoice::new(
             InvoiceId::new(next_id()),
@@ -100,19 +102,7 @@ impl ReceivableProcess {
             },
             actor.id(),
         )?;
-        persist_created_invoice(
-            &self.db,
-            &self.rbac,
-            invoice.clone(),
-            actor.clone(),
-            attachment_ids,
-            pending,
-        )
-        .await?;
-        self.finance
-            .invoice_detail(&invoice.base.id)
-            .await
-            .map_err(|error| committed_read_error(error, has_pending))
+        persist_created_invoice(&self.db, &self.rbac, invoice, actor.clone(), attachment_ids, pending).await
     }
 
     /// 原子创建或提交销项发票并完成分配。
@@ -476,10 +466,10 @@ pub(super) async fn register_created_invoice_document(
     persist_unbound_invoice_document(db, rbac, document, &bind_command, actor, executor).await
 }
 
-/// 在创建事务内写入发票草稿并登记无绑定单据。
+/// 在创建事务内写入发票草稿、登记无绑定单据并读取完整回包。
 ///
 /// # 错误
-/// 绑定、注册或发票写入失败时返回错误，调用方必须视作整体回滚。
+/// 绑定、注册、发票写入或结果读取失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_invoice(
     db: &Database,
     rbac: &FinancePostingPorts,
@@ -487,7 +477,7 @@ async fn persist_created_invoice(
     actor: AuditActor,
     attachment_ids: Vec<FileAssetId>,
     pending: Arc<dyn PendingAttachmentBatch>,
-) -> Result<()> {
+) -> Result<InvoiceView> {
     let audit = actor.clone().resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
@@ -496,11 +486,14 @@ async fn persist_created_invoice(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.authorization
+                    .require(&actor, &receivable::INVOICE_CREATE, AccessTarget::Operation, executor)
+                    .await?;
                 register_created_invoice_document(&db, &rbac, &invoice, &actor, executor).await?;
                 db.invoices().create(&invoice, executor).await?;
                 super::invoice_attachments::persist(
                     &db,
-                    &rbac.identity,
+                    &rbac.authorization,
                     &invoice.base.id,
                     &attachment_ids,
                     pending.as_ref(),
@@ -509,10 +502,60 @@ async fn persist_created_invoice(
                 )
                 .await?;
                 persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
+                created_invoice_result(&db, &rbac.authorization, &actor, &invoice.base.id, executor).await
             })
         })
         .await
+}
+
+/// 在原事务的写后读取阶段重验创建资格并投影草稿结果。
+/// # 参数
+/// db 为发票数据库，authorization 为共享授权，actor 为当前账号，id 为本次草稿身份，executor 为原事务执行器。
+/// # 返回
+/// 返回当前快照内的完整草稿视图，不追加详情菜单资格。
+/// # 错误
+/// 原事务失效、创建资格不足或发票读取失败时拒绝交付结果。
+async fn created_invoice_result(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<InvoiceView> {
+    authorization.require(actor, &receivable::INVOICE_CREATE, AccessTarget::Operation, executor).await?;
+    Ok(ReceivableService::new(db.clone()).invoice_detail_with_executor(id, executor).await?)
+}
+
+#[cfg(test)]
+mod result_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 原事务或创建资格不可用时，在读取草稿及分配前拒绝。
+    #[tokio::test]
+    async fn created_invoice_results_require_snapshot_and_current_command_qualification() {
+        let db =
+            Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("created_invoice_results");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error =
+            created_invoice_result(&db, &authorization, &actor, "draft", &mut ReadExecutor::default())
+                .await
+                .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message)
+            if message == "写入授权必须使用快照事务"));
+        let error =
+            created_invoice_result(&db, &authorization, &actor, "draft", &mut SnapshotExecutor::default())
+                .await
+                .unwrap_err();
+        assert!(matches!(error, Error::Internal(message)
+            if message == "测试授权设施不可用"));
+    }
 }
 
 #[cfg(test)]

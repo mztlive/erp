@@ -1,7 +1,9 @@
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -94,8 +96,39 @@ impl CatalogService {
     /// 分页或排序参数非法，以及仓储查询失败时返回错误。
     pub async fn voucher_category_profile_list(
         &self,
+        actor: &AuditActor,
         params: &VoucherCategoryProfileListParams,
     ) -> Result<PageView<VoucherCategoryProfileView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.voucher_category_profile_list_snapshot(&actor, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn voucher_category_profile_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &VoucherCategoryProfileListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<VoucherCategoryProfileView>> {
+        self.data_scope
+            .authorization
+            .require(
+                actor,
+                &catalog::PRODUCT_VOUCHER_CATEGORY_PROFILE_LIST,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = VoucherCategoryProfileRevisionFilter {
@@ -106,7 +139,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.catalog().voucher_profile_page(&filter, &mut NoTransaction).await?;
+        let page = self.db.catalog().voucher_profile_page(&filter, executor).await?;
         Ok(PageView {
             items: page.items.into_iter().map(VoucherCategoryProfileView::from).collect(),
             total: page.total,
@@ -289,7 +322,12 @@ impl CatalogService {
             },
             VoucherCategorySelection::New(input) => {
                 let category_id = ProductCategoryId::new(next_id());
-                self.ensure_parent_chain_ok(category_id.as_ref(), input.parent_category_id.as_ref()).await?;
+                self.ensure_parent_chain_ok(
+                    category_id.as_ref(),
+                    input.parent_category_id.as_ref(),
+                    &mut NoTransaction,
+                )
+                .await?;
                 let category = ProductCategory::new(
                     category_id.clone(),
                     ProductCategoryData {
@@ -430,12 +468,22 @@ impl CatalogService {
             draft.voucher_revision.base.id.clone(),
         )?;
         let VoucherCategoryDraft { new_category, product, revision, sku_item, voucher_revision } = draft;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::PRODUCT_VOUCHER_CATEGORY_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     if let Some(category) = &new_category {
                         db.product_categories().create(category, executor).await?;
                     }
@@ -674,12 +722,22 @@ impl CatalogService {
             sku_revision,
             voucher_revision,
         } = draft;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::PRODUCT_VOUCHER_CATEGORY_UPDATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     db.products().update(&mut product, executor).await?;
                     db.catalog().create_product_revision_with_media(&product_revision, &[], executor).await?;
                     db.skus().update(&mut sku, executor).await?;

@@ -4,12 +4,14 @@
 //! 具体责任人执行。当前可验收交付全部登记后完成任务，冲正或后续新交付再
 //! 形成新的开放任务，历史终态保持不变。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_core::ids::SalesOrderId;
-use erp_identity::{
-    AccountSummary, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
-};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AccountSummary, AuthorizationService, Error as IdentityError};
+use erp_permissions::{internal, sales_order as sales_order_permissions};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
@@ -20,7 +22,6 @@ use erp_workflow::repository::prelude::*;
 use id_generator::next_id;
 use persistence_core::Executor;
 
-use super::super::task::FulfillmentIdentityFactory;
 use crate::{Error, Result};
 
 const OBJECT_TYPE: &str = "sales_order";
@@ -48,7 +49,7 @@ impl CustomerAcceptanceTaskReason {
 ///
 /// # 参数
 /// * `db` - 业务数据库。
-/// * `identity_factory` - 每次新任务资格核验创建独立身份的工厂。
+/// * `authorization` - 进程共享授权服务。
 /// * `sales_order_id` - 销售单标识。
 /// * `reason` - 本次形成任务的业务原因。
 /// * `executor` - 调用方事务执行器。
@@ -60,7 +61,7 @@ impl CustomerAcceptanceTaskReason {
 /// 销售单不存在、不是实物及服务单、开放任务重复或责任不一致，以及新建时负责人不合格或写入失败时返回错误。
 pub async fn ensure_customer_acceptance_task(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     sales_order_id: &SalesOrderId,
     reason: CustomerAcceptanceTaskReason,
     executor: &mut dyn Executor,
@@ -80,14 +81,14 @@ pub async fn ensure_customer_acceptance_task(
         },
     }
 
-    create_customer_acceptance_task(db, identity_factory, &order, reason, executor).await
+    create_customer_acceptance_task(db, authorization, &order, reason, executor).await
 }
 
 /// 为验收正式命令加载当前任务并校验责任、任务身份和可选乐观锁。
 ///
 /// # 参数
 /// * `db` - 业务数据库。
-/// * `identity_factory` - 新任务与当前责任人重验各自创建独立身份的工厂。
+/// * `authorization` - 进程共享授权服务。
 /// * `sales_order_id` - 销售单标识。
 /// * `actor_id` - 当前操作人。
 /// * `work_item_id` - 调用方看到的任务主键；与 `expected_task_version` 必须同时有值或同时为空。
@@ -101,7 +102,7 @@ pub async fn ensure_customer_acceptance_task(
 /// 任务无法建立、主键与版本未成对提供或与当前任务不一致，或操作人不是当前销售责任人时返回错误。
 pub async fn prepare_customer_acceptance_task_command(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     sales_order_id: &SalesOrderId,
     actor_id: &str,
     work_item_id: Option<&str>,
@@ -110,14 +111,14 @@ pub async fn prepare_customer_acceptance_task_command(
 ) -> Result<WorkItem> {
     let mut task = ensure_customer_acceptance_task(
         db,
-        identity_factory,
+        authorization,
         sales_order_id,
         CustomerAcceptanceTaskReason::DeliveryAvailable,
         executor,
     )
     .await?;
     ensure_command_identity(&task, work_item_id, expected_task_version)?;
-    ensure_current_owner_execution_access(db, identity_factory, &task, actor_id, executor).await?;
+    ensure_current_owner_execution_access(db, authorization, &task, actor_id, executor).await?;
     task.record_activity(erp_core::common::time::Instant::now())?;
     Ok(task)
 }
@@ -153,13 +154,13 @@ pub async fn persist_customer_acceptance_task_after_posting(
 /// 校验当前销售负责人资格后创建唯一验收任务。
 async fn create_customer_acceptance_task(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     order: &SalesOrder,
     reason: CustomerAcceptanceTaskReason,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let owner_user_id = order.sales_owner_user_id.clone();
-    let rbac = identity_factory();
+    let rbac = authorization.clone();
     ensure_customer_acceptance_owner_eligible(db, &rbac, &owner_user_id, executor).await?;
     let task = WorkItem::new_with_responsibility_key(
         erp_core::ids::WorkItemId::new(next_id()),
@@ -254,43 +255,54 @@ fn responsibility_key(sales_order_id: &str) -> String {
 
 /// 销售责任人账号可用且具备完整验收操作权限，才允许形成任务。
 async fn ensure_customer_acceptance_owner_eligible(
-    db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    _db: &mongodb::Database,
+    rbac: &Arc<AuthorizationService>,
     owner_user_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<AccountSummary> {
-    let required_permissions = WorkItemType::CustomerAcceptanceRegistration
-        .customer_acceptance_execution_permissions(OBJECT_TYPE)
-        .expect("客户验收登记对象权限合同必须存在");
-    let required: Vec<_> = required_permissions
-        .iter()
-        .map(|code| Permission::parse(code).expect("固定客户验收操作权限必须合法"))
-        .collect();
     let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-    let qualified = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
-        .permissions(&actor, &required, executor)
-        .await?;
-    if let Some(qualified) = qualified.filter(|value| value.same_role(&required)) {
-        return Ok(qualified.account().clone());
+    let candidate = ObjectFacts {
+        resource: "work_item".into(),
+        subject_type: FactValue::Known(WorkItemType::CustomerAcceptanceRegistration.as_str().into()),
+        subject_source_resource: FactValue::Known(OBJECT_TYPE.into()),
+        ..Default::default()
+    };
+    match rbac
+        .require(
+            &actor,
+            &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+            AccessTarget::Candidate(candidate),
+            executor,
+        )
+        .await
+    {
+        Ok(()) => {},
+        Err(IdentityError::Forbidden(_)) => {
+            return Err(Error::BusinessLogicError(
+                "销售责任人账号无效或缺少客户验收完整操作权限，请先调整角色或责任配置".into(),
+            ));
+        },
+        Err(error) => return Err(error.into()),
     }
-    Err(Error::BusinessLogicError(
-        "销售责任人账号无效或缺少客户验收完整操作权限，请先调整角色或责任配置".to_string(),
-    ))
+    rbac.permissions(&actor, &[], executor)
+        .await?
+        .map(|qualified| qualified.account().clone())
+        .ok_or_else(|| Error::BusinessLogicError("销售责任人账号无效，请先调整角色或责任配置".into()))
 }
 
 /// 操作人须具备验收权限和销售单 detail 范围，并且是任务当前负责人。
 async fn ensure_current_owner_execution_access(
     db: &mongodb::Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     task: &WorkItem,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let rbac = identity_factory();
+    let rbac = authorization.clone();
     let account = ensure_customer_acceptance_owner_eligible(db, &rbac, actor_id, executor).await?;
     let actor = AuditActor::new(account.id, account.login_account, account.kind);
     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
-        .require_object(&actor, "detail", &task.business_object_id, &[], executor)
+        .require_object(&actor, &sales_order_permissions::DETAIL, &task.business_object_id, executor)
         .await?;
     super::super::task_access::require_assignee(
         db,
@@ -305,6 +317,23 @@ async fn ensure_current_owner_execution_access(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn owner_qualification_stops_before_account_reads_when_authorization_is_unavailable() {
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
+        let error = super::ensure_customer_acceptance_owner_eligible(
+            &db,
+            &unavailable_authorization(),
+            "sales",
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, crate::Error::Internal(message) if message == "测试授权设施不可用"));
+    }
     use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, WorkItemId};
     use erp_sales::entity::sales_order::{OriginSystem, SalesOrderData};
 

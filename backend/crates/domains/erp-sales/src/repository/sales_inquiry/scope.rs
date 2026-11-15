@@ -5,16 +5,17 @@ use erp_identity::entity::authorization::QueryOutput;
 use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::Executor;
+use persistence_core::{Executor, aggregate};
 
-use crate::Error;
+use super::SalesInquiryRepository;
+use crate::entity::sales_inquiry::SalesInquiry;
 use crate::repository::SalesInquiryExt;
 
 /// 必须持有完整授权凭证的仓储读取载体。
 #[derive(Clone)]
 pub struct InquiryReadScope {
     access: Arc<CompiledAccess>,
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
 }
 impl std::fmt::Debug for InquiryReadScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,7 +30,7 @@ impl InquiryReadScope {
     /// 仅用于当前事务读取的执行载体。
     /// # 错误
     /// 无；执行前后须复验。
-    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
+    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: Arc<AuthorizationService>) -> Self {
         Self { access, authorization }
     }
     /// 返回完整授权阶段。
@@ -54,19 +55,61 @@ impl InquiryReadScope {
         stages.extend(self.stages());
         stages
     }
-    /// 在原执行器复验 identity 凭证。
+    /// 在仓储执行前后检查模型、原执行边界和有效期，不读取数据库。
     /// # 参数
-    /// executor 为生成凭证时的执行器。
+    /// executor 为生成凭证时的原执行器。
     /// # 返回
-    /// 当前授权仍有效时成功。
+    /// 模型、边界和期限均符合当前读取时成功。
     /// # 错误
-    /// 身份、映射、版本或会话变化返回原始错误。
-    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
-        if self.access.model().collection != Database::SALES_INQUIRIES
+    /// 模型不匹配、跨阶段或到期时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+        if !matches!(self.access.model().resource.as_str(), "sales_inquiry" | "procurement_inquiry")
+            || self.access.model().collection != Database::SALES_INQUIRIES
             || self.access.model().output != QueryOutput::Object
         {
             return Err(crate::Error::ValidationError("询价授权查询模型不匹配".into()));
         }
-        self.authorization.validate(&self.access, executor).await.map_err(Error::from)
+
+        self.access.ensure_current(executor)?;
+        Ok(())
+    }
+
+    /// 在读取用例交付结果前复验本次实际授权依赖。
+    /// # 参数
+    /// executor 为查询时的原执行器。
+    /// # 返回
+    /// 当前边界、期限及依赖仍有效时成功。
+    /// # 错误
+    /// 身份、范围或动态依赖失效时拒绝交付。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+        self.ensure_current(executor)?;
+        self.authorization.validate(&self.access, executor).await.map_err(Into::into)
+    }
+}
+
+impl SalesInquiryRepository<'_> {
+    /// 使用完整查询凭证读取一张询价，授权过滤在单行限制之前执行。
+    ///
+    /// # 参数
+    /// id 为稳定询价身份，scope 为当前入口的查询凭证，executor 为原读取执行器。
+    ///
+    /// # 返回
+    /// 返回授权条件命中的询价；不存在和无权均返回 None。
+    ///
+    /// # 错误
+    /// 模型、读取阶段、期限失效或数据库读取失败时拒绝。
+    pub async fn find_authorized(
+        &self,
+        id: &str,
+        scope: &InquiryReadScope,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<Option<SalesInquiry>> {
+        scope.ensure_current(executor)?;
+        let collection = self.db.collection::<SalesInquiry>(Database::SALES_INQUIRIES);
+        let mut stages = scope.lookup_after(doc! { "id": id });
+        stages.push(doc! { "$limit": 1_i64 });
+        let mut rows = aggregate::rows(&collection, stages, executor).await?;
+        scope.ensure_current(executor)?;
+        Ok(rows.pop())
     }
 }

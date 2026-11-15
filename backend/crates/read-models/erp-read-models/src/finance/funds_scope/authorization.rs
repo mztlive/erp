@@ -9,15 +9,13 @@ use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsDataScopePort;
-use erp_identity::SharedRbacService;
-use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::prelude::*;
-use erp_sales::repository::sales_order::scope::SalesReadScope;
+use erp_identity::{AuthorizationService, CompiledAccess};
+use erp_permissions::Permission as AccessPermission;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde::Serialize;
 
+use super::repository::source_access::SourceQuery;
 use super::rows::*;
 use crate::ports::invoice_grants::InvoiceGrantReadiness;
 use crate::{Error, Result};
@@ -32,29 +30,41 @@ pub struct FundsReadContext {
 
 /// 资金自身动作资格与真实来源边界；整账职责不替代任何来源判定。
 pub struct FundsAuthorization {
+    pub(super) access: Option<Arc<CompiledAccess>>,
+    pub(super) service: Option<Arc<AuthorizationService>>,
     pub(super) whole: super::repository::whole_access::WholeAccess,
     /// 关联销售单的已解析范围。
-    pub sales: Option<SalesReadScope>,
+    pub(crate) sales: Option<SourceQuery>,
     /// 明确的财务整账读取职责，不授予来源业务动作。
     pub ledger_read: bool,
     /// 结算来源范围，必须按实际来源类型选择。
-    pub settlement: Option<super::repository::source_access::SourceQuery>,
+    pub(crate) settlement: Option<SourceQuery>,
     /// 采购关联资源的已解析采购范围；销售关联查询为 `None`。
-    pub purchase_scope: Option<PurchaseReadScope>,
+    pub(crate) purchase_scope: Option<SourceQuery>,
     /// 资金资源动作的解析上下文。
     pub context: FundsReadContext,
 }
 
 impl FundsAuthorization {
-    /// 读取本次已登记的销售来源凭证。
+    /// 读取本阶段的固定财务根凭证，供仓储先过滤再分页。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 当前读取阶段的完整销售授权。
+    /// 同次统一查询生成的完整根凭证。
+    /// # 错误
+    /// 没有真实根凭证时拒绝。
+    pub(crate) fn root_access(&self) -> Result<&CompiledAccess> {
+        self.access.as_deref().ok_or_else(|| Error::ValidationError("缺少资金根查询凭证".into()))
+    }
+    /// 读取本次已登记的销售来源固定投影计划。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前读取阶段的身份、版本及责任事实查询；不授予销售完整对象。
     /// # 错误
     /// 当前入口未登记销售来源时拒绝。
-    pub(super) fn sales_scope(&self) -> Result<&SalesReadScope> {
-        self.sales.as_ref().ok_or_else(|| Error::Forbidden("缺少销售授权凭证".into()))
+    pub(super) fn sales_scope(&self) -> Result<&SourceQuery> {
+        self.sales.as_ref().ok_or_else(|| Error::Forbidden("缺少销售来源计划".into()))
     }
 }
 
@@ -111,7 +121,7 @@ pub struct FundsLinkedCondition {
 pub struct FundsAccess {
     pub(super) grant_readiness: Option<Arc<dyn InvoiceGrantReadiness>>,
     pub(super) db: Database,
-    pub(super) rbac: SharedRbacService,
+    pub(super) rbac: Arc<AuthorizationService>,
     pub(super) scope: Arc<dyn FundsDataScopePort>,
 }
 
@@ -143,7 +153,7 @@ impl FundsAccess {
     ///
     /// # 关键业务约束
     /// 不得在构造时补公司范围或读取登录人默认组织；不得直接构造身份域 Service。
-    pub fn new(db: Database, rbac: SharedRbacService, scope: Arc<dyn FundsDataScopePort>) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>, scope: Arc<dyn FundsDataScopePort>) -> Self {
         Self { db, rbac, scope, grant_readiness: None }
     }
 
@@ -151,8 +161,7 @@ impl FundsAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `resource` - 本次解析的资金资源
-    /// * `action` - 该资源已注册动作
+    /// * `permission` - 本次资金入口的公共权限常量
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -166,19 +175,17 @@ impl FundsAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<(FundsReadContext, FundsAuthorization)> {
-        self.resolve_sources(actor, resource, action, false, false, executor).await
+        self.resolve_sources(actor, permission, false, false, executor).await
     }
 
     /// 证明资金自身动作后，按采购及结算的实际来源边界解析。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人。
-    /// * `resource` - 本次解析的资金资源。
-    /// * `action` - 该资源已注册动作。
+    /// * `permission` - 本次资金入口的公共权限常量。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -189,11 +196,10 @@ impl FundsAccess {
     pub async fn resolve_with_purchase(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<(FundsReadContext, FundsAuthorization)> {
-        self.resolve_sources(actor, resource, action, true, false, executor).await
+        self.resolve_sources(actor, permission, true, false, executor).await
     }
 
     /// 按本次真实来源分批读取允许的销售单 ID，不枚举账号全部授权。
@@ -214,7 +220,7 @@ impl FundsAccess {
         };
         let mut allowed = Vec::new();
         for batch in ids.chunks(500) {
-            let rows = self.db.sales_orders().scope_order_versions(batch, scope, executor).await?;
+            let rows = scope.versions_in(&self.db, batch, executor).await?;
             allowed.extend(rows.into_iter().map(|row| row.id));
         }
         Ok(allowed)

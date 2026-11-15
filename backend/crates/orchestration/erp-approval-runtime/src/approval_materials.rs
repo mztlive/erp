@@ -1,8 +1,10 @@
 //! 审批冻结附件读取：限定实例允许清单，重新校验文件内容，保留敏感读取审计。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::ids::FileAssetId;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_read_models::workbench::{authorize_material_transfer, invoice_sales_reference};
 use erp_support::repository::FileAssetExt;
 use erp_support::{FileAssetService, FileAssetView, SecurityScanStatus};
@@ -10,7 +12,7 @@ use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::approval_integration::ApprovalMaterialFile;
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{ReadExecutor, Transactional};
 
 use crate::{Error, Result};
 
@@ -61,8 +63,8 @@ impl ReadPhase {
         file_id: &str,
     ) -> Result<FileAssetView> {
         Ok(match self {
-            Self::Initial => files.file_asset_preview(file_id, actor).await?,
-            Self::Revalidate => files.file_asset_detail(file_id).await?,
+            Self::Initial => files.preview_asset(file_id, actor, &mut ReadExecutor::default()).await?,
+            Self::Revalidate => files.asset_view(file_id, &mut ReadExecutor::default()).await?,
         })
     }
 }
@@ -77,18 +79,29 @@ impl ReadPhase {
 /// # 错误
 /// 文件不存在、账号失效或无文件来源资格时拒绝。
 pub async fn authorize_attachment(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
     db: &Database,
     actor: &AuditActor,
     file_id: &str,
 ) -> Result<()> {
-    let file = db
-        .file_assets()
-        .find_by_id(file_id, &mut NoTransaction)
-        .await?
-        .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
-    authorize_material_transfer(identity_service, db, actor, &[file], &mut NoTransaction).await?;
-    Ok(())
+    let identity_service = identity_service.clone();
+    let db = db.clone();
+    let actor = actor.clone();
+    let file_id = file_id.to_owned();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                let file = db
+                    .file_assets()
+                    .find_by_id(&file_id, executor)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
+                authorize_material_transfer(&identity_service, &db, &actor, &[file], executor).await?;
+                Ok(())
+            })
+        })
+        .await
 }
 
 /// 取得已授权、仍匹配提交版本且可供读取的附件元数据。

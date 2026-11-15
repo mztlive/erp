@@ -1,5 +1,7 @@
 use application_core::AuditActor;
-use persistence_core::{NoTransaction, Transactional};
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -28,8 +30,34 @@ impl CatalogService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn unit_of_measure_list(
         &self,
+        actor: &AuditActor,
         params: &UnitOfMeasureListParams,
     ) -> Result<PageView<UnitOfMeasureView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.unit_of_measure_list_snapshot(&actor, &params, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn unit_of_measure_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &UnitOfMeasureListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<UnitOfMeasureView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::UNIT_OF_MEASURE_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = UnitOfMeasureFilter {
@@ -41,7 +69,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.unit_of_measures().search_unit_of_measures(&filter, &mut NoTransaction).await?;
+        let page = self.db.unit_of_measures().search_unit_of_measures(&filter, executor).await?;
         let items = page.items.into_iter().map(UnitOfMeasureView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -83,12 +111,17 @@ impl CatalogService {
             "unit_of_measure",
             unit.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::UNIT_OF_MEASURE_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     db.unit_of_measures().update(&mut unit, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<UnitOfMeasure, crate::error::Error>(unit)
@@ -118,12 +151,17 @@ impl CatalogService {
             "unit_of_measure",
             unit.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::UNIT_OF_MEASURE_DELETE, AccessTarget::Operation, executor)
+                        .await?;
                     db.unit_of_measures().soft_delete(&mut unit, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())

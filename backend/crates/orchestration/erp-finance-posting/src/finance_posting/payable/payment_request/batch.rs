@@ -2,7 +2,7 @@
 use application_core::CommandReceipt;
 use erp_finance::FinanceCommandReceiptService;
 use erp_finance::dto::payable::payment_request::CreatePaymentRequestBatch;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 
 use super::*;
 use crate::FinancePostingPorts;
@@ -46,12 +46,20 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
-        match result {
-            Ok(rows) => Ok(rows),
-            Err(error) => match recover(&self.db, &self.rbac, &recovery, actor, &mut NoTransaction).await? {
-                Some(rows) => Ok(rows),
-                None => Err(error),
-            },
+        let Err(error) = result else { return result };
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { recover(&db, &rbac, &recovery, &actor, executor).await })
+            })
+            .await?;
+        match recovered {
+            Some(rows) => Ok(rows),
+            None => Err(error),
         }
     }
 }

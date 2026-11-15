@@ -6,7 +6,7 @@ use application_core::AuditActor;
 use erp_approval_runtime::approver_directory::resolve_approvers;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_procurement::entity::purchase_order::{
     PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
@@ -253,7 +253,7 @@ async fn persist_created_order_start(
     )?;
     let prepared = prepare_created_order_start(
         db,
-        &(ports.task_identity)(),
+        &ports.task_identity.clone(),
         &frozen.order,
         actor,
         idempotency_key,
@@ -290,7 +290,7 @@ async fn persist_created_order_start(
 /// 新建提交没有既有启动收据。
 async fn prepare_created_order_start(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     order: &PurchaseOrder,
     actor: &AuditActor,
     idempotency_key: &str,

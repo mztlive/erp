@@ -6,7 +6,7 @@ use erp_catalog::{
     CatalogExt, CreateProductBrandRequest, CreateProductCategoryRequest, CreateUnitOfMeasureRequest,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::DemoMasterDataProcess;
 use super::lifecycle::{self, DemoKindDictionary};
@@ -46,8 +46,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some((id, live)) = self.lookup_unit(&step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Unit, id, live).await;
         }
-        let view =
-            erp_master_data::create_unit_of_measure(self.db.clone(), request.clone(), actor.clone()).await?;
+        let view = erp_master_data::create_unit_of_measure(
+            self.db.clone(),
+            self.authorization.clone(),
+            request.clone(),
+            actor.clone(),
+        )
+        .await?;
         self.remember(step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
@@ -97,6 +102,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         }
         let view = erp_master_data::create_product_category(
             self.db.clone(),
+            self.authorization.clone(),
             self.catalog(),
             request.clone(),
             actor.clone(),
@@ -117,7 +123,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     ) -> Result<EnsureOutcome> {
         record::ensure_owned(&self.db, &step.key, &id).await?;
         if !live {
-            lifecycle::restore_dictionary(&self.db, actor, kind, &id).await?;
+            lifecycle::restore_dictionary(&self.db, self.authorization.clone(), actor, kind, &id).await?;
         }
         self.remember(step, id, Vec::new()).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
@@ -128,7 +134,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(coded_state(
             self.db
                 .unit_of_measures()
-                .find_one_by_field_including_deleted("unit_code", key.to_string(), &mut NoTransaction)
+                .find_one_by_field_including_deleted(
+                    "unit_code",
+                    key.to_string(),
+                    &mut ReadExecutor::default(),
+                )
                 .await?,
         ))
     }
@@ -138,7 +148,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(coded_state(
             self.db
                 .product_brands()
-                .find_one_by_field_including_deleted("brand_code", key.to_string(), &mut NoTransaction)
+                .find_one_by_field_including_deleted(
+                    "brand_code",
+                    key.to_string(),
+                    &mut ReadExecutor::default(),
+                )
                 .await?,
         ))
     }
@@ -148,7 +162,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         Ok(coded_state(
             self.db
                 .product_categories()
-                .find_one_by_field_including_deleted("category_code", key.to_string(), &mut NoTransaction)
+                .find_one_by_field_including_deleted(
+                    "category_code",
+                    key.to_string(),
+                    &mut ReadExecutor::default(),
+                )
                 .await?,
         ))
     }

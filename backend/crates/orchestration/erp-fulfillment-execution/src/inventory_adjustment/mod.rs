@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_inventory::InventoryService;
 use erp_read_models::inventory_center::InventoryAdjustmentReadService;
 use mongodb::Database;
@@ -33,7 +33,7 @@ mod start_tests;
 /// Holds the root transaction for submit/cancel/create and reuses the caller
 /// Executor for approval-runtime post and cancel actions.
 pub struct InventoryAdjustmentProcess {
-    identity: SharedRbacService,
+    identity: Arc<AuthorizationService>,
     inventory_service: Arc<InventoryService>,
     workflow: Arc<dyn FulfillmentWorkflow>,
     db: Database,
@@ -55,7 +55,7 @@ impl InventoryAdjustmentProcess {
     /// 不返回错误。
     pub fn new(
         db: Database,
-        identity: SharedRbacService,
+        identity: Arc<AuthorizationService>,
         workflow: Arc<dyn FulfillmentWorkflow>,
         inventory_service: Arc<InventoryService>,
     ) -> Self {

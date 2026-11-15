@@ -7,6 +7,7 @@ use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::purchase_payment_request as payment_permissions;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::dto::work_item::WorkItemAllowedAction;
 use erp_workflow::{DocumentType, WorkItemExt, WorkItemStatus, WorkItemType};
@@ -64,14 +65,14 @@ impl PurchasePaymentRequestReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let request = this.load(&id, executor).await?;
-                    let scope = this.source_scope(&actor, "detail", executor).await?;
+                    let allowed_actions = this.allowed_actions(&actor, &request, executor).await?;
+                    let scope = this.source_scope(&actor, &payment_permissions::DETAIL, executor).await?;
                     if !this.readable(&request, &scope, executor).await? {
                         return Err(unavailable());
                     }
-                    let allowed_actions = this.allowed_actions(&actor, &request, executor).await?;
-                    let mut view = this.view(request, executor).await?;
+                    let mut view = this.view(request, allowed_actions, executor).await?;
                     view.review_lines = Some(this.review_lines(&view.request, executor).await?);
-                    view.allowed_actions = allowed_actions;
+                    scope.deliver(executor).await?;
                     Ok::<_, Error>(view)
                 })
             })
@@ -104,7 +105,7 @@ impl PurchasePaymentRequestReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let request = this.task_request(&actor_for_tx, &id, &expected, executor).await?;
-                    let mut view = this.view(request, executor).await?;
+                    let mut view = this.view(request, Vec::new(), executor).await?;
                     view.review_lines = Some(this.review_lines(&view.request, executor).await?);
                     if expected.work_item_type == WorkItemType::SupplierPaymentExecution
                         && expected.allowed_actions.contains(&WorkItemAllowedAction::Process)
@@ -128,8 +129,12 @@ impl PurchasePaymentRequestReadService {
         query: &PurchasePaymentRequestQuery,
         executor: &mut dyn Executor,
     ) -> Result<PageView<PurchasePaymentRequestView>> {
-        let scope = self.source_scope(actor, "list", executor).await?;
-        let candidates = self.db.purchase_payment_requests().scope_candidates(query, executor).await?;
+        let scope = self.source_scope(actor, &payment_permissions::LIST, executor).await?;
+        let candidates = self
+            .db
+            .purchase_payment_requests()
+            .scope_candidates(query, scope.root_access()?, executor)
+            .await?;
         if candidates.len() > 10_000 {
             return Err(Error::ValidationError("付款申请查询超过上限，请收窄筛选".into()));
         }
@@ -146,8 +151,9 @@ impl PurchasePaymentRequestReadService {
         let page = PaymentRequestList::page(rows, &names, query)?;
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
-            items.push(self.view(row, executor).await?);
+            items.push(self.view(row, Vec::new(), executor).await?);
         }
+        scope.deliver(executor).await?;
         Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
 
@@ -199,6 +205,7 @@ impl PurchasePaymentRequestReadService {
     async fn view(
         &self,
         request: PurchasePaymentRequest,
+        allowed_actions: Vec<String>,
         executor: &mut dyn Executor,
     ) -> Result<PurchasePaymentRequestView> {
         let (purchases, sales) = frozen_previews(&request.lines, &request.payer_party_id)?;
@@ -216,7 +223,7 @@ impl PurchasePaymentRequestReadService {
             .unwrap_or(&request.supplier_id)
             .to_string();
         let current_lines = self.current_lines(&request, executor).await?;
-        let approval = self.approval(&request, executor).await?;
+        let approval = self.approval(&request, &allowed_actions, executor).await?;
         let attachments = self.attachments(&request, executor).await?;
         let payments = self.payments(&request, executor).await?;
         let credit_uses =
@@ -230,7 +237,7 @@ impl PurchasePaymentRequestReadService {
             sales_previews: sales,
             current_lines,
             approval,
-            allowed_actions: Vec::new(),
+            allowed_actions,
             attachments,
             payments,
             credit_uses,
@@ -282,6 +289,7 @@ impl PurchasePaymentRequestReadService {
     async fn approval(
         &self,
         request: &PurchasePaymentRequest,
+        allowed_actions: &[String],
         executor: &mut dyn Executor,
     ) -> Result<DocumentApprovalView> {
         let binding = self.request_approval_binding(request, executor).await?;
@@ -293,13 +301,7 @@ impl PurchasePaymentRequestReadService {
             history_page: DocumentApprovalHistoryPageView::default(),
             allowed_actions: Vec::new(),
         };
-        match request.status {
-            PurchasePaymentRequestStatus::Draft
-            | PurchasePaymentRequestStatus::Rejected
-            | PurchasePaymentRequestStatus::Withdrawn => view.allowed_actions.push("SUBMIT".into()),
-            PurchasePaymentRequestStatus::InApproval => view.allowed_actions.push("CANCEL".into()),
-            _ => {},
-        }
+        view.allowed_actions = approval_actions(request.status, allowed_actions);
         if let Some(instance_id) = request.approval_instance_id.as_deref() {
             let runtime = load_document_runtime_for_instance(
                 &self.db,
@@ -327,6 +329,24 @@ impl PurchasePaymentRequestReadService {
     }
 }
 
+/// 审批面板只展示已经通过实际对象授权的申请动作。
+fn approval_actions(status: PurchasePaymentRequestStatus, authorized: &[String]) -> Vec<String> {
+    let action = match status {
+        PurchasePaymentRequestStatus::Draft
+        | PurchasePaymentRequestStatus::Rejected
+        | PurchasePaymentRequestStatus::Withdrawn
+            if authorized.iter().any(|action| action == "SUBMIT") =>
+        {
+            Some("SUBMIT")
+        },
+        PurchasePaymentRequestStatus::InApproval if authorized.iter().any(|action| action == "WITHDRAW") => {
+            Some("CANCEL")
+        },
+        _ => None,
+    };
+    action.into_iter().map(str::to_owned).collect()
+}
+
 fn unavailable() -> Error {
     Error::NotFound("付款申请不存在或无权查看".into())
 }
@@ -347,6 +367,17 @@ fn task_material_actionable(fact: &AuthorizedTaskFact) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn approval_panel_requires_the_real_authorized_action_as_well_as_state() {
+        assert!(approval_actions(PurchasePaymentRequestStatus::Draft, &[]).is_empty());
+        assert!(approval_actions(PurchasePaymentRequestStatus::InApproval, &["SUBMIT".into()]).is_empty());
+        assert_eq!(approval_actions(PurchasePaymentRequestStatus::Draft, &["SUBMIT".into()]), ["SUBMIT"]);
+        assert_eq!(
+            approval_actions(PurchasePaymentRequestStatus::InApproval, &["WITHDRAW".into()]),
+            ["CANCEL"]
+        );
+    }
 
     #[test]
     fn task_materials_require_current_action_and_never_accept_view_or_management_only() {

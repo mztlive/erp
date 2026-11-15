@@ -13,6 +13,7 @@ erp-core = { workspace = true }
 erp-finance = { workspace = true }
 erp-fulfillment-execution = { workspace = true }
 erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 erp-party = { workspace = true }
 erp-read-models = { workspace = true }
 erp-supplier = { workspace = true }

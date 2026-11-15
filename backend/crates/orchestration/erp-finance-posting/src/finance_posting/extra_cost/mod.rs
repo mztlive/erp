@@ -4,7 +4,9 @@
 //! 登记凭证文件、写入成本事实与分配并写审计。成本事实主键由操作人、动作和幂等键
 //! 派生，重试命中原事实；冲减来源行按序号编排，并发冲减由成本唯一索引串行化。
 
-use erp_identity::SharedRbacService;
+use erp_identity::entity::authorization::{ObjectFacts, RelatedObjects, RelationKey};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::cost;
 mod receipt;
 
 use std::collections::HashSet;
@@ -29,13 +31,13 @@ use erp_finance::repository::cost::CostAllocationRepositoryExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::cost::{PreparedCostEntry, persist_cost_entry};
 use erp_read_models::finance::extra_cost::order_costs;
-use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::extra_cost::ensure_attributable_line;
 use erp_supplier::SupplierExt;
 use erp_support::{PendingAttachmentBatch, PendingFileAssetRequest};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use self::receipt::registration_receipt;
@@ -47,7 +49,7 @@ const REDUCE_ACTION: &str = "sales_extra_cost.reduce";
 /// 附加费用登记与冲减流程。
 pub struct SalesExtraCostProcess {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl SalesExtraCostProcess {
@@ -55,14 +57,14 @@ impl SalesExtraCostProcess {
     ///
     /// # 参数
     /// * `db` - 应用数据库
-    /// * `rbac` - 当前 RBAC 服务，用于事务内重验销售单对象范围
+    /// * `rbac` - 应用共享授权服务，用于事务内重验销售单对象范围
     ///
     /// # 返回
     /// 返回流程实例，构造不执行 I/O。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -96,9 +98,6 @@ impl SalesExtraCostProcess {
         let entry_id = extra_cost_entry_id(actor.id(), REGISTER_ACTION, &req.idempotency_key);
         let order_id = SalesOrderId::new(sales_order_id.to_string());
         let expected = Expected::registration(&req, &order_id, receipt.clone());
-        if let Some(replayed) = replay(&self.db, &entry_id, &expected, &mut NoTransaction).await? {
-            return Ok(replayed);
-        }
         let command = Command::Register(Box::new(RegisterCommand {
             order_id,
             entry_id: entry_id.clone(),
@@ -106,10 +105,23 @@ impl SalesExtraCostProcess {
             receipt,
             inquiry_source: req.inquiry_source.clone(),
         }));
-        match self.transact(actor, pending, command).await {
-            Ok(()) => Ok(ExtraCostCommandResult { cost_entry_id: entry_id.to_string(), replayed: false }),
+        match self.transact(actor, pending, command, expected.clone(), entry_id.clone()).await {
+            Ok(result) => Ok(result),
             Err(error) => {
-                recover_command(error, replay(&self.db, &entry_id, &expected, &mut NoTransaction).await)
+                let db = self.db.clone();
+                let authorization = self.rbac.clone();
+                let actor = actor.clone();
+                let recovered = self
+                    .db
+                    .client()
+                    .with_transaction(move |executor| {
+                        Box::pin(async move {
+                            require_cost_source(&authorization, &actor, &expected.order_id, executor).await?;
+                            replay(&db, &entry_id, &expected, executor).await
+                        })
+                    })
+                    .await;
+                recover_command(error, recovered)
             },
         }
     }
@@ -145,15 +157,25 @@ impl SalesExtraCostProcess {
         let order_id = SalesOrderId::new(sales_order_id.to_string());
         let original_id = CostEntryId::new(cost_entry_id.to_string());
         let expected = Expected::reduction(&req, &order_id, &original_id);
-        if let Some(replayed) = replay(&self.db, &entry_id, &expected, &mut NoTransaction).await? {
-            return Ok(replayed);
-        }
         let command =
             Command::Reduce(ReduceCommand { order_id, original_id, entry_id: entry_id.clone(), reduction });
-        match self.transact(actor, pending, command).await {
-            Ok(()) => Ok(ExtraCostCommandResult { cost_entry_id: entry_id.to_string(), replayed: false }),
+        match self.transact(actor, pending, command, expected.clone(), entry_id.clone()).await {
+            Ok(result) => Ok(result),
             Err(error) => {
-                recover_command(error, replay(&self.db, &entry_id, &expected, &mut NoTransaction).await)
+                let db = self.db.clone();
+                let authorization = self.rbac.clone();
+                let actor = actor.clone();
+                let recovered = self
+                    .db
+                    .client()
+                    .with_transaction(move |executor| {
+                        Box::pin(async move {
+                            require_cost_source(&authorization, &actor, &expected.order_id, executor).await?;
+                            replay(&db, &entry_id, &expected, executor).await
+                        })
+                    })
+                    .await;
+                recover_command(error, recovered)
             },
         }
     }
@@ -164,18 +186,48 @@ impl SalesExtraCostProcess {
         actor: &AuditActor,
         pending: Arc<dyn PendingAttachmentBatch>,
         command: Command,
-    ) -> Result<()> {
+        expected: Expected,
+        entry_id: CostEntryId,
+    ) -> Result<ExtraCostCommandResult> {
         let db = self.db.clone();
-        let access = SalesAccess::new(self.db.clone(), self.rbac.clone());
+        let authorization = self.rbac.clone();
         let actor = actor.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { command.apply(&db, &access, &actor, pending.as_ref(), executor).await })
+                Box::pin(async move {
+                    require_cost_source(&authorization, &actor, &expected.order_id, executor).await?;
+                    if let Some(result) = replay(&db, &entry_id, &expected, executor).await? {
+                        return Ok(result);
+                    }
+                    command.apply(&db, &actor, pending.as_ref(), executor).await?;
+                    Ok(ExtraCostCommandResult { cost_entry_id: entry_id.to_string(), replayed: false })
+                })
             })
             .await
     }
+}
+
+/// 固定成本入口同时校验完整销售来源和同角色资格。
+async fn require_cost_source(
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let candidate = ObjectFacts {
+        resource: "cost_entry".into(),
+        relations: [(
+            RelationKey::parse("sales_source")?,
+            RelatedObjects { expected_ids: [order_id.to_string()].into(), objects: vec![] },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    Ok(authorization
+        .require(actor, &cost::ENTRY_CREATE, AccessTarget::Candidate(candidate), executor)
+        .await?)
 }
 
 /// 事务内执行的附加费用命令。
@@ -188,14 +240,13 @@ impl Command {
     async fn apply(
         &self,
         db: &Database,
-        access: &SalesAccess,
         actor: &AuditActor,
         pending: &dyn PendingAttachmentBatch,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         match self {
-            Self::Register(command) => command.apply(db, access, actor, pending, executor).await,
-            Self::Reduce(command) => command.apply(db, access, actor, pending, executor).await,
+            Self::Register(command) => command.apply(db, actor, pending, executor).await,
+            Self::Reduce(command) => command.apply(db, actor, pending, executor).await,
         }
     }
 }
@@ -213,12 +264,11 @@ impl RegisterCommand {
     async fn apply(
         &self,
         db: &Database,
-        access: &SalesAccess,
         actor: &AuditActor,
         pending: &dyn PendingAttachmentBatch,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let order = load_order(access, actor, &self.order_id, executor).await?;
+        let order = load_order(db, &self.order_id, executor).await?;
         ensure_attributable_line(db, &order, self.registration.sales_order_line_id(), executor).await?;
         ensure_supplier(db, self.registration.supplier_id(), executor).await?;
         let (entry, allocation) =
@@ -250,12 +300,11 @@ impl ReduceCommand {
     async fn apply(
         &self,
         db: &Database,
-        access: &SalesAccess,
         actor: &AuditActor,
         pending: &dyn PendingAttachmentBatch,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        load_order(access, actor, &self.order_id, executor).await?;
+        load_order(db, &self.order_id, executor).await?;
         let (original, allocation) = load_original(db, &self.order_id, &self.original_id, executor).await?;
         let (entries, _) = order_costs(db, self.order_id.as_ref(), executor).await?;
         let reduced = ReducedAmounts::of(&original, entries.iter());
@@ -267,12 +316,15 @@ impl ReduceCommand {
 
 /// 读取当前操作人可见且可登记附加费用的销售单。
 async fn load_order(
-    access: &SalesAccess,
-    actor: &AuditActor,
+    db: &Database,
     order_id: &SalesOrderId,
     executor: &mut dyn Executor,
 ) -> Result<SalesOrder> {
-    let order = access.require_object(actor, "detail", order_id.as_ref(), &[], executor).await?;
+    let order = db
+        .sales_orders()
+        .find_by_id(order_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("附加费用归属销售单不存在".into()))?;
     order.ensure_extra_cost_source()?;
     Ok(order)
 }
@@ -344,6 +396,7 @@ fn resolve_evidence(id: &mut FileAssetId, pending: &dyn PendingAttachmentBatch) 
 }
 
 /// 重放比对所需的原命令关键事实。
+#[derive(Clone)]
 struct Expected {
     fact_type: &'static str,
     order_id: String,

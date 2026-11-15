@@ -1,5 +1,80 @@
 use super::progress::RecognitionProgress;
 use super::*;
+
+mod authorization {
+    use async_trait::async_trait;
+    use erp_contract::Result as ContractResult;
+    use erp_contract::ports::{
+        ContractCreationPort, EmptyCustomers, FailClosedAuditPort, SigningCompanyFact, SigningCompanyPort,
+    };
+    use erp_core::AccountKind;
+    use erp_identity::entity::authorization::ObjectFacts;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::*;
+
+    struct UnusedFacts;
+    #[async_trait]
+    impl ContractCreationPort for UnusedFacts {
+        async fn candidate(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> ContractResult<ObjectFacts> {
+            panic!("未授权的识别任务不得读取归档候选");
+        }
+    }
+    #[async_trait]
+    impl SigningCompanyPort for UnusedFacts {
+        async fn company(&self, _: &str, _: &mut dyn Executor) -> ContractResult<Option<SigningCompanyFact>> {
+            panic!("未授权的识别任务不得读取签约主体");
+        }
+    }
+
+    #[tokio::test]
+    async fn import_reads_and_claims_reject_before_task_loading_or_version_updates() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("import_access");
+        let authorization = unavailable_authorization();
+        let access = ContractAccess::new(db.clone(), authorization.clone(), Arc::new(UnusedFacts));
+        let contracts = ContractService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(EmptyCustomers),
+            Arc::new(UnusedFacts),
+            access.clone(),
+        );
+        let process = ContractImportProcess::new(
+            db.clone(),
+            ContractImportServices {
+                contracts: Arc::new(contracts),
+                contract_access: access,
+                customer_access: CustomerAccess::new(db, authorization),
+            },
+            RecognitionProviders::default(),
+        );
+        let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
+        for executor in [&mut ReadExecutor::default() as &mut dyn Executor, &mut SnapshotExecutor::default()]
+        {
+            let snapshot = executor.boundary().is_some_and(|boundary| boundary.is_snapshot());
+            for error in [
+                process.task_stage("task", &actor, executor).await.err().unwrap(),
+                process.claim_stage("task", &actor, executor).await.err().unwrap(),
+            ] {
+                if snapshot {
+                    assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+                } else {
+                    assert!(
+                        matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务")
+                    );
+                }
+            }
+        }
+    }
+}
 #[tokio::test]
 async fn missing_provider_never_fabricates_success() {
     let attempt =

@@ -16,8 +16,8 @@ use crate::dto::{
 use crate::entity::inventory::{StockBalance, StockMovement};
 use crate::error::{Error, Result};
 use crate::ports::{
-    CatalogFactsPort, FulfillmentFactsPort, InventoryAction, InventoryAuthorization, SkuFact,
-    SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact,
+    CatalogFactsPort, FulfillmentFactsPort, InventoryAction, InventoryAuthorization, InventoryScopeMeta,
+    SkuFact, SkuRevisionFact, WarehouseFact, WarehouseFactsPort, WarehouseRevisionFact,
 };
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockBalanceFilter, StockBalanceRow, StockMovementFilter};
@@ -55,8 +55,14 @@ impl InventoryService {
         let page_no = query.paging.page;
         let page_size = query.paging.page_size;
         let scope_version = query.scope_version.clone();
-        let BalancePage { page, authorization, enrichments, active_reservation_dims, create_warehouses } =
-            self.balance_page(query, actor).await?;
+        let BalancePage {
+            page,
+            scope_meta,
+            no_scope,
+            enrichments,
+            active_reservation_dims,
+            create_warehouses,
+        } = self.balance_page(query, actor).await?;
         let items = page
             .items
             .into_iter()
@@ -69,15 +75,11 @@ impl InventoryService {
                 enrich_balance_view(balance, &enrichments, has_active_reservation, can_create_adjustment)
             })
             .collect();
-        ensure_scope_version(
-            page_no,
-            scope_version.as_deref(),
-            authorization.meta(InventoryAction::BalanceList).scope_version(),
-        )?;
+        ensure_scope_version(page_no, scope_version.as_deref(), scope_meta.scope_version())?;
         Ok(InventoryListPage::from_page(
             PageView { items, total: page.total, page: page_no, page_size },
-            authorization.meta(InventoryAction::BalanceList),
-            authorization.no_scope(InventoryAction::BalanceList),
+            &scope_meta,
+            no_scope,
             BALANCE_SCOPE_SUMMARY,
             BALANCE_OWNERSHIP_BASIS,
         ))
@@ -93,9 +95,8 @@ impl InventoryService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let authorization = authorization_port
-                        .authorize(&actor, &[InventoryAction::BalanceList], executor)
-                        .await?;
+                    let authorization =
+                        authorization_port.authorize(&actor, InventoryAction::BalanceList, executor).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存读取权限".into()));
                     }
@@ -109,15 +110,18 @@ impl InventoryService {
                         executor,
                     )
                     .await?;
+                    let scope_meta = authorization.meta(InventoryAction::BalanceList).clone();
+                    let no_scope = authorization.no_scope(InventoryAction::BalanceList);
+                    authorization.validate(executor).await?;
                     let candidates =
                         page.items.iter().map(|row| row.warehouse_id.to_string()).collect::<Vec<_>>();
                     let create_warehouses = authorization_port
                         .allowed_warehouses(&actor, InventoryAction::Create, &candidates, executor)
                         .await?;
-                    authorization.validate(executor).await?;
                     Ok(BalancePage {
                         page,
-                        authorization,
+                        scope_meta,
+                        no_scope,
                         enrichments,
                         active_reservation_dims,
                         create_warehouses,
@@ -229,7 +233,8 @@ impl InventoryService {
 
 struct BalancePage {
     page: persistence_core::PageResult<StockBalanceRow>,
-    authorization: InventoryAuthorization,
+    scope_meta: InventoryScopeMeta,
+    no_scope: bool,
     enrichments: BalanceEnrichments,
     active_reservation_dims: HashSet<(String, String)>,
     create_warehouses: BTreeSet<String>,

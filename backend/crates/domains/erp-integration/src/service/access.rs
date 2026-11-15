@@ -1,25 +1,24 @@
 //! 集成授权、查询编译与业务组织事实入口。
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::{
-    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, CompiledAccess,
-    OrganizationDirectoryService, Permission, ResourceTargets, SharedRbacService,
+    AccessTarget, AuthorizationService, CompiledAccess, OrganizationDirectoryService, Permission,
 };
+use erp_permissions::integration_ops;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::repository::authorization::registration;
+use crate::repository::IntegrationOpsExt;
 use crate::{Error, Result};
 
 /// 固定登记的集成授权设施；查询凭证绑定本实例。
 #[derive(Clone)]
 pub struct IntegrationAccess {
     db: Database,
-    service: AuthorizationService,
-    mappings: BTreeMap<String, Arc<dyn AccessMapping>>,
+    pub(super) service: Arc<AuthorizationService>,
 }
 impl IntegrationAccess {
     /// 绑定共享身份设施和本域固定目录。
@@ -29,14 +28,13 @@ impl IntegrationAccess {
     /// 不缓存授权结果的访问器。
     /// # 错误
     /// 固定目录非法时启动失败；构造不执行 I/O。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let (registry, mappings) = registration(&db);
-        Self { service: AuthorizationService::new(db.clone(), rbac, registry), db, mappings }
+    pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
+        Self { service, db }
     }
 
     /// 查询并编译固定资源的完整授权条件。
     /// # 参数
-    /// actor、resource、action 指定服务端入口，executor 为原执行器。
+    /// actor、permission 指定服务端入口，executor 为原执行器。
     /// # 返回
     /// identity 生成的不可伪造查询凭证。
     /// # 错误
@@ -44,23 +42,10 @@ impl IntegrationAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<CompiledAccess> {
-        let mapping =
-            self.mappings.get(resource).ok_or_else(|| Error::ValidationError("集成资源未登记".into()))?;
-        Ok(self
-            .service
-            .query(
-                actor,
-                &Permission::parse(format!("{resource}:{action}"))?,
-                AccessSubject::Direct,
-                executor,
-            )
-            .await?
-            .compile(mapping.as_ref(), executor)
-            .await?)
+        Ok(self.service.query(actor, permission, executor).await?)
     }
 
     /// 复验同一服务生成的读取凭证。
@@ -76,7 +61,7 @@ impl IntegrationAccess {
 
     /// 按真实记录身份执行完整对象授权。
     /// # 参数
-    /// actor、resource、action 为固定入口，id 为实际根记录，executor 为原执行器。
+    /// actor、permission 为固定入口，id 为实际根记录，executor 为原执行器。
     /// # 返回
     /// 全部对象事实及身份检查通过时成功。
     /// # 错误
@@ -84,21 +69,49 @@ impl IntegrationAccess {
     pub async fn require_handler(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        permission: &Permission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let target = if action == "create" {
+        let target = if [integration_ops::ERROR_TASK_CREATE, integration_ops::DIFFERENCE_CREATE]
+            .contains(permission)
+        {
             AccessTarget::Operation
         } else {
-            AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? }
+            AccessTarget::record(id)?
         };
+        Ok(self.service.require(actor, permission, target, executor).await?)
+    }
+    /// 检查真实差异记录的当前处理人和精确版本。
+    /// # 参数
+    /// actor、id 为真实账号和差异ID，executor 为决定写事务。
+    /// # 返回
+    /// 实际任务版本、指派及固定资格均通过时成功。
+    /// # 错误
+    /// 差异缺失、版本或指派不符时拒绝。
+    pub async fn require_decide(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let row = self
+            .db
+            .reconciliation_differences()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("差异记录不存在".into()))?;
         Ok(self
             .service
-            .require(actor, &Permission::parse(format!("{resource}:{action}"))?, target, executor)
+            .require(
+                actor,
+                &integration_ops::DIFFERENCE_DECISION,
+                AccessTarget::Task { id: row.base.id, version: row.base.version.to_string() },
+                executor,
+            )
             .await?)
     }
+
     /// 查询处理人在解析时点的唯一主属组织。
     ///
     /// # 参数

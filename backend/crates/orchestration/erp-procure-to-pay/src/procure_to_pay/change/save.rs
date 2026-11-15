@@ -2,6 +2,7 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::{
     PurchaseChangeDraftView, SavePurchaseChangeDraftRequest, SavePurchaseOrderLine,
 };
@@ -12,7 +13,7 @@ use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use erp_workflow::service::approval::execution::map_receipt_first_write_error;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::{PurchaseOrderPorts, PurchaseOrderProcess};
@@ -46,24 +47,29 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<PurchaseChangeDraftView> {
         request.validate()?;
-        let change = self.domain().load_change(id, &mut NoTransaction).await?;
-        let order = authorized_order(&self.db, &self.ports, &change, actor, &mut NoTransaction).await?;
         let (identity, fingerprint) = request.command(id, actor.id())?;
-        if let Some(result) = replay_save(&self.db, &identity, &fingerprint, &mut NoTransaction).await? {
-            return Ok(result);
-        }
-        change.ensure_expected_version(request.expected_lock_version)?;
-        change.ensure_draft_origin(&order)?;
-        let mut target =
-            self.prepare_change_target(&change, &order, &request.target_request(), actor).await?;
-        target.submission.mark_editing_copy()?;
-        let input = SaveTarget { change, target, request, identity, fingerprint, actor: actor.clone() };
-        let db = self.db.clone();
-        let ports = self.ports.clone();
+        let service = self.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { persist_save(&db, &ports, input, executor).await })
+                Box::pin(async move {
+                    let change = service.domain().load_change(&id, executor).await?;
+                    let order =
+                        authorized_order(&service.db, &service.ports, &change, &actor, executor).await?;
+                    if let Some(result) = replay_save(&service.db, &identity, &fingerprint, executor).await? {
+                        return Ok(result);
+                    }
+                    change.ensure_expected_version(request.expected_lock_version)?;
+                    change.ensure_draft_origin(&order)?;
+                    let mut target = service
+                        .prepare_change_target(&change, &order, &request.target_request(), &actor, executor)
+                        .await?;
+                    target.submission.mark_editing_copy()?;
+                    let input = SaveTarget { change, target, request, identity, fingerprint, actor };
+                    persist_save(&service.db, &service.ports, input, executor).await
+                })
             })
             .await
     }
@@ -78,23 +84,8 @@ async fn authorized_order(
     executor: &mut dyn Executor,
 ) -> Result<PurchaseOrder> {
     let access = ports.access(db.clone());
-    access
-        .require_object(
-            actor,
-            "update",
-            change.purchase_order_id.as_ref(),
-            &["purchase_order:submit".into()],
-            executor,
-        )
-        .await?;
     Ok(access
-        .require_object(
-            actor,
-            "submit",
-            change.purchase_order_id.as_ref(),
-            &["purchase_order:update".into()],
-            executor,
-        )
+        .require_entry(actor, &internal::PURCHASE_CHANGE_SOURCE, change.purchase_order_id.as_ref(), executor)
         .await?)
 }
 

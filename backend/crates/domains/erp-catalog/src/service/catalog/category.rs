@@ -1,5 +1,7 @@
 use application_core::AuditActor;
-use persistence_core::{NoTransaction, Transactional};
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -35,8 +37,34 @@ impl CatalogService {
     /// * `RepositoryError` - 数据库查询失败
     pub async fn product_category_list(
         &self,
+        actor: &AuditActor,
         params: &ProductCategoryListParams,
     ) -> Result<PageView<ProductCategoryView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.product_category_list_snapshot(&actor, &params, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn product_category_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &ProductCategoryListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<ProductCategoryView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_CATEGORY_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = ProductCategoryFilter {
@@ -50,8 +78,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.product_categories().search_product_categories(&filter, &mut NoTransaction).await?;
+        let page = self.db.product_categories().search_product_categories(&filter, executor).await?;
         let items = page.items.into_iter().map(ProductCategoryView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -79,7 +106,12 @@ impl CatalogService {
         let mut category = self.load_category(id).await?;
         ensure_version(category.base.version, req.version)?;
         if let Some(parent_change) = &req.parent_change {
-            self.ensure_parent_chain_ok(&category.base.id, parent_change.parent_category_id.as_ref()).await?;
+            self.ensure_parent_chain_ok(
+                &category.base.id,
+                parent_change.parent_category_id.as_ref(),
+                &mut NoTransaction,
+            )
+            .await?;
         }
         category.update(
             ProductCategoryUpdate { name: req.name, product_kind: req.product_kind, status: req.status },
@@ -94,12 +126,17 @@ impl CatalogService {
             "product_category",
             category.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     db.product_categories().update(&mut category, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<ProductCategory, crate::error::Error>(category)
@@ -134,7 +171,8 @@ impl CatalogService {
         req.validate()?;
         let mut category = self.load_category(id).await?;
         ensure_version(category.base.version, req.version)?;
-        self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref()).await?;
+        self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref(), &mut NoTransaction)
+            .await?;
         category.set_parent(req.parent_category_id, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -142,12 +180,17 @@ impl CatalogService {
             "product_category",
             category.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     db.product_categories().update(&mut category, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<ProductCategory, crate::error::Error>(category)
@@ -184,12 +227,17 @@ impl CatalogService {
             "product_category",
             category.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::PRODUCT_CATEGORY_DELETE, AccessTarget::Operation, executor)
+                        .await?;
                     db.product_categories().soft_delete(&mut category, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
@@ -206,6 +254,7 @@ impl CatalogService {
     /// # 参数
     /// * `id` - 本节点 ID
     /// * `parent_id` - 新父分类（`None` 为根）
+    /// * `executor` - 调用方读取或写入事务的原执行器
     ///
     /// # 返回
     /// 合法时返回 `Ok(())`。
@@ -216,11 +265,12 @@ impl CatalogService {
         &self,
         id: &str,
         parent_id: Option<&ProductCategoryId>,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         if parent_id.is_some_and(|parent| parent.as_ref() == id) {
             return Err(Error::BusinessLogicError("父子关系不能形成环".to_string()));
         }
-        let fact = self.db.product_categories().parent_chain(parent_id, &mut NoTransaction).await?;
+        let fact = self.db.product_categories().parent_chain(parent_id, executor).await?;
         interpret_parent_chain(id, &fact)
     }
 }

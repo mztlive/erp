@@ -25,12 +25,12 @@ pub(crate) async fn acceptance_list(
     executor: &mut dyn Executor,
 ) -> Result<PageView<CustomerAcceptanceView>> {
     let filter = acceptance_filter(params)?;
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let prefix = acceptance_prefix(&filter, scope.related_stages("sales_order_id"));
     let collection = db.collection::<CustomerAcceptanceRow>(Database::CUSTOMER_ACCEPTANCES);
     let rows = aggregate::rows(&collection, page_pipeline(prefix.clone(), &filter)?, executor).await?;
     let total = aggregate::count(&collection, doc! {}, prefix, executor).await?;
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("验收总数超过上限".into()))?;
     Ok(PageView {
         items: rows.into_iter().map(acceptance_view).collect(),

@@ -2,28 +2,41 @@
 
 use std::collections::HashSet;
 use std::future::Future;
+use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_core::{AccountKind, Result as CoreResult};
-use persistence_core::{Executor, NoTransaction};
+use erp_core::AccountKind;
+use erp_identity::AccessTarget;
+use erp_permissions::{internal, work_item};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{candidate_facts_current, ensure_generic_work_item_mutation};
+use super::access::candidate_facts_current;
 use super::order_access::{
     require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
     task_read_error,
 };
-use super::write::{IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteOutcome, expected_task_version, required_text};
+use super::reassign_apply::reassignment_audits;
+use super::write::{
+    IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version, required_text,
+};
 use super::{
-    ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
-    WorkItemService,
+    ReassignWorkItemRequest, WorkItemMutationOutcome, WorkItemReassignCandidateView, WorkItemService,
 };
 use crate::entity::work_item::{FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy};
 use crate::error::{Error, Result};
-use crate::ports::{TaskReadAction, WorkflowAuthorizationPort};
+use crate::ports::{PreparedWorkflowAudit, TaskReadAction, WorkflowAuthorizationPort};
 
-pub(super) struct AssignmentAuthorizationSnapshot {
-    pub(super) assignee_kind: erp_core::AccountKind,
+/// 服务端规范化的转交输入，不保存事务外任务或授权结果。
+struct ReassignCommand {
+    id: String,
+    actor: AuditActor,
+    expected_version: u64,
+    target_user_id: String,
+    reason: String,
+    receipt: CommandReceipt,
+    audit: PreparedWorkflowAudit,
 }
 
 /// 转交命令的任务、目标责任人与审计输入。
@@ -41,7 +54,7 @@ pub(super) struct AssignmentAuthorizationSnapshot {
 /// 无
 ///
 /// # 关键业务约束
-/// 事务内必须重验管理人、目标责任人与授权快照。
+/// 管理人、目标责任人与业务事实必须沿原事务核验。
 pub(super) struct AssignmentPolicyAuditInput<'a> {
     /// 待转交任务。
     pub(super) item: WorkItem,
@@ -55,8 +68,8 @@ pub(super) struct AssignmentPolicyAuditInput<'a> {
     pub(super) receipt: CommandReceipt,
     /// 权限安全的转交说明。
     pub(super) audit_detail: String,
-    /// 事务外冻结的授权快照。
-    pub(super) authorization: AssignmentAuthorizationSnapshot,
+    /// 原事务内读取的目标账号类型。
+    pub(super) assignee_kind: AccountKind,
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
@@ -80,34 +93,33 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         id: String,
         actor: AuditActor,
     ) -> Result<Vec<WorkItemReassignCandidateView>> {
-        self.authorization.require(&actor, "manage", &id, &mut NoTransaction).await?;
-        let item = self.load(id.clone()).await?;
-        ensure_generic_work_item_mutation(&item)?;
+        let db = self.db.clone();
+        db.client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { self.candidate_list(&id, &actor, executor).await })
+            })
+            .await
+    }
 
-        let cascade_tasks = self.cascade_tasks(&item, &mut NoTransaction).await?;
-
-        let accounts = self
-            .identity
-            .directory()
-            .accounts_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction)
-            .await?;
+    /// 候选列表和目标资格全部来自原管理授权快照。
+    async fn candidate_list(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItemReassignCandidateView>> {
+        let item = self.managed_item(id, actor, executor).await?;
+        let tasks = self.cascade_tasks(&item, executor).await?;
+        let accounts = self.identity.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
         let mut candidates = Vec::new();
         for account in accounts {
             if item.owner_user_id.as_deref() == Some(account.id.as_str()) {
                 continue;
             }
-            match self.assignment_authorization_snapshot(&actor, &account.id, &item).await {
-                Ok(_) => {},
+            match self.candidate_allowed(&account.id, &item, tasks.as_deref(), executor).await {
+                Ok(()) => {},
                 Err(Error::Forbidden(_)) => continue,
                 Err(error) => return Err(error),
-            };
-            if let Some(tasks) = cascade_tasks.as_deref() {
-                match ensure_fulfillment_tasks_candidate(&self, tasks, &account.id, &mut NoTransaction).await
-                {
-                    Ok(()) => {},
-                    Err(Error::Forbidden(_)) => continue,
-                    Err(error) => return Err(error),
-                }
             }
             candidates.push(WorkItemReassignCandidateView {
                 user_id: account.id,
@@ -121,7 +133,24 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 .then_with(|| left.account.cmp(&right.account))
                 .then_with(|| left.user_id.cmp(&right.user_id))
         });
+        // 候选逐项检查可能跨越授权到期边界，交付前重验管理目标。
+        self.authorization.require(actor, &work_item::MANAGE, id, executor).await?;
         Ok(candidates)
+    }
+
+    /// 沿原执行器检查具体候选及其全部级联履约任务。
+    async fn candidate_allowed(
+        &self,
+        id: &str,
+        item: &WorkItem,
+        tasks: Option<&[WorkItem]>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.assignment_kind(id, item, executor).await?;
+        if let Some(tasks) = tasks {
+            ensure_fulfillment_tasks_candidate(self, tasks, id, executor).await?;
+        }
+        Ok(())
     }
 
     /// 采购责任转交必须同时覆盖该采购单的全部开放履约任务。
@@ -158,87 +187,106 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: AuditActor,
     ) -> impl Future<Output = Result<WorkItemMutationOutcome>> + Send {
         async move {
-            self.authorization.require(&actor, "manage", &id, &mut NoTransaction).await?;
-            let item = self.load(id.clone()).await?;
-            ensure_generic_work_item_mutation(&item)?;
-            req.validate()?;
-            let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
-            let action = "work_item.reassign";
-            let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
-            let reason = required_text(&req.reason, "转交原因不能为空")?;
-            let expected_task_version = expected_task_version(&req.expected_task_version)?;
-            let version = expected_task_version.to_string();
-            let receipt = CommandReceipt::from_resource_parts(
-                IDEMPOTENCY_AUDIT_PREFIX,
-                actor.id(),
-                action,
-                "work_item",
-                &id,
-                &idempotency_key,
-                [version, target_user_id.clone(), reason.clone()],
-            )?;
-            if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
-                ensure_generic_work_item_mutation(&replayed)?;
-                self.authorization.require(&actor, "manage", &replayed.base.id, &mut NoTransaction).await?;
-                return self.applied_outcome(replayed, &actor).await;
-            }
-            if item.base.version != expected_task_version {
-                return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
-            }
-            self.authorization.require(&actor, "manage", &item.base.id, &mut NoTransaction).await?;
-            let authorization =
-                self.assignment_authorization_snapshot(&actor, &target_user_id, &item).await?;
-            let updated = self
-                .reassign_with_assignment_policy_audit(AssignmentPolicyAuditInput {
-                    item,
-                    expected_task_version,
-                    target_user_id,
-                    actor: &actor,
-                    receipt,
-                    audit_detail: reason,
-                    authorization,
+            let command = Arc::new(self.reassign_command(id, req, actor)?);
+            let transaction_command = command.clone();
+            let service = self.clone();
+            let result = self
+                .db
+                .client()
+                .with_transaction(move |executor| {
+                    Box::pin(async move { service.apply_reassign(&transaction_command, executor).await })
                 })
-                .await?;
-            match updated {
-                WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
-                WorkItemWriteOutcome::VersionConflict => {
-                    self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await
-                },
-            }
+                .await;
+            self.finish_command(&command.receipt, &command.actor, &command.audit, result).await
         }
     }
 
-    /// 形成事务外的账号类型事实；事务内仍会重新执行完整授权和业务事实检查。
-    async fn assignment_authorization_snapshot(
+    /// 规范化命令身份和安全审计，不读取事务外的决定事实。
+    fn reassign_command(
         &self,
-        actor: &AuditActor,
+        id: String,
+        req: ReassignWorkItemRequest,
+        actor: AuditActor,
+    ) -> Result<ReassignCommand> {
+        req.validate()?;
+        let key = required_text(&req.idempotency_key, "幂等键不能为空")?;
+        let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
+        let reason = required_text(&req.reason, "转交原因不能为空")?;
+        let expected_version = expected_task_version(&req.expected_task_version)?;
+        let receipt = CommandReceipt::from_resource_parts(
+            IDEMPOTENCY_AUDIT_PREFIX,
+            actor.id(),
+            "work_item.reassign",
+            "work_item",
+            &id,
+            &key,
+            [expected_version.to_string(), target_user_id.clone(), reason.clone()],
+        )?;
+        let (audit, _) = reassignment_audits(&actor, &receipt, &id, None)?;
+        self.audit.validate(&audit)?;
+        Ok(ReassignCommand { id, actor, expected_version, target_user_id, reason, receipt, audit })
+    }
+
+    /// 授权、重放、版本和目标资格在原写事务中核验。
+    async fn apply_reassign(
+        &self,
+        command: &ReassignCommand,
+        executor: &mut dyn Executor,
+    ) -> StdResult<WorkItemWriteOutcome, WorkItemWriteError> {
+        let item = self.managed_item(&command.id, &command.actor, executor).await?;
+        if let Some(replayed) = self.idempotent_replay(&command.receipt, &item, executor).await? {
+            return Ok(WorkItemWriteOutcome::Updated(Box::new(replayed)));
+        }
+        if item.base.version != command.expected_version {
+            return Ok(WorkItemWriteOutcome::VersionConflict);
+        }
+        let assignee_kind = self.assignment_kind(&command.target_user_id, &item, executor).await?;
+        let item = self
+            .reassign_with_assignment_policy_audit(
+                AssignmentPolicyAuditInput {
+                    item,
+                    expected_task_version: command.expected_version,
+                    target_user_id: command.target_user_id.clone(),
+                    actor: &command.actor,
+                    receipt: command.receipt.clone(),
+                    audit_detail: command.reason.clone(),
+                    assignee_kind,
+                },
+                executor,
+            )
+            .await?;
+        Ok(WorkItemWriteOutcome::Updated(Box::new(item)))
+    }
+
+    /// 原事务读取目标账号并检查完整执行资格，不冻结事务外授权快照。
+    async fn assignment_kind(
+        &self,
         assignee_id: &str,
         item: &WorkItem,
-    ) -> Result<AssignmentAuthorizationSnapshot> {
+        executor: &mut dyn Executor,
+    ) -> Result<AccountKind> {
         let assignee = self
             .identity
             .directory()
-            .account(assignee_id, &mut NoTransaction)
+            .account(assignee_id, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-        let snapshot = AssignmentAuthorizationSnapshot { assignee_kind: assignee.kind };
-        self.authorization.require(actor, "manage", &item.base.id, &mut NoTransaction).await?;
         self.ensure_assignment_candidate(
             assignee_id,
             assignee.kind,
             item,
             item.owner_user_id.as_deref() == Some(assignee_id),
-            &mut NoTransaction,
+            executor,
         )
         .await?;
-        Ok(snapshot)
+        Ok(assignee.kind)
     }
 
     /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
     ///
     /// # 参数
     /// * `user_id` - 待接收任务的具体账号 ID
-    /// * `expected_kind` - 事务外授权快照冻结的账号类型
+    /// * `expected_kind` - 原事务中读取的账号类型
     /// * `item` - 待转交任务
     /// * `allow_current_owner` - 是否允许目标账号保持为当前负责人
     /// * `executor` - 调用方事务执行器
@@ -251,24 +299,21 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     pub(super) async fn ensure_assignment_candidate(
         &self,
         user_id: &str,
-        expected_kind: erp_core::AccountKind,
+        expected_kind: AccountKind,
         item: &WorkItem,
         allow_current_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let actor = AuditActor::new(user_id.into(), user_id.into(), expected_kind);
-        let required = item.qualification_permissions()?;
-        let qualified = self
-            .authorization
+        self.authorization
             .service
-            .permissions(&actor, &required, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-        let account = qualified.account();
-        let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
-        if !qualified.same_role(&required) {
-            return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
-        }
+            .require(
+                &actor,
+                &internal::WORK_ITEM_RECIPIENT,
+                AccessTarget::Task { id: item.base.id.clone(), version: item.base.version.to_string() },
+                executor,
+            )
+            .await?;
         self.ensure_assignment_candidate_access_with_executor(item, &actor, executor)
             .await
             .map_err(task_read_error)?;
@@ -432,19 +477,17 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let actor = AuditActor::new(target_user_id.into(), target_user_id.into(), AccountKind::Admin);
-    let qualifications =
-        tasks.iter().map(WorkItem::qualification_permissions).collect::<CoreResult<Vec<_>>>()?;
-    let required = qualifications.iter().flatten().cloned().collect::<Vec<_>>();
-    let qualified = service
-        .authorization
-        .service
-        .permissions(&actor, &required, executor)
-        .await?
-        .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".into()))?;
-    for (task, required) in tasks.iter().zip(&qualifications) {
-        if !qualified.same_role(required) {
-            return Err(Error::Forbidden("目标账号不具备同角色完整任务资格".into()));
-        }
+    for task in tasks {
+        service
+            .authorization
+            .service
+            .require(
+                &actor,
+                &internal::WORK_ITEM_RECIPIENT,
+                AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() },
+                executor,
+            )
+            .await?;
         service.ensure_assignment_candidate_access_with_executor(task, &actor, executor).await?;
     }
     Ok(())
@@ -558,4 +601,81 @@ pub(super) fn non_empty_assignment_actors(actors: Vec<String>) -> Result<HashSet
         return Err(Error::Forbidden("任务岗位分离所需的权威责任人事实缺失".to_string()));
     }
     Ok(actors)
+}
+
+#[cfg(test)]
+mod transaction_tests {
+    use erp_core::ids::WorkItemId;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::unavailable_service;
+    use super::*;
+    use crate::entity::work_item::SupplierPortalReviewTaskData;
+
+    #[tokio::test]
+    async fn recipient_checks_exact_persisted_task_before_loading_business_sources() {
+        let service = unavailable_service();
+        let item = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("task"),
+            SupplierPortalReviewTaskData {
+                request_id: "request".into(),
+                subject_version: "submission-1".into(),
+                owner_user_id: "old-owner".into(),
+                owner_organization_id: "org".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        let error = service
+            .ensure_assignment_candidate("recipient", AccountKind::Admin, &item, false, &mut NoTransaction)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(_)));
+        let error = service
+            .ensure_assignment_candidate(
+                "recipient",
+                AccountKind::Admin,
+                &item,
+                false,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn reassign_uses_the_original_snapshot_and_stops_before_task_or_receipt_reads_on_denial() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let command = service
+            .reassign_command(
+                "task".into(),
+                ReassignWorkItemRequest {
+                    expected_task_version: "1".into(),
+                    target_user_id: "target".into(),
+                    reason: "reason".into(),
+                    idempotency_key: "key".into(),
+                },
+                actor,
+            )
+            .unwrap();
+        let error = service.apply_reassign(&command, &mut NoTransaction).await.err().unwrap();
+        assert!(matches!(error, WorkItemWriteError::Service(Error::ValidationError(_))));
+        let error = service.apply_reassign(&command, &mut SnapshotExecutor::default()).await.err().unwrap();
+        assert!(
+            matches!(error, WorkItemWriteError::Service(Error::Internal(reason)) if reason == "测试授权设施不可用")
+        );
+    }
+
+    #[tokio::test]
+    async fn candidate_queries_require_the_same_snapshot_before_reading_accounts() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let error =
+            service.candidate_list("task", &actor, &mut SnapshotExecutor::default()).await.err().unwrap();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_permissions::admin;
 use persistence_core::NoTransaction;
 
 use super::policy::{permission_pairs, permissions_for_role, role_key, role_or_not_found};
@@ -10,12 +11,14 @@ use crate::entity::rbac::{Permission, PermissionSet};
 use crate::entity::role::{Role, RoleData, RoleUpdate};
 use crate::error::{Error, Result};
 use crate::ports::PreparedResourceAudit;
-use crate::{AccessControlExt, RoleId};
+use crate::service::iam::management::ManagementAccess;
+use crate::{AccessControlExt, AuthorizationService, RoleId};
 
 impl RbacService {
     /// 创建角色并写入 Casbin 权限策略。
     ///
     /// # 参数
+    /// authorization 为应用注入的共享授权服务。
     /// * `params` - 创建角色参数
     /// * `actor` - 已通过鉴权的审计操作人
     ///
@@ -24,23 +27,59 @@ impl RbacService {
     ///
     /// # 错误
     /// 当角色校验、持久化或 Casbin policy 写入失败时返回错误。
-    pub async fn create_role(self: &Arc<Self>, params: CreateRoleParams, actor: AuditActor) -> Result<Role> {
+    pub async fn create_role(
+        self: &Arc<Self>,
+        params: CreateRoleParams,
+        actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<Role> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_CREATE_ROLE);
+        access.preflight(&self.db).await?;
         let authorized = self.authorize_permissions(&actor, params.permissions).await?;
         let id = id_generator::next_id();
         let audit = self.audit.resource_log(actor, "role.create", "role", id.clone())?;
-        self.create_role_with_id(
-            id,
+        let role = Role::new(
+            RoleId::parse(id)?,
             RoleData { workbenches: params.workbenches, ..RoleData::new(params.name) },
-            authorized.permissions.into_vec(),
-            Some(audit),
-            Some(authorized.policy_revision),
-        )
+        )?;
+        self.create_managed_role(role, authorized.permissions, audit, authorized.policy_revision, access)
+            .await
+    }
+
+    /// 在原 policy 事务内核验创建入口，再写入角色、权限与审计。
+    /// # 参数
+    /// role、permissions 为通过子集校验的目标，audit、revision 为原授权版本，access 为当前管理入口。
+    /// # 返回
+    /// 原子持久化后的角色。
+    /// # 错误
+    /// 入口拒绝、权限版本变化或角色与策略写入失败时回滚。
+    pub(super) async fn create_managed_role(
+        self: &Arc<Self>,
+        role: Role,
+        permissions: PermissionSet,
+        audit: PreparedResourceAudit,
+        revision: u64,
+        access: ManagementAccess,
+    ) -> Result<Role> {
+        let db = self.db.clone();
+        let policy_store = self.policy_store.clone();
+        let key = role_key(&role.base.id);
+        let permissions = permission_pairs(permissions.into_vec());
+        self.run_authorized_audited_policy_transaction(revision, audit, move |executor| {
+            Box::pin(async move {
+                access.require(executor).await?;
+                db.roles().create(&role, executor).await?;
+                policy_store.replace_role_permissions(&key, &permissions, executor).await?;
+                Ok(role)
+            })
+        })
         .await
     }
 
     /// 更新角色信息并按需覆盖权限。
     ///
     /// # 参数
+    /// authorization 为应用注入的共享授权服务。
     /// * `id` - 待更新角色 ID
     /// * `params` - 可选名称与权限更新
     /// * `actor` - 已通过鉴权的审计操作人
@@ -55,7 +94,10 @@ impl RbacService {
         id: &str,
         params: UpdateRoleParams,
         actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
     ) -> Result<Role> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_UPDATE_ROLE);
+        access.preflight(&self.db).await?;
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         role.ensure_mutable().map_err(|_| Error::Forbidden("系统角色不能修改".into()))?;
         let authorized =
@@ -65,19 +107,21 @@ impl RbacService {
 
         let update = RoleUpdate { name: params.name, workbenches: params.workbenches, ..Default::default() };
         match (update.name.is_some() || update.workbenches.is_some(), permissions) {
-            (false, None) => self.audit_role_update(role, audit, policy_revision).await,
-            (true, None) => self.update_role_attributes(role, update, audit, policy_revision).await,
+            (false, None) => self.audit_role_update(role, audit, policy_revision, access).await,
+            (true, None) => self.update_role_attributes(role, update, audit, policy_revision, access).await,
             (false, Some(permissions)) => {
                 self.replace_role_permissions(
                     &role.base.id,
                     permissions.into_vec(),
                     Some(audit),
                     Some(policy_revision),
+                    access,
                 )
                 .await
             },
             (true, Some(permissions)) => {
-                self.update_role_with_permissions(role, update, permissions, policy_revision, audit).await
+                self.update_role_with_permissions(role, update, (permissions, policy_revision), audit, access)
+                    .await
             },
         }
     }
@@ -85,6 +129,7 @@ impl RbacService {
     /// 删除非系统角色及其 Casbin policy/绑定。
     ///
     /// # 参数
+    /// authorization 为应用注入的共享授权服务。
     /// * `id` - 待删除角色 ID
     /// * `actor` - 已通过鉴权的审计操作人
     ///
@@ -93,13 +138,20 @@ impl RbacService {
     ///
     /// # 错误
     /// 当角色不存在、角色为系统角色或删除失败时返回错误。
-    pub async fn delete_role(self: &Arc<Self>, id: &str, actor: AuditActor) -> Result<()> {
+    pub async fn delete_role(
+        self: &Arc<Self>,
+        id: &str,
+        actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<()> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_DELETE_ROLE);
+        access.preflight(&self.db).await?;
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         role.ensure_deletable().map_err(|_| Error::Forbidden("系统角色不能删除".into()))?;
         let authorized = self.authorize_role_update(&actor, role.base.id.as_str(), None).await?;
         let audit = self.audit.resource_log(actor, "role.delete", "role", role.base.id.clone())?;
 
-        self.delete_role_with_policy(role, audit, authorized.policy_revision).await
+        self.delete_role_with_policy(role, audit, authorized.policy_revision, access).await
     }
 
     /// 为成功的无字段变更请求写入审计日志。
@@ -108,9 +160,13 @@ impl RbacService {
         role: Role,
         audit: PreparedResourceAudit,
         policy_revision: u64,
+        access: ManagementAccess,
     ) -> Result<Role> {
-        self.run_authorized_audited_policy_transaction(policy_revision, audit, move |_| {
-            Box::pin(async move { Ok(role) })
+        self.run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
+            Box::pin(async move {
+                access.require(executor).await?;
+                Ok(role)
+            })
         })
         .await
     }
@@ -122,11 +178,13 @@ impl RbacService {
         update: RoleUpdate,
         audit: PreparedResourceAudit,
         policy_revision: u64,
+        access: ManagementAccess,
     ) -> Result<Role> {
         role.update(update)?;
         let db = self.db.clone();
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
             Box::pin(async move {
+                access.require(executor).await?;
                 db.roles().update(&mut role, executor).await?;
                 Ok(role)
             })
@@ -156,6 +214,7 @@ impl RbacService {
         permissions: Vec<Permission>,
         audit: Option<PreparedResourceAudit>,
         expected_revision: Option<u64>,
+        access: ManagementAccess,
     ) -> Result<Role> {
         let role_id = role_id.to_string();
         let role_key = role_key(&role_id);
@@ -165,6 +224,7 @@ impl RbacService {
         let audit_port = self.audit.clone();
         self.run_policy_transaction_at_revision(expected_revision, move |executor| {
             Box::pin(async move {
+                access.require(executor).await?;
                 let mut role = role_or_not_found(db.roles().find_by_id(&role_id, executor).await?)?;
                 db.roles().update(&mut role, executor).await?;
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
@@ -240,10 +300,11 @@ impl RbacService {
         self: &Arc<Self>,
         mut role: Role,
         update: RoleUpdate,
-        permissions: PermissionSet,
-        policy_revision: u64,
+        authorized: (PermissionSet, u64),
         audit: PreparedResourceAudit,
+        access: ManagementAccess,
     ) -> Result<Role> {
+        let (permissions, policy_revision) = authorized;
         role.update(update)?;
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
@@ -251,6 +312,7 @@ impl RbacService {
         let permissions = permission_pairs(permissions.into_vec());
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
             Box::pin(async move {
+                access.require(executor).await?;
                 db.roles().update(&mut role, executor).await?;
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
                 Ok::<Role, Error>(role)
@@ -300,12 +362,14 @@ impl RbacService {
         mut role: Role,
         audit: PreparedResourceAudit,
         policy_revision: u64,
+        access: ManagementAccess,
     ) -> Result<()> {
         let db = self.db.clone();
         let policy_store = self.policy_store.clone();
         let role_key = role_key(role.base.id.as_str());
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
             Box::pin(async move {
+                access.require(executor).await?;
                 db.roles().soft_delete(&mut role, executor).await?;
                 policy_store.remove_role(&role_key, executor).await?;
                 Ok::<(), Error>(())

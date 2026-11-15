@@ -16,8 +16,34 @@ impl PartyService {
     ///
     /// # 错误
     /// 仓储查询失败时返回对应错误。主体缺少 `company_profile` 时，`TryFrom` 返回 `NotFound`。
-    pub async fn company_list(&self, params: &CompanyListParams) -> Result<PageView<CompanyView>> {
-        let page = self.db.parties().companies(params, &mut NoTransaction).await?;
+    pub async fn company_list(
+        &self,
+        actor: &AuditActor,
+        params: &CompanyListParams,
+    ) -> Result<PageView<CompanyView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.company_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn company_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &CompanyListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<CompanyView>> {
+        self.authorization
+            .require(actor, &party::COMPANY_COMPANY_LIST, AccessTarget::Operation, executor)
+            .await?;
+        let page = self.db.parties().companies(params, executor).await?;
         Ok(PageView {
             items: page.items.into_iter().map(CompanyView::try_from).collect::<Result<_>>()?,
             total: page.total,
@@ -36,8 +62,35 @@ impl PartyService {
     ///
     /// # 错误
     /// 主体不存在时返回 `NotFound`；主体没有 `company_profile` 时 `TryFrom` 返回 `NotFound`；查询失败时返回仓储错误。
-    pub async fn company_detail(&self, id: &str) -> Result<CompanyView> {
-        self.load_party(id).await?.try_into()
+    pub async fn company_detail(&self, actor: &AuditActor, id: &str) -> Result<CompanyView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.company_detail_snapshot(&actor, &id, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn company_detail_snapshot(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CompanyView> {
+        self.authorization
+            .require(actor, &party::COMPANY_COMPANY_DETAIL, AccessTarget::Operation, executor)
+            .await?;
+        self.db
+            .parties()
+            .find_party(&PartyId::new(id), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?
+            .try_into()
     }
 
     /// 创建公司；稳定编号支持结果未知后的同内容回读。
@@ -56,8 +109,13 @@ impl PartyService {
     /// 创建事务、唯一索引冲突或随后回读失败时返回对应错误。
     pub async fn create_company(&self, req: SaveCompanyRequest, actor: &AuditActor) -> Result<CompanyView> {
         let mut profile = req.profile()?;
-        if let Some(existing) =
-            self.db.parties().find_by_party_no_including_deleted(&req.party_no, &mut NoTransaction).await?
+        if let Some(existing) = self
+            .company_snapshot(
+                actor,
+                party::COMPANY_COMPANY_CREATE,
+                CompanyLookup::Number(req.party_no.clone()),
+            )
+            .await?
         {
             profile.bank_name = existing.company_profile.as_ref().and_then(|p| p.bank_name.clone());
             if existing.company_profile.as_ref() == Some(&profile)
@@ -78,8 +136,9 @@ impl PartyService {
             change_reason: "新建公司主体".into(),
             status: Some(req.status),
         };
-        let result = self.create_party_record(command, Some(profile), actor).await?;
-        self.company_detail(&result.id).await
+        let result =
+            self.create_party_record(command, Some(profile), actor, party::COMPANY_COMPANY_CREATE).await?;
+        self.company_result(actor, party::COMPANY_COMPANY_CREATE, &result.id).await
     }
 
     /// 更新公司资料或启停状态，旧引用继续保留同一主体身份。
@@ -103,7 +162,7 @@ impl PartyService {
         req: SaveCompanyRequest,
         actor: &AuditActor,
     ) -> Result<CompanyView> {
-        let existing = self.company_detail(id).await?;
+        let existing = self.company_result(actor, party::COMPANY_COMPANY_UPDATE, id).await?;
         if req.party_no != existing.party_no {
             return Err(Error::ValidationError("公司编号不可修改".into()));
         }
@@ -128,7 +187,123 @@ impl PartyService {
             short_name: profile.short_name.clone(),
             change_reason: "维护公司主体".into(),
         };
-        self.update_party_record(id, command, Some(profile), actor).await?;
-        self.company_detail(id).await
+        self.update_party_record(id, command, Some(profile), actor, party::COMPANY_COMPANY_UPDATE).await?;
+        self.company_result(actor, party::COMPANY_COMPANY_UPDATE, id).await
+    }
+}
+
+impl PartyService {
+    /// 以原写入口的资格读取完整公司回包，不额外要求详情权限。
+    async fn company_result(
+        &self,
+        actor: &AuditActor,
+        permission: Permission,
+        id: &str,
+    ) -> Result<CompanyView> {
+        self.company_snapshot(actor, permission, CompanyLookup::Id(id.into()))
+            .await?
+            .ok_or_else(|| Error::NotFound("主体不存在".into()))?
+            .try_into()
+    }
+
+    /// 功能资格与幂等回读、最终回包的全部字段读取使用同一快照。
+    async fn company_snapshot(
+        &self,
+        actor: &AuditActor,
+        permission: Permission,
+        lookup: CompanyLookup,
+    ) -> Result<Option<Party>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.company_lookup(&actor, &permission, &lookup, executor).await })
+            })
+            .await
+    }
+
+    /// 在公开入口提供的原快照内检查资格，再读取完整公司。
+    async fn company_lookup(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        lookup: &CompanyLookup,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Party>> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("公司回读必须使用快照事务".into()));
+        }
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+        Ok(match lookup {
+            CompanyLookup::Id(id) => self.db.parties().find_party(&PartyId::new(id), executor).await?,
+            CompanyLookup::Number(number) => {
+                self.db.parties().find_by_party_no_including_deleted(number, executor).await?
+            },
+        })
+    }
+}
+
+/// 公司身份和稳定编号回读均读取完整主体，编号回读保留已删除占用判断。
+enum CompanyLookup {
+    Id(String),
+    Number(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
+
+    /// 只构造惰性数据库句柄，授权失败不得尝试公司读取。
+    async fn service() -> PartyService {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("company_authorization");
+        PartyService::new(
+            db,
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedSupplierRolePort),
+            unavailable_authorization(),
+        )
+    }
+
+    #[tokio::test]
+    async fn replay_and_final_result_reads_require_the_original_write_qualification() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for permission in [party::COMPANY_COMPANY_CREATE, party::COMPANY_COMPANY_UPDATE] {
+            for lookup in [CompanyLookup::Number("stable-number".into()), CompanyLookup::Id("company".into())]
+            {
+                let error = service
+                    .company_lookup(&actor, &permission, &lookup, &mut SnapshotExecutor::default())
+                    .await
+                    .expect_err("授权失败不能读取公司");
+                assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn replay_read_rejects_non_snapshot_executors() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error = service()
+            .await
+            .company_lookup(
+                &actor,
+                &party::COMPANY_COMPANY_CREATE,
+                &CompanyLookup::Number("stable-number".into()),
+                &mut ReadExecutor::default(),
+            )
+            .await
+            .expect_err("事务外读取必须拒绝");
+        assert!(matches!(error, Error::ValidationError(message) if message == "公司回读必须使用快照事务"));
     }
 }

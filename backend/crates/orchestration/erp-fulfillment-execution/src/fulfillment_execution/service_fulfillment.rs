@@ -7,6 +7,8 @@ use erp_fulfillment::dto::{CreateServiceFulfillmentRequest, ServiceFulfillmentVi
 use erp_fulfillment::entity::fulfillment::ServiceFulfillment;
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::service_fulfillment_crypto::service_fulfillment_draft_from_request;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::fulfillment;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::repository::prelude::*;
@@ -21,7 +23,6 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
-use super::task::FulfillmentIdentityFactory;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
@@ -191,7 +192,7 @@ async fn register_created_service_fulfillment_document(
 async fn persist_created_service_fulfillment(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     record: ServiceFulfillment,
     actor: AuditActor,
 ) -> Result<()> {
@@ -207,6 +208,14 @@ async fn persist_created_service_fulfillment(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                task_identity
+                    .require(
+                        &actor,
+                        &fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 register_created_service_fulfillment_document(
                     &db,
                     workflow.as_ref(),

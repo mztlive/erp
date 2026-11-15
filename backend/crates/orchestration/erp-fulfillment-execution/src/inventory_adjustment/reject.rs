@@ -26,7 +26,7 @@ impl InventoryAdjustmentProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("库存调整驳回缺少运行时事务".into()));
         }
         let mut adjustment = self

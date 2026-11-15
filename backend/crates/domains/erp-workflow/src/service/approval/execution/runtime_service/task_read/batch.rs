@@ -5,7 +5,8 @@ use std::collections::{HashMap, HashSet};
 use application_core::AuditActor;
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::approval_instance;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -18,7 +19,6 @@ use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
-use crate::service::authorization::features;
 
 /// 只在当前批次和调用方执行器中复用的运行事实。
 struct RuntimeBatchFacts {
@@ -49,9 +49,10 @@ struct RuntimeBatchFacts {
 /// # Panics
 /// 准入任务与主体结果必须等长且同序；`subjects.next()` 为 `None` 时 `expect`，表示本函数内部拼接被破坏。
 pub async fn approval_tasks_readable_with_executor(
-    identity_service: &SharedRbacService,
+    authorization: &AuthorizationService,
+    _identity_service: &SharedRbacService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
+    _auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     items: &[&WorkItem],
     executor: &mut dyn Executor,
@@ -62,17 +63,16 @@ pub async fn approval_tasks_readable_with_executor(
     }) {
         return Ok(vec![false; items.len()]);
     }
-    let required =
-        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
-    let Some(qualified) = features(db, identity_service).permissions(actor, &required, executor).await?
-    else {
+    let required = [approval_instance::COPIES_HISTORY.clone(), approval_instance::SUBMIT_DECISION.clone()];
+    let Some(qualified) = authorization.permissions(actor, &required, executor).await? else {
         return Ok(vec![false; items.len()]);
     };
     if !qualified.permissions().covers_one(&required[0]) {
         return Ok(vec![false; items.len()]);
     }
-    let result = read_tasks(db, auth, actor, items, qualified.same_role(&required), executor).await?;
-    let current = features(db, identity_service).permissions(actor, &required, executor).await?;
+    let result =
+        read_tasks(authorization, db, actor, items, qualified.same_role(&required), executor).await?;
+    let current = authorization.permissions(actor, &required, executor).await?;
     if current.as_ref().is_none_or(|current| current.version() != qualified.version()) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：审批读取资格已改变".into()));
     }
@@ -81,8 +81,8 @@ pub async fn approval_tasks_readable_with_executor(
 
 /// 在已证明的账号资格内批量读取责任链；逐任务错误按输入顺序返回。
 async fn read_tasks(
+    authorization: &AuthorizationService,
     db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     items: &[&WorkItem],
     can_decide: bool,
@@ -124,7 +124,7 @@ async fn read_tasks(
         {
             true
         } else {
-            manager_can_read(auth, actor, &subject, executor).await?
+            manager_can_read(authorization, actor, &subject, executor).await?
         };
         result.push(readable);
     }

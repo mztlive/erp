@@ -8,12 +8,18 @@ use std::sync::Arc;
 use application_core::{AuditActor, CommandFingerprint};
 use erp_core::AccountKind;
 use erp_core::ids::SalesOrderId;
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{AccessControlExt, AccountSummary, Permission, SharedRbacService};
+use erp_identity::{
+    AccessControlExt, AccessTarget, AccountSummary, AuthorizationService, Error as IdentityError,
+};
+use erp_permissions::{internal as internal_permissions, sales_order as sales_order_permissions};
+use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::dto::sales_order::{HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView};
 use erp_sales::entity::command_receipt::SalesCommandResult;
-use erp_sales::repository::SalesOrderExt;
+use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::command::identity::{
     sales_handover_audit_id, sales_handover_fingerprint,
 };
@@ -23,7 +29,7 @@ use erp_workflow::service::approval::business_adapter::ensure_separation_of_duti
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::{DocumentType, WorkItemExt};
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SalesOrderCommandProcess;
@@ -76,7 +82,7 @@ impl SalesOrderCommandProcess {
         {
             return Ok(existing);
         }
-        let access = self.prepare_handover(id, &req, actor, &target).await?;
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
 
         let transaction_result = handover_transaction(
             self.db.clone(),
@@ -88,8 +94,7 @@ impl SalesOrderCommandProcess {
                 command_id: audit_id.clone(),
                 target: target.clone(),
                 access: access.clone(),
-                target_identity: self.services.handover_identity.clone(),
-                expected_version: req.expected_version,
+                target_identity: self.authorization.clone(),
                 expected_key_hash: expected_key_hash.clone(),
                 reason,
             },
@@ -106,31 +111,6 @@ impl SalesOrderCommandProcess {
                 self.replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor).await,
             ),
         }
-    }
-
-    /// 在写事务前校验当前版本、接收资格与显式组织；事务内仍按原路径重验。
-    async fn prepare_handover(
-        &self,
-        id: &str,
-        req: &HandoverSalesOrderRequest,
-        actor: &AuditActor,
-        target: &str,
-    ) -> Result<SalesCommandAccess> {
-        let access = self.command_access(actor, "update");
-        let current = access.current(id, &mut NoTransaction).await?;
-        if current.base.version != req.expected_version {
-            return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".to_string()));
-        }
-        self.ensure_handover_target(
-            target,
-            &current.sales_owner_user_id,
-            &current.base.id,
-            &mut NoTransaction,
-        )
-        .await?;
-        self.ensure_handover_org(req.target_business_org_unit_id.as_deref(), &mut NoTransaction).await?;
-
-        Ok(access)
     }
 
     /// 查询当前销售单可交接的合格目标候选。
@@ -153,12 +133,29 @@ impl SalesOrderCommandProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<HandoverCandidateView>> {
-        let access = self.command_access(actor, "update");
-        let order = access.current(id, &mut NoTransaction).await?;
-        let rbac = self.rbac.clone();
-        let approvers = open_approval_assignees(&self.db, &order.base.id, &mut NoTransaction).await?;
-        let accounts =
-            self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
+        let this = self.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.handover_candidates_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn handover_candidates_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> Result<Vec<HandoverCandidateView>> {
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
+        let order = access.current(id, executor).await?;
+        let authorization = self.authorization.clone();
+        let approvers = open_approval_assignees(&self.db, &order.base.id, executor).await?;
+        let accounts = self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
         let policy = require_process_required(DocumentType::SalesOrder)?;
         let mut candidates = Vec::new();
         for account in accounts {
@@ -173,14 +170,13 @@ impl SalesOrderCommandProcess {
                 continue;
             }
             let Some(qualified) =
-                acceptance_qualification(&self.db, &rbac, &account.base.id, &mut NoTransaction).await?
+                acceptance_qualification(&self.db, &authorization, &account.base.id, executor).await?
             else {
                 continue;
             };
             let mut planned = order.clone();
             planned.sales_owner_user_id = account.base.id.clone();
-            if !target_can_read_order(&self.db, &rbac, &account.base.id, &planned, &mut NoTransaction).await?
-            {
+            if !target_can_read_order(&self.db, &authorization, &account.base.id, &planned, executor).await? {
                 continue;
             }
             candidates.push(HandoverCandidateView {
@@ -213,7 +209,7 @@ impl SalesOrderCommandProcess {
         let expected_key_hash = expected_key_hash.clone();
         let order_id = sales_order_id.to_string();
         let actor_id = actor.id().to_string();
-        let access = self.command_access(actor, "update");
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -231,31 +227,6 @@ impl SalesOrderCommandProcess {
                 })
             })
             .await
-    }
-
-    /// 在事务外预检目标账号有效性、完整执行资格与审批岗位分离。
-    async fn ensure_handover_target(
-        &self,
-        target: &str,
-        current_owner: &str,
-        sales_order_id: &str,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> Result<()> {
-        if target == current_owner {
-            return Err(Error::BusinessLogicError("目标已是当前负责人，无需交接".to_string()));
-        }
-        let rbac = self.rbac.clone();
-        ensure_target_qualified(&self.db, &rbac, target, executor).await?;
-        ensure_handover_separation(&self.db, sales_order_id, target, executor).await
-    }
-
-    /// 在事务外预检显式目标业务组织启用状态。
-    async fn ensure_handover_org(
-        &self,
-        target_org: Option<&str>,
-        executor: &mut dyn persistence_core::Executor,
-    ) -> Result<()> {
-        ensure_org_enabled(&self.db, target_org, executor).await.map_err(Error::from)
     }
 }
 
@@ -288,8 +259,7 @@ struct SalesHandoverWrite {
     command_id: String,
     target: String,
     access: SalesCommandAccess,
-    target_identity: Arc<dyn Fn() -> SharedRbacService + Send + Sync>,
-    expected_version: u64,
+    target_identity: Arc<AuthorizationService>,
     expected_key_hash: CommandFingerprint,
     reason: String,
 }
@@ -316,10 +286,9 @@ async fn handover_transaction(
                 {
                     return Ok::<Option<HandoverSalesOrderView>, crate::Error>(Some(view));
                 }
-                input.access.revalidate(&input.order_id, input.expected_version, executor).await?;
                 apply_handover(
                     &db,
-                    input.target_identity.as_ref(),
+                    &input.target_identity,
                     &input.order_id,
                     &input.request,
                     &input.target,
@@ -340,7 +309,7 @@ async fn handover_transaction(
 #[allow(clippy::too_many_arguments)]
 async fn apply_handover(
     db: &mongodb::Database,
-    target_identity: &(dyn Fn() -> SharedRbacService + Send + Sync),
+    target_identity: &Arc<AuthorizationService>,
     id: &str,
     req: &HandoverSalesOrderRequest,
     target: &str,
@@ -350,28 +319,7 @@ async fn apply_handover(
     fingerprint: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Vec<String>> {
-    let mut order = db
-        .sales_orders()
-        .find_by_id(id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".to_string()))?;
-    if order.base.version != req.expected_version {
-        return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".to_string()));
-    }
-    let rbac = target_identity();
-    ensure_target_qualified(db, &rbac, target, executor).await?;
-    ensure_org_enabled(db, req.target_business_org_unit_id.as_deref(), executor).await?;
-    ensure_handover_separation(db, id, target, executor).await?;
-    let next_org = req
-        .target_business_org_unit_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    order.handover(target.to_string(), next_org, actor.id())?;
-    if !target_can_read_order(db, &rbac, target, &order, executor).await? {
-        return Err(Error::Forbidden("接收人无权读取交接后的销售单，请核对数据范围和个人上限".into()));
-    }
+    let mut order = prepare_handover_order(db, target_identity, id, req, target, actor, executor).await?;
     let mut acceptance_tasks = open_acceptance_tasks(db, id, executor).await?;
     let at = erp_core::common::time::Instant::now();
     let mut transferred = Vec::new();
@@ -381,9 +329,7 @@ async fn apply_handover(
         db.work_items().update(task, executor).await?;
         transferred.push(task.base.id.clone());
     }
-    erp_sales::service::sales_order::SalesOrderService::new(db.clone())
-        .persist_order(&mut order, executor)
-        .await?;
+    SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
     let audit = SalesCommandEvent::new(
         audit_id.to_string(),
         actor,
@@ -394,6 +340,41 @@ async fn apply_handover(
     )?;
     audit.persist(db, executor).await?;
     Ok(transferred)
+}
+
+/// 在原快照先核验原对象，再检查版本、接收资格及拟交接后的双方范围。
+async fn prepare_handover_order(
+    db: &Database,
+    authorization: &Arc<AuthorizationService>,
+    id: &str,
+    req: &HandoverSalesOrderRequest,
+    target: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<SalesOrder> {
+    let access = SalesAccess::new(db.clone(), authorization.clone());
+    let mut order = access.require_object(actor, &sales_order_permissions::HANDOVER, id, executor).await?;
+    if order.base.version != req.expected_version {
+        return Err(Error::ConflictError("销售单责任或版本已变化，请刷新后重试".into()));
+    }
+    if target == order.sales_owner_user_id {
+        return Err(Error::BusinessLogicError("目标已是当前负责人，无需交接".into()));
+    }
+    ensure_target_qualified(db, authorization, target, executor).await?;
+    ensure_org_enabled(db, req.target_business_org_unit_id.as_deref(), executor).await?;
+    ensure_handover_separation(db, id, target, executor).await?;
+    let next_org = req
+        .target_business_org_unit_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    order.handover(target.to_string(), next_org, actor.id())?;
+    access.require_loaded(actor, &sales_order_permissions::HANDOVER, &order, executor).await?;
+    if !target_can_read_order(db, authorization, target, &order, executor).await? {
+        return Err(Error::Forbidden("接收人无权读取交接后的销售单，请核对数据范围和个人上限".into()));
+    }
+    Ok(order)
 }
 
 /// 同执行器验证交接命令的完整身份，再读取当前责任及开放任务。
@@ -448,9 +429,9 @@ fn handover_view(
 ///
 /// # 参数
 /// * `db` - 目标数据库
-/// * `rbac` - 共享授权服务
+/// * `authorization` - 共享授权服务
 /// * `target` - 目标负责销售
-/// * `executor` - 调用方执行器（事务外预检与原事务重验共用）
+/// * `executor` - 原交接事务执行器
 ///
 /// # 返回
 /// 目标有效且具备验收读取与执行资格时成功。
@@ -462,11 +443,11 @@ fn handover_view(
 /// 只判定账号与权限事实；提交—审批分离另由 `ensure_handover_separation` 执行。
 async fn ensure_target_qualified(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     target: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
-    if acceptance_qualification(db, rbac, target, executor).await?.is_some() {
+    if acceptance_qualification(db, authorization, target, executor).await?.is_some() {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备销售验收读取与执行资格".to_string()))
@@ -478,7 +459,7 @@ async fn ensure_target_qualified(
 /// * `db` - 目标数据库
 /// * `sales_order_id` - 销售单 ID
 /// * `target` - 目标负责销售（交接后承担提交侧责任）
-/// * `executor` - 调用方执行器（事务外预检与原事务重验共用）
+/// * `executor` - 原交接事务执行器
 ///
 /// # 返回
 /// 目标满足销售审批政策时成功，允许兼任已配置审批人。
@@ -503,35 +484,48 @@ async fn ensure_handover_separation(
 
 /// 沿原执行器取得验收完整资格与同次读取的目标账号摘要。
 async fn acceptance_qualification(
-    db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    _db: &mongodb::Database,
+    authorization: &Arc<AuthorizationService>,
     target: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<AccountSummary>> {
-    let required_codes = WorkItemType::CustomerAcceptanceRegistration
-        .customer_acceptance_execution_permissions(ACCEPTANCE_OBJECT_TYPE)
-        .ok_or_else(|| Error::Internal("客户验收任务缺少固定执行权限配置".into()))?;
-    let required =
-        required_codes.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
     let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
-    Ok(crate::authorization::features(db.clone(), rbac.clone())
-        .permissions(&actor, &required, executor)
-        .await?
-        .filter(|qualified| qualified.same_role(&required))
-        .map(|qualified| qualified.account().clone()))
+    let candidate = ObjectFacts {
+        resource: "work_item".into(),
+        subject_type: FactValue::Known(WorkItemType::CustomerAcceptanceRegistration.as_str().into()),
+        subject_source_resource: FactValue::Known(ACCEPTANCE_OBJECT_TYPE.into()),
+        ..Default::default()
+    };
+    match authorization
+        .require(
+            &actor,
+            &internal_permissions::WORK_ITEM_EXECUTION_QUALIFICATION,
+            AccessTarget::Candidate(candidate),
+            executor,
+        )
+        .await
+    {
+        Ok(()) => {},
+        Err(IdentityError::Forbidden(_)) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    Ok(authorization.permissions(&actor, &[], executor).await?.map(|qualified| qualified.account().clone()))
 }
 
 /// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
 async fn target_can_read_order(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     target: &str,
     planned: &erp_sales::entity::sales_order::SalesOrder,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<bool> {
     let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
-    let access = erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone());
-    match access.require_loaded(&actor, "detail", planned, &[], executor).await {
+    let access = SalesAccess::new(db.clone(), authorization.clone());
+    match access
+        .require_loaded(&actor, &internal_permissions::SALES_ORDER_HANDOVER_RECIPIENT, planned, executor)
+        .await
+    {
         Ok(()) => Ok(true),
         Err(erp_read_models::Error::Forbidden(_) | erp_read_models::Error::NotFound(_)) => Ok(false),
         Err(error) => Err(error.into()),
@@ -616,6 +610,23 @@ async fn open_approval_assignees(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn acceptance_candidate_preserves_authorization_failures_before_reading_account_summary() {
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
+        let error = super::acceptance_qualification(
+            &db,
+            &unavailable_authorization(),
+            "sales",
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, crate::Error::Internal(message) if message == "测试授权设施不可用"));
+    }
     use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId};
     use erp_sales::entity::sales_order::{
         BusinessType, CommercialStatus, OriginSystem, SalesOrder, SalesOrderData,
@@ -713,5 +724,39 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[tokio::test]
+    async fn handover_stops_at_authorization_before_loading_version_or_target_state() {
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("handover_authorization");
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let request = super::HandoverSalesOrderRequest {
+            expected_version: 0,
+            target_owner_user_id: "actor".into(),
+            target_business_org_unit_id: None,
+            reason: "交接".into(),
+            idempotency_key: "handover".into(),
+        };
+        let error = super::prepare_handover_order(
+            &db,
+            &unavailable_authorization(),
+            "order",
+            &request,
+            "actor",
+            &actor,
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, crate::Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

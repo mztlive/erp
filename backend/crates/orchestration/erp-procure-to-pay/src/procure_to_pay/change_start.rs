@@ -11,7 +11,7 @@ use erp_approval_runtime::ApprovalRuntimePort;
 use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_procurement::dto::purchase_order::PurchaseChangeSubmitResult;
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseCommandReceipt,
@@ -37,7 +37,7 @@ use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use super::change::replay_change_command;
 use super::change_adapter::purchase_change_order_object_readable;
@@ -58,8 +58,9 @@ use crate::{Error, Result};
 pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    read::bound_definition_graph(db, binding, "采购变更单绑定的审批定义不存在", &mut NoTransaction)
+    read::bound_definition_graph(db, binding, "采购变更单绑定的审批定义不存在", executor)
         .await
         .map_err(Error::from)
 }
@@ -82,6 +83,7 @@ pub(super) async fn load_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     read::start_receipt(
         db,
@@ -89,7 +91,7 @@ pub(super) async fn load_start_receipt(
         subject,
         subject_version,
         idempotency_key,
-        &mut NoTransaction,
+        executor,
     )
     .await
     .map_err(Error::from)
@@ -302,14 +304,9 @@ pub(super) struct PurchaseChangeStartPersistInput {
 pub(super) async fn persist_purchase_change_start(
     db: &Database,
     input: PurchaseChangeStartPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<PurchaseChangeSubmitResult> {
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move { apply_change_start(&db, input, executor).await })
-        })
-        .await
+    apply_change_start(db, input, executor).await
 }
 async fn apply_change_start(
     db: &Database,
@@ -319,7 +316,7 @@ async fn apply_change_start(
     input
         .ports
         .access(db.clone())
-        .require_object(&input.actor, "submit", input.change_order.purchase_order_id.as_ref(), &[], executor)
+        .require_object(&input.actor, "submit", input.change_order.purchase_order_id.as_ref(), executor)
         .await?;
     if let Some(result) =
         replay_change_command(db, &input.command_identity, &input.request_fingerprint, executor).await?
@@ -338,7 +335,7 @@ async fn apply_change_start(
         .await?;
     persist_runtime_writes(
         db,
-        (input.ports.approval.as_ref(), &(input.ports.task_identity)()),
+        (input.ports.approval.as_ref(), &input.ports.task_identity.clone()),
         writes,
         &input.snapshot_payload,
         StartTaskContext {
@@ -430,7 +427,7 @@ async fn guard_change_start(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    runtime: (&dyn ApprovalRuntimePort, &SharedRbacService),
+    runtime: (&dyn ApprovalRuntimePort, &Arc<AuthorizationService>),
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartTaskContext<'_>,

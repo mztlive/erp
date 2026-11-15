@@ -5,6 +5,7 @@ mod create;
 mod create_prepare;
 mod identity;
 mod no_contract;
+mod result;
 mod save;
 mod selection;
 mod submit;

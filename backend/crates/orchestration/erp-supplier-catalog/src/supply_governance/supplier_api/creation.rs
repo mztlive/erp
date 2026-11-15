@@ -1,6 +1,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_api;
 use erp_supplier::SupplierExt;
 use erp_supply::dto::supplier_api::*;
 use erp_supply::entity::supplier_api::PreparedSupplierConnectionCreate;
@@ -60,12 +62,22 @@ impl SupplierApiGovernanceProcess {
             connection.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let current_actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let connection_tx = connection.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &current_actor,
+                            &supplier_api::CONNECTION_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     SupplierApiService::new(db.clone())
                         .persist_created_connection(&connection_tx, executor)
                         .await?;

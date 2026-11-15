@@ -1,7 +1,10 @@
 //! 客户验收 NO_APPROVAL 单据登记；所有写入使用调用方 Executor。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
@@ -166,13 +169,13 @@ async fn persist_unbound_customer_acceptance_document(
 pub async fn register_created_customer_acceptance_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     acceptance: &CustomerAcceptance,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
-        .require_object(actor, "detail", acceptance.sales_order_id.as_ref(), &[], executor)
+        .require_object(actor, &sales_order_permissions::DETAIL, acceptance.sales_order_id.as_ref(), executor)
         .await?;
     let bind_command = customer_acceptance_bind_command(acceptance, actor.id())?;
     let document = new_registered_document(

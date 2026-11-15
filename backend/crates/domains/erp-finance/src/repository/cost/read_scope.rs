@@ -1,4 +1,6 @@
 //! 成本范围投影所需的有界候选事实；应用层在分页前裁剪全部分配。
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::{QueryModel, QueryOutput};
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, QueryFilter, Result, aggregate, mongo_ops};
@@ -41,6 +43,7 @@ pub trait CostEntryReadScopeExt {
     /// # 参数
     /// * `filter` - 已规范化的成本筛选。
     /// * `id` - 精确成本身份；`None` 表示不按身份收窄。
+    /// * `access` - 本入口固定根授权，数据库在候选上限前执行完整会员过滤。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -52,14 +55,16 @@ pub trait CostEntryReadScopeExt {
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CostEntryRow>>;
+    ) -> crate::Result<Vec<CostEntryRow>>;
 
     /// 读取完整候选身份和版本；保留新增、删除及非当前页变化检测。
     ///
     /// # 参数
     /// * `filter` - 已规范化的成本筛选。
     /// * `id` - 独立成本筛选。
+    /// * `access` - 与候选查询相同的固定根授权。
     /// * `executor` - 调用方事务执行器。
     /// # 返回
     /// 最多候选上限加一条，按身份稳定排序。
@@ -69,8 +74,9 @@ pub trait CostEntryReadScopeExt {
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CostEntryScopeVersion>>;
+    ) -> crate::Result<Vec<CostEntryScopeVersion>>;
 
     /// 只装载匹配分配引用的成本投影，空身份集合直接返回空集。
     ///
@@ -127,46 +133,58 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CostEntryRow>> {
+    ) -> crate::Result<Vec<CostEntryRow>> {
+        let prefix = authorized_membership(access, self.collection().name(), executor)?;
         let mut document = filter.to_doc();
         if let Some(id) = id {
             document.insert("id", id);
         }
-        mongo_ops::find_many(
+        let options = FindOptions::builder()
+            .limit(10_001)
+            .sort(doc! { "id": 1 })
+            .projection(cost_entry_projection())
+            .build();
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<CostEntryRow>(),
             document,
-            FindOptions::builder()
-                .limit((ENTRY_LIMIT + 1) as i64)
-                .sort(doc! { "id": 1 })
-                .projection(cost_entry_projection())
-                .build(),
+            options,
+            prefix,
             executor,
         )
-        .await
+        .await?;
+        access.ensure_current(executor)?;
+        Ok(rows)
     }
 
     async fn scope_candidate_versions(
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<CostEntryScopeVersion>> {
+    ) -> crate::Result<Vec<CostEntryScopeVersion>> {
+        let prefix = authorized_membership(access, self.collection().name(), executor)?;
         let mut document = filter.to_doc();
         if let Some(id) = id {
             document.insert("id", id);
         }
-        mongo_ops::find_many(
+        let options = FindOptions::builder()
+            .limit(10_001)
+            .sort(doc! { "id": 1 })
+            .projection(doc! { "id": 1, "version": 1 })
+            .build();
+        let rows = aggregate::find(
             &self.collection().clone_with_type::<CostEntryScopeVersion>(),
             document,
-            FindOptions::builder()
-                .limit((ENTRY_LIMIT + 1) as i64)
-                .sort(doc! { "id": 1 })
-                .projection(doc! { "id": 1, "version": 1 })
-                .build(),
+            options,
+            prefix,
             executor,
         )
-        .await
+        .await?;
+        access.ensure_current(executor)?;
+        Ok(rows)
     }
 
     async fn scope_entries_by_ids(
@@ -192,6 +210,55 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
         )
         .await
     }
+}
+
+/// 用同一实际成本身份做授权会员关联，保留外根的内部计算投影。
+fn authorized_membership(
+    access: &CompiledAccess,
+    collection: &str,
+    executor: &mut dyn Executor,
+) -> crate::Result<Vec<Document>> {
+    ensure_candidate_model(access.model(), collection)?;
+    access.ensure_current(executor)?;
+    let whole = if !matches!(access.model().output, QueryOutput::Object) {
+        access.whole_stages()?
+    } else {
+        access.stages()
+    };
+    Ok(membership_stages(collection, access.stages(), whole))
+}
+
+/// 候选只使用固定成本身份会员能力；存在性不能附带完整金额字段。
+fn ensure_candidate_model(model: &QueryModel, collection: &str) -> crate::Result<()> {
+    model.validate()?;
+    if model.collection != collection
+        || !matches!(model.resource.as_str(), "cost_entry" | "cost_allocation")
+        || model.id_field != "id"
+    {
+        return Err(crate::Error::ValidationError("成本候选授权模型不匹配".into()));
+    }
+    Ok(())
+}
+
+fn membership_stages(collection: &str, shares: &[Document], whole: &[Document]) -> Vec<Document> {
+    let branch = |stages: &[Document]| {
+        let mut branch = stages.to_vec();
+        branch.extend([doc! { "$project": { "_id": 0, "id": 1 } }, doc! { "$limit": 1 }]);
+        branch
+    };
+    let pipeline = vec![
+        doc! { "$match": { "$expr": { "$eq": ["$id", "$$root"] } } },
+        doc! { "$facet": { "shares": branch(shares), "whole": branch(whole) } },
+        doc! { "$match": { "$expr": { "$or": [
+            { "$gt": [{ "$size": "$shares" }, 0] }, { "$gt": [{ "$size": "$whole" }, 0] }
+        ] } } },
+        doc! { "$project": { "_id": 0, "id": "$$root" } },
+    ];
+    vec![
+        doc! { "$lookup": { "from": collection, "let": { "root": "$id" }, "pipeline": pipeline, "as": "__cost_authorized_root" } },
+        doc! { "$match": { "__cost_authorized_root.0": { "$exists": true } } },
+        doc! { "$unset": "__cost_authorized_root" },
+    ]
 }
 
 #[allow(async_fn_in_trait)]
@@ -364,5 +431,75 @@ mod tests {
             doc! { "deleted_at": 0_i64, "sales_order_id": "sales-a" }
         );
         assert_eq!(matching_allocation_filter(None, None), doc! { "deleted_at": 0_i64 });
+    }
+}
+
+#[cfg(test)]
+mod membership_tests {
+    use erp_identity::entity::authorization::QueryModelKey;
+    use mongodb::bson::Bson;
+
+    use super::*;
+
+    #[test]
+    fn id_only_existence_is_accepted_as_membership_and_rejects_amount_or_wrong_collection() {
+        let mut model = QueryModel {
+            key: QueryModelKey::parse("cost_membership").unwrap(),
+            resource: "cost_entry".into(),
+            collection: "cost_entries".into(),
+            id_field: "id".into(),
+            output: QueryOutput::Existence { fields: ["id".into()].into() },
+            facts: Default::default(),
+        };
+        ensure_candidate_model(&model, "cost_entries").unwrap();
+        assert!(ensure_candidate_model(&model, "other_entries").is_err());
+        model.output = QueryOutput::Existence { fields: ["id".into(), "amount".into()].into() };
+        assert!(ensure_candidate_model(&model, "cost_entries").is_err());
+    }
+
+    #[test]
+    fn allocation_membership_uses_cost_roots_without_accepting_other_resources() {
+        let mut model = QueryModel {
+            key: QueryModelKey::parse("funds_cost_allocation").unwrap(),
+            resource: "cost_allocation".into(),
+            collection: "cost_entries".into(),
+            id_field: "id".into(),
+            output: QueryOutput::Existence { fields: ["id".into()].into() },
+            facts: Default::default(),
+        };
+        ensure_candidate_model(&model, "cost_entries").unwrap();
+        model.resource = "invoice".into();
+        assert!(ensure_candidate_model(&model, "cost_entries").is_err());
+        model.resource = "cost_allocation".into();
+        model.collection = "cost_allocations".into();
+        assert!(ensure_candidate_model(&model, "cost_entries").is_err());
+        model.collection = "cost_entries".into();
+        model.id_field = "cost_entry_id".into();
+        assert!(ensure_candidate_model(&model, "cost_entries").is_err());
+    }
+
+    #[test]
+    fn same_root_semijoin_keeps_share_or_whole_membership_before_outer_limit() {
+        let shares = [doc! { "$match": { "share_owner": "actor" } }];
+        let whole = [doc! { "$match": { "ledger": true } }];
+        let stages = membership_stages("cost_entries", &shares, &whole);
+        let lookup = stages[0].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! { "root": "$id" });
+        let pipeline = lookup.get_array("pipeline").unwrap();
+        assert_eq!(pipeline[0], Bson::Document(doc! { "$match": { "$expr": { "$eq": ["$id", "$$root"] } } }));
+        let facet = pipeline[1].as_document().unwrap().get_document("$facet").unwrap();
+        for (name, expected) in [("shares", &shares[0]), ("whole", &whole[0])] {
+            let branch = facet.get_array(name).unwrap();
+            assert_eq!(branch[0], Bson::Document(expected.clone()));
+            assert_eq!(branch.last().unwrap(), &Bson::Document(doc! { "$limit": 1 }));
+        }
+        assert_eq!(
+            pipeline[2],
+            Bson::Document(doc! { "$match": { "$expr": { "$or": [
+                { "$gt": [{ "$size": "$shares" }, 0] }, { "$gt": [{ "$size": "$whole" }, 0] }
+            ] } } })
+        );
+        assert_eq!(stages[1], doc! { "$match": { "__cost_authorized_root.0": { "$exists": true } } });
+        assert_eq!(stages[2], doc! { "$unset": "__cost_authorized_root" });
     }
 }

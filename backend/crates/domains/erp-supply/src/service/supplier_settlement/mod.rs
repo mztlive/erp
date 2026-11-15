@@ -1,6 +1,6 @@
 //! 供应商结算单域准备、查询和事务内写入；跨域根事务由 supply_settlement 组合。
 pub mod access;
-mod authorization;
+pub(crate) mod authorization;
 pub mod difference;
 pub mod draft;
 pub mod evidence;

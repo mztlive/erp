@@ -294,6 +294,7 @@ fn invoice_pipeline(
     condition: &FundsLinkedCondition,
 ) -> Vec<Document> {
     let mut pipeline = vec![doc! { "$match": header_filter(filter, condition) }];
+    pipeline.extend(authorization.guard_stages());
     pipeline.push(allocation_lookup(
         <Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
         sales_stages(authorization, condition),

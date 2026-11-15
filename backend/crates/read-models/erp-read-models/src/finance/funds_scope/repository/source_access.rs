@@ -1,270 +1,173 @@
-//! 资金入口的真实来源查询；字段映射只提供事实，组合政策交给 identity。
-
-use std::collections::BTreeSet;
+//! 来源条件只供固定身份、版本及责任投影，不能转换为领域完整对象凭证。
 use std::sync::Arc;
 
-use application_core::AuditActor;
-use async_trait::async_trait;
-use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, MappingFacts, QueryModel, QueryModelKey, QueryOutput, ReadAccess, RelationKey,
-    RelationMatch,
-};
-use erp_identity::ports::{QueryFragment, RelationMapping};
-use erp_identity::{
-    AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry,
-    AuthorizationService, CompiledAccess, DataAccess, Error as IdentityError, Permission,
-    Result as IdentityResult, SharedRbacService,
-};
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::{QueryModel, RelationKey};
 use mongodb::Database;
-use mongodb::bson::{Bson, Document};
-use persistence_core::Executor;
+use mongodb::bson::{Document, doc};
+use persistence_core::{Executor, aggregate};
+use serde::Deserialize;
 
 use crate::{Error, Result};
 
-/// 本次资金来源读取的 identity 凭证及其复验服务。
+/// 同一根授权固定来源的内部查询；字段私有，不能构造通用领域 Scope。
 #[derive(Clone)]
-pub struct SourceQuery {
-    /// 当前读取阶段的不可伪造查询凭证。
-    pub access: Arc<CompiledAccess>,
-    /// 生成该凭证的同一授权服务。
-    pub service: AuthorizationService,
+pub(crate) struct SourceQuery {
+    root: Arc<CompiledAccess>,
+    relation: RelationKey,
+    model: QueryModel,
+}
+
+/// 来源身份与业务版本固定投影；不包含订单内容或金额。
+#[derive(Debug, Deserialize)]
+pub(crate) struct SourceVersion {
+    pub id: String,
+    pub version: u64,
+}
+
+/// 资金来源所需的销售责任投影；不包含销售商品明细或金额。
+#[derive(Debug, Deserialize)]
+pub(crate) struct SalesSourceFact {
+    pub id: String,
+    pub version: u64,
+    pub owner_user_id: String,
+    pub business_org_unit_id: String,
+    pub document_no: String,
 }
 
 impl SourceQuery {
-    /// 在原执行器中复验当前来源凭证。
+    /// 绑定根凭证中已有的固定来源，不生成新的授权凭证。
     /// # 参数
-    /// executor 为本次查询沿用的执行器。
+    /// root 为本次根凭证，relation 为服务端固定关系。
     /// # 返回
-    /// 身份、授权及映射依赖仍有效时成功。
+    /// 该入口提供来源时返回其内部查询，否则返回 None。
     /// # 错误
-    /// 授权撤销、版本变化、会话不一致或持久化失败时返回对应错误。
-    pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.service.validate(&self.access, executor).await?;
+    /// 固定关系标识非法时拒绝。
+    pub(crate) fn new(root: Arc<CompiledAccess>, relation: &str) -> Result<Option<Self>> {
+        let relation = RelationKey::parse(relation)?;
+        let Ok(model) = root.source_model(&relation).cloned() else {
+            return Ok(None);
+        };
+        Ok(Some(Self { root, relation, model }))
+    }
+
+    /// 核验当前阶段及期限，不结束根凭证的读取阶段。
+    /// # 参数
+    /// executor 为原读取执行器。
+    /// # 返回
+    /// 根凭证仍有效时成功。
+    /// # 错误
+    /// 跨阶段、到期或事务失效拒绝。
+    pub(crate) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.root.ensure_current(executor)?;
         Ok(())
     }
 
-    /// 取得编译器生成的完整来源授权阶段。
+    /// 返回原根授权内固定来源条件，仅用于本模块的投影查询。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 必须在分页、计数、汇总之前执行的只读聚合阶段。
+    /// 原根绑定关系的数据库阶段。
     /// # 错误
-    /// 不执行 I/O；阶段使用前后仍须复验凭证。
-    pub fn stages(&self) -> &[Document] {
-        self.access.stages()
+    /// 构造已检查来源存在，凭证内关系不可变。
+    pub(crate) fn stages(&self) -> &[Document] {
+        self.root.source_stages(&self.relation).expect("SourceQuery构造已校验固定来源，根凭证不可变")
     }
-}
 
-struct SourceMapping {
-    model: QueryModel,
-    relation: RelationKey,
-    source: Arc<dyn AccessMapping>,
-}
-
-impl SourceMapping {
-    /// 根行与实际来源使用同一物理主键，不预筛除任何来源引用。
-    fn new(
-        entry: &Permission,
-        source: Arc<dyn AccessMapping>,
-        relation: RelationKey,
-    ) -> IdentityResult<Self> {
-        Ok(Self {
-            model: QueryModel {
-                key: QueryModelKey::parse(format!("funds_{}", source.model().resource))?,
-                resource: entry.resource().into(),
-                collection: source.model().collection.clone(),
-                id_field: "id".into(),
-                output: QueryOutput::Object,
-                facts: BTreeSet::new(),
-            },
-            relation,
-            source,
-        })
-    }
-}
-
-#[async_trait]
-impl AccessMapping for SourceMapping {
-    fn model(&self) -> &QueryModel {
-        &self.model
-    }
-    fn key(&self, context: &AccessContext, facts: &MappingFacts) -> IdentityResult<Bson> {
-        self.source.key(context, facts)
-    }
-    async fn prepare(
+    /// 只读取本批实际来源的身份，不交付完整订单对象。
+    /// # 参数
+    /// db 为数据库，ids 为本批引用，executor 为原执行器。
+    /// # 返回
+    /// 本批授权身份集合。
+    /// # 错误
+    /// 边界失效、必要版本缺失或查询失败时拒绝。
+    pub(crate) async fn ids_in(
         &self,
-        context: &AccessContext,
+        db: &Database,
+        ids: &[String],
         executor: &mut dyn Executor,
-    ) -> IdentityResult<MappingFacts> {
-        self.source.prepare(context, executor).await
+    ) -> Result<Vec<String>> {
+        Ok(self.versions_in(db, ids, executor).await?.into_iter().map(|row| row.id).collect())
     }
-    fn records(&self, context: &AccessContext, facts: &MappingFacts) -> IdentityResult<QueryFragment> {
-        self.source.records(context, facts)
-    }
-    fn predicate(
+
+    /// 使用固定字段读取身份和版本，不开放调用方投影选择。
+    /// # 参数
+    /// db 为数据库，ids 为实际来源，executor 为原执行器。
+    /// # 返回
+    /// 固定版本投影，按身份排序。
+    /// # 错误
+    /// 边界失效、版本缺失或查询失败时拒绝。
+    pub(crate) async fn versions_in(
         &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: &MappingFacts,
-    ) -> IdentityResult<QueryFragment> {
-        Err(IdentityError::ValidationError("来源根不提供责任事实".into()))
-    }
-    fn relation(
-        &self,
-        relation: &RelationKey,
-        _: &AccessContext,
-        _: &MappingFacts,
-    ) -> IdentityResult<RelationMapping> {
-        if relation != &self.relation {
-            return Err(IdentityError::ValidationError("未知资金来源关系".into()));
+        db: &Database,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SourceVersion>> {
+        self.validate(executor).await?;
+        if ids.is_empty() {
+            return Ok(vec![]);
         }
-        Ok(RelationMapping { expected_ids: Bson::Array(vec!["$id".into()]), mapping: self.source.clone() })
+        let mut pipeline = vec![doc! {"$match": {&self.model.id_field: {"$in": ids}}}];
+        pipeline.extend_from_slice(self.stages());
+        pipeline.extend([
+            doc! {"$project": {"_id":0, "id":format!("${}",self.model.id_field), "version":1}},
+            doc! {"$sort":{"id":1}},
+        ]);
+        let result =
+            aggregate::rows(&db.collection::<SourceVersion>(&self.model.collection), pipeline, executor)
+                .await?;
+        self.validate(executor).await?;
+        Ok(result)
+    }
+
+    /// 读取真实销售来源所需的最小责任事实。
+    /// # 参数
+    /// db 为数据库，id 为实际销售引用，executor 为原执行器。
+    /// # 返回
+    /// 当前可读销售的身份、版本、单号及责任；不存在或无权时为 None。
+    /// # 错误
+    /// 来源资源错配、阶段失效或必要字段缺失时拒绝。
+    pub(crate) async fn sales_fact(
+        &self,
+        db: &Database,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesSourceFact>> {
+        if self.model.resource != "sales_order" {
+            return Err(Error::ValidationError("资金销售来源模型错配".into()));
+        }
+        self.validate(executor).await?;
+        let mut pipeline = vec![doc! {"$match": {&self.model.id_field:id}}];
+        pipeline.extend_from_slice(self.stages());
+        pipeline.extend([sales_fact_projection(), doc! {"$limit":1}]);
+        let result =
+            aggregate::rows(&db.collection::<SalesSourceFact>(&self.model.collection), pipeline, executor)
+                .await?
+                .into_iter()
+                .next();
+        self.validate(executor).await?;
+        Ok(result)
     }
 }
 
-/// 按固定入口登记真实来源并编译完整查询。
-/// # 参数
-/// db、rbac 为身份设施，actor 为真实操作人，entry 为固定业务入口；
-/// source 为真实来源 Mapping，executor 为原业务执行器。
-/// # 返回
-/// 绑定原事务的完整查询凭证。
-/// # 错误
-/// 入口未登记、事实不完整或授权失败时拒绝。
-pub(in crate::finance::funds_scope) async fn source_query(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    entry: &Permission,
-    source: Arc<dyn AccessMapping>,
-    executor: &mut dyn Executor,
-) -> Result<SourceQuery> {
-    require_source_entry(entry)?;
-    let relation = RelationKey::parse("funds_source")?;
-    let mapping: Arc<dyn AccessMapping> =
-        Arc::new(SourceMapping::new(entry, source.clone(), relation.clone())?);
-    let registration = source_registration(entry, source.as_ref(), mapping.clone(), relation.clone())?;
-    let registry = AuthorizationRegistry::new(vec![registration])?;
-    let service = AuthorizationService::new(db.clone(), rbac.clone(), registry);
-    let query = service.query(actor, entry, AccessSubject::Source(relation), executor).await?;
-    let access = Arc::new(query.compile(mapping.as_ref(), executor).await?);
-    service.validate(&access, executor).await?;
-    Ok(SourceQuery { access, service })
-}
-
-/// 只接受组合根已接入的资金采购来源入口。
-fn require_source_entry(entry: &Permission) -> Result<()> {
-    if matches!(
-        entry.resource(),
-        "payable_account"
-            | "supplier_payment"
-            | "purchase_payment_request"
-            | "invoice"
-            | "purchase_invoice_allocation"
-    ) {
-        Ok(())
-    } else {
-        Err(Error::ValidationError("未登记的资金采购来源入口".into()))
-    }
-}
-
-/// 保留目标入口资格，数据政策绑定真实来源及其完整关系。
-fn source_registration(
-    entry: &Permission,
-    source: &dyn AccessMapping,
-    mapping: Arc<dyn AccessMapping>,
-    relation: RelationKey,
-) -> IdentityResult<AccessRegistration> {
-    let source_resource = source.model().resource.as_str();
-    let action = if source_resource == "supplier_settlement_statement" { "list" } else { "detail" };
-    let permission = Permission::parse(format!("{source_resource}:{action}"))?;
-    let read = ReadAccess { history: false, records: source_resource == "purchase_order" };
-    Ok(AccessRegistration {
-        permission: entry.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Query {
-            data: DataAccess {
-                subject: AccessSubject::Source(relation.clone()),
-                required_facts: BTreeSet::new(),
-                policy: AccessPolicy::Related {
-                    relation,
-                    resource: source.model().resource.clone(),
-                    mode: RelationMatch::AllNonEmpty,
-                    required_facts: source.model().facts.clone(),
-                    policy: Box::new(AccessPolicy::Scope { permission, read }),
-                },
-            },
-            mapping,
-        },
-    })
+/// 固定投影只开放资金关联需要的责任元数据。
+fn sales_fact_projection() -> Document {
+    doc! {"$project": {"_id":0, "id":1, "version":1, "owner_user_id":"$sales_owner_user_id", "business_org_unit_id":1, "document_no":"$order_no"}}
 }
 
 #[cfg(test)]
 mod tests {
-    use erp_core::AccountKind;
-    use erp_core::common::time::Instant;
-    use mongodb::bson::doc;
+    use mongodb::bson::deserialize_from_document;
 
     use super::*;
-    use crate::finance::funds_scope::repository::settlement_mapping::SettlementMapping;
-
-    fn context() -> AccessContext {
-        AccessContext {
-            actor: AuditActor::new("actor".into(), "经办人".into(), AccountKind::Admin),
-            permission: Permission::parse("payable_account:list").unwrap(),
-            resource: "payable_account".into(),
-            model: None,
-            as_of: Instant::from_unix_secs(1),
-        }
-    }
 
     #[test]
-    fn source_mapping_preserves_actual_record_identity_and_rejects_unknown_facts_and_relations() {
-        let entry = Permission::parse("payable_account:list").unwrap();
-        let source: Arc<dyn AccessMapping> = Arc::new(SettlementMapping::new().unwrap());
-        let key = RelationKey::parse("funds_source").unwrap();
-        let mapping = SourceMapping::new(&entry, source.clone(), key.clone()).unwrap();
-        let facts = MappingFacts::default();
-        assert_eq!(mapping.key(&context(), &facts).unwrap(), Bson::String("$id".into()));
-        assert_eq!(mapping.model().collection, source.model().collection);
-        assert_eq!(mapping.model().resource, "payable_account");
-        assert!(mapping.model().facts.is_empty());
-        let QueryFragment::Match(records) = mapping.records(&context(), &facts).unwrap() else {
-            panic!("直接来源记录应使用字段条件");
-        };
-        assert_eq!(records, doc! { "deleted_at": 0 });
-        let related = mapping.relation(&key, &context(), &facts).unwrap();
-        assert_eq!(related.expected_ids, Bson::Array(vec!["$id".into()]));
-        assert!(Arc::ptr_eq(&related.mapping, &source));
-        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context(), &facts).is_err());
-        assert!(mapping.predicate(&AccessFact::Owned, &context(), &facts).is_err());
-    }
-
-    #[test]
-    fn registered_entry_keeps_target_qualification_and_all_nonempty_source_policy() {
-        let entry = Permission::parse("payable_account:list").unwrap();
-        let source: Arc<dyn AccessMapping> = Arc::new(SettlementMapping::new().unwrap());
-        let relation = RelationKey::parse("funds_source").unwrap();
-        let mapping: Arc<dyn AccessMapping> =
-            Arc::new(SourceMapping::new(&entry, source.clone(), relation.clone()).unwrap());
-        let registration = source_registration(&entry, source.as_ref(), mapping, relation.clone()).unwrap();
-        assert_eq!(registration.permission, entry);
-        let AccessMode::Query { data, .. } = &registration.access else {
-            panic!("必须登记查询");
-        };
-        assert_eq!(data.subject, AccessSubject::Source(relation));
-        let AccessPolicy::Related { resource, mode, policy, .. } = &data.policy else {
-            panic!("必须绑定真实来源");
-        };
-        assert_eq!(resource, "supplier_settlement_statement");
-        assert_eq!(*mode, RelationMatch::AllNonEmpty);
-        let AccessPolicy::Scope { permission, read } = policy.as_ref() else {
-            panic!("必须使用identity范围");
-        };
-        assert_eq!(permission, &Permission::parse("supplier_settlement_statement:list").unwrap());
-        assert!(!read.history);
-        assert!(!read.records);
-        assert!(AuthorizationRegistry::new(vec![registration]).is_ok());
-        assert!(require_source_entry(&entry).is_ok());
-        assert!(require_source_entry(&Permission::parse("customer:list").unwrap()).is_err());
+    fn sales_fact_decodes_only_metadata_and_requires_its_business_version() {
+        let row = doc! {"id":"sale", "version":2_i64,"owner_user_id":"sales", "business_org_unit_id":"org", "document_no":"SO1"};
+        let fact = deserialize_from_document::<SalesSourceFact>(row.clone()).unwrap();
+        assert_eq!((fact.id.as_str(), fact.version, fact.document_no.as_str()), ("sale", 2, "SO1"));
+        let mut missing = row;
+        missing.remove("version");
+        assert!(deserialize_from_document::<SalesSourceFact>(missing).is_err());
     }
 }

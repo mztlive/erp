@@ -6,6 +6,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
+use erp_identity::AuthorizationService;
 use erp_procure_to_pay::procure_to_pay::responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityProcess, ResolutionInput,
 };
@@ -41,7 +42,7 @@ pub(super) struct ProcurementFormalizationPlan {
 pub struct FormalizedSubmissionWrite {
     pub(super) finance_responsibility: Arc<dyn FinanceResponsibilityPort>,
     pub(super) db: Database,
-    pub(super) rbac: erp_identity::SharedRbacService,
+    pub(super) authorization: Arc<AuthorizationService>,
     pub(super) order_id: String,
     pub(super) order: SalesOrder,
     pub(super) submission: SalesOrderSubmission,
@@ -88,7 +89,7 @@ impl SalesOrderCommandProcess {
         let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
         prepare_formalized_submission_write(
             &self.db,
-            (self.rbac.clone(), self.services.finance_responsibility.clone()),
+            (self.authorization.clone(), self.services.finance_responsibility.clone()),
             &mut order,
             submission,
             lines,
@@ -118,7 +119,7 @@ impl SalesOrderCommandProcess {
             return Ok(None);
         }
         let inputs = submission_procurement_inputs(lines)?;
-        let resolution = ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone())
+        let resolution = ProcurementResponsibilityProcess::new(self.db.clone(), self.authorization.clone())
             .resolve_strict(&inputs)
             .await?;
         Ok(Some(ProcurementFormalizationPlan { inputs, resolution }))
@@ -131,7 +132,7 @@ impl SalesOrderCommandProcess {
 /// 状态、版本或任务字段不合法时返回错误。
 fn prepare_formalized_submission_write(
     db: &Database,
-    (rbac, finance_responsibility): (erp_identity::SharedRbacService, Arc<dyn FinanceResponsibilityPort>),
+    (authorization, finance_responsibility): (Arc<AuthorizationService>, Arc<dyn FinanceResponsibilityPort>),
     order: &mut SalesOrder,
     mut submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,
@@ -159,7 +160,7 @@ fn prepare_formalized_submission_write(
     Ok(FormalizedSubmissionWrite {
         finance_responsibility,
         db: db.clone(),
-        rbac: rbac.clone(),
+        authorization: authorization.clone(),
         order_id: order.base.id.clone(),
         order: order.clone(),
         submission,

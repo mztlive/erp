@@ -7,8 +7,9 @@ use erp_catalog::{CatalogExt, CreateProductRequest, HandoverProductRequest, Prod
 use erp_core::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use erp_master_data::handover_product;
 use erp_master_data::product_handover::CatalogHandoverPorts;
+use erp_permissions::catalog as catalog_permissions;
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::{ReadExecutor, Transactional};
 
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{DemoKind, DemoStep};
@@ -38,7 +39,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(existing) = self
             .db
             .products()
-            .find_one_by_field_including_deleted("product_no", step.key.clone(), &mut NoTransaction)
+            .find_one_by_field_including_deleted("product_no", step.key.clone(), &mut ReadExecutor::default())
             .await?
         {
             return self.adopt_product(actor, step, &existing, &maintainer_id).await;
@@ -63,7 +64,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let sku_ids = self.sku_ids(id).await?;
         let live = product.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
         if !live {
-            lifecycle::restore_product_graph(&self.db, actor, id, &sku_ids).await?;
+            lifecycle::restore_product_graph(&self.db, self.authorization.clone(), actor, id, &sku_ids)
+                .await?;
         }
         self.align_product_maintainer(actor, id, maintainer_id).await?;
         self.remember_product(step, id.to_string(), sku_ids).await?;
@@ -78,12 +80,33 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         maintainer_id: &str,
     ) -> Result<()> {
         let access = self.ports.catalog_access.clone();
-        let (maintainer, org) = access.maintainer_org(Some(maintainer_id), actor, &mut NoTransaction).await?;
-        let product = access.require_product(actor, "update", id, &mut NoTransaction).await?;
-        if let Some(request) = product_handover_request(&product, &maintainer, &org) {
+        let read_access = access.clone();
+        let read_actor = actor.clone();
+        let product_id = id.to_owned();
+        let maintainer_id = maintainer_id.to_owned();
+        let request = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (maintainer, org) =
+                        read_access.maintainer_org(Some(&maintainer_id), &read_actor, executor).await?;
+                    let product = read_access
+                        .require_product(
+                            &read_actor,
+                            &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                            &product_id,
+                            executor,
+                        )
+                        .await?;
+                    Ok::<_, Error>(product_handover_request(&product, &maintainer, &org))
+                })
+            })
+            .await?;
+        if let Some(request) = request {
             handover_product(
                 self.db.clone(),
-                self.rbac.clone(),
+                self.authorization.clone(),
                 CatalogHandoverPorts::new(access, self.catalog()),
                 id,
                 request,
@@ -99,7 +122,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let skus = self
             .db
             .skus()
-            .find_many_by_field_including_deleted("product_id", product_id.to_string(), &mut NoTransaction)
+            .find_many_by_field_including_deleted(
+                "product_id",
+                product_id.to_string(),
+                &mut ReadExecutor::default(),
+            )
             .await?;
         Ok(skus.into_iter().map(|sku| sku.base.id).collect())
     }

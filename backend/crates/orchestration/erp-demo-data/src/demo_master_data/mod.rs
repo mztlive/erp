@@ -3,6 +3,7 @@
 //! 生成客户、供应商、商品、仓库和字典，并补齐岗位账号、审批流程和默认责任规则。
 //! 删除时清空整个数据库，只保留 admin 账号及必要超管授权。
 
+use std::sync::Arc;
 mod accounts;
 mod approvals;
 mod ensure_customer;
@@ -31,7 +32,7 @@ mod service;
 mod spec;
 mod voucher;
 
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 pub use foundation::DemoFoundationReport;
 pub use record::ensure_indexes;
 pub use removal::DemoResetReport;
@@ -42,7 +43,8 @@ use storage::S3Storage;
 pub struct DemoMasterDataProcess<A> {
     pub(super) db: mongodb::Database,
     ports: crate::runtime_ports::DemoRuntimePorts<A>,
-    pub(super) rbac: SharedRbacService,
+    pub(super) identity: SharedRbacService,
+    pub(super) authorization: Arc<AuthorizationService>,
     enabled: bool,
     storage: S3Storage,
     image_secret: Vec<u8>,

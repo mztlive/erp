@@ -10,10 +10,10 @@ use erp_identity::entity::authorization::{
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
-    AccessFactsPort, AccessMapping, AccessMode, AccessPolicy, AccessRegistration, AccessSubject,
-    AccessTarget, AuthorizationRegistry, AuthorizationService, CompiledAccess, DataAccess,
-    Error as IdentityError, Permission, ResourceTargets, Result as IdentityResult, RoleId, SharedRbacService,
+    AccessFactsPort, AccessMapping, AccessTarget, AuthorizationService, CompiledAccess,
+    Error as IdentityError, Permission, ResourceTargets, Result as IdentityResult,
 };
+use erp_permissions::{bulk_job, internal};
 use mongodb::Database;
 use mongodb::bson::{Bson, doc};
 use persistence_core::Executor;
@@ -23,8 +23,7 @@ use crate::{BackgroundJob, BulkJobExt, Result};
 
 #[derive(Clone)]
 pub(crate) struct BackgroundAuthorization {
-    pub(crate) service: AuthorizationService,
-    mapping: Arc<dyn AccessMapping>,
+    pub(crate) service: Arc<AuthorizationService>,
 }
 
 impl BackgroundAuthorization {
@@ -35,11 +34,8 @@ impl BackgroundAuthorization {
     /// 未执行 I/O 的任务授权服务。
     /// # 错误
     /// 固定登记损坏时启动失败。
-    pub(crate) fn new(db: Database, identity: SharedRbacService) -> Self {
-        let mapping: Arc<dyn AccessMapping> = Arc::new(JobMapping(model()));
-        let facts: Arc<dyn AccessFactsPort> = Arc::new(JobFacts(db.clone()));
-        let registry = registry(mapping.clone(), facts).expect("固定后台任务授权目录");
-        Self { service: AuthorizationService::new(db, identity, registry), mapping }
+    pub(crate) fn new(service: Arc<AuthorizationService>) -> Self {
+        Self { service }
     }
 
     /// 在调用方事务编译任务中心完整授权条件。
@@ -54,11 +50,8 @@ impl BackgroundAuthorization {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<CompiledAccess> {
-        let query = self
-            .service
-            .query(actor, &Permission::parse("background_job:list")?, AccessSubject::Direct, executor)
-            .await?;
-        Ok(query.compile(self.mapping.as_ref(), executor).await?)
+        let compiled = self.service.query(actor, &bulk_job::BACKGROUND_JOB_LIST.clone(), executor).await?;
+        Ok(compiled)
     }
 
     /// 检查真实后台任务的当前动作资格。
@@ -70,20 +63,12 @@ impl BackgroundAuthorization {
     /// 对象缺失、无权或身份设施故障时拒绝。
     pub(crate) async fn require(
         &self,
-        permission: &str,
+        permission: &Permission,
         id: &str,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self
-            .service
-            .require(
-                actor,
-                &Permission::parse(permission)?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
-            .await?)
+        Ok(self.service.require(actor, permission, AccessTarget::record(id)?, executor).await?)
     }
 
     /// 批量取消前在每个写事务重验启用管理员角色和入口权限。
@@ -100,55 +85,30 @@ impl BackgroundAuthorization {
     ) -> Result<()> {
         Ok(self
             .service
-            .require(
-                actor,
-                &Permission::parse("background_job:cancel_all")?,
-                AccessTarget::Operation,
-                executor,
-            )
+            .require(actor, &bulk_job::BACKGROUND_JOB_CANCEL_ALL.clone(), AccessTarget::Operation, executor)
             .await?)
     }
 }
 
-/// 原管理员范围固定在服务端政策，启用与有效性由 identity 解释。
-fn administrators() -> AccessPolicy {
-    AccessPolicy::Roles(vec![
-        RoleId::parse("role-root").expect("固定根角色"),
-        RoleId::parse("role-sysadmin").expect("固定系统管理员角色"),
-    ])
+/// 构造后台任务真实发起人 Facts。
+/// # 参数
+/// db 为后台任务数据库。
+/// # 返回
+/// 统一读取器。
+/// # 错误
+/// 构造不执行 I/O。
+pub fn facts(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(JobFacts(db))
 }
-
-/// 将入口资格、本人和启用管理员政策绑定到真实任务模型。
-fn registry(
-    mapping: Arc<dyn AccessMapping>,
-    facts: Arc<dyn AccessFactsPort>,
-) -> IdentityResult<AuthorizationRegistry> {
-    let mut entries = Vec::new();
-    for code in
-        ["background_job:list", "background_job:detail", "background_job:cancel", "background_job_item:list"]
-    {
-        let data = DataAccess {
-            subject: AccessSubject::Direct,
-            required_facts: [FactKind::Owner].into(),
-            policy: AccessPolicy::Any(vec![AccessPolicy::Owned, administrators()]),
-        };
-        let access = if code == "background_job:list" {
-            AccessMode::Query { data, mapping: mapping.clone() }
-        } else {
-            AccessMode::Object { data, facts: facts.clone() }
-        };
-        entries.push(AccessRegistration {
-            permission: Permission::parse(code)?,
-            required_permissions: vec![],
-            access,
-        });
-    }
-    entries.push(AccessRegistration {
-        permission: Permission::parse("background_job:cancel_all")?,
-        required_permissions: vec![],
-        access: AccessMode::QualifiedOperation { policy: administrators() },
-    });
-    AuthorizationRegistry::new(entries)
+/// 构造后台任务静态查询映射。
+/// # 参数
+/// 无。
+/// # 返回
+/// 固定后台任务模型。
+/// # 错误
+/// 构造不执行 I/O。
+pub fn mapping() -> Arc<dyn AccessMapping> {
+    Arc::new(JobMapping(model()))
 }
 
 /// 后台任务所有者只映射到不可变发起人字段。
@@ -169,20 +129,21 @@ impl AccessMapping for JobMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
-        Ok(QueryFragment::Match(doc! {"deleted_at": 0}))
+    fn records(&self, context: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+        let mut filter = doc! {"deleted_at": 0};
+        if let Some(domain) = job_domain(&context.permission)? {
+            filter.insert("domain_job_type", domain);
+        }
+        Ok(QueryFragment::Match(filter))
     }
     fn predicate(
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! {"requested_by": context.actor.id()})),
@@ -193,7 +154,7 @@ impl AccessMapping for JobMapping {
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("后台任务没有授权来源关系".into()))
     }
@@ -208,6 +169,7 @@ impl AccessFactsPort for JobFacts {
         ids: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> IdentityResult<Vec<ObjectFacts>> {
+        let domain = job_domain(&context.permission)?;
         let ids = ids.ids().iter().map(|id| BackgroundJobId::new(id.clone())).collect::<Vec<_>>();
         Ok(self
             .0
@@ -215,6 +177,7 @@ impl AccessFactsPort for JobFacts {
             .find_by_ids(&ids, executor)
             .await?
             .iter()
+            .filter(|job| domain.is_none_or(|domain| job.domain_job_type.as_deref() == Some(domain)))
             .map(|job| job_facts(job, &context.resource))
             .collect())
     }
@@ -230,6 +193,31 @@ fn job_facts(job: &BackgroundJob, resource: &str) -> ObjectFacts {
     }
 }
 
+fn job_domain(permission: &Permission) -> IdentityResult<Option<&'static str>> {
+    for (entry, domain) in [
+        (internal::PRODUCT_IMPORT_JOB_READ, "PRODUCT_IMPORT"),
+        (internal::SUPPLIER_IMPORT_JOB_READ, "SUPPLIER_IMPORT"),
+        (internal::BRAND_IMPORT_JOB_READ, "BRAND_IMPORT"),
+        (internal::DATA_TRANSFER_JOB_READ, "DATA_TRANSFER"),
+    ] {
+        if permission == &entry {
+            return Ok(Some(domain));
+        }
+    }
+    if [
+        bulk_job::BACKGROUND_JOB_LIST,
+        bulk_job::BACKGROUND_JOB_DETAIL,
+        bulk_job::BACKGROUND_JOB_CANCEL,
+        bulk_job::BACKGROUND_JOB_CANCEL_ALL,
+        bulk_job::BACKGROUND_JOB_ITEM_LIST,
+    ]
+    .contains(permission)
+    {
+        return Ok(None);
+    }
+    Err(IdentityError::ValidationError("后台任务事实未接入该权限".into()))
+}
+
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
@@ -241,7 +229,7 @@ mod tests {
     fn context(actor: &str) -> AccessContext {
         AccessContext {
             actor: AuditActor::new(actor.into(), actor.into(), AccountKind::Admin),
-            permission: Permission::parse("background_job:list").unwrap(),
+            permission: bulk_job::BACKGROUND_JOB_LIST.clone(),
             resource: "background_job".into(),
             model: Some(model().key),
             as_of: Instant::now(),
@@ -271,16 +259,12 @@ mod tests {
         assert_eq!(facts.id, job.base.id);
         assert_eq!(facts.version, job.base.version.to_string());
         assert_eq!(facts.resource, "background_job");
-        let predicate = JobMapping(model())
-            .predicate(&AccessFact::Owned, &context("owner"), &MappingFacts::default())
-            .unwrap();
+        let predicate = JobMapping(model()).predicate(&AccessFact::Owned, &context("owner"), None).unwrap();
         let QueryFragment::Match(document) = predicate else {
             panic!("本人范围应为真实发起人条件")
         };
         assert_eq!(document, doc! {"requested_by": "owner"});
-        let other = JobMapping(model())
-            .predicate(&AccessFact::Owned, &context("other"), &MappingFacts::default())
-            .unwrap();
+        let other = JobMapping(model()).predicate(&AccessFact::Owned, &context("other"), None).unwrap();
         let QueryFragment::Match(other_document) = other else {
             panic!("本人范围应为真实发起人条件")
         };
@@ -288,12 +272,34 @@ mod tests {
     }
 
     #[test]
+    fn import_query_partitions_use_the_real_job_domain() {
+        for (action, domain) in [
+            ("product_import_read", "PRODUCT_IMPORT"),
+            ("supplier_import_read", "SUPPLIER_IMPORT"),
+            ("brand_import_read", "BRAND_IMPORT"),
+            ("data_transfer_read", "DATA_TRANSFER"),
+        ] {
+            let mut context = context("reader");
+            context.permission = Permission::parse(format!("background_job:{action}")).unwrap();
+            let QueryFragment::Match(records) = JobMapping(model()).records(&context, None).unwrap() else {
+                panic!("固定资料过滤必须为字段条件")
+            };
+            assert_eq!(records.get_str("domain_job_type").unwrap(), domain);
+            assert_eq!(job_domain(&context.permission).unwrap(), Some(domain));
+        }
+        let QueryFragment::Match(records) = JobMapping(model()).records(&context("reader"), None).unwrap()
+        else {
+            panic!("固定资料过滤必须为字段条件")
+        };
+        assert!(!records.contains_key("domain_job_type"));
+    }
+
+    #[test]
     fn mapping_rejects_unsupported_fact_dimensions() {
-        assert!(
-            JobMapping(model())
-                .predicate(&AccessFact::AssignedTo, &context("owner"), &MappingFacts::default())
-                .is_err()
-        );
+        let mut unknown = context("owner");
+        unknown.permission = Permission::parse("background_job:unknown").unwrap();
+        assert!(JobMapping(model()).records(&unknown, None).is_err());
+        assert!(JobMapping(model()).predicate(&AccessFact::AssignedTo, &context("owner"), None).is_err());
         assert_eq!(model().facts, [FactKind::Owner].into());
     }
 }

@@ -53,8 +53,14 @@ impl SupplierCatalogAdoptionProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SelectionView> {
-        let batch = self.load_batch(connection, id, actor, &mut NoTransaction).await?;
-        Ok(selection_view(&self.db, batch, &mut NoTransaction).await?)
+        let (connection, id, actor) = (connection.to_owned(), id.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let batch = process.load_batch(&connection, &id, &actor, executor).await?;
+                Ok(selection_view(&process.db, batch, executor).await?)
+            })
+        })
+        .await
     }
 
     /// 重试或取消原准备任务，不变更其冻结成员及已完成部分。
@@ -131,11 +137,15 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 在同一事务重验权限、读取成员、批量写入并推进版本。
-    async fn prepare_chunk(
-        &self,
-        mut batch: CatalogAdoptionBatch,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
+    async fn prepare_chunk(&self, original: CatalogAdoptionBatch, executor: &mut dyn Executor) -> Result<()> {
+        let Some(mut batch) =
+            self.db.catalog_adoption_batches().find_by_id(&original.base.id, executor).await?
+        else {
+            return Ok(());
+        };
+        if batch.preparation.as_ref().is_none_or(|state| !state.runnable()) {
+            return Ok(());
+        }
         let actor = self.batch_actor(&batch.actor_id, executor).await?;
         let source = self.batch_access(&batch.connection_id, &actor, executor).await?;
         self.ensure_source(&source)?;

@@ -583,9 +583,6 @@ mod tests {
         );
         let old_task = supplier_task();
         assert!(!matches_purchase_payment_request_identity(&old_task, "request-1"));
-        assert!(
-            old_task.work_item_type.required_execution_permissions(&old_task.business_object_type).is_none()
-        );
     }
 
     fn sales_task() -> WorkItem {

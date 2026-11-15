@@ -1,6 +1,6 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
@@ -9,7 +9,6 @@ use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
 use mongodb::Database;
 use mongodb::bson::{Bson, doc};
-use persistence_core::Executor;
 
 use crate::repository::PurchaseOrderExt;
 
@@ -40,22 +39,27 @@ impl PurchaseMapping {
     }
 }
 
-#[async_trait]
 impl AccessMapping for PurchaseMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
 
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> Result<Bson> {
+    fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
+        if self.model.resource == "purchase_order" {
+            return BTreeMap::new();
+        }
+        [(
+            RelationKey::parse("self_purchase").expect("固定来源标识"),
+            Arc::new(Self::new("purchase_order").expect("固定采购模型")) as Arc<dyn AccessMapping>,
+        )]
+        .into()
+    }
+
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
         Ok("$id".into())
     }
 
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
-        // 责任字段读取沿用原事务快照；非事务缺少完整业务修订证据时由 identity 拒绝。
-        Ok(MappingFacts::default())
-    }
-
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }))
     }
 
@@ -63,7 +67,7 @@ impl AccessMapping for PurchaseMapping {
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> Result<QueryFragment> {
         let predicate = match fact {
             AccessFact::Owned => doc! { "owner_user_id": context.actor.id() },
@@ -82,7 +86,7 @@ impl AccessMapping for PurchaseMapping {
         &self,
         relation: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> Result<RelationMapping> {
         if relation.as_str() != "self_purchase" {
             return Err(Error::ValidationError("采购 Mapping 未登记该来源关系".into()));
@@ -127,29 +131,22 @@ mod tests {
                 doc! { "target_warehouse_id": { "$in": ["warehouse"] } },
             ),
         ] {
-            let QueryFragment::Match(actual) =
-                mapping.predicate(&fact, &context(), &MappingFacts::default()).unwrap()
-            else {
+            let QueryFragment::Match(actual) = mapping.predicate(&fact, &context(), None).unwrap() else {
                 panic!("采购字段事实应编译为单字段条件");
             };
             assert_eq!(actual, expected);
         }
-        assert!(mapping.predicate(&AccessFact::Participant, &context(), &MappingFacts::default()).is_err());
+        assert!(mapping.predicate(&AccessFact::Participant, &context(), None).is_err());
     }
 
     #[test]
     fn self_relation_keeps_the_complete_id_and_unknown_relationship_is_rejected() {
         let mapping = PurchaseMapping::new("supplier_payment").unwrap();
-        let relation = mapping
-            .relation(&RelationKey::parse("self_purchase").unwrap(), &context(), &MappingFacts::default())
-            .unwrap();
+        let relation =
+            mapping.relation(&RelationKey::parse("self_purchase").unwrap(), &context(), None).unwrap();
         assert_eq!(relation.expected_ids, Bson::Array(vec!["$id".into()]));
         assert_eq!(relation.mapping.model().resource, "purchase_order");
-        assert!(
-            mapping
-                .relation(&RelationKey::parse("other").unwrap(), &context(), &MappingFacts::default())
-                .is_err()
-        );
+        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context(), None).is_err());
         assert!(PurchaseMapping::new("bad.resource").is_err());
     }
 }

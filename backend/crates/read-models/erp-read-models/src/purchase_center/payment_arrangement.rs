@@ -3,7 +3,6 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::PurchaseOrderId;
 use erp_core::money::Amount;
-use erp_finance::dto::payable::payment_request::PurchasePaymentRequestQuery;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
@@ -99,9 +98,11 @@ impl PurchaseOrderReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.access().resolve_detail(&actor, &id, executor).await?;
+                    let (_, _, scope) = this.access().resolve_detail(&actor, &id, executor).await?;
                     let facts = arrangement_facts(&this.db, &id, executor).await?;
-                    arrangement_view(&this.db, facts, actor.id(), executor).await
+                    let view = arrangement_view(&this.db, facts, actor.id(), executor).await?;
+                    scope.validate(executor).await?;
+                    Ok(view)
                 })
             })
             .await
@@ -123,16 +124,7 @@ async fn arrangement_view(
     view.reserved_amount = account.payment_request_reserved_total;
     view.paid_amount = account.settled_total;
     fill_terms(db, &facts.order, &account, &mut view, executor).await?;
-    let requests = db
-        .purchase_payment_requests()
-        .scope_candidates(
-            &PurchasePaymentRequestQuery {
-                payable_account_id: Some(account.base.id.clone()),
-                ..Default::default()
-            },
-            executor,
-        )
-        .await?;
+    let requests = db.purchase_payment_requests().linked_for_account(&account.base.id, executor).await?;
     if requests.len() > 10_000 {
         return Err(Error::ValidationError("本采购单付款申请过多，请联系管理员核对".into()));
     }

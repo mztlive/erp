@@ -1,8 +1,10 @@
 //! 页面授权命名用例：先持久互斥，再在事务外单次调用官方端点，最后CAS保存密文及审计。
+use erp_permissions::supplier_api;
 mod access;
 mod dto;
 mod engine;
 mod policy;
+pub use policy::connection_facts_port;
 mod status;
 mod store;
 mod tasks;
@@ -16,11 +18,11 @@ use config::JdVopConfig;
 pub use dto::{JdVopAuthorizationRequest, JdVopAuthorizationStatus, JdVopAuthorizationStatusQuery};
 use engine::AuthorizationEngine;
 use erp_core::common::time::Instant;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
 pub use erp_supply::ports::jd_vop::authorization::{AuthorizationError, Result};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{ReadExecutor, Transactional};
 pub use tasks::JdVopAuthorizationTasks;
 pub use tokens::JdVopTokenConfiguration;
 
@@ -38,7 +40,7 @@ pub struct JdVopAuthorizationProcess {
 impl JdVopAuthorizationProcess {
     /// 装配指定部署账号的页面授权用例，不读取数据库或发送HTTP。
     /// # 参数
-    /// 应用数据库、可选京东配置、现有 RBAC、应用共享任务边界与可用授权通信实现。
+    /// 应用数据库、可选京东配置、共享授权服务、应用共享任务边界与可用授权通信实现。
     /// # 返回
     /// 状态查询和单次授权入口；未配置时仍可返回脱敏未就绪状态。
     /// # 错误
@@ -46,11 +48,12 @@ impl JdVopAuthorizationProcess {
     pub fn new(
         db: Database,
         settings: Option<&JdVopConfig>,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         tasks: Arc<JdVopAuthorizationTasks>,
         http: Result<Arc<dyn AuthorizationHttp>>,
     ) -> Self {
-        let access = ConnectionAccess { db, rbac, settings: settings.cloned(), protocol: http.clone() };
+        let access =
+            ConnectionAccess { db, authorization, settings: settings.cloned(), protocol: http.clone() };
         let engine = settings
             .ok_or(AuthorizationError::Unavailable)
             .and_then(|settings| AuthorizationEngine::new(access.clone(), settings, tasks, http?));
@@ -70,7 +73,18 @@ impl JdVopAuthorizationProcess {
         actor: &AuditActor,
         operation_id: Option<&str>,
     ) -> Result<JdVopAuthorizationStatus> {
-        let connection = self.access.require(id, actor, "detail", &mut NoTransaction).await?;
+        let access = self.access.clone();
+        let target_id = id.to_string();
+        let current_actor = actor.clone();
+        let connection = self
+            .access
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { access.require(&target_id, &current_actor, "detail", executor).await })
+            })
+            .await?;
         let Ok(engine) = &self.engine else {
             return Ok(JdVopAuthorizationStatus::empty(
                 "unconfigured",
@@ -86,18 +100,12 @@ impl JdVopAuthorizationProcess {
             ));
         }
         let mut status = engine.status(operation_id).await;
-        let permitted = AuthorizationService::new(
-            self.access.db.clone(),
-            self.access.rbac.clone(),
-            AuthorizationRegistry::default(),
-        )
-        .has_permission(
-            actor,
-            &Permission::parse("supplier_api_connection:authorize").map_err(ProcessError::from)?,
-            &mut NoTransaction,
-        )
-        .await
-        .map_err(ProcessError::from)?;
+        let permitted = self
+            .access
+            .authorization
+            .has_permission(actor, &supplier_api::JD_VOP_AUTHORIZE, &mut ReadExecutor::default())
+            .await
+            .map_err(ProcessError::from)?;
         status.can_authorize &= permitted;
         status.can_configure_tokens = permitted
             && status.state != "unconfigured"
@@ -120,7 +128,20 @@ impl JdVopAuthorizationProcess {
         actor: &AuditActor,
     ) -> Result<JdVopAuthorizationStatus> {
         request.validate()?;
-        let connection = self.access.require(id, actor, "authorize", &mut NoTransaction).await?;
+        let access = self.access.clone();
+        let target_id = id.to_string();
+        let current_actor = actor.clone();
+        let connection = self
+            .access
+            .db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { access.require(&target_id, &current_actor, "authorize", executor).await },
+                )
+            })
+            .await?;
         self.access.binding(&connection)?;
         let engine = self.engine.as_ref().map_err(|error| *error)?;
         engine.authorize(id, request, actor).await

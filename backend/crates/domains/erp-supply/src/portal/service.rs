@@ -199,7 +199,7 @@ impl PortalOfferingService {
         req: &PortalAvailabilityInput,
         executor: &mut dyn Executor,
     ) -> Result<PortalAvailabilityUpdateResult> {
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("门户可供命令必须使用调用方事务".into()));
         }
         let (before, mut availability) =
@@ -308,7 +308,7 @@ impl PortalOfferingService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let receipt = PortalCommandReceipt::new(command, supplier_id, result)?;
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("门户命令回执必须与业务事实共用事务".into()));
         }
         self.db.portal_command_receipts().create(&receipt, executor).await?;

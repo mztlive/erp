@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
+use erp_permissions::catalog as catalog_permissions;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Pagination, QueryFilter, insert_literal_regex_filter};
 use serde::{Deserialize, Serialize};
@@ -280,15 +281,22 @@ impl CatalogPortalService {
         if q.trim().is_empty() {
             return Err(Error::ValidationError("重复匹配搜索不能为空".into()));
         }
-        self.catalog.access().ensure_writable(actor, "update", executor).await?;
+        self.catalog
+            .access()
+            .ensure_writable(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, executor)
+            .await?;
         let mut result = Vec::new();
         for product_id in self.duplicate_product_ids(q, executor).await? {
-            let product =
-                match self.catalog.access().require_product(actor, "update", &product_id, executor).await {
-                    Ok(product) => product,
-                    Err(Error::NotFound(_)) => continue,
-                    Err(error) => return Err(error),
-                };
+            let product = match self
+                .catalog
+                .access()
+                .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &product_id, executor)
+                .await
+            {
+                Ok(product) => product,
+                Err(Error::NotFound(_)) => continue,
+                Err(error) => return Err(error),
+            };
             if !product.is_active() {
                 continue;
             }

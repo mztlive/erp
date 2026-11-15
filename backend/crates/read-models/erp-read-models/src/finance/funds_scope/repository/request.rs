@@ -21,7 +21,8 @@ impl FundsAccess {
         let result: crate::Result<_> = async {
         let condition = self.request_condition(query, executor).await?;
         let filter = super::linked_condition_document(&condition, "sales_owner_user_id");
-        let mut stages = super::source_stages(
+        let mut stages = authorization.guard_stages();
+        stages.extend(super::source_stages(
             <Database as SalesOrderExt>::SALES_ORDERS,
             "$sales_order_id".into(),
             "_source",
@@ -29,7 +30,7 @@ impl FundsAccess {
             "sales_owner_user_id",
             "order_no",
             &authorization.sales_stages(),
-        );
+        ));
         stages.push(doc! { "$match": { "_source_allowed": true } });
         if let Some(ids) = condition.operator_user_ids {
             stages.push(doc! { "$match": { "created_by": { "$in": ids } } });

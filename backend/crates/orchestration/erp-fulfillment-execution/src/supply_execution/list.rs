@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, ScopeVersion};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::dto::supplier_fulfillment::{
     FulfillmentOrderListQuery, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderListView,
     SupplierFulfillmentOrderView,
@@ -82,7 +83,7 @@ async fn build_snapshot(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ListSnapshot> {
     let access = domain.access();
-    let mut context = access.resolve(actor, "list", executor).await?;
+    let mut context = access.resolve(actor, &supplier_fulfillment::ORDER_LIST, executor).await?;
     let mut filter = fulfillment_order_filter(query);
     filter.scope = Some(context.clone());
     apply_org_filter(&access, query, &mut filter, executor).await?;
@@ -91,6 +92,7 @@ async fn build_snapshot(
     attach_handlers(domain, &mut page.items, executor).await?;
     fingerprint(&mut context.scope_version, page.total);
     let names = account_display_names(db, &page.items, executor).await?;
+    context.validate(executor).await?;
     Ok(ListSnapshot {
         page: application_core::PageView {
             items: named_rows(page.items, &names),

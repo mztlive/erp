@@ -2,10 +2,14 @@
 
 use application_core::AuditActor;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
+use erp_identity::{AccessTarget, Error as IdentityError};
+use erp_permissions::{
+    Permission as AccessPermission, purchase_payment_request as purchase_payment_request_permissions,
+};
 use persistence_core::Executor;
 
 use super::PurchasePaymentRequestReadService;
-use crate::{Error, Result};
+use crate::Result;
 
 impl PurchasePaymentRequestReadService {
     pub(super) async fn allowed_actions(
@@ -22,19 +26,29 @@ impl PurchasePaymentRequestReadService {
                 | PurchasePaymentRequestStatus::Withdrawn
         );
         if editable {
-            if self.actionable(actor, request, "update", executor).await? {
+            if self
+                .actionable(actor, request, &purchase_payment_request_permissions::UPDATE, executor)
+                .await?
+            {
                 actions.push("EDIT".into());
             }
-            if self.actionable(actor, request, "submit", executor).await? {
+            if self
+                .actionable(actor, request, &purchase_payment_request_permissions::SUBMIT, executor)
+                .await?
+            {
                 actions.push("SUBMIT".into());
             }
         }
         if request.status == PurchasePaymentRequestStatus::InApproval
-            && self.actionable(actor, request, "withdraw", executor).await?
+            && self
+                .actionable(actor, request, &purchase_payment_request_permissions::WITHDRAW, executor)
+                .await?
         {
             actions.push("WITHDRAW".into());
         }
-        if request.status.can_close() && self.actionable(actor, request, "close", executor).await? {
+        if request.status.can_close()
+            && self.actionable(actor, request, &purchase_payment_request_permissions::CLOSE, executor).await?
+        {
             actions.push("CLOSE".into());
         }
         Ok(actions)
@@ -44,14 +58,13 @@ impl PurchasePaymentRequestReadService {
         &self,
         actor: &AuditActor,
         request: &PurchasePaymentRequest,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let scope = match self.source_scope(actor, action, executor).await {
-            Ok(scope) => scope,
-            Err(Error::Forbidden(_)) => return Ok(false),
-            Err(error) => return Err(error),
-        };
-        self.readable(request, &scope, executor).await
+        match self.rbac.require(actor, permission, AccessTarget::record(&request.base.id)?, executor).await {
+            Ok(()) => Ok(true),
+            Err(IdentityError::Forbidden(_) | IdentityError::NotFound(_)) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
     }
 }

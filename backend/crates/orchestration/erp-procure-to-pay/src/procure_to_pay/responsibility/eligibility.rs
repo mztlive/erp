@@ -1,9 +1,12 @@
 //! 询价责任采购的账号、同角色权限与有效主属组织资格。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_identity::AuthorizationService;
 use erp_identity::service::business_ownership::required_business_org;
-use erp_identity::{Permission, SharedRbacService};
+use erp_permissions::{Permission, sales_inquiry};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -12,7 +15,7 @@ use crate::{Error, Result};
 /// 采购责任消费的询价执行资格，不持有销售询价流程。
 pub struct ProcurementInquiryEligibility {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl ProcurementInquiryEligibility {
@@ -24,7 +27,7 @@ impl ProcurementInquiryEligibility {
     /// 不缓存资格的读取器。
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -38,11 +41,13 @@ impl ProcurementInquiryEligibility {
     /// 账号、组织或必要执行权限失效时拒绝，不以销售权限代替。
     pub async fn assignment_owner(&self, owner: &str, executor: &mut dyn Executor) -> Result<String> {
         let actor = AuditActor::new(owner.into(), owner.into(), AccountKind::Admin);
-        let permissions = ["detail", "save_feedback", "publish"]
-            .into_iter()
-            .map(|action| Permission::parse(format!("procurement_inquiry:{action}")))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+        let permissions = [
+            sales_inquiry::QUERY_PROCUREMENT_DETAIL,
+            sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
+            sales_inquiry::COMMANDS_PROCUREMENT_PUBLISH,
+        ];
+        let qualified = self
+            .rbac
             .permissions(&actor, &permissions, executor)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("询价责任采购账号已失效".into()))?;
@@ -59,7 +64,7 @@ impl ProcurementInquiryEligibility {
     /// 在同一执行器证明当前询价处理动作权限。
     ///
     /// # 参数
-    /// `actor`、`action` 为当前身份及询价动作，`executor` 为原事务。
+    /// `actor`、`permission` 为当前身份及固定询价采购权限，`executor` 为原事务。
     /// # 返回
     /// 返回当前有效策略版本。
     /// # 错误
@@ -67,11 +72,15 @@ impl ProcurementInquiryEligibility {
     pub async fn ensure_permission(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        let permissions = [Permission::parse(format!("procurement_inquiry:{action}"))?];
-        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+        if permission.resource() != sales_inquiry::QUERY_PROCUREMENT_LIST.resource() {
+            return Err(Error::ValidationError("询价采购资格不能使用其他资源权限".into()));
+        }
+        let permissions = [permission.clone()];
+        let qualified = self
+            .rbac
             .permissions(actor, &permissions, executor)
             .await?
             .filter(|value| value.same_role(&permissions))

@@ -38,9 +38,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use super::InventoryAdjustmentProcess;
 use super::adapter::stock_adjustment_adapter;
 use super::approval_prepare::load_bound_definition_graph;
-pub(crate) use super::cancel_authorization::{
-    CancelAuthority, CancelAuthorization, ensure_cancel_authorized,
-};
+pub(crate) use super::cancel_authorization::{CancelAuthority, CancelAuthorization, cancel_authority_facts};
 use super::cancel_facts::{cancellation_fact, ensure_receipt};
 use crate::{Error, Result};
 
@@ -170,6 +168,9 @@ pub(crate) async fn committed_cancel_replay(
             actor_id: actor.id(),
         })?,
     };
+    if find_cancel_receipt(&service.db, &input.identity, &mut NoTransaction).await?.is_none() {
+        return Ok(None);
+    }
     let db = service.db.clone();
     let workflow = service.workflow.clone();
     let client = db.client().clone();

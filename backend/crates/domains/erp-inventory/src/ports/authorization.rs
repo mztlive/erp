@@ -1,11 +1,13 @@
 //! 按仓库范围计算库存授权事实的消费端口。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_identity::entity::authorization::QueryOutput;
 use erp_identity::{AuthorizationService, CompiledAccess};
+use erp_permissions::{Permission, inventory};
 use mongodb::bson::Document;
 use persistence_core::Executor;
 
@@ -39,28 +41,17 @@ impl InventoryAction {
     /// 当前动作的具体权限码。
     /// # 错误
     /// 不执行 I/O。
-    pub fn permission(self) -> &'static str {
+    pub fn permission(self) -> Permission {
         match self {
-            Self::BalanceList => "stock_balance:list",
-            Self::BalanceDetail => "stock_balance:detail",
-            Self::MovementList => "stock_movement:list",
-            Self::ReservationList => "stock_reservation:list",
-            Self::AdjustmentList => "stock_adjustment:list",
-            Self::AdjustmentDetail => "stock_adjustment:detail",
-            Self::Create => "stock_adjustment:create",
-            Self::Update => "stock_adjustment:update",
+            Self::BalanceList => inventory::STOCK_BALANCE_LIST,
+            Self::BalanceDetail => inventory::STOCK_BALANCE_DETAIL,
+            Self::MovementList => inventory::STOCK_MOVEMENT_LIST,
+            Self::ReservationList => inventory::STOCK_RESERVATION_LIST,
+            Self::AdjustmentList => inventory::STOCK_ADJUSTMENT_LIST,
+            Self::AdjustmentDetail => inventory::STOCK_ADJUSTMENT_DETAIL,
+            Self::Create => inventory::STOCK_ADJUSTMENT_CREATE,
+            Self::Update => inventory::STOCK_ADJUSTMENT_UPDATE,
         }
-    }
-
-    /// 声明该动作是否同时要求同角色具备调整详情资格。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 列表、创建和更新调整单时为 true。
-    /// # 错误
-    /// 不执行 I/O。
-    pub fn requires_adjustment_detail(self) -> bool {
-        matches!(self, Self::AdjustmentList | Self::Create | Self::Update)
     }
 }
 
@@ -71,7 +62,7 @@ pub trait AuthorizationPort: Send + Sync {
     ///
     /// # 参数
     /// * `actor` - 已认证的审计操作者。
-    /// * `actions` - 当前用例实际使用的动作。
+    /// * `action` - 当前读取阶段唯一使用的动作。
     /// * `executor` - 调用方选择的数据访问执行器。
     ///
     /// # 返回
@@ -82,7 +73,7 @@ pub trait AuthorizationPort: Send + Sync {
     async fn authorize(
         &self,
         actor: &AuditActor,
-        actions: &[InventoryAction],
+        action: InventoryAction,
         executor: &mut dyn Executor,
     ) -> Result<InventoryAuthorization>;
 
@@ -233,7 +224,7 @@ impl InventoryScopeMeta {
 /// 当前读取阶段的库存查询凭证，直接用于库存集合聚合。
 #[derive(Clone)]
 pub struct InventoryQuery {
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
     compiled: Arc<CompiledAccess>,
     meta: InventoryScopeMeta,
     no_scope: bool,
@@ -246,7 +237,7 @@ impl InventoryQuery {
     /// 只在当前读取阶段使用的完整凭证。
     /// # 错误
     /// 不执行 I/O。
-    pub fn new(authorization: AuthorizationService, compiled: CompiledAccess, no_scope: bool) -> Self {
+    pub fn new(authorization: Arc<AuthorizationService>, compiled: CompiledAccess, no_scope: bool) -> Self {
         let meta = InventoryScopeMeta::new(
             compiled.version(),
             compiled.policy_version(),
@@ -275,34 +266,49 @@ impl InventoryQuery {
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
-    /// 在实际读取前后复验原凭证。
+    /// 仓储仅检查当前执行边界与有效期，不重读授权依赖。
     /// # 参数
-    /// executor 为原执行器。
+    /// executor 为本次读取的原执行器。
     /// # 返回
-    /// 原凭证仍有效时成功。
+    /// 当前凭证有效时成功。
     /// # 错误
-    /// 身份、权限、事实或版本失效拒绝。
+    /// 跨事务、跨阶段或到期时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
+        if self.compiled.model().output != QueryOutput::Object {
+            return Err(crate::Error::ValidationError("库存查询必须输出完整对象".into()));
+        }
+        self.compiled.ensure_current(executor).map_err(Into::into)
+    }
+
+    /// 在读取用例交付前复验本次真实授权依赖。
+    /// # 参数
+    /// executor 为生成凭证时的原执行器。
+    /// # 返回
+    /// 身份、范围、动态依赖及有效期均有效时成功。
+    /// # 错误
+    /// 任一依赖失效时拒绝交付。
     pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.ensure_current(executor)?;
         self.authorization.validate(&self.compiled, executor).await.map_err(Into::into)
     }
 }
 
-/// 当前用例实际请求的查询凭证；不保存八组全量仓库 ID。
+/// 当前读取阶段唯一的查询凭证；不保存其他动作或全量仓库 ID。
 #[derive(Clone)]
 pub struct InventoryAuthorization {
     actor_active: bool,
-    queries: BTreeMap<InventoryAction, InventoryQuery>,
+    query: Option<(InventoryAction, InventoryQuery)>,
 }
 impl InventoryAuthorization {
-    /// 构造当前账号和实际读取动作的凭证集合。
+    /// 构造当前账号和单个实际读取动作的凭证。
     /// # 参数
-    /// actor_active 为账号取证结果，queries 仅保存当前请求的查询动作。
+    /// actor_active 为账号取证结果，query 仅保存当前阶段唯一的查询动作及凭证。
     /// # 返回
-    /// 有界的动作查询集合。
+    /// 单一读取阶段的查询授权。
     /// # 错误
     /// 无。
-    pub fn new(actor_active: bool, queries: BTreeMap<InventoryAction, InventoryQuery>) -> Self {
-        Self { actor_active, queries }
+    pub fn new(actor_active: bool, query: Option<(InventoryAction, InventoryQuery)>) -> Self {
+        Self { actor_active, query }
     }
     /// 构造已失效账号的拒绝结果。
     /// # 参数
@@ -312,7 +318,7 @@ impl InventoryAuthorization {
     /// # 错误
     /// 无。
     pub fn inactive() -> Self {
-        Self::new(false, BTreeMap::new())
+        Self::new(false, None)
     }
     /// 判断账号是否仍有效。
     /// # 参数
@@ -332,7 +338,7 @@ impl InventoryAuthorization {
     /// # 错误
     /// 无。
     pub fn query(&self, action: InventoryAction) -> Option<&InventoryQuery> {
-        self.queries.get(&action)
+        self.query.as_ref().filter(|(entry, _)| entry == &action).map(|(_, query)| query)
     }
     /// 判断列表动作是否没有真实授权仓库。
     /// # 参数
@@ -360,15 +366,15 @@ impl InventoryAuthorization {
         };
         self.query(action).map_or(&EMPTY, |query| &query.meta)
     }
-    /// 复验本用例全部实际查询凭证。
+    /// 复验当前读取阶段唯一的查询凭证。
     /// # 参数
     /// executor 为原读取或写入事务。
     /// # 返回
-    /// 全部凭证仍有效时成功。
+    /// 当前凭证仍有效时成功。
     /// # 错误
-    /// 任一授权失效返回原错误。
+    /// 授权失效返回原错误。
     pub async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        for query in self.queries.values() {
+        if let Some((_, query)) = &self.query {
             query.validate(executor).await?;
         }
         Ok(())
@@ -380,7 +386,7 @@ mod tests {
     use super::*;
     #[test]
     fn absent_actions_never_create_unrestricted_queries() {
-        let active = InventoryAuthorization::new(true, BTreeMap::new());
+        let active = InventoryAuthorization::new(true, None);
         assert!(active.actor_is_active());
         for action in [
             InventoryAction::BalanceList,

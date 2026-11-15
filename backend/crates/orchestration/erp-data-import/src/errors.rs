@@ -3,6 +3,7 @@
 use application_core::{ErrorClass, ValidationIssues};
 use erp_audit::AuditAttemptResult;
 use erp_audit::execution::AuditFailure;
+use erp_permissions::ParsePermissionError;
 use erp_workflow::ErrorCode as WorkflowErrorCode;
 
 /// 应用边界结果，不通过旧 services 或另一应用边界定义别名。
@@ -282,6 +283,12 @@ impl From<erp_sales::Error> for Error {
             erp_sales::Error::OutcomeUnknown(payload) => Self::OutcomeUnknown(payload),
             erp_sales::Error::RepositoryError(payload) => Self::RepositoryError(payload),
         }
+    }
+}
+
+impl From<ParsePermissionError> for Error {
+    fn from(value: ParsePermissionError) -> Self {
+        Self::ValidationError(value.to_string())
     }
 }
 

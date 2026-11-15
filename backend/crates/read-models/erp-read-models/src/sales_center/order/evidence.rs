@@ -1,6 +1,7 @@
 //! 销售凭证按来源销售单授权，禁止由任意资产身份取得读取资格。
 use application_core::AuditActor;
 use erp_core::ids::BusinessDocumentId;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
 use persistence_core::Transactional;
@@ -36,7 +37,9 @@ impl SalesOrderReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let order = access.require_object(&actor, "detail", &order_id, &[], executor).await?;
+                    let order = access
+                        .require_object(&actor, &sales_order_permissions::DETAIL, &order_id, executor)
+                        .await?;
                     if !order.evidence_file_asset_ids.iter().any(|id| id.as_ref() == asset_id) {
                         return Err(Error::NotFound("销售单凭证不存在或无权下载".into()));
                     }

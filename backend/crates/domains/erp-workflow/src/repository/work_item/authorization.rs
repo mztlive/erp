@@ -9,6 +9,8 @@ use erp_identity::entity::authorization::{
 use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
 use erp_identity::{CompiledAccess, Error, Result};
+#[cfg(test)]
+use erp_permissions::work_item;
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{
@@ -25,7 +27,7 @@ pub(crate) struct WorkItemMapping {
 }
 
 impl WorkItemMapping {
-    /// 固定模型只提供当前负责人及其主属组织。
+    /// 固定模型读取当前负责人、主属组织及真实历次责任，协作关系明确为空。
     pub(crate) fn shared() -> Arc<dyn AccessMapping> {
         Arc::new(Self {
             model: QueryModel {
@@ -34,7 +36,13 @@ impl WorkItemMapping {
                 collection: <Database as WorkItemExt>::WORK_ITEMS.into(),
                 id_field: "id".into(),
                 output: QueryOutput::Object,
-                facts: [FactKind::Owner, FactKind::Organization].into(),
+                facts: [
+                    FactKind::Owner,
+                    FactKind::Collaborators,
+                    FactKind::Organization,
+                    FactKind::HistoryParticipants,
+                ]
+                .into(),
             },
         })
     }
@@ -45,45 +53,53 @@ impl AccessMapping for WorkItemMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
-        // 任务与组织关联沿用事务快照；组织版本和到期边界由 identity 的范围解析绑定。
-        Ok(MappingFacts::default())
-    }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> Result<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, context: &AccessContext, _: &MappingFacts) -> Result<QueryFragment> {
-        let mut fragment = primary_membership_query("$owner_user_id".into(), None, context.as_of);
-        if let QueryFragment::Exists { bindings, pipeline, .. } = &mut fragment {
-            bindings.insert("active", doc! { "$eq": ["$deleted_at", NOT_DELETED_TIMESTAMP_BSON] });
-            pipeline.push(doc! { "$match": { "$expr": "$$active" } });
-        }
-        Ok(fragment)
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+        Ok(QueryFragment::Match(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }))
     }
     fn predicate(
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> Result<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! { "owner_user_id": context.actor.id() })),
+            AccessFact::Collaborating => Ok(QueryFragment::Match(doc! { "$expr": false })),
+            AccessFact::HistoryParticipant => Ok(QueryFragment::Match(doc! { "$or": [
+                { "responsibility_actor_ids": context.actor.id() },
+                { "completed_by": context.actor.id() },
+                { "closed_by": context.actor.id() },
+            ] })),
             AccessFact::OrganizationIn(ids) => {
                 Ok(primary_membership_query("$owner_user_id".into(), Some(ids), context.as_of))
             },
             _ => Err(Error::ValidationError("任务查询不支持该事实维度".into())),
         }
     }
-    fn relation(&self, _: &RelationKey, _: &AccessContext, _: &MappingFacts) -> Result<RelationMapping> {
+    fn relation(
+        &self,
+        _: &RelationKey,
+        _: &AccessContext,
+        _: Option<&MappingFacts>,
+    ) -> Result<RelationMapping> {
         Err(Error::ValidationError("任务列表不接入来源单据授权".into()))
     }
 }
 
 /// 按查询模型检查约束后，供任务仓储拼接数据库阶段。
-pub(super) fn prefix(filter: &WorkItemFilter) -> RepositoryResult<Vec<Document>> {
+pub(super) fn prefix(
+    filter: &WorkItemFilter,
+    executor: &mut dyn Executor,
+) -> RepositoryResult<Vec<Document>> {
     match &filter.authorization {
         Some(access) => {
             check_model(access)?;
+            access
+                .ensure_current(executor)
+                .map_err(|_| RepositoryError::UnsupportedDeployment("工作项授权阶段已失效"))?;
             Ok(access.stages().to_vec())
         },
         None => Ok(vec![]),
@@ -112,7 +128,7 @@ struct TaskId {
 pub(crate) trait WorkItemAuthorizationExt {
     /// 在完整授权条件内读取当前批次的任务 ID。
     /// # 参数
-    /// ids 为当前展示批次，access 为管理授权约束，executor 为原事务。
+    /// ids 为当前展示批次，access 为原读取凭证及其固定管理过滤，executor 为原事务。
     /// # 返回
     /// 本批允许管理的实际任务 ID。
     /// # 错误
@@ -133,6 +149,9 @@ impl WorkItemAuthorizationExt for Repository<'_, WorkItem> {
         executor: &mut dyn Executor,
     ) -> RepositoryResult<Vec<String>> {
         check_model(access)?;
+        access
+            .ensure_current(executor)
+            .map_err(|_| RepositoryError::UnsupportedDeployment("工作项授权阶段已失效"))?;
         if ids.is_empty() {
             return Ok(vec![]);
         }
@@ -140,7 +159,11 @@ impl WorkItemAuthorizationExt for Repository<'_, WorkItem> {
             return Err(RepositoryError::EntityMetadataOutOfRange("任务授权批次超过 1000 项"));
         }
         let mut pipeline = vec![doc! { "$match": { "id": { "$in": ids } } }];
-        pipeline.extend_from_slice(access.stages());
+        pipeline.extend_from_slice(
+            access
+                .management_stages()
+                .map_err(|_| RepositoryError::UnsupportedDeployment("工作项读取缺少固定管理动作过滤"))?,
+        );
         pipeline.push(doc! { "$project": { "id": 1, "_id": 0 } });
         Ok(aggregate::rows(&self.collection().clone_with_type::<TaskId>(), pipeline, executor)
             .await?
@@ -155,15 +178,13 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_identity::Permission;
-    use persistence_core::NoTransaction;
 
     use super::*;
 
     fn context() -> AccessContext {
         AccessContext {
             actor: AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin),
-            permission: Permission::parse("work_item:list").unwrap(),
+            permission: work_item::LIST.clone(),
             resource: "work_item".into(),
             model: Some(QueryModelKey::parse("work_items").unwrap()),
             as_of: Instant::from_unix_secs(10),
@@ -171,35 +192,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mapping_requires_transaction_and_rejects_source_and_read_supplements() {
+    async fn static_mapping_rejects_source_and_unsupported_warehouse_facts() {
         let mapping = WorkItemMapping::shared();
         let context = context();
-        let facts = mapping.prepare(&context, &mut NoTransaction).await.unwrap();
-        assert!(facts.validate(false, context.as_of).is_err());
-        assert!(facts.validate(true, context.as_of).is_ok());
-        for fact in [
-            AccessFact::HistoryParticipant,
-            AccessFact::Collaborating,
-            AccessFact::WarehouseIn(["w".into()].into()),
-        ] {
-            assert!(mapping.predicate(&fact, &context, &facts).is_err());
-        }
-        assert!(mapping.relation(&RelationKey::parse("sources").unwrap(), &context, &facts).is_err());
+        assert!(mapping.preparation().is_none());
+        let facts = None;
+        assert!(mapping.predicate(&AccessFact::WarehouseIn(["w".into()].into()), &context, facts).is_err());
+        assert!(mapping.relation(&RelationKey::parse("sources").unwrap(), &context, facts).is_err());
     }
 
     #[test]
     fn owner_uses_current_responsibility_and_org_uses_current_identity_membership() {
         let mapping = WorkItemMapping::shared();
         let context = context();
-        let facts = MappingFacts::default();
-        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, &facts).unwrap()
+        let facts = None;
+        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
         else {
             panic!("owner must use task responsibility")
         };
         assert_eq!(owner, doc! { "owner_user_id": "reader" });
         let orgs = ["dept".into()].into();
         let QueryFragment::Exists { bindings, pipeline, .. } =
-            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context, &facts).unwrap()
+            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context, facts).unwrap()
         else {
             panic!("org must resolve current membership")
         };
@@ -209,6 +223,6 @@ mod tests {
             &doc! { "$lte": 10_i64 }
         );
         assert_eq!(pipeline[3], doc! { "$match": { "count": 1, "org": { "$in": ["dept"] } } });
-        assert_eq!(mapping.key(&context, &facts).unwrap(), Bson::String("$id".into()));
+        assert_eq!(mapping.key(&context, facts).unwrap(), Bson::String("$id".into()));
     }
 }

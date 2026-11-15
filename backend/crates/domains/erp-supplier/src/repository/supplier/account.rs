@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PartyId, SupplierAccountId};
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
@@ -410,7 +409,7 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
         filter: &SupplierAccountFilter,
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SupplierAccountRow>> {
-        filter.authorized_scope.validate(executor).await?;
+        filter.authorized_scope.ensure_current(executor)?;
 
         let options = FindOptions::builder()
             .sort(sort_doc(
@@ -439,7 +438,7 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
         )
         .await?;
 
-        filter.authorized_scope.validate(executor).await?;
+        filter.authorized_scope.ensure_current(executor)?;
         let total =
             i64::try_from(total).map_err(|_| crate::Error::ValidationError("供应商总数超限".into()))?;
         Ok(PageResult { items, total })
@@ -670,28 +669,8 @@ async fn aggregate_id_duplicates(
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierAccountIdDuplicate>> {
     let pipeline = supplier_account_id_duplicate_pipeline();
-    let rows = match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<SupplierAccountIdDuplicate>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect::<Vec<_>>()
-                .await
-        },
-        None => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<SupplierAccountIdDuplicate>()
-                .await?
-                .try_collect::<Vec<_>>()
-                .await
-        },
-    }
-    .map_err(persistence_core::Error::from)?;
-    Ok(rows)
+    let collection = collection.clone_with_type::<SupplierAccountIdDuplicate>();
+    aggregate::rows(&collection, pipeline, executor).await
 }
 
 /// 返回业务主键重复审计的聚合管道，供审计执行与测试共用。

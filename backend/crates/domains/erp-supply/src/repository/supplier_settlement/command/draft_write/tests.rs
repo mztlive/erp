@@ -7,22 +7,13 @@ use erp_core::ids::{
     SupplierSettlementItemId, SupplierSettlementStatementId,
 };
 use erp_core::money::{Amount, Quantity};
+use persistence_core::ReadExecutor as TestExecutor;
 
 use super::*;
 use crate::entity::supplier_settlement::{
     SettlementDifferenceStatus, SettlementDifferenceType, SettlementStatus, SupplierSettlementDifferenceData,
     SupplierSettlementItemData, SupplierSettlementStatementData,
 };
-
-struct TestExecutor {
-    _identity: u8,
-}
-
-impl Executor for TestExecutor {
-    fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-        None
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {
@@ -128,7 +119,7 @@ async fn draft_replace_keeps_physical_delete_cas_insert_order_and_one_executor()
     let version = statement.base.version;
     let (items, differences) = replacement();
     let mut store = Store::new(None);
-    let mut executor = TestExecutor { _identity: 1 };
+    let mut executor = TestExecutor::default();
     let identity = &mut executor as *mut TestExecutor as usize;
     replace_snapshot(
         &mut store,
@@ -153,7 +144,7 @@ async fn draft_replace_stops_at_every_failed_write_and_keeps_original_error() {
         let mut statement = statement_fixture("statement-1");
         let (items, differences) = replacement();
         let mut store = Store::new(Some(failed.step));
-        let mut executor = TestExecutor { _identity: 2 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let result = replace_snapshot(
             &mut store,
@@ -191,7 +182,7 @@ async fn draft_replace_keeps_original_empty_batch_conditions() {
                     Vec::new()
                 };
                 let mut store = Store::new(None);
-                let mut executor = TestExecutor { _identity: 3 };
+                let mut executor = TestExecutor::default();
                 let identity = &mut executor as *mut TestExecutor as usize;
                 replace_snapshot(
                     &mut store,
@@ -231,7 +222,7 @@ async fn draft_store_does_not_add_a_state_guard_before_original_first_write() {
     let mut statement = statement_fixture("statement-1");
     statement.status = SettlementStatus::Confirmed;
     let mut store = Store::new(Some(Step::DeleteEvidence));
-    let mut executor = TestExecutor { _identity: 4 };
+    let mut executor = TestExecutor::default();
     let result = replace_snapshot(
         &mut store,
         &mut statement,

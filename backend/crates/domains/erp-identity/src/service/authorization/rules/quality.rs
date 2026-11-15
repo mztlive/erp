@@ -1,0 +1,192 @@
+//! 客户质量当前态：销售当前范围与真实客户当前范围取交集。
+use std::collections::BTreeSet;
+
+use erp_permissions::{customer, internal};
+
+use super::capability_scope;
+use crate::entity::access_control::ResolvedScope;
+use crate::entity::authorization::{AccessRule, FactKind, RelationKey, RelationMatch};
+use crate::{Error, Permission, QualifiedPermissions, Result};
+
+/// 客户列表资格独立于销售列表资格，允许来自不同启用角色。
+pub(crate) fn qualifications(permission: &Permission) -> Vec<Permission> {
+    if current(permission) { vec![customer::LIST] } else { vec![] }
+}
+
+/// 客户范围使用客户入口自身的合格角色；不沿用销售入口角色。
+pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permission)> {
+    if current(permission) { vec![(customer::LIST, customer::LIST)] } else { vec![] }
+}
+
+/// 保留销售基础条件，并要求完整真实客户来源满足当前客户范围。
+pub(crate) fn condition(
+    permission: &Permission,
+    qualified: &QualifiedPermissions,
+    scopes: &[(Permission, Permission, ResolvedScope)],
+    base: AccessRule,
+) -> Result<AccessRule> {
+    if !current(permission) {
+        return Ok(base);
+    }
+    if !qualified.same_role(&[customer::LIST]) {
+        return Err(Error::Forbidden("客户质量查询缺少客户列表资格".into()));
+    }
+    let scope = scopes
+        .iter()
+        .find(|(entry, source, _)| entry == &customer::LIST && source == &customer::LIST)
+        .map(|(_, _, scope)| scope)
+        .ok_or_else(|| Error::ValidationError("客户质量查询缺少独立客户范围".into()))?;
+    Ok(AccessRule::all(vec![base, customer_condition(scope)?]))
+}
+
+/// 启动时检查销售根与真实客户关系的完整事实能力。
+pub(crate) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
+    if !current(permission) {
+        return Ok(base);
+    }
+    Ok(AccessRule::all(vec![base, customer_condition(&capability_scope(&customer::LIST)?)?]))
+}
+
+fn current(permission: &Permission) -> bool {
+    permission == &internal::CUSTOMER_QUALITY_CURRENT
+}
+
+fn customer_condition(scope: &ResolvedScope) -> Result<AccessRule> {
+    let facts = BTreeSet::from([FactKind::Owner, FactKind::Organization]);
+    Ok(AccessRule::Independent {
+        permission: customer::LIST,
+        rule: Box::new(AccessRule::Related {
+            relation: RelationKey::parse("customer")?,
+            resource: "customer".into(),
+            mode: RelationMatch::AllNonEmpty,
+            rule: Box::new(AccessRule::scope(scope, false).requiring(&facts)),
+        }),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_permissions::sales_order;
+
+    use super::*;
+    use crate::entity::access_control::ScopeClause;
+    use crate::entity::authorization::{FactValue, ObjectFacts, RelatedObjects};
+
+    fn scope(company: bool) -> ResolvedScope {
+        ResolvedScope {
+            role_clauses: vec![ScopeClause { company, self_owned: !company, ..Default::default() }],
+            user_limit: None,
+        }
+    }
+
+    fn customer(owner: &str, history: bool) -> ObjectFacts {
+        ObjectFacts {
+            resource: "customer".into(),
+            id: "customer".into(),
+            version: "1".into(),
+            owner_id: FactValue::Known(Some(owner.into())),
+            org_unit_id: FactValue::Known(None),
+            history_participants: FactValue::Known(if history {
+                ["actor".into()].into()
+            } else {
+                BTreeSet::new()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn order(owner: &str, child: ObjectFacts, history: bool) -> ObjectFacts {
+        ObjectFacts {
+            resource: "sales_order".into(),
+            id: "order".into(),
+            version: "1".into(),
+            owner_id: FactValue::Known(Some(owner.into())),
+            org_unit_id: FactValue::Known(None),
+            history_participants: FactValue::Known(if history {
+                ["actor".into()].into()
+            } else {
+                BTreeSet::new()
+            }),
+            relations: [(
+                RelationKey::parse("customer").unwrap(),
+                RelatedObjects { expected_ids: [child.id.clone()].into(), objects: vec![child] },
+            )]
+            .into(),
+            ..Default::default()
+        }
+    }
+
+    fn rule(sales_company: bool, customer_company: bool) -> AccessRule {
+        let qualified = QualifiedPermissions::test_grants(&[
+            ("sales", &[sales_order::LIST]),
+            ("customer", &[customer::LIST]),
+        ]);
+        let scopes = [(customer::LIST, customer::LIST, scope(customer_company))];
+        condition(
+            &internal::CUSTOMER_QUALITY_CURRENT,
+            &qualified,
+            &scopes,
+            AccessRule::scope(&scope(sales_company), false),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn both_scopes_apply_and_company_customer_range_does_not_add_an_owner_restriction() {
+        let rule = rule(false, true);
+        assert!(
+            rule.allows_object("actor", &order("actor", customer("other", false), false), &BTreeSet::new())
+                .unwrap()
+        );
+        assert!(
+            !rule
+                .allows_object("actor", &order("other", customer("actor", false), false), &BTreeSet::new())
+                .unwrap()
+        );
+        let rule = self::rule(true, false);
+        assert!(
+            rule.allows_object("actor", &order("other", customer("actor", false), false), &BTreeSet::new())
+                .unwrap()
+        );
+        assert!(
+            !rule
+                .allows_object("actor", &order("actor", customer("other", false), false), &BTreeSet::new())
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn historical_participation_does_not_supply_current_sales_or_current_customer_access() {
+        let rule = rule(false, false);
+        assert!(
+            !rule
+                .allows_object("actor", &order("other", customer("actor", false), true), &BTreeSet::new())
+                .unwrap()
+        );
+        assert!(
+            !rule
+                .allows_object("actor", &order("actor", customer("other", true), false), &BTreeSet::new())
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn missing_customer_qualification_scope_or_real_source_fails_closed() {
+        let qualified = QualifiedPermissions::test_grants(&[("sales", &[sales_order::LIST])]);
+        assert!(matches!(
+            condition(&internal::CUSTOMER_QUALITY_CURRENT, &qualified, &[], AccessRule::Allow),
+            Err(Error::Forbidden(_))
+        ));
+        let qualified = QualifiedPermissions::test_grants(&[("customers", &[customer::LIST])]);
+        assert!(matches!(
+            condition(&internal::CUSTOMER_QUALITY_CURRENT, &qualified, &[], AccessRule::Allow),
+            Err(Error::ValidationError(_))
+        ));
+        let rule = rule(true, true);
+        let mut root = order("actor", customer("other", false), false);
+        root.relations.values_mut().next().unwrap().objects.clear();
+        assert!(!rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
+        root.relations.clear();
+        assert!(rule.allows_object("actor", &root, &BTreeSet::new()).is_err());
+    }
+}

@@ -1,12 +1,10 @@
 //! 采购创建任务的真实来源映射与授权结果读取。
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
+use erp_identity::repository::organization::primary_membership_query;
 use erp_identity::{CompiledAccess, Error as IdentityError, Result as IdentityResult};
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
@@ -15,10 +13,9 @@ use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, aggregate};
 
 use crate::Result;
-use crate::purchase_center::creation_authorization::relation;
 
 /// 业务身份只收窄 identity 编译的任务结果。
-pub(in crate::purchase_center) struct CreationTaskFilter {
+pub(crate) struct CreationTaskFilter {
     pub sales_order_id: Option<String>,
     pub work_item_id: Option<String>,
 }
@@ -46,6 +43,7 @@ pub(in crate::purchase_center) async fn read_creation_tasks(
 
 fn filter(sales_order_id: Option<&str>, work_item_id: Option<&str>) -> Document {
     let mut filter = doc! {
+        "deleted_at": 0,
         "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
         "business_object_type": "sales_order",
         "status": WorkItemStatus::Open.as_str(),
@@ -59,109 +57,58 @@ fn filter(sales_order_id: Option<&str>, work_item_id: Option<&str>) -> Document 
     filter
 }
 
-/// 来源检查上下文与真实任务各自保留资源身份；不能把任务当作采购单对象。
-pub(in crate::purchase_center) struct CreationTaskRoot(QueryModel);
-
-impl CreationTaskRoot {
-    /// 构造采购创建来源上下文的固定模型。
+/// 采购创建入口的真实开放任务查询模型。
+pub struct CreationTaskMapping(QueryModel);
+impl CreationTaskMapping {
+    /// 绑定实际工作项集合、当前负责人及其当前主属组织事实。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 保留真实任务来源关系的 Mapping。
+    /// 固定任务查询映射。
     /// # 错误
-    /// 固定模型身份非法时返回错误。
-    pub(in crate::purchase_center) fn new() -> IdentityResult<Self> {
-        let mut model = CreationTaskMapping::new()?.0;
-        model.key = QueryModelKey::parse("purchase_creation_task_source")?;
-        model.resource = "purchase_order".into();
-        model.facts.clear();
-        Ok(Self(model))
-    }
-}
-
-#[async_trait]
-impl AccessMapping for CreationTaskRoot {
-    fn model(&self) -> &QueryModel {
-        &self.0
-    }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
-        Ok("$id".into())
-    }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
-        Ok(QueryFragment::Match(doc! { "deleted_at": 0 }))
-    }
-    fn predicate(
-        &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: &MappingFacts,
-    ) -> IdentityResult<QueryFragment> {
-        Err(IdentityError::ValidationError("采购创建来源上下文不提供任务责任事实".into()))
-    }
-    fn relation(
-        &self,
-        key: &RelationKey,
-        _: &AccessContext,
-        _: &MappingFacts,
-    ) -> IdentityResult<RelationMapping> {
-        if key != &relation() {
-            return Err(IdentityError::ValidationError("未知采购创建来源关系".into()));
-        }
-        Ok(RelationMapping {
-            expected_ids: Bson::Array(vec!["$id".into()]),
-            mapping: Arc::new(CreationTaskMapping::new()?),
-        })
-    }
-}
-
-struct CreationTaskMapping(QueryModel);
-
-impl CreationTaskMapping {
-    fn new() -> IdentityResult<Self> {
+    /// 固定模型标识非法时拒绝。
+    pub fn new() -> IdentityResult<Self> {
         Ok(Self(QueryModel {
             key: QueryModelKey::parse("purchase_creation_tasks")?,
-            resource: "work_item".into(),
+            resource: "purchase_order".into(),
             collection: <Database as WorkItemExt>::WORK_ITEMS.into(),
             id_field: "id".into(),
             output: QueryOutput::Object,
-            facts: [FactKind::Assignee].into(),
+            facts: [FactKind::Owner, FactKind::Organization, FactKind::Assignee].into(),
         }))
     }
 }
-
-#[async_trait]
 impl AccessMapping for CreationTaskMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
-        Ok(QueryFragment::Match(doc! { "deleted_at": 0 }))
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+        Ok(QueryFragment::Match(filter(None, None)))
     }
     fn predicate(
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<QueryFragment> {
         match fact {
-            AccessFact::AssignedTo => Ok(QueryFragment::Match(doc! { "owner_user_id": context.actor.id() })),
-            _ => Err(IdentityError::ValidationError("采购创建任务仅提供当前分配事实".into())),
+            AccessFact::Owned | AccessFact::AssignedTo => {
+                Ok(QueryFragment::Match(doc! { "owner_user_id": context.actor.id() }))
+            },
+            AccessFact::OrganizationIn(ids) => {
+                Ok(primary_membership_query("$owner_user_id".into(), Some(ids), context.as_of))
+            },
+            _ => Err(IdentityError::ValidationError("采购创建任务不提供该事实维度".into())),
         }
     }
     fn relation(
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("采购创建任务没有来源授权关系".into()))
     }
@@ -172,56 +119,59 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_identity::{AccessMode, AccessRegistration, AuthorizationRegistry, Permission};
-    use persistence_core::NoTransaction;
+    use erp_permissions::purchase_order;
 
     use super::*;
-    use crate::purchase_center::creation_authorization::data;
 
-    #[tokio::test]
-    async fn mapping_uses_identity_assignee_fact_and_requires_transaction_evidence() {
+    #[test]
+    fn creation_task_mapping_uses_real_owner_and_current_primary_organization() {
         let mapping = CreationTaskMapping::new().unwrap();
+        mapping.model().validate().unwrap();
+        assert_eq!(
+            mapping.model().facts,
+            [FactKind::Owner, FactKind::Organization, FactKind::Assignee].into()
+        );
         let context = AccessContext {
             actor: AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin),
-            permission: Permission::parse("purchase_order:create").unwrap(),
-            resource: "work_item".into(),
+            permission: purchase_order::CREATE,
+            resource: "purchase_order".into(),
             model: Some(mapping.model().key.clone()),
-            as_of: Instant::now(),
+            as_of: Instant::from_unix_secs(100),
         };
-        let facts = mapping.prepare(&context, &mut NoTransaction).await.unwrap();
-        assert!(facts.validate(false, Instant::now()).is_err());
-        facts.validate(true, Instant::now()).unwrap();
-        let QueryFragment::Match(predicate) =
-            mapping.predicate(&AccessFact::AssignedTo, &context, &facts).unwrap()
+        for fact in [AccessFact::Owned, AccessFact::AssignedTo] {
+            let QueryFragment::Match(predicate) = mapping.predicate(&fact, &context, None).unwrap() else {
+                panic!("任务归属和分配必须使用真实负责人")
+            };
+            assert_eq!(predicate, doc! { "owner_user_id": "buyer" });
+        }
+        let organizations = ["current-org".into()].into();
+        let QueryFragment::Exists { bindings, pipeline, .. } =
+            mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
         else {
-            panic!("分配事实映射为字段条件")
+            panic!("任务组织必须解析当前负责人主属组织")
         };
-        assert_eq!(predicate, doc! { "owner_user_id": "buyer" });
-        assert!(mapping.predicate(&AccessFact::Owned, &context, &facts).is_err());
-        let root = CreationTaskRoot::new().unwrap();
-        let source = root.relation(&relation(), &context, &facts).unwrap();
-        assert_eq!(root.model().resource, "purchase_order");
-        assert_eq!(source.mapping.model().resource, "work_item");
-        assert_eq!(source.expected_ids, Bson::Array(vec!["$id".into()]));
+        assert_eq!(bindings, doc! { "member": "$owner_user_id" });
+        assert_eq!(
+            pipeline[0].get_document("$match").unwrap().get_document("valid_from").unwrap(),
+            &doc! { "$lte": 100_i64 }
+        );
+        assert_eq!(pipeline[3], doc! { "$match": { "count": 1, "org": { "$in": ["current-org"] } } });
+        let QueryFragment::Match(records) = mapping.records(&context, None).unwrap() else {
+            panic!("任务查询仅按真实开放任务收窄")
+        };
+        assert_eq!(records, filter(None, None));
+        assert_eq!(mapping.key(&context, None).unwrap(), Bson::String("$id".into()));
+    }
+    #[test]
+    fn task_filter_keeps_exact_business_and_open_task_identity() {
         assert_eq!(
             filter(Some("sales"), Some("task")),
             doc! {
+                "deleted_at": 0,
                 "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
-                "business_object_type": "sales_order",
-                "status": WorkItemStatus::Open.as_str(),
+                "business_object_type": "sales_order", "status": WorkItemStatus::Open.as_str(),
                 "business_object_id": "sales", "id": "task",
             }
-        );
-        assert!(
-            AuthorizationRegistry::new(vec![AccessRegistration {
-                permission: context.permission,
-                required_permissions: vec![],
-                access: AccessMode::Query {
-                    data: data(),
-                    mapping: Arc::new(CreationTaskRoot::new().unwrap())
-                },
-            }])
-            .is_ok()
         );
     }
 }

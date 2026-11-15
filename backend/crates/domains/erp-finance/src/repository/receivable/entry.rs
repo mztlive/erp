@@ -1,9 +1,8 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 
 use crate::entity::receivable::{ReceivableEntry, ReceivableEntryOffset};
@@ -85,26 +84,9 @@ impl ReceivableEntryRepositoryExt for persistence_core::Repository<'_, Receivabl
         }
         let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let pipeline = minimum_due_dates_pipeline(ids);
-        let rows = match executor.session() {
-            Some(session) => {
-                self.collection()
-                    .aggregate(pipeline)
-                    .with_type::<AccountDueDateRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                self.collection()
-                    .aggregate(pipeline)
-                    .with_type::<AccountDueDateRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
+        let rows =
+            aggregate::rows(&self.collection().clone_with_type::<AccountDueDateRow>(), pipeline, executor)
+                .await?;
         Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 

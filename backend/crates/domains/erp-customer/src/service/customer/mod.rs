@@ -18,6 +18,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
 use erp_identity::AccountDirectoryService;
+use erp_permissions::customer as customer_permissions;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -49,6 +50,7 @@ pub use scope::CustomerListView;
 ///
 /// 提供客户角色与归属的创建、查询与更新编排（§6.2：一个 party 最多一个
 /// 有效客户角色）。
+#[derive(Clone)]
 pub struct CustomerService {
     db: Database,
     audit: Arc<dyn CustomerAuditPort>,
@@ -132,11 +134,8 @@ impl CustomerService {
                         .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
                         .ensure_can_login()
                         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                    access.require_create(&actor_for_tx, executor).await?;
+                    access.require_candidate(&actor_for_tx, &account_for_tx.base.id, executor).await?;
                     persist_new_account(&db, &account_for_tx, &assignment_for_tx, executor).await?;
-                    access
-                        .require_with(actor_for_tx.clone(), "create", &account_for_tx.base.id, executor)
-                        .await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
                 })
@@ -213,7 +212,9 @@ impl CustomerService {
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &customer_id, executor).await?;
+                    access
+                        .require_with(actor_for_tx, &customer_permissions::UPDATE, &customer_id, executor)
+                        .await?;
                     db.customer_accounts().update(&mut account_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)

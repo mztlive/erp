@@ -1,3 +1,4 @@
+use erp_permissions::catalog as catalog_permissions;
 use persistence_core::NoTransaction;
 
 use super::CatalogService;
@@ -28,7 +29,9 @@ impl CatalogService {
     ) -> Result<(String, String)> {
         let access = self.access();
         let (maintainer, org) = access.maintainer_org(requested, actor, &mut NoTransaction).await?;
-        access.ensure_writable(actor, "create", &mut NoTransaction).await?;
+        access
+            .ensure_writable(actor, &catalog_permissions::PRODUCT_PRODUCT_CREATE, &mut NoTransaction)
+            .await?;
         Ok((maintainer, org))
     }
 

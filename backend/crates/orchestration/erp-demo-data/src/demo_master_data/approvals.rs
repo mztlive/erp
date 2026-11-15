@@ -12,7 +12,7 @@ use erp_workflow::service::approval::definition_dto::{
     DraftSource, PublishDefinitionRequest, ReplaceDefinitionNodesRequest,
 };
 use erp_workflow::service::approval::policy::require_process_required;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::accounts::PreparedAccounts;
 use super::spec::{self, ApprovalSpec};
@@ -36,7 +36,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         self.validate_approval_accounts(accounts).await?;
         let definitions = ApprovalDefinitionService::with_audit(
             self.db.clone(),
-            self.rbac.clone(),
+            self.identity.clone(),
+            self.authorization.clone(),
             self.ports.workflow_audit.clone(),
         );
         let catalog = definitions.definition_catalog(actor).await?;
@@ -170,10 +171,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     .await?
                     .ok_or_else(|| Error::Forbidden(format!("审批账号 {} 不可用", account.account)))?;
                 if !approval_participant_permissions_with_executor(
+                    &self.authorization,
                     &self.db,
-                    &self.rbac,
+                    &self.identity,
                     &actor,
-                    &mut NoTransaction,
+                    &mut ReadExecutor::default(),
                 )
                 .await?
                 {

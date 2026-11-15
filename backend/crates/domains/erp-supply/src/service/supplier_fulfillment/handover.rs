@@ -1,6 +1,7 @@
 //! 供应商履约订单跟进人交接：范围重验、CAS 与责任字段。
 
 use application_core::AuditActor;
+use erp_permissions::supplier_fulfillment;
 use validator::Validate;
 
 use super::SupplierFulfillmentService;
@@ -44,7 +45,7 @@ async fn persist_handover(
     actor: &AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<HandoverFulfillmentOrderView> {
-    let mut order = access.require_order(actor, "handover", id, executor).await?;
+    let mut order = access.require_order(actor, &supplier_fulfillment::ORDER_HANDOVER, id, executor).await?;
     if order.base.version != req.expected_version {
         return Err(Error::ConflictError("供应商履约订单责任或版本已变化，请刷新后重试".into()));
     }

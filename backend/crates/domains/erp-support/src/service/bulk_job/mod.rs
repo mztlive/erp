@@ -5,7 +5,7 @@
 //!   `with_transaction`（复用域专用仓储 `create_snapshot_with_items` /
 //!   `create_job_with_items`）+ 审计日志同事务；
 //! - 确认/失效/取消：业务行 + 审计日志 → `with_transaction`；
-//! - 查询一律 `&mut NoTransaction`。
+//! - 受保护查询的功能资格与业务读取共用同一快照事务。
 //!
 //! 幂等：后台任务按 `request_id` 唯一索引幂等，重复提交返回既有任务
 //! （§6.1：涉及资金/状态机变更的入口必须有幂等键）。
@@ -18,11 +18,13 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::ids::FileAssetId;
-use erp_identity::SharedRbacService;
+use erp_core::common::time::Instant;
+use erp_core::ids::{BulkSelectionItemId, FileAssetId};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, bulk_job};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::check_expected_version;
@@ -37,8 +39,8 @@ pub use crate::dto::bulk_job::{
 };
 use crate::entity::bulk_job::{
     BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId, BackgroundJobItem,
-    BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
-    BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
+    BackgroundJobItemDraft, BulkSelectionItem, BulkSelectionItemDraft, BulkSelectionSnapshot,
+    BulkSelectionSnapshotAggregate, BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
 };
 use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort, is_business_document_type};
@@ -54,6 +56,7 @@ type BackgroundJobFilter = <mongodb::Database as BulkJobExt>::BackgroundJobFilte
 /// 批量任务服务。
 ///
 /// 提供选择快照与后台任务的创建、确认与查询编排。
+#[derive(Clone)]
 pub struct BulkJobService {
     db: Database,
     audit: Arc<dyn SupportAuditPort>,
@@ -68,7 +71,7 @@ impl BulkJobService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `documents` - 业务单据注册端口
-    /// * `identity` - 当前共享身份设施，用于后台任务统一授权。
+    /// * `authorization` - 完成启动绑定的共享授权服务。
     ///
     /// # 返回
     /// 返回服务实例。
@@ -79,9 +82,9 @@ impl BulkJobService {
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
         documents: Arc<dyn BusinessDocumentPort>,
-        identity: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        let authorization = BackgroundAuthorization::new(db.clone(), identity);
+        let authorization = BackgroundAuthorization::new(authorization);
         Self { db, audit, documents, authorization }
     }
 
@@ -89,6 +92,7 @@ impl BulkJobService {
     ///
     /// # 参数
     /// * `params` - 查询参数（`selection_type`/`status`/`created_by` 扁平筛选）
+    /// * `actor` - 当前认证账号，由共享服务检查列表资格。
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -99,7 +103,30 @@ impl BulkJobService {
     pub async fn bulk_selection_snapshot_list(
         &self,
         params: &BulkSelectionSnapshotListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<BulkSelectionSnapshotView>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.selection_snapshot_page(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 选择快照列表资格与完整分页共用原快照事务。
+    async fn selection_snapshot_page(
+        &self,
+        params: &BulkSelectionSnapshotListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<BulkSelectionSnapshotView>> {
+        self.authorization
+            .service
+            .require(actor, &bulk_job::BULK_SELECTION_SNAPSHOT_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
@@ -112,7 +139,7 @@ impl BulkJobService {
             sort_by,
             sort_ascending,
         };
-        let page = self.db.bulk_selection_snapshots().search_snapshots(&filter, &mut NoTransaction).await?;
+        let page = self.db.bulk_selection_snapshots().search_snapshots(&filter, executor).await?;
         let items = page.items.into_iter().map(BulkSelectionSnapshotView::from).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -141,50 +168,68 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BulkSelectionSnapshotView> {
         req.validate()?;
-        self.ensure_items_registered(&req.items).await?;
         let snapshot_id = BulkSelectionSnapshotId::new(next_id());
         let drafts = req
             .items
             .into_iter()
             .map(|item| BulkSelectionItemDraft {
-                id: erp_core::ids::BulkSelectionItemId::new(next_id()),
+                id: BulkSelectionItemId::new(next_id()),
                 object_type: item.object_type,
                 object_id: item.object_id,
                 expected_version: item.expected_version,
                 expected_hash: item.expected_hash,
             })
             .collect();
+        let cutoff = i64::try_from(req.data_cutoff_at)
+            .map_err(|_| Error::ValidationError("数据截止时间超出支持范围".into()))?;
+        let expires = i64::try_from(req.expires_at)
+            .map_err(|_| Error::ValidationError("快照过期时间超出支持范围".into()))?;
         let aggregate = BulkSelectionSnapshotAggregate::new(
             snapshot_id,
             BulkSelectionSnapshotAggregateData {
                 selection_type: req.selection_type,
-                data_cutoff_at: erp_core::common::time::Instant::from_unix_secs(req.data_cutoff_at as i64),
+                data_cutoff_at: Instant::from_unix_secs(cutoff),
                 created_by: actor.id().to_string(),
-                expires_at: erp_core::common::time::Instant::from_unix_secs(req.expires_at as i64),
+                expires_at: Instant::from_unix_secs(expires),
             },
             drafts,
         )?;
         let (snapshot, items) = aggregate.into_parts();
+        let service = self.clone();
+        let actor = actor.clone();
+        let snapshot = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.persist_snapshot(snapshot, items, &actor, executor).await })
+            })
+            .await?;
+
+        Ok(snapshot.into())
+    }
+
+    /// 在创建事务中完成资格、真实目标注册检查和快照原子写入。
+    async fn persist_snapshot(
+        &self,
+        snapshot: BulkSelectionSnapshot,
+        items: Vec<BulkSelectionItem>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<BulkSelectionSnapshot> {
+        self.authorization
+            .service
+            .require(actor, &bulk_job::BULK_SELECTION_SNAPSHOT_CREATE, AccessTarget::Operation, executor)
+            .await?;
+        Self::ensure_items_registered(self.documents.as_ref(), &items, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "bulk_selection_snapshot.create",
             "bulk_selection_snapshot",
             snapshot.base.id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let snapshot = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.bulk_job().create_snapshot_with_items(&snapshot, items, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<_, crate::error::Error>(snapshot)
-                })
-            })
-            .await?;
-
-        Ok(snapshot.into())
+        self.db.bulk_job().create_snapshot_with_items(&snapshot, items, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(snapshot)
     }
 
     /// 确认选择快照。
@@ -210,9 +255,25 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BulkSelectionSnapshotView> {
         req.validate()?;
-        let mut snapshot = self.load_snapshot_with_version(id, req.version).await?;
-        snapshot.confirm()?;
-        self.update_snapshot_with_audit(snapshot, "bulk_selection_snapshot.confirm", actor).await
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .change_snapshot(
+                            &id,
+                            req.version,
+                            bulk_job::BULK_SELECTION_SNAPSHOT_CONFIRM,
+                            &actor,
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await
     }
 
     /// 标记选择快照失效。
@@ -237,9 +298,25 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BulkSelectionSnapshotView> {
         req.validate()?;
-        let mut snapshot = self.load_snapshot_with_version(id, req.version).await?;
-        snapshot.expire()?;
-        self.update_snapshot_with_audit(snapshot, "bulk_selection_snapshot.expire", actor).await
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .change_snapshot(
+                            &id,
+                            req.version,
+                            bulk_job::BULK_SELECTION_SNAPSHOT_EXPIRE,
+                            &actor,
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await
     }
 
     /// 分页查询快照逐项结果。
@@ -249,6 +326,7 @@ impl BulkJobService {
     /// * `result_status` - 逐项执行结果筛选
     /// * `page` - 页码（1 起）
     /// * `page_size` - 单页条数
+    /// * `actor` - 当前认证账号，由共享服务检查逐项读取资格。
     ///
     /// # 返回
     /// 返回当前页逐项结果行与总数。
@@ -261,7 +339,37 @@ impl BulkJobService {
         result_status: Option<crate::entity::bulk_job::SelectionItemStatus>,
         page: u64,
         page_size: u32,
+        actor: &AuditActor,
     ) -> Result<PageView<BulkSelectionItemView>> {
+        let service = self.clone();
+        let snapshot_id = snapshot_id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .selection_item_page(&snapshot_id, result_status, page, page_size, &actor, executor)
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 选择项读取资格、分页与计数共用原快照事务。
+    async fn selection_item_page(
+        &self,
+        snapshot_id: &str,
+        result_status: Option<crate::entity::bulk_job::SelectionItemStatus>,
+        page: u64,
+        page_size: u32,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<BulkSelectionItemView>> {
+        self.authorization
+            .service
+            .require(actor, &bulk_job::BULK_SELECTION_ITEM_LIST, AccessTarget::Operation, executor)
+            .await?;
         if page == 0 {
             return Err(Error::ValidationError("页码必须大于0".to_string()));
         }
@@ -269,7 +377,7 @@ impl BulkJobService {
         let result = self
             .db
             .bulk_selection_items()
-            .search_items(&snapshot_id, result_status, page, page_size, &mut NoTransaction)
+            .search_items(&snapshot_id, result_status, page, page_size, executor)
             .await?;
         let items = result.items.into_iter().map(BulkSelectionItemView::from).collect();
 
@@ -305,9 +413,8 @@ impl BulkJobService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let access = authorization.query(&actor, executor).await?;
-                    let page =
-                        authorized_background_page(&db, &filter, &authorization.service, &access, executor)
-                            .await?;
+                    let page = authorized_background_page(&db, &filter, &access, executor).await?;
+                    authorization.service.validate(&access, executor).await?;
                     Ok(PageView {
                         items: page.items.into_iter().map(Into::into).collect(),
                         total: page.total,
@@ -370,7 +477,7 @@ impl BulkJobService {
                         .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
-                    authorization.require("background_job:detail", &id, &actor, executor).await?;
+                    authorization.require(&bulk_job::BACKGROUND_JOB_DETAIL, &id, &actor, executor).await?;
                     Ok(job.into())
                 })
             })
@@ -409,20 +516,31 @@ impl BulkJobService {
         let client = db.client().clone();
         let job_for_tx = job.clone();
         let audit_port = self.audit.clone();
+        let authorization = self.authorization.service.clone();
+        let actor = actor.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await?;
-                    audit_port.persist(&audit, executor).await.map_err(support_error_as_persistence)?;
-                    Ok(())
+                    authorization
+                        .require(&actor, &bulk_job::BACKGROUND_JOB_CREATE, AccessTarget::Operation, executor)
+                        .await?;
+                    db.bulk_job()
+                        .create_job_with_items(&job_for_tx, items, executor)
+                        .await
+                        .map_err(Error::RepositoryError)?;
+                    audit_port.persist(&audit, executor).await?;
+                    Ok::<_, Error>(())
                 })
             })
             .await;
 
         match created {
             Ok(()) => Ok(job.into()),
-            Err(persistence_core::Error::DuplicateKey(_)) => self.resolve_creation_race(&job).await,
-            Err(error) => Err(error.into()),
+            Err(Error::RepositoryError(persistence_core::Error::DuplicateKey(_))) => {
+                self.resolve_creation_race(&job).await
+            },
+            Err(Error::RepositoryError(error)) => Err(error.into()),
+            Err(error) => Err(error),
         }
     }
 
@@ -487,7 +605,7 @@ impl BulkJobService {
                         .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
-                    authorization.require("background_job:cancel", &id, &actor, executor).await?;
+                    authorization.require(&bulk_job::BACKGROUND_JOB_CANCEL, &id, &actor, executor).await?;
                     check_expected_version(job.base.version, req.version)?;
                     job.cancel(erp_core::common::time::Instant::now())?;
                     let audit =
@@ -536,7 +654,7 @@ impl BulkJobService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     authorization
-                        .require("background_job_item:list", &job_id, &actor, executor)
+                        .require(&bulk_job::BACKGROUND_JOB_ITEM_LIST, &job_id, &actor, executor)
                         .await
                         .map_err(|error| match error {
                             Error::NotFound(_) => Error::NotFound("后台任务不存在".into()),
@@ -552,7 +670,9 @@ impl BulkJobService {
                             executor,
                         )
                         .await?;
-                    authorization.require("background_job_item:list", &job_id, &actor, executor).await?;
+                    authorization
+                        .require(&bulk_job::BACKGROUND_JOB_ITEM_LIST, &job_id, &actor, executor)
+                        .await?;
                     Ok(PageView {
                         items: result.items.into_iter().map(Into::into).collect(),
                         total: result.total,
@@ -567,119 +687,63 @@ impl BulkJobService {
     /// 校验批量冻结目标中业务单据类对象已注册（跨域 D02 仓储读取）。
     ///
     /// # 参数
-    /// * `items` - 冻结目标请求
+    /// * `items` - 待保存的冻结目标实体
     ///
     /// # 返回
     /// 无返回值。
     ///
     /// # 错误
     /// 目标命中 `DocumentType` 目录但单据未注册时返回 `NotFound`。
-    async fn ensure_items_registered(&self, items: &[CreateBulkSelectionItemRequest]) -> Result<()> {
+    async fn ensure_items_registered(
+        documents: &dyn BusinessDocumentPort,
+        items: &[BulkSelectionItem],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let document_ids = items
             .iter()
             .filter(|item| is_business_document_type(&item.object_type))
             .map(|item| item.object_id.clone())
             .collect::<Vec<_>>();
         let unique_ids = dedup_preserving_order(&document_ids);
-        let registered_ids = self
-            .documents
-            .find_registered_ids(&unique_ids, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .collect::<HashSet<_>>();
+        let registered_ids =
+            documents.find_registered_ids(&unique_ids, executor).await?.into_iter().collect::<HashSet<_>>();
         if first_unregistered_document_id(&document_ids, &registered_ids).is_some() {
             return Err(Error::NotFound("业务单据未注册".to_string()));
         }
         Ok(())
     }
 
-    /// 按 ID 加载快照并校验期望版本。
-    ///
-    /// # 参数
-    /// * `id` - 快照 ID
-    /// * `expected_version` - 请求携带的期望版本
-    ///
-    /// # 返回
-    /// 返回加载的快照实体。
-    ///
-    /// # 错误
-    /// 快照不存在返回 `NotFound`；版本不一致返回 `ConflictError`。
-    async fn load_snapshot_with_version(
+    /// 在授权事务中读取、校验版本并迁移选择快照。
+    async fn change_snapshot(
         &self,
         id: &str,
-        expected_version: u64,
-    ) -> Result<BulkSelectionSnapshot> {
-        let snapshot = self
+        version: u64,
+        permission: Permission,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<BulkSelectionSnapshotView> {
+        self.authorization.service.require(actor, &permission, AccessTarget::Operation, executor).await?;
+        let mut snapshot = self
             .db
             .bulk_selection_snapshots()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("选择快照不存在".to_string()))?;
-        check_expected_version(snapshot.base.version, expected_version)?;
-        Ok(snapshot)
-    }
-
-    /// 在单个事务中更新快照并追加审计日志。
-    ///
-    /// # 参数
-    /// * `mut snapshot` - 已由实体完成状态迁移的快照
-    /// * `action` - 审计动作名
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后的快照视图。
-    ///
-    /// # 错误
-    /// 并发写入冲突或审计写入失败时返回错误。
-    async fn update_snapshot_with_audit(
-        &self,
-        mut snapshot: BulkSelectionSnapshot,
-        action: &str,
-        actor: &AuditActor,
-    ) -> Result<BulkSelectionSnapshotView> {
+            .ok_or_else(|| Error::NotFound("选择快照不存在".into()))?;
+        check_expected_version(snapshot.base.version, version)?;
+        match permission.action() {
+            "confirm" => snapshot.confirm()?,
+            "expire" => snapshot.expire()?,
+            _ => return Err(Error::ValidationError("未知选择快照动作".into())),
+        }
         let audit = self.audit.resource_log(
             actor.clone(),
-            action,
+            &format!("bulk_selection_snapshot.{}", permission.action()),
             "bulk_selection_snapshot",
-            snapshot.base.id.clone(),
+            id.to_owned(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.bulk_selection_snapshots().update(&mut snapshot, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<BulkSelectionSnapshot, crate::error::Error>(snapshot)
-                })
-            })
-            .await?;
-
-        Ok(updated.into())
-    }
-}
-
-/// 把支撑领域错误还原为持久化错误，供幂等创建任务识别唯一键冲突。
-///
-/// `create_background_job` 在事务结束后仍检查 `DuplicateKey`。审计写入失败
-/// 不是请求身份冲突，不能伪装成该冲突。
-///
-/// # 参数
-/// * `error` - 事务内返回的支撑领域错误
-///
-/// # 返回
-/// 仓储来源的错误原样交还原内部错误；其余错误包成 `DatabaseError`。
-///
-/// # 错误
-/// 不返回错误。
-fn support_error_as_persistence(error: Error) -> persistence_core::Error {
-    match error {
-        Error::RepositoryError(inner)
-        | Error::ReceiptDuplicate(inner)
-        | Error::TransientTransaction(inner)
-        | Error::OutcomeUnknown(inner) => inner,
-        other => persistence_core::Error::DatabaseError(mongodb::error::Error::custom(other.to_string())),
+        self.db.bulk_selection_snapshots().update(&mut snapshot, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(snapshot.into())
     }
 }
 
@@ -767,6 +831,48 @@ mod tests {
     use std::collections::HashSet;
 
     use super::first_unregistered_document_id;
+
+    /// 选择快照的两个公开读取入口必须先通过共享授权，再访问数据库。
+    #[tokio::test]
+    async fn selection_reads_require_identity_before_loading_rows() {
+        use std::sync::Arc;
+
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use persistence_core::testing::SnapshotExecutor;
+
+        use super::{BulkJobService, BulkSelectionSnapshotListParams};
+        use crate::error::Error;
+        use crate::ports::{FailClosedAuditPort, FailClosedBusinessDocumentPort};
+
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = BulkJobService::new(
+            client.database("selection_authorization_test"),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedBusinessDocumentPort),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let errors = [
+            service
+                .selection_snapshot_page(
+                    &BulkSelectionSnapshotListParams::default(),
+                    &actor,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .selection_item_page("snapshot", None, 1, 20, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        }
+    }
 
     #[test]
     fn registration_membership_preserves_first_missing_request_order() {

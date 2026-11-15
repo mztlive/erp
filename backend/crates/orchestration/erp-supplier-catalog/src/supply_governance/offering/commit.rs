@@ -10,6 +10,8 @@ use erp_supply::service::supplier_offering::{
 };
 use mongodb::Database;
 use persistence_core::Executor;
+#[cfg(test)]
+use persistence_core::ReadExecutor;
 
 use crate::Result;
 #[async_trait]
@@ -146,12 +148,8 @@ pub(super) async fn availability(
 mod tests {
     use super::*;
     use crate::Error;
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type Marker = ReadExecutor;
+
     struct Recorder {
         pointer: usize,
         calls: Vec<&'static str>,
@@ -182,7 +180,7 @@ mod tests {
     #[tokio::test]
     async fn domain_and_audit_preserve_executor_result_and_each_error() {
         for fail in [None, Some(0), Some(1)] {
-            let mut executor = Marker(164);
+            let mut executor = Marker::default();
             let mut port = Recorder { pointer: &mut executor as *mut Marker as usize, calls: vec![], fail };
             let result = commit(&mut port, &mut executor).await;
             if let Some(i) = fail {
@@ -192,7 +190,6 @@ mod tests {
                 assert_eq!(result.unwrap(), 73);
                 assert_eq!(port.calls, ["domain", "audit"]);
             }
-            assert_eq!(executor.0, 164);
         }
     }
 }

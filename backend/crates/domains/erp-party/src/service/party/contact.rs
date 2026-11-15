@@ -9,9 +9,11 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, normalized_text};
 use erp_core::field_update::FieldUpdate;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -32,11 +34,13 @@ use crate::repository::prelude::*;
 type PartyContactFilter = <mongodb::Database as PartyExt>::PartyContactFilter;
 
 /// 联系人服务。
+#[derive(Clone)]
 pub struct PartyContactService {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
     audit: Arc<dyn PartyAuditPort>,
     supplier_roles: Arc<dyn SupplierRolePort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl PartyContactService {
@@ -58,8 +62,9 @@ impl PartyContactService {
         sensitive_data: Arc<SensitiveDataCodec>,
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, sensitive_data, audit, supplier_roles }
+        Self { db, sensitive_data, audit, supplier_roles, authorization }
     }
 
     /// 分页查询联系人列表（投影查询，敏感字段不进投影）。
@@ -75,9 +80,34 @@ impl PartyContactService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn party_contact_list(
         &self,
+        actor: &AuditActor,
         party_id: &str,
         params: &PartyContactListParams,
     ) -> Result<PageView<PartyContactView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.party_contact_list_snapshot(&actor, &party_id, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_contact_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        party_id: &str,
+        params: &PartyContactListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<PartyContactView>> {
+        self.authorization.require(actor, &party::CONTACT_LIST, AccessTarget::Operation, executor).await?;
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let paging = normalize_paging(
@@ -98,7 +128,7 @@ impl PartyContactService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.party_contacts().search_party_contacts(&filter, &mut NoTransaction).await?;
+        let page = self.db.party_contacts().search_party_contacts(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -172,6 +202,8 @@ impl PartyContactService {
             contact.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -179,6 +211,9 @@ impl PartyContactService {
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::CONTACT_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     if contact_for_tx.is_default {
                         clear_default_marks!(db, party_contacts, contact_for_tx.party_id, None, executor);
                     }
@@ -212,12 +247,7 @@ impl PartyContactService {
         actor: &AuditActor,
     ) -> Result<PartyContactView> {
         req.validate()?;
-        let mut contact = self
-            .db
-            .party_contacts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
+        let mut contact = self.load_contact(id).await?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id).await?;
         super::map_version_conflict(contact.ensure_version(req.version))?;
         contact.update(
@@ -235,6 +265,8 @@ impl PartyContactService {
             contact.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -242,6 +274,9 @@ impl PartyContactService {
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::CONTACT_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     if contact_for_tx.is_default {
                         clear_default_marks!(
                             db,
@@ -259,5 +294,13 @@ impl PartyContactService {
             .await?;
 
         Ok(updated.into())
+    }
+    /// 读取仍存在的本域联系人事实。
+    async fn load_contact(&self, id: &str) -> Result<PartyContact> {
+        self.db
+            .party_contacts()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))
     }
 }

@@ -2,6 +2,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::PurchaseReturnOrderView;
 use erp_returns::dto::CreatePurchaseReturnOrderRequest;
@@ -49,7 +51,7 @@ impl ReturnsProcess {
         req.validate()?;
         let (order_id, order, line) = build_purchase_return_order_and_line(req, actor.id())?;
         persist_created_purchase_return_order(&self.db, &self.rbac, order, line, actor.clone()).await?;
-        ReturnsReadService::new(self.db.clone())
+        ReturnsReadService::new(self.db.clone(), self.rbac.identity.clone())
             .with_purchase_scope(self.rbac.purchase_scope.clone())
             .purchase_return_order_detail(&order_id, actor)
             .await
@@ -235,6 +237,14 @@ async fn persist_created_purchase_return_order(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.identity
+                    .require(
+                        &actor,
+                        &returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 let mut creation = MongoCreation {
                     db: &db,
                     rbac: &rbac,
@@ -245,7 +255,7 @@ async fn persist_created_purchase_return_order(
                 };
                 rbac.purchase
                     .clone()
-                    .require_object(&actor, "update", order.purchase_order_id.as_ref(), &[], executor)
+                    .require_object(&actor, "update", order.purchase_order_id.as_ref(), executor)
                     .await?;
                 persist_creation(&mut creation, executor).await?;
                 Ok::<(), crate::Error>(())
@@ -372,19 +382,10 @@ mod purchase_return_no_approval_tests {
 
 #[cfg(test)]
 mod creation_sequence_tests {
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::{CreationSteps, persist_creation};
     use crate::{Error, Result};
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Default)]
     struct RecordingCreation {
         events: Vec<&'static str>,
@@ -415,7 +416,7 @@ mod creation_sequence_tests {
     }
     #[tokio::test]
     async fn no_approval_creation_keeps_one_executor_and_write_order() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let id = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingCreation::default();
         persist_creation(&mut steps, &mut executor).await.unwrap();
@@ -426,7 +427,7 @@ mod creation_sequence_tests {
     async fn no_approval_creation_preserves_first_error_and_stops_later_writes() {
         let all = ["document", "return_head_and_first_line", "audit"];
         for (at, fail) in all.iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingCreation { fail: Some(*fail), ..Default::default() };
             let error = persist_creation(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *fail));

@@ -4,9 +4,8 @@ use std::collections::BTreeMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{PurchaseOrderId, SupplierOfferingId};
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::Executor;
+use persistence_core::{Executor, aggregate};
 use serde::Deserialize;
 
 use super::scope::PurchaseReadScope;
@@ -63,7 +62,7 @@ impl PurchaseOrderDomainRepository<'_> {
             return Err(Error::ValidationError("采购供给影响查询上限必须在1至10000之间".into()));
         }
 
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let mut rows = self.offering_usage_rows(offering_id, scope, true, limit, executor).await?;
         rows.extend(self.offering_usage_rows(offering_id, scope, false, limit, executor).await?);
         if rows.len() > usize::try_from(limit).unwrap_or(10_000) {
@@ -78,7 +77,7 @@ impl PurchaseOrderDomainRepository<'_> {
                 .lines
                 .push(row.line);
         }
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(grouped.into_values().collect())
     }
 
@@ -133,26 +132,8 @@ impl PurchaseOrderDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> persistence_core::Result<Vec<UsageRow>> {
         let name = if revision { PURCHASE_ORDER_REVISION_LINES } else { PURCHASE_ORDER_SUBMISSION_LINES };
-        let collection = self.db.collection::<Document>(name);
-        let pipeline = usage_pipeline(id, scope, revision, limit);
-        match executor.session() {
-            Some(session) => collection
-                .aggregate(pipeline)
-                .with_type::<UsageRow>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect()
-                .await
-                .map_err(Into::into),
-            None => collection
-                .aggregate(pipeline)
-                .with_type::<UsageRow>()
-                .await?
-                .try_collect()
-                .await
-                .map_err(Into::into),
-        }
+        let collection = self.db.collection::<UsageRow>(name);
+        aggregate::rows(&collection, usage_pipeline(id, scope, revision, limit), executor).await
     }
 }
 

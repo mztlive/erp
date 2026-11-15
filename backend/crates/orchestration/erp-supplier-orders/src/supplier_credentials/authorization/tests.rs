@@ -1,34 +1,12 @@
 use async_trait::async_trait;
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
-use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
-use erp_identity::shared_rbac_service;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
 };
 use erp_supply::ports::jd_vop::authorization::{AuthorizationGrant, AuthorizationParameters};
-use persistence_core::Executor;
 use zeroize::Zeroizing;
 
 use super::*;
-
-struct NoAudit;
-
-#[async_trait]
-impl IdentityAuditPort for NoAudit {
-    fn resource_log(
-        &self,
-        _: AuditActor,
-        _: &str,
-        _: &str,
-        _: String,
-    ) -> erp_identity::Result<PreparedResourceAudit> {
-        panic!("local binding must not prepare audit writes")
-    }
-
-    async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> erp_identity::Result<()> {
-        panic!("local binding must not persist audit writes")
-    }
-}
 
 struct UnavailableHttp;
 
@@ -89,30 +67,21 @@ pub(super) fn connection() -> SupplierApiConnection {
     .unwrap()
 }
 
-async fn process(
-    settings: Option<&JdVopConfig>,
-    http: Result<Arc<dyn AuthorizationHttp>>,
-) -> JdVopAuthorizationProcess {
-    // Construct handles only; no Mongo command is issued by the production constructor or binding check.
-    let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
-    let db = client.database("jd-authorization-binding-unit-test");
-    let rbac = shared_rbac_service(db.clone(), Arc::new(NoAudit));
-    JdVopAuthorizationProcess::new(db, settings, rbac, Arc::new(JdVopAuthorizationTasks::default()), http)
-}
-
-#[tokio::test]
-async fn unavailable_authorization_engine_does_not_block_local_token_binding() {
-    let process = process(Some(&settings()), Ok(Arc::new(UnavailableHttp))).await;
-    assert!(matches!(process.engine, Err(AuthorizationError::Unavailable)));
+#[test]
+fn unavailable_remote_authorization_does_not_block_local_token_binding() {
+    let protocol: Result<Arc<dyn AuthorizationHttp>> = Ok(Arc::new(UnavailableHttp));
+    assert_eq!(protocol.as_ref().unwrap().ensure_available(), Err(AuthorizationError::Unavailable));
     let mut connection = connection();
-    assert_eq!(process.access.binding(&connection), Ok(()));
+    assert_eq!(access::verify_binding(Some(&settings()), &protocol, &connection), Ok(()));
     connection.endpoint_reference = "wrong-endpoint".into();
-    assert_eq!(process.access.binding(&connection), Err(AuthorizationError::BindingMismatch));
+    assert_eq!(
+        access::verify_binding(Some(&settings()), &protocol, &connection),
+        Err(AuthorizationError::BindingMismatch)
+    );
 }
 
-#[tokio::test]
-async fn missing_authorization_configuration_keeps_unavailable_binding() {
-    let process = process(None, Ok(Arc::new(UnavailableHttp))).await;
-    assert!(matches!(process.engine, Err(AuthorizationError::Unavailable)));
-    assert_eq!(process.access.binding(&connection()), Err(AuthorizationError::Unavailable));
+#[test]
+fn missing_configuration_keeps_local_binding_unavailable() {
+    let protocol: Result<Arc<dyn AuthorizationHttp>> = Ok(Arc::new(UnavailableHttp));
+    assert_eq!(access::verify_binding(None, &protocol, &connection()), Err(AuthorizationError::Unavailable));
 }

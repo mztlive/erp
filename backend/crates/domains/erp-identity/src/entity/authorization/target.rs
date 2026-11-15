@@ -85,6 +85,10 @@ pub struct ObjectFacts {
     pub id: String,
     pub version: String,
     pub valid_until: Option<Instant>,
+    /// 审批冻结的单据类型或持久化任务种类，不接收权限或政策结论。
+    pub subject_type: FactValue<String>,
+    /// 由业务强外键核定的来源资源或对象类型；权限仍由 identity 选择。
+    pub subject_source_resource: FactValue<String>,
     pub owner_id: FactValue<Option<String>>,
     /// 多负责人资源的完整当前负责人集合；与 owner_id 二选一。
     pub owner_ids: FactValue<BTreeSet<String>>,

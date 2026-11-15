@@ -1,10 +1,11 @@
 //! 提交事务冻结本单据直接关联的审批材料，不追溯客户或供应商其他附件。
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::ids::{BusinessDocumentId, FileAssetId, SalesChangeOrderId, SalesOrderId};
-use erp_identity::SharedRbacService;
+use erp_identity::{AccountDirectoryService, AuthorizationService};
 use erp_returns::repository::ReturnsExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
@@ -40,7 +41,7 @@ pub(super) mod related_sales;
 /// # 错误
 /// 单据类型不匹配、附件资产缺失或材料超限时中止提交。
 pub async fn freeze_approval_materials(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
     mut snapshot: ApprovalSubjectSnapshot,
@@ -106,7 +107,7 @@ fn unique_materials(mut materials: Vec<ApprovalMaterialFile>) -> Vec<ApprovalMat
 
 /// 本单直接附件保持原上传者或通用文件预览资格，不以关联记录替代转授授权。
 async fn direct_materials(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
     db: &Database,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
@@ -136,8 +137,7 @@ async fn direct_materials(
     if files.len() != ids.len() {
         return Err(Error::ConflictError("审批材料引用的文件不存在或已删除".into()));
     }
-    let account = identity_service
-        .directory()
+    let account = AccountDirectoryService::new(db.clone())
         .account(&snapshot.payload.submitted_by, executor)
         .await?
         .filter(|account| account.is_active_backoffice())

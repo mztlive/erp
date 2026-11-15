@@ -226,6 +226,7 @@ fn allocation_pipeline(
         pipeline.extend(invoice_header_stages());
         pipeline.push(doc! { "$match": { "_invoice.created_by": { "$in": ids } } });
     }
+    pipeline.extend(authorization.guard_stages());
     pipeline.extend(purchase_stages(
         authorization,
         condition.owner_user_ids.as_deref(),
@@ -291,12 +292,20 @@ mod tests {
         );
         assert_eq!(stages[3], doc! { "$match": { "_invoice.created_by": { "$in": ["registrar"] } } });
         assert_eq!(
-            stages[4].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            stages[4 + authorization().guard_stages().len()]
+                .get_document("$lookup")
+                .unwrap()
+                .get_str("from")
+                .unwrap(),
             <Database as PayableExt>::PAYABLE_ACCOUNTS
         );
         let unrestricted = allocation_pipeline(&query, &authorization(), &FundsLinkedCondition::default());
         assert_eq!(
-            unrestricted[1].get_document("$lookup").unwrap().get_str("from").unwrap(),
+            unrestricted[1 + authorization().guard_stages().len()]
+                .get_document("$lookup")
+                .unwrap()
+                .get_str("from")
+                .unwrap(),
             <Database as PayableExt>::PAYABLE_ACCOUNTS
         );
         assert!(!unrestricted.iter().any(|stage| {

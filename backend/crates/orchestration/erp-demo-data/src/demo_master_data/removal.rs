@@ -25,14 +25,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 功能未开放、身份不符合保留要求、策略并发变化、删除或提交失败时返回错误。
     pub async fn reset_database(&self, actor: &AuditActor) -> Result<DemoResetReport> {
         self.ensure_enabled()?;
-        let revision = self.rbac.authorize_database_reset(actor).await?;
+        let revision = self.identity.authorize_database_reset(actor).await?;
         let reset = DatabaseReset::prepare(self.db.clone()).await?;
         let actor = actor.clone();
-        let rbac = self.rbac.clone();
-        self.rbac
+        let identity = self.identity.clone();
+        self.identity
             .run_authorized_policy_transaction(revision, move |executor| {
                 Box::pin(async move {
-                    let retained = rbac.database_reset_retention(&actor, executor).await?;
+                    let retained = identity.database_reset_retention(&actor, executor).await?;
                     let deleted_documents = reset.execute(retained, executor).await?;
                     Ok::<_, Error>(DemoResetReport { deleted_documents })
                 })

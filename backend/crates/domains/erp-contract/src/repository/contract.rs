@@ -273,7 +273,7 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<ContractRow>> {
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         let result: persistence_core::Result<_> = async {
             let options = FindOptions::builder()
@@ -304,7 +304,7 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
         .await;
         let result = result?;
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(result)
     }
@@ -337,11 +337,11 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", Some(keyword));
         let collection = self.collection();
-        let mut query = collection.distinct("id", filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+        Ok(mongo_ops::distinct(&collection, "id", filter, executor)
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect())
     }
 }
 

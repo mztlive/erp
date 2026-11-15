@@ -9,14 +9,14 @@ use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, aggregate};
 
+use crate::Result;
 use crate::repository::SalesOrderExt;
-use crate::{Error, Result};
 
 /// 必须持有完整授权凭证的仓储读取载体。
 #[derive(Clone)]
 pub struct SalesReadScope {
     access: Arc<CompiledAccess>,
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
 }
 impl std::fmt::Debug for SalesReadScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -31,7 +31,7 @@ impl SalesReadScope {
     /// 仅用于当前事务读取的执行载体。
     /// # 错误
     /// 无；执行前后须复验。
-    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: AuthorizationService) -> Self {
+    pub fn from_compiled(access: Arc<CompiledAccess>, authorization: Arc<AuthorizationService>) -> Self {
         Self { access, authorization }
     }
     /// 返回完整授权阶段。
@@ -66,20 +66,34 @@ impl SalesReadScope {
     pub fn related_stages(&self, source_field: &str) -> Vec<Document> {
         related_sales_stages(source_field, self.stages())
     }
-    /// 在原执行器复验 identity 凭证。
+    /// 在仓储执行前后检查模型、原执行边界和有效期，不读取数据库。
     /// # 参数
-    /// executor 为生成凭证时的执行器。
+    /// executor 为生成凭证时的原执行器。
     /// # 返回
-    /// 当前授权仍有效时成功。
+    /// 模型、边界和期限均符合当前读取时成功。
     /// # 错误
-    /// 身份、映射、版本或会话变化返回原始错误。
-    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+    /// 模型不匹配、跨阶段或到期时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> crate::Result<()> {
         if self.access.model().collection != Database::SALES_ORDERS
             || self.access.model().output != QueryOutput::Object
         {
             return Err(crate::Error::ValidationError("销售授权查询模型不匹配".into()));
         }
-        self.authorization.validate(&self.access, executor).await.map_err(Error::from)
+
+        self.access.ensure_current(executor)?;
+        Ok(())
+    }
+
+    /// 在读取用例交付结果前复验本次实际授权依赖。
+    /// # 参数
+    /// executor 为查询时的原执行器。
+    /// # 返回
+    /// 当前边界、期限及依赖仍有效时成功。
+    /// # 错误
+    /// 身份、范围或动态依赖失效时拒绝交付。
+    pub async fn validate(&self, executor: &mut dyn Executor) -> crate::Result<()> {
+        self.ensure_current(executor)?;
+        self.authorization.validate(&self.access, executor).await.map_err(Into::into)
     }
 }
 
@@ -151,7 +165,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let result = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
@@ -162,7 +176,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(result)
     }
 
@@ -172,7 +186,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         scope: &SalesReadScope,
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Option<crate::entity::sales_order::SalesOrder>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let rows = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": 0, "id": id },
@@ -181,7 +195,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows.into_iter().next())
     }
 }

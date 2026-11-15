@@ -78,20 +78,12 @@ mod tests {
 
     use async_trait::async_trait;
     use erp_core::ids::{SupplierAccountId, SupplierCommercialProfileRevisionId};
+    use persistence_core::ReadExecutor;
 
     use super::*;
     use crate::entity::facts::{PaymentTermFact, SupplierRoleFact};
     use crate::entity::purchase_order::{FulfillmentResponsibility, PurchaseType};
 
-    struct RecordingExecutor {
-        marker: u64,
-    }
-    impl Executor for RecordingExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.marker += 1;
-            None
-        }
-    }
     enum SupplierOutcome {
         Missing,
         NoRevision,
@@ -154,9 +146,9 @@ mod tests {
         }
     }
     async fn invoke(outcome: SupplierOutcome, code: &str) -> (Result<PurchaseOrderSubmission>, Vec<String>) {
-        let mut executor = RecordingExecutor { marker: 37 };
+        let mut executor = ReadExecutor::default();
         let port = SupplierPort {
-            expected_executor: (&mut executor as *mut RecordingExecutor) as usize,
+            expected_executor: (&mut executor as *mut ReadExecutor) as usize,
             outcome,
             calls: Mutex::new(Vec::new()),
         };
@@ -177,7 +169,6 @@ mod tests {
             &mut executor,
         )
         .await;
-        assert_eq!(executor.marker, 37);
         (result, port.calls.into_inner().unwrap())
     }
     /// 同一非零大小执行器重读供应商后，才解析付款并冻结草稿快照。

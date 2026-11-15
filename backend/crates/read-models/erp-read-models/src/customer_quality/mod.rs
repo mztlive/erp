@@ -3,6 +3,9 @@
 //! 两个口径永不合并排名或合计：当前口径按客户现任主责归属分组，历史口径按
 //! 销售单首次生效冻结归属分组。历史分组只读快照身份与祖先路径，不回填现任。
 
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
 mod access;
 mod current;
 mod directory;
@@ -10,7 +13,6 @@ mod dto;
 mod export;
 mod history;
 mod query;
-mod repository;
 mod source;
 
 pub use access::QualityAccess;
@@ -28,7 +30,7 @@ use crate::Result;
 #[derive(Clone)]
 pub struct CustomerQualityReadModel {
     db: Database,
-    rbac: erp_identity::SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     customer_scope: CustomerAccess,
 }
 
@@ -45,7 +47,7 @@ impl CustomerQualityReadModel {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: erp_identity::SharedRbacService, customer_scope: CustomerAccess) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>, customer_scope: CustomerAccess) -> Self {
         Self { db, rbac, customer_scope }
     }
 
@@ -184,3 +186,6 @@ fn ensure_version(expected: Option<&str>, current: &str) -> Result<()> {
         .verify(current)
         .map_err(|error| crate::support::data_scope_changed(error.detail()))
 }
+
+mod repository;
+pub use repository::authorization::QualitySalesMapping;

@@ -4,7 +4,7 @@
 //! - 单据注册（幂等）、动作追加、关系/参与人写入：单集合 + 审计日志 → 跨审计
 //!   集合写入按 TRANSACTIONS.md「基本用法」编排在 `with_transaction` 内
 //!   （仓库尚无 `run_audited_transaction` 模板，与 source_registry 同款写法）；
-//! - 查询入口统一接收 `&mut dyn Executor`（单文档读默认在组合点传 `NoTransaction`，事务复用时传入同一执行器）。
+//! - 管理查询在同一快照事务中证明功能权限并读取完整结果；执行器注入版复用原事务。
 //!
 //! 跨域：只经各领域 `*Ext` 扩展 trait 调对方域 Repository（P3-service-api §2）。本域依赖
 //! D01：登记外部来源单据时，经 `db.external_identity_maps()` 校验来源身份映射
@@ -13,6 +13,8 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, document_registry};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -137,8 +139,10 @@ type WorkflowActionFilter = <mongodb::Database as DocumentRegistryExt>::Workflow
 /// 单据注册服务。
 ///
 /// 提供单据注册、工作流动作、单据关系与参与人的查询与写入编排。
+#[derive(Clone)]
 pub struct DocumentRegistryService {
     db: Database,
+    authorization: Arc<AuthorizationService>,
     audit: Arc<dyn WorkflowAuditPort>,
     facts: Arc<dyn ObjectFactPort>,
 }
@@ -148,20 +152,22 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `db` - 数据库实例
+    /// * `authorization` - 应用共享授权服务
     ///
     /// # 返回
     /// 返回服务实例。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database) -> Self {
-        Self::with_ports(db, Arc::new(FailClosedAuditPort), Arc::new(FailClosedObjectFactPort))
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self::with_ports(db, authorization, Arc::new(FailClosedAuditPort), Arc::new(FailClosedObjectFactPort))
     }
 
     /// 创建注入审计与对象事实端口的单据注册服务。
     ///
     /// # 参数
     /// * `db` - 数据库
+    /// * `authorization` - 应用共享授权服务
     /// * `audit` - 审计写入端口
     /// * `facts` - 对象事实端口
     ///
@@ -172,10 +178,11 @@ impl DocumentRegistryService {
     /// 不返回错误。
     pub fn with_ports(
         db: Database,
+        authorization: Arc<AuthorizationService>,
         audit: Arc<dyn WorkflowAuditPort>,
         facts: Arc<dyn ObjectFactPort>,
     ) -> Self {
-        Self { db, audit, facts }
+        Self { db, authorization, audit, facts }
     }
 
     /// 幂等注册业务单据。
@@ -201,11 +208,7 @@ impl DocumentRegistryService {
         actor: &AuditActor,
     ) -> Result<BusinessDocumentView> {
         req.validate()?;
-        if let Some(map_id) = &req.external_identity_map_id
-            && !self.facts.external_identity_map_exists(map_id, &mut NoTransaction).await?
-        {
-            return Err(Error::NotFound("外部身份映射不存在".to_string()));
-        }
+        let external_identity_map_id = req.external_identity_map_id;
         let id = req.id.map(BusinessDocumentId::new).unwrap_or_else(|| BusinessDocumentId::new(next_id()));
         let doc = BusinessDocument::new(
             id,
@@ -223,9 +226,25 @@ impl DocumentRegistryService {
         let audit_port = Arc::clone(&self.audit);
         let client = db.client().clone();
         let doc_for_tx = doc.clone();
+        let authorization = Arc::clone(&self.authorization);
+        let operator = actor.clone();
+        let facts = Arc::clone(&self.facts);
         let existing = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &operator,
+                            &document_registry::BUSINESS_DOCUMENT_REGISTER,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    if let Some(map_id) = external_identity_map_id
+                        && !facts.external_identity_map_exists(&map_id, executor).await?
+                    {
+                        return Err(Error::NotFound("外部身份映射不存在".to_string()));
+                    }
                     let existing = db.business_documents().register(&doc_for_tx, executor).await?;
                     if existing.is_none() {
                         audit_port.persist(&audit, executor).await?;
@@ -246,10 +265,11 @@ impl DocumentRegistryService {
     /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `params` - 查询参数
     ///
     /// # 返回
-    /// 使用 `NoTransaction` 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 在同一快照事务内授权并返回分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
@@ -257,27 +277,40 @@ impl DocumentRegistryService {
     pub async fn business_document_list(
         &self,
         params: &BusinessDocumentListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<BusinessDocumentView>> {
-        self.business_document_list_with(params, &mut NoTransaction).await
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.business_document_list_with(&params, &actor, executor).await })
+            })
+            .await
     }
 
-    /// 分页查询单据注册列表（执行器注入版，事务复用时传入同一执行器）。
+    /// 在调用方原快照事务中查询单据注册列表，不开启事务。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `params` - 查询参数
-    /// * `executor` - 数据访问执行器
+    /// * `executor` - 调用方当前活动的快照事务执行器
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
+    /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn business_document_list_with(
         &self,
         params: &BusinessDocumentListParams,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PageView<BusinessDocumentView>> {
+        self.require_read_access(actor, &document_registry::BUSINESS_DOCUMENT_LIST, executor).await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = BusinessDocumentFilter {
@@ -310,33 +343,50 @@ impl DocumentRegistryService {
     /// 查询单据注册详情。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `id` - 单据注册 ID
     ///
     /// # 返回
-    /// 使用 `NoTransaction` 返回注册行视图。
+    /// 经功能授权后返回注册行视图。
     ///
     /// # 错误
     /// * `NotFound` - 单据注册不存在
-    pub async fn business_document_detail(&self, id: &str) -> Result<BusinessDocumentView> {
-        self.business_document_detail_with(id, &mut NoTransaction).await
+    pub async fn business_document_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<BusinessDocumentView> {
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.business_document_detail_with(&id, &actor, executor).await })
+            })
+            .await
     }
 
-    /// 查询单据注册详情（执行器注入版）。
+    /// 在调用方原快照事务中查询单据注册详情，不开启事务。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `id` - 单据注册 ID
-    /// * `executor` - 数据访问执行器
+    /// * `executor` - 调用方当前活动的快照事务执行器
     ///
     /// # 返回
     /// 返回注册行视图。
     ///
     /// # 错误
+    /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `NotFound` - 单据注册不存在
     pub async fn business_document_detail_with(
         &self,
         id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<BusinessDocumentView> {
+        self.require_read_access(actor, &document_registry::BUSINESS_DOCUMENT_DETAIL, executor).await?;
         let doc = self
             .db
             .business_documents()
@@ -413,7 +463,7 @@ impl DocumentRegistryService {
         )?;
         let action_for_tx = action.clone();
         let audit_port = Arc::clone(&self.audit);
-        self.write_with_audit(move |tx_db, executor| {
+        self.write_with_audit(actor, &document_registry::WORKFLOW_ACTION_CREATE, move |tx_db, executor| {
             Box::pin(async move {
                 if !tx_db.business_documents().exists_by_id(&action_for_tx.document_id, executor).await? {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
@@ -431,6 +481,7 @@ impl DocumentRegistryService {
     /// 分页查询工作流动作列表。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `params` - 查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）
     ///
     /// # 返回
@@ -442,27 +493,40 @@ impl DocumentRegistryService {
     pub async fn workflow_action_list(
         &self,
         params: &WorkflowActionListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<WorkflowActionView>> {
-        self.workflow_action_list_with(params, &mut NoTransaction).await
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.workflow_action_list_with(&params, &actor, executor).await })
+            })
+            .await
     }
 
-    /// 分页查询工作流动作列表（执行器注入版）。
+    /// 在调用方原快照事务中查询工作流动作列表，不开启事务。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `params` - 查询参数（`document_id`/`actor_id`/`action_type` 扁平筛选）
-    /// * `executor` - 数据访问执行器
+    /// * `executor` - 调用方当前活动的快照事务执行器
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
+    /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
     pub async fn workflow_action_list_with(
         &self,
         params: &WorkflowActionListParams,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PageView<WorkflowActionView>> {
+        self.require_read_access(actor, &document_registry::WORKFLOW_ACTION_LIST, executor).await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = WorkflowActionFilter {
@@ -497,36 +561,52 @@ impl DocumentRegistryService {
     /// 查询单据的全部关系（出向 + 入向）。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `document_id` - 业务单据 ID
     ///
     /// # 返回
-    /// 使用 `NoTransaction` 返回出向与入向关系的合并视图。
+    /// 经功能授权后返回出向与入向关系的合并视图。
     ///
     /// # 错误
     /// * `RepositoryError` - 数据库查询失败
     pub async fn document_relation_list(
         &self,
         document_id: &BusinessDocumentId,
+        actor: &AuditActor,
     ) -> Result<Vec<DocumentRelationView>> {
-        self.document_relation_list_with(document_id, &mut NoTransaction).await
+        let service = self.clone();
+        let document_id = document_id.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.document_relation_list_with(&document_id, &actor, executor).await },
+                )
+            })
+            .await
     }
 
-    /// 查询单据的全部关系（执行器注入版）。
+    /// 在调用方原快照事务中查询单据全部关系，不开启事务。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器
+    /// * `executor` - 调用方当前活动的快照事务执行器
     ///
     /// # 返回
     /// 返回出向与入向关系的合并视图。
     ///
     /// # 错误
+    /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `RepositoryError` - 数据库查询失败
     pub async fn document_relation_list_with(
         &self,
         document_id: &BusinessDocumentId,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Vec<DocumentRelationView>> {
+        self.require_read_access(actor, &document_registry::DOCUMENT_RELATION_LIST, executor).await?;
         let relations = self.db.document_relations().list_for_document(document_id, executor).await?;
         Ok(relations.into_iter().map(Into::into).collect())
     }
@@ -560,7 +640,7 @@ impl DocumentRegistryService {
         )?;
         let relation_for_tx = relation.clone();
         let audit_port = Arc::clone(&self.audit);
-        self.write_with_audit(move |tx_db, executor| {
+        self.write_with_audit(actor, &document_registry::DOCUMENT_RELATION_CREATE, move |tx_db, executor| {
             Box::pin(async move {
                 let document_ids =
                     [relation_for_tx.from_document_id.clone(), relation_for_tx.to_document_id.clone()];
@@ -580,40 +660,76 @@ impl DocumentRegistryService {
     /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `user_id` - 参与人用户 ID
     ///
     /// # 返回
-    /// 使用 `NoTransaction` 返回按参与时间倒序排列的参与记录视图。
+    /// 经功能授权后返回按参与时间倒序排列的参与记录视图。
     ///
     /// # 错误
     /// * `ValidationError` - 用户 ID 为空白
     /// * `RepositoryError` - 数据库查询失败
-    pub async fn document_participant_list(&self, user_id: &str) -> Result<Vec<DocumentParticipantView>> {
-        self.document_participant_list_with(user_id, &mut NoTransaction).await
+    pub async fn document_participant_list(
+        &self,
+        user_id: &str,
+        actor: &AuditActor,
+    ) -> Result<Vec<DocumentParticipantView>> {
+        let service = self.clone();
+        let user_id = user_id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.document_participant_list_with(&user_id, &actor, executor).await },
+                )
+            })
+            .await
     }
 
-    /// 按参与人查询其参与过的全部单据（执行器注入版）。
+    /// 在调用方原快照事务中查询参与人的全部单据，不开启事务。
     ///
     /// # 参数
+    /// * `actor` - 需要具备对应管理功能权限的操作人
     /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 数据访问执行器
+    /// * `executor` - 调用方当前活动的快照事务执行器
     ///
     /// # 返回
     /// 返回按参与时间倒序排列的参与记录视图。
     ///
     /// # 错误
+    /// * `ValidationError` - 执行器没有当前活动的快照事务
     /// * `ValidationError` - 用户 ID 为空白
     /// * `RepositoryError` - 数据库查询失败
     pub async fn document_participant_list_with(
         &self,
         user_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Vec<DocumentParticipantView>> {
+        self.require_read_access(actor, &document_registry::DOCUMENT_PARTICIPANT_LIST, executor).await?;
         if user_id.trim().is_empty() {
             return Err(Error::ValidationError("用户ID不能为空".to_string()));
         }
         let items = self.db.document_participants().list_by_user(user_id, executor).await?;
         Ok(items.into_iter().map(Into::into).collect())
+    }
+
+    /// 纯功能读取只能沿活动快照事务授权，后续业务读取继续复用原执行器。
+    async fn require_read_access(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if !executor
+            .boundary()
+            .is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
+        {
+            return Err(Error::ValidationError("单据注册管理读取必须使用快照事务".into()));
+        }
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+        Ok(())
     }
 
     /// 登记单据参与人。
@@ -649,17 +765,24 @@ impl DocumentRegistryService {
         )?;
         let participant_for_tx = participant.clone();
         let audit_port = Arc::clone(&self.audit);
-        self.write_with_audit(move |tx_db, executor| {
-            Box::pin(async move {
-                if !tx_db.business_documents().exists_by_id(&participant_for_tx.document_id, executor).await?
-                {
-                    return Err(Error::NotFound("业务单据未注册".to_string()));
-                }
-                participant_access::append(tx_db, &participant_for_tx, executor).await?;
-                audit_port.persist(&audit, executor).await?;
-                Ok::<(), crate::error::Error>(())
-            })
-        })
+        self.write_with_audit(
+            actor,
+            &document_registry::DOCUMENT_PARTICIPANT_CREATE,
+            move |tx_db, executor| {
+                Box::pin(async move {
+                    if !tx_db
+                        .business_documents()
+                        .exists_by_id(&participant_for_tx.document_id, executor)
+                        .await?
+                    {
+                        return Err(Error::NotFound("业务单据未注册".to_string()));
+                    }
+                    participant_access::append(tx_db, &participant_for_tx, executor).await?;
+                    audit_port.persist(&audit, executor).await?;
+                    Ok::<(), crate::error::Error>(())
+                })
+            },
+        )
         .await?;
 
         Ok(participant.into())
@@ -675,7 +798,12 @@ impl DocumentRegistryService {
     ///
     /// # 返回
     /// 返回事务闭包的结果。
-    async fn write_with_audit<T, F>(&self, transaction: F) -> Result<T>
+    async fn write_with_audit<T, F>(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        transaction: F,
+    ) -> Result<T>
     where
         T: Send + 'static,
         F: for<'a> FnOnce(
@@ -688,8 +816,19 @@ impl DocumentRegistryService {
     {
         let db = self.db.clone();
         let client = db.client().clone();
+        let authorization = Arc::clone(&self.authorization);
+        let actor = actor.clone();
+        let permission = permission.clone();
         client
-            .with_transaction(move |executor| Box::pin(async move { transaction(&db, executor).await }))
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization.require(&actor, &permission, AccessTarget::Operation, executor).await?;
+                    transaction(&db, executor).await
+                })
+            })
             .await
     }
 }
+
+#[cfg(test)]
+mod read_tests;

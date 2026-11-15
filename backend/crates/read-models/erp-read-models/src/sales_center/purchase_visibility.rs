@@ -1,14 +1,14 @@
 //! 销售侧查看受影响采购明细的资格。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
+use erp_permissions::purchase_order;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use crate::Result;
-
-/// 查看受影响采购明细所需的权限。
-const PURCHASE_LIST_PERMISSION: &str = "purchase_order:list";
 
 /// 当前账号仍可登录且具备采购列表权限时返回 `true`。
 ///
@@ -23,14 +23,13 @@ const PURCHASE_LIST_PERMISSION: &str = "purchase_order:list";
 /// # 错误
 /// 账号或授权查询失败时返回错误。
 pub(crate) async fn can_list_purchases(
-    db: &Database,
-    rbac: &SharedRbacService,
+    _db: &Database,
+    rbac: &Arc<AuthorizationService>,
     actor: Option<&AuditActor>,
+    executor: &mut dyn Executor,
 ) -> Result<bool> {
     let Some(actor) = actor else {
         return Ok(false);
     };
-    let permission = Permission::parse(PURCHASE_LIST_PERMISSION)?;
-    let authorization = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
-    Ok(authorization.has_permission(actor, &permission, &mut NoTransaction).await?)
+    Ok(rbac.has_permission(actor, &purchase_order::LIST, executor).await?)
 }

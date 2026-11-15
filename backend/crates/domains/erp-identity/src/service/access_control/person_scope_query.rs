@@ -1,13 +1,21 @@
 //! 由当前有效账号角色生成逐操作资格，范围配置不绑定角色。
 use application_core::AuditActor;
+use erp_permissions::access_control;
 use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
-use super::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPersonScope};
 use crate::entity::access_control::scope_spec;
+use crate::entity::organization_change::OrganizationState;
+use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt};
+use crate::{AccessControlExt, AccessTarget, Error, Result, RoleRepositoryExt};
+
+/// 通过统一入口授权后，供配置用例使用的当前事务事实。
+pub(super) struct PersonScopeFacts {
+    pub(super) policy_version: u64,
+    pub(super) organizations: OrganizationState,
+}
 
 impl AccessControlService {
     /// 获取人员唯一范围及服务端有效操作候选。
@@ -49,33 +57,14 @@ impl AccessControlService {
         actor: &AuditActor,
         write: bool,
         executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let codes = if write {
-            vec!["admin:list", "role:list", "data_scope:create"]
-        } else {
-            vec!["admin:list", "role:list", "data_scope:list"]
-        };
-        let permissions =
-            codes.into_iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(
-                actor,
-                &Permission::parse(format!("{}:{}", "org_unit", if write { "manage" } else { "list" }))?,
-                &permissions,
-                executor,
-            )
-            .await?;
-        if !access.scope.role_clauses.iter().any(|c| c.company)
-            || access.scope.user_limit.as_ref().is_some_and(|c| !c.company)
-        {
-            let message = if write {
-                "设置人员范围需要公司范围的组织配置权限"
-            } else {
-                "查看人员范围需要公司范围的组织查看权限"
-            };
-            return Err(Error::Forbidden(message.into()));
-        }
-        Ok(access)
+    ) -> Result<PersonScopeFacts> {
+        let entry =
+            if write { &access_control::PERSON_SCOPE_SAVE } else { &access_control::PERSON_SCOPE_LIST };
+        self.authorization.require(actor, entry, AccessTarget::Operation, executor).await?;
+        Ok(PersonScopeFacts {
+            policy_version: self.rbac.policy_revision_with_executor(executor).await?,
+            organizations: OrganizationRepository::new(&self.db).state(executor).await?,
+        })
     }
 
     /// 各操作独立证明，可来自人员不同的有效角色。
@@ -124,8 +113,11 @@ impl AccessControlService {
             Some(_) => return Ok(vec![]),
             None => scope_spec::resources(),
         };
-        let permissions =
-            resources.iter().flat_map(|resource| scope_spec::actions(resource)).cloned().collect::<Vec<_>>();
+        let permissions = resources
+            .iter()
+            .flat_map(|resource| scope_spec::display_actions(resource))
+            .cloned()
+            .collect::<Vec<_>>();
         let rbac = self.rbac.clone();
         let snapshot = rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
         rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
@@ -133,7 +125,7 @@ impl AccessControlService {
         let mut options = Vec::new();
         for resource in resources {
             let mut granted: Vec<String> = Vec::new();
-            for permission in scope_spec::actions(resource) {
+            for permission in scope_spec::display_actions(resource) {
                 let ids = snapshot.granting_role_ids(permission);
                 if roles.iter().any(|role| ids.iter().any(|id| id.as_str() == role.base.id)) {
                     granted.push(permission.action().into());

@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::sales_selection;
 use erp_sales::dto::sales_selection::{
     PublicSelectionAccessView, PublicSelectionPageView, SalesSelectionBookletView,
     SalesSelectionPasswordRequest, SaveSelectionSessionRequest, SelectionDetailView, SelectionVoucherView,
@@ -11,8 +12,9 @@ use erp_sales::entity::sales_selection::{
     IdempotencyOperation, SelectionGrant, hash_selection_password, token_hash, verify_selection_password,
 };
 use erp_sales::repository::SalesSelectionExt;
+use erp_sales::repository::sales_selection::SalesSelectionDomainRepository;
 use erp_sales::service::sales_selection::SalesSelectionService;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 use tokio::sync::Semaphore;
 
 use super::SalesSelectionProcess;
@@ -45,7 +47,7 @@ impl SalesSelectionProcess {
             self.admit_participant("read", &grant.session_id, 120).await?;
         }
         Ok(SalesSelectionService::new(self.db.clone())
-            .public_page_by_token(token, grant.as_ref(), Instant::now(), &mut NoTransaction)
+            .public_page_by_token(token, grant.as_ref(), Instant::now(), &mut ReadExecutor::default())
             .await?)
     }
 
@@ -67,11 +69,12 @@ impl SalesSelectionProcess {
     ) -> Result<PublicSelectionAccessView> {
         self.admit_public("unlock", &ip, Some(&token), 2000).await?;
         let service = SalesSelectionService::new(self.db.clone());
-        let scope =
-            service.public_unlock_scope(&token, req.voucher_code.as_deref(), &mut NoTransaction).await?;
+        let scope = service
+            .public_unlock_scope(&token, req.voucher_code.as_deref(), &mut ReadExecutor::default())
+            .await?;
         self.admit_participant("unlock", &scope, 10).await?;
         let hash = service
-            .public_password_hash(&token, &mut NoTransaction)
+            .public_password_hash(&token, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::Forbidden("选品册尚未设置访问密码，请联系业务员".into()))?;
         let verify_hash = hash.clone();
@@ -92,7 +95,7 @@ impl SalesSelectionProcess {
                 req.voucher_code.as_deref(),
                 Instant::now(),
                 &self.crypto,
-                &mut NoTransaction,
+                &mut ReadExecutor::default(),
             )
             .await?)
     }
@@ -206,7 +209,7 @@ impl SalesSelectionProcess {
         let grant = self.decode_grant(access)?;
         self.admit_participant("image", &grant.session_id, 600).await?;
         Ok(SalesSelectionService::new(self.db.clone())
-            .public_image_key(token, asset_id, &grant, Instant::now(), &mut NoTransaction)
+            .public_image_key(token, asset_id, &grant, Instant::now(), &mut ReadExecutor::default())
             .await?)
     }
 
@@ -244,9 +247,27 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 权限或范围不足时拒绝。
     pub async fn vouchers(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionVoucherView>> {
-        let mut executor = NoTransaction;
-        self.services.selections.clone().require_booklet(actor, "copy_link", id, &mut executor).await?;
-        Ok(SalesSelectionService::new(self.db.clone()).vouchers(id, &self.crypto, &mut executor).await?)
+        let db = self.db.clone();
+        let access = self.services.selections.clone();
+        let crypto = self.crypto.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let scope = access.resolve(&actor, &sales_selection::BOOKLET_COPY_LINK, executor).await?;
+                    let book = SalesSelectionDomainRepository::new(&db)
+                        .find_authorized_booklet(&id, &scope, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                    let result =
+                        SalesSelectionService::new(db).vouchers(&book.base.id, &crypto, executor).await?;
+                    scope.validate(executor).await?;
+                    Ok(result)
+                })
+            })
+            .await
     }
 
     /// 按册详情范围读取全部个人选择与地址供导出。
@@ -260,11 +281,28 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 权限或范围不足时拒绝。
     pub async fn selection_details(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionDetailView>> {
-        let mut executor = NoTransaction;
-        self.services.selections.clone().require_booklet(actor, "get", id, &mut executor).await?;
-        Ok(SalesSelectionService::new(self.db.clone())
-            .selection_details(id, &self.crypto, &mut executor)
-            .await?)
+        let db = self.db.clone();
+        let access = self.services.selections.clone();
+        let crypto = self.crypto.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let scope = access.resolve(&actor, &sales_selection::BOOKLET_DETAIL, executor).await?;
+                    let book = SalesSelectionDomainRepository::new(&db)
+                        .find_authorized_booklet(&id, &scope, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                    let result = SalesSelectionService::new(db)
+                        .selection_details(&book.base.id, &crypto, executor)
+                        .await?;
+                    scope.validate(executor).await?;
+                    Ok(result)
+                })
+            })
+            .await
     }
 
     async fn admit_participant(&self, kind: &str, session_id: &str, limit: i64) -> Result<()> {

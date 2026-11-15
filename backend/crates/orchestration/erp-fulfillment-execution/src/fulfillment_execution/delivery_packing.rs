@@ -1,17 +1,20 @@
 //! 地址包裹保存、部分发货和剩余任务共用原发货事务。
+use std::sync::Arc;
+
 use erp_core::ids::DeliveryId;
 use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryAddressSnapshot, DeliveryData, DeliveryLine, DeliveryPacking,
 };
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment::service::document_number::next_delivery_no;
+use erp_identity::AuthorizationService;
 use erp_party::SensitiveDataCodec;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::delivery_addresses::{address_source, external_delivery, freeze_addresses, guard_sources};
-use super::task::{FulfillmentIdentityFactory, FulfillmentTaskObject, ensure_fulfillment_task};
+use super::task::{FulfillmentTaskObject, ensure_fulfillment_task};
 use crate::{Error, Result};
 
 pub(super) struct PackingContext {
@@ -68,7 +71,7 @@ impl PackingContext {
     pub(super) async fn prepare_posting(
         &self,
         db: &Database,
-        identity: &FulfillmentIdentityFactory,
+        identity: &Arc<AuthorizationService>,
         delivery: &mut Delivery,
         lines: Vec<DeliveryLine>,
         executor: &mut dyn Executor,
@@ -94,7 +97,7 @@ impl PackingContext {
     pub(super) async fn partition(
         &self,
         db: &Database,
-        identity: &FulfillmentIdentityFactory,
+        identity: &Arc<AuthorizationService>,
         delivery: &mut Delivery,
         original: &[DeliveryLine],
         source: DeliveryAddressSnapshot,

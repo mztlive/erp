@@ -19,6 +19,7 @@ erp-customer = { workspace = true }
 erp-finance = { workspace = true }
 erp-finance-posting = { workspace = true }
 erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 erp-party = { workspace = true }
 erp-procure-to-pay = { workspace = true }
 erp-procurement = { workspace = true }
@@ -42,3 +43,4 @@ validator = { workspace = true }
 
 [dev-dependencies]
 erp-identity = { workspace = true, features = ["test-support"] }
+persistence-core = { workspace = true, features = ["test-support"] }

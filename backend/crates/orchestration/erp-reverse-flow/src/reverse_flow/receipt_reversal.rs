@@ -18,12 +18,10 @@ use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::service::receivable::receipt_reversal::{
     load_posted_receipt, receipt_allocation_sales_order_ids, reverse_receipt_allocations,
 };
-use erp_read_models::returns_center::ReturnsReadService;
-use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::ReturnsService;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 use sales_refresh::{AffectedSales, refresh_affected_sales};
 
 use crate::Result;
@@ -46,42 +44,6 @@ impl ReceiptReversalProcess {
     /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
-    }
-
-    /// 最终通过过账（§8.3-3 事务不变量）。
-    ///
-    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
-    /// 按原回款核销分配反向写入 `REVERSE` 分配并原子冲减子账已核销进度；
-    /// 原回款迁移为已冲正；冲正单迁移为已过账。任一校验失败整体回滚。
-    ///
-    /// # 参数
-    /// * `id` - 冲正单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后冲正单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 冲正单或原回款不存在
-    /// * `ConflictError` - 非审批中
-    /// * `BusinessLogicError` - 累计冲正超原回款、重复过账或超额冲减
-    pub async fn post_receipt_reversal(&self, id: &str, actor: &AuditActor) -> Result<ReceiptReversalView> {
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let reversal_id = id.to_string();
-        let detail_id = reversal_id.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    apply_receipt_reversal_final_post(&db, &reversal_id, &actor_owned, executor).await
-                })
-            })
-            .await?;
-        ReturnsReadService::new(self.db.clone())
-            .receipt_reversal_detail(&detail_id)
-            .await
-            .map_err(crate::Error::from)
     }
 
     /// 复用审批最终通过的会话，禁止创建内层事务或延后销售刷新。
@@ -207,19 +169,10 @@ impl AffectedSales for DatabasePosting<'_> {
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::{ReceiptReversalPosting, post};
     use crate::{Error, Result};
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Default)]
     struct RecordingPosting {
         events: Vec<&'static str>,
@@ -254,7 +207,7 @@ mod tests {
     #[tokio::test]
     async fn reversal_finance_status_audit_and_sales_keep_one_executor_and_original_order() {
         let mut port = RecordingPosting::default();
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(
@@ -268,7 +221,7 @@ mod tests {
         let steps = ["reverse_finance", "post_reversal", "audit", "query_allocations_and_refresh_sales"];
         for (index, step) in steps.iter().enumerate() {
             let mut port = RecordingPosting { fail: Some(step), ..Default::default() };
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let error = post(&mut port, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *step));
             assert_eq!(port.events, steps[..=index]);

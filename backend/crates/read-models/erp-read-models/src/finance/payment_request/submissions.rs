@@ -3,8 +3,10 @@
 use application_core::AuditActor;
 use erp_finance::entity::payable::PurchasePaymentRequest;
 use erp_finance::repository::PurchasePaymentRequestSnapshotExt;
+use erp_permissions::purchase_payment_request as payment_permissions;
 use persistence_core::{Executor, Transactional};
 
+use super::access::PaymentReadScope;
 use super::previews::frozen_previews;
 use super::{
     PaymentRequestMaterialReference, PurchasePaymentRequestReadService, PurchasePaymentRequestSubmissionView,
@@ -34,10 +36,11 @@ impl PurchasePaymentRequestReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let request = this.authorized_submission(&actor, &id, version, executor).await?;
+                    let (request, scope) = this.authorized_submission(&actor, &id, version, executor).await?;
                     let (purchase_previews, sales_previews) =
                         frozen_previews(&request.lines, &request.payer_party_id)?;
                     let attachments = this.attachments(&request, executor).await?;
+                    scope.deliver(executor).await?;
                     Ok(PurchasePaymentRequestSubmissionView {
                         request,
                         purchase_previews,
@@ -73,8 +76,10 @@ impl PurchasePaymentRequestReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let request = this.authorized_submission(&actor, &id, version, executor).await?;
-                    this.material(&request, &asset_id, executor).await
+                    let (request, scope) = this.authorized_submission(&actor, &id, version, executor).await?;
+                    let material = this.material(&request, &asset_id, executor).await?;
+                    scope.deliver(executor).await?;
+                    Ok(material)
                 })
             })
             .await
@@ -86,7 +91,7 @@ impl PurchasePaymentRequestReadService {
         id: &str,
         version: u32,
         executor: &mut dyn Executor,
-    ) -> Result<PurchasePaymentRequest> {
+    ) -> Result<(PurchasePaymentRequest, PaymentReadScope)> {
         let request = self
             .db
             .purchase_payment_request_snapshots()
@@ -101,10 +106,10 @@ impl PurchasePaymentRequestReadService {
             })
             .map(|snapshot| snapshot.request)
             .ok_or_else(|| Error::NotFound("付款申请历史提交不存在或无权查看".into()))?;
-        let scope = self.source_scope(actor, "detail", executor).await?;
+        let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
         if !self.readable(&request, &scope, executor).await? {
             return Err(Error::NotFound("付款申请历史提交不存在或无权查看".into()));
         }
-        Ok(request)
+        Ok((request, scope))
     }
 }

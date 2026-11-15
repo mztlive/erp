@@ -3,7 +3,6 @@
 use std::collections::{BTreeSet, HashMap};
 
 use erp_finance::entity::payable::PayableSourceType;
-use erp_procurement::repository::{PurchaseOrderExt, PurchaseOrderRepositoryScopeExt};
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use mongodb::Database;
@@ -96,7 +95,7 @@ impl FundsAccess {
                     allowed.insert(id.clone());
                 }
             } else if let Some(scope) = &authorization.purchase_scope
-                && self.db.purchase_orders().find_authorized(id, scope, executor).await?.is_some()
+                && !scope.ids_in(&self.db, std::slice::from_ref(id), executor).await?.is_empty()
             {
                 allowed.insert(id.clone());
             }

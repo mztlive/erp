@@ -1,5 +1,5 @@
 //! 连接与能力本域分页，不读取供应商主数据或后台任务。
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::SupplierApiService;
@@ -10,7 +10,7 @@ use crate::repository::prelude::*;
 type SupplierApiConnectionFilter = <mongodb::Database as SupplierApiExt>::SupplierApiConnectionFilter;
 type SupplierApiCapabilityFilter = <mongodb::Database as SupplierApiExt>::SupplierApiCapabilityFilter;
 impl SupplierApiService {
-    /// 分页查询连接列表。
+    /// 在调用方已授权的事务内分页读取连接列表。
     ///
     /// 排序字段白名单在 Service 层校验（api-contract §4）。
     ///
@@ -18,6 +18,7 @@ impl SupplierApiService {
     /// * `params` - 查询参数
     ///
     /// * `keyword_supplier_ids` - 读取模型按关键词解析的完整供应商身份，与精确条件取交集
+    /// * `executor` - 已完成连接列表功能资格检查的原快照事务执行器
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -29,6 +30,7 @@ impl SupplierApiService {
         &self,
         params: &SupplierApiConnectionListParams,
         keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<SupplierApiConnectionView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -43,45 +45,9 @@ impl SupplierApiService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self
-            .db
-            .supplier_api_connections()
-            .search_supplier_api_connections(&filter, &mut NoTransaction)
-            .await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| SupplierApiConnectionView {
-                id: row.id,
-                supplier_id: row.supplier_id,
-                connection_code: row.connection_code,
-                connector_type: row.connector_type,
-                connector_type_label: row.connector_type.map(|kind| kind.label()),
-                status: row.status,
-                rate_limit_policy: None,
-                last_health_at: row.last_health_at.map(|at| at as u64),
-                last_health_result: row.last_health_result,
-                safe_references: SafeReferencesView {
-                    endpoint: SafeReferenceView {
-                        state: if row.endpoint_reference_bound { "BOUND" } else { "MISSING" },
-                        alias: None,
-                        version: None,
-                        visible: false,
-                    },
-                    credential: SafeReferenceView {
-                        state: if row.credential_reference_bound { "BOUND" } else { "MISSING" },
-                        alias: None,
-                        version: None,
-                        visible: false,
-                    },
-                },
-                technical_config_version: row.technical_config_version,
-                allowed_actions: Vec::new(),
-                action_blockers: Vec::new(),
-                version: row.version,
-                created_at: row.created_at,
-            })
-            .collect();
+        let page =
+            self.db.supplier_api_connections().search_supplier_api_connections(&filter, executor).await?;
+        let items = page.items.into_iter().map(SupplierApiConnectionView::from_row).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }

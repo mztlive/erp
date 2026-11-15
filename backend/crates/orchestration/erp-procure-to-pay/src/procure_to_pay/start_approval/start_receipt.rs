@@ -12,27 +12,9 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use crate::{Error, Result};
-
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
-pub(crate) async fn load_bound_definition_graph(
-    db: &Database,
-    binding: &ApprovalDefinitionBinding,
-) -> Result<DefinitionGraph> {
-    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
-}
 
 /// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
 ///
@@ -57,37 +39,6 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
     read::bound_definition_graph(db, binding, "采购单绑定的审批定义不存在", executor)
         .await
         .map_err(Error::from)
-}
-
-/// 读取同载荷启动收据；不存在时返回 `None`。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-///
-/// # 返回
-/// 已提交收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
-pub(crate) async fn load_start_receipt(
-    db: &Database,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    read::start_receipt(
-        db,
-        DocumentType::PurchaseOrder,
-        subject,
-        subject_version,
-        idempotency_key,
-        &mut NoTransaction,
-    )
-    .await
-    .map_err(Error::from)
 }
 
 /// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购启动结果。

@@ -112,6 +112,7 @@ fn pipeline(
 ) -> Vec<Document> {
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(query, condition));
+    stages.extend(authorization.guard_stages());
     stages.push(allocation_lookup(query, authorization, condition, summary));
     if query.sales_order_id.is_some() || query.receivable_account_id.is_some() {
         stages.push(pending_lookup(query));
@@ -303,7 +304,8 @@ mod tests {
             query.operator_kind = Some(kind);
             let stages =
                 pipeline(&query, &CustomerReceiptFilter::default(), &authorization(), &condition, false);
-            let source_index = if kind == ReceiptOperatorKind::Register { 2 } else { 3 };
+            let source_index = if kind == ReceiptOperatorKind::Register { 2 } else { 3 }
+                + authorization().guard_stages().len();
             assert_eq!(
                 stages[source_index].get_document("$lookup").unwrap().get_str("from").unwrap(),
                 Database::RECEIPT_ALLOCATIONS

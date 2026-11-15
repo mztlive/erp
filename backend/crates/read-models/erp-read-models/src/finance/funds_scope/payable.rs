@@ -8,6 +8,7 @@ use erp_finance::dto::payable::PayableEntryView;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableAccountRow, PayableExt};
+use erp_permissions::payable as payable_permissions;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -154,7 +155,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedPayableAccountRow>> {
         let (_access, authorization) =
-            self.resolve_with_purchase(actor, "payable_account", "list", executor).await?;
+            self.resolve_with_purchase(actor, &payable_permissions::ACCOUNT_LIST, executor).await?;
         let condition = self.payable_account_condition(query, executor).await?;
         let snapshot =
             self.payable_database_snapshot(query, &authorization, &condition, true, executor).await?;
@@ -162,6 +163,7 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version)?;
         let items = self.payable_page_items(&snapshot.items, executor).await?;
         let summary = payable_summary(&snapshot.summary, &version)?;
+        authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
             total: snapshot.total(),
@@ -190,8 +192,9 @@ impl FundsAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (_, authorization) =
-                        this.resolve_with_purchase(&actor, "payable_account", "list", executor).await?;
+                    let (_, authorization) = this
+                        .resolve_with_purchase(&actor, &payable_permissions::ACCOUNT_LIST, executor)
+                        .await?;
                     let condition = this.payable_account_condition(&query, executor).await?;
                     this.payable_database_snapshot(&query, &authorization, &condition, false, executor)
                         .await?
@@ -278,7 +281,8 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
         let (_access, authorization) =
-            self.resolve_with_purchase(actor, "payable_account", "detail", executor).await?;
+            self.resolve_with_purchase(actor, &payable_permissions::ACCOUNT_DETAIL, executor).await?;
+        self.require_visible_root(&authorization, id, executor).await?;
         let accounts = self
             .db
             .payable_accounts()
@@ -304,6 +308,7 @@ impl FundsAccess {
         };
         let data = self.payable_detail_data(&account, fact.as_ref(), executor).await?;
         let parts = vec![format!("{}:{}", account.base.id, account.base.version), row_facts.version_part()];
+        authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),

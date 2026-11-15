@@ -84,24 +84,17 @@ pub(super) async fn replay_receipt_command<P: ReceiptReplayPort>(
     port.current_result(&id, executor).await.map(Some)
 }
 
-/// 提交未知时任何查证失败均保留首次错误；只查证一次，不执行写命令。
+/// 合并原事务错误与当前授权快照的查证结果，未知提交查证失败保留首次错误。
 ///
 /// # 参数
-/// * `port` - 回执及原结果读取边界。
-/// * `command` - 原命令身份。
+/// * `probe` - 当前快照核对回执、当前资格及结果后的查证结果。
 /// * `original_error` - 事务首次错误。
-/// * `executor` - 当前查证执行器。
 /// # 返回
 /// 查证成功时返回原结果。
 /// # 错误
 /// 无命中时返回原错误；未知提交查证失败时保留原未知错误。
-pub(super) async fn recover_receipt_command<P: ReceiptReplayPort>(
-    port: &P,
-    command: &CommandReceipt,
-    original_error: Error,
-    executor: &mut dyn Executor,
-) -> Result<P::Output> {
-    match replay_receipt_command(port, command, None, executor).await {
+pub(super) fn recover_receipt_command<T>(probe: Result<Option<T>>, original_error: Error) -> Result<T> {
+    match probe {
         Ok(Some(result)) => Ok(result),
         Ok(None) => Err(original_error),
         Err(_) if matches!(original_error, Error::OutcomeUnknown(_)) => Err(original_error),
@@ -491,8 +484,8 @@ mod tests {
                 _ => {},
             }
             let request = command(if case == 4 { 50 } else { 100 });
-            let error =
-                recover_receipt_command(&probe, &request, unknown_error(), &mut executor).await.unwrap_err();
+            let result = replay_receipt_command(&probe, &request, None, &mut executor).await;
+            let error = recover_receipt_command(result, unknown_error()).unwrap_err();
             assert_original_unknown(error);
             assert!(probe.written_receipts.lock().unwrap().is_empty());
             assert!(probe.logs.lock().unwrap().is_empty());
@@ -503,11 +496,28 @@ mod tests {
     async fn unknown_commit_can_recover_only_the_current_original_result() {
         let mut executor = NoTransaction;
         let probe = Probe::new(&mut executor);
-        assert_eq!(
-            recover_receipt_command(&probe, &command(100), unknown_error(), &mut executor).await.unwrap(),
-            42
-        );
+        let result = replay_receipt_command(&probe, &command(100), None, &mut executor).await;
+        assert_eq!(recover_receipt_command(result, unknown_error()).unwrap(), 42);
         assert_eq!(*probe.calls.lock().unwrap(), ["read_receipt", "current_result"]);
+    }
+
+    /// 新快照初始化或当前授权取证失败不能掩盖未知提交，普通失败仍返回查证错误。
+    #[test]
+    fn recovery_keeps_unknown_commit_for_snapshot_or_authorization_failure() {
+        for failure in [
+            Error::RepositoryError(PersistenceError::EntityMetadataOutOfRange("snapshot unavailable")),
+            Error::Forbidden("当前提交资格已撤销".into()),
+        ] {
+            assert_original_unknown(
+                recover_receipt_command::<()>(Err(failure), unknown_error()).unwrap_err(),
+            );
+        }
+        let error = recover_receipt_command::<()>(
+            Err(Error::Forbidden("当前提交资格已撤销".into())),
+            Error::ConflictError("原写入冲突".into()),
+        )
+        .unwrap_err();
+        assert!(matches!(error, Error::Forbidden(message) if message == "当前提交资格已撤销"));
     }
 
     #[tokio::test]

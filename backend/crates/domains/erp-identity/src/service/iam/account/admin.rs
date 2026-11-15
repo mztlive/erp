@@ -1,17 +1,18 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
+use erp_permissions::admin;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{
     AdminItem, CreateAdminParams, InitializeSuperAdminParams, UpdateAdminParams, UpdateAdminRoleParams,
 };
 use super::scope::seed_company;
-use crate::AccessControlExt;
 use crate::entity::account_core::{
     AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, ExistingSuperAdminState,
 };
@@ -22,7 +23,9 @@ use crate::ports::PreparedResourceAudit;
 use crate::repository::prelude::*;
 use crate::service::account_support::{account_of_kind, apply_account_update, ensure_account_available};
 use crate::service::auth::password;
+use crate::service::iam::management::ManagementAccess;
 use crate::service::iam::{AuthorizedAccountManagement, AuthorizedRoleGrant, SharedRbacService};
+use crate::{AccessControlExt, AuthorizationService};
 
 /// 管理员服务
 ///
@@ -92,6 +95,7 @@ impl AdminService {
     /// 会校验账号唯一性以及角色存在性，然后为管理员生成安全凭证并持久化。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// * `params` - 创建管理员所需参数
     /// * `actor` - 已通过鉴权的审计操作人
     ///
@@ -101,7 +105,14 @@ impl AdminService {
     /// # 错误
     /// * `ConflictError` - 账号已存在
     /// * `BusinessLogicError` - 角色不存在或密码策略等业务校验失败
-    pub async fn create_admin(&self, params: CreateAdminParams, actor: AuditActor) -> Result<()> {
+    pub async fn create_admin(
+        &self,
+        params: CreateAdminParams,
+        actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<()> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_CREATE_ADMIN);
+        access.preflight(&self.db).await?;
         params.validate()?;
         let account = LoginAccount::new(params.account)?;
         ensure_account_available(&self.db, &account, None, &mut NoTransaction).await?;
@@ -114,7 +125,7 @@ impl AdminService {
         let grant = self.rbac.authorize_role_assignment(&actor, role_ids).await?;
         let audit =
             self.rbac.prepare_resource_log(actor, "admin.create", "admin", account.base.id.clone())?;
-        self.create_account_with_roles(account, grant, audit).await?;
+        self.create_account_with_roles(account, grant, audit, access).await?;
 
         Ok(())
     }
@@ -151,6 +162,7 @@ impl AdminService {
     /// 获取管理员列表。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// 无。
     ///
     /// # 返回
@@ -158,19 +170,38 @@ impl AdminService {
     ///
     /// # 错误
     /// 账号列表或角色绑定读取失败时返回错误。
-    pub async fn admin_list(&self) -> Result<Vec<AdminItem>> {
-        let admins: Vec<AccountCore> =
-            self.db.accounts().list_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
-        let account_ids = admins.iter().map(|account| account.base.id.clone()).collect::<Vec<_>>();
-        let mut role_ids = self.rbac.role_ids_by_accounts(AccountKind::Admin, &account_ids).await?;
-
-        Ok(admins
-            .into_iter()
-            .map(|account| {
-                let roles = role_ids.remove(&account.base.id).unwrap_or_default();
-                AdminItem::from_account(account, roles.into_iter().map(|id| id.to_string()).collect())
+    pub async fn admin_list(
+        &self,
+        actor: &AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<Vec<AdminItem>> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_LIST_ADMINS);
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    let admins = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
+                    let account_ids =
+                        admins.iter().map(|account| account.base.id.clone()).collect::<Vec<_>>();
+                    let mut role_ids = rbac.role_ids_by_accounts(AccountKind::Admin, &account_ids).await?;
+                    let items = admins
+                        .into_iter()
+                        .map(|account| {
+                            let roles = role_ids.remove(&account.base.id).unwrap_or_default();
+                            AdminItem::from_account(
+                                account,
+                                roles.into_iter().map(|id| id.to_string()).collect(),
+                            )
+                        })
+                        .collect();
+                    access.require(executor).await?;
+                    Ok(items)
+                })
             })
-            .collect())
+            .await
     }
 
     /// 更新管理员信息。
@@ -178,6 +209,7 @@ impl AdminService {
     /// 支持更新姓名、密码、角色（角色需存在）。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// * `params` - 更新参数（包含管理员ID与可选更新字段）
     /// * `actor` - 已通过鉴权的审计操作人
     ///
@@ -187,7 +219,14 @@ impl AdminService {
     /// # 错误
     /// * `NotFound` - 管理员不存在
     /// * `BusinessLogicError` - 指定角色不存在
-    pub async fn update_admin(&self, params: UpdateAdminParams, actor: AuditActor) -> Result<()> {
+    pub async fn update_admin(
+        &self,
+        params: UpdateAdminParams,
+        actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<()> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_UPDATE_ADMIN);
+        access.preflight(&self.db).await?;
         params.validate()?;
         let context = self.prepare_admin_update(params, &actor).await?;
         let resource_id = context.account.base.id.clone();
@@ -195,11 +234,11 @@ impl AdminService {
         match context.authorization.into_role_grant() {
             Some(grant) => {
                 let audit = self.rbac.prepare_resource_log(actor, "admin.update", "admin", resource_id)?;
-                self.update_account_with_roles(context.account, grant, audit).await?;
+                self.update_account_with_roles(context.account, grant, audit, access).await?;
             },
             None => {
                 let audit = self.rbac.prepare_resource_log(actor, "admin.update", "admin", resource_id)?;
-                self.update_account_only(context.account, audit, policy_revision).await?;
+                self.update_account_only(context.account, audit, policy_revision, access).await?;
             },
         }
         Ok(())
@@ -236,9 +275,10 @@ impl AdminService {
         mut account: AccountCore,
         audit: PreparedResourceAudit,
         policy_revision: u64,
+        access: ManagementAccess,
     ) -> Result<()> {
         let db = self.db.clone();
-        self.run_admin_account_write(policy_revision, audit, move |executor| {
+        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
             Box::pin(async move {
                 db.accounts().update(&mut account, executor).await?;
                 Ok(())
@@ -250,6 +290,7 @@ impl AdminService {
     /// 单独更新管理员角色。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// * `params` - 包含管理员ID与新角色ID集合
     /// * `actor` - 已通过鉴权的审计操作人
     ///
@@ -259,7 +300,14 @@ impl AdminService {
     /// # 错误
     /// * `NotFound` - 管理员不存在
     /// * `BusinessLogicError` - 角色不存在
-    pub async fn update_admin_role(&self, params: UpdateAdminRoleParams, actor: AuditActor) -> Result<()> {
+    pub async fn update_admin_role(
+        &self,
+        params: UpdateAdminRoleParams,
+        actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<()> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_UPDATE_ADMIN_ROLE);
+        access.preflight(&self.db).await?;
         params.validate()?;
         let account = account_of_kind(
             self.db.accounts().find_by_id(&params.id, &mut NoTransaction).await?,
@@ -280,7 +328,7 @@ impl AdminService {
         let audit =
             self.rbac.prepare_resource_log(actor, "admin.role.update", "admin", account_id.clone())?;
         let rbac = self.rbac.clone();
-        self.run_admin_account_write(policy_revision, audit, move |executor| {
+        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
             Box::pin(async move {
                 rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
                 Ok(())
@@ -292,6 +340,7 @@ impl AdminService {
     /// 删除管理员（软删除）。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// * `id` - 管理员ID
     /// * `actor` - 已通过鉴权的审计操作人
     ///
@@ -300,7 +349,14 @@ impl AdminService {
     ///
     /// # 错误
     /// * `NotFound` - 管理员不存在
-    pub async fn delete_admin(&self, id: String, actor: AuditActor) -> Result<()> {
+    pub async fn delete_admin(
+        &self,
+        id: String,
+        actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<()> {
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_DELETE_ADMIN);
+        access.preflight(&self.db).await?;
         let account = account_of_kind(
             self.db.accounts().find_by_id(&id, &mut NoTransaction).await?,
             AccountKind::Admin,
@@ -312,7 +368,7 @@ impl AdminService {
             .authorize_target_management(&actor, AccountKind::Admin, account.base.id.as_str(), None)
             .await?;
         let audit = self.rbac.prepare_resource_log(actor, "admin.delete", "admin", id)?;
-        self.delete_account_with_roles(account, audit, authorization.policy_revision()).await
+        self.delete_account_with_roles(account, audit, authorization.policy_revision(), access).await
     }
 
     /// 在同一事务中创建管理员账号并写入完整角色绑定。
@@ -332,12 +388,13 @@ impl AdminService {
         account: AccountCore,
         grant: AuthorizedRoleGrant,
         audit: PreparedResourceAudit,
+        access: ManagementAccess,
     ) -> Result<()> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         let policy_revision = grant.policy_revision();
-        self.run_admin_account_write(policy_revision, audit, move |executor| {
+        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
             Box::pin(async move {
                 db.accounts().create(&account, executor).await?;
                 rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
@@ -364,12 +421,13 @@ impl AdminService {
         mut account: AccountCore,
         grant: AuthorizedRoleGrant,
         audit: PreparedResourceAudit,
+        access: ManagementAccess,
     ) -> Result<()> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
         let policy_revision = grant.policy_revision();
-        self.run_admin_account_write(policy_revision, audit, move |executor| {
+        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
             Box::pin(async move {
                 db.accounts().update(&mut account, executor).await?;
                 rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
@@ -446,11 +504,12 @@ impl AdminService {
         mut account: AccountCore,
         audit: PreparedResourceAudit,
         policy_revision: u64,
+        access: ManagementAccess,
     ) -> Result<()> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let account_id = account.base.id.clone();
-        self.run_admin_account_write(policy_revision, audit, move |executor| {
+        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
             Box::pin(async move {
                 db.accounts().soft_delete(&mut account, executor).await?;
                 rbac.clear_roles(AccountKind::Admin, &account_id, executor).await?;
@@ -467,6 +526,7 @@ impl AdminService {
         &self,
         policy_revision: u64,
         audit: PreparedResourceAudit,
+        access: ManagementAccess,
         write: F,
     ) -> Result<T>
     where
@@ -475,7 +535,14 @@ impl AdminService {
             + Send
             + 'static,
     {
-        self.rbac.run_authorized_audited_policy_transaction(policy_revision, audit, write).await
+        self.rbac
+            .run_authorized_audited_policy_transaction(policy_revision, audit, move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    write(executor).await
+                })
+            })
+            .await
     }
 
     /// 确保超级管理员账号存在、启用并绑定 root 角色。

@@ -13,6 +13,7 @@ use erp_customer::{
 use erp_party::repository::prelude::*;
 use erp_party::service::party::identity::ensure_identity_available;
 use erp_party::{Party, PartyExt, PartyRevision, PartyRevisionData, PartyUpdate};
+use erp_permissions::customer as customer_permissions;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -85,7 +86,7 @@ impl CustomerProfileProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.require_with(actor, "update", &customer_id, executor).await?;
+                    rbac.require_with(actor, &customer_permissions::UPDATE, &customer_id, executor).await?;
                     prepared.persist(&db, executor).await
                 })
             })

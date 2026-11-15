@@ -1,7 +1,9 @@
 //! 模板目录和当前申请人记录的数据库分页。
 
 use application_core::AuditActor;
-use persistence_core::NoTransaction;
+use erp_identity::AccessTarget;
+use erp_permissions::contract;
+use persistence_core::{Executor, Transactional};
 
 use super::ContractTemplateService;
 use crate::PageView;
@@ -17,8 +19,34 @@ impl ContractTemplateService {
     /// 稳定排序的模板公开视图。
     /// # 错误
     /// 数据读取失败。
-    pub async fn templates(&self, params: &TemplateListParams) -> Result<PageView<TemplateView>> {
-        let result = templates_page(&self.db, params, &mut NoTransaction).await?;
+    pub async fn templates(
+        &self,
+        actor: &AuditActor,
+        params: &TemplateListParams,
+    ) -> Result<PageView<TemplateView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.templates_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn templates_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &TemplateListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<TemplateView>> {
+        self.authorization
+            .require(actor, &contract::TEMPLATES_LIST, AccessTarget::Operation, executor)
+            .await?;
+        let result = templates_page(&self.db, params, executor).await?;
         Ok(PageView {
             items: result.items.into_iter().map(Into::into).collect(),
             total: result.total,
@@ -40,7 +68,29 @@ impl ContractTemplateService {
         params: &TemplateListParams,
         actor: &AuditActor,
     ) -> Result<PageView<ApplicationView>> {
-        let result = applications_page(&self.db, actor.id(), params, &mut NoTransaction).await?;
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.applications_snapshot(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn applications_snapshot(
+        &self,
+        params: &TemplateListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<ApplicationView>> {
+        self.authorization
+            .require(actor, &contract::TEMPLATES_APPLICATIONS, AccessTarget::Operation, executor)
+            .await?;
+        let result = applications_page(&self.db, actor.id(), params, executor).await?;
         Ok(PageView {
             items: result.items.into_iter().map(Into::into).collect(),
             total: result.total,

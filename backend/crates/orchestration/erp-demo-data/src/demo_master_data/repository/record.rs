@@ -3,7 +3,7 @@
 use mongodb::bson::{Document, doc};
 use mongodb::options::{IndexOptions, UpdateOptions};
 use mongodb::{Database, IndexModel};
-use persistence_core::{Executor, NoTransaction, mongo_ops};
+use persistence_core::{Executor, ReadExecutor, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use super::super::plan::DemoKind;
@@ -55,7 +55,7 @@ impl DemoMasterRecord {
 /// # 错误
 /// 查询失败时返回错误。
 pub(in crate::demo_master_data) async fn load_all(db: &Database) -> Result<Vec<DemoMasterRecord>> {
-    load(db, &mut NoTransaction).await
+    load(db, &mut ReadExecutor::default()).await
 }
 
 /// 在调用方事务内读取登记，包含旧版软删除记录。
@@ -158,5 +158,22 @@ mod tests {
         assert!(check_owner(Some(&row), "owned").is_ok());
         assert!(check_owner(Some(&row), "other").is_err());
         assert!(check_owner(None, "owned").is_err());
+    }
+}
+
+#[cfg(test)]
+pub(in crate::demo_master_data) mod testing {
+    use mongodb::options::ClientOptions;
+    use mongodb::{Client, Database};
+
+    /// 构造不连接服务器的数据库句柄，只供授权失败先于读取的单元测试使用。
+    /// # 参数
+    /// name 为测试数据库名。
+    /// # 返回
+    /// 未执行任何数据库操作的句柄。
+    /// # 错误
+    /// 默认客户端配置无效时测试失败。
+    pub(in crate::demo_master_data) fn database(name: &str) -> Database {
+        Client::with_options(ClientOptions::default()).unwrap().database(name)
     }
 }

@@ -54,9 +54,7 @@ impl ReturnsProcess {
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        let persisted = persist_customer_refund_start(
-            &self.db,
-            &self.rbac,
+        self.complete_customer_refund_start(
             CustomerRefundStartPersistInput {
                 command_receipt: submission.command_receipt.clone(),
                 resubmission_reason: resubmission_reason.clone(),
@@ -69,10 +67,26 @@ impl ReturnsProcess {
                 organization_id,
                 now,
             },
+            &submission,
         )
-        .await;
-        self.finish_reversal_submit(&submission, persisted.map(|_| ())).await?;
-        self.reads().customer_refund_detail(id).await.map_err(reversal_result_read_error)
+        .await
+    }
+    /// 完成启动持久化或精确收据恢复，再按原提交入口读取回包。
+    async fn complete_customer_refund_start(
+        &self,
+        input: CustomerRefundStartPersistInput,
+        submission: &ReversalSubmitReplayInput,
+    ) -> Result<CustomerRefundView> {
+        let persisted = persist_customer_refund_start(&self.db, &self.rbac, input).await;
+        self.finish_reversal_submit(submission, persisted.map(|_| ())).await?;
+        self.customer_refund_result(
+            &submission.id,
+            &submission.actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+            AccessTarget::record(&submission.id)?,
+        )
+        .await
+        .map_err(reversal_result_read_error)
     }
     /// 加载撤回运行事实并写回草稿。
     ///
@@ -95,8 +109,7 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = customer_refund_adapter()?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = customer_refund_subject_ref(id)?;
         let runtime =
@@ -142,7 +155,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 先证明账号和提交资格，再读取退款并核验资金来源，沿用调用方事务。
+/// 先执行真实单据的完整提交规则，再读取退款业务状态，沿用调用方事务。
 /// # 参数
 /// * `db` / `rbac` - 数据库与审批授权端口。
 /// * `actor` / `refund_id` - 当前操作人与退款单主键。
@@ -158,14 +171,14 @@ pub(in crate::reverse_flow) async fn authorized_customer_refund(
     refund_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<CustomerRefund> {
-    ensure_submit_permission(db, rbac, actor, "customer_refund:submit", executor).await?;
+    ensure_submit_permission(rbac, actor, DocumentType::CustomerRefund, refund_id, executor).await?;
     let refund = ReturnsService::new(db.clone()).load_customer_refund(refund_id, executor).await?;
+    refund.ensure_separation()?;
     let customer = db
         .customer_accounts()
         .find_by_id(&refund.customer_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
     customer_refund_responsible_org_id(customer.party_id.as_ref())?;
-    ensure_source_authorized(db, rbac, actor, DocumentType::CustomerRefund, refund_id, executor).await?;
     Ok(refund)
 }

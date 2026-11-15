@@ -2,12 +2,15 @@
 //!
 //! 页面只接收最近摘要和跨页指标；Service 不返回可诱导客户端继续拉全量的分页游标。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_contract::{ContractAccess, ContractStatus};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
 use erp_customer::CustomerAccess;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::{contract, customer as customer_permissions, sales_order as sales_order_permissions};
 use erp_sales::entity::sales_order::{CloseStatus, CommercialStatus};
 use mongodb::Database;
 use persistence_core::Transactional;
@@ -62,7 +65,7 @@ pub struct CustomerCenterReceivableView {
 #[derive(Clone)]
 pub struct CustomerCenterReadService {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     contracts: ContractAccess,
     customers: CustomerAccess,
     funds: FundsAccess,
@@ -85,7 +88,7 @@ impl CustomerCenterReadService {
     /// 不返回错误。
     pub fn new(
         db: Database,
-        rbac: SharedRbacService,
+        rbac: Arc<AuthorizationService>,
         contracts: ContractAccess,
         customers: CustomerAccess,
         funds: FundsAccess,
@@ -118,23 +121,38 @@ impl CustomerCenterReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.customers.require_with(actor.clone(), "detail", &customer_id, executor).await?;
-                    let contracts = this.contracts.resolve(&actor, "list", executor).await?;
-                    let (sales_context, sales) = SalesAccess::new(this.db.clone(), this.rbac.clone())
-                        .resolve(&actor, "list", &[], executor)
+                    this.customers
+                        .require_with(actor.clone(), &customer_permissions::DETAIL, &customer_id, executor)
                         .await?;
-                    let result = super::repository::CustomerCenterRepository::new(&this.db)
+                    let repository = super::repository::CustomerCenterRepository::new(&this.db);
+                    let contracts = this.contracts.resolve(&actor, &contract::LIST, executor).await?;
+                    let mut result = repository
                         .customer_center_related(
                             &customer_id,
                             RECENT_RELATED_LIMIT,
-                            &contracts.stages(),
-                            &sales.stages(),
+                            Some(&contracts.stages()),
+                            None,
+                            executor,
+                        )
+                        .await?
+                        .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
+                    contracts.validate(executor).await?;
+                    let (sales_context, sales) = SalesAccess::new(this.db.clone(), this.rbac.clone())
+                        .resolve(&actor, &sales_order_permissions::LIST, executor)
+                        .await?;
+                    let sales_result = repository
+                        .customer_center_related(
+                            &customer_id,
+                            RECENT_RELATED_LIMIT,
+                            None,
+                            Some(&sales.stages()),
                             executor,
                         )
                         .await?
                         .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
                     sales_context.validate(executor).await?;
-                    contracts.validate(executor).await?;
+                    result.sales_orders = sales_result.sales_orders;
+                    result.in_progress_sales_order_count = sales_result.in_progress_sales_order_count;
                     Ok::<_, Error>(result)
                 })
             })
@@ -171,7 +189,9 @@ impl CustomerCenterReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.customers.require_with(actor.clone(), "detail", &customer_id, executor).await?;
+                    this.customers
+                        .require_with(actor.clone(), &customer_permissions::DETAIL, &customer_id, executor)
+                        .await?;
                     this.funds.customer_receivable_summary(&customer_id, &actor, executor).await
                 })
             })

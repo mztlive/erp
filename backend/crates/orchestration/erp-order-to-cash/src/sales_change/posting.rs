@@ -164,21 +164,13 @@ pub(super) async fn prepare_receivable_delta(
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor};
 
     use super::{SalesChangePostingPort, post};
     use crate::{Error, Result};
 
     // 非零大小保证执行器地址能够区分不同实例。
-    struct TestExecutor {
-        _identity: u8,
-    }
-
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type TestExecutor = ReadExecutor;
 
     #[derive(Default)]
     struct RecordingPosting {
@@ -219,7 +211,7 @@ mod tests {
     #[tokio::test]
     async fn formal_revision_finance_tasks_change_procurement_and_audit_share_executor_in_order() {
         let mut port = RecordingPosting::default();
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(port.events, ["revision", "receivable_and_tasks", "change", "procurement", "audit"]);
@@ -232,7 +224,7 @@ mod tests {
         let steps = ["revision", "receivable_and_tasks", "change", "procurement", "audit"];
         for (index, failed_step) in steps.iter().enumerate() {
             let mut port = RecordingPosting { fail: Some(*failed_step), ..Default::default() };
-            let error = post(&mut port, &mut TestExecutor { _identity: 1 }).await.unwrap_err();
+            let error = post(&mut port, &mut TestExecutor::default()).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(ref message) if message.as_str() == *failed_step));
             assert_eq!(port.events, steps[..=index]);
         }

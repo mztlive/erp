@@ -10,7 +10,8 @@ use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanc
 use erp_fulfillment::repository::extensions::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::document_number::next_customer_acceptance_no;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_read_models::fulfillment_center::dto::CommitCustomerAcceptanceView;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::repository::SalesOrderExt;
@@ -19,7 +20,6 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::super::task::FulfillmentIdentityFactory;
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
 use super::evidence::ensure_evidence;
@@ -137,8 +137,8 @@ fn commit_command_receipt(req: &CommitCustomerAcceptanceRequest, actor_id: &str)
 /// 根事务开始前固定行身份及命令依赖，恢复查询仍使用原命令收据。
 struct PreparedAcceptanceCommit {
     db: Database,
-    rbac: SharedRbacService,
-    task_identity: FulfillmentIdentityFactory,
+    rbac: Arc<AuthorizationService>,
+    task_identity: Arc<AuthorizationService>,
     workflow: Arc<dyn FulfillmentWorkflow>,
     req: CommitCustomerAcceptanceRequest,
     actor: AuditActor,
@@ -183,7 +183,7 @@ impl PreparedAcceptanceCommit {
 
     async fn execute(self, executor: &mut dyn Executor) -> Result<CustomerAcceptance> {
         SalesAccess::new(self.db.clone(), self.rbac.clone())
-            .require_object(&self.actor, "detail", &self.req.sales_order_id, &[], executor)
+            .require_object(&self.actor, &sales_order_permissions::DETAIL, &self.req.sales_order_id, executor)
             .await?;
         if let Some(persisted) = replay_commit(&self.db, &self.receipt, &self.req, executor).await? {
             return Ok(persisted);
@@ -279,7 +279,7 @@ async fn replay_commit(
 struct CustomerAcceptanceDocument<'a> {
     db: &'a Database,
     workflow: &'a dyn FulfillmentWorkflow,
-    rbac: &'a SharedRbacService,
+    rbac: &'a Arc<AuthorizationService>,
     actor: &'a AuditActor,
 }
 

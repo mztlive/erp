@@ -8,7 +8,7 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::read::bound_definition_graph;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::approval::order::{
     RECENT_HISTORY_LIMIT, document_approval_view, document_approval_view_with_definition,
@@ -26,6 +26,7 @@ use crate::approval_runtime::load_approval_summary;
 /// * `purchase_order_id` - 采购单主键
 /// * `binding` - 创建时冻结的定义绑定
 /// * `status` - 当前采购单业务状态
+/// * `executor` - 已授权采购详情所属的原事务执行器
 ///
 /// # 返回
 /// 返回绑定定义、可选实例、最近历史与单据允许动作。
@@ -40,17 +41,18 @@ pub async fn load_document_approval(
     purchase_order_id: &str,
     binding: Option<&ApprovalDefinitionBinding>,
     status: PurchaseOrderStatus,
+    executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     let Some(binding) = binding else {
         return Ok(document_approval_view(None, None, status));
     };
-    let graph = load_bound_definition_graph(db, binding).await?;
+    let graph = load_bound_definition_graph(db, binding, executor).await?;
     let subject = purchase_order_subject_ref(purchase_order_id)?;
     let runtime = load_approval_summary(
         db,
         &subject,
         u32::try_from(RECENT_HISTORY_LIMIT).expect("审批历史首屏条数在 u32 范围内"),
-        &mut NoTransaction,
+        executor,
     )
     .await?;
     let mut view = document_approval_view_with_definition(Some(binding), Some(&graph), None, status);
@@ -78,10 +80,11 @@ pub(super) async fn load_change_document_approval(
     id: &str,
     binding: Option<&ApprovalDefinitionBinding>,
     status: PurchaseChangeOrderStatus,
+    executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     let mut view = super::approval::change::document_approval_view(binding, None, status);
     if let Some(binding) = binding {
-        let graph = load_bound_definition_graph(db, binding).await?;
+        let graph = bound_definition_graph(db, binding, "采购单绑定的审批定义不存在", executor).await?;
         view.definition = Some(super::approval::order::definition_view_from_binding(binding, Some(&graph)));
     }
     let subject = subject_ref_for(DocumentType::PurchaseChangeOrder, id)
@@ -90,7 +93,7 @@ pub(super) async fn load_change_document_approval(
         db,
         &subject,
         u32::try_from(RECENT_HISTORY_LIMIT).expect("审批历史首屏条数在 u32 范围内"),
-        &mut NoTransaction,
+        executor,
     )
     .await?;
     view.instance = runtime.instance;
@@ -103,8 +106,9 @@ pub(super) async fn load_change_document_approval(
 async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    Ok(bound_definition_graph(db, binding, "采购单绑定的审批定义不存在", &mut NoTransaction).await?)
+    Ok(bound_definition_graph(db, binding, "采购单绑定的审批定义不存在", executor).await?)
 }
 /// 构造采购审批主体，非法身份保持原参数错误。
 fn purchase_order_subject_ref(id: &str) -> Result<SubjectRef> {

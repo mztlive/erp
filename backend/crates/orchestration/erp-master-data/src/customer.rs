@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::run_audited;
 use erp_customer::{CustomerAccess, CustomerExt, CustomerService};
+use erp_permissions::customer as customer_permissions;
 use mongodb::Database;
 
 use crate::{Error, Result};
@@ -52,7 +53,7 @@ pub async fn delete_customer(
     let customer_id = id.clone();
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
-            access.require_with(actor_for_tx, "delete", &customer_id, executor).await?;
+            access.require_with(actor_for_tx, &customer_permissions::DELETE, &customer_id, executor).await?;
             db.customer_accounts().soft_delete(&mut account, executor).await?;
             Ok::<(), Error>(())
         })

@@ -1,9 +1,10 @@
 //! 审批静态资格、类型管理权限与真实业务来源授权。
-
-use std::result::Result as StdResult;
+use std::slice;
 
 use application_core::AuditActor;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts, RelatedObjects, RelationKey};
+use erp_identity::{AccessTarget, AuthorizationService, ResourceTargets, SharedRbacService};
+use erp_permissions::{Permission, approval_instance};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -11,8 +12,7 @@ use super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of};
 use crate::entity::approval_qualification::ApprovalQualification;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
-use crate::ports::WorkflowAuthorizationPort;
-use crate::service::authorization::features;
+use crate::ports::ApprovalUpgradeSubjectFacts;
 
 /// 定义管理的类型级可见范围。不是具体单据 对象范围。
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -114,11 +114,19 @@ impl DefinitionManagementVisibility {
 /// # 错误
 /// 角色、政策读取或 RBAC 判定失败时返回服务错误。
 pub async fn definition_management_visibility(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     actor: &AuditActor,
 ) -> Result<DefinitionManagementVisibility> {
-    definition_management_visibility_with_executor(db, identity_service, actor, &mut NoTransaction).await
+    definition_management_visibility_with_executor(
+        authorization,
+        db,
+        identity_service,
+        actor,
+        &mut NoTransaction,
+    )
+    .await
 }
 
 /// 在调用方执行器的同一数据库快照内计算定义与运行管理的类型级可见范围。
@@ -134,8 +142,9 @@ pub async fn definition_management_visibility(
 /// # 错误
 /// 角色、政策读取或 RBAC 判定失败时返回服务错误。
 pub async fn definition_management_visibility_with_executor(
-    db: &Database,
-    identity_service: &SharedRbacService,
+    authorization: &AuthorizationService,
+    _db: &Database,
+    _identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionManagementVisibility> {
@@ -144,8 +153,8 @@ pub async fn definition_management_visibility_with_executor(
         if let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? {
             policies.push((
                 document_type,
-                Permission::parse(policy.definition_admin_permission)?,
-                Permission::parse(policy.runtime_admin_permission)?,
+                policy.definition_admin_permission.clone(),
+                policy.runtime_admin_permission.clone(),
             ));
         }
     }
@@ -153,7 +162,7 @@ pub async fn definition_management_visibility_with_executor(
         .iter()
         .flat_map(|(_, define, runtime)| [define.clone(), runtime.clone()])
         .collect::<Vec<_>>();
-    let qualification = features(db, identity_service).permissions(actor, &required, executor).await?;
+    let qualification = authorization.permissions(actor, &required, executor).await?;
     let Some(qualification) = qualification else {
         return Ok(DefinitionManagementVisibility::default());
     };
@@ -200,13 +209,14 @@ fn visibility_from_enforced_permissions(
 /// # 错误
 /// 账号或策略读取失败时拒绝。
 pub async fn approval_participant_permissions_with_executor(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     Ok(matches!(
-        approver_qualification(db, identity_service, actor, executor).await?,
+        approver_qualification(authorization, db, identity_service, actor, executor).await?,
         ApprovalQualification::Eligible(_)
     ))
 }
@@ -219,48 +229,39 @@ pub async fn approval_participant_permissions_with_executor(
 /// # 错误
 /// 身份、策略和数据库错误保持原类别。
 pub(super) async fn approver_qualification(
-    db: &Database,
-    identity_service: &SharedRbacService,
+    authorization: &AuthorizationService,
+    _db: &Database,
+    _identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalQualification> {
-    let required =
-        [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
-    let qualified = features(db, identity_service).permissions(actor, &required, executor).await?;
+    let required = [approval_instance::COPIES_HISTORY.clone(), approval_instance::SUBMIT_DECISION.clone()];
+    let qualified = authorization.permissions(actor, &required, executor).await?;
     Ok(ApprovalQualification::from_account(
         qualified.as_ref().map(|value| value.account().clone()),
         qualified.as_ref().is_some_and(|value| value.same_role(&required)),
     ))
 }
 
-/// 证明运行管理动作、类型管理资格和真实业务来源同时成立。
-///
+/// 使用固定管理入口检查真实审批实例、冻结类型和完整业务来源。
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `rbac` / `actor` / `executor` - 当前身份和授权事务。
-/// * `permission` - 当前管理动作。
-/// * `document_type` / `document_id` - 精确主体。
+/// authorization 为共享服务；actor 为当前管理者；permission 为固定管理操作。
+/// document_type 为调用方已加载的类型上下文；instance_id 必须是真实审批实例主键。
+/// executor 为本次读取阶段或原写事务。
 /// # 返回
-/// 所有边界同时成立时成功。
+/// identity 固定的功能资格、实际类型管理和来源读取条件均成立时成功。
 /// # 错误
-/// 任何动作、类型或来源权限不足时拒绝。
+/// 缺少资格、冻结事实、完整来源或执行边界时拒绝。
 pub async fn require_approval_management_with_executor(
-    rbac: &impl WorkflowAuthorizationPort,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
-    permission: &str,
-    document_type: DocumentType,
-    document_id: &str,
+    permission: &Permission,
+    _document_type: DocumentType,
+    instance_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? else {
-        return Err(Error::Forbidden("缺少审批类型管理资格".into()));
-    };
-    let required = [permission, "approval_instance:read", &policy.runtime_admin_permission]
-        .into_iter()
-        .map(Permission::parse)
-        .collect::<StdResult<Vec<_>, _>>()?;
-    let entry = Permission::parse(permission)?;
-    rbac.require_approval_management(actor, &entry, &required, document_type, document_id, executor).await
+    authorization.require(actor, permission, AccessTarget::record(instance_id)?, executor).await?;
+    Ok(())
 }
 
 /// 绑定升级在同一授权快照中得到的服务端身份。
@@ -270,55 +271,52 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
     pub(crate) actor_role: String,
 }
 
-/// 在调用方事务快照中形成绑定升级的三重授权证明。
-///
+/// 在原事务授权未启动单据的升级候选，并选择定义管理角色作为审计来源。
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `rbac` - 共享 RBAC 服务
-/// * `actor` - 已在同一事务中重验为有效的操作人
-/// * `document_type` - 强业务对象证明的精确单据类型
-/// * `document_id` - 已加载强事实证明的精确业务主体
-/// * `executor` - 调用方持有的事务执行器
-///
+/// authorization 为共享服务，actor 为当前管理者，facts 为拥有领域读取的强业务事实。
+/// executor 为同一原业务事务。
 /// # 返回
-/// 动作权限、定义管理权限和真实来源读权同时成立时，
-/// 返回定义管理授权角色中确定性的 `actor_role`。
-///
+/// 完整授权通过后返回定义管理角色；角色只用于审计。
 /// # 错误
-/// 权限、角色、对象范围、对象读取关系或 policy revision 任一无法证明时
-/// 失败关闭。
-///
-/// # 关键业务约束
-/// 完整权限通过 identity 的同角色资格证明；实际来源另走统一对象授权。
-/// actor_role 只记录有效定义管理角色的审计来源，不参与权限决策。
+/// 资格、真实来源、强主体或审计角色缺失时拒绝。
 pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
-    db: &Database,
-    identity_service: &SharedRbacService,
-    rbac: &impl WorkflowAuthorizationPort,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
-    document_type: DocumentType,
-    document_id: &str,
+    facts: &ApprovalUpgradeSubjectFacts,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalBindingUpgradeAuthorization> {
-    let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? else {
+    let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(facts.document_type)? else {
         return Err(Error::Forbidden("缺少审批类型定义管理资格".into()));
     };
-    let definition = Permission::parse(policy.definition_admin_permission)?;
-    let upgrade = Permission::parse("approval_instance:upgrade_binding")?;
-    let read = Permission::parse("approval_instance:read")?;
-    let required = [definition.clone(), upgrade.clone(), read.clone()];
-    rbac.require_approval_management(actor, &upgrade, &required, document_type, document_id, executor)
-        .await?;
-    let qualified = features(db, identity_service)
-        .permissions(actor, &required, executor)
+    let definition = policy.definition_admin_permission.clone();
+    let upgrade = approval_instance::UPGRADE_BINDING.clone();
+    authorization.require(actor, &upgrade, binding_upgrade_target(facts)?, executor).await?;
+    let qualified = authorization
+        .permissions(actor, slice::from_ref(&definition), executor)
         .await?
         .ok_or_else(|| Error::Forbidden("审批绑定升级账号不存在、已停用或身份已变化".into()))?;
     let mut roles = qualified.roles(&definition);
     roles.sort();
     let actor_role =
         roles.into_iter().next().ok_or_else(|| Error::Forbidden("没有该类型定义管理权".into()))?.to_string();
-    identity_service.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?;
     Ok(ApprovalBindingUpgradeAuthorization { actor_role })
+}
+
+/// 使用强业务来源构造升级候选，不把未启动的业务单据伪装成审批实例。
+fn binding_upgrade_target(facts: &ApprovalUpgradeSubjectFacts) -> Result<AccessTarget> {
+    let ids = ResourceTargets::new(&[facts.source_id.as_str()])?;
+    let candidate = ObjectFacts {
+        resource: "approval_instance".into(),
+        subject_type: FactValue::Known(facts.document_type.as_str().into()),
+        subject_source_resource: FactValue::Known(facts.source_resource.clone()),
+        relations: [(
+            RelationKey::parse("subject_source")?,
+            RelatedObjects { expected_ids: ids.ids().iter().cloned().collect(), objects: vec![] },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    Ok(AccessTarget::Candidate(candidate))
 }
 
 #[cfg(test)]
@@ -354,5 +352,29 @@ mod tests {
         assert!(visibility.can_read_detail(DocumentType::SalesOrder));
         assert!(!visibility.can_read_detail(DocumentType::Invoice));
         assert_eq!(visibility.definition_admin_types(), &[DocumentType::StockAdjustment]);
+    }
+    #[test]
+    fn binding_upgrade_uses_real_parent_identity_without_claiming_a_persisted_instance() {
+        let mut facts = super::ApprovalUpgradeSubjectFacts {
+            document_type: DocumentType::SalesChangeOrder,
+            document_id: "change".into(),
+            business_object_version: 3,
+            document_no: String::new(),
+            responsible_org_id: "org".into(),
+            creator_id: "creator".into(),
+            source_resource: "sales_order".into(),
+            source_id: "order".into(),
+        };
+        let super::AccessTarget::Candidate(candidate) = super::binding_upgrade_target(&facts).unwrap() else {
+            panic!("unsubmitted upgrade requires a candidate");
+        };
+        assert!(candidate.id.is_empty());
+        assert!(candidate.version.is_empty());
+        assert_eq!(candidate.subject_type, super::FactValue::Known("sales_change_order".into()));
+        let relation = candidate.relations.values().next().unwrap();
+        assert_eq!(relation.expected_ids, ["order".into()].into());
+        assert!(relation.objects.is_empty());
+        facts.source_id.clear();
+        assert!(super::binding_upgrade_target(&facts).is_err());
     }
 }

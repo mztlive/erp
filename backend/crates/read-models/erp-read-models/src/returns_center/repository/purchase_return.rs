@@ -25,13 +25,13 @@ pub(in crate::returns_center) async fn search(
     scope: &PurchaseReadScope,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<PurchaseReturnOrderRow>> {
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let collection = db.collection::<PurchaseReturnOrderRow>(Database::PURCHASE_RETURN_ORDERS);
     let stages = scope.related_stages(filter.to_doc(), "$purchase_order_id");
     let items =
         aggregate::find(&collection, filter.to_doc(), page_options(filter), stages.clone(), executor).await?;
     let total = aggregate::count(&collection, filter.to_doc(), stages, executor).await?;
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let total =
         i64::try_from(total).map_err(|_| RepositoryError::EntityMetadataOutOfRange("采购退货总数超限"))?;
     Ok(PageResult { items, total })
@@ -50,7 +50,7 @@ pub(in crate::returns_center) async fn versions(
     scope: &PurchaseReadScope,
     executor: &mut dyn Executor,
 ) -> Result<Vec<PurchaseReturnVersion>> {
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let rows = aggregate::find(
         &db.collection::<PurchaseReturnVersion>(Database::PURCHASE_RETURN_ORDERS),
         filter.to_doc(),
@@ -63,7 +63,7 @@ pub(in crate::returns_center) async fn versions(
         executor,
     )
     .await?;
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     Ok(rows)
 }
 

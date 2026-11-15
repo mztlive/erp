@@ -1,6 +1,8 @@
 //! 在审批提交事务装配材料来源授权，不信任既有附件关联提供转授权限。
 
-use erp_identity::SharedRbacService;
+use std::sync::Arc;
+
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_read_models::workbench::freeze_approval_materials as freeze_materials;
 use erp_workflow::WorkflowAuthorizationPort;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
@@ -22,7 +24,7 @@ use crate::Result;
 /// # 错误
 /// 账号、静态权限、资产归属或业务来源校验失败时中止提交。
 pub async fn freeze_approval_materials<A: WorkflowAuthorizationPort>(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
     db: &Database,
     snapshot: ApprovalSubjectSnapshot,
     auth: &A,

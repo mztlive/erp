@@ -3,10 +3,9 @@ use std::collections::HashMap;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PayableAccountId, PayableEntryId};
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Result, aggregate, mongo_ops};
 use serde::Deserialize;
 
 use crate::entity::payable::{PayableEntry, PayableEntryOffset};
@@ -134,26 +133,9 @@ impl PayableEntryRepositoryExt for persistence_core::Repository<'_, PayableEntry
         }
         let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let pipeline = minimum_due_dates_pipeline("payable_account_id", ids, None);
-        let rows = match executor.session() {
-            Some(session) => {
-                self.collection()
-                    .aggregate(pipeline)
-                    .with_type::<AccountDueDateRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                self.collection()
-                    .aggregate(pipeline)
-                    .with_type::<AccountDueDateRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
+        let rows =
+            aggregate::rows(&self.collection().clone_with_type::<AccountDueDateRow>(), pipeline, executor)
+                .await?;
         Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 

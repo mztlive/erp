@@ -50,6 +50,7 @@ impl WarehouseDirectoryService {
                             "DATA_SCOPE_CHANGED：目录已变化，请重新查询".into(),
                         ));
                     }
+                    read.validate(executor).await?;
                     Ok(page)
                 })
             })
@@ -95,6 +96,7 @@ impl WarehouseDirectoryService {
                         page: filter.page,
                         page_size: filter.page_size,
                     };
+                    read.validate(executor).await?;
                     Ok(ScopedPage::new(page, scope))
                 })
             })

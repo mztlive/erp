@@ -1,10 +1,8 @@
 //! 按应收项目汇总有效审批占用；复用 pending_entry 索引。
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::ReceivableEntryId;
-use futures_util::TryStreamExt;
 use mongodb::bson::doc;
-use persistence_core::{Executor, Repository, Result};
+use persistence_core::{Executor, Repository, Result, aggregate};
 
 use crate::entity::receivable::{CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation};
 
@@ -58,25 +56,6 @@ impl ReceiptCapacityRepositoryExt for Repository<'_, CustomerReceipt> {
             doc! { "$project": { "_id": 0, "receivable_entry_id": "$_id", "allocated_amount": 1 } },
         ];
         let collection = self.collection();
-        Ok(match executor.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<PendingReceiptAllocation>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect()
-                    .await?
-            },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<PendingReceiptAllocation>()
-                    .await?
-                    .try_collect()
-                    .await?
-            },
-        })
+        aggregate::rows(&collection.clone_with_type::<PendingReceiptAllocation>(), pipeline, executor).await
     }
 }

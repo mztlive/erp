@@ -306,7 +306,7 @@ impl CatalogService {
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor = actor.clone();
-        access.require_create(&actor, &product.base.id, executor).await?;
+        access.require_create(&actor, &product, executor).await?;
         pending_assets.persist(&db, executor).await?;
         db.products().create(&product, executor).await?;
         db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;

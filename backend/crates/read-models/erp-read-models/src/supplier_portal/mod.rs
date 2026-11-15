@@ -13,6 +13,8 @@ pub use impacts::{
 mod repository;
 mod review_context;
 mod session;
+#[cfg(test)]
+mod testing;
 mod views;
 mod warnings;
 use std::sync::Arc;
@@ -35,7 +37,7 @@ pub use crate::supplier_center::offering::portal::{
 };
 
 /// 外部统一分页筛选，只能收窄当前供应商的授权结果。
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PortalListParams {
     pub q: Option<String>,
@@ -45,7 +47,7 @@ pub struct PortalListParams {
 }
 
 /// 内部申请查询明确指定供应商，不能发起全库申请扫描。
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PortalAdminListParams {
     pub supplier_id: String,
@@ -61,7 +63,7 @@ pub trait PortalReadAuthorizationPort: Send + Sync {
     /// 在调用方执行器上重验精确申请及其供应商、供给对象资格。
     ///
     /// # 参数
-    /// `actor` 为内部身份；`request_id` 为申请；`executor` 为本次读取执行器。
+    /// `actor` 为内部身份；`request_id` 为申请；`executor` 为覆盖授权和业务读取的原快照事务。
     /// # 返回
     /// 可读返回 `true`，不存在或越权返回 `false`。
     /// # 错误
@@ -76,7 +78,7 @@ pub trait PortalReadAuthorizationPort: Send + Sync {
     /// 核对内部账号对目标供应商的正式详情资格。
     ///
     /// # 参数
-    /// `actor` 为内部身份；`supplier_id` 是服务器解析目标；`executor` 为本次执行器。
+    /// `actor` 为内部身份；`supplier_id` 是服务器解析目标；`executor` 为原快照事务。
     /// # 返回
     /// 可读返回 `true`，范围外返回 `false`。
     /// # 错误
@@ -91,7 +93,7 @@ pub trait PortalReadAuthorizationPort: Send + Sync {
     /// 逐个验证已有供给的正式详情范围，不能继承新品申请的供应商范围。
     ///
     /// # 参数
-    /// `actor` 为内部身份；`offering_id` 为服务器解析的供给；`executor` 为本次执行器。
+    /// `actor` 为内部身份；`offering_id` 为服务器解析的供给；`executor` 为原快照事务。
     /// # 返回
     /// 可读返回 `true`，不存在或越权返回 `false`。
     /// # 错误
@@ -105,6 +107,7 @@ pub trait PortalReadAuthorizationPort: Send + Sync {
 }
 
 /// 门户会话、目录与三类申请的跨域读取入口。
+#[derive(Clone)]
 pub struct SupplierPortalReadService {
     db: Database,
     authorization: Option<Arc<dyn PortalReadAuthorizationPort>>,

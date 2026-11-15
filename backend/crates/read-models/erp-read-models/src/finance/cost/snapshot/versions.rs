@@ -1,7 +1,6 @@
 //! 完整范围的轻量版本读取；身份、来源和顺序与首次金额快照一致。
 use erp_finance::repository::cost::read_scope::{CostAllocationScopeVersion, CostEntryScopeVersion};
-use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::prelude::*;
+use erp_permissions::Permission as AccessPermission;
 
 use super::*;
 
@@ -70,31 +69,29 @@ impl CostReadModel {
         &self,
         params: &CostEntryListParams,
         selection: &CostSelection,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         actor: &AuditActor,
     ) -> Result<String> {
         let filter = cost_entry_filter(params)?;
         let this = self.clone();
         let actor = actor.clone();
         let id = selection.id.clone();
-        let resource = resource.to_owned();
-        let action = action.to_owned();
+        let permission = permission.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut access = this.authorize(&actor, &resource, &action, executor).await?;
-                    access.context.validate(executor).await?;
-                    access.whole.validate(executor).await?;
+                    let mut access = this.authorize(&actor, &permission, executor).await?;
+                    access.context.ensure_current(executor)?;
+                    access.whole.ensure_current(executor)?;
                     access.require_filter(&filter)?;
-                    let facts = this.candidate_versions(&filter, id.as_deref(), executor).await?;
+                    let facts = this.candidate_versions(&filter, id.as_deref(), &access, executor).await?;
                     this.authorized_orders(&facts, &mut access, executor).await?;
                     this.whole_orders(&facts, &access.whole, executor).await?.hash(&mut access.fingerprint);
                     facts.hash(&mut access.fingerprint);
+                    // 同一根凭证只在全部读取结束后交付一次。
                     access.context.validate(executor).await?;
-                    access.whole.validate(executor).await?;
                     Ok(format!("{:x}", access.fingerprint.finish()))
                 })
             })
@@ -113,9 +110,11 @@ impl CostReadModel {
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
+        access: &CostAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<VersionFacts> {
-        let entries = self.db.cost_entries().scope_candidate_versions(filter, id, executor).await?;
+        let entries =
+            self.db.cost_entries().scope_candidate_versions(filter, id, &access.access, executor).await?;
         if entries.len() > ENTRY_LIMIT {
             return Err(Error::ValidationError("成本查询超过上限，请指定供应商或成本类型".into()));
         }
@@ -137,7 +136,7 @@ impl CostReadModel {
         access: &WholeAccess,
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>> {
-        access.validate(executor).await?;
+        access.ensure_current(executor)?;
         let stages = access.stages();
         let ids = facts.entries.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let mut result = BTreeSet::new();
@@ -151,7 +150,7 @@ impl CostReadModel {
                     .map(|row| row.id),
             );
         }
-        access.validate(executor).await?;
+        access.ensure_current(executor)?;
         Ok(result)
     }
 
@@ -178,7 +177,7 @@ impl CostReadModel {
             .collect::<Vec<_>>();
         let mut orders = BTreeSet::new();
         for chunk in ids.chunks(500) {
-            let current = self.db.sales_orders().scope_order_versions(chunk, &access.sales, executor).await?;
+            let current = access.sales.versions_in(&self.db, chunk, executor).await?;
             for order in current {
                 order.id.hash(&mut access.fingerprint);
                 order.version.hash(&mut access.fingerprint);

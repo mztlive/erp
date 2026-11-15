@@ -4,13 +4,15 @@ mod reference_prices;
 
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use erp_identity::AccessTarget;
+use erp_permissions::{Permission, sales_order as sales_order_permissions, sales_order};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use self::facts::DetailFacts;
 use super::super::approval_query::load_document_approval;
@@ -38,63 +40,107 @@ struct DetailPresentation {
 }
 
 impl SalesOrderReadService {
-    /// 查询销售单详情，并在事实装配完成后重验授权和销售单版本。
-    ///
+    /// 在同一授权快照中读取销售单及完整关联详情。
     /// # 参数
-    /// * `id` - 销售单稳定身份
-    /// * `actor` - 已认证操作人；内部查询可不提供
-    ///
+    /// id 为销售身份；actor 必须是当前已认证账号。
     /// # 返回
-    /// 包含稳定明细、草稿、提交、版本、采购、财务与审批的详情视图。
-    ///
+    /// 完整详情，所有数据库事实均来自同一快照。
     /// # 错误
-    /// 单据缺失、无权读取、关联查询失败或读取期间范围发生变化时拒绝。
-    #[tracing::instrument(
-        name = "sales_order.detail",
-        skip_all,
-        fields(layer = "service", domain = "sales_order", operation = "detail")
-    )]
+    /// 缺少身份、无详情资格、事实读取或交付检查失败时拒绝。
     pub async fn sales_order_detail(
         &self,
         id: &str,
         actor: Option<&AuditActor>,
     ) -> Result<SalesOrderDetailView> {
-        let (order, access_version) = self.detail_order(id, actor).await?;
-        let facts = self.load_detail_facts(&order).await?;
-        let presentation = self.detail_presentation(&order, &facts, actor).await?;
-        let inquiry_source = inquiry_sources(&self.db).find_by_id(id, &mut NoTransaction).await?;
-        let current_work = self.current_work(&order).await?;
-        self.recheck_detail_access(id, actor, access_version).await?;
+        let actor = actor.ok_or_else(|| Error::Unauthenticated("销售详情必须提供当前账号".into()))?.clone();
+        let id = id.to_string();
+        let this = Self::with_rbac(self.db.clone(), self.require_rbac()?.clone());
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.require_rbac()?
+                        .require(&actor, &sales_order::DETAIL, AccessTarget::record(&id)?, executor)
+                        .await?;
+                    let order = this
+                        .db
+                        .sales_orders()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
+                    let view = this.detail_view(order, &actor, executor).await?;
+                    let (context, scope) = SalesAccess::new(this.db.clone(), this.require_rbac()?.clone())
+                        .resolve(&actor, &sales_order_permissions::DETAIL, executor)
+                        .await?;
+                    this.db
+                        .sales_orders()
+                        .find_authorized(&id, &scope, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
+                    context.validate(executor).await?;
+                    Ok(view)
+                })
+            })
+            .await
+    }
+
+    /// 在调用方快照中按实际命令资格重新授权并读取结果。
+    /// # 参数
+    /// id、actor 为真实销售单和当前账号；permission 为该命令固定的记录权限，
+    /// 创建回包使用 SALES_CREATED_RESULT_READ；executor 为活动快照执行器。
+    /// # 返回
+    /// 同一快照的完整结果；不会追加详情菜单资格。
+    /// # 错误
+    /// 非快照执行器、非销售权限、记录无权、读取或最终授权失败时拒绝。
+    pub async fn command_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesOrderDetailView> {
+        if permission.resource() != "sales_order"
+            || !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
+        {
+            return Err(Error::ValidationError("销售结果读取必须使用对应权限和快照事务".into()));
+        }
+        self.require_rbac()?.require(actor, permission, AccessTarget::record(id)?, executor).await?;
+        let order = self
+            .db
+            .sales_orders()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
+        let view = self.detail_view(order, actor, executor).await?;
+        self.require_rbac()?.require(actor, permission, AccessTarget::record(id)?, executor).await?;
+        Ok(view)
+    }
+
+    /// 全部投影共用调用方快照；子查询在各自阶段完成交付。
+    async fn detail_view(
+        &self,
+        order: SalesOrder,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesOrderDetailView> {
+        let facts = self.load_detail_facts(&order, executor).await?;
+        let presentation = self.detail_presentation(&order, &facts, Some(actor), executor).await?;
+        let inquiry_source = inquiry_sources(&self.db).find_by_id(&order.base.id, executor).await?;
+        let current_work = self.current_work(&order, executor).await?;
         let mut view = SalesOrderDetailView::from_facts(order, facts, presentation);
         view.inquiry_source = inquiry_source;
         view.current_work = current_work;
         Ok(view)
     }
 
-    /// 有操作人时取得授权单据与范围版本；内部调用保留原有直接读取入口。
-    async fn detail_order(
-        &self,
-        id: &str,
-        actor: Option<&AuditActor>,
-    ) -> Result<(SalesOrder, Option<String>)> {
-        if let Some(actor) = actor {
-            let (order, version) =
-                SalesAccess::new(self.db.clone(), self.require_rbac()?.clone()).detail(actor, id).await?;
-            return Ok((order, Some(version)));
-        }
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".into()))?;
-        Ok((order, None))
-    }
-
     /// 仅读取已授权销售单自身凭证的安全元数据。
-    async fn evidence_files(&self, order: &SalesOrder) -> Result<Vec<SalesOrderEvidenceFileView>> {
-        let files =
-            self.db.file_assets().find_by_ids(&order.evidence_file_asset_ids, &mut NoTransaction).await?;
+    async fn evidence_files(
+        &self,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderEvidenceFileView>> {
+        let files = self.db.file_assets().find_by_ids(&order.evidence_file_asset_ids, executor).await?;
         Ok(files
             .into_iter()
             .map(|file| SalesOrderEvidenceFileView {
@@ -106,34 +152,18 @@ impl SalesOrderReadService {
             .collect())
     }
 
-    /// 装配后再次执行原授权查询，拒绝期间撤权或单据版本变化。
-    async fn recheck_detail_access(
-        &self,
-        id: &str,
-        actor: Option<&AuditActor>,
-        expected: Option<String>,
-    ) -> Result<()> {
-        if let (Some(actor), Some(expected)) = (actor, expected) {
-            let (_, current) =
-                SalesAccess::new(self.db.clone(), self.require_rbac()?.clone()).detail(actor, id).await?;
-            if current != expected {
-                return Err(crate::support::data_scope_changed("数据范围或销售单已变化，请刷新"));
-            }
-        }
-        Ok(())
-    }
-
     /// 按原顺序读取采购资格、审批工作面、责任人、变更资格和审批结构。
     async fn detail_presentation(
         &self,
         order: &SalesOrder,
         facts: &DetailFacts,
         actor: Option<&AuditActor>,
+        executor: &mut dyn Executor,
     ) -> Result<DetailPresentation> {
-        let purchase_coverage = self.sales_procurement_coverage(order, actor).await?;
+        let purchase_coverage = self.sales_procurement_coverage(order, actor, executor).await?;
         let purchase_creation_access =
-            self.purchase_creation_access(order, &purchase_coverage, actor).await?;
-        let freight_follow_ups = self.freight_follow_ups(order, actor).await?;
+            self.purchase_creation_access(order, &purchase_coverage, actor, executor).await?;
+        let freight_follow_ups = self.freight_follow_ups(order, actor, executor).await?;
         let active_card_sales_approval = match (actor, facts.submissions.first()) {
             (Some(actor), Some(submission)) => {
                 self.resolve_active_card_sales_approval(
@@ -141,13 +171,14 @@ impl SalesOrderReadService {
                     &SalesOrderSubmissionId::new(submission.id.clone()),
                     Some(submission),
                     actor,
+                    executor,
                 )
                 .await?
             },
             _ => None,
         };
-        let (owner_user_name, stage) = self.detail_stage(order).await?;
-        let active_change = self.has_active_sales_change(order).await?;
+        let (owner_user_name, stage) = self.detail_stage(order, executor).await?;
+        let active_change = self.has_active_sales_change(order, executor).await?;
         let (can_start_sales_change_order, change_order_blocker) =
             compute_can_start_sales_change(order.origin_system, stage.code, stage.label, active_change);
         let approval = load_document_approval(
@@ -157,10 +188,11 @@ impl SalesOrderReadService {
             facts.binding.as_ref(),
             order.commercial_status,
             order.review_status,
+            executor,
         )
         .await?;
         Ok(DetailPresentation {
-            evidence_files: self.evidence_files(order).await?,
+            evidence_files: self.evidence_files(order, executor).await?,
             owner_user_name,
             stage,
             purchase_coverage,
@@ -174,19 +206,24 @@ impl SalesOrderReadService {
     }
 
     /// 批量补齐负责销售与阶段责任人姓名，保留原阶段与时限计算。
-    async fn detail_stage(&self, order: &SalesOrder) -> Result<(Option<String>, SalesOrderStageSummary)> {
+    async fn detail_stage(
+        &self,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<(Option<String>, SalesOrderStageSummary)> {
         let (owner_role, owner_user_id, due_at) = self
             .resolve_stage_owner(
                 &SalesOrderId::new(order.base.id.clone()),
                 order.business_type,
                 order.review_status,
+                executor,
             )
             .await?;
         let mut name_ids = vec![order.sales_owner_user_id.clone()];
         if let Some(id) = owner_user_id.as_ref() {
             name_ids.push(id.clone());
         }
-        let names = self.resolve_account_names_batch(&name_ids).await?;
+        let names = self.account_names(&name_ids, executor).await?;
         let owner_user_name = owner_user_id.as_ref().and_then(|id| names.get(id).cloned());
         let (code, label, tone) = stage_code_label_tone(
             order.commercial_status,
@@ -201,7 +238,7 @@ impl SalesOrderReadService {
     }
 
     /// 只按当前生效版本查询进行中的销售变更；无当前版本时保持无变更。
-    async fn has_active_sales_change(&self, order: &SalesOrder) -> Result<bool> {
+    async fn has_active_sales_change(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<bool> {
         let Some(revision_id) = order.current_revision_id() else {
             return Ok(false);
         };
@@ -211,7 +248,7 @@ impl SalesOrderReadService {
             .has_in_progress_by_order_and_base(
                 &SalesOrderId::new(order.base.id.clone()),
                 &SalesOrderRevisionId::new(revision_id),
-                &mut NoTransaction,
+                executor,
             )
             .await?)
     }
@@ -267,5 +304,60 @@ impl SalesOrderDetailView {
             active_card_sales_approval: presentation.active_card_sales_approval,
             approval: Some(presentation.approval),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_permissions::customer;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 不可用数据库仅用于证明拒绝路径不会触发业务读取。
+    async fn service() -> SalesOrderReadService {
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .expect("合法测试地址");
+        SalesOrderReadService::with_rbac(
+            client.database("sales_detail_authorization"),
+            unavailable_authorization(),
+        )
+    }
+
+    #[tokio::test]
+    async fn detail_requires_an_actor_before_reading_business_data() {
+        let error = service().await.sales_order_detail("order", None).await.expect_err("缺少身份必须拒绝");
+        assert!(matches!(error, Error::Unauthenticated(_)));
+    }
+
+    #[tokio::test]
+    async fn command_result_rejects_non_snapshot_and_foreign_resource_before_reading() {
+        let service = service().await;
+        let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);
+        let error = service
+            .command_detail("order", &actor, &sales_order::DETAIL, &mut ReadExecutor::default())
+            .await
+            .expect_err("非快照不能读取结果");
+        assert!(matches!(error, Error::ValidationError(_)));
+        let error = service
+            .command_detail("order", &actor, &customer::DETAIL, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("其他资源权限不能读取销售结果");
+        assert!(matches!(error, Error::ValidationError(_)));
+    }
+
+    #[tokio::test]
+    async fn command_result_propagates_authorization_failure_before_reading() {
+        let service = service().await;
+        let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);
+        let error = service
+            .command_detail("order", &actor, &sales_order::DETAIL, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("身份取证失败必须停止");
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
     }
 }

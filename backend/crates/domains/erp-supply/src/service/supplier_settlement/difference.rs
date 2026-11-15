@@ -2,7 +2,8 @@ use std::slice::from_ref;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use persistence_core::{Executor, NoTransaction};
+use erp_permissions::supplier_settlement;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::shared::*;
@@ -21,9 +22,10 @@ impl SupplierSettlementService {
     ///
     /// # 参数
     /// * `params` - 查询参数（`statement_item_id`/`status` 扁平筛选）
+    /// * `actor` - 当前认证账号。
     ///
     /// # 返回
-    /// 返回契约形状的分页视图。
+    /// 功能资格、分页和计数共用同一快照；提交成功后返回分页视图。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
@@ -31,7 +33,33 @@ impl SupplierSettlementService {
     pub async fn supplier_settlement_difference_list(
         &self,
         params: &SupplierSettlementDifferenceListParams,
+        actor: &AuditActor,
     ) -> Result<SettlementPageView<SupplierSettlementDifferenceView>> {
+        let service = Self::new(self.db.clone()).with_data_scope(self.access());
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.difference_page(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原读取快照检查功能资格，并使用原执行器读取分页和计数。
+    /// # 参数
+    /// params 为列表条件，actor 为认证账号，executor 为公开入口的原事务执行器。
+    /// # 返回
+    /// 功能资格检查通过后的结算差异分页。
+    /// # 错误
+    /// 授权、参数校验或业务读取失败时返回对应错误。
+    pub(super) async fn difference_page(
+        &self,
+        params: &SupplierSettlementDifferenceListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementPageView<SupplierSettlementDifferenceView>> {
+        self.access().require_operation(actor, &supplier_settlement::DIFFERENCE_LIST, executor).await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = DifferenceFilter {
@@ -45,7 +73,7 @@ impl SupplierSettlementService {
         let page = self
             .db
             .supplier_settlement_differences()
-            .search_supplier_settlement_differences(&filter, &mut NoTransaction)
+            .search_supplier_settlement_differences(&filter, executor)
             .await?;
         let items = page
             .items

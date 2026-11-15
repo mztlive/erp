@@ -1,11 +1,12 @@
 //! 定义期审批人候选：只做静态账号过滤，不读具体单据 DataScopeFact。
 
 use application_core::AuditActor;
-use persistence_core::NoTransaction;
+use erp_permissions::internal;
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::approval_participant_permissions_with_executor;
-use super::definition::ApprovalDefinitionService;
+use super::definition::{ApprovalDefinitionService, require_definition_access};
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
 use crate::entity::document_registry::DocumentType;
@@ -50,12 +51,36 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         query: DefinitionAssigneeQuery,
     ) -> Result<DefinitionAssigneePage> {
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.assignee_list(&actor, query, executor).await })
+            })
+            .await
+    }
+
+    async fn assignee_list(
+        &self,
+        actor: &AuditActor,
+        query: DefinitionAssigneeQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<DefinitionAssigneePage> {
         let policy = require_process_required(query.document_type)?;
-        self.ensure_definition_admin(actor, &policy).await?;
+        require_definition_access(
+            &self.authorization,
+            actor,
+            &internal::APPROVAL_DEFINITION_ASSIGNEES,
+            &policy,
+            executor,
+        )
+        .await?;
         let accounts = self
             .identity
             .directory()
-            .active_backoffice(query.search.as_deref(), query.limit, &mut NoTransaction)
+            .active_backoffice(query.search.as_deref(), query.limit, executor)
             .await?;
         let mut items = Vec::new();
         for account in accounts {
@@ -63,10 +88,11 @@ impl ApprovalDefinitionService {
                 let candidate =
                     AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
                 if !approval_participant_permissions_with_executor(
+                    &self.authorization,
                     &self.db,
                     &self.identity,
                     &candidate,
-                    &mut NoTransaction,
+                    executor,
                 )
                 .await?
                 {
@@ -76,5 +102,27 @@ impl ApprovalDefinitionService {
             items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
         }
         Ok(DefinitionAssigneePage { items })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::definition::test_support::unavailable_service;
+    use super::*;
+    use crate::error::Error;
+
+    #[tokio::test]
+    async fn candidates_reject_before_reading_accounts() {
+        let (service, actor) = unavailable_service().await;
+        let query = DefinitionAssigneeQuery {
+            copies: false,
+            document_type: DocumentType::SalesOrder,
+            search: None,
+            limit: 20,
+        };
+        let error = service.assignee_list(&actor, query, &mut SnapshotExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

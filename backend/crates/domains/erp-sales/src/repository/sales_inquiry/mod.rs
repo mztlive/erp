@@ -147,7 +147,7 @@ impl<'a> SalesInquiryRepository<'a> {
         access_scope: &InquiryReadScope,
         executor: &mut dyn Executor,
     ) -> SalesResult<PageResult<SalesInquiry>> {
-        access_scope.validate(executor).await?;
+        access_scope.ensure_current(executor)?;
         let document = filter.document();
         let size = u64::from(filter.page_size.clamp(1, 100));
         let skip = filter.page.max(1).saturating_sub(1).saturating_mul(size);
@@ -166,7 +166,7 @@ impl<'a> SalesInquiryRepository<'a> {
         .await?;
         let total =
             aggregate::count(&collection, document, access_scope.lookup_after(doc! {}), executor).await?;
-        access_scope.validate(executor).await?;
+        access_scope.ensure_current(executor)?;
         Ok(PageResult { items, total: i64::try_from(total).unwrap_or(i64::MAX) })
     }
 

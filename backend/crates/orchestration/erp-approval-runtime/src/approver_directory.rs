@@ -1,4 +1,6 @@
 //! 将身份域组织负责人及事务内账号资格接入工作流。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::ids::ApprovalProcessInstanceId;
@@ -7,9 +9,8 @@ use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_identity::entity::organization::OrgUnitKind;
 use erp_identity::service::organization::leader::applicant_leader;
-use erp_identity::{
-    AccountSummary, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
-};
+use erp_identity::{AccountSummary, AuthorizationService};
+use erp_permissions::approval_instance;
 use erp_workflow::ports::approver_directory::{ApproverDirectory, ResolvedApprover};
 use erp_workflow::service::approval::assignee_source::AssigneeSource;
 use erp_workflow::service::approval::dynamic_assignees::{resolve_graph, revalidate_assignments};
@@ -24,19 +25,14 @@ use crate::{Error, Result};
 /// 只借用数据库与调用方事务，不读取其他业务领域。
 struct OrganizationApprovers<'a> {
     db: &'a Database,
-    identity: &'a SharedRbacService,
+    identity: &'a Arc<AuthorizationService>,
 }
 impl OrganizationApprovers<'_> {
     /// 通过统一入口核验动态审批人的有效内部账号及同角色完整资格。
     async fn account(&self, user: &str, ex: &mut dyn Executor) -> WorkflowResult<AccountSummary> {
         let actor = AuditActor::new(user.into(), user.into(), AccountKind::Admin);
-        let required = ["approval_instance:read", "approval_instance:decide"]
-            .map(|code| Permission::parse(code).expect("固定审批权限合法"));
-        let authorization = AuthorizationService::new(
-            self.db.clone(),
-            self.identity.clone(),
-            AuthorizationRegistry::default(),
-        );
+        let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
+        let authorization = self.identity.clone();
         let qualified = authorization
             .permissions(&actor, &required, ex)
             .await
@@ -102,7 +98,7 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
 /// 任一动态节点不可用时拒绝。
 pub async fn resolve_approvers(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     graph: DefinitionGraph,
     applicant: &str,
     ex: &mut dyn Executor,
@@ -119,7 +115,7 @@ pub async fn resolve_approvers(
 /// 负责人变化、权限撤销或查询错误时拒绝整次提交。
 pub async fn revalidate_approvers(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     writes: &PlannedWrites,
     ex: &mut dyn Executor,
 ) -> Result<()> {
@@ -142,7 +138,7 @@ pub async fn revalidate_approvers(
 /// 收据实例或申请人不匹配时拒绝；命令摘要仍由后续统一启动入口核验。
 pub async fn resolve_start_approvers(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     graph: DefinitionGraph,
     applicant: &str,
     receipt: Option<&ApprovalCommandReceipt>,

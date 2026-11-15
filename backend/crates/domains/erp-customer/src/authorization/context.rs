@@ -8,7 +8,6 @@ use erp_identity::CompiledAccess;
 #[derive(Clone)]
 pub struct CustomerResolvedScope {
     pub user_id: String,
-    pub current: bool,
     pub scope_version: String,
     pub as_of: Instant,
     pub compiled: Arc<CompiledAccess>,

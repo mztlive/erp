@@ -1,6 +1,7 @@
 //! 停用商品：范围重验、不可变修订与审计。
 
 use application_core::AuditActor;
+use erp_permissions::catalog as catalog_permissions;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
@@ -103,7 +104,8 @@ async fn write_disabled_product(
     session: &mut dyn persistence_core::Executor,
 ) -> Result<Product> {
     let DisableWrite { db, access, audit_port, id, req, actor, audit } = input;
-    let scoped = access.require_product(actor, "update", id, session).await?;
+    let scoped =
+        access.require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id, session).await?;
     scoped.ensure_has_responsibility()?;
     ensure_version(scoped.base.version, req.version)?;
     let snapshot = db

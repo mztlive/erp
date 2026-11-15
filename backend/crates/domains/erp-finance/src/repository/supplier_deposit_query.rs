@@ -2,11 +2,10 @@
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_identity::CompiledAccess;
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Error as PersistenceError, Executor, Repository, mongo_ops};
+use persistence_core::{Executor, Repository, aggregate, mongo_ops};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -265,26 +264,7 @@ pub async fn ledger_balance_at(
         doc! {"$match": {"account_id": account, "evidence.occurred_at": {"$lte": cutoff.unix_secs()}, "deleted_at": 0_i64}},
         doc! {"$group": {"_id": "$kind", "amount": {"$sum": "$amount"}}},
     ];
-    let rows: Vec<LedgerBalanceRow> = match executor.session() {
-        Some(session) => collection
-            .aggregate(pipeline)
-            .with_type::<LedgerBalanceRow>()
-            .session(&mut *session)
-            .await
-            .map_err(PersistenceError::from)?
-            .stream(session)
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-        None => collection
-            .aggregate(pipeline)
-            .with_type::<LedgerBalanceRow>()
-            .await
-            .map_err(PersistenceError::from)?
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-    };
+    let rows = aggregate::rows(&collection.clone_with_type::<LedgerBalanceRow>(), pipeline, executor).await?;
     rows.into_iter().try_fold(Amount::zero(), |balance, row| {
         let decimal = match row.kind {
             DepositLedgerKind::Recharge | DepositLedgerKind::Return => {
@@ -305,24 +285,5 @@ async fn account_rows(
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierDepositAccount>> {
     let collection = db.supplier_deposit_accounts().collection();
-    Ok(match executor.session() {
-        Some(session) => collection
-            .aggregate(pipeline)
-            .with_type::<SupplierDepositAccount>()
-            .session(&mut *session)
-            .await
-            .map_err(PersistenceError::from)?
-            .stream(session)
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-        None => collection
-            .aggregate(pipeline)
-            .with_type::<SupplierDepositAccount>()
-            .await
-            .map_err(PersistenceError::from)?
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-    })
+    Ok(aggregate::rows(&collection, pipeline, executor).await?)
 }

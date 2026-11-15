@@ -42,6 +42,10 @@ pub struct ApprovalUpgradeSubjectFacts {
     pub responsible_org_id: String,
     /// 强业务对象不可变创建人。
     pub creator_id: String,
+    /// 强实体提供的真实授权来源资源。
+    pub source_resource: String,
+    /// 强实体或固定父链提供的真实授权来源主键。
+    pub source_id: String,
 }
 
 /// 审批升级单据的内部路由种类。
@@ -328,6 +332,8 @@ fn to_workflow_facts(facts: ApprovalUpgradeSubjectFacts) -> erp_workflow::Approv
         document_no: facts.document_no,
         responsible_org_id: facts.responsible_org_id,
         creator_id: facts.creator_id,
+        source_resource: facts.source_resource,
+        source_id: facts.source_id,
     }
 }
 
@@ -339,6 +345,8 @@ fn to_entities_facts(facts: &erp_workflow::ApprovalUpgradeSubjectFacts) -> Appro
         document_no: facts.document_no.clone(),
         responsible_org_id: facts.responsible_org_id.clone(),
         creator_id: facts.creator_id.clone(),
+        source_resource: facts.source_resource.clone(),
+        source_id: facts.source_id.clone(),
     }
 }
 
@@ -386,11 +394,15 @@ mod tests {
             "ADJ-1".to_string(),
             "warehouse-1",
             "creator-1",
+            ("stock_adjustment", "adjustment-1"),
         )
         .expect("完整强事实");
 
         assert_eq!(facts.document_id, "adjustment-1");
         assert_eq!(facts.business_object_version, 7);
+        assert_eq!(facts.source_resource, "stock_adjustment");
+        assert_eq!(facts.source_id, "adjustment-1");
+        assert_eq!(to_entities_facts(&to_workflow_facts(facts.clone())), facts);
         assert_eq!(
             facts.binding_context(),
             BindingRevalidationContext::new("warehouse-1".to_string(), "creator-1".to_string())
@@ -410,6 +422,7 @@ mod tests {
                 "RC-1".to_string(),
                 org,
                 creator,
+                ("stock_adjustment", "adjustment-1"),
             )
         };
 
@@ -462,6 +475,7 @@ mod tests {
             adjustment.adjustment_no.clone(),
             adjustment.warehouse_id.as_ref(),
             &adjustment.created_by,
+            ("stock_adjustment", "adjustment-1"),
         )
         .expect("Replay 授权事实不得被生命周期门禁拒绝");
         assert_eq!(facts.creator_id, "creator-1");

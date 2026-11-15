@@ -1,6 +1,7 @@
 //! 采购新一轮报价必须同时证明历史参与及当前责任，历史读取不授予写入权。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_procurement::entity::procurement_responsibility::ProcurementResponsibilityRule;
 use erp_procurement::repository::ProcurementResponsibilityExt;
 use erp_procurement::repository::prelude::*;
@@ -38,9 +39,23 @@ impl SalesInquiryProcess {
         request: &InquiryTaskReasonCommand,
         executor: &mut dyn Executor,
     ) -> Result<(SalesInquiry, Vec<String>)> {
-        self.access().ensure_procurement_permission(actor, "publish", executor).await?;
-        let (mut inquiry, task) =
-            self.access().require_read_task(actor, "detail", id, &request.task_id, executor).await?;
+        self.access()
+            .ensure_procurement_permission(
+                actor,
+                &sales_inquiry_permissions::COMMANDS_PROCUREMENT_PUBLISH,
+                executor,
+            )
+            .await?;
+        let (mut inquiry, task) = self
+            .access()
+            .require_read_task(
+                actor,
+                &sales_inquiry_permissions::QUERY_PROCUREMENT_DETAIL,
+                id,
+                &request.task_id,
+                executor,
+            )
+            .await?;
         if task.status != WorkItemStatus::Completed
             || task.base.version != request.task_version
             || task.subject_version != inquiry_subject_version(inquiry.requirement_version)

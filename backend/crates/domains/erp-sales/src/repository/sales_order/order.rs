@@ -529,7 +529,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SalesOrderRow>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -553,7 +553,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         )
         .await?;
 
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -563,7 +563,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<super::scope::SalesVersion>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let rows = aggregate::find(
             &self.collection().clone_with_type::<super::scope::SalesVersion>(),
             filter.to_doc(),
@@ -576,7 +576,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows)
     }
 

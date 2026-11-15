@@ -277,7 +277,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .limit(filter.limit())
             .build();
         let condition = filter.to_doc();
-        authorized_scope.validate(executor).await?;
+        authorized_scope.ensure_current(BOOKLETS, executor)?;
         let stages = authorized_scope.lookup_after(condition.clone());
         let items = aggregate::find(
             &self.db.collection::<SalesSelectionBooklet>(BOOKLETS),
@@ -294,7 +294,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             executor,
         )
         .await?;
-        authorized_scope.validate(executor).await?;
+        authorized_scope.ensure_current(BOOKLETS, executor)?;
         Ok(PageResult {
             items,
             total: i64::try_from(total).map_err(|_| crate::Error::Internal("选品计数超限".into()))?,

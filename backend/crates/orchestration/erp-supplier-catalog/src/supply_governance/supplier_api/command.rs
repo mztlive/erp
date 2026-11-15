@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 use erp_supply::dto::supplier_api::{SupplierConnectionCommand, SupplierConnectionCommandResult};
 use erp_supply::entity::supplier_api::{
     HealthCheckResult, PreparedSupplierConnectionCommand, SupplierApiConnectionId, SupplierCommandOutcome,
@@ -39,7 +40,23 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
         command.validate()?;
-        self.ensure_permission(actor, action_permission(command.action)).await?;
+        self.ensure_permission(actor, &action_permission(command.action)).await?;
+        let authorization = self.authorization.clone();
+        let current_actor = actor.clone();
+        let permission = action_permission(command.action);
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    Ok::<(), Error>(
+                        authorization
+                            .require(&current_actor, &permission, AccessTarget::Operation, executor)
+                            .await?,
+                    )
+                })
+            })
+            .await?;
         let identity = CommandIdentity::new(id, actor.id(), &command)?;
         if let Some(result) = self.replay_command(&identity).await? {
             return Ok(result);
@@ -111,6 +128,7 @@ impl SupplierApiGovernanceProcess {
         } else {
             None
         };
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -118,6 +136,9 @@ impl SupplierApiGovernanceProcess {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &action_permission(action), AccessTarget::Operation, executor)
+                        .await?;
                     let domain = SupplierApiService::new(db.clone());
                     let mut connection = domain
                         .prepare_status_target(&connection_id_value, expected_version, executor)

@@ -3,6 +3,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::dto::{CancelReceiptReversalApprovalRequest, SubmitReceiptReversalRequest};
 use erp_returns::entity::returns::ReceiptReversal;
@@ -66,7 +68,15 @@ impl ReturnsProcess {
             actor: actor.clone(),
         };
         if let Some(id) = self.replay_reversal_submit(&submission).await? {
-            return self.reads().receipt_reversal_detail(&id).await.map_err(reversal_result_read_error);
+            return self
+                .receipt_reversal_result(
+                    &id,
+                    actor,
+                    &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+                    AccessTarget::record(&id)?,
+                )
+                .await
+                .map_err(reversal_result_read_error);
         }
         let adapter = receipt_reversal_adapter()?;
         let mut reversal = self.domain().load_receipt_reversal(id).await?;
@@ -106,7 +116,13 @@ impl ReturnsProcess {
         let mut reversal = self.domain().load_receipt_reversal(id).await?;
         ensure_receipt_reversal_version(&reversal, req.expected_version)?;
         self.persist_cancelled_receipt_reversal(id, &mut reversal, &req, actor).await?;
-        self.reads().receipt_reversal_detail(id).await.map_err(crate::Error::from)
+        self.receipt_reversal_result(
+            id,
+            actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+        )
+        .await
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -193,7 +209,14 @@ impl ReturnsProcess {
     ) -> Result<ReceiptReversalView> {
         let persisted = persist_receipt_reversal_start(&self.db, &self.rbac, input).await.map(|_| ());
         self.finish_reversal_submit(submission, persisted).await?;
-        self.reads().receipt_reversal_detail(&submission.id).await.map_err(reversal_result_read_error)
+        self.receipt_reversal_result(
+            &submission.id,
+            &submission.actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+            AccessTarget::record(&submission.id)?,
+        )
+        .await
+        .map_err(reversal_result_read_error)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -208,8 +231,7 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = receipt_reversal_adapter()?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
         let subject = receipt_reversal_subject_ref(id)?;
         let runtime =

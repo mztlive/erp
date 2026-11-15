@@ -4,6 +4,7 @@ mod export;
 mod facts;
 
 use application_core::AuditActor;
+use erp_permissions::access_control;
 use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
@@ -11,7 +12,7 @@ use super::resolve::{AuthorizedDataScope, DataScopeService};
 use crate::dto::authorization_bundle::PolicyPreview;
 use crate::entity::authorization_bundle::PolicyDocument;
 use crate::entity::authorization_bundle::plan::PolicyPlan;
-use crate::{Error, Permission, Result};
+use crate::{AccessTarget, Error, Permission, Result};
 
 /// 持有当前版本权限目录及既有范围配置端口。
 #[derive(Clone)]
@@ -49,6 +50,16 @@ impl PolicyBundleService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    service
+                        .access
+                        .authorization
+                        .require(
+                            &actor,
+                            &access_control::POLICY_BUNDLE_PREVIEW,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     let authorization = service.authorize(&document, &actor, executor).await?;
                     Ok(service.plan(document, &actor, authorization, executor).await?.preview)
                 })

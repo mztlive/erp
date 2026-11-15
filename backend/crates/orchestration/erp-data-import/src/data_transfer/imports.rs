@@ -6,11 +6,12 @@ use erp_supplier_catalog::supply_governance::offering::batch::{BatchRequest, Tar
 use erp_supply::dto::supplier_offering::{
     ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
 };
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use super::{BusinessTransfers, TransferKind, TransferResult};
+use crate::sales_inquiry_import::SalesInquiryImportProcess;
 use crate::{Error, Result};
 
 pub(super) fn decode<T: DeserializeOwned>(input: &Value) -> Result<T> {
@@ -59,16 +60,19 @@ impl BusinessTransfers {
         if authorization["expires_at"].as_i64().is_some_and(|at| at <= Instant::now().unix_secs()) {
             return Err(Error::ConflictError("导入预览已过期，请重新上传".into()));
         }
-        let service = self.services.inquiry.clone();
         match kind {
-            TransferKind::InquiryPreview => {
-                service
-                    .require_import(actor, required(input, "inquiry_id")?, &mut NoTransaction)
-                    .await?
-                    .ensure_version(version(input)?)?;
-            },
-            TransferKind::InquiryCreationPreview => {
-                service.creation_header(actor, required(input, "customer_id")?, &mut NoTransaction).await?;
+            TransferKind::InquiryPreview | TransferKind::InquiryCreationPreview => {
+                let service = self.services.inquiry.clone();
+                let actor = actor.clone();
+                let input = input.clone();
+                self.db
+                    .client()
+                    .with_transaction(move |executor| {
+                        Box::pin(
+                            async move { authorize_inquiry(&service, kind, &input, &actor, executor).await },
+                        )
+                    })
+                    .await?;
             },
             TransferKind::SupplyBatch => {
                 self.supply_batch(input, actor, true).await?;
@@ -149,6 +153,33 @@ impl BusinessTransfers {
         };
         serde_json::to_value(result).map_err(json_error)
     }
+}
+
+/// 使用提交或读取用例的原快照检查询价目标及其业务版本。
+/// # 参数
+/// service、kind、input 为固定询价任务和原始业务参数，actor、executor 为本次身份与原执行器。
+/// # 返回
+/// 当前目标或创建归属以及业务版本满足时成功。
+/// # 错误
+/// 非询价任务、无权限、对象缺失或业务版本变化时拒绝。
+pub(super) async fn authorize_inquiry(
+    service: &SalesInquiryImportProcess,
+    kind: TransferKind,
+    input: &Value,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    match kind {
+        TransferKind::InquiryPreview => service
+            .require_import(actor, required(input, "inquiry_id")?, executor)
+            .await?
+            .ensure_version(version(input)?)?,
+        TransferKind::InquiryCreationPreview => {
+            service.creation_header(actor, required(input, "customer_id")?, executor).await?;
+        },
+        _ => return Err(Error::ValidationError("该任务不是询价导入预览".into())),
+    }
+    Ok(())
 }
 
 fn json_error(_: serde_json::Error) -> Error {

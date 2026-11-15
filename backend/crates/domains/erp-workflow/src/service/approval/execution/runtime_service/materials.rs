@@ -1,7 +1,7 @@
 //! 只返回审批提交时冻结的展示与材料元数据；不读取当前业务详情。
 
 use application_core::AuditActor;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::{ApprovalRuntimeService, hidden_not_found};
@@ -54,15 +54,31 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 无权、主体链不一致、展示或材料校验失败，或旧实例未保存展示快照时拒绝，不补读当前业务数据。
     pub async fn materials(&self, actor: &AuditActor, instance_id: &str) -> Result<ApprovalMaterialsView> {
-        self.ensure_active_instance_reader(actor).await?;
-        let subject = self.load_runtime_read_subject(instance_id).await?;
-        self.ensure_ordinary_runtime_read(actor, &subject).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.materials_stage(&actor, &instance_id, executor).await })
+            })
+            .await
+    }
+
+    /// 冻结资料与补充显示姓名沿实例授权的同一快照读取。
+    async fn materials_stage(
+        &self,
+        actor: &AuditActor,
+        instance_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ApprovalMaterialsView> {
+        self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
+        let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
         let snapshot = subject.snapshot;
         let mut display =
             snapshot.display.ok_or_else(|| Error::ConflictError("该审批未保存可预览资料".into()))?;
         if display.source.needs_submitter_name(&snapshot.payload.submitted_by) {
-            let account =
-                self.identity.directory().account(&snapshot.payload.submitted_by, &mut NoTransaction).await?;
+            let account = self.identity.directory().account(&snapshot.payload.submitted_by, executor).await?;
             display.source.resolve_submitter_name(
                 &snapshot.payload.submitted_by,
                 account.as_ref().map(|account| account.display_name.as_str()),
@@ -102,9 +118,30 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         instance_id: &str,
         file_id: &str,
     ) -> Result<ApprovalMaterialFile> {
-        self.ensure_active_instance_reader(actor).await?;
-        let subject = self.load_runtime_read_subject(instance_id).await?;
-        self.ensure_ordinary_runtime_read(actor, &subject).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_owned();
+        let file_id = file_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.material_reference_stage(&actor, &instance_id, &file_id, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 文件允许清单检查与实例读取资格使用同一事务。
+    async fn material_reference_stage(
+        &self,
+        actor: &AuditActor,
+        instance_id: &str,
+        file_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ApprovalMaterialFile> {
+        self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
+        let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
         if !subject.snapshot.allows_runtime_material(
             instance_id,
             subject.document_type,

@@ -30,9 +30,11 @@ use crate::repository::owned::{
     SupplierHealthCheckRunRepository,
 };
 
+mod authorization;
 mod capability_change_batch;
 mod query;
 
+pub use authorization::{authorized_connection, connection_mapping};
 pub use query::{
     BusinessCapabilityConfirmationRepositoryExt, SupplierApiCapabilityFilter,
     SupplierApiCapabilityRepositoryExt, SupplierApiCapabilityRow, SupplierApiConnectionFilter,

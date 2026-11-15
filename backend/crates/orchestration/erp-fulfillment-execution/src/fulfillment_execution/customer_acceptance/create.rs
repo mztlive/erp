@@ -8,7 +8,7 @@ use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CreateCustomerAcceptanceRequest, CustomerAcceptanceView};
 use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceLine};
 use erp_fulfillment::repository::FulfillmentExt;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Transactional;
@@ -76,7 +76,7 @@ impl CustomerAcceptanceProcess {
 async fn persist_created_customer_acceptance(
     db: &Database,
     workflow: Arc<dyn crate::workflow::FulfillmentWorkflow>,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     acceptance: CustomerAcceptance,
     lines: Vec<CustomerAcceptanceLine>,
     actor: AuditActor,

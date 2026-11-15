@@ -61,18 +61,11 @@ pub(super) async fn refresh_affected_sales(
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor as TestExecutor;
+
     use super::super::{ReceiptReversalPosting, post};
     use super::*;
     use crate::Error;
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
 
     #[derive(Default)]
     struct RecordingPosting {
@@ -125,7 +118,7 @@ mod tests {
     async fn final_post_reloads_after_audit_and_refreshes_each_new_sale_with_same_executor() {
         let mut port =
             RecordingPosting { allocations: vec![SalesOrderId::new("stale-sales")], ..Default::default() };
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(
@@ -138,7 +131,7 @@ mod tests {
     #[tokio::test]
     async fn allocation_reload_failure_stops_before_any_sales_refresh() {
         let mut port = RecordingPosting { fail: Some("load_allocations"), ..Default::default() };
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let error = post(&mut port, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "load_allocations"));
         assert_eq!(port.events, ["finance", "returns", "audit", "load_allocations"]);
@@ -147,7 +140,7 @@ mod tests {
     #[tokio::test]
     async fn middle_sales_failure_stops_before_later_sales_with_same_executor() {
         let mut port = RecordingPosting { fail: Some("sales-2"), ..Default::default() };
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
         let error = post(&mut port, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "sales-2"));

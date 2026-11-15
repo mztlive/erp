@@ -6,7 +6,7 @@ use erp_core::common::time::Instant;
 use mongodb::Database;
 use mongodb::bson::{Document, doc, serialize_to_document};
 use persistence_core::indexes::{named_index, unique_index};
-use persistence_core::{Error, Executor, Repository, Result};
+use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
 
 use super::{BatchWorkRequest, CatalogAdoptionBatchItem};
 
@@ -38,15 +38,12 @@ pub async fn update_draft_chunk(
     if rows.is_empty() {
         return Ok(());
     }
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::EntityMetadataOutOfRange("批量草稿更新必须使用事务"));
     }
     let (filter, update) = draft_chunk_update(rows, Instant::now().unix_secs())?;
     let collection = db.collection::<Document>("supplier_catalog_adoption_batch_items");
-    let result = match executor.session() {
-        Some(session) => collection.update_many(filter, update).session(session).await?,
-        None => return Err(Error::EntityMetadataOutOfRange("批量草稿事务缺失")),
-    };
+    let result = mongo_ops::update_many_pipeline(&collection, filter, update, executor).await?;
     if usize::try_from(result.matched_count).ok() != Some(rows.len()) {
         return Err(Error::OptimisticLockingError);
     }

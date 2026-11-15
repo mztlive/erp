@@ -2,7 +2,8 @@
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::AccessTarget;
+use erp_permissions::{Permission, receivable};
 use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
 use mongodb::Database;
@@ -25,10 +26,10 @@ impl RequestAction {
             _ => Err(Error::Internal("开票申请命令动作未登记".into())),
         }
     }
-    fn permission(self) -> &'static str {
+    fn permission(self) -> Permission {
         match self {
-            Self::Submit => "sales_invoice_request:submit",
-            Self::Cancel => "sales_invoice_request:cancel",
+            Self::Submit => receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
+            Self::Cancel => receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL,
         }
     }
 }
@@ -71,12 +72,8 @@ impl RequestAccess for MongoAccess<'_> {
         action: RequestAction,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let service = AuthorizationService::new(
-            self.db.clone(),
-            self.rbac.identity.clone(),
-            AuthorizationRegistry::default(),
-        );
-        Ok(service.has_permission(actor, &Permission::parse(action.permission())?, executor).await?)
+        let service = &self.rbac.authorization;
+        Ok(service.has_permission(actor, &action.permission(), executor).await?)
     }
     async fn readable(
         &self,
@@ -85,16 +82,10 @@ impl RequestAccess for MongoAccess<'_> {
         action: RequestAction,
         executor: &mut dyn Executor,
     ) -> Result<bool> {
-        let request = super::load(self.db, id, executor).await?;
         match self
             .rbac
-            .funds
-            .require_sales_sources(
-                actor,
-                action.permission(),
-                &[request.sales_order_id.to_string()],
-                executor,
-            )
+            .authorization
+            .require(actor, &action.permission(), AccessTarget::record(id)?, executor)
             .await
             .map_err(Error::from)
         {

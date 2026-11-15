@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::api_order::ApiOrderExt;
 use erp_supply::order_tracking::TrackingState;
 use erp_supply::order_tracking::repository::OrderTrackingExt;
@@ -42,7 +43,7 @@ impl SupplierApiOrderProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_order(&actor, "submit", &id, executor).await?;
+                    access.require_order(&actor, &supplier_fulfillment::ORDER_SUBMIT, &id, executor).await?;
                     let mut execution = db
                         .supplier_api_order_executions()
                         .find_by_id(&id, executor)

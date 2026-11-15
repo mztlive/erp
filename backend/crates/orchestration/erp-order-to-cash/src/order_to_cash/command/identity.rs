@@ -49,7 +49,7 @@ pub(super) fn sales_create_bind_command(
 ///
 /// # 参数
 /// * `db` - 业务数据库。
-/// * `rbac` - 授权源。
+/// * `authorization` - 授权源。
 /// * `document` - 待写入的单据注册行。
 /// * `bind_command` - 创建时绑定命令。
 /// * `actor` - 创建人。

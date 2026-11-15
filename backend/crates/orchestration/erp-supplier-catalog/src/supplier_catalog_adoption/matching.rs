@@ -1,15 +1,15 @@
 //! 自动匹配的跨域读取与提交重验；身份规则由商品领域执行。
-
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::auto_match::{MatchIdentity, match_text, same_specification, unique_match};
 use erp_catalog::{CatalogExt, Product, ProductKind, Sku};
 use erp_core::common::time::Instant;
+use erp_permissions::catalog as catalog_permissions;
 use erp_supply::catalog_adoption::{
     AdoptionMapping, AdoptionRow, AdoptionSpecEntry, AdoptionTarget, BatchMatchAnchor, CatalogAdoptionExt,
     ResolveAdoptionRequest, has_product_receipt,
 };
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -103,12 +103,30 @@ impl SupplierCatalogAdoptionProcess {
         request: ResolveAdoptionRequest,
         actor: &AuditActor,
     ) -> Result<AdoptionResolution> {
-        self.batch_access(connection, actor, &mut NoTransaction).await?;
-        self.require_preview_owner(actor, preview_id, &mut NoTransaction).await?;
+        let (connection, preview_id, actor) = (connection.to_owned(), preview_id.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                process.resolve_in_snapshot(&connection, &preview_id, request, &actor, executor).await
+            })
+        })
+        .await
+    }
+
+    /// 使用原快照核验预览、来源与匹配商品的修改资格。
+    async fn resolve_in_snapshot(
+        &self,
+        connection: &str,
+        preview_id: &str,
+        request: ResolveAdoptionRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<AdoptionResolution> {
+        self.batch_access(connection, actor, executor).await?;
+        self.require_preview_owner(actor, preview_id, executor).await?;
         let preview = self
             .db
             .catalog_adoption_previews()
-            .find_by_id(preview_id, &mut NoTransaction)
+            .find_by_id(preview_id, executor)
             .await?
             .filter(|p| p.connection_id == connection)
             .ok_or_else(|| Error::NotFound("选品预览不存在".into()))?;
@@ -120,7 +138,7 @@ impl SupplierCatalogAdoptionProcess {
             .iter()
             .find(|i| i.base.id == request.item_id)
             .ok_or_else(|| Error::ValidationError("商品不属于本次选品范围".into()))?;
-        self.resolve_item(item, &request.mapping, actor, &mut NoTransaction).await
+        self.resolve_item(item, &request.mapping, actor, executor).await
     }
 
     pub(super) async fn automatic_row_with_anchor(
@@ -363,7 +381,12 @@ impl SupplierCatalogAdoptionProcess {
         let product = self
             .services
             .catalog_access
-            .require_product(actor, "update", sku.product_id.as_ref(), executor)
+            .require_product(
+                actor,
+                &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                sku.product_id.as_ref(),
+                executor,
+            )
             .await?;
         let revision = self
             .db
@@ -414,7 +437,11 @@ impl SupplierCatalogAdoptionProcess {
         let mut category_id = mapping.category_id.clone();
         let mut brand_id = String::new();
         if let Some(id) = bound_id {
-            let product = self.services.catalog_access.require_product(actor, "update", id, executor).await?;
+            let product = self
+                .services
+                .catalog_access
+                .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id, executor)
+                .await?;
             if !product.is_active()
                 || product.product_kind != kind
                 || !self.same_brand(item, &product, executor).await?

@@ -1,11 +1,15 @@
 //! 供给对象读取与写入范围；显式维护人和业务组织分别解释。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{OrganizationDirectoryService, SharedRbacService};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService, OrganizationDirectoryService};
+use erp_permissions::{Permission, supplier_offering};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::authorization::{self, Authorization, CompiledScope};
+use crate::authorization::{Authorization, CompiledScope};
 use crate::entity::supplier_offering::SupplierOffering;
 use crate::error::{Error, Result};
 use crate::repository::SupplierOfferingExt;
@@ -32,8 +36,8 @@ impl OfferingAccess {
     ///
     /// # 关键业务约束
     /// 账号和功能资格由 identity 执行；业务组织只作为写入事实。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let authorization = Authorization::new(&db, rbac, "supplier_offering").expect("固定资源授权目录有效");
+    pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
+        let authorization = Authorization::new(service, "supplier_offering").expect("固定资源授权目录有效");
         Self { db, authorization: Some(authorization) }
     }
 
@@ -57,7 +61,7 @@ impl OfferingAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 内置权限
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -71,17 +75,17 @@ impl OfferingAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(self.authorization()?.resolve(actor, action, executor).await?)
+        Ok(self.authorization()?.resolve(actor, permission, executor).await?)
     }
 
     /// 在调用方事务内重验供给对象资格。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 内置权限
     /// * `id` - 供给主键
     /// * `executor` - 调用方执行器
     ///
@@ -96,11 +100,11 @@ impl OfferingAccess {
     pub async fn require_offering(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierOffering> {
-        self.authorization()?.require(actor, action, id, executor).await?;
+        self.authorization()?.require(actor, permission, id, executor).await?;
         self.db
             .supplier_offerings()
             .find_by_id(id, executor)
@@ -161,11 +165,42 @@ impl OfferingAccess {
         Ok((maintainer.to_string(), org))
     }
 
+    /// 检查由服务端构造的供给创建候选。
+    /// # 参数
+    /// actor、offering 为真实账号和已验证候选，executor 为创建事务。
+    /// # 返回
+    /// 创建功能资格与目标归属全部通过时成功。
+    /// # 错误
+    /// 资格、范围或候选不符合时拒绝。
+    pub async fn require_create(
+        &self,
+        actor: &AuditActor,
+        offering: &SupplierOffering,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self
+            .authorization()?
+            .service
+            .require(
+                actor,
+                &supplier_offering::CREATE,
+                AccessTarget::Candidate(ObjectFacts {
+                    resource: "supplier_offering".into(),
+                    id: offering.base.id.clone(),
+                    owner_id: FactValue::Known(Some(offering.maintainer_user_id.clone())),
+                    org_unit_id: FactValue::Known(Some(offering.business_org_unit_id.clone())),
+                    ..Default::default()
+                }),
+                executor,
+            )
+            .await?)
+    }
+
     /// 检查共享资料当前动作的功能资格；对象操作另行检查完整目标。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册写动作
+    /// * `permission` - 内置写权限
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -176,11 +211,11 @@ impl OfferingAccess {
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let permission = authorization::action_permission("supplier_offering", action)?;
-        if !self.authorization()?.service.has_permission(actor, &permission, executor).await? {
+        self.authorization()?.ensure_permission(permission)?;
+        if !self.authorization()?.service.has_permission(actor, permission, executor).await? {
             return Err(Error::Forbidden("没有该操作权限".into()));
         }
         Ok(())

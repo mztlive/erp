@@ -21,18 +21,20 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
+use erp_permissions::access_control;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::AccessControlExt;
 use crate::entity::access_control::{
     AuditEvent, AuditEventData, AuditEventId, AuditEventResult, PermissionDefinition, PermissionId, UserRole,
     UserRoleId,
 };
 use crate::ports::ScopeTargetPort;
 use crate::repository::prelude::*;
+use crate::service::iam::management::ManagementAccess;
+use crate::{AccessControlExt, AuthorizationService};
 mod person_scope;
 mod person_scope_query;
 pub mod policy_bundle;
@@ -55,23 +57,30 @@ pub struct AccessControlService {
     db: Database,
     rbac: crate::SharedRbacService,
     targets: Arc<dyn ScopeTargetPort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl AccessControlService {
     /// 创建已完整装配的访问控制服务。
     /// # 参数
-    /// db 为身份数据库，rbac 为权限服务，targets 为外域目标校验端口。
+    /// db 为身份数据库，rbac 为身份设施，targets 为外域目标校验端口，authorization 为共享授权服务。
     /// # 返回
     /// 可执行目录查询和范围配置的完整服务。
     /// # 错误
     /// 不执行 I/O，不返回错误。
-    pub fn new(db: Database, rbac: crate::SharedRbacService, targets: Arc<dyn ScopeTargetPort>) -> Self {
-        Self { db, rbac, targets }
+    pub fn new(
+        db: Database,
+        rbac: crate::SharedRbacService,
+        targets: Arc<dyn ScopeTargetPort>,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self { db, rbac, targets, authorization }
     }
 
     /// 分页查询权限定义列表（权限目录）。
     ///
     /// # 参数
+    /// actor 为当前已认证账号。
     /// * `params` - 查询参数（`resource`/`disabled`/`system` 扁平筛选）
     ///
     /// # 返回
@@ -80,18 +89,39 @@ impl AccessControlService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
-    pub async fn permission_list(&self, params: &PermissionListParams) -> Result<PageView<PermissionView>> {
-        params.validate()?;
-        let filter = params.normalized()?;
-        let page = self.db.permissions().search_permissions(&filter, &mut NoTransaction).await?;
-        let items = page.items;
+    pub async fn permission_list(
+        &self,
+        params: &PermissionListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<PermissionView>> {
+        let db = self.db.clone();
+        let params = params.clone();
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::PERMISSION_LIST,
+        );
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    params.validate()?;
+                    let filter = params.normalized()?;
+                    let page = db.permissions().search_permissions(&filter, executor).await?;
+                    let items = page.items;
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.paging.page,
-            page_size: filter.paging.page_size,
-        })
+                    let result = Ok(PageView {
+                        items,
+                        total: page.total,
+                        page: filter.paging.page,
+                        page_size: filter.paging.page_size,
+                    });
+                    access.require(executor).await?;
+                    result
+                })
+            })
+            .await
     }
 
     /// 创建权限定义。
@@ -114,6 +144,12 @@ impl AccessControlService {
         req: CreatePermissionRequest,
         actor: &AuditActor,
     ) -> Result<PermissionView> {
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::PERMISSION_CREATE,
+        );
+        access.preflight(&self.db).await?;
         req.validate()?;
         let permission = PermissionDefinition::new(PermissionId::new(next_id()), req.into_data())?;
         let event = self
@@ -127,7 +163,7 @@ impl AccessControlService {
             .await?;
         let db = self.db.clone();
         let permission = self
-            .with_audited_write(event, move |executor| {
+            .with_audited_write(event, access, move |executor| {
                 Box::pin(async move {
                     db.permissions().create(&permission, executor).await?;
                     Ok(permission)
@@ -160,6 +196,12 @@ impl AccessControlService {
         req: UpdatePermissionRequest,
         actor: &AuditActor,
     ) -> Result<PermissionView> {
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::PERMISSION_UPDATE,
+        );
+        access.preflight(&self.db).await?;
         req.validate()?;
         let mut permission = self.load_permission_with_version(id, req.version).await?;
         let changed = req.changed_field_names();
@@ -175,7 +217,7 @@ impl AccessControlService {
             .await?;
         let db = self.db.clone();
         let updated = self
-            .with_audited_write(event, move |executor| {
+            .with_audited_write(event, access, move |executor| {
                 Box::pin(async move {
                     db.permissions().update(&mut permission, executor).await?;
                     Ok(permission)
@@ -202,6 +244,12 @@ impl AccessControlService {
     /// * `NotFound` - 权限定义不存在
     /// * `BusinessLogicError` - 系统内建权限禁止删除
     pub async fn delete_permission(&self, id: &str, actor: &AuditActor) -> Result<()> {
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::PERMISSION_DELETE,
+        );
+        access.preflight(&self.db).await?;
         let mut permission = self
             .db
             .permissions()
@@ -213,7 +261,7 @@ impl AccessControlService {
             .build_audit_event(actor, "permission.delete", "permission", Some(id.to_string()), Vec::new())
             .await?;
         let db = self.db.clone();
-        self.with_audited_write(event, move |executor| {
+        self.with_audited_write(event, access, move |executor| {
             Box::pin(async move {
                 db.permissions().soft_delete(&mut permission, executor).await?;
                 Ok(())
@@ -225,6 +273,7 @@ impl AccessControlService {
     /// 按用户查询角色绑定（W19 用户授权，含撤权历史）。
     ///
     /// # 参数
+    /// actor 为当前已认证账号。
     /// * `params` - 查询参数（`user_id` 必填）
     ///
     /// # 返回
@@ -232,10 +281,28 @@ impl AccessControlService {
     ///
     /// # 错误
     /// * `ValidationError` - 用户 ID 缺失
-    pub async fn user_role_list(&self, params: &UserRoleListParams) -> Result<Vec<UserRoleView>> {
-        params.validate()?;
-        let items = self.db.user_roles().list_by_user(&params.user_id, &mut NoTransaction).await?;
-        Ok(items.into_iter().map(Into::into).collect())
+    pub async fn user_role_list(
+        &self,
+        params: &UserRoleListParams,
+        actor: &AuditActor,
+    ) -> Result<Vec<UserRoleView>> {
+        let db = self.db.clone();
+        let params = params.clone();
+        let access =
+            ManagementAccess::new(self.authorization.clone(), actor.clone(), &access_control::USER_ROLE_LIST);
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    params.validate()?;
+                    let items = db.user_roles().list_by_user(&params.user_id, executor).await?;
+                    let result = Ok(items.into_iter().map(Into::into).collect());
+                    access.require(executor).await?;
+                    result
+                })
+            })
+            .await
     }
 
     /// 分配用户角色（绑定记录 + 审计事件原子写入）。
@@ -261,6 +328,12 @@ impl AccessControlService {
         req: AssignUserRoleRequest,
         actor: &AuditActor,
     ) -> Result<UserRoleView> {
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::USER_ROLE_CREATE,
+        );
+        access.preflight(&self.db).await?;
         let data = req.into_data(actor.id())?;
         self.db
             .roles()
@@ -279,7 +352,7 @@ impl AccessControlService {
             .await?;
         let db = self.db.clone();
         let binding = self
-            .with_audited_write(event, move |executor| {
+            .with_audited_write(event, access, move |executor| {
                 Box::pin(async move {
                     db.user_roles().create(&binding, executor).await?;
                     Ok(binding)
@@ -312,6 +385,12 @@ impl AccessControlService {
         req: RevokeUserRoleRequest,
         actor: &AuditActor,
     ) -> Result<UserRoleView> {
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::USER_ROLE_REVOKE,
+        );
+        access.preflight(&self.db).await?;
         req.validate()?;
         let event = self
             .build_audit_event(
@@ -327,7 +406,7 @@ impl AccessControlService {
         let revoked_by = actor.id().to_string();
         let revoke_data = req.into_revoke_data();
         let updated = self
-            .with_audited_write(event, move |executor| {
+            .with_audited_write(event, access, move |executor| {
                 Box::pin(async move {
                     let mut binding = db
                         .user_roles()
@@ -347,6 +426,7 @@ impl AccessControlService {
     /// 分页查询审计事件（W19 §5.2 审计查询）。
     ///
     /// # 参数
+    /// actor 为当前已认证账号。
     /// * `params` - 查询参数（`actor_id`/`action_type`/`object_type`/`result` 等）
     ///
     /// # 返回
@@ -355,18 +435,39 @@ impl AccessControlService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
-    pub async fn audit_event_list(&self, params: &AuditEventListParams) -> Result<PageView<AuditEventView>> {
-        params.validate()?;
-        let filter = params.normalized()?;
-        let page = self.db.audit_events().search_audit_events(&filter, &mut NoTransaction).await?;
-        let items = page.items.into_iter().map(AuditEventView::from).collect();
+    pub async fn audit_event_list(
+        &self,
+        params: &AuditEventListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<AuditEventView>> {
+        let db = self.db.clone();
+        let params = params.clone();
+        let access = ManagementAccess::new(
+            self.authorization.clone(),
+            actor.clone(),
+            &access_control::AUDIT_EVENT_LIST,
+        );
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    params.validate()?;
+                    let filter = params.normalized()?;
+                    let page = db.audit_events().search_audit_events(&filter, executor).await?;
+                    let items = page.items.into_iter().map(AuditEventView::from).collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.paging.page,
-            page_size: filter.paging.page_size,
-        })
+                    let result = Ok(PageView {
+                        items,
+                        total: page.total,
+                        page: filter.paging.page,
+                        page_size: filter.paging.page_size,
+                    });
+                    access.require(executor).await?;
+                    result
+                })
+            })
+            .await
     }
 
     /// 按 ID 加载权限定义并校验期望版本。
@@ -455,7 +556,12 @@ impl AccessControlService {
     ///
     /// 调用方闭包负责业务写入；范围场景须在闭包内完成授权校验与
     /// `bump_policy_revision`。顺序固定为「业务写入 →（范围场景）revision bump → 审计」。
-    async fn with_audited_write<T, F>(&self, event: AuditEvent, write: F) -> Result<T>
+    async fn with_audited_write<T, F>(
+        &self,
+        event: AuditEvent,
+        access: ManagementAccess,
+        write: F,
+    ) -> Result<T>
     where
         T: Send + 'static,
         F: for<'a> FnOnce(&'a mut dyn Executor) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
@@ -467,6 +573,7 @@ impl AccessControlService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    access.require(executor).await?;
                     let value = write(executor).await?;
                     db.audit_events().create(&event, executor).await?;
                     Ok(value)

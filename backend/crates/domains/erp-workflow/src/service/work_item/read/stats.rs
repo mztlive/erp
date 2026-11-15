@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::work_item;
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -149,7 +150,7 @@ impl WorkItemReadService {
         all_families: bool,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemStatsView> {
-        let access = QueueAccess::new(self.authorization.query(&actor, "list", executor).await?);
+        let access = QueueAccess::new(self.authorization.query(&actor, &work_item::LIST, executor).await?);
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds_at(as_of.unix_secs())?;
         let context = StatsContext {

@@ -107,9 +107,9 @@ async fn apply_authorize(
     command: AuthorizeDepositExecution,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositAuthorization> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "authorize", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "authorize", executor).await?;
     let id = operation_id(&account, "authorize", &command.operation_key)?;
     let authorization = SupplierDepositAuthorization {
         base: BaseModel::new(id),
@@ -137,9 +137,9 @@ async fn apply_revoke(
     id: String,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositAuthorization> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "revoke", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "revoke", executor).await?;
     let result = SupplierDepositService::new(db.clone())
         .revoke_authorization(&account, &id, command.expected_version, executor)
         .await?;
@@ -152,9 +152,9 @@ async fn apply_reconcile(
     command: ReconcileDepositAccount,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositReconciliation> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "reconcile", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "reconcile", executor).await?;
     let id = operation_id(&account, "reconcile", &command.operation_key)?;
     let record = SupplierDepositReconciliation {
         base: BaseModel::new(id),

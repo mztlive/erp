@@ -28,8 +28,8 @@ use crate::ports::{PreparedWorkflowAudit, WorkflowAuthorizationPort};
 use crate::repository::bpm::ApprovalInstanceListProjection;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use crate::service::approval::ApprovalResumeCommand;
 use crate::service::approval::business_adapter::{ApprovalAdapterSpec, adapter_spec_of};
-use crate::service::approval::{ApprovalResumeCommand, require_approval_management_with_executor};
 
 /// 旧关闭任务的只读并发守卫；恢复不会修改原任务。
 pub(super) struct ClosedTaskGuard {
@@ -121,7 +121,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 按原顺序校验恢复动作、版本、历史任务、冻结主体和管理者来源边界。
     async fn load_resume_runtime(
         &self,
-        actor: &AuditActor,
+        _actor: &AuditActor,
         command: &ApprovalResumeCommand,
     ) -> Result<ResumeRuntime> {
         let instance_id = &command.approval_process_instance_id;
@@ -134,15 +134,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             )
             .await?;
         let (snapshot, document_type) = self.load_resume_subject(&instance, instance_id).await?;
-        require_approval_management_with_executor(
-            &self.auth,
-            actor,
-            "approval_instance:resume",
-            document_type,
-            &snapshot.business_object_id,
-            &mut NoTransaction,
-        )
-        .await?;
         let spec = adapter_spec_of(document_type)?;
         Ok(ResumeRuntime { instance, current, assignee, closed_task_guard, snapshot, document_type, spec })
     }
@@ -211,6 +202,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         executor: &mut dyn Executor,
     ) -> Result<Eligibility> {
         revalidate_decision_approver(
+            &self.authorization,
             &self.db,
             &self.identity,
             &self.auth,

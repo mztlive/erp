@@ -1,7 +1,7 @@
 //! 批量取消后台任务的权限、状态和逐任务事务编排。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 use tracing::warn;
 use validator::Validate;
 
@@ -30,10 +30,7 @@ impl BulkJobService {
         req: CancelAllBackgroundJobsRequest,
         actor: &AuditActor,
     ) -> Result<CancelAllBackgroundJobsResponse> {
-        self.authorization.require_cancel_all(actor, &mut NoTransaction).await?;
-        req.validate()?;
-        let candidates =
-            self.db.background_jobs().cancellation_candidates(req.job_type, &mut NoTransaction).await?;
+        let candidates = self.cancel_candidates(req, actor).await?;
         let mut result = CancelAllBackgroundJobsResponse {
             cancelled_count: 0,
             skipped_count: 0,
@@ -53,6 +50,27 @@ impl BulkJobService {
             }
         }
         Ok(result)
+    }
+
+    /// 在同一快照检查批量资格并取得当前候选，不把非事务预检当成写入资格。
+    async fn cancel_candidates(
+        &self,
+        req: CancelAllBackgroundJobsRequest,
+        actor: &AuditActor,
+    ) -> Result<Vec<BackgroundJob>> {
+        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization.require_cancel_all(&actor, executor).await?;
+                    req.validate()?;
+                    Ok(db.background_jobs().cancellation_candidates(req.job_type, executor).await?)
+                })
+            })
+            .await
     }
 
     /// 单个候选任务取消与审计同事务写入；终态或不允许取消时返回跳过。

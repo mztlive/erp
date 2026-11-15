@@ -40,7 +40,7 @@ impl SupplierDepositService {
 }
 
 fn require_transaction(executor: &mut dyn Executor) -> Result<()> {
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::BusinessLogicError("预存款资金写入必须加入调用方事务".into()));
     }
     Ok(())

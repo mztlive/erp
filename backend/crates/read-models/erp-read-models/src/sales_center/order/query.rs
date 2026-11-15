@@ -10,22 +10,22 @@ use erp_contract::repository::prelude::*;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
 use erp_core::money::Amount;
 use erp_customer::repository::prelude::*;
+use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission};
 use erp_sales::dto::sales_order::{PageView, SubmissionView};
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus};
 use erp_sales::repository::sales_order::SalesOrderRow;
 use erp_sales::repository::{SalesOrderExt, SalesOrderRevisionRepositoryExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::dto::{
     ActiveCardSalesApprovalView, PurchaseCreationAccessView, SalesOrderView, SalesProcurementCoverageView,
 };
 use super::status::stage_code_label_tone;
 use super::{SalesOrderReadService, dto};
-use crate::purchase_center::creation_authorization::creation_tasks;
+use crate::purchase_center::creation_authorization::{CreationTaskFilter, query_tasks};
 use crate::purchase_center::freight_follow_up::{FreightFollowUpView, freight_follow_ups};
 use crate::{Error, Result};
 
@@ -63,33 +63,29 @@ impl SalesOrderReadService {
         let expected = params.scope_version.as_deref();
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         validator::Validate::validate(params)?;
-        let search = self.keyword_search(params.q.as_deref()).await?;
-        let super::scope::SalesSnapshot { page, context } =
-            self.list_snapshot(params, search.clone(), actor).await?;
-        if expected.is_some_and(|value| value != context.scope_version) {
-            return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
-        }
+        self.list_snapshot(params, actor).await
+    }
 
-        let revision_amounts = self.revision_amounts(&page.items).await?;
+    /// 在原授权事务补齐当前页金额、责任人与客户展示，不改变分页成员。
+    ///
+    /// # 参数
+    /// page 为已授权分页；executor 为签发该页凭证的原事务执行器。
+    /// # 返回
+    /// 完整列表页；总数、页码、行序及页大小保持原值。
+    /// # 错误
+    /// 任一金额、任务、账号或客户事实读取失败时拒绝交付整页。
+    pub(super) async fn list_view(
+        &self,
+        page: PageView<SalesOrderRow>,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SalesOrderView>> {
+        let revision_amounts = self.revision_amounts(&page.items, executor).await?;
         let mut items =
             page.items.into_iter().map(|row| map_sales_row(row, &revision_amounts)).collect::<Vec<_>>();
-        self.fill_stage_owners(&mut items).await?;
-        self.fill_owner_names(&mut items).await?;
-        self.fill_customer_names(&mut items).await?;
-
-        let current_version = self.scope_fingerprint(params, search, actor).await?;
-        if current_version != context.scope_version {
-            return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
-        }
-
-        Ok(super::SalesListView {
-            scope_version: context.scope_version.clone(),
-            as_of: context.as_of.as_utc().to_rfc3339(),
-            empty_reason: None,
-            scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
-            ownership_basis: "document_sales_owner",
-            data: PageView { items, total: page.total, page: page.page, page_size: page.page_size },
-        })
+        self.fill_stage_owners(&mut items, executor).await?;
+        self.fill_owner_names(&mut items, executor).await?;
+        self.fill_customer_names(&mut items, executor).await?;
+        Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
 
     /// 计算当前账号从销售单继续执行供给分配的访问投影。
@@ -114,6 +110,7 @@ impl SalesOrderReadService {
         order: &erp_sales::entity::sales_order::SalesOrder,
         coverage: &SalesProcurementCoverageView,
         actor: Option<&AuditActor>,
+        executor: &mut dyn Executor,
     ) -> Result<PurchaseCreationAccessView> {
         if let Some(message) = order.procurement_creation_blocker(coverage.remaining_quantity) {
             return Ok(blocked_purchase_creation_access(message));
@@ -121,16 +118,23 @@ impl SalesOrderReadService {
         let Some(actor) = actor else {
             return Ok(blocked_purchase_creation_access("当前调用缺少供给分配责任上下文"));
         };
-        let task_count =
-            match creation_tasks(&self.db, self.require_rbac()?, actor, Some(&order.base.id), None).await {
-                Ok(tasks) => tasks.len(),
-                Err(Error::Forbidden(_) | Error::Unauthenticated(_)) => {
-                    return Ok(blocked_purchase_creation_access(
-                        "当前账号不能执行供给分配，请检查账号状态和 purchase_order:create 权限",
-                    ));
-                },
-                Err(error) => return Err(error),
-            };
+        let task_count = match query_tasks(
+            &self.db,
+            self.require_rbac()?,
+            actor,
+            CreationTaskFilter { sales_order_id: Some(order.base.id.clone()), work_item_id: None },
+            executor,
+        )
+        .await
+        {
+            Ok(tasks) => tasks.len(),
+            Err(Error::Forbidden(_) | Error::Unauthenticated(_)) => {
+                return Ok(blocked_purchase_creation_access(
+                    "当前账号不能执行供给分配，请检查账号状态和 purchase_order:create 权限",
+                ));
+            },
+            Err(error) => return Err(error),
+        };
         if task_count == 0 {
             return Ok(blocked_purchase_creation_access("当前账号不是该销售单供给分配任务负责人"));
         }
@@ -152,23 +156,17 @@ impl SalesOrderReadService {
         &self,
         order: &erp_sales::entity::sales_order::SalesOrder,
         actor: Option<&AuditActor>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<FreightFollowUpView>> {
         let Some(actor) = actor else {
             return Ok(Vec::new());
         };
-        let authorization = AuthorizationService::new(
-            self.db.clone(),
-            self.require_rbac()?.clone(),
-            AuthorizationRegistry::default(),
-        );
-        if !authorization
-            .has_permission(actor, &Permission::parse("purchase_order:create")?, &mut NoTransaction)
-            .await?
-        {
+        let authorization = self.require_rbac()?;
+        if !authorization.has_permission(actor, &erp_permissions::purchase_order::CREATE, executor).await? {
             return Ok(Vec::new());
         }
         let mut grouped =
-            freight_follow_ups(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
+            freight_follow_ups(&self.db, std::slice::from_ref(&order.base.id), executor).await?;
         Ok(grouped.remove(&order.base.id).unwrap_or_default())
     }
 
@@ -189,6 +187,7 @@ impl SalesOrderReadService {
         sales_order_id: &SalesOrderId,
         business_type: BusinessType,
         review_status: ReviewStatus,
+        executor: &mut dyn Executor,
     ) -> Result<(Option<String>, Option<String>, Option<u64>)> {
         if !review_status.has_active_review_task() {
             return Ok((None, None, None));
@@ -197,7 +196,7 @@ impl SalesOrderReadService {
         let tasks = self
             .db
             .work_items()
-            .list_active_approval_by_objects(&[(object_type, sales_order_id.to_string())], &mut NoTransaction)
+            .list_active_approval_by_objects(&[(object_type, sales_order_id.to_string())], executor)
             .await?;
         let Some(task) = tasks.into_iter().next() else {
             return Ok((None, None, None));
@@ -212,6 +211,7 @@ impl SalesOrderReadService {
         _submission_id: &SalesOrderSubmissionId,
         _submission: Option<&SubmissionView>,
         _actor: &AuditActor,
+        _executor: &mut dyn Executor,
     ) -> Result<Option<ActiveCardSalesApprovalView>> {
         Ok(None)
     }
@@ -219,7 +219,11 @@ impl SalesOrderReadService {
     /// 批量补齐当前页的阶段责任人和时限，不改变列表顺序与成员。
     ///
     /// 无开放审核任务的单据保持空阶段责任，仓储失败时返回错误。
-    async fn fill_stage_owners(&self, items: &mut [SalesOrderView]) -> Result<()> {
+    async fn fill_stage_owners(
+        &self,
+        items: &mut [SalesOrderView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let business_objects = items
             .iter()
             .filter(|item| item.review_status.has_active_review_task())
@@ -230,14 +234,11 @@ impl SalesOrderReadService {
                 )
             })
             .collect::<Vec<_>>();
-        let tasks = self
-            .db
-            .work_items()
-            .list_active_approval_by_objects(&business_objects, &mut NoTransaction)
-            .await?;
+        let tasks = self.db.work_items().list_active_approval_by_objects(&business_objects, executor).await?;
         let owner_names = self
-            .resolve_account_names_batch(
+            .account_names(
                 &tasks.iter().filter_map(|task| task.owner_user_id.clone()).collect::<Vec<_>>(),
+                executor,
             )
             .await?;
         let owners = tasks
@@ -268,9 +269,13 @@ impl SalesOrderReadService {
     }
 
     /// 批量补齐当前页负责销售姓名；缺失账号保持空名称，查询失败时返回错误。
-    async fn fill_owner_names(&self, items: &mut [SalesOrderView]) -> Result<()> {
+    async fn fill_owner_names(
+        &self,
+        items: &mut [SalesOrderView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let ids = items.iter().map(|item| item.owner_user_id.clone()).collect::<Vec<_>>();
-        let names = self.resolve_account_names_batch(&ids).await?;
+        let names = self.account_names(&ids, executor).await?;
         for item in items {
             item.owner_user_name = names.get(&item.owner_user_id).cloned();
         }
@@ -281,6 +286,7 @@ impl SalesOrderReadService {
     ///
     /// # 参数
     /// * `rows` - 当前页销售单投影行
+    /// * `executor` - 原授权事务执行器。
     ///
     /// # 返回
     /// 返回按正式版本身份索引的金额快照；无正式版本的单据不在结果中。
@@ -290,6 +296,7 @@ impl SalesOrderReadService {
     async fn revision_amounts(
         &self,
         rows: &[SalesOrderRow],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, SalesRevisionAmounts>> {
         let revision_ids = rows
             .iter()
@@ -298,7 +305,7 @@ impl SalesOrderReadService {
             .into_iter()
             .collect::<Vec<_>>();
         let revisions =
-            self.db.sales_order_revisions().find_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
+            self.db.sales_order_revisions().find_revisions_by_ids(&revision_ids, executor).await?;
         Ok(revisions
             .into_iter()
             .map(|revision| {
@@ -318,15 +325,20 @@ impl SalesOrderReadService {
     ///
     /// # 参数
     /// * `account_ids` - 账号 ID 集合，允许重复或为空
+    /// * `executor` - 原授权事务执行器。
     ///
     /// # 返回
     /// 返回按账号 ID 索引的展示姓名；已删除或不存在的账号不会进入结果。
     ///
     /// # 错误
     /// 账号仓储查询失败时返回仓储错误。
-    async fn resolve_account_names_batch(&self, account_ids: &[String]) -> Result<HashMap<String, String>> {
+    async fn account_names(
+        &self,
+        account_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
         let unique_ids = account_ids.iter().cloned().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
-        let accounts = self.db.accounts().list_by_ids(&unique_ids, &mut NoTransaction).await?;
+        let accounts = self.db.accounts().list_by_ids(&unique_ids, executor).await?;
         Ok(accounts.into_iter().map(|account| (account.base.id, account.name)).collect())
     }
 }
@@ -411,10 +423,16 @@ fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView
 impl SalesOrderReadService {
     /// 在分页前经拥有领域解析客户名称、合同号；空关键词不读取关联表。
     ///
-    /// 返回销售域中性的搜索条件，关联读取失败时整次查询失败。
+    /// # 参数
+    /// q 为可选关键词，executor 为当前读取用例的执行器。
+    /// # 返回
+    /// 返回销售域中性的搜索条件；空关键词得到默认条件。
+    /// # 错误
+    /// 客户、主体或合同关联读取失败时整次查询失败。
     pub(crate) async fn keyword_search(
         &self,
         q: Option<&str>,
+        executor: &mut dyn Executor,
     ) -> Result<erp_sales::repository::sales_order::SalesOrderSearch> {
         use erp_contract::ContractExt;
         use erp_customer::CustomerExt;
@@ -425,14 +443,13 @@ impl SalesOrderReadService {
         let party_ids = self
             .db
             .party()
-            .matching_current_party_ids_by_name(&q, &mut NoTransaction)
+            .matching_current_party_ids_by_name(&q, executor)
             .await?
             .into_iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>();
-        let customer_ids =
-            self.db.customer_accounts().matching_ids_by_parties(&party_ids, &mut NoTransaction).await?;
-        let contract_ids = self.db.contracts().matching_ids_by_number(&q, &mut NoTransaction).await?;
+        let customer_ids = self.db.customer_accounts().matching_ids_by_parties(&party_ids, executor).await?;
+        let contract_ids = self.db.contracts().matching_ids_by_number(&q, executor).await?;
         Ok(erp_sales::repository::sales_order::SalesOrderSearch { q: Some(q), customer_ids, contract_ids })
     }
 }

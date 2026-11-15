@@ -6,15 +6,15 @@ use erp_approval_runtime::ApprovalRuntimePort;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_contract::ContractAccess;
 use erp_customer::{CustomerAccess, CustomerService};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_sales::service::sales_selection::SelectionAccess;
 use erp_supplier::SupplierAccess;
 use erp_support::FileAssetService;
 
 /// 应用使用同一数据库和授权政策构造的销售消费合同。
 pub struct SalesServices {
-    /// 每次交接写入重验时创建独立身份，不复用调用方的权限缓存和未知提交状态。
-    pub handover_identity: Arc<dyn Fn() -> SharedRbacService + Send + Sync>,
+    /// 进程共享授权服务；交接双方资格使用本次执行器读取。
+    pub authorization: Arc<AuthorizationService>,
     /// 客户事实读取，不替代独立对象范围核验。
     pub customers: Arc<CustomerService>,
     /// 客户对象范围及创建资格。

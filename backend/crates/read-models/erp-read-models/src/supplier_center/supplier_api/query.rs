@@ -3,11 +3,14 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::{AccessTarget, PermissionSet};
 use erp_party::PartyExt;
+use erp_permissions::supplier_api;
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
-use erp_supply::after_sales::{AfterSalesExt, pending_settlements};
+use erp_supply::after_sales::{
+    AfterSalesExt, SettlementEvidenceView, SettlementScanView, pending_settlements,
+};
 use erp_supply::dto::supplier_api::{
     PageView, SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilitySummaryView,
     SupplierApiConnectionDetailView, SupplierApiConnectionListItemView, SupplierApiConnectionListParams,
@@ -18,15 +21,16 @@ use erp_supply::entity::supplier_api::{
     SupplierConnectionGovernance, SupplierHealthCheckRun, SupplierHealthCheckType,
 };
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
+use erp_supply::repository::supplier_api::authorized_connection;
 use erp_supply::service::supplier_api::context::{
     action_permission, blocker, governance_blocker_view, safe_reference,
 };
 use erp_support::BulkJobExt;
 use erp_support::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use super::SupplierApiReadService;
-use super::context::{GovernanceContext, REFERENCE_METADATA_PERMISSION};
+use super::context::GovernanceContext;
 use crate::Result;
 
 impl SupplierApiReadService {
@@ -34,7 +38,7 @@ impl SupplierApiReadService {
     ///
     /// # 参数
     /// * `params` - 连接列表查询参数。
-    /// * `_actor` - 保留的操作人。当前不参与过滤或动作投影。
+    /// * `actor` - 当前账号；统一查询检查本入口完整资格。
     ///
     /// # 返回
     /// 返回带能力摘要和供应商名称的连接分页。空关键词不按名称收窄。
@@ -44,12 +48,48 @@ impl SupplierApiReadService {
     pub async fn connection_list_for_actor(
         &self,
         params: &SupplierApiConnectionListParams,
-        _actor: &AuditActor,
+        actor: &AuditActor,
     ) -> Result<PageView<SupplierApiConnectionListItemView>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.connection_list_snapshot(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一事务内检查列表功能资格并补齐完整分页展示。
+    /// # 参数
+    /// params 为业务筛选，actor 为当前账号，executor 为公开入口的原快照执行器。
+    /// # 返回
+    /// 返回同一快照中的连接分页及供应商展示资料。
+    /// # 错误
+    /// 功能资格不足、参数非法或任一读取失败时终止。
+    pub(super) async fn connection_list_snapshot(
+        &self,
+        params: &SupplierApiConnectionListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SupplierApiConnectionListItemView>> {
+        self.authorization
+            .require(actor, &supplier_api::CONNECTION_LIST, AccessTarget::Operation, executor)
+            .await?;
         validator::Validate::validate(params)?;
-        let suppliers = crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref()).await?;
-        let page = self.domain().connection_list(params, suppliers).await?;
-        let supplier_names = self.supplier_names_for_connections(&page.items).await?;
+        let suppliers =
+            crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref(), executor).await?;
+        let page = self.domain().connection_list(params, suppliers, executor).await?;
+        let supplier_names = self.supplier_names_for_connections(&page.items, executor).await?;
+        Ok(self.connection_list_view(page, &supplier_names))
+    }
+
+    fn connection_list_view(
+        &self,
+        page: PageView<SupplierApiConnectionView>,
+        supplier_names: &HashMap<String, String>,
+    ) -> PageView<SupplierApiConnectionListItemView> {
         let items = page
             .items
             .into_iter()
@@ -77,21 +117,20 @@ impl SupplierApiReadService {
                 connection,
             })
             .collect();
-        Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
+        PageView { items, total: page.total, page: page.page, page_size: page.page_size }
     }
 
     async fn supplier_names_for_connections(
         &self,
         connections: &[SupplierApiConnectionView],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let supplier_ids =
             connections.iter().map(|item| SupplierAccountId::new(&item.supplier_id)).collect::<Vec<_>>();
-        let accounts =
-            self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, &mut NoTransaction).await?;
+        let accounts = self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
         let party_ids =
             accounts.iter().map(|account| PartyId::new(account.party_id.to_string())).collect::<Vec<_>>();
-        let (parties, revisions) =
-            self.db.party().list_with_current_revisions(&party_ids, &mut NoTransaction).await?;
+        let (parties, revisions) = self.db.party().list_with_current_revisions(&party_ids, executor).await?;
         let revisions_by_id = revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision.legal_name))
@@ -129,9 +168,13 @@ impl SupplierApiReadService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SupplierApiConnectionDetailView> {
-        let connection = self.domain().load_connection(id, &mut NoTransaction).await?;
-        let context = self.governance_context(&connection, &mut NoTransaction).await?;
-        self.detail_view(connection, context, actor).await
+        let executor = &mut ReadExecutor::default();
+        let access = self.authorization.query(actor, &supplier_api::CONNECTION_DETAIL, executor).await?;
+        let connection = authorized_connection(&self.db, id, &access, executor).await?;
+        let context = self.governance_context(&connection, executor).await?;
+        let view = self.detail_view(connection, context, actor, executor).await?;
+        self.authorization.validate(&access, executor).await?;
+        Ok(view)
     }
 
     async fn detail_view(
@@ -139,9 +182,10 @@ impl SupplierApiReadService {
         connection: SupplierApiConnection,
         context: GovernanceContext,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<SupplierApiConnectionDetailView> {
-        let permissions = self.connection_permissions(actor).await?;
-        let reference_visible = permissions.covers_one(&Permission::parse(REFERENCE_METADATA_PERMISSION)?);
+        let permissions = self.connection_permissions(actor, executor).await?;
+        let reference_visible = permissions.covers_one(&erp_permissions::supplier_api::REFERENCES_OPTIONS);
         let connector_description = self
             .reference_registry
             .as_ref()
@@ -151,30 +195,16 @@ impl SupplierApiReadService {
             .map(|description| description.operations.clone())
             .unwrap_or_default();
 
-        let (allowed_actions, action_blockers) =
-            self.connection_action_projection(&connection, &permissions).await?;
-        let mut connection_view: SupplierApiConnectionView = connection.clone().into();
-        connection_view.safe_references = SafeReferencesView {
-            endpoint: safe_reference(connection.endpoint_reference_bound, reference_visible),
-            credential: safe_reference(connection.credential_reference_bound, reference_visible),
-        };
-        connection_view.allowed_actions = allowed_actions;
-        connection_view.action_blockers = action_blockers;
+        let connection_view =
+            self.connection_view(&connection, &permissions, reference_visible, executor).await?;
+        let (settlement_scan, settlement_evidence) =
+            self.settlement_context(&connection.base.id, executor).await?;
         let deployment_ready = self.reference_registry.as_ref().is_some_and(|registry| {
             registry.deployment_config(&SupplierReferenceTarget::from(&connection)).is_ok()
         });
         Ok(SupplierApiConnectionDetailView {
-            settlement_scan: self
-                .db
-                .api_settlement_scans()
-                .find_by_id(&connection.base.id, &mut NoTransaction)
-                .await?
-                .map(Into::into),
-            settlement_evidence: pending_settlements(&self.db, &connection.base.id, &mut NoTransaction)
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            settlement_scan,
+            settlement_evidence,
             connector_description,
             deployment_ready,
             deployment_message: if deployment_ready {
@@ -193,15 +223,46 @@ impl SupplierApiReadService {
         })
     }
 
+    async fn connection_view(
+        &self,
+        connection: &SupplierApiConnection,
+        permissions: &PermissionSet,
+        reference_visible: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierApiConnectionView> {
+        let (allowed_actions, action_blockers) =
+            self.connection_action_projection(connection, permissions, executor).await?;
+        let mut connection_view: SupplierApiConnectionView = connection.clone().into();
+        connection_view.safe_references = SafeReferencesView {
+            endpoint: safe_reference(connection.endpoint_reference_bound, reference_visible),
+            credential: safe_reference(connection.credential_reference_bound, reference_visible),
+        };
+        connection_view.allowed_actions = allowed_actions;
+        connection_view.action_blockers = action_blockers;
+        Ok(connection_view)
+    }
+
+    async fn settlement_context(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<(Option<SettlementScanView>, Vec<SettlementEvidenceView>)> {
+        let scan = self.db.api_settlement_scans().find_by_id(id, executor).await?.map(Into::into);
+        let evidence =
+            pending_settlements(&self.db, id, executor).await?.into_iter().map(Into::into).collect();
+        Ok((scan, evidence))
+    }
+
     async fn connection_action_projection(
         &self,
         connection: &SupplierApiConnection,
         permissions: &PermissionSet,
+        executor: &mut dyn Executor,
     ) -> Result<(Vec<String>, Vec<SupplierActionBlockerView>)> {
         let mut allowed = Vec::new();
         let mut blocked = Vec::new();
         let active_catalog =
-            self.db.background_jobs().active_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
+            self.db.background_jobs().active_catalog_jobs(&connection.base.id, executor).await?;
         let catalog_running = active_catalog.len() >= 100
             || active_catalog.iter().any(|job| !job.catalog_stalled(Instant::now()));
         let deployment = self
@@ -216,7 +277,7 @@ impl SupplierApiReadService {
             ) {
                 continue;
             }
-            if !permissions.covers_one(&Permission::parse(action_permission(action))?) {
+            if !permissions.covers_one(&action_permission(action)) {
                 continue;
             }
             let blockers = self.operation_blockers(connection, action, deployment.is_some(), catalog_running);

@@ -13,7 +13,7 @@ use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::display::{resolve_source_document_no, resolve_supplier_display};
@@ -213,7 +213,7 @@ impl PayableReadService {
     /// # 错误
     /// * `NotFound` - 子账不存在
     pub async fn payable_account_detail(&self, id: &str) -> Result<PayableAccountView> {
-        self.payable_account_view(id.to_string(), true).await
+        self.payable_account_view(id.to_string(), true, &mut NoTransaction).await
     }
 
     // -----------------------------------------------------------------------
@@ -223,32 +223,33 @@ impl PayableReadService {
     /// 装配应付往来子账视图。
     ///
     /// # 参数
-    /// * `id` - 子账 ID
-    /// * `include_payment_recipient` - 是否加载任务/详情所需的当前收款账户
+    /// * `id` - 本用例已授权的实际子账 ID。
+    /// * `include_payment_recipient` - 是否加载任务/详情所需的当前收款账户。
+    /// * `executor` - 完成该授权的原事务执行器。
     ///
     /// # 返回
     /// 返回完整应付台账视图。
     ///
     /// # 错误
     /// * `NotFound` - 子账不存在
-    async fn payable_account_view(
+    pub async fn payable_account_view(
         &self,
         id: String,
         include_payment_recipient: bool,
+        executor: &mut dyn Executor,
     ) -> Result<PayableAccountView> {
         let account = self
             .db
             .payable_accounts()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
-        let source_document_no = resolve_source_document_no(&self.db, &account).await?;
-        let entries = self.detail_entries(&account, source_document_no.as_deref()).await?;
-        let payment_allocations =
-            payment_allocations_for_entries(&self.db, &entries, &mut NoTransaction).await?;
+        let source_document_no = resolve_source_document_no(&self.db, &account, executor).await?;
+        let entries = self.detail_entries(&account, source_document_no.as_deref(), executor).await?;
+        let payment_allocations = payment_allocations_for_entries(&self.db, &entries, executor).await?;
         let (supplier_no, supplier_name) =
-            resolve_supplier_display(&self.db, account.supplier_id.as_ref()).await?;
-        let payment_recipient = self.detail_recipient(&account, include_payment_recipient).await?;
+            resolve_supplier_display(&self.db, account.supplier_id.as_ref(), executor).await?;
+        let payment_recipient = self.detail_recipient(&account, include_payment_recipient, executor).await?;
         Ok(PayableAccountView {
             id: account.base.id.clone(),
             source_document_id: account.source_document_id,
@@ -277,11 +278,12 @@ impl PayableReadService {
         &self,
         account: &PayableAccount,
         source_document_no: Option<&str>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<PayableEntryView>> {
         Ok(self
             .db
             .payable_entries()
-            .find_entries_by_account(&account.base.id.clone().into(), &mut NoTransaction)
+            .find_entries_by_account(&account.base.id.clone().into(), executor)
             .await?
             .into_iter()
             .map(|entry| PayableEntryView {
@@ -305,11 +307,12 @@ impl PayableReadService {
         &self,
         account: &PayableAccount,
         include: bool,
+        executor: &mut dyn Executor,
     ) -> Result<Option<PaymentRecipientView>> {
         if !include {
             return Ok(None);
         }
-        Ok(resolve_optional_payment_recipient_for_read(&self.db, &account.supplier_id, &mut NoTransaction)
+        Ok(resolve_optional_payment_recipient_for_read(&self.db, &account.supplier_id, executor)
             .await?
             .as_ref()
             .map(payment_recipient_view))

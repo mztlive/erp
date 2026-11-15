@@ -1,15 +1,18 @@
 //! 方案预填与创建事务内来源重验。
 use application_core::AuditActor;
 use erp_core::ids::CustomerAccountId;
+use erp_permissions::{internal, sales_selection as selection_permissions};
 use erp_sales::dto::sales_order::selection_basis::SelectionOrderBasis;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::repository::SalesSelectionExt;
-use erp_sales::repository::sales_selection::SalesSelectionProposalSkuLineRepositoryExt;
+use erp_sales::repository::sales_selection::{
+    SalesSelectionDomainRepository, SalesSelectionProposalSkuLineRepositoryExt,
+};
 use persistence_core::{Executor, Transactional};
 
 use super::super::SalesOrderCommandProcess;
-use crate::Result;
+use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
     /// 读取已授权按份采购方案的开单预填。
@@ -31,7 +34,7 @@ impl SalesOrderCommandProcess {
             .await
     }
 
-    /// 在同一读取事务内核验方案与客户后返回开单预填。
+    /// 按固定开单预填资格读取方案和明细，并在交付前检查原查询。
     async fn selection_basis(
         &self,
         id: &str,
@@ -39,10 +42,15 @@ impl SalesOrderCommandProcess {
         executor: &mut dyn Executor,
     ) -> Result<SelectionOrderBasis> {
         let access = self.services.selections.clone();
-        let proposal = access.require_proposal(actor, "get", id, executor).await?;
-        self.command_access(actor, "create").load_customer(proposal.customer_id.as_ref(), executor).await?;
+        let scope = access.resolve(actor, &internal::SALES_SELECTION_ORDER_BASIS, executor).await?;
+        let proposal = SalesSelectionDomainRepository::new(&self.db)
+            .find_authorized_proposal(id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
         let lines = self.db.sales_selection_proposal_sku_lines().list_by_proposal(id, executor).await?;
-        Ok(SelectionOrderBasis::from_proposal(&proposal, lines)?)
+        let basis = SelectionOrderBasis::from_proposal(&proposal, lines)?;
+        scope.validate(executor).await?;
+        Ok(basis)
     }
 
     /// 在调用方执行器中核验并冻结方案来源。
@@ -61,7 +69,8 @@ impl SalesOrderCommandProcess {
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionSource> {
         let access = self.services.selections.clone();
-        let proposal = access.require_proposal(actor, "get", id, executor).await?;
+        let proposal =
+            access.require_proposal(actor, &selection_permissions::PROPOSAL_DETAIL, id, executor).await?;
         Ok(SalesSelectionSource::from_proposal(&proposal, customer, business_type)?)
     }
 }

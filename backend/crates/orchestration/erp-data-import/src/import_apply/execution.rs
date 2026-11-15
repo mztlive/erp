@@ -4,6 +4,7 @@ use application_core::{AuditActor, StructuredCommandReceipt};
 use erp_audit::BusinessEventContext;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 use erp_import::entity::command_receipt::{
     ImportCommandReceipt, ImportCommandResult, ImportExecutionReceipt,
 };
@@ -15,6 +16,7 @@ use erp_import::{
     LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportExt, LegacyImportRow,
     PreparedImportExecution,
 };
+use erp_permissions::legacy_import;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use mongodb::Database;
@@ -57,7 +59,7 @@ impl ImportApplyProcess {
         let identity =
             import_execution_command_identity(actor.id(), "legacy_import_batch.execute", &prepared)
                 .structured_receipt("legacy_import_batch")?;
-        if let Some(result) = self.replay_import_execution(&identity, &prepared).await? {
+        if let Some(result) = self.replay_import_execution(&identity, &prepared, actor).await? {
             return Ok(result);
         }
         let context = import_event_context(
@@ -67,11 +69,11 @@ impl ImportApplyProcess {
             "执行导入应用命令",
             &identity,
         )?;
-        match self.commit_import_execution(&identity, &prepared, &context).await {
+        match self.commit_import_execution(&identity, &prepared, actor, &context).await {
             Ok(result) => Ok(result),
             Err(error) => erp_audit::execution::recover_command(
                 error,
-                self.replay_import_execution(&identity, &prepared).await,
+                self.replay_import_execution(&identity, &prepared, actor).await,
             ),
         }
     }
@@ -81,14 +83,22 @@ impl ImportApplyProcess {
         &self,
         identity: &StructuredCommandReceipt,
         prepared: &PreparedImportExecution,
+        actor: &AuditActor,
     ) -> Result<Option<ImportExecutionResult>> {
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let identity = identity.clone();
         let prepared = prepared.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { replay_execution_step(&db, &identity, &prepared, executor).await })
+                Box::pin(async move {
+                    authorization
+                        .require(&actor, &legacy_import::EXECUTION_COMMAND, AccessTarget::Operation, executor)
+                        .await?;
+                    replay_execution_step(&db, &identity, &prepared, executor).await
+                })
             })
             .await
     }
@@ -98,8 +108,11 @@ impl ImportApplyProcess {
         &self,
         identity: &StructuredCommandReceipt,
         prepared: &PreparedImportExecution,
+        actor: &AuditActor,
         context: &BusinessEventContext,
     ) -> Result<ImportExecutionResult> {
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let identity = identity.clone();
         let prepared = prepared.clone();
@@ -108,6 +121,9 @@ impl ImportApplyProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &legacy_import::EXECUTION_COMMAND, AccessTarget::Operation, executor)
+                        .await?;
                     let command = ImportExecutionWrite {
                         db: &db,
                         identity: &identity,

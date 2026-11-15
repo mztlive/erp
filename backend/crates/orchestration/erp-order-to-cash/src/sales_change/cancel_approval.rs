@@ -15,7 +15,7 @@ use erp_workflow::service::approval::execution::{
     CancelExecutionInput, PreparedExecution, claim_and_persist_document_cancel_runtime,
 };
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use crate::Result;
 
@@ -39,6 +39,7 @@ pub(super) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     subject: &SubjectRef,
     subject_version: u32,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
     Ok(document_cancel_runtime(
         db,
@@ -46,7 +47,7 @@ pub(super) async fn load_cancel_runtime(
         subject,
         subject_version,
         "销售变更单绑定的审批定义不存在",
-        &mut NoTransaction,
+        executor,
     )
     .await?)
 }
@@ -113,8 +114,6 @@ pub(super) struct SalesChangeCancelPersistInput {
     pub audit: erp_audit::AuditLog,
     /// 已认证操作人，用于事务内重验来源销售单范围。
     pub actor: application_core::AuditActor,
-    /// 与写事务绑定的授权源。
-    pub rbac: erp_identity::SharedRbacService,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回变更单。
@@ -137,6 +136,7 @@ pub(super) struct SalesChangeCancelPersistInput {
 pub(super) async fn persist_sales_change_cancel(
     db: &Database,
     input: SalesChangeCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let SalesChangeCancelPersistInput {
         approvals,
@@ -148,35 +148,14 @@ pub(super) async fn persist_sales_change_cancel(
         now,
         audit,
         actor,
-        rbac,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
     };
     let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
-                    .require_object(
-                        &actor,
-                        "cancel_approval",
-                        change_order.sales_order_id.as_ref(),
-                        &[],
-                        executor,
-                    )
-                    .await
-                    .map_err(crate::Error::from)?;
-                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, actor.id(), executor)
-                    .await?;
-                approvals.persist_cancel_copies(&db, &writes, executor).await?;
-                erp_sales::service::sales_review::persist_cancelled_change(&db, &mut change_order, executor)
-                    .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    claim_and_persist_document_cancel_runtime(db, &writes, &closed_tasks, actor.id(), executor).await?;
+    approvals.persist_cancel_copies(db, &writes, executor).await?;
+    erp_sales::service::sales_review::persist_cancelled_change(db, &mut change_order, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }

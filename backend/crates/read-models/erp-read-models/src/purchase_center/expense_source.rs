@@ -1,7 +1,10 @@
 //! 费用采购来源：以采购创建资格读取销售协同范围，不要求销售菜单权限。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderRevisionId, SalesOrderRevisionLineId};
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
+use erp_permissions::internal;
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
@@ -59,7 +62,7 @@ pub struct ExpenseSourceDetail {
 #[derive(Clone)]
 pub struct ExpenseSourceReadService {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl ExpenseSourceReadService {
@@ -70,7 +73,7 @@ impl ExpenseSourceReadService {
     /// 不执行查询的读取器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -80,7 +83,7 @@ impl ExpenseSourceReadService {
         executor: &mut dyn Executor,
     ) -> Result<(SalesReadContext, SalesReadScope)> {
         let (access, scope) = SalesAccess::new(self.db.clone(), self.rbac.clone())
-            .resolve_source(actor, &Permission::parse("purchase_order:create")?, executor)
+            .resolve(actor, &internal::PURCHASE_EXPENSE_SOURCE, executor)
             .await?;
         Ok((access, scope))
     }
@@ -123,7 +126,7 @@ impl ExpenseSourceReadService {
         }
         let sales = SalesOrderReadService::new(self.db.clone());
         let filter = SalesOrderFilter {
-            search: sales.keyword_search(params.q.as_deref()).await?,
+            search: sales.keyword_search(params.q.as_deref(), executor).await?,
             business_type: Some(BusinessType::GoodsService),
             commercial_status: Some(CommercialStatus::Effective),
             page,
@@ -132,7 +135,10 @@ impl ExpenseSourceReadService {
         };
         let result = self.db.sales_orders().search_sales_orders(&filter, &scope, executor).await?;
         let names = sales
-            .customer_names_batch(&result.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>())
+            .customer_names_batch(
+                &result.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>(),
+                executor,
+            )
             .await?;
         let items = result
             .items
@@ -167,13 +173,24 @@ impl ExpenseSourceReadService {
         executor: &mut dyn Executor,
     ) -> Result<SalesOrder> {
         let (access, scope) = self.scope(actor, executor).await?;
+        let order = self.authorized_order(id, &scope, executor).await?;
+        access.validate(executor).await?;
+        Ok(order)
+    }
+
+    /// 在已经签发的同一查询阶段读取来源，不另开授权阶段。
+    async fn authorized_order(
+        &self,
+        id: &str,
+        scope: &SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesOrder> {
         let order = self
             .db
             .sales_orders()
-            .find_authorized(id, &scope, executor)
+            .find_authorized(id, scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或不在费用采购可选范围内".into()))?;
-        access.validate(executor).await?;
         order.ensure_extra_cost_source()?;
         Ok(order)
     }
@@ -204,8 +221,30 @@ impl ExpenseSourceReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<ExpenseSourceDetail> {
-        let (access, _) = self.scope(actor, executor).await?;
-        let order = self.require_order(id, actor, executor).await?;
+        let (access, scope) = self.scope(actor, executor).await?;
+        let order = self.authorized_order(id, &scope, executor).await?;
+        let lines = self.detail_lines(&order, executor).await?;
+        let names = SalesOrderReadService::new(self.db.clone())
+            .customer_names_batch(&[order.customer_id.to_string()], executor)
+            .await?;
+        access.validate(executor).await?;
+        Ok(ExpenseSourceDetail {
+            summary: ExpenseSourceSummary {
+                id: order.base.id,
+                order_no: order.order_no,
+                customer_name: names.get(order.customer_id.as_ref()).cloned(),
+                status_label: if order.closed_at.is_some() { "已关闭" } else { "已生效" },
+            },
+            lines,
+        })
+    }
+
+    /// 仅从本次授权快照的当前版本读取可归属费用的业务行。
+    async fn detail_lines(
+        &self,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExpenseSourceLine>> {
         let revision = order
             .stable
             .current_revision_id
@@ -222,7 +261,7 @@ impl ExpenseSourceReadService {
             .sales_order_goods_service_line_revisions()
             .list_by_revision_line_ids(&ids, executor)
             .await?;
-        let lines = lines
+        Ok(lines
             .into_iter()
             .filter(|line| {
                 goods.iter().any(|goods| {
@@ -234,20 +273,7 @@ impl ExpenseSourceReadService {
                 id: line.sales_order_line_id.to_string(),
                 name: line.item_name_snapshot,
             })
-            .collect();
-        let names = SalesOrderReadService::new(self.db.clone())
-            .customer_names_batch(&[order.customer_id.to_string()])
-            .await?;
-        access.validate(executor).await?;
-        Ok(ExpenseSourceDetail {
-            summary: ExpenseSourceSummary {
-                id: order.base.id,
-                order_no: order.order_no,
-                customer_name: names.get(order.customer_id.as_ref()).cloned(),
-                status_label: if order.closed_at.is_some() { "已关闭" } else { "已生效" },
-            },
-            lines,
-        })
+            .collect())
     }
 }
 
@@ -257,5 +283,36 @@ fn summary(row: SalesOrderRow, customer_name: Option<String>) -> ExpenseSourceSu
         order_no: row.order_no,
         customer_name,
         status_label: if row.closed_at.is_some() { "已关闭" } else { "已生效" },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn expense_sources_stop_before_business_reads_when_mapping_is_missing() {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("expense_source_authorization");
+        let service = ExpenseSourceReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
+        let errors = [
+            service
+                .detail_view("sales", &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("详情不得读取未授权销售资料"),
+            service
+                .require_order("sales", &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("写入来源不得读取未授权销售资料"),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::ValidationError(reason) if reason == "缺少查询 Mapping 绑定"));
+        }
     }
 }

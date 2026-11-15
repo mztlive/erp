@@ -8,9 +8,11 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -31,10 +33,12 @@ use crate::repository::prelude::*;
 type PartyTaxProfileFilter = <mongodb::Database as PartyExt>::PartyTaxProfileFilter;
 
 /// 税务资料服务。
+#[derive(Clone)]
 pub struct PartyTaxProfileService {
     db: Database,
     audit: Arc<dyn PartyAuditPort>,
     supplier_roles: Arc<dyn SupplierRolePort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl PartyTaxProfileService {
@@ -54,8 +58,9 @@ impl PartyTaxProfileService {
         db: Database,
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, audit, supplier_roles }
+        Self { db, audit, supplier_roles, authorization }
     }
 
     /// 分页查询税务资料列表。
@@ -71,9 +76,36 @@ impl PartyTaxProfileService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn party_tax_profile_list(
         &self,
+        actor: &AuditActor,
         party_id: &str,
         params: &PartyTaxProfileListParams,
     ) -> Result<PageView<PartyTaxProfileView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.party_tax_profile_list_snapshot(&actor, &party_id, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_tax_profile_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        party_id: &str,
+        params: &PartyTaxProfileListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<PartyTaxProfileView>> {
+        self.authorization
+            .require(actor, &party::TAX_PROFILE_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let paging = normalize_paging(
@@ -92,8 +124,7 @@ impl PartyTaxProfileService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.party_tax_profiles().search_party_tax_profiles(&filter, &mut NoTransaction).await?;
+        let page = self.db.party_tax_profiles().search_party_tax_profiles(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -153,6 +184,8 @@ impl PartyTaxProfileService {
             profile.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -160,6 +193,9 @@ impl PartyTaxProfileService {
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::TAX_PROFILE_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     if profile_for_tx.is_default {
                         clear_default_marks!(db, party_tax_profiles, profile_for_tx.party_id, None, executor);
                     }
@@ -193,12 +229,7 @@ impl PartyTaxProfileService {
         actor: &AuditActor,
     ) -> Result<PartyTaxProfileView> {
         req.validate()?;
-        let mut profile = self
-            .db
-            .party_tax_profiles()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("税务资料不存在".to_string()))?;
+        let mut profile = self.load_tax_profile(id).await?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &profile.party_id).await?;
         super::map_version_conflict(profile.ensure_version(req.version))?;
         profile.update(
@@ -216,6 +247,8 @@ impl PartyTaxProfileService {
             profile.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -223,6 +256,9 @@ impl PartyTaxProfileService {
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::TAX_PROFILE_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     if profile_for_tx.is_default {
                         clear_default_marks!(
                             db,
@@ -240,5 +276,13 @@ impl PartyTaxProfileService {
             .await?;
 
         Ok(updated.into())
+    }
+    /// 读取仍存在的本域税务档案事实。
+    async fn load_tax_profile(&self, id: &str) -> Result<PartyTaxProfile> {
+        self.db
+            .party_tax_profiles()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("税务资料不存在".to_string()))
     }
 }

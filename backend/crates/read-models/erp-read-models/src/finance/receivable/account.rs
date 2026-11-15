@@ -12,7 +12,7 @@ use erp_finance::repository::prelude::*;
 use erp_finance::repository::{ReceivableAccountFilter, ReceivableExt};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::ReceivableReadService;
@@ -189,26 +189,31 @@ impl ReceivableReadService {
     /// * `NotFound` - 子账不存在
     /// * `RepositoryError` - 数据库查询失败
     pub async fn receivable_account_detail(&self, id: &str) -> Result<ReceivableAccountView> {
-        self.receivable_account_view(id.to_string()).await
+        self.receivable_account_view(id.to_string(), &mut NoTransaction).await
     }
     /// 装配应收往来子账详情视图。
     ///
     /// # 参数
-    /// * `id` - 子账 ID
+    /// * `id` - 本用例已授权的实际子账 ID。
+    /// * `executor` - 完成该授权的原事务执行器。
     ///
     /// # 返回
     /// 返回完整台账视图。
     ///
     /// # 错误
     /// * `NotFound` - 子账不存在
-    pub async fn receivable_account_view(&self, id: String) -> Result<ReceivableAccountView> {
+    pub async fn receivable_account_view(
+        &self,
+        id: String,
+        executor: &mut dyn Executor,
+    ) -> Result<ReceivableAccountView> {
         let account = self
             .db
             .receivable_accounts()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
-        let snapshot = load_receivable_snapshot(&self.db, &account, &mut NoTransaction).await?;
+        let snapshot = load_receivable_snapshot(&self.db, &account, executor).await?;
         let offsets = snapshot
             .entries
             .iter()
@@ -216,8 +221,7 @@ impl ReceivableReadService {
             .map(|entry| entry.base.id.clone().into())
             .collect::<Vec<ReceivableEntryId>>();
         let mut offset_map: std::collections::HashMap<String, Amount> = std::collections::HashMap::new();
-        for offset in
-            self.db.receivable_entry_offsets().find_offsets_by_decreases(&offsets, &mut NoTransaction).await?
+        for offset in self.db.receivable_entry_offsets().find_offsets_by_decreases(&offsets, executor).await?
         {
             let key = offset.increase_entry_id.to_string();
             let total = offset_map.entry(key).or_insert_with(zero_amount);

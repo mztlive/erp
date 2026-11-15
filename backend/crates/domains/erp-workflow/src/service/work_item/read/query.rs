@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::{ResourceTargets, SharedRbacService};
+use erp_identity::{AuthorizationService, ResourceTargets};
+use erp_permissions::{Permission, work_item};
 use futures_util::future::BoxFuture;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -53,8 +55,8 @@ impl WorkItemReadService {
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: mongodb::Database, rbac: SharedRbacService) -> Self {
-        let authorization = WorkItemAuthorization::new(db.clone(), rbac);
+    pub fn new(db: mongodb::Database, service: Arc<AuthorizationService>) -> Self {
+        let authorization = WorkItemAuthorization::new(db.clone(), service);
         Self { db, authorization }
     }
 }
@@ -78,7 +80,8 @@ impl WorkItemReadService {
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {
-            let result = self.authorization.require(actor, "detail", id, executor).await.map(|()| true);
+            let result =
+                self.authorization.require(actor, &work_item::DETAIL, id, executor).await.map(|()| true);
             match result {
                 Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(false),
                 other => other,
@@ -146,7 +149,7 @@ impl WorkItemReadService {
         actor: AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemPageView> {
-        let access = self.task_access(&actor, "list", executor).await?;
+        let access = self.task_access(&actor, &work_item::LIST, executor).await?;
         let identity_version = access.version();
         let queue_context_id = queue_context_id(actor.id(), &query, &access.version());
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
@@ -385,7 +388,9 @@ impl WorkItemReadService {
                 .client()
                 .clone()
                 .with_transaction(move |executor| {
-                    Box::pin(async move { this.detail_page_for(&id, &actor, "manage", executor).await })
+                    Box::pin(
+                        async move { this.detail_page_for(&id, &actor, &work_item::MANAGE, executor).await },
+                    )
                 })
                 .await
         })
@@ -413,7 +418,7 @@ impl WorkItemReadService {
         actor: &'a AuditActor,
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<WorkItemView>> {
-        self.detail_page_for(id, actor, "detail", executor)
+        self.detail_page_for(id, actor, &work_item::DETAIL, executor)
     }
 
     /// 详情与操作结果使用各自动作的数据范围，材料不进入结果。
@@ -421,17 +426,18 @@ impl WorkItemReadService {
         &'a self,
         id: &'a str,
         actor: &'a AuditActor,
-        action: &'static str,
+        permission: &Permission,
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<WorkItemView>> {
+        let permission = permission.clone();
         Box::pin(async move {
             ResourceTargets::new(&[id])?;
-            let access = self.task_access(actor, action, executor).await?;
+            let access = self.task_access(actor, &permission, executor).await?;
             let filter =
                 WorkItemFilter { authorization: Some(access.read_access().clone()), ..Default::default() };
             let Some(item) = self.db.work_items().find_visible_by_id(id, &filter, executor).await? else {
                 // 仅拒绝分支复用点查错误分类；成功读取只执行一次授权查询。
-                self.authorization.require(actor, action, id, executor).await?;
+                self.authorization.require(actor, &permission, id, executor).await?;
                 return Err(Error::NotFound("任务不存在".into()));
             };
             let item_id = item.base.id.clone();

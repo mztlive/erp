@@ -127,15 +127,9 @@ pub(super) async fn post(
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor as TestExecutor;
+
     use super::*;
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct RecordingSteps {
         calls: Vec<Step>,
         executor: usize,
@@ -154,7 +148,7 @@ mod tests {
     }
     #[tokio::test]
     async fn formalization_preserves_domain_finance_fulfillment_audit_order() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = RecordingSteps {
             calls: Vec::new(),
             executor: &mut executor as *mut TestExecutor as usize,
@@ -184,7 +178,7 @@ mod tests {
             Step::Audit,
         ];
         for (index, step) in order.into_iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
                 calls: Vec::new(),
                 executor: &mut executor as *mut TestExecutor as usize,

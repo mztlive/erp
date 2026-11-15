@@ -1,18 +1,10 @@
 //! 实际动作事实函数使用注入权威端口的顺序与失败停止证据。
 use std::sync::Mutex;
 
+use persistence_core::ReadExecutor as TestExecutor;
+
 use super::*;
 use crate::ports::evidence::{EvidenceFuture, VerifiedEvidence};
-
-struct TestExecutor {
-    _identity: u8,
-}
-
-impl Executor for TestExecutor {
-    fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-        None
-    }
-}
 
 struct Authority {
     original: OriginalResultFact,
@@ -102,7 +94,7 @@ async fn terminal_query_discovers_after_query_on_same_injected_executor() {
         fail: None,
         seen: Mutex::new(Vec::new()),
     };
-    let mut executor = TestExecutor { _identity: 1 };
+    let mut executor = TestExecutor::default();
     let identity = &mut executor as *mut TestExecutor as usize;
     let fact = query_action_fact(&authority, &subject(), &mut executor).await.unwrap();
     assert_eq!(fact.outcome, IntegrationActionOutcome::TerminalEvidenceFound);
@@ -118,7 +110,7 @@ async fn authority_error_is_preserved_and_no_later_call_runs() {
             fail: Some(step),
             seen: Mutex::new(Vec::new()),
         };
-        let mut executor = TestExecutor { _identity: 2 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let result = query_action_fact(&authority, &subject(), &mut executor).await;
         assert!(
@@ -140,7 +132,7 @@ async fn absent_or_unknown_original_does_not_discover_or_replay() {
         (OriginalResultFact::Unknown, IntegrationActionOutcome::ResultUnknown),
     ] {
         let authority = Authority { original, fail: None, seen: Mutex::new(Vec::new()) };
-        let mut executor = TestExecutor { _identity: 3 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let fact = query_action_fact(&authority, &subject(), &mut executor).await.unwrap();
         assert_eq!(fact.outcome, outcome);

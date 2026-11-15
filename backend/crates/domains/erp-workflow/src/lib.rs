@@ -1,5 +1,6 @@
 //! 工作流域：审批集成、单据注册与工作项命令。
 
+pub mod authorization;
 pub mod dto;
 pub mod entity;
 mod error;

@@ -1,6 +1,6 @@
 //! 线下服务履约本域查询及事实持久化。
 
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::FulfillmentService;
@@ -31,9 +31,10 @@ impl FulfillmentService {
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "service_fulfillment_list")
     )]
-    pub async fn service_fulfillment_list(
+    pub(super) async fn load_service_fulfillments(
         &self,
         params: &ServiceFulfillmentListParams,
+        executor: &mut dyn Executor,
     ) -> Result<crate::dto::PageView<ServiceFulfillmentView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -46,7 +47,7 @@ impl FulfillmentService {
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         super::map_search_page(
-            self.db.service_fulfillments().search_service_fulfillments(&filter, &mut NoTransaction),
+            self.db.service_fulfillments().search_service_fulfillments(&filter, executor),
             |row| ServiceFulfillmentView {
                 id: row.id,
                 fulfillment_no: row.fulfillment_no,
@@ -79,14 +80,21 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 服务履约记录不存在
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.service_fulfillment_detail",
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "service_fulfillment_detail")
     )]
-    pub async fn service_fulfillment_detail(&self, id: &str) -> Result<ServiceFulfillmentView> {
+    pub async fn load_service_fulfillment_view(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ServiceFulfillmentView> {
         let record = super::find_header_or_not_found(
-            self.db.service_fulfillments().find_by_id(id, &mut NoTransaction),
+            self.db.service_fulfillments().find_by_id(id, executor),
             "服务履约记录不存在",
         )
         .await?;

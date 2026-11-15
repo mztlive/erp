@@ -2,12 +2,10 @@
 
 use application_core::AuditActor;
 use erp_finance::repository::ReceivableExt;
-use erp_identity::Permission;
-use erp_sales::repository::{SalesOrderExt, SalesOrderRepositoryScopeExt};
+use erp_permissions::receivable as receivable_permissions;
 use persistence_core::Executor;
 
 use super::authorization::*;
-use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
 impl FundsAccess {
@@ -29,7 +27,9 @@ impl FundsAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let (_access, authorization) = self.resolve(actor, "receivable_account", "detail", executor).await?;
+        let (_access, authorization) =
+            self.resolve(actor, &receivable_permissions::ACCOUNT_DETAIL, executor).await?;
+        self.require_visible_root(&authorization, id, executor).await?;
         let account = self
             .db
             .receivable_accounts()
@@ -37,36 +37,15 @@ impl FundsAccess {
             .await
             .map_err(Error::from)?
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
-        if self
-            .db
-            .sales_orders()
-            .find_authorized(account.sales_order_id.as_ref(), authorization.sales_scope()?, executor)
+        if authorization
+            .sales_scope()?
+            .ids_in(&self.db, &[account.sales_order_id.to_string()], executor)
             .await?
-            .is_none()
+            .is_empty()
         {
             return Err(Error::NotFound("应收往来子账不存在".into()));
         }
+        authorization.deliver(executor).await?;
         Ok(())
-    }
-}
-
-impl FundsAccess {
-    /// 在原事务重验财务入口和全部真实销售来源。
-    /// # 参数
-    /// actor 为当前身份；permission 为财务入口；ids 为服务端完整来源；executor 为原事务。
-    /// # 返回
-    /// 每一个存在的来源均有读取资格时成功。
-    /// # 错误
-    /// 空来源、缺失来源、功能失效或任一来源无权时拒绝。
-    pub async fn require_sales_sources(
-        &self,
-        actor: &AuditActor,
-        permission: &str,
-        ids: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        SalesAccess::new(self.db.clone(), self.rbac.clone())
-            .require_source(actor, &Permission::parse(permission)?, ids, executor)
-            .await
     }
 }

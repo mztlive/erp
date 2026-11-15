@@ -166,6 +166,33 @@ pub(crate) fn inquiry_members(access: &CompiledAccess) -> Vec<String> {
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_owned()).collect()
 }
 
+/// 用固定真实来源样本执行生产管理列表条件；缺失和无权来源不能进入结果。
+pub(crate) fn management_members(access: &CompiledAccess) -> Vec<String> {
+    let rows = vec![
+        doc! {"id":"sales", "deleted_at":0, "management_sales_order_sales_order":["sale"]},
+        doc! {"id":"outside", "deleted_at":0, "management_sales_order_sales_order":["outside"]},
+        doc! {"id":"missing", "deleted_at":0, "management_sales_order_sales_order":["missing"]},
+        doc! {"id":"multiple", "deleted_at":0, "management_sales_order_sales_order":["sale", "other"]},
+        doc! {"id":"purchase", "deleted_at":0, "management_purchase_order_purchase_order":["purchase"]},
+    ];
+    let sources = [
+        (
+            "sales_order_rows".into(),
+            vec![
+                doc! {"id":"sale", "owner":"user", "deleted_at":0},
+                doc! {"id":"other", "owner":"user", "deleted_at":0},
+                doc! {"id":"outside", "owner":"other", "deleted_at":0},
+            ],
+        ),
+        ("purchase_order_rows".into(), vec![doc! {"id":"purchase", "owner":"user", "deleted_at":0}]),
+    ]
+    .into();
+    execute(rows, access.stages(), &sources, &doc! {})
+        .into_iter()
+        .map(|row| row.get_str("id").unwrap().to_owned())
+        .collect()
+}
+
 pub(crate) fn receipt_projection(access: &CompiledAccess) -> Value {
     let collections =
         [("sales_order_rows".into(), vec![doc! {"id": "sale", "owner": "user", "deleted_at": 0}])].into();
@@ -188,10 +215,12 @@ pub(crate) fn task_members(access: &CompiledAccess, tasks: &[(&str, &str, bool, 
         .map(|(id, assignee, completed, participant)| {
             doc! {
                 "id": *id, "assignee": *assignee, "completed": *completed,
-                "participant": *participant, "deleted_at": 0
+                "participant": *participant, "deleted_at": 0, "purchase_source": ["purchase"]
             }
         })
         .collect();
-    let rows = execute(rows, access.stages(), &BTreeMap::new(), &doc! {});
+    let sources =
+        [("purchase_order_rows".into(), vec![doc! {"id":"purchase", "owner":"user", "deleted_at":0}])].into();
+    let rows = execute(rows, access.stages(), &sources, &doc! {});
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_owned()).collect()
 }

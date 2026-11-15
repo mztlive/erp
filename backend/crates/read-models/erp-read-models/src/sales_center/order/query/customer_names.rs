@@ -5,7 +5,7 @@ use erp_core::ids::CustomerAccountId;
 use erp_customer::CustomerExt;
 use erp_customer::repository::prelude::*;
 use erp_party::PartyExt;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::{SalesOrderReadService, SalesOrderView};
 use crate::Result;
@@ -15,13 +15,18 @@ impl SalesOrderReadService {
     ///
     /// # 参数
     /// * `items` - 已完成授权分页的销售单视图
+    /// * `executor` - 原授权事务执行器。
     /// # 返回
     /// 原地填写客户名称；缺失客户或主体资料时名称为空。
     /// # 错误
     /// 客户或主体仓储查询失败时返回错误。
-    pub(super) async fn fill_customer_names(&self, items: &mut [SalesOrderView]) -> Result<()> {
+    pub(super) async fn fill_customer_names(
+        &self,
+        items: &mut [SalesOrderView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let ids = items.iter().map(|item| item.customer_id.clone()).collect::<Vec<_>>();
-        let names = self.customer_names_batch(&ids).await?;
+        let names = self.customer_names_batch(&ids, executor).await?;
         for item in items {
             item.customer_name = names.get(&item.customer_id).cloned();
         }
@@ -32,6 +37,7 @@ impl SalesOrderReadService {
     ///
     /// # 参数
     /// * `customer_ids` - 当前页销售客户身份
+    /// * `executor` - 当前读取用例的执行器。
     /// # 返回
     /// 返回现行主体名称映射；缺失客户或主体资料保持缺失。
     /// # 错误
@@ -39,6 +45,7 @@ impl SalesOrderReadService {
     pub(crate) async fn customer_names_batch(
         &self,
         customer_ids: &[String],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let ids = customer_ids
             .iter()
@@ -46,13 +53,13 @@ impl SalesOrderReadService {
             .into_iter()
             .map(CustomerAccountId::new)
             .collect::<Vec<_>>();
-        let customers = self.db.customer_accounts().find_accounts_by_ids(&ids, &mut NoTransaction).await?;
+        let customers = self.db.customer_accounts().find_accounts_by_ids(&ids, executor).await?;
         let (_, revisions) = self
             .db
             .party()
             .list_with_current_revisions(
                 &customers.iter().map(|customer| customer.party_id.clone()).collect::<Vec<_>>(),
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         let names = revisions

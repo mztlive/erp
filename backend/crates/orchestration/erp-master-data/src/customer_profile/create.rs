@@ -38,7 +38,7 @@ impl CustomerProfileProcess {
     /// 输入非法、无创建范围、创建人账号不存在或已停用、身份重复、敏感值加密失败或事务失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 写入事务内必须调用 `CustomerAccess.require_create`；handler 事前检查不能代替。
+    /// 写入事务内必须校验真实创建候选；handler 事前检查不能代替。
     pub async fn create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -67,7 +67,7 @@ impl CustomerProfileProcess {
     /// 无创建资格、范围为空或写入冲突时拒绝。
     ///
     /// # 关键业务约束
-    /// 必须在原领域事务调用 `require_create`，handler 事前检查不能代替。
+    /// 必须在原领域事务持久化前校验真实创建候选，handler 事前检查不能代替。
     async fn commit_create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -86,8 +86,8 @@ impl CustomerProfileProcess {
                     let identity = this.creation_identity(&req, &actor, executor).await?;
                     let prepared = this.prepare_create(req, identity, replay, &actor)?;
                     let result = prepared.result.clone();
+                    rbac.require_candidate(&actor, &result.customer_id, executor).await?;
                     prepared.persist(&this.db, executor).await?;
-                    rbac.require_with(actor.clone(), "create", &result.customer_id, executor).await?;
                     Ok(result)
                 })
             })
@@ -287,40 +287,20 @@ fn create_owner(
 mod tests {
     use std::sync::Arc;
 
-    use async_trait::async_trait;
     use erp_core::AccountKind;
     use erp_customer::CustomerAccess;
-    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
+    use erp_identity::testing::unavailable_authorization;
     use erp_party::SensitiveDataCodec;
     use mongodb::Client;
     use serde_json::json;
 
     use super::*;
 
-    struct UnusedIdentityAudit;
-
-    #[async_trait]
-    impl IdentityAuditPort for UnusedIdentityAudit {
-        fn resource_log(
-            &self,
-            _: AuditActor,
-            _: &str,
-            _: &str,
-            _: String,
-        ) -> erp_identity::Result<PreparedResourceAudit> {
-            panic!("pure preparation must not execute identity auditing")
-        }
-
-        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> erp_identity::Result<()> {
-            panic!("pure preparation must not persist identity auditing")
-        }
-    }
-
     /// 仅调用纯载荷准备，不执行数据库读写。
     #[tokio::test]
     async fn reuse_creates_only_customer_role_and_preserves_existing_identity() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let rbac = erp_identity::shared_rbac_service(db.clone(), Arc::new(UnusedIdentityAudit));
+        let rbac = unavailable_authorization();
         let access = CustomerAccess::new(db.clone(), rbac);
         let service = CustomerProfileProcess::new(
             db,

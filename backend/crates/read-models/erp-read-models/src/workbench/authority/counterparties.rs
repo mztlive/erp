@@ -147,15 +147,6 @@ mod tests {
 
     use super::*;
     use crate::errors::Error;
-    struct TestExecutor {
-        reads: usize,
-    }
-    impl persistence_core::Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.reads += 1;
-            None
-        }
-    }
     struct Source {
         seen: Mutex<Vec<(Kind, String)>>,
         executor: usize,
@@ -169,7 +160,6 @@ mod tests {
             executor: &mut dyn persistence_core::Executor,
         ) -> crate::errors::Result<Option<String>> {
             assert_eq!(executor as *mut dyn persistence_core::Executor as *mut () as usize, self.executor);
-            executor.session();
             self.seen.lock().unwrap().push((kind, id.to_string()));
             match id {
                 "missing" => Ok(None),
@@ -180,29 +170,35 @@ mod tests {
     }
     #[tokio::test]
     async fn counterparty_recipe_preserves_duplicate_reads_input_order_and_same_executor() {
-        let mut ex = TestExecutor { reads: 0 };
-        let source = Source { seen: Mutex::new(Vec::new()), executor: &mut ex as *mut TestExecutor as usize };
+        let mut ex = persistence_core::ReadExecutor::default();
+        let source = Source {
+            seen: Mutex::new(Vec::new()),
+            executor: &mut ex as *mut persistence_core::ReadExecutor as usize,
+        };
         let ids =
             vec!["second".to_string(), "missing".to_string(), "second".to_string(), "first".to_string()];
         let result = numbers(&source, "supplier", &ids, &mut ex).await.unwrap();
         assert_eq!(source.seen.lock().unwrap().iter().map(|x| x.1.clone()).collect::<Vec<_>>(), ids);
         assert_eq!(result.len(), 2);
         assert_eq!(result["second"], "second-number");
-        assert_eq!(ex.reads, 4);
+        assert_eq!(source.seen.lock().unwrap().len(), 4);
     }
     #[tokio::test]
     async fn unknown_kind_performs_no_reads_and_first_error_stops_later_ids() {
-        let mut ex = TestExecutor { reads: 0 };
-        let source = Source { seen: Mutex::new(Vec::new()), executor: &mut ex as *mut TestExecutor as usize };
+        let mut ex = persistence_core::ReadExecutor::default();
+        let source = Source {
+            seen: Mutex::new(Vec::new()),
+            executor: &mut ex as *mut persistence_core::ReadExecutor as usize,
+        };
         let ids = vec!["first".to_string(), "error".to_string(), "never".to_string()];
         assert!(numbers(&source, "SUPPLIER", &ids, &mut ex).await.unwrap().is_empty());
-        assert_eq!(ex.reads, 0);
+        assert!(source.seen.lock().unwrap().is_empty());
         let error = numbers(&source, "customer", &ids, &mut ex).await.unwrap_err();
         assert!(matches!(error,Error::ValidationError(message) if message=="number-read"));
         assert_eq!(
             *source.seen.lock().unwrap(),
             vec![(Kind::Customer, "first".to_string()), (Kind::Customer, "error".to_string())]
         );
-        assert_eq!(ex.reads, 2);
+        assert_eq!(source.seen.lock().unwrap().len(), 2);
     }
 }

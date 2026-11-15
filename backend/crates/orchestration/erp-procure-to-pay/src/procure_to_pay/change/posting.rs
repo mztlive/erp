@@ -336,15 +336,9 @@ async fn advance_source_sales_procurement_guard(
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor as TestExecutor;
+
     use super::*;
-    struct TestExecutor {
-        identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Call {
         Apply(EffectStep),
@@ -429,8 +423,8 @@ mod tests {
     }
     #[tokio::test]
     async fn effective_change_uses_same_executor_and_original_write_order_without_cost_step() {
-        let mut executor = TestExecutor { identity: 1 };
-        assert_eq!(executor.identity, 1);
+        let mut executor = TestExecutor::default();
+
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingSteps {
             calls: Vec::new(),
@@ -446,7 +440,7 @@ mod tests {
     #[tokio::test]
     async fn every_failure_stops_later_effects_and_preserves_original_error() {
         for (index, step) in expected().into_iter().enumerate() {
-            let mut executor = TestExecutor { identity: 1 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let mut steps = RecordingSteps {
                 calls: Vec::new(),
@@ -466,7 +460,7 @@ mod tests {
     /// 零差额生效只跳过差额分录，正式版本及主体依据继续同步。
     #[tokio::test]
     async fn zero_delta_skips_delta_without_skipping_current_subject_effects() {
-        let mut executor = TestExecutor { identity: 1 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingSteps {
             calls: Vec::new(),
@@ -483,7 +477,7 @@ mod tests {
 
     #[tokio::test]
     async fn ordinary_purchase_change_does_not_create_api_execution() {
-        let mut executor = TestExecutor { identity: 1 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingSteps {
             calls: Vec::new(),

@@ -5,7 +5,7 @@ use erp_core::ids::PartyId;
 use erp_supplier::repository::SupplierProfileCommandRepositoryExt;
 use erp_supplier::{HandoverSupplierRequest, SaveSupplierProfileRequest, SupplierExt};
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::DemoStep;
@@ -67,13 +67,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let supplier = self
             .db
             .supplier_accounts()
-            .find_by_id_including_deleted(supplier_id, &mut NoTransaction)
+            .find_by_id_including_deleted(supplier_id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("演示供应商创建后未能读回".to_string()))?;
         let created = supplier.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
-        lifecycle::restore_party(&self.db, actor, supplier.party_id.as_ref()).await?;
+        lifecycle::restore_party(&self.db, self.authorization.clone(), actor, supplier.party_id.as_ref())
+            .await?;
         if supplier.base.deleted_at != entity_core::NOT_DELETED_TIMESTAMP {
-            lifecycle::restore_supplier(&self.db, actor, supplier_id).await?;
+            lifecycle::restore_supplier(&self.db, self.authorization.clone(), actor, supplier_id).await?;
         }
         record::save(&self.db, &supplier_record(step, supplier_id, supplier.party_id.as_ref())).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
@@ -108,8 +109,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             push_supplier_notice(notices, "没有可用的采购账号，演示供应商仍由原维护人负责");
             return Ok(());
         };
-        let Some(supplier) =
-            self.db.supplier_accounts().find_by_id_including_deleted(supplier_id, &mut NoTransaction).await?
+        let Some(supplier) = self
+            .db
+            .supplier_accounts()
+            .find_by_id_including_deleted(supplier_id, &mut ReadExecutor::default())
+            .await?
         else {
             return Ok(());
         };
@@ -133,8 +137,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
 
     /// 按稳定幂等键读取此前创建的供应商。
     async fn supplier_command(&self, key: &str) -> Result<Option<String>> {
-        let command =
-            self.db.supplier_profile_commands().find_by_idempotency_key(key, &mut NoTransaction).await?;
+        let command = self
+            .db
+            .supplier_profile_commands()
+            .find_by_idempotency_key(key, &mut ReadExecutor::default())
+            .await?;
         Ok(command.map(|command| command.supplier_id))
     }
 }

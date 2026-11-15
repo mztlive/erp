@@ -23,7 +23,7 @@ impl CatalogRepository<'_> {
         else {
             return Ok(());
         };
-        if executor.session().is_none() {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("条码占用必须与正式 SKU 建档共用事务".into()));
         }
         let owners = self.barcode_owner_sku_ids(barcode, executor).await?;

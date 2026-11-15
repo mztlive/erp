@@ -4,9 +4,8 @@ use bpm::graph::MAX_DEFINITION_NODES;
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::ApprovalNodeExecution;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use futures_util::TryStreamExt;
 use mongodb::bson::doc;
-use persistence_core::{Error, Executor, Result};
+use persistence_core::{Error, Executor, Result, aggregate};
 
 use super::{BpmWorkflowRepository, EXECUTIONS};
 
@@ -43,21 +42,6 @@ impl BpmWorkflowRepository<'_> {
             doc! { "$limit": limit },
         ];
         let collection = self.db.collection::<ApprovalNodeExecution>(EXECUTIONS);
-        match executor.session() {
-            Some(session) => Ok(collection
-                .aggregate(pipeline)
-                .with_type::<ApprovalNodeExecution>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect()
-                .await?),
-            None => Ok(collection
-                .aggregate(pipeline)
-                .with_type::<ApprovalNodeExecution>()
-                .await?
-                .try_collect()
-                .await?),
-        }
+        aggregate::rows(&collection, pipeline, executor).await
     }
 }

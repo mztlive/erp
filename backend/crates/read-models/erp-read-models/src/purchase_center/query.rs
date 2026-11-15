@@ -16,7 +16,7 @@ use erp_procurement::entity::purchase_order::{
     ProgressStatus, PurchaseOrderRevision, PurchaseOrderSubmission,
 };
 use erp_procurement::repository::purchase_order::PurchaseOrderRow;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderReadService;
@@ -84,35 +84,46 @@ impl PurchaseOrderReadService {
     ///
     /// # 参数
     /// * `id` - 采购单 ID
-    /// * `actor` - 已认证操作人；内部无账号上下文时为空
+    /// * `actor` - 已认证操作人；缺少身份时拒绝读取
     ///
     /// # 返回
     /// 返回对象中心视图（当前内容按 版本 > 提交 > 草稿 优先级取用）。
     ///
     /// # 错误
     /// * `NotFound` - 采购单不存在或不可见
-    /// * `ConflictError` - 组装过程中范围或单据已变化
+    /// * `Unauthenticated` - 缺少当前操作人
+    /// * `ConflictError` - 原读取阶段或授权有效期已失效
     /// * `RepositoryError` - 数据库查询失败
     ///
     /// # 关键业务约束
-    /// 列表已授权不能作为详情凭证；返回前再次重验范围版本。
+    /// 列表已授权不能作为详情凭证；完整详情与交付检查使用同一授权快照。
     pub async fn purchase_order_detail(
         &self,
         id: &str,
         actor: Option<&AuditActor>,
     ) -> Result<PurchaseOrderCenterView> {
-        let mut access_version = None;
-        if let Some(actor) = actor {
-            let (_, version) = self.access().detail(actor, id).await?;
-            access_version = Some(version);
-        }
-        let view = self.detail_view(id).await?;
-        if let (Some(actor), Some(expected)) = (actor, access_version) {
-            let (_, current) = self.access().detail(actor, id).await?;
-            if current != expected {
-                return Err(crate::support::data_scope_changed("数据范围或采购单已变化，请刷新"));
-            }
-        }
+        let actor = actor.ok_or_else(|| Error::Unauthenticated("采购详情必须提供当前身份".into()))?.clone();
+        let service = self.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.detail_snapshot(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原快照完成详情授权、关联资料读取与结果交付检查。
+    async fn detail_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseOrderCenterView> {
+        let (_, _, scope) = self.access().resolve_detail(actor, id, executor).await?;
+        let view = self.detail_view(id, executor).await?;
+        scope.validate(executor).await?;
         Ok(view)
     }
 
@@ -123,6 +134,7 @@ impl PurchaseOrderReadService {
     ///
     /// # 参数
     /// * `account_ids` - 账号 ID 列表（可重复；空串会被忽略）
+    /// * `executor` - 当前读取用例的事务执行器。
     ///
     /// # 返回
     /// 返回账号 ID → 姓名映射；账号不存在时不写入该键。
@@ -132,12 +144,13 @@ impl PurchaseOrderReadService {
     pub(super) async fn resolve_account_names(
         &self,
         account_ids: &[String],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         let unique = crate::support::dedup_trimmed_nonempty(account_ids.iter().map(String::as_str));
         if unique.is_empty() {
             return Ok(HashMap::new());
         }
-        let accounts = self.db.accounts().list_by_ids(&unique, &mut NoTransaction).await?;
+        let accounts = self.db.accounts().list_by_ids(&unique, executor).await?;
         Ok(accounts.into_iter().map(|account| (account.base.id, account.name)).collect())
     }
 }
@@ -343,6 +356,48 @@ fn center_content_source(has_revision: bool, submission_source: Option<&str>) ->
         return source.to_string();
     }
     "DRAFT".to_string()
+}
+
+#[cfg(test)]
+mod detail_authorization_tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_procurement::FailClosedPurchaseDataScopePort;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+
+    use super::PurchaseOrderReadService;
+    use crate::Error;
+
+    async fn service() -> PurchaseOrderReadService {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        PurchaseOrderReadService::new(
+            client.database("purchase_detail_authorization"),
+            unavailable_authorization(),
+            FailClosedPurchaseDataScopePort::shared(),
+        )
+    }
+
+    #[tokio::test]
+    async fn missing_actor_is_rejected_before_opening_a_detail_transaction() {
+        let error = service().await.purchase_order_detail("purchase", None).await.unwrap_err();
+        assert!(matches!(
+            error,
+            Error::Unauthenticated(message) if message == "采购详情必须提供当前身份"
+        ));
+    }
+
+    #[tokio::test]
+    async fn missing_scope_binding_stops_before_loading_purchase_details() {
+        let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
+        let error = service()
+            .await
+            .detail_snapshot("purchase", &actor, &mut ReadExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "采购范围端口未接线"));
+    }
 }
 
 #[cfg(test)]

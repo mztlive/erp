@@ -1,4 +1,7 @@
 //! 非卡券实际经营盈亏：正式收入、成本归属和完整性的一致快照查询。
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
 mod access;
 mod attribution;
 mod calculation;
@@ -11,7 +14,6 @@ mod source;
 
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use dto::{PeriodBasisConfig, PeriodBasisOption, ProfitLossExport, ProfitLossQuery, ProfitLossView};
-use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Transactional;
 
@@ -26,7 +28,7 @@ pub struct ProfitLossAccess {
 #[derive(Clone)]
 pub struct ActualProfitLossReadModel {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 impl ActualProfitLossReadModel {
     /// 复用应用数据库与 RBAC，不持有独立连接或缓存旧权限。
@@ -39,7 +41,7 @@ impl ActualProfitLossReadModel {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
     /// 提供已实现的口径，由用户显式选择，不伪装已配置财务收入确认规则。
@@ -129,7 +131,7 @@ impl ActualProfitLossReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (context, scope) = this.authorized_scope(&actor, executor).await?;
-                    context.validate(executor).await?;
+                    context.ensure_current(executor)?;
                     let orders =
                         source::authorized_orders(&this.db, &query, query.validate()?, scope, executor)
                             .await?;
@@ -156,7 +158,7 @@ impl ActualProfitLossReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (mut context, scope) = this.authorized_scope(&actor, executor).await?;
-                    context.validate(executor).await?;
+                    context.ensure_current(executor)?;
                     let sources = source::Sources::load(&this.db, &query, bounds, scope, executor).await?;
                     context.validate(executor).await?;
                     context.map_read_version(|base| source::version(base, &sources.orders));

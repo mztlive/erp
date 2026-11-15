@@ -1,7 +1,10 @@
 //! 销售变更提交正常重试与提交未知恢复共用的授权、完整请求及冻结事实核验。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_identity::SharedRbacService;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{sales_order, sales_review};
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_review::{
     SalesChangeSubmissionCommand, SalesChangeSubmissionFact, SalesChangeSubmissionReceipt,
@@ -15,12 +18,22 @@ use crate::{Error, Result};
 /// 先证明当前提交资格，再按固定命令ID回读原提交和原实例，完全不使用current_submission_id。
 pub(super) async fn replay_submission(
     db: &Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     actor: &AuditActor,
     command: &SalesChangeSubmissionCommand,
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
-    replay(&MongoReplay { db, access: SalesAccess::new(db.clone(), rbac), actor }, command, executor).await
+    replay(
+        &MongoReplay {
+            db,
+            access: SalesAccess::new(db.clone(), authorization.clone()),
+            authorization,
+            actor,
+        },
+        command,
+        executor,
+    )
+    .await
 }
 
 /// 只有本独立回执的唯一索引竞争允许进入只读结果恢复。
@@ -54,6 +67,7 @@ trait ReplaySource: Sync {
 struct MongoReplay<'a> {
     db: &'a Database,
     access: SalesAccess,
+    authorization: Arc<AuthorizationService>,
     actor: &'a AuditActor,
 }
 #[async_trait]
@@ -66,6 +80,9 @@ impl ReplaySource for MongoReplay<'_> {
         if command.actor_id != self.actor.id() {
             return Err(Error::NotFound("销售变更单不存在或无权操作".into()));
         }
+        self.authorization
+            .require(self.actor, &sales_review::SALES_CHANGE_DRAFT, AccessTarget::Operation, executor)
+            .await?;
         let change = self
             .db
             .sales_change_orders()
@@ -73,7 +90,7 @@ impl ReplaySource for MongoReplay<'_> {
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".into()))?;
         self.access
-            .require_object(self.actor, "submit", change.sales_order_id.as_ref(), &[], executor)
+            .require_object(self.actor, &sales_order::SUBMIT, change.sales_order_id.as_ref(), executor)
             .await?;
         Ok(())
     }
@@ -123,8 +140,12 @@ mod tests {
     use std::sync::Mutex;
 
     use erp_approval_runtime::approval_recovery::recover_approval_command;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
     use mongodb::error::Error as MongoError;
-    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
 
     use super::*;
 
@@ -185,13 +206,38 @@ mod tests {
         }
     }
 
+    /// 正常提交与回执恢复先验证独立入口；资格取证失败时不能触及变更或回执仓储。
+    #[tokio::test]
+    async fn submission_entry_is_checked_before_loading_change_or_receipt() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("sales_change_entry_test");
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let command = SalesChangeSubmissionCommand::new("change", actor.id(), 1, "submit", None).unwrap();
+        let error = replay_submission(
+            &db,
+            unavailable_authorization(),
+            &actor,
+            &command,
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        let error = replay_submission(&db, unavailable_authorization(), &actor, &command, &mut NoTransaction)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+    }
+
     /// 后续 S2 已存在时原 K1 仍精确恢复 S1，不读 S2、不写任何事实。
     #[tokio::test]
     async fn original_request_replays_first_instance_after_second_submission() {
         let first = record(4, "k1", 1);
         let second = record(7, "k2", 2);
         let source = store(&[first.clone(), second.clone()]);
-        let found = replay(&source, &first.command, &mut NoTransaction).await.unwrap();
+        let found = replay(&source, &first.command, &mut ReadExecutor::default()).await.unwrap();
         assert_eq!(found.as_deref(), Some("instance1"));
         assert_eq!(
             source.calls.lock().unwrap().as_slice(),
@@ -215,7 +261,7 @@ mod tests {
             ))),
         ] {
             let error = recover_approval_command(error, || async {
-                replay(&source, &original, &mut NoTransaction).await
+                replay(&source, &original, &mut ReadExecutor::default()).await
             })
             .await
             .unwrap_err();
@@ -223,7 +269,7 @@ mod tests {
         }
         assert_eq!(source.receipts[&original.id], winner);
         assert_eq!(
-            replay(&source, &winner.command, &mut NoTransaction).await.unwrap().as_deref(),
+            replay(&source, &winner.command, &mut ReadExecutor::default()).await.unwrap().as_deref(),
             Some("instance1")
         );
     }
@@ -234,10 +280,13 @@ mod tests {
         let original = record(4, "key", 1);
         let mut source = store(std::slice::from_ref(&original));
         let changed = SalesChangeSubmissionCommand::new("change", "actor", 4, "key", Some("改说明")).unwrap();
-        assert!(matches!(replay(&source, &changed, &mut NoTransaction).await, Err(Error::ConflictError(_))));
+        assert!(matches!(
+            replay(&source, &changed, &mut ReadExecutor::default()).await,
+            Err(Error::ConflictError(_))
+        ));
         source.submissions.get_mut("s1").unwrap().source_version = Some(5);
         assert!(matches!(
-            replay(&source, &original.command, &mut NoTransaction).await,
+            replay(&source, &original.command, &mut ReadExecutor::default()).await,
             Err(Error::ConflictError(_))
         ));
     }
@@ -253,7 +302,7 @@ mod tests {
         ));
         assert!(matches!(
             recover_approval_command(unknown, || async {
-                replay(&source, &original.command, &mut NoTransaction).await
+                replay(&source, &original.command, &mut ReadExecutor::default()).await
             })
             .await,
             Err(Error::NotFound(_))
@@ -267,7 +316,7 @@ mod tests {
         let original = record(4, "key", 1);
         let mut source = store(std::slice::from_ref(&original));
         source.receipts.clear();
-        assert!(replay(&source, &original.command, &mut NoTransaction).await.unwrap().is_none());
+        assert!(replay(&source, &original.command, &mut ReadExecutor::default()).await.unwrap().is_none());
         assert_eq!(source.calls.lock().unwrap().len(), 2);
     }
 }

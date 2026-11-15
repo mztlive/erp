@@ -1,5 +1,6 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
 use application_core::AuditActor;
+use erp_permissions::integration_ops;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -56,7 +57,7 @@ impl IntegrationOpsService {
         let scope = resolve_list_scope(
             &access,
             actor,
-            "integration_error_task",
+            &integration_ops::ERROR_TASK_LIST,
             &query.org_unit_ids,
             query.include_descendants,
             query.scope_version.as_deref(),
@@ -64,7 +65,6 @@ impl IntegrationOpsService {
         )
         .await?;
         let filter = error_task_filter(query, scope.owner_org_unit_ids);
-        access.validate(&scope.read_scope, executor).await?;
         let page = self
             .db
             .integration_error_tasks()

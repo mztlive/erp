@@ -5,6 +5,8 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_fulfillment::dto::{CreatePurchaseReceiptRequest, PurchaseReceiptView, UpdatePurchaseReceiptRequest};
 use erp_fulfillment::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptLine};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::fulfillment;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
@@ -17,7 +19,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::FulfillmentProcess;
-use super::task::FulfillmentIdentityFactory;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 impl FulfillmentProcess {
@@ -273,7 +274,7 @@ async fn register_created_purchase_receipt_document(
 async fn persist_created_purchase_receipt(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     receipt: PurchaseReceipt,
     lines: Vec<PurchaseReceiptLine>,
     actor: AuditActor,
@@ -287,6 +288,14 @@ async fn persist_created_purchase_receipt(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                task_identity
+                    .require(
+                        &actor,
+                        &fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 register_created_purchase_receipt_document(
                     &db,
                     workflow.as_ref(),

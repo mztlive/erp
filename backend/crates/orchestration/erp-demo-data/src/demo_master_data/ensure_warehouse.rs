@@ -6,7 +6,7 @@ use erp_warehouse::{
     WarehouseFulfillmentOperation,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::ensure_dictionary::{EnsureOutcome, step_label};
 use super::plan::DemoStep;
@@ -38,13 +38,18 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(existing) = self
             .db
             .warehouses()
-            .find_one_by_field_including_deleted("warehouse_code", step.key.clone(), &mut NoTransaction)
+            .find_one_by_field_including_deleted(
+                "warehouse_code",
+                step.key.clone(),
+                &mut ReadExecutor::default(),
+            )
             .await?
         {
             record::ensure_owned(&self.db, &step.key, &existing.base.id).await?;
             let live = existing.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
             if !live {
-                lifecycle::restore_warehouse(&self.db, actor, &existing.base.id).await?;
+                lifecycle::restore_warehouse(&self.db, self.authorization.clone(), actor, &existing.base.id)
+                    .await?;
             }
             self.verify_warehouse_ready(&existing.base.id).await?;
             self.remember_warehouse(step, existing.base.id).await?;
@@ -71,7 +76,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let warehouse = self
             .db
             .warehouses()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("演示仓库未能读回，请核对登记记录".into()))?;
         warehouse_ready(&warehouse, self.ports.warehouse_identity.as_ref()).await

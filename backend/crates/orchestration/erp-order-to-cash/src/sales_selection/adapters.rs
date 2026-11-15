@@ -18,7 +18,7 @@ use erp_sales::entity::sales_selection::{
 use erp_sales::ports::sales_selection::{
     SelectionCatalogPort, SelectionCustomerFact, SelectionCustomerPort, SelectionImagePort, SelectionSkuFact,
 };
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, ReadExecutor};
 use storage::S3Storage;
 
 /// 回显已通过册详情权限验证的来源，不扩大来源或返回采购价格。
@@ -31,11 +31,12 @@ use storage::S3Storage;
 pub(super) async fn source_skus(
     query: &dyn CatalogSupplyQueryPort,
     ids: &[String],
+    executor: &mut dyn Executor,
 ) -> crate::Result<Vec<SelectionSourceSkuView>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = query.find_sellable_skus_by_ids(ids, BusinessDate::today(), &mut NoTransaction).await?;
+    let rows = query.find_sellable_skus_by_ids(ids, BusinessDate::today(), executor).await?;
     Ok(rows
         .into_iter()
         .map(|row| SelectionSourceSkuView { sku_id: row.sku_id, name: row.name, sku_no: row.sku_no })
@@ -62,7 +63,7 @@ impl SelectionCustomerPort for CustomerAdapter {
     async fn customer_fact(&self, customer_id: &str) -> SalesResult<SelectionCustomerFact> {
         let detail = self
             .service
-            .load_customer_detail(customer_id)
+            .load_customer_detail(customer_id, &mut ReadExecutor::default())
             .await
             .map_err(|error| erp_sales::Error::NotFound(error.to_string()))?;
         Ok(SelectionCustomerFact {
@@ -124,8 +125,11 @@ impl SelectionCatalogPort for CatalogAdapter {
             page: 1,
             page_size: 501,
         };
-        let page =
-            self.query.search_sellable_skus(&catalog_filter, &mut NoTransaction).await.map_err(map_store)?;
+        let page = self
+            .query
+            .search_sellable_skus(&catalog_filter, &mut ReadExecutor::default())
+            .await
+            .map_err(map_store)?;
         Ok(page.items.into_iter().map(to_fact).collect())
     }
 
@@ -147,7 +151,7 @@ impl SelectionCatalogPort for CatalogAdapter {
     ) -> SalesResult<Vec<SelectionSkuFact>> {
         let rows = self
             .query
-            .find_sellable_skus_by_ids(sku_ids, as_of, &mut NoTransaction)
+            .find_sellable_skus_by_ids(sku_ids, as_of, &mut ReadExecutor::default())
             .await
             .map_err(map_store)?;
         Ok(rows.into_iter().map(to_fact).collect())
@@ -169,8 +173,11 @@ impl SelectionCatalogPort for CatalogAdapter {
         refs: &[(String, String)],
         as_of: BusinessDate,
     ) -> SalesResult<Vec<(String, String)>> {
-        let rows =
-            self.query.find_sellable_sku_refs(refs, as_of, &mut NoTransaction).await.map_err(map_store)?;
+        let rows = self
+            .query
+            .find_sellable_sku_refs(refs, as_of, &mut ReadExecutor::default())
+            .await
+            .map_err(map_store)?;
         Ok(rows.into_iter().map(|row| (row.sku_id, row.sku_revision_id)).collect())
     }
 }
@@ -204,7 +211,7 @@ impl SelectionImagePort for ImageAdapter {
         let Some(source_asset_id) = source_asset_id.filter(|value| !value.is_empty()) else {
             return Ok(None);
         };
-        let Ok(view) = self.files.file_asset_detail(source_asset_id).await else {
+        let Ok(view) = self.files.asset_view(source_asset_id, &mut ReadExecutor::default()).await else {
             return Ok(None);
         };
         let Ok(bytes) = self.storage.read(&view.storage_object_key).await else {

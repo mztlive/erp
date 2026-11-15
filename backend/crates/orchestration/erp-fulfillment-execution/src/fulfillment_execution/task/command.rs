@@ -1,19 +1,18 @@
 //! W01 活动与完成命令的真实生产读取、责任重验与写入边界。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::{
-    FulfillmentIdentityFactory, FulfillmentTaskObject, ensure_task_matches_frozen_identity,
-    load_single_open_task,
-};
+use super::{FulfillmentTaskObject, ensure_task_matches_frozen_identity, load_single_open_task};
 use crate::Result;
 use crate::fulfillment_execution::task_access::{TaskPurpose, require_assignee};
 
@@ -45,7 +44,7 @@ struct MongoTaskCommand<'a> {
 }
 #[async_trait]
 impl TaskCommandPort for MongoTaskCommand<'_> {
-    type Identity = SharedRbacService;
+    type Identity = Arc<AuthorizationService>;
     async fn load_open(
         &self,
         object_type: &str,
@@ -56,7 +55,7 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
     }
     async fn authorize(
         &self,
-        identity: &SharedRbacService,
+        identity: &Arc<AuthorizationService>,
         task: &WorkItem,
         actor_id: &str,
         executor: &mut dyn Executor,
@@ -83,7 +82,7 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
 /// 同一执行器先核验当前任务指定人，再同步活动或完成事实并写回。
 async fn execute<P: TaskCommandPort>(
     port: &P,
-    identity_factory: &(dyn Fn() -> P::Identity + Send + Sync),
+    authorization: &(dyn Fn() -> P::Identity + Send + Sync),
     object: FulfillmentTaskObject<'_>,
     actor_id: &str,
     kind: CommandKind,
@@ -92,7 +91,7 @@ async fn execute<P: TaskCommandPort>(
     let mut task =
         port.load_open(object.business_object_type(), object.business_object_id(), executor).await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
-    let identity = identity_factory();
+    let identity = authorization();
     port.authorize(&identity, &task, actor_id, executor).await?;
     match kind {
         CommandKind::Activity => {
@@ -121,14 +120,14 @@ async fn execute<P: TaskCommandPort>(
 /// 开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
 pub(super) async fn record(
     db: &Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     execute(
         &MongoTaskCommand { db },
-        identity_factory.as_ref(),
+        &|| authorization.clone(),
         object,
         actor_id,
         CommandKind::Activity,
@@ -153,14 +152,14 @@ pub(super) async fn record(
 /// 开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
 pub(super) async fn complete(
     db: &Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     execute(
         &MongoTaskCommand { db },
-        identity_factory.as_ref(),
+        &|| authorization.clone(),
         object,
         actor_id,
         CommandKind::Complete,
@@ -251,7 +250,7 @@ mod tests {
         actor: &str,
         fail_at: Option<usize>,
     ) -> (Result<()>, Recorded) {
-        let mut executor = TestExecutor { marker: 79 };
+        let mut executor = TestExecutor::default();
         let port = RecordingPort {
             executor: (&mut executor as *mut TestExecutor) as usize,
             task,
@@ -268,7 +267,7 @@ mod tests {
             &mut executor,
         )
         .await;
-        assert_eq!(executor.marker, 79);
+
         (result, port.recorded.into_inner().unwrap())
     }
     /// 连续保存草稿时同步任务关联版本，保留开放状态、当前责任人与任务身份。
@@ -279,7 +278,7 @@ mod tests {
         let original_owner = current.owner_user_id.clone();
         let mut started_at = None;
         for version in [2, 3] {
-            let mut executor = TestExecutor { marker: 79 };
+            let mut executor = TestExecutor::default();
             let port = RecordingPort {
                 executor: (&mut executor as *mut TestExecutor) as usize,
                 task: current,
@@ -350,7 +349,7 @@ mod tests {
     #[tokio::test]
     async fn next_activity_or_completion_creates_fresh_identity_after_authorization_failure() {
         for kind in [CommandKind::Activity, CommandKind::Complete] {
-            let mut executor = TestExecutor { marker: 79 };
+            let mut executor = TestExecutor::default();
             let mut port = RecordingPort {
                 executor: (&mut executor as *mut TestExecutor) as usize,
                 task: task(),
@@ -381,7 +380,6 @@ mod tests {
                 ["load", "identity", "authorize", "load", "identity", "authorize", "update"]
             );
             assert!(recorded.written.is_some());
-            assert_eq!(executor.marker, 79);
         }
     }
     /// 冻结责任身份不匹配在账号权限重验之前失败，不能写任务。

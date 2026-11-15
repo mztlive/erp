@@ -1,6 +1,7 @@
 //! 链接生命周期命令：版本竞争与幂等结果共同提交。
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesSelectionBookletId;
+use erp_permissions::sales_selection;
 use persistence_core::{Executor, Transactional};
 
 use super::{IdempotencyStoreInput, SalesSelectionService};
@@ -56,14 +57,14 @@ impl SalesSelectionService {
         crypto: Option<LinkTokenCrypto>,
         tx: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
-        let action = match operation {
-            IdempotencyOperation::RotateLink => "rotate_link",
-            IdempotencyOperation::Close => "close",
-            IdempotencyOperation::RevokeAccess => "revoke",
-            IdempotencyOperation::Void => "void",
+        let permission = match operation {
+            IdempotencyOperation::RotateLink => &sales_selection::BOOKLET_ROTATE_LINK,
+            IdempotencyOperation::Close => &sales_selection::BOOKLET_CLOSE,
+            IdempotencyOperation::RevokeAccess => &sales_selection::BOOKLET_REVOKE,
+            IdempotencyOperation::Void => &sales_selection::BOOKLET_VOID,
             _ => return Err(Error::Internal("非法选品生命周期命令".into())),
         };
-        self.authorize_booklet(id, action, tx).await?;
+        self.authorize_booklet(id, permission, tx).await?;
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash =
             request_hash(&serde_json::to_string(&(id, &req)).map_err(|e| Error::Internal(e.to_string()))?);

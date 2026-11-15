@@ -2,7 +2,7 @@
 
 use application_core::{AuditActor, PageView};
 use erp_identity::PortalActor;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde_json::Value;
 
 use super::repository::applications::PortalApplicationRepository;
@@ -66,12 +66,26 @@ impl SupplierPortalReadService {
         actor: &AuditActor,
         params: &PortalAdminListParams,
     ) -> Result<PageView<Value>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.admin_application_page(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在原快照内过滤全部可读申请，再读取分页与计数。
+    async fn admin_application_page(
+        &self,
+        actor: &AuditActor,
+        params: &PortalAdminListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<Value>> {
+        self.require_management_supplier(actor, &params.supplier_id, executor).await?;
         let authorization = self.internal_authorization()?;
-        if params.supplier_id.trim().is_empty()
-            || !authorization.supplier_readable(actor, &params.supplier_id, &mut NoTransaction).await?
-        {
-            return Err(hidden_target());
-        }
         let query = PortalQuery::new(&PortalListParams {
             q: params.q.clone(),
             status: params.status.clone(),
@@ -79,16 +93,16 @@ impl SupplierPortalReadService {
             page_size: params.page_size,
         })?;
         let ids = PortalApplicationRepository::new(&self.db)
-            .application_ids(&params.supplier_id, &query, &mut NoTransaction)
+            .application_ids(&params.supplier_id, &query, executor)
             .await?;
         let mut allowed = Vec::new();
         for item in ids {
-            if authorization.request_readable(actor, &item, &mut NoTransaction).await? {
+            if authorization.request_readable(actor, &item, executor).await? {
                 allowed.push(item);
             }
         }
         let (records, total) = PortalApplicationRepository::new(&self.db)
-            .application_page(&params.supplier_id, &query, Some(&allowed), &mut NoTransaction)
+            .application_page(&params.supplier_id, &query, Some(&allowed), executor)
             .await?;
         let items = records.into_iter().map(|row| row.internal()).collect::<Result<Vec<_>>>()?;
         Ok(PageView { items, total, page: query.page, page_size: query.page_size })
@@ -104,10 +118,31 @@ impl SupplierPortalReadService {
     /// 未知或越权统一返回 `NotFound`。非内部身份或未注入授权时返回 `Forbidden`。
     /// 查询或序列化失败时返回对应错误。
     pub async fn admin_application(&self, actor: &AuditActor, id: &str) -> Result<Value> {
-        if !self.internal_authorization()?.request_readable(actor, id, &mut NoTransaction).await? {
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.admin_application_detail(&actor, &id, executor).await })
+            })
+            .await
+    }
+
+    /// 精确申请授权与完整响应始终在同一个快照内读取。
+    async fn admin_application_detail(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Value> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
+        }
+        if !self.internal_authorization()?.request_readable(actor, id, executor).await? {
             return Err(hidden_target());
         }
-        PortalApplicationRepository::new(&self.db).any_application(id, &mut NoTransaction).await?.internal()
+        PortalApplicationRepository::new(&self.db).any_application(id, executor).await?.internal()
     }
 
     /// 取得组合层装配的正式对象授权端口。
@@ -128,4 +163,73 @@ impl SupplierPortalReadService {
 /// 不存在或范围外目标使用一致错误。
 fn hidden_target() -> Error {
     Error::NotFound("申请不存在或无权查看".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::PortalAdminListParams;
+    use crate::Error;
+    use crate::supplier_portal::testing::{Outcome, service};
+
+    #[tokio::test]
+    async fn internal_application_reads_authorize_in_the_original_snapshot_before_data_reads() {
+        let (service, authorization, actor) = service(Outcome::Denied).await;
+        let params = PortalAdminListParams {
+            supplier_id: "supplier".into(),
+            q: None,
+            status: None,
+            page: None,
+            page_size: None,
+        };
+        let mut executor = SnapshotExecutor::default();
+        let expected = &mut executor as *mut SnapshotExecutor as usize;
+        assert!(matches!(
+            service.admin_application_page(&actor, &params, &mut executor).await,
+            Err(Error::NotFound(_))
+        ));
+        assert!(matches!(
+            service.admin_application_detail(&actor, "application", &mut executor).await,
+            Err(Error::NotFound(message)) if message == "申请不存在或无权查看"
+        ));
+        assert_eq!(
+            *authorization.calls.lock().unwrap(),
+            vec![("supplier", "supplier".into(), expected), ("request", "application".into(), expected),]
+        );
+    }
+
+    #[tokio::test]
+    async fn internal_application_reads_reject_unscoped_execution_without_calling_authorization() {
+        let (service, authorization, actor) = service(Outcome::Allowed).await;
+        let params = PortalAdminListParams {
+            supplier_id: "supplier".into(),
+            q: None,
+            status: None,
+            page: None,
+            page_size: None,
+        };
+        let mut executor = NoTransaction;
+        assert!(matches!(
+            service.admin_application_page(&actor, &params, &mut executor).await,
+            Err(Error::ValidationError(message)) if message == "内部门户读取必须使用快照事务"
+        ));
+        assert!(matches!(
+            service.admin_application_detail(&actor, "application", &mut executor).await,
+            Err(Error::ValidationError(message)) if message == "内部门户读取必须使用快照事务"
+        ));
+        assert!(authorization.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn application_authorization_errors_are_not_hidden_as_missing_objects() {
+        let (service, _, actor) = service(Outcome::Failed).await;
+        let result =
+            service.admin_application_detail(&actor, "application", &mut SnapshotExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权依赖已变化"
+        ));
+    }
 }

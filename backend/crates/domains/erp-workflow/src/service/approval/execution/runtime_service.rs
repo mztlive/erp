@@ -11,6 +11,7 @@ mod progress;
 mod query;
 mod query_contract;
 mod read_auth;
+pub(crate) use read_auth::{RuntimeReadSubject, open_tasks_match, task_proves_current_responsibility};
 mod resume_apply;
 mod route;
 mod task_read;
@@ -25,7 +26,7 @@ use application_core::AuditActor;
 use bpm::engine::CommitRequired;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalCommandReceipt, ApprovalProcessInstance};
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 pub use query::{
@@ -49,6 +50,7 @@ use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActio
 #[derive(Clone)]
 pub struct ApprovalRuntimeService<A> {
     pub(crate) identity: SharedRbacService,
+    pub(crate) authorization: Arc<AuthorizationService>,
     pub(crate) db: Database,
     pub(crate) auth: A,
     action_port: Arc<dyn ApprovalDomainActionPort>,
@@ -78,10 +80,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: Database, identity: SharedRbacService, auth: A) -> Self {
+    pub fn new(
+        db: Database,
+        identity: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
+        auth: A,
+    ) -> Self {
         Self::with_ports(
             db,
             identity,
+            authorization,
             auth,
             Arc::new(FailClosedApprovalActionPort),
             Arc::new(crate::ports::FailClosedUpgradeSubjectPort),
@@ -107,12 +115,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     pub fn with_ports(
         db: Database,
         identity: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         auth: A,
         action_port: Arc<dyn ApprovalDomainActionPort>,
         upgrade: Arc<dyn UpgradeSubjectPort>,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        Self { db, identity, auth, action_port, upgrade, audit }
+        Self { db, identity, authorization, auth, action_port, upgrade, audit }
     }
 }
 

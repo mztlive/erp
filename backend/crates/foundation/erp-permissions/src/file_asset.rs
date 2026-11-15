@@ -83,3 +83,9 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
         PermissionDef { permission: &DESTROY, group: groups::FILE_ASSET, description: "销毁文件资产" },
     ),
 ];
+
+/// 将本人上传的文件关联到业务材料。
+pub const TRANSFER: Permission = Permission::new(resources::FILE_ASSET, "transfer");
+
+/// 将本人上传文件关联到只接受原上传者材料的业务命令。
+pub const OWNED_TRANSFER: Permission = Permission::new(resources::FILE_ASSET, "transfer_owned");

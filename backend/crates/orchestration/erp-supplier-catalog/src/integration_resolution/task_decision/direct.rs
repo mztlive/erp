@@ -1,6 +1,5 @@
 //! 无正式任务对账的任务关联闸门、事务与回执。
 use application_core::AuditActor;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
 use erp_integration::dto::{
     DirectReconciliationCommand, DirectReconciliationResult, DirectReconciliationStatus,
     PreparedDirectDecisionTarget,
@@ -8,10 +7,11 @@ use erp_integration::dto::{
 use erp_integration::entity::integration_ops::{DirectReceiptResult, IntegrationCommandIdentity};
 use erp_integration::service::task_decision::DirectFact;
 use erp_integration::service::task_decision::direct::execute_direct_decision;
+use erp_permissions::integration_ops;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, ReadExecutor};
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::command_identity;
@@ -100,12 +100,8 @@ impl IntegrationResolutionProcess {
 
     /// 独立决定与重放统一检验当前静态权限，任务关联由各自读取闸门拒绝。
     async fn ensure_direct_permission(&self, actor: &AuditActor) -> Result<()> {
-        let rbac = (self.identity_factory)();
-        let permission = Permission::parse("reconciliation_difference:decide")?;
-        if !AuthorizationService::new(self.db.clone(), rbac, AuthorizationRegistry::default())
-            .has_permission(actor, &permission, &mut NoTransaction)
-            .await?
-        {
+        let permission = integration_ops::DIFFERENCE_DECISION;
+        if !self.authorization.has_permission(actor, &permission, &mut ReadExecutor::default()).await? {
             return Err(Error::Forbidden("当前账号已不具备对账差异决定权限".into()));
         }
         Ok(())
@@ -119,9 +115,11 @@ impl IntegrationResolutionProcess {
     ) -> Result<DirectReconciliationResult> {
         let attempt_context = super::audit_context(&actor, &receipt)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
+        let access = self.data_scope.clone();
         let result = self
             .run_audited(move |db, executor| {
                 Box::pin(async move {
+                    access.require_decide(&actor, &command.difference_id, executor).await?;
                     let prepared = PreparedDirectDecisionTarget::try_from(&command)?;
                     super::execution::run_direct(
                         &mut DirectCommand {
@@ -156,7 +154,7 @@ impl IntegrationResolutionProcess {
             return Ok(None);
         };
         self.ensure_direct_permission(actor).await?;
-        ensure_no_work_item(&self.db, &command.difference_id, &mut persistence_core::NoTransaction).await?;
+        ensure_no_work_item(&self.db, &command.difference_id, &mut ReadExecutor::default()).await?;
         Ok(Some(DirectReconciliationResult {
             difference_id: command.difference_id.clone(),
             operation_id: command.operation_id.clone(),

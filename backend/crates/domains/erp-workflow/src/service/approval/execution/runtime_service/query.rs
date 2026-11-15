@@ -1,5 +1,9 @@
 //! 运行实例列表、详情、历史与恢复选项查询。
 
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{
+    approval_instance as approval_permissions, approval_instance, internal as internal_permissions,
+};
 mod detail;
 mod query_list;
 
@@ -9,10 +13,9 @@ use application_core::AuditActor;
 use bpm::engine::TaskIntent;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::ApprovalNodeExecution;
-use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use bpm::model::types::ApprovalProcessInstanceStatus;
 use erp_core::common::time::Instant;
-use erp_identity::Permission;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::super::apply_plan::PlannedWrites;
@@ -25,9 +28,7 @@ use super::super::runtime_query::{
 use super::super::view::OpenTaskSummary;
 pub(crate) use super::query_contract::parse_document_type;
 pub use super::query_contract::{RuntimeInstanceListCursor, RuntimeInstanceListQuery};
-use super::read_auth::{
-    RuntimeReadSubject, current_execution_matches_instance, task_proves_current_responsibility,
-};
+use super::read_auth::{RuntimeReadSubject, current_execution_matches_instance};
 use super::{ApprovalRuntimeService, hidden_not_found};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
@@ -42,10 +43,7 @@ use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::process_kind::process_kind_of;
-use crate::service::approval::{
-    approval_participant_permissions_with_executor, require_approval_management_with_executor,
-};
-use crate::service::authorization::features;
+use crate::service::approval::require_approval_management_with_executor;
 use crate::service::work_item::approval_rework::open_rework_id;
 
 /// 实例列表行。
@@ -184,12 +182,34 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         instance_id: &str,
     ) -> Result<RuntimeInstanceDetail> {
-        self.ensure_active_instance_reader(actor).await?;
-        let subject = self.load_runtime_read_subject(instance_id).await?;
-        self.ensure_ordinary_runtime_read(actor, &subject).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_string();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.instance_detail_stage(&actor, &instance_id, executor).await })
+            })
+            .await
+    }
+
+    /// 在原快照中执行实例读取资格、主体和当前返工任务读取。
+    /// # 参数
+    /// actor、instance_id 为已认证读者与精确实例，executor 为原快照执行器。
+    /// # 返回
+    /// 同一快照授权的实例详情。
+    /// # 错误
+    /// 无权、主体链不一致或仓储读取失败时拒绝。
+    pub(in crate::service::approval) async fn instance_detail_stage(
+        &self,
+        actor: &AuditActor,
+        instance_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<RuntimeInstanceDetail> {
+        self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
+        let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
         let instance = RuntimeInstanceListItem::from_read_subject(&subject)?;
-        let rework_task_id =
-            open_rework_id(&self.db, &subject.instance, actor.id(), &mut NoTransaction).await?;
+        let rework_task_id = open_rework_id(&self.db, &subject.instance, actor.id(), executor).await?;
         Ok(RuntimeInstanceDetail { instance, rework_task_id })
     }
 
@@ -215,9 +235,40 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         limit: u32,
         order: ExecutionHistoryOrder,
     ) -> Result<RuntimeHistoryPage> {
-        self.ensure_active_instance_reader(actor).await?;
-        let subject = self.load_runtime_read_subject(instance_id).await?;
-        self.ensure_ordinary_runtime_read(actor, &subject).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .instance_history_stage(
+                            &actor,
+                            &instance_id,
+                            after_execution_no,
+                            limit,
+                            order,
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 历史授权、执行记录和冻结路线沿同一事务读取。
+    async fn instance_history_stage(
+        &self,
+        actor: &AuditActor,
+        instance_id: &str,
+        after_execution_no: Option<u32>,
+        limit: u32,
+        order: ExecutionHistoryOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<RuntimeHistoryPage> {
+        self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
+        let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
         let fetch_limit = limit.saturating_add(1);
         let rows = self
             .db
@@ -227,13 +278,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 after_execution_no,
                 fetch_limit,
                 order,
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         let items = rows.iter().map(history_item_from_execution).collect();
         let mut page = history_page_from(items, limit);
         if after_execution_no.is_none() {
-            page.route = self.sales_approval_route(&subject).await?;
+            page.route = self.sales_approval_route(&subject, executor).await?;
         }
         page.observe_progress(&subject.instance, actor.id(), after_execution_no, order);
         Ok(page)
@@ -258,21 +309,38 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         instance_id: &str,
     ) -> Result<RuntimeRecoveryOptionsView> {
-        self.ensure_active_instance_reader(actor).await?;
-        let subject = self.load_runtime_read_subject(instance_id).await?;
-        self.ensure_management_runtime_read(actor, &subject).await?;
+        let this = self.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_string();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.recovery_options_stage(&actor, &instance_id, executor).await })
+            })
+            .await
+    }
+
+    async fn recovery_options_stage(
+        &self,
+        actor: &AuditActor,
+        instance_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<RuntimeRecoveryOptionsView> {
+        let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
+        self.ensure_management_runtime_read_stage(actor, &subject, executor).await?;
         let blocked = subject.instance.status == ApprovalProcessInstanceStatus::Blocked;
         let candidates = recovery_options_for(blocked, subject.instance.blocker_code);
         let actions = authorized_recovery_actions(
-            &self.auth,
+            &self.authorization,
             actor,
             subject.document_type,
-            &subject.snapshot.business_object_id,
+            &subject.instance.base.id,
             candidates,
-            &mut NoTransaction,
+            executor,
         )
         .await?;
-        let hints = self.resume_version_hints(&subject).await?;
+        let hints = self.resume_version_hints(&subject, executor).await?;
         Ok(RuntimeRecoveryOptionsView {
             instance_id: instance_id.to_string(),
             actions,
@@ -296,7 +364,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ///
     /// # 关键业务约束
     /// 提示仅供调用方构造恢复命令，事务提交前仍须按期望版本做 CAS 重验。
-    async fn resume_version_hints(&self, subject: &RuntimeReadSubject) -> Result<ResumeVersionHints> {
+    async fn resume_version_hints(
+        &self,
+        subject: &RuntimeReadSubject,
+        executor: &mut dyn Executor,
+    ) -> Result<ResumeVersionHints> {
         let instance_version = subject.instance.base.version.to_string();
         let Some(execution) = subject.current_execution.as_ref() else {
             return Ok(ResumeVersionHints {
@@ -311,10 +383,10 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let assignee = self
             .db
             .bpm_workflow()
-            .find_assignee_for_node(&instance_id, &execution.node_key, &mut NoTransaction)
+            .find_assignee_for_node(&instance_id, &execution.node_key, executor)
             .await?;
         let assignment_version = assignee.map(|item| item.base.version.to_string());
-        let closed_task_version = self.closed_resume_task_version(execution).await?;
+        let closed_task_version = self.closed_resume_task_version(execution, executor).await?;
         Ok(ResumeVersionHints {
             instance_version,
             execution_version,
@@ -336,10 +408,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ///
     /// # 关键业务约束
     /// 多任务属于恢复命令的失败关闭场景，此处不提前报错，由命令执行时判定。
-    async fn closed_resume_task_version(&self, execution: &ApprovalNodeExecution) -> Result<Option<String>> {
+    async fn closed_resume_task_version(
+        &self,
+        execution: &ApprovalNodeExecution,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
         let execution_id = ApprovalNodeExecutionId::new(execution.base.id.clone());
-        let tasks =
-            self.db.work_items().approval_tasks_for_execution(&execution_id, &mut NoTransaction).await?;
+        let tasks = self.db.work_items().approval_tasks_for_execution(&execution_id, executor).await?;
         let [task] = tasks.as_slice() else {
             return Ok(None);
         };
@@ -357,37 +432,38 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
     pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
-        if features(&self.db, &self.identity)
-            .has_permission(actor, &Permission::parse("approval_instance:read")?, &mut NoTransaction)
-            .await?
-        {
+        self.ensure_active_instance_reader_stage(actor, &mut NoTransaction).await
+    }
+
+    /// 身份资格读取使用当前业务执行器，不创建第二个读取阶段。
+    async fn ensure_active_instance_reader_stage(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if self.authorization.has_permission(actor, &approval_instance::COPIES_HISTORY, executor).await? {
             return Ok(());
         }
         Err(hidden_not_found())
     }
 
-    /// 加载实例、当前执行与唯一冻结快照，并校验运行主体三元组。
-    ///
-    /// # 参数
-    /// * `instance_id` - 审批实例 ID。
-    ///
-    /// # 返回
-    /// 返回实例、当前执行、冻结快照和单据类型都已对齐的读取主体。
-    ///
-    /// # 错误
-    /// 实例或快照缺失、类型与流程不一致、主体三元组不匹配或当前执行令牌不一致时隐藏为不存在；仓储失败时返回对应错误。
-    pub(super) async fn load_runtime_read_subject(&self, instance_id: &str) -> Result<RuntimeReadSubject> {
+    /// 在原执行器读取并核对实例、当前执行与冻结快照。
+    pub(super) async fn load_runtime_read_subject_stage(
+        &self,
+        instance_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<RuntimeReadSubject> {
         let instance_id = ApprovalProcessInstanceId::new(instance_id);
         let instance = self
             .db
             .bpm_workflow()
-            .find_instance_by_id(&instance_id, &mut NoTransaction)
+            .find_instance_by_id(&instance_id, executor)
             .await?
             .ok_or_else(hidden_not_found)?;
         let snapshot = self
             .db
             .approval_subject_snapshots()
-            .find_by_process_instance_id(instance_id.as_ref(), &mut NoTransaction)
+            .find_by_process_instance_id(instance_id.as_ref(), executor)
             .await?
             .ok_or_else(hidden_not_found)?;
         let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
@@ -406,131 +482,53 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         {
             return Err(hidden_not_found());
         }
-        let current_execution =
-            self.db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
+        let current_execution = self.db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
         if !current_execution_matches_instance(&instance, current_execution.as_ref()) {
             return Err(hidden_not_found());
         }
         Ok(RuntimeReadSubject { instance, current_execution, snapshot, document_type })
     }
 
-    /// 发起人和精确当前责任人读取冻结审批资料；其他人必须具备类型管理及来源读权。
-    ///
-    /// # 参数
-    /// * `actor` - 当前读者。
-    /// * `subject` - 已加载的运行主体。
-    ///
-    /// # 返回
-    /// 发起人、当前或历史责任人，或管理读取成立时无返回值。
-    ///
-    /// # 错误
-    /// 管理资格不足时隐藏为不存在；责任链或权限读取失败时返回对应错误。
-    pub(super) async fn ensure_ordinary_runtime_read(
+    /// 普通与管理读取由同一固定入口选择，业务只保留运行主体完整性检查。
+    pub(super) async fn ensure_ordinary_runtime_read_stage(
         &self,
         actor: &AuditActor,
-        subject: &RuntimeReadSubject,
+        instance_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
-        let current = self.current_runtime_responsibility(actor, subject).await?;
-        let participant = current || self.historical_runtime_participant(actor, subject).await?;
-        if subject.instance.started_by.as_str() == actor.id() || participant {
-            return Ok(());
-        }
-        self.ensure_management_runtime_read(actor, subject).await
+        self.authorization
+            .require(
+                actor,
+                &internal_permissions::APPROVAL_INSTANCE_READ,
+                AccessTarget::record(instance_id)?,
+                executor,
+            )
+            .await
+            .map_err(|error| match Error::from(error) {
+                Error::Forbidden(_) | Error::NotFound(_) => hidden_not_found(),
+                other => other,
+            })
     }
 
-    /// 只承认已执行决定的历史审批人，不把未来节点配置当作参与事实。
-    async fn historical_runtime_participant(
+    async fn ensure_management_runtime_read_stage(
         &self,
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
-    ) -> Result<bool> {
-        let instance_id = ApprovalProcessInstanceId::new(subject.instance.base.id.clone());
-        let mut after = None;
-        loop {
-            let executions = self
-                .db
-                .bpm_workflow()
-                .list_execution_history(&instance_id, after, 100, &mut NoTransaction)
-                .await?;
-            if executions.is_empty() {
-                return Ok(false);
-            }
-            if executions.iter().any(|execution| {
-                execution.process_instance_id == instance_id
-                    && execution.has_participant(actor.id())
-                    && execution
-                        .decided_by
-                        .as_ref()
-                        .is_some_and(|participant| participant.as_str() == actor.id())
-                    && execution.decided_at.is_some()
-                    && matches!(
-                        execution.status,
-                        ApprovalNodeExecutionStatus::Approved | ApprovalNodeExecutionStatus::Rejected
-                    )
-            }) {
-                return Ok(true);
-            }
-            after = executions.last().map(|execution| execution.execution_no);
-        }
-    }
-
-    /// 管理读取必须具有静态 read、类型管理和真实业务来源读取资格。
-    async fn ensure_management_runtime_read(
-        &self,
-        actor: &AuditActor,
-        subject: &RuntimeReadSubject,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         require_approval_management_with_executor(
-            &self.auth,
+            &self.authorization,
             actor,
-            "approval_instance:read",
+            &internal_permissions::APPROVAL_MANAGEMENT_READ,
             subject.document_type,
-            &subject.snapshot.business_object_id,
-            &mut NoTransaction,
+            &subject.instance.base.id,
+            executor,
         )
         .await
         .map_err(|error| match error {
             crate::error::Error::Forbidden(_) => hidden_not_found(),
             other => other,
         })
-    }
-
-    /// 判断当前执行是否仍有由本人承担的开放审批任务。
-    async fn current_runtime_responsibility(
-        &self,
-        actor: &AuditActor,
-        subject: &RuntimeReadSubject,
-    ) -> Result<bool> {
-        if subject.instance.status != ApprovalProcessInstanceStatus::Running
-            || !approval_participant_permissions_with_executor(
-                &self.db,
-                &self.identity,
-                actor,
-                &mut NoTransaction,
-            )
-            .await?
-        {
-            return Ok(false);
-        }
-        let Some(execution) = &subject.current_execution else {
-            return Ok(false);
-        };
-        if execution.status != ApprovalNodeExecutionStatus::Active
-            || execution.round_no != subject.instance.current_round_no
-            || !execution.has_participant(actor.id())
-        {
-            return Ok(false);
-        }
-        let execution_id = ApprovalNodeExecutionId::new(execution.base.id.clone());
-        let tasks =
-            self.db.work_items().open_approval_tasks_for_execution(&execution_id, &mut NoTransaction).await?;
-        if !super::read_auth::open_tasks_match(execution, &tasks) {
-            return Ok(false);
-        }
-        let owner_role = adapter_spec_of(subject.document_type)?.owner_role;
-        Ok(tasks.iter().any(|task| {
-            task_proves_current_responsibility(task, execution, subject, actor.id(), owner_role.as_str())
-        }))
     }
 }
 
@@ -756,7 +754,7 @@ pub(super) fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -
 
 /// 恢复动作展示复用写端的完整同角色权限及真实来源授权。
 async fn authorized_recovery_actions(
-    auth: &impl WorkflowAuthorizationPort,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     document_type: DocumentType,
     document_id: &str,
@@ -766,11 +764,11 @@ async fn authorized_recovery_actions(
     let mut actions = Vec::new();
     for action in candidates {
         let permission = match action {
-            RuntimeRecoveryAction::ResumeCurrentApprover => "approval_instance:resume",
-            RuntimeRecoveryAction::CancelBlocked => "approval_instance:cancel_blocked",
+            RuntimeRecoveryAction::ResumeCurrentApprover => &internal_permissions::APPROVAL_RECOVER,
+            RuntimeRecoveryAction::CancelBlocked => &approval_permissions::CANCEL_BLOCKED,
         };
         match require_approval_management_with_executor(
-            auth,
+            authorization,
             actor,
             permission,
             document_type,
@@ -789,112 +787,10 @@ async fn authorized_recovery_actions(
 
 #[cfg(test)]
 mod runtime_recovery_options_view_tests {
-    use std::sync::{Arc, Mutex};
 
-    use application_core::AuditActor;
-    use erp_core::AccountKind;
-    use erp_identity::Permission;
-    use persistence_core::{Executor, NoTransaction};
     use serde_json::json;
 
-    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView, authorized_recovery_actions};
-    use crate::entity::document_registry::DocumentType;
-    use crate::error::{Error, Result};
-    use crate::ports::WorkflowAuthorizationPort;
-
-    struct ManagementCheck {
-        entry: String,
-        required: Vec<String>,
-        document_type: DocumentType,
-        document_id: String,
-    }
-
-    #[derive(Clone, Default)]
-    struct RecoveryAuthorization {
-        denied: bool,
-        unavailable: bool,
-        calls: Arc<Mutex<Vec<ManagementCheck>>>,
-    }
-
-    impl WorkflowAuthorizationPort for RecoveryAuthorization {
-        async fn require_approval_management(
-            &self,
-            _: &AuditActor,
-            entry: &Permission,
-            required: &[Permission],
-            document_type: DocumentType,
-            document_id: &str,
-            _: &mut dyn Executor,
-        ) -> Result<()> {
-            self.calls.lock().unwrap().push(ManagementCheck {
-                entry: entry.to_string(),
-                required: required.iter().map(ToString::to_string).collect(),
-                document_type,
-                document_id: document_id.to_owned(),
-            });
-            if self.unavailable {
-                return Err(Error::Internal("identity unavailable".into()));
-            }
-            if self.denied {
-                return Err(Error::Forbidden("完整同角色资格不足".into()));
-            }
-            Ok(())
-        }
-    }
-
-    #[tokio::test]
-    async fn recovery_actions_use_the_same_complete_management_authorization_as_commands() {
-        let auth = RecoveryAuthorization::default();
-        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
-        let candidates =
-            vec![RuntimeRecoveryAction::ResumeCurrentApprover, RuntimeRecoveryAction::CancelBlocked];
-        let actual = authorized_recovery_actions(
-            &auth,
-            &actor,
-            DocumentType::SalesOrder,
-            "order",
-            candidates.clone(),
-            &mut NoTransaction,
-        )
-        .await
-        .unwrap();
-        assert_eq!(actual, candidates);
-        let calls = auth.calls.lock().unwrap();
-        assert_eq!(calls.len(), 2);
-        for check in calls.iter() {
-            assert!(check.required.contains(&check.entry));
-            assert!(check.required.iter().any(|permission| permission == "approval_instance:read"));
-            assert!(
-                check.required.iter().any(|permission| permission == "sales_order:approval_runtime_admin")
-            );
-            assert_eq!(check.document_type, DocumentType::SalesOrder);
-            assert_eq!(check.document_id, "order");
-        }
-    }
-
-    #[tokio::test]
-    async fn recovery_actions_hide_denied_candidates_and_preserve_infrastructure_errors() {
-        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
-        let denied = RecoveryAuthorization { denied: true, ..Default::default() };
-        assert!(
-            authorized_recovery_actions(
-                &denied,
-                &actor,
-                DocumentType::SalesOrder,
-                "order",
-                vec![RuntimeRecoveryAction::ResumeCurrentApprover],
-                &mut NoTransaction,
-            )
-            .await
-            .unwrap()
-            .is_empty()
-        );
-        let unavailable = RecoveryAuthorization { unavailable: true, ..Default::default() };
-        assert!(matches!(authorized_recovery_actions(
-            &unavailable, &actor, DocumentType::SalesOrder, "order",
-            vec![RuntimeRecoveryAction::ResumeCurrentApprover], &mut NoTransaction,
-        ).await, Err(Error::Internal(message)) if message == "identity unavailable"));
-    }
+    use super::{RuntimeRecoveryAction, RuntimeRecoveryOptionsView};
 
     /// 旧恢复选项载荷缺版本提示时须兼容反序列化为空提示。
     #[test]

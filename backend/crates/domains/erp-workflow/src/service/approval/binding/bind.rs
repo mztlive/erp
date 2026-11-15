@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessDefinitionId;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -39,6 +39,7 @@ use crate::repository::{BpmExt, DocumentRegistryExt};
 /// # 错误
 /// 缺失发布定义、图损坏、人员或范围失败时返回错误，调用方必须回滚。
 pub async fn bind_published_definition_on_document_create(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
@@ -54,8 +55,16 @@ pub async fn bind_published_definition_on_document_create(
             Ok(None)
         },
         BindingDecision::RequirePublished => {
-            let binding =
-                bind_required_definition(identity_service, db, audit_port, command, actor, executor).await?;
+            let binding = bind_required_definition(
+                authorization,
+                identity_service,
+                db,
+                audit_port,
+                command,
+                actor,
+                executor,
+            )
+            .await?;
             Ok(Some(binding))
         },
     }
@@ -102,6 +111,7 @@ pub fn binding_from_published(
 
 /// 必须审批路径：查询发布定义、重验并写绑定审计。
 async fn bind_required_definition(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
@@ -111,7 +121,16 @@ async fn bind_required_definition(
 ) -> Result<ApprovalDefinitionBinding> {
     let policy = require_process_required(command.document_type)?;
     let graph = load_published_graph(db, command.document_type, executor).await?;
-    revalidate_binding_graph(db, identity_service, &policy, &command.context, &graph, executor).await?;
+    revalidate_binding_graph(
+        authorization,
+        db,
+        identity_service,
+        &policy,
+        &command.context,
+        &graph,
+        executor,
+    )
+    .await?;
     let binding = binding_from_published(
         ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         graph.definition.definition_version,

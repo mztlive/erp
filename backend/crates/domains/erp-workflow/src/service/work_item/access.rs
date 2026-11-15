@@ -2,17 +2,17 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
-use erp_identity::Permission;
+use erp_identity::AccessTarget;
+use erp_permissions::{internal, work_item};
 use persistence_core::Executor;
 
-use super::order_access::{
-    require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
-    task_read_error,
-};
-use super::{WorkItemAuthorization, WorkItemService};
+use super::WorkItemService;
+use super::order_access::{require_order_task_read, require_supplier_portal_task_read, task_read_error};
+use crate::WorkItemExt;
 use crate::entity::work_item::{TaskAccess, WorkItem, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::{ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
+use crate::repository::work_item::authorization::WorkItemAuthorizationExt;
 use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
@@ -29,31 +29,22 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<TaskAccess> {
-        let execution = item.qualification_permissions()?;
-        let decide =
-            [Permission::parse("approval_instance:read")?, Permission::parse("approval_instance:decide")?];
-        let mut required = execution.clone();
-        required.extend(decide.iter().cloned());
-        let qualified = self
-            .authorization
-            .service
-            .permissions(actor, &required, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("任务操作账号已失效".into()))?;
+        let read = self.authorization.query(actor, &work_item::DETAIL, executor).await?;
         let mut access = TaskAccess::new(actor.id().to_owned());
-        if qualified.same_role(&execution) {
+        if read.execution_qualified(item.work_item_type.as_str(), &item.business_object_type, executor)? {
             access.executable_task_ids.insert(item.base.id.clone());
         }
-        if qualified.same_role(&decide) {
+        if read.decision_qualified(executor)? {
             access.decidable_task_ids.insert(item.base.id.clone());
         }
-        match self.authorization.require(actor, "manage", &item.base.id, executor).await {
-            Ok(()) => {
-                access.managed_task_ids.insert(item.base.id.clone());
-            },
-            Err(Error::Forbidden(_)) => {},
-            Err(error) => return Err(error),
-        }
+        access.managed_task_ids = self
+            .db
+            .work_items()
+            .authorized_ids(std::slice::from_ref(&item.base.id), &read, executor)
+            .await?
+            .into_iter()
+            .collect();
+        self.authorization.service.validate(&read, executor).await?;
         Ok(access)
     }
 
@@ -70,7 +61,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.authorization.require(actor, "detail", &item.base.id, executor).await?;
+        self.authorization.require(actor, &work_item::DETAIL, &item.base.id, executor).await?;
         self.ensure_task_facts(item, actor, executor).await
     }
 
@@ -89,6 +80,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<()> {
         if item.work_item_type.is_document_approval() {
             return if approval_task_readable_with_executor(
+                &self.authorization.service,
                 &self.identity,
                 &self.db,
                 &self.auth,
@@ -148,12 +140,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.ensure_decision_access(actor, item, &self.authorization, executor).await
+        self.ensure_decision_access(actor, item, executor).await
     }
 
     /// 在原执行器核验完整办理资格、指定任务事实和真实业务来源。
     /// # 参数
-    /// actor、item 为账号与任务；authorization 提供已有或拟保存任务的事实；executor 为原事务。
+    /// actor、item 为账号与真实任务；executor 为原事务。
     /// # 返回
     /// 同角色资格、任务范围、冻结事实和业务确认资格均成立时成功。
     /// # 错误
@@ -162,34 +154,36 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         &self,
         actor: &AuditActor,
         item: &WorkItem,
-        authorization: &WorkItemAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let policy = item
+        self.authorization
+            .service
+            .require(actor, &internal::WORK_ITEM_EXECUTE, AccessTarget::record(&item.base.id)?, executor)
+            .await
+            .map_err(|error| task_read_error(error.into()))?;
+        self.ensure_decision_facts(item, actor, executor).await.map_err(task_read_error)
+    }
+
+    /// 完整授权后仅检查任务冻结的业务版本与责任事实，不再选择权限组合。
+    async fn ensure_decision_facts(
+        &self,
+        item: &WorkItem,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if item.work_item_type.is_document_approval() {
+            return self.ensure_task_facts(item, actor, executor).await;
+        }
+        let relation = item
             .work_item_type
             .brief_relation(&item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
-        let required = item.qualification_permissions()?;
-        let qualified = self
-            .authorization
-            .service
-            .permissions(actor, &required, executor)
-            .await?
-            .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".into()))?;
-        if !qualified.same_role(&required) {
-            return Err(Error::Forbidden("当前账号不具备同角色完整执行资格".into()));
+        let keys = HashSet::from([(relation.object_kind, item.business_object_id.clone())]);
+        let facts = self.facts.load_object_facts(&keys, executor).await?;
+        if !task_facts_current(item, &facts) {
+            return Err(Error::Forbidden("任务业务版本或冻结责任不匹配".into()));
         }
-        authorization.require(actor, "detail", &item.base.id, executor).await.map_err(task_read_error)?;
-        self.ensure_task_facts(item, actor, executor).await.map_err(task_read_error)?;
-        require_supplier_portal_task_review(
-            &self.auth,
-            actor,
-            policy.object_kind,
-            &item.business_object_id,
-            executor,
-        )
-        .await?;
-        Ok(self.identity.ensure_policy_snapshot_with_executor(qualified.policy_revision(), executor).await?)
+        Ok(())
     }
 }
 
@@ -257,4 +251,48 @@ pub fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
     }
     item.ensure_generic_responsibility_mutation()
         .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))
+}
+
+#[cfg(test)]
+mod decision_tests {
+    use erp_core::AccountKind;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::entity::work_item::SupplierPortalReviewTaskData;
+    use crate::service::work_item::testing::unavailable_service;
+
+    #[tokio::test]
+    async fn decision_stops_before_business_facts_when_central_authorization_cannot_prove_access() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("reviewer".into(), "reviewer".into(), AccountKind::Admin);
+        let mut task = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("task"),
+            SupplierPortalReviewTaskData {
+                request_id: "request".into(),
+                subject_version: "submission-1".into(),
+                owner_user_id: "reviewer".into(),
+                owner_organization_id: "org".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        for terminal in [false, true] {
+            if terminal {
+                task.complete_supplier_portal_review(actor.id(), Instant::from_unix_secs(100)).unwrap();
+            }
+            assert!(matches!(
+                service.ensure_domain_decision_access(&actor, &task, &mut NoTransaction).await,
+                Err(Error::ValidationError(_))
+            ));
+            assert!(
+                matches!(service.ensure_domain_decision_access(&actor, &task, &mut SnapshotExecutor::default()).await,
+                Err(Error::Internal(reason)) if reason == "测试授权设施不可用")
+            );
+        }
+    }
 }

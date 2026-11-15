@@ -9,7 +9,7 @@ use erp_identity::{
     UpdateAdminRoleParams,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::roles::DemoRole;
 use super::spec::{self, AccountSpec};
@@ -71,7 +71,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 
     async fn ensure_account(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<bool> {
-        let admin = AdminService::new(self.db.clone(), self.rbac.clone());
+        let admin = AdminService::new(self.db.clone(), self.identity.clone());
         match admin
             .create_admin(
                 CreateAdminParams {
@@ -81,6 +81,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     role_ids: DemoRole::for_account(spec::foundation_spec(), spec)?.account_role_ids(spec),
                 },
                 actor.clone(),
+                self.authorization.clone(),
             )
             .await
         {
@@ -96,7 +97,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     async fn ensure_account_role(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<()> {
         let id = self.account_id(&spec.account).await?;
         let mut role_ids = self
-            .rbac
+            .identity
             .role_ids(AccountKind::Admin, &id)
             .await?
             .into_iter()
@@ -108,15 +109,20 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             return Ok(());
         }
         role_ids.extend(missing);
-        AdminService::new(self.db.clone(), self.rbac.clone())
-            .update_admin_role(UpdateAdminRoleParams { id, role_ids }, actor.clone())
+        AdminService::new(self.db.clone(), self.identity.clone())
+            .update_admin_role(
+                UpdateAdminRoleParams { id, role_ids },
+                actor.clone(),
+                self.authorization.clone(),
+            )
             .await?;
         Ok(())
     }
 
     // 账号 id 不变，审批链、责任规则和部门引用保持有效；不改密码和角色。
     async fn sync_account_name(&self, actor: &AuditActor, spec: &AccountSpec) -> Result<bool> {
-        let Some(existing) = self.db.accounts().find_by_account(&spec.account, &mut NoTransaction).await?
+        let Some(existing) =
+            self.db.accounts().find_by_account(&spec.account, &mut ReadExecutor::default()).await?
         else {
             // 软删除的账号不在此处理，由随后的账号解析报出明确错误。
             return Ok(false);
@@ -124,7 +130,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if existing.name == spec.name {
             return Ok(false);
         }
-        AdminService::new(self.db.clone(), self.rbac.clone())
+        AdminService::new(self.db.clone(), self.identity.clone())
             .update_admin(
                 UpdateAdminParams {
                     id: existing.base.id,
@@ -134,6 +140,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     status: None,
                 },
                 actor.clone(),
+                self.authorization.clone(),
             )
             .await?;
         Ok(true)
@@ -147,7 +154,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// # 错误
     /// 账号查询失败时返回错误。
     pub(super) async fn role_actor(&self, login: &str) -> Result<Option<AuditActor>> {
-        let found = self.db.accounts().find_by_account(login, &mut NoTransaction).await?;
+        let found = self.db.accounts().find_by_account(login, &mut ReadExecutor::default()).await?;
         Ok(found
             .filter(|account| account.is_active_backoffice())
             .map(|account| AuditActor::new(account.base.id, login.to_string(), AccountKind::Admin)))
@@ -163,7 +170,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     pub(super) async fn account_id(&self, account: &str) -> Result<String> {
         self.db
             .accounts()
-            .find_by_account(account, &mut NoTransaction)
+            .find_by_account(account, &mut ReadExecutor::default())
             .await?
             .filter(|found| found.is_active_backoffice())
             .map(|found| found.base.id)

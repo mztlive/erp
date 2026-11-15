@@ -1,13 +1,15 @@
 //! 结算对象读取与写入范围；对账负责人与业务组织分别解释。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::{
-    AccessSubject, AccessTarget, OrganizationDirectoryService, ResourceTargets, SharedRbacService,
-};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService, OrganizationDirectoryService};
+use erp_permissions::{Permission, supplier_settlement};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::authorization::{self, SettlementAction, SettlementActionAccess};
+use super::authorization::{SettlementAction, SettlementActionAccess};
 use crate::authorization::{Authorization, CompiledScope};
 use crate::entity::supplier_settlement::SupplierSettlementStatement;
 use crate::error::{Error, Result};
@@ -18,7 +20,6 @@ use crate::repository::SupplierSettlementExt;
 pub struct SettlementAccess {
     db: Database,
     authorization: Option<Authorization>,
-    identity: Option<SharedRbacService>,
 }
 
 impl SettlementAccess {
@@ -33,10 +34,10 @@ impl SettlementAccess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let authorization = Authorization::new(&db, rbac.clone(), "supplier_settlement_statement")
+    pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
+        let authorization = Authorization::new(service.clone(), "supplier_settlement_statement")
             .expect("固定资源授权目录有效");
-        Self { db, authorization: Some(authorization), identity: Some(rbac) }
+        Self { db, authorization: Some(authorization) }
     }
 
     /// 创建尚未接线的访问器，授权调用保持失败关闭。
@@ -47,7 +48,7 @@ impl SettlementAccess {
     /// # 错误
     /// 构造不执行 I/O。
     pub fn unwired(db: Database) -> Self {
-        Self { db, authorization: None, identity: None }
+        Self { db, authorization: None }
     }
 
     /// 取得已注入的身份设施，禁止默认扩大范围。
@@ -55,11 +56,24 @@ impl SettlementAccess {
         self.authorization.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))
     }
 
+    pub(crate) async fn require_operation(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self
+            .authorization()?
+            .service
+            .require(actor, permission, AccessTarget::Operation, executor)
+            .await?)
+    }
+
     /// 在调用方事务内证明资源动作并映射结算责任条件。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 内置权限
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -73,17 +87,17 @@ impl SettlementAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        Ok(self.authorization()?.resolve(actor, action, executor).await?)
+        Ok(self.authorization()?.resolve(actor, permission, executor).await?)
     }
 
     /// 在调用方事务内重验结算对象资格。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 内置权限
     /// * `id` - 结算单主键
     /// * `executor` - 调用方执行器
     ///
@@ -95,16 +109,50 @@ impl SettlementAccess {
     pub async fn require_statement(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatement> {
-        self.authorization()?.require(actor, action, id, executor).await?;
+        self.authorization()?.require(actor, permission, id, executor).await?;
         self.db
             .supplier_settlement_statements()
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("结算单不存在或无权访问".into()))
+    }
+
+    /// 在交接事务内同时检查原结算单资格与拟保存的目标归属。
+    /// # 参数
+    /// actor 为发起交接的账号，statement 为服务端完成归属变更后的实体，executor 为原写事务。
+    /// # 返回
+    /// 原对象和目标负责人、业务组织均在当前操作范围内时成功。
+    /// # 错误
+    /// 账号、原对象或目标归属无权，以及必要事实缺失时拒绝。
+    pub async fn require_owner_change(
+        &self,
+        actor: &AuditActor,
+        statement: &SupplierSettlementStatement,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self
+            .authorization()?
+            .service
+            .require(
+                actor,
+                &supplier_settlement::STATEMENT_HANDOVER,
+                AccessTarget::OwnershipChange {
+                    id: statement.base.id.clone(),
+                    candidate: ObjectFacts {
+                        resource: "supplier_settlement_statement".into(),
+                        id: statement.base.id.clone(),
+                        owner_id: FactValue::Known(Some(statement.prepared_by.clone())),
+                        org_unit_id: FactValue::Known(Some(statement.business_org_unit_id.clone())),
+                        ..Default::default()
+                    },
+                },
+                executor,
+            )
+            .await?)
     }
 
     /// 在原执行器核验具体结算命令的功能权限及实际责任人。
@@ -121,14 +169,10 @@ impl SettlementAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let identity = self.identity.as_ref().ok_or_else(|| Error::Internal("供应链授权未接线".into()))?;
-        Ok(authorization::service(&self.db, identity.clone(), action)?
-            .require(
-                actor,
-                &action.permission()?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
+        Ok(self
+            .authorization()?
+            .service
+            .require(actor, &action.permission(), AccessTarget::record(id)?, executor)
             .await?)
     }
 
@@ -182,16 +226,30 @@ impl SettlementAccess {
         actor: &AuditActor,
         owner_user_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(CompiledScope, String)> {
-        let access = self.resolve(actor, "create", executor).await?;
+    ) -> Result<String> {
         let owner_org = OrganizationDirectoryService::new(self.db.clone())
-            .own_org(owner_user_id, access.as_of(), executor)
+            .own_org(owner_user_id, erp_core::common::time::Instant::now(), executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护对账负责人的有效主属组织".into()))?;
         if owner_org == "company" {
             return Err(Error::ValidationError("请先维护对账负责人的有效主属组织".into()));
         }
-        Ok((access, owner_org))
+        self.authorization()?
+            .service
+            .require(
+                actor,
+                &supplier_settlement::STATEMENT_CREATE,
+                AccessTarget::Candidate(ObjectFacts {
+                    resource: "supplier_settlement_statement".into(),
+                    id: "new_statement".into(),
+                    owner_id: FactValue::Known(Some(owner_user_id.into())),
+                    org_unit_id: FactValue::Known(Some(owner_org.clone())),
+                    ..Default::default()
+                }),
+                executor,
+            )
+            .await?;
+        Ok(owner_org)
     }
 
     /// 展开请求组织及其可选下级。

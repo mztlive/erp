@@ -2,10 +2,12 @@
 
 use std::collections::HashMap;
 
+use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
 use erp_customer::dto::customer::CustomerOwnerView;
 use erp_customer::repository::prelude::*;
+use erp_customer::repository::scope::authorized_customer;
 use erp_customer::{
     AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerActionBlockerView,
     CustomerAssignment, CustomerAssignmentView, CustomerExt, CustomerProfileDetailView,
@@ -14,7 +16,8 @@ use erp_customer::{
 use erp_identity::AccountDirectoryService;
 use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision};
-use persistence_core::NoTransaction;
+use erp_permissions::customer as customer_permissions;
+use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::CustomerProfileProcess;
 use crate::{Error, Result};
@@ -24,33 +27,54 @@ impl CustomerProfileProcess {
     ///
     /// # 参数
     /// * `customer_id` - 客户角色主键。
+    /// * `actor` - 当前操作人；完整读取资格由本入口在原事务中核验。
     ///
     /// # 返回
     /// 返回客户、主体、修订、归属、当前事实和敏感字段令牌入口。归属人没有显示名时回退为账号 ID。
     ///
     /// # 错误
     /// 客户或关联主体不存在、当前名称修订无法解析、敏感令牌无法签发，或任一仓储查询失败时返回错误。
-    pub async fn detail(&self, customer_id: &str) -> Result<CustomerProfileDetailView> {
-        let account = self.load_customer(customer_id).await?;
-        let party = self.load_party(&account.party_id).await?;
-        let revisions =
-            self.db.party_revisions().list_revision_history(&account.party_id, &mut NoTransaction).await?;
+    pub async fn detail(&self, customer_id: &str, actor: &AuditActor) -> Result<CustomerProfileDetailView> {
+        let service = self.clone();
+        let customer_id = customer_id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.detail_snapshot(&customer_id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 完整客户过滤、资料水合和交付检查使用同一事务快照。
+    async fn detail_snapshot(
+        &self,
+        customer_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerProfileDetailView> {
+        let (context, _) = self.access.query(actor, &customer_permissions::DETAIL, executor).await?;
+        let account = authorized_customer(&self.db, customer_id, &context, executor).await?;
+        let party = self
+            .db
+            .parties()
+            .find_party(&account.party_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户关联主体不存在".to_string()))?;
+        let revisions = self.db.party_revisions().list_revision_history(&account.party_id, executor).await?;
         let current_revision =
             party.current_revision(&revisions).map_err(|error| Error::Internal(error.to_string()))?.clone();
         let assignments = self
             .db
             .customer_assignments()
-            .list_history_for_customer(&CustomerAccountId::new(customer_id), &mut NoTransaction)
+            .list_history_for_customer(&CustomerAccountId::new(customer_id), executor)
             .await?;
         let account_ids: Vec<String> =
             assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
         let account_names =
-            AccountDirectoryService::new(self.db.clone()).names(&account_ids, &mut NoTransaction).await?;
-        let (contacts, addresses, tax_profiles, bank_accounts) = self
-            .db
-            .party()
-            .load_current_facts(&account.party_id, BusinessDate::today(), &mut NoTransaction)
-            .await?;
+            AccountDirectoryService::new(self.db.clone()).names(&account_ids, executor).await?;
+        let (contacts, addresses, tax_profiles, bank_accounts) =
+            self.db.party().load_current_facts(&account.party_id, BusinessDate::today(), executor).await?;
         let sensitive_fields = self.sensitive_fields(customer_id, &contacts, &addresses, &bank_accounts)?;
         let detail = build_detail(
             ProfileDetailParts {
@@ -67,6 +91,7 @@ impl CustomerProfileProcess {
             },
             &account_names,
         );
+        self.access.validate(&context, executor).await?;
         Ok(detail)
     }
 
@@ -215,11 +240,32 @@ pub(super) fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<Cus
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use erp_core::AccountKind;
     use erp_core::ids::{CustomerAssignmentId, PartyRevisionId};
-    use erp_customer::{CustomerAccountData, CustomerAssignmentData};
-    use erp_party::{PartyData, PartyKind, PartyRevisionData, PartyStatus};
+    use erp_customer::{CustomerAccess, CustomerAccountData, CustomerAssignmentData};
+    use erp_identity::testing::unavailable_authorization;
+    use erp_party::{PartyData, PartyKind, PartyRevisionData, PartyStatus, SensitiveDataCodec};
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+
+    #[tokio::test]
+    async fn profile_detail_rejects_missing_query_binding_before_reading_customer_or_party() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("profile_guard");
+        let access = CustomerAccess::new(db.clone(), unavailable_authorization());
+        let process = CustomerProfileProcess::new(
+            db,
+            Arc::new(SensitiveDataCodec::from_secret(b"profile-guard")),
+            access,
+        );
+        let actor = AuditActor::new("operator".into(), "operator".into(), AccountKind::Admin);
+        let error =
+            process.detail_snapshot("customer", &actor, &mut SnapshotExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message) if message == "缺少查询 Mapping 绑定"));
+    }
 
     #[test]
     fn canonical_profile_detail_includes_every_current_owner_and_display_name() {

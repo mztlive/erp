@@ -2,11 +2,12 @@
 
 use std::num::NonZeroU32;
 
+#[cfg(test)]
 use futures_util::{TryStream, TryStreamExt};
+use mongodb::Collection;
 use mongodb::bson::doc;
-use mongodb::options::AggregateOptions;
-use mongodb::{Collection, Cursor, SessionCursor};
-use persistence_core::{Error, Executor, QueryFilter, Result};
+use persistence_core::aggregate::RowCursor;
+use persistence_core::{Executor, QueryFilter, Result};
 
 use super::authorization::prefix;
 use super::query::{sort_doc, work_item_projection};
@@ -15,13 +16,7 @@ use crate::entity::work_item::WorkItem;
 
 /// 在原执行上下文内连续读取的工作项候选游标。
 pub struct WorkItemScan {
-    cursor: ScanCursor,
-}
-
-/// 事务游标必须在每批读取时重新借用调用方会话。
-enum ScanCursor {
-    Independent(Cursor<WorkItemRow>),
-    Transactional(SessionCursor<WorkItemRow>),
+    cursor: RowCursor<WorkItemRow>,
 }
 
 impl WorkItemScan {
@@ -45,15 +40,10 @@ impl WorkItemScan {
         executor: &mut dyn Executor,
     ) -> Result<Self> {
         let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
-        pipeline.extend(prefix(filter)?);
+        pipeline.extend(prefix(filter, executor)?);
         pipeline.push(doc! { "$sort": sort_doc(filter.sort_by.as_deref(), filter.sort_ascending) });
         pipeline.push(doc! { "$project": work_item_projection() });
-        let options = AggregateOptions::builder().batch_size(batch_size.get()).build();
-        let query = collection.aggregate(pipeline).with_type::<WorkItemRow>().with_options(options);
-        let cursor = match executor.session() {
-            Some(session) => ScanCursor::Transactional(query.session(session).await?),
-            None => ScanCursor::Independent(query.await?),
-        };
+        let cursor = RowCursor::open(&collection, pipeline, batch_size, executor).await?;
         Ok(Self { cursor })
     }
 
@@ -70,31 +60,12 @@ impl WorkItemScan {
         batch_size: NonZeroU32,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemRow>> {
-        match &mut self.cursor {
-            ScanCursor::Independent(cursor) => read_batch(cursor, batch_size).await,
-            ScanCursor::Transactional(cursor) => read_session_batch(cursor, batch_size, executor).await,
-        }
+        self.cursor.next_batch(batch_size, executor).await
     }
-}
-
-/// 会话游标逐项推进，取消 getMore 时不遗留持有会话的流状态。
-async fn read_session_batch(
-    cursor: &mut SessionCursor<WorkItemRow>,
-    batch_size: NonZeroU32,
-    executor: &mut dyn Executor,
-) -> Result<Vec<WorkItemRow>> {
-    let session = executor.session().ok_or(Error::UnsupportedDeployment("事务工作项游标必须沿用原执行器"))?;
-    let mut rows = Vec::with_capacity(batch_size.get() as usize);
-    for _ in 0..batch_size.get() {
-        if !cursor.advance(session).await? {
-            break;
-        }
-        rows.push(cursor.deserialize_current()?);
-    }
-    Ok(rows)
 }
 
 /// 固定批次消费独立游标，不越过首个读取错误。
+#[cfg(test)]
 async fn read_batch<S>(mut stream: S, batch_size: NonZeroU32) -> Result<Vec<WorkItemRow>>
 where
     S: TryStream<Ok = WorkItemRow, Error = mongodb::error::Error> + Unpin,
@@ -114,6 +85,7 @@ mod tests {
     use futures_util::stream;
     use mongodb::bson::{deserialize_from_document, doc};
     use mongodb::error::Error as MongoError;
+    use persistence_core::Error;
 
     use super::*;
 
@@ -124,20 +96,11 @@ mod tests {
         fn assert_send<T: Send>() {}
         /// 约束读取 future 可跨线程调度。
         fn assert_future_send(_: impl std::future::Future + Send) {}
-        /// 检查独立游标读取的 Send 边界。
-        fn independent(cursor: &mut Cursor<WorkItemRow>, size: NonZeroU32) {
-            assert_future_send(read_batch(cursor, size));
-        }
-        /// 检查沿用执行器的事务游标读取的 Send 边界。
-        fn transactional(
-            cursor: &mut SessionCursor<WorkItemRow>,
-            size: NonZeroU32,
-            executor: &mut dyn Executor,
-        ) {
-            assert_future_send(read_session_batch(cursor, size, executor));
+        fn buffered(cursor: &mut RowCursor<WorkItemRow>, size: NonZeroU32, executor: &mut dyn Executor) {
+            assert_future_send(cursor.next_batch(size, executor));
         }
         assert_send::<WorkItemScan>();
-        let _ = (independent, transactional);
+        let _ = buffered;
     }
 
     /// 使用真实投影反序列化构造候选，测试流式消费不会改变字段或顺序。

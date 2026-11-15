@@ -9,6 +9,7 @@ use application_core::AuditActor;
 use application_core::query::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
 use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
+use erp_permissions::work_item;
 use erp_workflow::WorkItemReadService;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority};
 use erp_workflow::service::work_item::read::context::{
@@ -355,7 +356,7 @@ impl WorkbenchReadService {
         tasks: WorkItemReadService,
         executor: &mut dyn Executor,
     ) -> Result<FulfillmentQueuePageView> {
-        let access = tasks.task_access(&actor, "list", executor).await?;
+        let access = tasks.task_access(&actor, &work_item::LIST, executor).await?;
         let identity_version = access.version();
         let visible_types = query.operation_types.clone();
         let context_id = fulfillment_queue_context_id(actor.id(), &query, &visible_types);

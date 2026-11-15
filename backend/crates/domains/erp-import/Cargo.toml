@@ -5,6 +5,8 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }
 entity-core = { workspace = true }
@@ -18,3 +20,6 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 validator = { workspace = true }
+
+[dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }

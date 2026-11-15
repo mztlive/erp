@@ -1,8 +1,11 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::integration_ops;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::IntegrationOpsService;
@@ -22,6 +25,7 @@ impl IntegrationOpsService {
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `actor` - 当前认证操作人。
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -32,8 +36,31 @@ impl IntegrationOpsService {
     pub async fn inbox_message_list(
         &self,
         params: &InboxMessageListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<InboxMessageListView>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.inbox_page(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一快照内检查功能资格并读取消息分页。
+    async fn inbox_page(
+        &self,
+        params: &InboxMessageListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<InboxMessageListView>> {
         params.validate()?;
+        self.data_scope
+            .service
+            .require(actor, &integration_ops::INBOX_MESSAGE_LIST, AccessTarget::Operation, executor)
+            .await?;
         let query = params.normalized()?;
         let filter = InboxMessageFilter {
             source_system_id: query.source_system_id,
@@ -47,7 +74,7 @@ impl IntegrationOpsService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.inbox_messages().search_inbox_messages(&filter, &mut NoTransaction).await?;
+        let page = self.db.inbox_messages().search_inbox_messages(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -74,6 +101,7 @@ impl IntegrationOpsService {
     ///
     /// # 参数
     /// * `id` - 消息 ID
+    /// * `actor` - 当前认证操作人。
     ///
     /// # 返回
     /// 返回消息详情视图。
@@ -81,11 +109,33 @@ impl IntegrationOpsService {
     /// # 错误
     /// * `NotFound` - 消息不存在
     /// * 仓储读取失败时返回对应错误。
-    pub async fn inbox_message_detail(&self, id: &str) -> Result<InboxMessageView> {
+    pub async fn inbox_message_detail(&self, id: &str, actor: &AuditActor) -> Result<InboxMessageView> {
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.inbox_detail(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一快照内检查功能资格并读取消息详情。
+    async fn inbox_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InboxMessageView> {
+        self.data_scope
+            .service
+            .require(actor, &integration_ops::INBOX_MESSAGE_DETAIL, AccessTarget::Operation, executor)
+            .await?;
         let message = self
             .db
             .inbox_messages()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("消息不存在".to_string()))?;
         Ok(message.into())
@@ -253,4 +303,38 @@ pub async fn persist_error_task_with_message_failure(
 ) -> Result<()> {
     db.integration_ops().create_error_task_with_message_failure(task, message, executor).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::service::IntegrationAccess;
+
+    #[tokio::test]
+    async fn inbox_reads_require_identity_before_loading_messages() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("inbox_authorization_test");
+        let access = IntegrationAccess::new(db.clone(), unavailable_authorization());
+        let service = IntegrationOpsService::new(db, access);
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let params = serde_json::from_value::<InboxMessageListParams>(serde_json::json!({})).unwrap();
+        let errors = [
+            service
+                .inbox_page(&params, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .inbox_detail("message", &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+        ];
+        for error in errors {
+            assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        }
+    }
 }

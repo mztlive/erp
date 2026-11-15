@@ -11,7 +11,7 @@ use erp_procurement::entity::purchase_order::{
 };
 use erp_supply::api_order::{connections_by_ids, for_purchase, fulfillment_orders_by_execution_ids};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use rust_decimal::Decimal;
 
 use crate::purchase_center::change_bounds::{all_revision_lines, shipped_rows};
@@ -20,26 +20,27 @@ use crate::{Error, Result};
 
 type FulfillmentViews = (Vec<PurchaseApiExecutionView>, Vec<PurchaseFulfillmentQuantityView>);
 
-pub(super) async fn fulfillment_views(db: &Database, order: &PurchaseOrder) -> Result<FulfillmentViews> {
+pub(super) async fn fulfillment_views(
+    db: &Database,
+    order: &PurchaseOrder,
+    executor: &mut dyn Executor,
+) -> Result<FulfillmentViews> {
     let Some(current_revision) = order.stable.current_revision_id.as_deref() else {
         return Ok((vec![], vec![]));
     };
-    let lines = all_revision_lines(db, &PurchaseOrderId::new(&order.base.id), &mut NoTransaction).await?;
+    let lines = all_revision_lines(db, &PurchaseOrderId::new(&order.base.id), executor).await?;
     let current = lines
         .iter()
         .filter(|line| line.purchase_order_revision_id.as_ref() == current_revision)
         .cloned()
         .collect::<Vec<_>>();
-    let api = execution_views(db, order, &current).await?;
+    let api = execution_views(db, order, &current, executor).await?;
     if order.purchase_type != PurchaseType::Physical {
         return Ok((api, vec![]));
     }
     let inbound = db
         .fulfillment()
-        .qualified_received_totals_by_purchase_revision_line(
-            &PurchaseOrderId::new(&order.base.id),
-            &mut NoTransaction,
-        )
+        .qualified_received_totals_by_purchase_revision_line(&PurchaseOrderId::new(&order.base.id), executor)
         .await?;
     let known = lines.iter().map(|line| line.base.id.as_str()).collect::<HashSet<_>>();
     if inbound.keys().any(|id| !known.contains(id.as_ref())) {
@@ -47,7 +48,7 @@ pub(super) async fn fulfillment_views(db: &Database, order: &PurchaseOrder) -> R
     }
     let inbound = rollup_by_stable_key(&lines, &inbound).map_err(Error::Logic)?;
     let mut shipped = HashMap::<String, Decimal>::new();
-    for (line, quantity) in shipped_rows(db, order, &mut NoTransaction).await? {
+    for (line, quantity) in shipped_rows(db, order, executor).await? {
         let total = shipped.entry(line).or_default();
         *total = total
             .checked_add(quantity.to_decimal())
@@ -65,27 +66,26 @@ async fn execution_views(
     db: &Database,
     order: &PurchaseOrder,
     current: &[PurchaseOrderRevisionLine],
+    executor: &mut dyn Executor,
 ) -> Result<Vec<PurchaseApiExecutionView>> {
     let executions =
-        for_purchase(db, &order.base.id, order.stable.current_revision_id.as_deref(), &mut NoTransaction)
-            .await?;
+        for_purchase(db, &order.base.id, order.stable.current_revision_id.as_deref(), executor).await?;
     if executions.is_empty() {
         return Ok(vec![]);
     }
     let root_ids = executions.iter().map(|execution| execution.base.id.clone()).collect::<Vec<_>>();
     let connections =
         executions.iter().map(|execution| execution.connection_id.clone()).collect::<HashSet<_>>();
-    let roots = fulfillment_orders_by_execution_ids(db, &root_ids, &mut NoTransaction)
+    let roots = fulfillment_orders_by_execution_ids(db, &root_ids, executor)
         .await?
         .into_iter()
         .map(|root| (root.base.id.clone(), root))
         .collect::<HashMap<_, _>>();
-    let connections =
-        connections_by_ids(db, &connections.into_iter().collect::<Vec<_>>(), &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|connection| (connection.base.id.clone(), connection))
-            .collect::<HashMap<_, _>>();
+    let connections = connections_by_ids(db, &connections.into_iter().collect::<Vec<_>>(), executor)
+        .await?
+        .into_iter()
+        .map(|connection| (connection.base.id.clone(), connection))
+        .collect::<HashMap<_, _>>();
     let mut views = Vec::with_capacity(executions.len());
     for execution in executions {
         let connection = connections

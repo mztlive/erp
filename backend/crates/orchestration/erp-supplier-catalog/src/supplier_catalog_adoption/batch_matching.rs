@@ -23,7 +23,6 @@ impl SupplierCatalogAdoptionProcess {
         &self,
         rows: &[CatalogAdoptionBatchItem],
         actor: &AuditActor,
-        executor: &mut dyn Executor,
         work: Option<(&CatalogAdoptionBatch, &str)>,
     ) -> Result<HashMap<String, BatchMatchAnchor>> {
         let (mut anchors, mut ambiguous) = (HashMap::<String, BatchMatchAnchor>::new(), HashSet::new());
@@ -36,13 +35,12 @@ impl SupplierCatalogAdoptionProcess {
             if !row.editable() || row.status == BatchItemStatus::Excluded {
                 continue;
             }
-            let resolution = match self.resolve_item(&row.source, &row.mapping, actor, executor).await {
-                Ok(value) if matches!(value.kind, MatchKind::Existing) => value,
-                Ok(_) => continue,
+            let target = match self.anchor_candidate(row, actor).await {
+                Ok(Some(target)) => target,
+                Ok(None) => continue,
                 Err(error) if row_matching_error(&error) => continue,
                 Err(error) => return Err(error),
             };
-            let target = self.group_anchor_target(&resolution, executor).await?;
             let key = row.source.product_id.clone();
             if anchors.get(&key).is_some_and(|existing| existing.target.product_id != target.product_id) {
                 ambiguous.insert(key.clone());
@@ -55,6 +53,25 @@ impl SupplierCatalogAdoptionProcess {
         }
         anchors.retain(|key, _| !ambiguous.contains(key));
         Ok(anchors)
+    }
+
+    /// 每个匹配候选在短快照中读取资格与目标版本；续租在快照外进行。
+    async fn anchor_candidate(
+        &self,
+        row: &CatalogAdoptionBatchItem,
+        actor: &AuditActor,
+    ) -> Result<Option<BatchAnchorTarget>> {
+        let (row, actor) = (row.clone(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let resolution = process.resolve_item(&row.source, &row.mapping, &actor, executor).await?;
+                if !matches!(resolution.kind, MatchKind::Existing) {
+                    return Ok(None);
+                }
+                Ok(Some(process.group_anchor_target(&resolution, executor).await?))
+            })
+        })
+        .await
     }
 
     /// 将经当前事务重验的同源依据传给正常自动匹配，不绕过身份或授权。

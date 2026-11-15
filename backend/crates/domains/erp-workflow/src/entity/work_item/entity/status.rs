@@ -540,14 +540,6 @@ mod tests {
 
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
-        assert_eq!(
-            WorkItemType::SupplierPaymentExecution
-                .supplier_payment_execution_permissions("purchase_payment_request")
-                .unwrap()
-                .last()
-                .copied(),
-            Some("purchase_payment_request:pay")
-        );
     }
 
     #[test]
@@ -578,13 +570,5 @@ mod tests {
 
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
-        assert_eq!(
-            WorkItemType::SalesInvoiceExecution
-                .sales_invoice_execution_permissions("receivable_account")
-                .unwrap()
-                .last()
-                .copied(),
-            Some("invoice:post")
-        );
     }
 }

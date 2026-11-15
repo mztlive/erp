@@ -7,6 +7,7 @@ use erp_audit::execution::persist_log;
 use erp_catalog::CatalogExt;
 use erp_catalog::repository::prelude::*;
 use erp_core::ids::{ProductId, SkuId, SupplierAccountId};
+use erp_permissions::catalog as catalog_permissions;
 use erp_supplier_catalog::supply_governance::offering::MongoOfferingQualification;
 use erp_supply::ports::offering_qualification::QualificationPort;
 use erp_supply::repository::{SupplierOfferingExt, SupplierOfferingRepositoryExt};
@@ -86,7 +87,7 @@ impl RowCommitPort for ImportCommit<'_> {
                     .services
                     .catalog_access
                     .clone()
-                    .require_product(self.actor, "detail", &id, executor)
+                    .require_product(self.actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, &id, executor)
                     .await?
             },
         };
@@ -134,11 +135,7 @@ impl ProductImportProcess {
             .find_by_supplier_identity(supplier, &input.supplier_sku_code, executor)
             .await?
         {
-            self.services
-                .offering_access
-                .clone()
-                .require_offering(actor, "create", &existing.base.id, executor)
-                .await?;
+            self.services.offering_access.clone().require_create(actor, &existing, executor).await?;
             if existing.sku_id.as_ref() != sku_id {
                 return Err(Error::ConflictError("供应商订货编码已关联其他 SKU，请核对后重新导入".into()));
             }
@@ -166,14 +163,11 @@ impl ProductImportProcess {
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor;
+
     use super::*;
 
-    struct Marker;
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type Marker = ReadExecutor;
     struct Recorder {
         calls: Vec<&'static str>,
         pointer: usize,
@@ -216,7 +210,7 @@ mod tests {
     #[tokio::test]
     async fn supplier_failure_stops_writes_and_existing_sku_still_gets_offering() {
         for fail in [Some("supplier"), Some("product"), Some("offering"), None] {
-            let mut executor = Marker;
+            let mut executor = Marker::default();
             let mut port = Recorder {
                 calls: vec![],
                 pointer: &mut executor as *mut Marker as usize,

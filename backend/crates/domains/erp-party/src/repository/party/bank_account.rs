@@ -278,10 +278,7 @@ impl PartyBankAccountRepositoryExt for Repository<'_, PartyBankAccount> {
         .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("账户版本"))?,
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         let update = doc! { "$inc": { "payment_request_lock": 1_i64 } };
-        let result = match executor.session() {
-            Some(session) => self.collection().update_one(filter, update).session(session).await?,
-            None => self.collection().update_one(filter, update).await?,
-        };
+        let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
         Ok(result.modified_count == 1)
     }
 

@@ -352,39 +352,6 @@ pub fn candidate_in_directory(
     )
 }
 
-/// 计算需装载成员的有限组织集合；Company 无组织约束时无需枚举账号。
-/// # 参数
-/// `scope` 为角色并集及个人上限，`filter` 为已展开的候选组织筛选。
-/// # 返回
-/// 返回组织维度交集；本人身份由调用方另行判定，不由空集合推导公司范围。
-/// # 错误
-/// 不返回错误。调用方须传入已经公共解析器校验的范围。
-pub(crate) fn directory_org_ids(
-    scope: &ResolvedScope,
-    filter: Option<&BTreeSet<String>>,
-) -> BTreeSet<String> {
-    let company = scope.role_clauses.iter().any(|clause| clause.company);
-    let mut orgs = if company {
-        scope
-            .user_limit
-            .as_ref()
-            .filter(|limit| !limit.company)
-            .map(|limit| limit.org_unit_ids.clone())
-            .unwrap_or_else(|| filter.cloned().unwrap_or_default())
-    } else {
-        scope.role_clauses.iter().flat_map(|clause| clause.org_unit_ids.iter().cloned()).collect()
-    };
-    if let Some(limit) = &scope.user_limit
-        && !limit.company
-    {
-        orgs.retain(|id| limit.org_unit_ids.contains(id));
-    }
-    if let Some(filter) = filter {
-        orgs.retain(|id| filter.contains(id));
-    }
-    orgs
-}
-
 fn normalize_search(search: Option<&str>) -> Result<Option<String>> {
     let Some(search) = search.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);

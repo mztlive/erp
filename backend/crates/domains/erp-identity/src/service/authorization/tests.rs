@@ -1,5 +1,21 @@
 //! 用替身设施执行真实 Builder 和公共 API；不连接数据库。
+mod approval_management;
+mod contract_import;
+mod entry_migration;
 mod fixtures;
+mod management_contract;
+mod migration_fixes;
+mod phase5;
+mod phase5_regressions;
+mod phase5_review_fixes;
+mod purchase_entries;
+mod read_delivery_expiry;
+mod review_handover_delivery;
+mod review_management_query;
+mod review_query_targets;
+mod sales_change_draft;
+mod work_item_execution;
+mod work_item_qualifications;
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -17,7 +33,6 @@ use persistence_core::{Executor, ReadExecutor};
 use serde_json::json;
 
 use super::*;
-use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{
     AccessContext, AccessTarget, FactKind, FactValue, ObjectFacts, QueryOutput, RelatedObjects, RelationKey,
@@ -521,19 +536,31 @@ async fn operation_only_permissions_use_rbac_and_cannot_be_replaced_with_record_
     ));
 }
 
+fn payment_sources() -> std::collections::BTreeMap<RelationKey, RelatedObjects> {
+    [(
+        RelationKey::parse("purchase_source").unwrap(),
+        RelatedObjects {
+            expected_ids: ["purchase".into()].into(),
+            objects: vec![object("purchase_order", "purchase", "user")],
+        },
+    )]
+    .into()
+}
+
 #[tokio::test]
 async fn payment_requires_detail_on_the_same_role_for_tasks_and_queries() {
     let permission = purchase_payment_request::CREDIT_LIST;
     let detail = purchase_payment_request::DETAIL;
     let identity = Arc::new(Identity::default());
     let task = ObjectFacts {
+        relations: payment_sources(),
         assignee_id: FactValue::Known(Some("user".into())),
         ..object(permission.resource(), "task", "user")
     };
     let port = Arc::new(Facts::new(vec![task]));
     let mut builder = complete();
     builder.facilities = identity.clone();
-    builder.facts.insert(permission.resource().into(), port.clone());
+    builder.facts.insert(rules::task_facts_resource(&permission).into(), port.clone());
     let service = builder.build().unwrap();
     let target = || AccessTarget::Task { id: "task".into(), version: "v1".into() };
     let mut ex = SnapshotExecutor::default();
@@ -564,12 +591,8 @@ async fn payment_requires_detail_on_the_same_role_for_tasks_and_queries() {
 
 #[test]
 fn existing_read_permissions_keep_their_query_bindings() {
-    for permission in rules::permissions() {
-        if scope_spec::kind(permission).unwrap() != ActionKind::Function
-            && matches!(permission.action(), "list" | "detail" | "get" | "read")
-        {
-            empty().mapping(permission, mapping(permission)).unwrap();
-        }
+    for permission in super::rules::queries::PERMISSIONS {
+        empty().mapping(permission, mapping(permission)).unwrap();
     }
 }
 
@@ -617,10 +640,15 @@ async fn shared_write_permissions_support_queries_without_relaxing_task_or_trans
                 assignee_id: FactValue::Known(Some((*assignee).into())),
                 completed: FactValue::Known(*completed),
                 participants: FactValue::Known([(*participant).into()].into()),
+                relations: if permission == purchase_payment_request::CREDIT_LIST {
+                    payment_sources()
+                } else {
+                    Default::default()
+                },
                 ..object(permission.resource(), id, "user")
             })
             .collect();
-        builder.facts.insert(permission.resource().into(), Arc::new(Facts::new(objects)));
+        builder.facts.insert(rules::task_facts_resource(&permission).into(), Arc::new(Facts::new(objects)));
         let service = builder.mapping(&permission, mapping(&permission)).unwrap().build().unwrap();
         let mut ex = ReadExecutor::default();
         let access = service.query(&actor(), &permission, &mut ex).await.unwrap();
@@ -676,7 +704,9 @@ async fn internal_quote_task_rejects_missing_completion_or_participation_facts()
     no_participation.participants = FactValue::Missing;
     for task in [no_completion, no_participation] {
         let mut builder = complete();
-        builder.facts.insert(permission.resource().into(), Arc::new(Facts::new(vec![task])));
+        builder
+            .facts
+            .insert(rules::task_facts_resource(&permission).into(), Arc::new(Facts::new(vec![task])));
         let service = builder.build().unwrap();
         let result = service
             .require(

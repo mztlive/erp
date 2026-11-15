@@ -31,7 +31,7 @@ mod void;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_read_models::supplier_center::settlement::dto::SettlementReviewDecisionResult;
 use erp_supply::SettlementAccess;
 use erp_supply::dto::supplier_settlement as dto;
@@ -42,13 +42,13 @@ use erp_workflow::WorkItemService;
 use mongodb::Database;
 use shared::*;
 /// 供应商结算跨工作流、审计与财务的唯一命令入口。
+#[derive(Clone)]
 pub struct SupplierSettlementProcess<A: WorkflowAuthorizationPort> {
     db: Database,
     data_scope: SettlementAccess,
     rbac: SharedRbacService,
-    // 候选查询沿用调用方身份；写入、决定和重放在原调用点创建独立身份。
+    authorization: Arc<AuthorizationService>,
     work_items: WorkItemService<A>,
-    fresh_work_items: Arc<dyn Fn() -> WorkItemService<A> + Send + Sync>,
 }
 struct SettlementWriteContext {
     db: Database,
@@ -64,7 +64,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// * `data_scope` - 已接入身份域的结算范围。
     /// * `rbac` - 应用共享的权威授权源。
     /// * `work_items` - 应用注入且复用同一授权源的工作项服务。
-    /// * `fresh_work_items` - 每次调用创建独立授权实例的工作项工厂。
+    /// * `authorization` - 应用共享的完整授权服务。
     ///
     /// # 返回
     /// 返回依赖完整的结算流程。
@@ -75,10 +75,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         db: Database,
         data_scope: SettlementAccess,
         rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         work_items: WorkItemService<A>,
-        fresh_work_items: Arc<dyn Fn() -> WorkItemService<A> + Send + Sync>,
     ) -> Self {
-        Self { db, data_scope, rbac, work_items, fresh_work_items }
+        Self { db, data_scope, rbac, authorization, work_items }
     }
 
     fn write_context(&self, actor: &AuditActor) -> SettlementWriteContext {

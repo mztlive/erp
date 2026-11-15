@@ -19,7 +19,7 @@ use erp_workflow::repository::prelude::FinanceResponsibilityRuleRepositoryExt;
 use erp_workflow::service::work_item::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
 };
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::accounts::PreparedAccounts;
 use super::{DemoFoundationReport, DemoMasterDataProcess, spec};
@@ -80,7 +80,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         owner_user_id: &str,
         report: &mut DemoFoundationReport,
     ) -> Result<()> {
-        if should_create_responsibility(&self.finance_default_flags(operation).await?) {
+        if should_create_responsibility(&self.finance_default_flags(actor, operation).await?) {
             self.create_finance_default(actor, operation, owner_user_id).await?;
             report.responsibilities_created += 1;
         } else {
@@ -98,7 +98,10 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             let found = self
                 .db
                 .procurement_responsibility_rules()
-                .search_procurement_responsibility_rules(&dispatcher_filter(page), &mut NoTransaction)
+                .search_procurement_responsibility_rules(
+                    &dispatcher_filter(page),
+                    &mut ReadExecutor::default(),
+                )
                 .await?;
             let batch = found.items.len();
             for rule in found.items.iter().filter(|rule| rule.is_active()) {
@@ -117,18 +120,22 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 
     /// 保留既有负责人前复用工作项服务的完整执行资格，失效规则阻断准备。
-    async fn finance_default_flags(&self, operation: FinanceResponsibilityOperation) -> Result<Vec<bool>> {
+    async fn finance_default_flags(
+        &self,
+        actor: &AuditActor,
+        operation: FinanceResponsibilityOperation,
+    ) -> Result<Vec<bool>> {
         let rules = self
             .db
             .finance_responsibility_rules()
-            .list_finance_responsibility_rules(&mut NoTransaction)
+            .list_finance_responsibility_rules(&mut ReadExecutor::default())
             .await?;
         let defaults = rules
             .into_iter()
             .filter(|rule| rule.operation == operation && rule.scope == FinanceResponsibilityScope::Default)
             .collect::<Vec<_>>();
         if defaults.iter().any(|rule| rule.is_active()) {
-            let options = self.ports.work_items.clone().finance_responsibility_owner_options().await?;
+            let options = self.ports.work_items.clone().finance_responsibility_owner_options(actor).await?;
             for rule in defaults.iter().filter(|rule| rule.is_active()) {
                 for owner in &rule.owner_user_ids {
                     ensure_finance_owner(operation, owner, &options)?;

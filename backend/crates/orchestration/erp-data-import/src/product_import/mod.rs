@@ -22,7 +22,8 @@ mod views;
 use std::sync::Arc;
 
 use erp_catalog::{CatalogAccess, CatalogService};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::internal;
 use erp_supply::OfferingAccess;
 use erp_supply::service::supplier_offering::SupplierOfferingService;
 use erp_support::PRODUCT_IMPORT_DOMAIN_JOB_TYPE;
@@ -60,7 +61,7 @@ impl ProductImportProcess {
     /// # 参数
     /// * `db` - MongoDB 数据库。
     /// * `services` - 应用装配的目录、供给与数据范围服务。
-    /// * `rbac` - 实时身份与权限服务。
+    /// * `authorization` - 实时身份与权限服务。
     /// * `storage` - 对象存储。
     /// * `secret` - 文件内容指纹密钥。
     ///
@@ -72,16 +73,16 @@ impl ProductImportProcess {
     pub fn new(
         db: Database,
         services: ProductImportServices,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         storage: S3Storage,
         secret: impl Into<Vec<u8>>,
     ) -> Self {
         Self {
             job_access: ImportJobAccess::new(
                 db.clone(),
-                rbac,
+                authorization,
                 PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
-                Some("product:list"),
+                internal::PRODUCT_IMPORT_JOB_READ,
             ),
             db,
             services,

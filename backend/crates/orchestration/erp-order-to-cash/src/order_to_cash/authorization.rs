@@ -2,16 +2,20 @@
 
 use std::sync::Arc;
 
+use erp_permissions::{Permission as AccessPermission, contract, sales_order as sales_order_permissions};
+
 use crate::services::SalesServices;
 mod settlement;
 
 use application_core::AuditActor;
 use erp_contract::{Contract, ContractExt};
 use erp_customer::{CustomerAccount, CustomerExt};
-use erp_identity::Permission;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{customer, internal};
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::entity::sales_order::contract_terms::ensure_contract_customer;
+use erp_sales::repository::SalesOrderExt;
 use persistence_core::Executor;
 
 use super::SalesOrderCommandProcess;
@@ -22,10 +26,11 @@ use crate::{Error, Result};
 pub(super) struct SalesCommandAccess {
     pub(super) services: Arc<SalesServices>,
     db: mongodb::Database,
+    authorization: Arc<AuthorizationService>,
     access: SalesAccess,
     actor: AuditActor,
-    action: &'static str,
-    permissions: Vec<Permission>,
+    permission: AccessPermission,
+    submit: bool,
 }
 
 impl SalesOrderCommandProcess {
@@ -43,14 +48,19 @@ impl SalesOrderCommandProcess {
     ///
     /// # 关键业务约束
     /// 关联合同／客户必须另走各自资源动作，不能复用本销售动作码。
-    pub(super) fn command_access(&self, actor: &AuditActor, action: &'static str) -> SalesCommandAccess {
+    pub(super) fn command_access(
+        &self,
+        actor: &AuditActor,
+        permission: AccessPermission,
+    ) -> SalesCommandAccess {
         SalesCommandAccess {
             services: self.services.clone(),
             db: self.db.clone(),
-            access: SalesAccess::new(self.db.clone(), self.rbac.clone()),
+            authorization: self.authorization.clone(),
+            access: SalesAccess::new(self.db.clone(), self.authorization.clone()),
             actor: actor.clone(),
-            action,
-            permissions: vec![],
+            permission,
+            submit: false,
         }
     }
 }
@@ -65,12 +75,10 @@ impl SalesCommandAccess {
     /// 返回可能追加了提交权限的检查器。
     ///
     /// # 错误
-    /// 提交权限码无法解析时返回错误。
-    pub(super) fn require_submit(mut self, submit: bool) -> Result<Self> {
-        if submit {
-            self.permissions.push(Permission::parse("sales_order:submit")?);
-        }
-        Ok(self)
+    /// 不返回错误。
+    pub(super) fn require_submit(mut self, submit: bool) -> Self {
+        self.submit = submit;
+        self
     }
 
     /// 在调用方事务内读取当前可操作单据，并复用公共单对象判定。
@@ -85,18 +93,23 @@ impl SalesCommandAccess {
     /// # 错误
     /// 单据不可见或缺失时返回错误；已要求提交时，缺少创建权限同样拒绝。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
-        let order =
-            self.access.require_object(&self.actor, self.action, id, &self.permissions, executor).await?;
-        if !self.permissions.is_empty() {
-            self.access
-                .require_object(
-                    &self.actor,
-                    "submit",
-                    id,
-                    &[Permission::parse("sales_order:create")?],
-                    executor,
-                )
-                .await?;
+        let order = if self.permission == sales_order_permissions::CREATE {
+            let permission = if self.submit {
+                &internal::SALES_CREATE_AND_SUBMIT
+            } else {
+                &internal::SALES_CREATED_RESULT_READ
+            };
+            self.authorization.require(&self.actor, permission, AccessTarget::record(id)?, executor).await?;
+            self.db
+                .sales_orders()
+                .find_by_id(id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))?
+        } else {
+            self.access.require_object(&self.actor, &self.permission, id, executor).await?
+        };
+        if self.submit {
+            self.access.require_object(&self.actor, &sales_order_permissions::SUBMIT, id, executor).await?;
         }
         Ok(order)
     }
@@ -142,16 +155,11 @@ impl SalesCommandAccess {
             .customer_access
             .require_current(&self.actor, order.customer_id.as_ref(), executor)
             .await?;
-        self.access.require_loaded(&self.actor, self.action, order, &self.permissions, executor).await?;
-        if !self.permissions.is_empty() {
+        let permission = if self.submit { &internal::SALES_CREATE_AND_SUBMIT } else { &self.permission };
+        self.access.require_loaded(&self.actor, permission, order, executor).await?;
+        if self.submit {
             self.access
-                .require_loaded(
-                    &self.actor,
-                    "submit",
-                    order,
-                    &[Permission::parse("sales_order:create")?],
-                    executor,
-                )
+                .require_loaded(&self.actor, &sales_order_permissions::SUBMIT, order, executor)
                 .await?;
         }
         Ok(())
@@ -172,7 +180,10 @@ impl SalesCommandAccess {
     /// # 关键业务约束
     /// handler 事前检查不能代替；不得用无范围 `find_by_id` 作为授权读取。
     async fn require_contract(&self, contract_id: &str, executor: &mut dyn Executor) -> Result<()> {
-        self.services.contracts.require_with(self.actor.clone(), "detail", contract_id, executor).await?;
+        self.services
+            .contracts
+            .require_with(self.actor.clone(), &contract::DETAIL, contract_id, executor)
+            .await?;
         Ok(())
     }
 
@@ -193,7 +204,7 @@ impl SalesCommandAccess {
     async fn require_customer(&self, customer_id: &str, executor: &mut dyn Executor) -> Result<()> {
         self.services
             .customer_access
-            .require_with(self.actor.clone(), "detail", customer_id, executor)
+            .require_with(self.actor.clone(), &customer::DETAIL, customer_id, executor)
             .await?;
         Ok(())
     }

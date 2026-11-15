@@ -9,7 +9,7 @@ use erp_identity::repository::organization::OrganizationRepository;
 use erp_identity::repository::prelude::*;
 use erp_sales::entity::sales_order::{CommercialStatus, SalesOrder};
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use repository::CurrentWorkRepository;
 use serde::Serialize;
 
@@ -54,17 +54,20 @@ impl SalesOrderReadService {
     /// 返回按环节与责任人合并的待办摘要；终结任务与关联单据明细不进入结果。
     /// # 错误
     /// 关联读取、责任读取或姓名查询失败时返回错误，不伪装成无人处理。
-    pub(super) async fn current_work(&self, order: &SalesOrder) -> Result<Vec<SalesOrderCurrentWork>> {
+    pub(super) async fn current_work(
+        &self,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderCurrentWork>> {
         if order.commercial_status == CommercialStatus::Voided {
             return Ok(Vec::new());
         }
-        let current = CurrentWorkRepository { db: &self.db }.tasks(order).await?;
+        let current = CurrentWorkRepository { db: &self.db }.tasks(order, executor).await?;
         let tasks = current.tasks;
         let ids = tasks.iter().filter_map(|task| task.owner_user_id.clone()).collect::<Vec<_>>();
-        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
-        let org_names = OrganizationRepository::new(&self.db)
-            .primary_org_names(&ids, Instant::now(), &mut NoTransaction)
-            .await?;
+        let names = self.db.accounts().names_by_ids(&ids, executor).await?;
+        let org_names =
+            OrganizationRepository::new(&self.db).primary_org_names(&ids, Instant::now(), executor).await?;
         let mut rows = tasks
             .iter()
             .filter_map(|task| SalesOrderCurrentWork::from_task(task, &names))

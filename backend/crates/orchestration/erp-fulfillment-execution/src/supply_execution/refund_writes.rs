@@ -78,18 +78,10 @@ pub(super) async fn persist(
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::{RefundWrites, execute};
     use crate::{Error, Result};
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Default)]
     struct Writes {
         steps: Vec<&'static str>,
@@ -120,7 +112,7 @@ mod tests {
     }
     #[tokio::test]
     async fn refund_callback_preserves_one_executor_and_original_write_order() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let id = &mut executor as *mut TestExecutor as usize;
         let mut writes = Writes::default();
         execute(&mut writes, &mut executor).await.unwrap();
@@ -131,7 +123,7 @@ mod tests {
     async fn refund_callback_each_failure_stops_later_writes() {
         let steps = ["inbox", "order_fact_allocations", "audit"];
         for (index, fail) in steps.iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut writes = Writes { fail: Some(*fail), ..Default::default() };
             let result = execute(&mut writes, &mut executor).await;
             assert!(matches!(result,Err(Error::ConflictError(message)) if message==*fail));

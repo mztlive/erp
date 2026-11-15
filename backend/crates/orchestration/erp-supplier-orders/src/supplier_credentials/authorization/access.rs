@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use config::JdVopConfig;
-use erp_identity::{AccessSubject, AccessTarget, Permission, ResourceTargets, SharedRbacService};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, supplier_api};
 use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
 use erp_supply::service::supplier_api::SupplierApiService;
@@ -15,7 +16,7 @@ use crate::{Error as ProcessError, Result as ProcessResult};
 #[derive(Clone)]
 pub(super) struct ConnectionAccess {
     pub(super) db: Database,
-    pub(super) rbac: SharedRbacService,
+    pub(super) authorization: Arc<AuthorizationService>,
     pub(super) settings: Option<JdVopConfig>,
     pub(super) protocol: Result<Arc<dyn AuthorizationHttp>>,
 }
@@ -28,18 +29,13 @@ impl ConnectionAccess {
         action: &str,
         executor: &mut dyn Executor,
     ) -> ProcessResult<SupplierApiConnection> {
-        let connection = SupplierApiService::new(self.db.clone())
-            .load_connection(id, executor)
+        self.authorization
+            .require(actor, &connection_permission(action)?, AccessTarget::record(id)?, executor)
             .await
             .map_err(ProcessError::from)
             .map_err(conceal_missing)?;
-        super::policy::authorization(&self.db, self.rbac.clone(), &connection)?
-            .require(
-                actor,
-                &Permission::parse(format!("supplier_api_connection:{action}"))?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
+        let connection = SupplierApiService::new(self.db.clone())
+            .load_connection(id, executor)
             .await
             .map_err(ProcessError::from)
             .map_err(conceal_missing)?;
@@ -50,8 +46,7 @@ impl ConnectionAccess {
     }
 
     pub(super) fn binding(&self, connection: &SupplierApiConnection) -> Result<()> {
-        self.settings.as_ref().ok_or(AuthorizationError::Unavailable)?;
-        self.protocol.as_ref().map_err(|error| *error)?.verify_binding(connection)
+        verify_binding(self.settings.as_ref(), &self.protocol, connection)
     }
 }
 
@@ -77,6 +72,30 @@ impl From<ProcessError> for AuthorizationError {
             _ => Self::Unavailable,
         }
     }
+}
+
+fn connection_permission(action: &str) -> ProcessResult<Permission> {
+    match action {
+        "detail" => Ok(supplier_api::CONNECTION_DETAIL),
+        "authorize" => Ok(supplier_api::JD_VOP_AUTHORIZE),
+        _ => Err(ProcessError::ValidationError("未知供应商连接动作".into())),
+    }
+}
+
+/// 核对当前部署配置与协议绑定，不执行身份访问或远程授权。
+/// # 参数
+/// settings/protocol 为固定部署能力；connection 为已授权的真实连接。
+/// # 返回
+/// 配置存在且协议绑定匹配时成功。
+/// # 错误
+/// 配置缺失或绑定不符时保留脱敏协议错误。
+pub(super) fn verify_binding(
+    settings: Option<&JdVopConfig>,
+    protocol: &Result<Arc<dyn AuthorizationHttp>>,
+    connection: &SupplierApiConnection,
+) -> Result<()> {
+    settings.ok_or(AuthorizationError::Unavailable)?;
+    protocol.as_ref().map_err(|error| *error)?.verify_binding(connection)
 }
 
 #[cfg(test)]

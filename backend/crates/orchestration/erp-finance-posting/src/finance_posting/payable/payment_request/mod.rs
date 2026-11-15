@@ -5,8 +5,12 @@ use erp_core::money::Amount;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
+use erp_identity::AccessTarget;
+use erp_identity::entity::authorization::{ObjectFacts, RelatedObjects, RelationKey};
+use erp_permissions::{Permission, purchase_payment_request};
 use erp_procure_to_pay::procure_to_pay::sync_payment_arrangement;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::ApprovalActionContext;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -138,8 +142,50 @@ async fn require_sources(
             .ok_or_else(|| Error::NotFound("来源应付不存在".into()))?;
         ids.push(account.source_document_id);
     }
-    let read = &rbac.payment_request_read;
-    Ok(read.require_request_sources(actor, action, &ids, executor).await?)
+    let (permission, target) = request_target(request, action, &ids)?;
+    rbac.authorization.require(actor, &permission, target, executor).await?;
+    let mut orders = Vec::new();
+    for id in ids {
+        orders.push(
+            db.purchase_orders()
+                .find_by_id(&id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("付款申请采购来源不存在".into()))?,
+        );
+    }
+    Ok(orders)
+}
+
+/// 只构造服务端完整来源候选；授权规则始终由 identity 选择。
+fn request_target(
+    request: &PurchasePaymentRequest,
+    action: &str,
+    ids: &[String],
+) -> Result<(Permission, AccessTarget)> {
+    let permission = match action {
+        "create" => purchase_payment_request::CREATE,
+        "update" => purchase_payment_request::UPDATE,
+        "detail" => purchase_payment_request::DETAIL,
+        "submit" => purchase_payment_request::SUBMIT,
+        "withdraw" => purchase_payment_request::WITHDRAW,
+        "close" => purchase_payment_request::CLOSE,
+        _ => return Err(Error::ValidationError("未知付款申请动作".into())),
+    };
+    let candidate = ObjectFacts {
+        resource: "purchase_payment_request".into(),
+        relations: [(
+            RelationKey::parse("purchase_source")?,
+            RelatedObjects { expected_ids: ids.iter().cloned().collect(), objects: vec![] },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    let target = match action {
+        "create" => AccessTarget::Candidate(candidate),
+        "update" => AccessTarget::OwnershipChange { id: request.base.id.to_string(), candidate },
+        _ => AccessTarget::record(&request.base.id.to_string())?,
+    };
+    Ok((permission, target))
 }
 
 /// 校验回调仍属于当前冻结提交及审批实例。

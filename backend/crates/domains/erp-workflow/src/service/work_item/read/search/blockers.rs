@@ -5,6 +5,7 @@ use super::super::access::QueueAccess;
 use super::super::dto::WorkItemFields;
 use super::super::{ProcessingState, WorkItemReadService, WorkItemScope};
 use crate::Result;
+use crate::dto::work_item::WorkItemView;
 
 impl WorkItemReadService {
     /// 将正式办理资格回填为查询事实。
@@ -17,11 +18,16 @@ impl WorkItemReadService {
     pub(in crate::service::work_item::read) async fn search_blockers(
         &self,
         fields: &mut [WorkItemFields],
-        scope: WorkItemScope,
-        access: &QueueAccess,
+        _scope: WorkItemScope,
+        _access: &QueueAccess,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let projected = self.project_fields(fields.to_vec(), scope, access, "", executor).await?;
+        let mut projected = fields
+            .iter()
+            .cloned()
+            .map(|field| WorkItemView::from_fields(field, String::new()))
+            .collect::<Result<Vec<_>>>()?;
+        self.apply_approval_contexts(&mut projected, executor).await?;
         for (field, view) in fields.iter_mut().zip(projected) {
             field.search.blocked = matches!(
                 view.processing_state,

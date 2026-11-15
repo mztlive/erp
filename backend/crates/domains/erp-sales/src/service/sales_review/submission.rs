@@ -6,7 +6,7 @@ use erp_core::ids::{
     SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId, SalesOrderWorkingCopyId,
 };
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SalesReviewService;
 use super::state::start_sales_change_approval;
@@ -90,6 +90,7 @@ impl SalesReviewService {
     /// # 参数
     /// * `change_order` - 冻结审批绑定读取之后的变更单。
     /// * `actor` - 当前提交人。
+    /// * `executor` - 原用例事务执行器。
     ///
     /// # 返回
     /// 返回尚未写入的提交计划；变更单已在内存中进入审批中。
@@ -100,9 +101,11 @@ impl SalesReviewService {
         &self,
         mut change_order: SalesChangeOrder,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<SalesChangeSubmissionWrite> {
-        let (mut working_copy, copy_lines) = load_change_working_copy(&self.db, &change_order).await?;
-        let submission_no = next_change_submission_no(&self.db, &change_order.base.id).await?;
+        let (mut working_copy, copy_lines) =
+            load_change_working_copy(&self.db, &change_order, executor).await?;
+        let submission_no = next_change_submission_no(&self.db, &change_order.base.id, executor).await?;
         let (submission, submission_lines) =
             build_change_submission_with_no(&change_order, &working_copy, &copy_lines, submission_no, actor)?;
         working_copy.lock_for_submission_if_needed()?;
@@ -168,6 +171,7 @@ fn build_change_submission_with_no(
 async fn load_change_working_copy(
     db: &mongodb::Database,
     change_order: &SalesChangeOrder,
+    executor: &mut dyn Executor,
 ) -> Result<(
     crate::entity::sales_order::SalesOrderWorkingCopy,
     Vec<crate::entity::sales_order::SalesOrderWorkingCopyLine>,
@@ -177,13 +181,13 @@ async fn load_change_working_copy(
         .find_resubmittable_sales_change_copy(
             &change_order.sales_order_id,
             &SalesChangeOrderId::new(change_order.base.id.clone()),
-            &mut NoTransaction,
+            executor,
         )
         .await?
         .ok_or_else(|| Error::NotFound("变更工作副本不存在".to_string()))?;
     let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
     let copy_lines =
-        db.sales_order_working_copy_lines().list_lines_by_working_copy(&copy_id, &mut NoTransaction).await?;
+        db.sales_order_working_copy_lines().list_lines_by_working_copy(&copy_id, executor).await?;
     Ok((working_copy, copy_lines))
 }
 
@@ -192,14 +196,21 @@ async fn load_change_working_copy(
 /// # 参数
 /// * `db` - 数据库
 /// * `change_order_id` - 销售变更单 ID
+/// * `executor` - 原用例事务执行器
 ///
 /// # 返回
 /// 返回严格递增的下一提交序号。
 ///
 /// # 错误
 /// 仓储失败或提交序号溢出时返回错误。
-async fn next_change_submission_no(db: &mongodb::Database, change_order_id: &str) -> Result<u32> {
-    Ok(SalesChangeSubmission::next_submission_no(latest_change_submission_no(db, change_order_id).await?)?)
+async fn next_change_submission_no(
+    db: &mongodb::Database,
+    change_order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<u32> {
+    Ok(SalesChangeSubmission::next_submission_no(
+        latest_change_submission_no(db, change_order_id, executor).await?,
+    )?)
 }
 
 /// 读取已冻结的最大提交序号；尚无提交时返回 0。
@@ -207,15 +218,20 @@ async fn next_change_submission_no(db: &mongodb::Database, change_order_id: &str
 /// # 参数
 /// * `db` - 数据库
 /// * `change_order_id` - 销售变更单 ID
+/// * `executor` - 原用例事务执行器
 ///
 /// # 返回
 /// 返回当前最大提交序号。
 ///
 /// # 错误
 /// 仓储失败时返回错误。
-pub async fn latest_change_submission_no(db: &mongodb::Database, change_order_id: &str) -> Result<u32> {
+pub async fn latest_change_submission_no(
+    db: &mongodb::Database,
+    change_order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<u32> {
     Ok(db
         .sales_change_submissions()
-        .latest_submission_no_by_change_order(&SalesChangeOrderId::new(change_order_id), &mut NoTransaction)
+        .latest_submission_no_by_change_order(&SalesChangeOrderId::new(change_order_id), executor)
         .await?)
 }

@@ -7,12 +7,13 @@ use erp_catalog::portal::NewProductInput;
 use erp_core::common::time::Instant;
 use erp_core::ids::FileAssetId;
 use erp_identity::{PortalActor, PortalIdentityService};
+use erp_permissions::supplier_portal;
 use erp_read_models::supplier_portal::{PortalSkuImageSource, portal_sku_image_source};
 use erp_supply::portal::{PortalOfferingService, PortalSupplyExt};
 use erp_support::FileAssetExt;
 use erp_support::entity::file_asset::{FileAsset, FileAssetData, RetentionClass};
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, ReadExecutor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -132,8 +133,8 @@ impl SupplierPortalProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FileAsset> {
-        self.internal_permission(actor, "supplier_portal.application_detail", executor).await?;
-        if !request_readable(&self.db, &self.rbac, actor, request_id, executor).await? {
+        self.internal_permission(actor, &supplier_portal::ADMIN_IMPACTS, executor).await?;
+        if !request_readable(&self.db, &self.authorization, actor, request_id, executor).await? {
             return Err(Error::NotFound("申请不存在或无权查看".into()));
         }
         let draft = self.catalog_portal().load(request_id, executor).await?;
@@ -278,9 +279,9 @@ impl SupplierPortalProcess {
         key: &str,
         actor: &PortalActor,
     ) -> Result<Option<PortalAssetView>> {
-        let current = self.session_validate(actor, &mut NoTransaction).await?;
+        let current = self.session_validate(actor, &mut ReadExecutor::default()).await?;
         current.require_write()?;
-        self.catalog_portal().detail(request_id, &current.supplier_id, &mut NoTransaction).await?;
+        self.catalog_portal().detail(request_id, &current.supplier_id, &mut ReadExecutor::default()).await?;
         let command = scoped_command(
             &actor.account_id,
             &actor.supplier_id,
@@ -289,7 +290,7 @@ impl SupplierPortalProcess {
             &asset_payload(request_id, expected_version, data),
         )?;
         PortalOfferingService::new(self.db.clone())
-            .command_result(&command, &mut NoTransaction)
+            .command_result(&command, &mut ReadExecutor::default())
             .await?
             .map(|v| serde_json::from_value(v).map_err(|e| Error::Internal(e.to_string())))
             .transpose()

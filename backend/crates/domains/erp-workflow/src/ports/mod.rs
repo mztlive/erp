@@ -1,5 +1,7 @@
 //! 消费方拥有的端口：授权、对象读取、升级事实与工作项事实。
+mod approval_subject_facts;
 pub mod approver_directory;
+pub use approval_subject_facts::ApprovalSubjectFactsPort;
 
 mod audit;
 mod authorization;

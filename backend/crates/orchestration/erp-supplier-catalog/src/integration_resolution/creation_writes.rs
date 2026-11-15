@@ -84,18 +84,12 @@ pub(super) async fn persist_created(
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor};
 
     use super::{CreationWrites, execute};
     use crate::{Error, Result};
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type TestExecutor = ReadExecutor;
+
     #[derive(Default)]
     struct RecordingWrites {
         steps: Vec<&'static str>,
@@ -126,7 +120,7 @@ mod tests {
     }
     #[tokio::test]
     async fn integration_creation_preserves_one_executor_and_write_order() {
-        let mut e = TestExecutor { _identity: 1 };
+        let mut e = TestExecutor::default();
         let id = &mut e as *mut TestExecutor as usize;
         let mut writes = RecordingWrites::default();
         execute(&mut writes, &mut e).await.unwrap();
@@ -137,7 +131,7 @@ mod tests {
     async fn integration_creation_stops_at_each_original_failure() {
         let expected = ["domain", "work_item", "audit"];
         for (at, fail) in expected.iter().enumerate() {
-            let mut e = TestExecutor { _identity: 1 };
+            let mut e = TestExecutor::default();
             let mut writes = RecordingWrites { fail: Some(*fail), ..Default::default() };
             let result = execute(&mut writes, &mut e).await;
             assert!(matches!(result,Err(Error::ConflictError(message)) if message==*fail));

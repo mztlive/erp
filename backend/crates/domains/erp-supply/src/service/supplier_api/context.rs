@@ -1,4 +1,5 @@
 //! 本域版本、形态、连接读取与固定权限名；授权执行属于组合层。
+use erp_permissions::{Permission, internal, supplier_api};
 use sha2::{Digest, Sha256};
 
 use super::SupplierApiService;
@@ -58,17 +59,15 @@ pub fn map_command_shape_rejection(rejection: SupplierCommandShapeRejection) -> 
 ///
 /// # 错误
 /// 不返回错误。
-pub fn action_permission(action: SupplierConnectionAction) -> &'static str {
+pub fn action_permission(action: SupplierConnectionAction) -> Permission {
     match action {
-        SupplierConnectionAction::UpdateBusinessProfile => "supplier_api_connection:update_business_profile",
-        SupplierConnectionAction::BindEndpointReference => "supplier_api_connection:bind_endpoint_reference",
-        SupplierConnectionAction::BindCredentialReference => {
-            "supplier_api_connection:manage_credential_reference"
-        },
-        SupplierConnectionAction::RunHealthCheck => "supplier_api_connection:health_check",
-        SupplierConnectionAction::Enable => "supplier_api_connection:enable",
-        SupplierConnectionAction::Disable => "supplier_api_connection:disable",
-        SupplierConnectionAction::StartCatalogSync => "supplier_api_connection:catalog_sync",
+        SupplierConnectionAction::UpdateBusinessProfile => internal::CONNECTION_UPDATE_BUSINESS_PROFILE,
+        SupplierConnectionAction::BindEndpointReference => internal::CONNECTION_BIND_ENDPOINT,
+        SupplierConnectionAction::BindCredentialReference => supplier_api::DANGAOSHUSHU_REFERENCE_TICKETS,
+        SupplierConnectionAction::RunHealthCheck => internal::CONNECTION_HEALTH_CHECK,
+        SupplierConnectionAction::Enable => internal::CONNECTION_ENABLE,
+        SupplierConnectionAction::Disable => internal::CONNECTION_DISABLE,
+        SupplierConnectionAction::StartCatalogSync => supplier_api::ADOPTIONS_PREVIEW,
     }
 }
 

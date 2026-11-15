@@ -3,7 +3,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
 use erp_support::repository::bulk_job::BackgroundJobInput;
 use erp_support::{BackgroundJob, BulkJobExt, FileAssetExt};
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -45,7 +45,11 @@ impl DataTransferProcess {
         if let Some(bytes) = self
             .db
             .bulk_job()
-            .strict_job_input(&BackgroundJobId::new(&job.base.id), CONTEXT_FORMAT, &mut NoTransaction)
+            .strict_job_input(
+                &BackgroundJobId::new(&job.base.id),
+                CONTEXT_FORMAT,
+                &mut ReadExecutor::default(),
+            )
             .await?
         {
             return decode_context(&bytes);
@@ -58,7 +62,7 @@ impl DataTransferProcess {
         let id = job.input_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务输入缺失".into()))?;
         self.db
             .file_assets()
-            .find_by_id(id.as_ref(), &mut NoTransaction)
+            .find_by_id(id.as_ref(), &mut ReadExecutor::default())
             .await?
             .filter(|asset| asset.created_by == job.requested_by && asset.destroyed_at.is_none())
             .and_then(|asset| asset.expires_at)

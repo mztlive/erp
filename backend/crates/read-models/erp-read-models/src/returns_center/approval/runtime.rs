@@ -7,7 +7,7 @@ use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason,
 };
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::super::dto::{
     DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
@@ -20,6 +20,7 @@ use crate::approval_runtime::binding_route;
 /// 为已授权单据详情补齐真实实例、当前执行和有界历史。
 ///
 /// # 参数
+/// * `executor` - 与单据读取共用的原执行器。
 /// * `db` - 数据库
 /// * `document_type` - 原业务单据类型
 /// * `id` - 原业务单据主键
@@ -35,24 +36,24 @@ pub async fn load_runtime(
     document_type: DocumentType,
     id: &str,
     mut view: DocumentApprovalView,
+    executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     if let Some(definition) = view.definition.as_mut()
-        && let Some(binding) = optional_approval_binding(db, id).await?
+        && let Some(binding) = optional_approval_binding(db, id, executor).await?
     {
-        let (name, nodes) = binding_route(db, &binding, &mut NoTransaction).await?;
+        let (name, nodes) = binding_route(db, &binding, executor).await?;
         definition.name = name;
         definition.nodes = nodes;
     }
     let subject = erp_workflow::entity::approval_integration::subject_ref_for(document_type, id)
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
-    let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, &mut NoTransaction).await? else {
+    let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, executor).await? else {
         return Ok(view);
     };
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
-    let current = db.bpm_workflow().find_current_execution(&instance_id, &mut NoTransaction).await?;
+    let current = db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
     let limit = RECENT_HISTORY_LIMIT as u32;
-    let rows =
-        db.bpm_workflow().list_execution_history(&instance_id, None, limit + 1, &mut NoTransaction).await?;
+    let rows = db.bpm_workflow().list_execution_history(&instance_id, None, limit + 1, executor).await?;
     let page = history_page_from(rows.iter().map(history_item_from_execution).collect(), limit);
     view.instance = Some(instance_view(&instance, current.as_ref(), latest_rejection_reason(&page.items)));
     view.recent_history = page

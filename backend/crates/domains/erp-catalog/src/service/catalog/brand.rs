@@ -3,8 +3,10 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -36,8 +38,32 @@ impl CatalogService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn product_brand_list(
         &self,
+        actor: &AuditActor,
         params: &ProductBrandListParams,
     ) -> Result<PageView<ProductBrandView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.product_brand_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn product_brand_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &ProductBrandListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<ProductBrandView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_BRAND_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = ProductBrandFilter {
@@ -50,7 +76,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.product_brands().search_product_brands(&filter, &mut NoTransaction).await?;
+        let page = self.db.product_brands().search_product_brands(&filter, executor).await?;
         let items = page.items.into_iter().map(ProductBrandView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -100,16 +126,7 @@ impl CatalogService {
         }
         pending_assets.ensure_all_used(&used)?;
         self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets).await?;
-        if req.brand_code.trim().is_empty() {
-            req.brand_code = DocumentNumberGenerator::new(self.db.clone())
-                .next_number(
-                    DocumentNumberKind::ProductBrand,
-                    BusinessDate::today().as_naive_date(),
-                    &mut NoTransaction,
-                )
-                .await
-                .map_err(|error| Error::Internal(error.to_string()))?;
-        }
+        req.brand_code = self.brand_code(req.brand_code).await?;
         let id = ProductBrandId::new(next_id());
         let brand = ProductBrand::new(
             id.clone(),
@@ -129,12 +146,17 @@ impl CatalogService {
             "product_brand",
             id.to_string(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let brand = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     pending_assets.persist(&db, executor).await?;
                     db.product_brands().create(&brand, executor).await?;
                     audit_port.persist(&audit, executor).await?;
@@ -143,6 +165,21 @@ impl CatalogService {
             })
             .await?;
         Ok(brand.into())
+    }
+
+    /// 沿已有编号规则解析显式编号或分配新编号。
+    async fn brand_code(&self, requested: String) -> Result<String> {
+        if !requested.trim().is_empty() {
+            return Ok(requested);
+        }
+        DocumentNumberGenerator::new(self.db.clone())
+            .next_number(
+                DocumentNumberKind::ProductBrand,
+                BusinessDate::today().as_naive_date(),
+                &mut NoTransaction,
+            )
+            .await
+            .map_err(|error| Error::Internal(error.to_string()))
     }
 
     /// 更新商品品牌（乐观锁语义）。
@@ -214,12 +251,17 @@ impl CatalogService {
             "product_brand",
             brand.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::PRODUCT_BRAND_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     pending_assets.persist(&db, executor).await?;
                     db.product_brands().update(&mut brand, executor).await?;
                     audit_port.persist(&audit, executor).await?;
@@ -269,12 +311,17 @@ impl CatalogService {
             "product_brand",
             brand.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::PRODUCT_BRAND_DELETE, AccessTarget::Operation, executor)
+                        .await?;
                     db.product_brands().soft_delete(&mut brand, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())

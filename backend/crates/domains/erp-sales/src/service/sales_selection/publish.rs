@@ -4,8 +4,11 @@
 
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionSessionId};
+use erp_permissions::sales_selection;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction, Transactional};
+
+mod replay;
 
 use super::{IdempotencyStoreInput, SalesSelectionService};
 use crate::dto::sales_selection::{
@@ -45,10 +48,7 @@ impl SalesSelectionService {
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash = request_hash(&serde_json::to_string(&(booklet_id, &req)).unwrap_or_default());
         let mut executor = NoTransaction;
-        if let Some(replay) = self
-            .replay_idempotency(IdempotencyOperation::Publish, actor_id, &key, &hash, &mut executor)
-            .await?
-        {
+        if let Some(replay) = self.publish_replay(booklet_id, actor_id, &key, &hash).await? {
             return Ok(replay);
         }
         let mut booklet = self.load_booklet(booklet_id, &mut executor).await?;
@@ -137,7 +137,9 @@ impl SalesSelectionService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let executor: &mut dyn Executor = executor;
-                    service.authorize_booklet(&booklet_tx.base.id, "publish", executor).await?;
+                    service
+                        .authorize_booklet(&booklet_tx.base.id, &sales_selection::BOOKLET_PUBLISH, executor)
+                        .await?;
                     db.sales_selection_booklets().update(&mut booklet_tx, executor).await?;
                     for session in &sessions_tx {
                         db.sales_selection_sessions().create(session, executor).await?;
@@ -289,7 +291,7 @@ impl SalesSelectionService {
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
-        self.authorize_booklet(booklet_id, "maintain", executor).await?;
+        self.authorize_booklet(booklet_id, &sales_selection::BOOKLET_DELETE_ITEM, executor).await?;
         let mut booklet = self.load_booklet(booklet_id, executor).await?;
         booklet
             .ensure_version(expected_version)
@@ -319,6 +321,7 @@ impl SalesSelectionService {
     /// * `req` - 版本与幂等
     /// * `actor_id` - 操作人
     /// * `crypto` - 令牌编解码器
+    /// * `executor` - 已完成精确册授权的原快照执行器。
     ///
     /// # 返回
     /// 返回详情，原令牌立即失效。
@@ -347,15 +350,20 @@ impl SalesSelectionService {
     /// # 参数
     /// * `booklet_id` - 选品册身份
     /// * `crypto` - 令牌编解码器
+    /// * `executor` - 已完成精确册授权的原快照执行器。
     ///
     /// # 返回
     /// 返回明文令牌，调用方拼接公开地址，不记录完整链接。
     ///
     /// # 错误
     /// 无链接或密文损坏时拒绝。
-    pub async fn copy_link(&self, booklet_id: &str, crypto: &LinkTokenCrypto) -> Result<String> {
-        let mut executor = NoTransaction;
-        let booklet = self.load_booklet(booklet_id, &mut executor).await?;
+    pub async fn copy_link(
+        &self,
+        booklet_id: &str,
+        crypto: &LinkTokenCrypto,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let booklet = self.load_booklet(booklet_id, executor).await?;
         if booklet.link_revoked || booklet.link_token_ciphertext.is_none() {
             return Err(Error::ValidationError("当前没有可复制的选品链接".into()));
         }

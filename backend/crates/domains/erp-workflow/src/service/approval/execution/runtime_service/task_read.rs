@@ -3,7 +3,8 @@
 use application_core::AuditActor;
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::internal as internal_permissions;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -32,6 +33,7 @@ mod tests;
 /// # 错误
 /// 仓储、策略或冻结主体损坏时失败关闭。
 pub async fn approval_task_readable_with_executor(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
@@ -39,8 +41,16 @@ pub async fn approval_task_readable_with_executor(
     item: &WorkItem,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let readable =
-        approval_tasks_readable_with_executor(identity_service, db, auth, actor, &[item], executor).await?;
+    let readable = approval_tasks_readable_with_executor(
+        authorization,
+        identity_service,
+        db,
+        auth,
+        actor,
+        &[item],
+        executor,
+    )
+    .await?;
     Ok(readable.first().copied().unwrap_or(false))
 }
 
@@ -88,17 +98,17 @@ fn task_chain_matches_subject(
 /// # 错误
 /// 除 Forbidden 之外的策略及来源错误原样传播。
 async fn manager_can_read(
-    auth: &impl WorkflowAuthorizationPort,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     subject: &RuntimeReadSubject,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     match require_approval_management_with_executor(
-        auth,
+        authorization,
         actor,
-        "approval_instance:read",
+        &internal_permissions::APPROVAL_MANAGEMENT_READ,
         subject.document_type,
-        &subject.snapshot.business_object_id,
+        &subject.instance.base.id,
         executor,
     )
     .await

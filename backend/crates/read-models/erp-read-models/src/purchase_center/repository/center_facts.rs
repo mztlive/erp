@@ -92,7 +92,7 @@ pub async fn load_purchase_order_center_facts(
     let Some(order) = db.purchase_orders().find_by_id(order_id, executor).await? else {
         return Ok(PurchaseOrderCenterFacts::default());
     };
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return load_parallel_facts(db, order).await;
     }
     load_serial_facts(db, order, executor).await

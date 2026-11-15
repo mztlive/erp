@@ -5,6 +5,7 @@ mod delivery;
 mod delivery_posting;
 pub mod direct_delivery_draft;
 pub use delivery_posting::post_observed_supplier_delivery;
+use erp_identity::AuthorizationService;
 mod delivery_addresses;
 mod delivery_packing;
 mod delivery_tracking;
@@ -27,7 +28,6 @@ use std::sync::Arc;
 use erp_fulfillment::service::FulfillmentService;
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
-use task::FulfillmentIdentityFactory;
 
 use crate::workflow::FulfillmentWorkflow;
 
@@ -38,7 +38,7 @@ pub struct FulfillmentProcess {
     pub(super) db: Database,
     pub(super) fingerprint_key: Vec<u8>,
     pub(super) sensitive_data: Arc<SensitiveDataCodec>,
-    pub(super) task_identity: FulfillmentIdentityFactory,
+    pub(super) task_identity: Arc<AuthorizationService>,
 }
 
 impl FulfillmentProcess {
@@ -49,7 +49,7 @@ impl FulfillmentProcess {
     /// * `fingerprint_key` - 启动期共享的指纹密钥。
     /// * `sensitive_data` - 启动期共享的敏感信息编解码器。
     /// * `workflow` - 应用装配的工作流绑定、材料和正式任务能力。
-    /// * `task_identity` - 每次任务资格核验独立创建身份的工厂。
+    /// * `task_identity` - 进程共享授权服务。
     ///
     /// # 返回
     /// 返回对象读取默认失败关闭的履约流程。
@@ -60,7 +60,7 @@ impl FulfillmentProcess {
         db: Database,
         fingerprint_key: Vec<u8>,
         sensitive_data: Arc<SensitiveDataCodec>,
-        task_identity: FulfillmentIdentityFactory,
+        task_identity: Arc<AuthorizationService>,
         workflow: Arc<dyn FulfillmentWorkflow>,
     ) -> Self {
         Self { workflow, db, fingerprint_key, sensitive_data, task_identity }

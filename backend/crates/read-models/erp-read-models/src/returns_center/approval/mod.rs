@@ -5,7 +5,7 @@ use erp_returns::entity::returns::{
 };
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 pub(super) use runtime::load_runtime;
 
 use super::dto::{
@@ -173,10 +173,9 @@ pub fn payment_reversal_approval_view(
 pub(super) async fn optional_approval_binding(
     db: &mongodb::Database,
     document_id: &str,
+    executor: &mut dyn Executor,
 ) -> crate::Result<Option<ApprovalDefinitionBinding>> {
-    binding_or_none(
-        find_approval_binding(db, document_id, &mut NoTransaction).await.map_err(crate::Error::from),
-    )
+    binding_or_none(find_approval_binding(db, document_id, executor).await.map_err(crate::Error::from))
 }
 
 fn binding_or_none(

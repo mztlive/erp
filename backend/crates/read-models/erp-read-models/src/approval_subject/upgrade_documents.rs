@@ -8,6 +8,7 @@ use erp_customer::CustomerExt;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_inventory::InventoryExt;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_returns::entity::returns::{CustomerRefund, SupplierRefund};
 use erp_returns::repository::ReturnsExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
@@ -57,6 +58,7 @@ pub(crate) async fn load_sales_order(
         order.order_no,
         order.settlement_party_id.as_ref(),
         &order.stable.created_by,
+        ("sales_order", &order.base.id),
     )
 }
 
@@ -96,6 +98,7 @@ pub(crate) async fn load_sales_change(
         String::new(),
         order.settlement_party_id.as_ref(),
         &change.stable.created_by,
+        ("sales_order", &order.base.id),
     )
 }
 
@@ -135,6 +138,7 @@ pub(crate) async fn load_purchase_order(
         purchase.purchase_no,
         sales.settlement_party_id.as_ref(),
         &purchase.stable.created_by,
+        ("purchase_order", &purchase.base.id),
     )
 }
 
@@ -179,6 +183,7 @@ pub(crate) async fn load_purchase_change(
         String::new(),
         sales.settlement_party_id.as_ref(),
         &change.stable.created_by,
+        ("purchase_order", &purchase.base.id),
     )
 }
 
@@ -212,6 +217,7 @@ pub(crate) async fn load_stock_adjustment(
         adjustment.adjustment_no,
         adjustment.warehouse_id.as_ref(),
         &adjustment.created_by,
+        ("stock_adjustment", &adjustment.base.id),
     )
 }
 
@@ -245,6 +251,7 @@ pub(crate) async fn load_customer_receipt(
         receipt.receipt_no,
         receipt.counterparty_party_id.as_ref(),
         &receipt.created_by,
+        ("customer_receipt", &receipt.base.id),
     )
 }
 
@@ -275,6 +282,7 @@ pub(crate) async fn load_customer_refund(
         .find_by_id(refund.customer_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户退款单所属客户不存在".to_string()))?;
+    let source = customer_refund_source(db, &refund, executor).await?;
     build_facts(
         DocumentType::CustomerRefund,
         document_id,
@@ -283,6 +291,7 @@ pub(crate) async fn load_customer_refund(
         refund.refund_no,
         customer.party_id.as_ref(),
         &refund.created_by,
+        (&source.0, &source.1),
     )
 }
 
@@ -313,6 +322,7 @@ pub(crate) async fn load_supplier_refund(
         .find_by_id(refund.supplier_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应商退款单所属供应商不存在".to_string()))?;
+    let source = supplier_refund_source(db, &refund, executor).await?;
     build_facts(
         DocumentType::SupplierRefund,
         document_id,
@@ -321,6 +331,7 @@ pub(crate) async fn load_supplier_refund(
         refund.refund_no,
         supplier.party_id.as_ref(),
         &refund.created_by,
+        (&source.0, &source.1),
     )
 }
 
@@ -359,6 +370,7 @@ pub(crate) async fn load_receipt_reversal(
         reversal.reversal_no,
         receipt.counterparty_party_id.as_ref(),
         &reversal.created_by,
+        ("customer_receipt", &receipt.base.id),
     )
 }
 
@@ -402,6 +414,7 @@ pub(crate) async fn load_payment_reversal(
         reversal.reversal_no,
         supplier.party_id.as_ref(),
         &reversal.created_by,
+        ("supplier_payment", &payment.base.id),
     )
 }
 
@@ -680,4 +693,44 @@ pub(crate) async fn ensure_fresh_payment_reversal(
         .ok_or_else(|| Error::NotFound("付款冲正单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &reversal.base.id, reversal.base.version)?;
     reversal.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::PaymentReversal))
+}
+
+/// 从退款的真实二选一来源取得授权根；分录来源必须先读取归属子账。
+async fn customer_refund_source(
+    db: &Database,
+    refund: &CustomerRefund,
+    executor: &mut dyn Executor,
+) -> Result<(String, String)> {
+    match (&refund.original_receipt_id, &refund.original_receivable_entry_id) {
+        (Some(receipt), None) => Ok(("customer_receipt".into(), receipt.to_string())),
+        (None, Some(entry)) => {
+            let entry = db
+                .receivable_entries()
+                .find_by_id(entry.as_ref(), executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("客户退款来源应收分录不存在".into()))?;
+            Ok(("receivable_account".into(), entry.receivable_account_id.to_string()))
+        },
+        _ => Err(Error::ValidationError("客户退款必须具有唯一真实授权来源".into())),
+    }
+}
+
+/// 从退款的真实二选一来源取得授权根；分录来源必须先读取归属子账。
+async fn supplier_refund_source(
+    db: &Database,
+    refund: &SupplierRefund,
+    executor: &mut dyn Executor,
+) -> Result<(String, String)> {
+    match (&refund.original_payment_id, &refund.original_payable_entry_id) {
+        (Some(payment), None) => Ok(("supplier_payment".into(), payment.to_string())),
+        (None, Some(entry)) => {
+            let entry = db
+                .payable_entries()
+                .find_by_id(entry.as_ref(), executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("供应商退款来源应付分录不存在".into()))?;
+            Ok(("payable_account".into(), entry.payable_account_id.to_string()))
+        },
+        _ => Err(Error::ValidationError("供应商退款必须具有唯一真实授权来源".into())),
+    }
 }

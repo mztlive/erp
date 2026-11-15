@@ -71,7 +71,7 @@ backend/
 - 不得恢复旧 `erp-processes`、旧路径别名或兼容 façade；编排间只允许显式登记的单向依赖。具体协议适配不得反向依赖编排或应用。
 
 - `http/` 与 `worker/` 不得相互依赖；`wiring/` 不得依赖 HTTP 类型或启动后台循环。HTTP 专属状态归 `HttpState`，共享资源和业务工厂归 `Application`。
-- 授权装配统一使用 `wiring::authorization::build`，只连接身份设施、资源 Facts 与权限 Mapping，不声明政策。identity 的 `AuthorizationService::builder` 校验完整绑定；禁止用空实现或放宽校验构造生产服务。完整业务绑定在第五阶段补齐，`Application` 和服务工厂在第六阶段切换。
+- 授权装配统一使用 `wiring::authorization::build`，只连接身份设施、资源 Facts 与权限 Mapping，不声明政策。identity 的 `AuthorizationService::builder` 校验完整绑定；禁止用空实现或放宽校验构造生产服务。完整业务绑定已在第五阶段补齐；`Application` 和服务工厂在第六阶段切换。
 - 业务迁入 `AuthorizationService::{require, query, validate}`，内置权限直接引用 `erp-permissions` 常量；不得恢复政策登记、调用方授权主体选择或独立查询编译入口。Mapping 的固定来源通过 `relations()` 描述；动态数据只经按需准备能力读取。
 
 ## 新功能落点

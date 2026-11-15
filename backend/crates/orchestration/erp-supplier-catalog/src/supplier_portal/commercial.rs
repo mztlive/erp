@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SupplierCommercialProfileRevisionId, WorkItemId};
 use erp_identity::PortalActor;
+use erp_permissions::{supplier, supplier_portal};
 use erp_supplier::SupplierExt;
 use erp_supplier::portal::{CooperationApplication, CooperationRepository, plan_confirmed_cooperation};
 use erp_workflow::entity::work_item::SupplierPortalReviewTaskData;
@@ -211,7 +212,14 @@ impl SupplierPortalProcess {
         self.internal_command(
             actor,
             &current.supplier_id,
-            action,
+            (
+                action,
+                match input.decision {
+                    PortalDecision::Approve => supplier::HANDOVER,
+                    PortalDecision::Return => supplier::DETAIL,
+                },
+                supplier_portal::ADMIN_REVIEW,
+            ),
             &key,
             &payload,
             move |this, actor, executor| {

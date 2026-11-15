@@ -2,8 +2,9 @@
 
 use application_core::AuditActor;
 use erp_catalog::CatalogExt;
+use erp_permissions::{catalog as catalog_permissions, supplier, supplier_portal};
 use erp_supply::portal::{PortalOfferingService, QuoteAccessGrant};
-use persistence_core::NoTransaction;
+use persistence_core::Transactional;
 use serde_json::json;
 
 use super::{PortalGrantInput, SupplierPortalProcess};
@@ -22,10 +23,29 @@ impl SupplierPortalProcess {
         supplier_id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<QuoteAccessGrant>> {
-        self.internal_supplier(actor, "detail", supplier_id, &mut NoTransaction).await?;
-        Ok(PortalOfferingService::new(self.db.clone())
-            .quote_access_list(supplier_id, &mut NoTransaction)
-            .await?)
+        let process = self.clone();
+        let supplier_id = supplier_id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let access = Self::management_supplier(
+                        &process.db,
+                        &process.services.suppliers,
+                        &actor,
+                        &supplier_id,
+                        executor,
+                    )
+                    .await?;
+                    let grants = PortalOfferingService::new(process.db.clone())
+                        .quote_access_list(&supplier_id, executor)
+                        .await?;
+                    access.validate(executor).await?;
+                    Ok(grants)
+                })
+            })
+            .await
     }
 
     /// 开放或撤销本供应商对指定SKU的首次报价资格。
@@ -46,7 +66,7 @@ impl SupplierPortalProcess {
         self.internal_command(
             actor,
             &supplier_id,
-            "supplier_portal.quote_access_update",
+            ("supplier_portal.quote_access_update", supplier::DETAIL, supplier_portal::ADMIN_UPDATE_GRANT),
             &key,
             &payload,
             move |this, actor, executor| {
@@ -60,7 +80,12 @@ impl SupplierPortalProcess {
                     let product = this
                         .services
                         .catalog_access
-                        .require_product(&actor, "detail", sku.product_id.as_ref(), executor)
+                        .require_product(
+                            &actor,
+                            &catalog_permissions::PRODUCT_PRODUCT_DETAIL,
+                            sku.product_id.as_ref(),
+                            executor,
+                        )
                         .await?;
                     if input.active && (!sku.is_active() || !product.is_active()) {
                         return Err(Error::BusinessLogicError("停用商品或SKU不能开放报价".into()));

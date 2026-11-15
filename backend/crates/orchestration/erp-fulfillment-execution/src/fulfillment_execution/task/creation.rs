@@ -1,8 +1,10 @@
 //! 履约任务创建的真实步骤；幂等检查和责任解析完成后才创建本次授权身份。
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use erp_core::ids::WorkItemId;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_read_models::work_item_links;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{
@@ -13,9 +15,8 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::{
-    FulfillmentIdentityFactory, FulfillmentTaskObject, FulfillmentTaskOwner,
-    ensure_fulfillment_owner_eligible, ensure_task_matches_frozen_identity, open_fulfillment_tasks,
-    resolve_task_owner,
+    FulfillmentTaskObject, FulfillmentTaskOwner, ensure_fulfillment_owner_eligible,
+    ensure_task_matches_frozen_identity, open_fulfillment_tasks, resolve_task_owner,
 };
 use crate::{Error, Result};
 
@@ -46,7 +47,7 @@ struct MongoTaskCreation<'a>(&'a Database);
 
 #[async_trait]
 impl TaskCreationPort for MongoTaskCreation<'_> {
-    type Identity = SharedRbacService;
+    type Identity = Arc<AuthorizationService>;
 
     async fn open(
         &self,
@@ -67,7 +68,7 @@ impl TaskCreationPort for MongoTaskCreation<'_> {
 
     async fn authorize(
         &self,
-        identity: &SharedRbacService,
+        identity: &Arc<AuthorizationService>,
         owner: &str,
         object_type: &str,
         executor: &mut dyn Executor,
@@ -88,7 +89,7 @@ impl TaskCreationPort for MongoTaskCreation<'_> {
 
 /// 在调用方事务中幂等建立履约执行任务。
 /// # 参数
-/// `db`、`executor` 为调用方数据库与事务；`identity_factory` 保留独立授权身份来源；
+/// `db`、`executor` 为调用方数据库与事务；`authorization` 为进程共享授权服务；
 /// `object` 为已经形成的履约草稿。
 /// # 返回
 /// 原任务身份核验通过或新任务保存成功后返回。
@@ -96,16 +97,16 @@ impl TaskCreationPort for MongoTaskCreation<'_> {
 /// 任务重复、责任解析、授权、领域校验或写入失败时保留原错误。
 pub(super) async fn ensure(
     db: &Database,
-    identity_factory: &FulfillmentIdentityFactory,
+    authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(&MongoTaskCreation(db), identity_factory.as_ref(), object, executor).await
+    execute(&MongoTaskCreation(db), &|| authorization.clone(), object, executor).await
 }
 
 async fn execute<P: TaskCreationPort>(
     port: &P,
-    identity_factory: &(dyn Fn() -> P::Identity + Send + Sync),
+    authorization: &(dyn Fn() -> P::Identity + Send + Sync),
     object: FulfillmentTaskObject<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -120,7 +121,7 @@ async fn execute<P: TaskCreationPort>(
         },
     }
     let owner = port.owner(&object, executor).await?;
-    let identity = identity_factory();
+    let identity = authorization();
     port.authorize(&identity, &owner.owner_user_id, object.business_object_type(), executor).await?;
     let task = new_task(&object, owner)?;
     ensure_task_matches_frozen_identity(&task, &object)?;
@@ -255,7 +256,7 @@ mod tests {
 
     #[tokio::test]
     async fn task_creation_resolves_owner_before_fresh_identity_and_preserves_frozen_fields() {
-        let mut executor = TestExecutor { marker: 79 };
+        let mut executor = TestExecutor::default();
         let port = port(&mut executor);
         invoke(&port, &mut executor).await.unwrap();
         let recorded = port.recorded.lock().unwrap();
@@ -277,7 +278,7 @@ mod tests {
 
     #[tokio::test]
     async fn existing_task_replay_does_not_resolve_owner_create_identity_or_write() {
-        let mut executor = TestExecutor { marker: 79 };
+        let mut executor = TestExecutor::default();
         let mut port = port(&mut executor);
         port.existing = vec![task()];
         port.fail_at = Some("owner");
@@ -293,7 +294,7 @@ mod tests {
         let mut wrong = task();
         wrong.reason_code = Some("WAREHOUSE_DELIVERY_READY".into());
         for existing in [vec![wrong], vec![task(), task()]] {
-            let mut executor = TestExecutor { marker: 79 };
+            let mut executor = TestExecutor::default();
             let mut port = port(&mut executor);
             port.existing = existing;
             assert!(matches!(invoke(&port, &mut executor).await, Err(Error::BusinessLogicError(_))));
@@ -308,7 +309,7 @@ mod tests {
     async fn creation_failure_stops_every_later_step_and_preserves_executor_and_error() {
         let steps = ["open", "owner", "identity", "authorize", "create"];
         for failed in [0, 1, 3, 4] {
-            let mut executor = TestExecutor { marker: 79 };
+            let mut executor = TestExecutor::default();
             let mut port = port(&mut executor);
             port.fail_at = Some(steps[failed]);
             assert!(
@@ -323,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn authorization_failure_cannot_reuse_the_identity_on_the_next_command() {
-        let mut executor = TestExecutor { marker: 79 };
+        let mut executor = TestExecutor::default();
         let mut port = port(&mut executor);
         port.fail_at = Some("authorize");
         assert!(matches!(invoke(&port, &mut executor).await, Err(Error::Forbidden(_))));

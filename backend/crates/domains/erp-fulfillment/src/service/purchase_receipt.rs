@@ -35,9 +35,10 @@ impl FulfillmentService {
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_list")
     )]
-    pub async fn purchase_receipt_list(
+    pub(super) async fn load_purchase_receipts(
         &self,
         params: &PurchaseReceiptListParams,
+        executor: &mut dyn Executor,
     ) -> Result<crate::dto::PageView<PurchaseReceiptView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -50,7 +51,7 @@ impl FulfillmentService {
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         super::map_search_page(
-            self.db.purchase_receipts().search_purchase_receipts(&filter, &mut NoTransaction),
+            self.db.purchase_receipts().search_purchase_receipts(&filter, executor),
             |row| PurchaseReceiptView {
                 id: row.id,
                 receipt_no: row.receipt_no,
@@ -68,6 +69,8 @@ impl FulfillmentService {
     }
     /// 查询采购入库单详情（表头 + 行）。
     ///
+    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
+    ///
     /// # 参数
     /// * `id` - 入库单主键
     ///
@@ -77,21 +80,28 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 入库单不存在
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.purchase_receipt_detail",
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "purchase_receipt_detail")
     )]
-    pub async fn purchase_receipt_detail(&self, id: &str) -> Result<PurchaseReceiptDetailView> {
+    pub async fn load_purchase_receipt_view(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseReceiptDetailView> {
         let receipt = super::find_header_or_not_found(
-            self.db.purchase_receipts().find_by_id(id, &mut NoTransaction),
+            self.db.purchase_receipts().find_by_id(id, executor),
             "采购入库单不存在",
         )
         .await?;
         let lines = self
             .db
             .fulfillment()
-            .receipt_lines_by_receipt_ids(&[receipt.base.id.clone().into()], &mut NoTransaction)
+            .receipt_lines_by_receipt_ids(&[receipt.base.id.clone().into()], executor)
             .await?;
         Ok(PurchaseReceiptDetailView {
             receipt: receipt.into(),

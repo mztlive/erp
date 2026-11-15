@@ -60,7 +60,7 @@ impl SalesInquiryProcess {
             .iter()
             .map(|line| ResolutionInput::new(line.line_id.clone(), SkuId::new(line.sku_id.clone())))
             .collect::<CoreResult<Vec<_>>>()?;
-        ProcurementResponsibilityProcess::new(self.db.clone(), self.rbac.clone())
+        ProcurementResponsibilityProcess::new(self.db.clone(), self.authorization.clone())
             .resolve_inquiry_candidates(&inputs, executor)
             .await
             .map_err(|error| match Error::from(error) {

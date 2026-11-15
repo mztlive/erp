@@ -5,13 +5,14 @@ use entity_core::BaseModel;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_core::common::time::Instant;
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::entity::sales_inquiry_import::{
     InquiryImportPreview, InquiryImportReceipt, InquiryImportResult,
 };
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 use sha2::{Digest, Sha256};
 
 use super::facts::sku_facts;
@@ -38,9 +39,10 @@ impl SalesInquiryImportProcess {
         }
         let result = self.confirm_transaction(actor, id, &command).await;
         match result {
-            Err(error) if error.command_may_have_committed() => {
-                recover_command(error, self.recover_confirm(actor, id, &command, &mut NoTransaction).await)
-            },
+            Err(error) if error.command_may_have_committed() => recover_command(
+                error,
+                self.recover_confirm(actor, id, &command, &mut ReadExecutor::default()).await,
+            ),
             other => other,
         }
     }
@@ -77,7 +79,9 @@ impl SalesInquiryImportProcess {
         let Some(receipt) = receipt else {
             return Ok(None);
         };
-        self.access().require_sales(actor, "import", id, executor).await?;
+        self.access()
+            .require_sales(actor, &sales_inquiry_permissions::IMPORT_SALES_IMPORT_CONFIRM, id, executor)
+            .await?;
         Ok(Some(receipt.recover(&command_id, actor.id(), id, &command.preview_id, &fingerprint)?))
     }
 

@@ -22,7 +22,7 @@ mod integration_task_binding;
 mod query;
 mod scan;
 
-pub use approval::WorkItemRepositoryApprovalExt;
+pub use approval::{DocumentApprovalPageQuery, DocumentApprovalWorkItemPage, WorkItemRepositoryApprovalExt};
 pub use finance::{FinanceResponsibilityRuleRepositoryExt, WorkItemRepositoryFinanceExt};
 pub use fulfillment::WorkItemRepositoryFulfillmentExt;
 pub use integration_task_binding::WorkItemRepositoryIntegrationTaskBindingExt;

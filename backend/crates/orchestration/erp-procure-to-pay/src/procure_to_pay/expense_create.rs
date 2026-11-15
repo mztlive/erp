@@ -3,12 +3,15 @@
 //! 费用采购单不经供给分配、不选择供给、不计入供给覆盖；采购类型为费用、无需履约。
 //! 建单沿用采购单的单据登记、审批绑定、提交冻结和命令回执，失败时整单回滚。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, SalesOrderRevisionId};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_identity::service::business_ownership::required_business_org;
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_procurement::dto::purchase_order::{
     CREATE_EXPENSE_ACTION, CreateExpensePurchaseRequest, CreatePurchaseOrderResult,
 };
@@ -26,12 +29,11 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::service::sales_order::extra_cost::ensure_attributable_line;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
 use super::adapters::payment_term::parse;
-use super::authorization::PurchaseOrderAuthorization;
 use super::create_submit::{CreatedDraftBundle, submit_created_draft};
 use super::creation_basis::create::{PreparedDraftWrite, replay_creation, write_prepared_draft};
 use super::creation_basis::supplier::CreationBasisSupplierAdapter;
@@ -42,7 +44,6 @@ use crate::procure_to_pay::inquiry_expense::reserve_purchase;
 use crate::procure_to_pay::responsibility::eligibility::ProcurementInquiryEligibility;
 use crate::{Error, Result};
 
-const CREATE_PERMISSION: &str = "purchase_order:create";
 const EXPENSE_RECEIPT_PREFIX: &str = "purchase-order-expense-command-";
 
 /// 事务内的费用采购建单命令。
@@ -83,12 +84,7 @@ impl PurchaseOrderProcess {
             Some(sales_order_id),
             &req.idempotency_key,
         )?;
-        let authorization = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
-        if let Some(result) =
-            replay_creation(&self.db, &identity, &fingerprint, actor, &mut NoTransaction).await?
-        {
-            return Ok(result);
-        }
+        let authorization = self.require_rbac()?.clone();
         let command = ExpenseCommand {
             sales_order_id: sales_order_id.to_string(),
             req,
@@ -98,10 +94,9 @@ impl PurchaseOrderProcess {
         };
         match self.expense_transaction(command, authorization).await {
             Ok(result) => Ok(result),
-            Err(error) => recover_command(
-                error,
-                replay_creation(&self.db, &identity, &fingerprint, actor, &mut NoTransaction).await,
-            ),
+            Err(error) => {
+                recover_command(error, self.replay_created_result(&identity, &fingerprint, actor).await)
+            },
         }
     }
 
@@ -109,10 +104,10 @@ impl PurchaseOrderProcess {
     async fn expense_transaction(
         &self,
         command: ExpenseCommand,
-        authorization: PurchaseOrderAuthorization,
+        authorization: Arc<AuthorizationService>,
     ) -> Result<CreatePurchaseOrderResult> {
         let ports = self.ports.clone();
-        let rbac = authorization.rbac.clone();
+        let rbac = authorization;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
 
@@ -120,7 +115,6 @@ impl PurchaseOrderProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    authorization.require(&command.actor, executor).await?;
                     apply_expense_create(&db, ports.as_ref(), &binding_rbac, &command, executor).await
                 })
             })
@@ -132,12 +126,12 @@ impl PurchaseOrderProcess {
 async fn apply_expense_create(
     db: &Database,
     ports: &PurchaseOrderPorts,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     command: &ExpenseCommand,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrderResult> {
     if let Some(result) =
-        replay_creation(db, &command.identity, &command.fingerprint, &command.actor, executor).await?
+        replay_creation(db, rbac, &command.identity, &command.fingerprint, &command.actor, executor).await?
     {
         return Ok(result);
     }
@@ -146,7 +140,11 @@ async fn apply_expense_create(
         prepare_expense_draft(db, ports, &sales_order, command, executor).await?;
     if lines.iter().any(|line| line.expense.as_ref().is_some_and(|fee| fee.inquiry_source.is_some())) {
         ProcurementInquiryEligibility::new(db.clone(), rbac.clone())
-            .ensure_permission(&command.actor, "convert_expenses", executor)
+            .ensure_permission(
+                &command.actor,
+                &sales_inquiry_permissions::COMMANDS_PROCUREMENT_CONVERT_EXPENSES,
+                executor,
+            )
             .await?;
     }
     reserve_purchase(db, &order, &lines, &command.actor, executor).await?;
@@ -183,7 +181,7 @@ async fn apply_expense_create(
 /// 读取操作人可见、已生效的实物与服务销售单，并校验每条归属明细。
 async fn load_expense_source(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     command: &ExpenseCommand,
     executor: &mut dyn Executor,
 ) -> Result<SalesOrder> {

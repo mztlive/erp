@@ -1,6 +1,7 @@
 //! 履约领域应用错误，并保留原有唯一索引冲突文案映射。
 
 use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
+use erp_identity::Error as IdentityError;
 use persistence_core::impl_repository_error;
 
 /// Fulfillment-domain result alias.
@@ -99,6 +100,26 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         Some("uk_service_fulfillments_fulfillment_no") => "服务履约单号重复，请勿重复提交".to_string(),
         Some("uk_customer_acceptances_acceptance_no") => "客户验收单号重复，请勿重复提交".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
+    }
+}
+
+impl From<IdentityError> for Error {
+    fn from(error: IdentityError) -> Self {
+        match error {
+            IdentityError::Internal(value) | IdentityError::Rbac(value) => Self::Internal(value),
+            IdentityError::NotFound(value) => Self::NotFound(value),
+            IdentityError::ValidationError(value) => Self::ValidationError(value),
+            IdentityError::InvalidInput(value) => Self::InvalidInput(value),
+            IdentityError::BusinessLogicError(value) => Self::BusinessLogicError(value),
+            IdentityError::ConflictError(value) => Self::ConflictError(value),
+            IdentityError::ReceiptDuplicate(value) => Self::from(value),
+            IdentityError::TransientTransaction(value) => Self::TransientTransaction(value),
+            IdentityError::Forbidden(value) => Self::Forbidden(value),
+            IdentityError::Unauthenticated(value) => Self::Unauthenticated(value),
+            IdentityError::Logic(value) => Self::Logic(value),
+            IdentityError::OutcomeUnknown(value) => Self::OutcomeUnknown(value),
+            IdentityError::RepositoryError(value) => Self::RepositoryError(value),
+        }
     }
 }
 

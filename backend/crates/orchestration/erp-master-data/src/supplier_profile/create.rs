@@ -11,6 +11,7 @@ use erp_core::ids::{
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
 };
+use erp_identity::service::business_ownership::required_business_org;
 use erp_party::service::party::identity::ensure_identity_available;
 use erp_party::{
     AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
@@ -29,10 +30,10 @@ use erp_supplier::{
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use super::validation::resolve_supplier_file_references;
-use super::{SupplierProfileAuthorization, SupplierProfileProcess, SupplierProfileWithAssetsResult};
+use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 use crate::{Error, Result};
 
 impl SupplierProfileProcess {
@@ -88,8 +89,7 @@ impl SupplierProfileProcess {
                 assets_committed: false,
             });
         }
-        let references =
-            self.prepare_creation_references(&mut req, &pending_assets, rbac.clone(), actor).await?;
+        let references = self.prepare_creation_references(&mut req, &pending_assets).await?;
         let idempotency_key = req.idempotency_key.clone();
         let maintainer = references.maintainer.clone();
         let prepared =
@@ -101,7 +101,10 @@ impl SupplierProfileProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.access.clone().require_create(&actor, &maintainer, executor).await?;
+                    let current_org = rbac.access.require_create(&actor, &maintainer, executor).await?;
+                    if current_org != prepared.supplier.business_org_unit_id {
+                        return Err(Error::ConflictError("供应商维护人主属组织已变化，请重新提交".into()));
+                    }
                     prepared.persist(&db, executor).await
                 })
             })
@@ -117,13 +120,11 @@ impl SupplierProfileProcess {
         .await
     }
 
-    /// 依次解析附件、主数据引用和创建授权，失败即停止后续准备。
+    /// 解析附件、主数据引用和维护人主属组织事实，失败即停止后续准备。
     async fn prepare_creation_references(
         &self,
         req: &mut SaveSupplierProfileRequest,
         pending_assets: &Arc<dyn PendingAttachmentBatch>,
-        rbac: SupplierProfileAuthorization,
-        actor: &AuditActor,
     ) -> Result<CreationReferences> {
         let used = resolve_supplier_file_references(req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used)?;
@@ -137,7 +138,7 @@ impl SupplierProfileProcess {
         self.ensure_unique_inputs(req)?;
 
         let maintainer = required_maintainer(req)?;
-        let org = resolve_create_org(&self.db, rbac, actor, &maintainer).await?;
+        let org = required_business_org(&self.db, &maintainer, &mut ReadExecutor::default()).await?;
         Ok(CreationReferences { party_no, supplier_no, maintainer, org })
     }
 
@@ -548,31 +549,6 @@ pub(super) fn capability_owners_of(
         owners.push((*code, owner.owner_user_id.trim().to_string()));
     }
     Ok(owners)
-}
-
-/// 在独立事务中证明创建资格并读取维护人主属组织。
-async fn resolve_create_org(
-    db: &Database,
-    rbac: SupplierProfileAuthorization,
-    actor: &AuditActor,
-    maintainer: &str,
-) -> Result<String> {
-    let actor = actor.clone();
-    let maintainer = maintainer.to_string();
-    let db = db.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                rbac.access
-                    .clone()
-                    .require_create(&actor, &maintainer, executor)
-                    .await
-                    .map(|(_, org)| org)
-                    .map_err(Error::from)
-            })
-        })
-        .await
 }
 
 /// 创建可选税务事实。税号为空时不创建。

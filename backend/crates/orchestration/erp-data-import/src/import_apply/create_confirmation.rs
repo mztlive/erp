@@ -3,19 +3,20 @@ use erp_audit::AuditActorLogs;
 use erp_audit::entity::AuditLog;
 use erp_audit::execution::persist_log;
 use erp_core::ids::WorkItemId;
-use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_identity::{AccessControlExt, AccessTarget};
 use erp_import::repository::prelude::*;
 use erp_import::{
     ConfirmationMatrixDecision, ConfirmationScope, CreateLegacyImportConfirmationRequest,
     ImportBusinessConfirmationNextStep, LegacyImportBatch, LegacyImportConfirmation,
     LegacyImportConfirmationData, LegacyImportConfirmationId, LegacyImportExt, required_text,
 };
+use erp_permissions::legacy_import;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::confirmation_query::confirmation_view;
@@ -47,20 +48,61 @@ impl ImportApplyProcess {
         actor: &AuditActor,
     ) -> Result<LegacyImportConfirmationView> {
         let prepared = PreparedConfirmationCreation::new(req, actor)?;
+        let authorization = self.authorization.clone();
+        let operator = actor.clone();
         let identity = prepared.identity.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
-            .with_transaction(move |executor| Box::pin(async move { prepared.execute(&db, executor).await }))
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(
+                            &operator,
+                            &legacy_import::CONFIRMATION_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    prepared.execute(&db, executor).await
+                })
+            })
             .await;
         let (confirmation, work_item) = match transaction_result {
             Ok(result) => result,
-            Err(error) => match identity.existing(&self.db, &mut NoTransaction).await? {
+            Err(error) => match self.replay_confirmation_creation(identity, actor).await? {
                 Some(result) => result,
                 None => return Err(error),
             },
         };
         Ok(confirmation_view(confirmation, &work_item))
+    }
+
+    /// 失败回放重新核验当前资格，查询与结果交付不跨事务。
+    async fn replay_confirmation_creation(
+        &self,
+        identity: ConfirmationCreationIdentity,
+        actor: &AuditActor,
+    ) -> Result<Option<(LegacyImportConfirmation, WorkItem)>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .authorization
+                        .require(
+                            &actor,
+                            &legacy_import::CONFIRMATION_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    identity.existing(&service.db, executor).await
+                })
+            })
+            .await
     }
 }
 

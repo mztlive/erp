@@ -8,7 +8,8 @@ use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProces
 use bpm::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::approval_instance as approval_permissions;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -100,7 +101,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         idempotency_key: IdempotencyKey,
     ) -> Result<ApprovalCommandView> {
         let db = self.db.clone();
-        let rbac = self.auth.clone();
+        let authorization = self.authorization.clone();
         let identity_service = self.identity.clone();
         let action_port = Arc::clone(&self.action_port);
 
@@ -111,9 +112,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     cancel_blocked_apply(
+                        &authorization,
                         &identity_service,
                         &db,
-                        &rbac,
                         action_port.as_ref(),
                         audit_port.as_ref(),
                         &actor,
@@ -137,7 +138,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<ApprovalCommandView> {
         recover_by_replay(original_error, || async {
             let db = self.db.clone();
-            let rbac = self.auth.clone();
+            let authorization = self.authorization.clone();
 
             let actor = actor.clone();
             let command = command.clone();
@@ -146,7 +147,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        replay_cancel_blocked(&db, &rbac, &actor, &command, &idempotency_key, executor).await
+                        replay_cancel_blocked(
+                            &authorization,
+                            &db,
+                            &actor,
+                            &command,
+                            &idempotency_key,
+                            executor,
+                        )
+                        .await
                     })
                 })
                 .await
@@ -160,8 +169,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 /// # Panics
 /// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_cancel_blocked(
+    authorization: &AuthorizationService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
     idempotency_key: &IdempotencyKey,
@@ -175,7 +184,8 @@ async fn replay_cancel_blocked(
     if instance.base.id != command.approval_process_instance_id {
         return Err(hidden_not_found());
     }
-    let Some(terminal_facts) = replay_terminal_facts(db, rbac, actor, command, &instance, executor).await?
+    let Some(terminal_facts) =
+        replay_terminal_facts(authorization, db, actor, command, &instance, executor).await?
     else {
         return Ok(None);
     };
@@ -213,8 +223,8 @@ async fn replay_cancel_blocked(
 
 /// 当前授权和原 actor 必须先于请求摘要比较；缺事实不能当作未执行。
 async fn replay_terminal_facts(
+    authorization: &AuthorizationService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
     instance: &ApprovalProcessInstance,
@@ -224,7 +234,7 @@ async fn replay_terminal_facts(
         return Ok(None);
     }
     let (document_type, snapshot) = load_exact_runtime_snapshot(db, instance, executor, true).await?;
-    ensure_cancel_blocked_authorized(rbac, actor, document_type, &snapshot, executor).await?;
+    ensure_cancel_blocked_authorized(authorization, actor, document_type, &snapshot, executor).await?;
     let facts =
         load_cancel_blocked_terminal_facts(db, instance, executor).await?.ok_or_else(hidden_not_found)?;
     if facts.actor_id != actor.id() {
@@ -351,9 +361,9 @@ pub(super) fn ensure_cancel_blocked_instance_preconditions(
 // 与回放函数同形以便命令入口统一分派，参数顺序由字段名锚定；告警逐项压制。
 #[allow(clippy::too_many_arguments)]
 async fn cancel_blocked_apply(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
@@ -361,10 +371,12 @@ async fn cancel_blocked_apply(
     idempotency_key: &IdempotencyKey,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalCommandView> {
-    if let Some(replay) = replay_cancel_blocked(db, rbac, actor, command, idempotency_key, executor).await? {
+    if let Some(replay) =
+        replay_cancel_blocked(authorization, db, actor, command, idempotency_key, executor).await?
+    {
         return Ok(replay);
     }
-    let source = load_cancel_source(db, rbac, actor, command, executor).await?;
+    let source = load_cancel_source(authorization, db, actor, command, executor).await?;
     let operation = prepare_blocked_cancel(db, source, command, idempotency_key, actor, executor).await?;
     persist_cancel_operation(
         identity_service,
@@ -399,8 +411,8 @@ struct CancelOperation {
 
 /// 先重验授权，再验证实例及执行版本，保持原首错顺序。
 async fn load_cancel_source(
+    authorization: &AuthorizationService,
     db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
     executor: &mut dyn Executor,
@@ -409,7 +421,7 @@ async fn load_cancel_source(
     let instance =
         db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
     let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, false).await?;
-    ensure_cancel_blocked_authorized(rbac, actor, document_type, &snapshot, executor).await?;
+    ensure_cancel_blocked_authorized(authorization, actor, document_type, &snapshot, executor).await?;
     ensure_cancel_blocked_instance_preconditions(&instance, command)?;
     let (current, historical_tasks) = load_cancel_execution(db, &instance, command, executor).await?;
     Ok(CancelSource { document_type, snapshot, instance, current, historical_tasks })
@@ -618,18 +630,18 @@ fn cancel_action_context(
 
 /// 事务内重验受阻取消账号、动作权限、类型级运行管理、对象读取与 DataScopeFact。
 async fn ensure_cancel_blocked_authorized(
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     document_type: DocumentType,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     require_approval_management_with_executor(
-        rbac,
+        authorization,
         actor,
-        "approval_instance:cancel_blocked",
+        &approval_permissions::CANCEL_BLOCKED,
         document_type,
-        &snapshot.business_object_id,
+        snapshot.approval_process_instance_id.as_ref(),
         executor,
     )
     .await

@@ -15,6 +15,7 @@ use erp_fulfillment::entity::fulfillment::{
 };
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::service_fulfillment_confirm::service_confirmation_from_request;
+use erp_identity::AuthorizationService;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_support::{FileAssetExt, PendingAttachmentBatch};
 use mongodb::Database;
@@ -26,7 +27,6 @@ use super::fulfillment_actual_cost::{ActualCostSource, post as post_actual_cost}
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable};
 use super::service_confirm_audit::{SERVICE_CONFIRM_ACTION, confirmed_service_content};
 use super::service_crypto::{ServiceCryptoAdapter, evidence_metadata};
-use super::task::FulfillmentIdentityFactory;
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
@@ -98,7 +98,7 @@ impl FulfillmentProcess {
 /// 记录不存在、版本冲突、门槛失败或事务提交失败时返回错误。
 async fn persist_confirmed_service_fulfillment(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     record_id: ServiceFulfillmentId,
     expected_version: u64,
     confirmation: ServiceFulfillmentConfirmation,
@@ -164,7 +164,7 @@ struct ServiceConfirmationTarget<'a> {
 /// 记录不存在、版本冲突、门槛失败或凭证不合法时返回错误。
 async fn confirm_service_fulfillment_apply(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     target: ServiceConfirmationTarget<'_>,
     confirmation: ServiceFulfillmentConfirmation,
     pending_assets: &dyn PendingAttachmentBatch,
@@ -327,7 +327,7 @@ async fn execute_confirmation_steps<P: ServiceConfirmationPort>(
 
 struct MongoServiceConfirmation<'a> {
     db: &'a Database,
-    task_identity: &'a FulfillmentIdentityFactory,
+    task_identity: &'a Arc<AuthorizationService>,
     record_id: &'a ServiceFulfillmentId,
     expected_version: u64,
     confirmation: ServiceFulfillmentConfirmation,
@@ -514,21 +514,11 @@ mod confirmation_order_tests {
         AuditFact, AuditLog, AuditValue, BusinessEventContent, BusinessEventContext, BusinessEventResult,
     };
     use erp_core::AccountKind;
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::super::service_confirm_audit::SERVICE_CONFIRM_ACTION;
     use super::{ServiceConfirmationPort, execute_confirmation};
     use crate::{Error, Result};
-
-    struct TestExecutor {
-        visits: usize,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
     struct RecordingPort {
         identity: usize,
         eligible: bool,
@@ -632,7 +622,7 @@ mod confirmation_order_tests {
 
     #[tokio::test]
     async fn confirmation_keeps_evidence_before_pending_and_same_executor() {
-        let mut executor = TestExecutor { visits: 0 };
+        let mut executor = TestExecutor::default();
         let port = RecordingPort {
             identity: (&mut executor as *mut TestExecutor) as usize,
             eligible: true,
@@ -641,13 +631,12 @@ mod confirmation_order_tests {
         };
         assert!(execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap());
         assert_eq!(*port.calls.lock().unwrap(), STEPS);
-        assert_eq!(executor.visits, STEPS.len());
     }
 
     #[tokio::test]
     async fn confirmation_failure_stops_every_later_step_with_original_error() {
         for (index, step) in STEPS.iter().enumerate() {
-            let mut executor = TestExecutor { visits: 0 };
+            let mut executor = TestExecutor::default();
             let port = RecordingPort {
                 identity: (&mut executor as *mut TestExecutor) as usize,
                 eligible: true,
@@ -658,13 +647,12 @@ mod confirmation_order_tests {
                 execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == format!("failed {step}")));
             assert_eq!(*port.calls.lock().unwrap(), STEPS[..=index]);
-            assert_eq!(executor.visits, index + 1);
         }
     }
 
     #[tokio::test]
     async fn unsuccessful_service_does_not_create_acceptance_task() {
-        let mut executor = TestExecutor { visits: 0 };
+        let mut executor = TestExecutor::default();
         let port = RecordingPort {
             identity: (&mut executor as *mut TestExecutor) as usize,
             eligible: false,

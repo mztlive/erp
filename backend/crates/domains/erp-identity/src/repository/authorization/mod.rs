@@ -3,9 +3,12 @@ pub(crate) mod binding;
 #[cfg(test)]
 pub(crate) mod fixtures;
 mod fragment;
+#[cfg(test)]
+mod phase5_tests;
 mod query;
 #[cfg(test)]
 pub(crate) mod testing;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
@@ -14,7 +17,8 @@ use futures_util::future::BoxFuture;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{ExecutionBoundary, Executor};
 pub use query::CompiledAccess;
-pub(crate) use query::{AccessProof, MappingDependency};
+use query::SourcePlan;
+pub(crate) use query::{AccessProof, ApprovalSource, MappingDependency};
 
 use crate::entity::authorization::{
     AccessContext, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
@@ -24,7 +28,8 @@ use crate::entity::resource_access::ResourceKind;
 use crate::ports::AccessMapping;
 use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::resource_grants::grant_lookup;
-use crate::{Error, Result};
+use crate::service::authorization::rules;
+use crate::{Error, Permission, Result};
 
 /// 一次编译共享动态准备结果及复验依赖；关联别名由各集合的 Fragment 管理。
 struct Compiler<'a> {
@@ -55,6 +60,8 @@ pub(crate) async fn compile(
     };
     let (fragment, _) = compiler.model(&proof.rule, mapping, &proof.context, 0).await?;
     let mut stages = fragment.finish();
+    let (sources, whole) = compiler.plans(proof, mapping).await?;
+    let management = compiler.management(proof, mapping).await?;
     if let QueryOutput::Share { fields } | QueryOutput::Existence { fields } = &model.output {
         let mut projection = doc! { "_id": 0 };
         for field in fields {
@@ -69,18 +76,98 @@ pub(crate) async fn compile(
     version.model(model);
     version.unordered(&compiler.versions, |hash, value| hash.text(value));
     version.sequence(&stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
+    version.optional(management.as_ref(), |hash, stages| {
+        hash.sequence(stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
+    });
     let compiled = CompiledAccess {
         proof,
         model: model.clone(),
         stages,
         dependencies: if compiler.boundary.is_snapshot() { vec![] } else { compiler.prepared },
         version: version.finish(),
+        sources,
+        whole,
+        management,
     };
     compiled.ensure_current(compiler.executor)?;
     Ok(compiled)
 }
 
+/// 仅提取根关系的份额规则，嵌套来源保持在相应子模型内。
+fn source_rules(
+    rule: &AccessRule,
+    permission: Option<&Permission>,
+    output: &mut BTreeMap<RelationKey, Vec<(Option<Permission>, AccessRule)>>,
+) {
+    match rule {
+        AccessRule::Related { relation, rule, .. } => {
+            let rules = output.entry(relation.clone()).or_default();
+            let branch = (permission.cloned(), rule.as_ref().clone());
+            if !rules.contains(&branch) {
+                rules.push(branch);
+            }
+        },
+        AccessRule::All(rules) | AccessRule::Any(rules) => {
+            for rule in rules {
+                source_rules(rule, permission, output);
+            }
+        },
+        AccessRule::Required { rule, .. } => source_rules(rule, permission, output),
+        AccessRule::Independent { permission, rule } => source_rules(rule, Some(permission), output),
+        _ => {},
+    }
+}
+
 impl Compiler<'_> {
+    /// 工作项按钮使用固定管理条件，不开启第二次授权读取阶段。
+    async fn management(
+        &mut self,
+        proof: &AccessProof,
+        mapping: &Arc<dyn AccessMapping>,
+    ) -> Result<Option<Vec<Document>>> {
+        let Some(rule) = &proof.management_rule else { return Ok(None) };
+        let permission = rules::management_permission(&proof.context.permission)
+            .ok_or_else(|| Error::ValidationError("管理动作过滤与查询入口不匹配".into()))?;
+        let context = AccessContext { permission, ..proof.context.clone() };
+        Ok(Some(self.model(rule, mapping, &context, 0).await?.0.finish()))
+    }
+
+    /// 来源和整账计划共享本次资格、范围、动态准备及执行边界。
+    async fn plans(
+        &mut self,
+        proof: &AccessProof,
+        mapping: &Arc<dyn AccessMapping>,
+    ) -> Result<(BTreeMap<RelationKey, SourcePlan>, Option<Vec<Document>>)> {
+        let Some(whole_rule) = &proof.whole_rule else {
+            return Ok((BTreeMap::new(), None));
+        };
+        let whole = self.model(whole_rule, mapping, &proof.context, 0).await?.0.finish();
+        let mut rules = BTreeMap::new();
+        source_rules(&proof.rule, None, &mut rules);
+        let mut sources = BTreeMap::new();
+        for (key, rules) in rules {
+            let child = mapping
+                .relations()
+                .remove(&key)
+                .ok_or_else(|| Error::ValidationError("缺少来源 Mapping".into()))?;
+            let mut fragment = Fragment::with_stages(child.stages());
+            let mut conditions = Vec::new();
+            for (entry, rule) in rules {
+                let context = AccessContext {
+                    resource: child.model().resource.clone(),
+                    model: Some(child.model().key.clone()),
+                    permission: entry.unwrap_or_else(|| proof.context.permission.clone()),
+                    ..proof.context.clone()
+                };
+                conditions.push(self.condition(&rule, &child, &context, &mut fragment, 0).await?.0);
+            }
+            fragment.filter = combine("$or", conditions);
+            let stages = fragment.finish();
+            sources.insert(key, SourcePlan { model: child.model().clone(), stages });
+        }
+        Ok((sources, Some(whole)))
+    }
+
     /// 每个模型都限定有效行，来源公司范围也不能读取已删除记录。
     fn model<'a>(
         &'a mut self,
@@ -90,7 +177,7 @@ impl Compiler<'_> {
         depth: usize,
     ) -> BoxFuture<'a, Result<(Fragment, Bson)>> {
         Box::pin(async move {
-            let mut fragment = Fragment::default();
+            let mut fragment = Fragment::with_stages(mapping.stages());
             let (filter, key) = self.condition(rule, mapping, context, &mut fragment, depth).await?;
             fragment.filter = filter;
             Ok((fragment, key))
@@ -125,6 +212,12 @@ impl Compiler<'_> {
         context: &AccessContext,
     ) -> Result<Option<MappingFacts>> {
         mapping.model().validate()?;
+        if let Some(until) = mapping.valid_until(context) {
+            if Instant::now() >= until {
+                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：静态时间边界已到期".into()));
+            }
+            self.valid_until = Some(self.valid_until.map_or(until, |old| old.min(until)));
+        }
         if context.resource != mapping.model().resource
             || context.model.as_ref() != Some(&mapping.model().key)
         {
@@ -476,6 +569,7 @@ mod tests {
         let model = mapping.model().clone();
         Query {
             proof: AccessProof {
+                approval_source: None,
                 context: AccessContext {
                     actor: AuditActor::new("u".into(), "user".into(), AccountKind::Admin),
                     permission: Permission::parse(format!("{}:list", model.resource)).unwrap(),
@@ -483,6 +577,11 @@ mod tests {
                     model: Some(model.key.clone()),
                     as_of: Instant::now(),
                 },
+                qualified: crate::QualifiedPermissions::test_grants(&[]),
+                task: false,
+                whole_rule: None,
+                management_rule: None,
+                has_role_scope: false,
                 rule,
                 version: "identity-v1".into(),
                 valid_until: None,

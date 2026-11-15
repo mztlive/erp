@@ -344,3 +344,6 @@ pub const WORK_ITEM: &str = "work_item";
 
 /// `workflow_action` 资源。
 pub const WORKFLOW_ACTION: &str = "workflow_action";
+
+/// `voucher_sales_order` 审批主体类型。
+pub const VOUCHER_SALES_ORDER: &str = "voucher_sales_order";

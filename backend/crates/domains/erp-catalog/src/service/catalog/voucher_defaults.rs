@@ -1,6 +1,8 @@
 use std::future::Future;
 
 use application_core::AuditActor;
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 
@@ -66,12 +68,22 @@ impl CatalogService {
             "product_category",
             category_id.to_string(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::PRODUCT_VOUCHER_CATEGORY_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     db.product_categories().create(&category, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
@@ -130,12 +142,22 @@ impl CatalogService {
             "product_brand",
             brand_id.to_string(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::PRODUCT_VOUCHER_CATEGORY_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     db.product_brands().create(&brand, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
@@ -194,12 +216,22 @@ impl CatalogService {
             "unit_of_measure",
             unit_id.to_string(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::PRODUCT_VOUCHER_CATEGORY_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     db.unit_of_measures().create(&unit, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())

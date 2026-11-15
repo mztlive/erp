@@ -5,7 +5,7 @@
 
 mod access;
 mod action_policy;
-pub use access::{TaskAccess, required_execution_permissions};
+pub use access::TaskAccess;
 mod due;
 mod entity;
 mod finance_responsibility;

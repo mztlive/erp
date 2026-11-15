@@ -1,6 +1,7 @@
 //! 交接命令的规范化、目标组织检查和安全中文事件事实。
 
 use std::slice;
+use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{
@@ -9,10 +10,7 @@ use erp_audit::{
 };
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::{
-    AccessControlExt, AccountPermissionCandidate, AuthorizationRegistry, AuthorizationService, Permission,
-    SharedRbacService,
-};
+use erp_identity::{AccessControlExt, AccountPermissionCandidate, AuthorizationService, Permission};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -114,15 +112,15 @@ pub(crate) fn handover_content(value: HandoverEventFacts) -> BusinessEventConten
 /// # 错误
 /// 身份设施或策略读取失败时透传。
 pub(crate) async fn target_qualified(
-    db: &Database,
-    rbac: &SharedRbacService,
+    _db: &Database,
+    rbac: &Arc<AuthorizationService>,
     target: &str,
     permission: &Permission,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     // 交接目标只允许内部账号；统一资格检查负责重读账号并核验真实类型和状态。
     let actor = AuditActor::new(target.to_owned(), target.to_owned(), AccountKind::Admin);
-    let authorization = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
+    let authorization = rbac.clone();
     Ok(authorization.has_permission(&actor, permission, executor).await?)
 }
 
@@ -135,12 +133,12 @@ pub(crate) async fn target_qualified(
 /// 账号、权限或身份设施读取失败时停止。
 pub(crate) async fn qualified_candidates(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     excluded: &str,
     permission: &Permission,
     executor: &mut dyn Executor,
 ) -> Result<Vec<AccountPermissionCandidate>> {
-    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
+    let service = rbac.clone();
     let mut candidates = Vec::new();
     for account in db.accounts().list_by_kind(AccountKind::Admin, executor).await? {
         if account.base.id == excluded {

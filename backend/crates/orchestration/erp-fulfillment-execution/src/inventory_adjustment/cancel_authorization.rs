@@ -1,8 +1,10 @@
 //! 库存调整普通撤回授权：原提交人和运行管理员沿调用方快照重新证明身份。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use bpm::model::ApprovalProcessInstance;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_workflow::ApprovalIntegrationExt;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -46,29 +48,33 @@ impl CancelAuthority {
     }
 }
 
-/// 校验普通撤回的账号、动作权限、对象读取范围和提交人/运行管理员身份。
-///
+/// 读取取消计划所需的冻结提交人及责任组织；写事务另行执行完整授权。
 /// # 参数
-/// * `service` - 库存调整流程服务。
-/// * `instance` - 待撤回的审批实例。
-/// * `actor` - 当前认证操作人。
-///
+/// service、instance为当前用例与精确实例，actor为待执行操作人。
 /// # 返回
-/// 返回原提交人或运行管理员的授权事实。
-///
+/// 仅用于准备计划的责任事实，不代表授权通过。
 /// # 错误
-/// 账号、动作、冻结来源或撤回身份不符合合同，以及取证失败时返回错误。
-pub(crate) async fn ensure_cancel_authorized(
+/// 冻结快照缺失或与实例不匹配时返回错误。
+pub(crate) async fn cancel_authority_facts(
     service: &InventoryAdjustmentProcess,
     instance: &ApprovalProcessInstance,
     actor: &AuditActor,
 ) -> Result<CancelAuthorization> {
-    service.workflow.as_ref().authorize_stock_adjustment_cancel(instance, actor, &mut NoTransaction).await
+    let snapshot = cancel_authorization_snapshot(&service.db, instance, &mut NoTransaction).await?;
+    Ok(CancelAuthorization {
+        authority: if snapshot.payload.submitted_by == actor.id() {
+            CancelAuthority::Submitter
+        } else {
+            CancelAuthority::RuntimeAdmin
+        },
+        submitted_by: snapshot.payload.submitted_by,
+        responsible_org_id: snapshot.payload.responsible_org_id,
+    })
 }
 
 /// 原撤回授权顺序使用应用已装配的工作流 Port，禁止重建授权源。
 pub(crate) async fn authorize_with(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
     db: &Database,
     instance: &ApprovalProcessInstance,
     actor: &AuditActor,

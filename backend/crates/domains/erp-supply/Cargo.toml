@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+erp-permissions = { workspace = true }
 erp-identity = { workspace = true }
 bson = { workspace = true }
 sha2 = { workspace = true }
@@ -32,4 +33,5 @@ uuid = { workspace = true }
 zeroize = { version = "1.8.2", features = ["serde"] }
 
 [dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }
 hmac = { workspace = true }

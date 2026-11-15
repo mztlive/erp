@@ -63,7 +63,11 @@ impl PurchaseAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.resolve_detail(&actor, &id, executor).await })
+                Box::pin(async move {
+                    let (order, version, scope) = this.resolve_detail(&actor, &id, executor).await?;
+                    scope.validate(executor).await?;
+                    Ok((order, version))
+                })
             })
             .await
     }
@@ -74,7 +78,8 @@ impl PurchaseAccess {
     /// * `actor` / `id` - 当前账号及采购单身份。
     /// * `executor` - 调用方执行器；文件目录关系证明须使用同一事务。
     /// # 返回
-    /// 返回授权采购单及绑定范围和对象版本的服务器校验标识。
+    /// 返回授权采购单、绑定范围和对象版本的服务器校验标识及本阶段凭证。
+    /// 调用方必须在全部关联读取完成后 validate，再交付视图或开始下一授权阶段。
     /// # 错误
     /// 账号、动作、范围或对象资格无效时拒绝，不泄露不可见对象存在性。
     pub async fn resolve_detail(
@@ -82,7 +87,7 @@ impl PurchaseAccess {
         actor: &AuditActor,
         id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(PurchaseOrder, String)> {
+    ) -> Result<(PurchaseOrder, String, PurchaseReadScope)> {
         let (context, scope) = self.resolve(actor, "detail", executor).await?;
         let order = self
             .db
@@ -91,7 +96,7 @@ impl PurchaseAccess {
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
         let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
-        Ok((order, version))
+        Ok((order, version, scope))
     }
 
     /// 按资源动作证明范围，读取动作附加合法历史参与。

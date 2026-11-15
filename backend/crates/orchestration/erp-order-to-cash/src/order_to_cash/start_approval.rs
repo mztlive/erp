@@ -3,6 +3,8 @@
 //! `SalesOrder` 与 `VoucherSalesOrder` 共用本模块，按 `DocumentType` 分派
 //! `ProcessKind`、快照与任务归属，不得回退 `CARD_SALES_APPROVAL`。
 
+use std::sync::Arc;
+
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_approval_runtime::ApprovalRuntimePort;
@@ -10,7 +12,7 @@ use erp_approval_runtime::approval_start::{
     StartReplayErrors, StartTaskContext, persist_start_runtime, persist_start_tasks, replay_start,
 };
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_sales::dto::sales_order::SubmissionView;
 use erp_sales::entity::command_receipt::SalesCommandReceipt;
 use erp_sales::entity::sales_order::SalesOrder;
@@ -33,7 +35,7 @@ use erp_workflow::service::approval::read;
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
@@ -57,7 +59,7 @@ pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
-    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
+    load_bound_definition_graph_with_executor(db, binding, &mut ReadExecutor::default()).await
 }
 
 /// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
@@ -103,9 +105,16 @@ pub(super) async fn load_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    read::start_receipt(db, document_type, subject, subject_version, idempotency_key, &mut NoTransaction)
-        .await
-        .map_err(Error::from)
+    read::start_receipt(
+        db,
+        document_type,
+        subject,
+        subject_version,
+        idempotency_key,
+        &mut ReadExecutor::default(),
+    )
+    .await
+    .map_err(Error::from)
 }
 
 /// 销售单启动收据回放入参。
@@ -306,7 +315,7 @@ fn start_bindings_from_graph(
 /// 运行事实、不可变快照与入口任务必须与提交快照同事务。
 pub(super) struct SalesOrderStartPersistInput {
     /// 与销售命令共享的身份源，审批运行事实落库前重验分配资格。
-    pub identity: SharedRbacService,
+    pub identity: Arc<AuthorizationService>,
     pub resubmission_reason: Option<String>,
     /// 已进入审批中的销售单。
     pub order: SalesOrder,
@@ -570,7 +579,7 @@ async fn guard_sales_approval_start(
 /// `document_type` 必须与提交分派一致，不得在此改写。
 pub(super) struct SalesOrderRuntimeWriteInput<'a> {
     /// 审批人资格重验使用的共享身份源。
-    pub identity: &'a SharedRbacService,
+    pub identity: &'a Arc<AuthorizationService>,
     pub resubmission_reason: Option<&'a str>,
     pub approvals: &'a dyn ApprovalRuntimePort,
     /// 按业务性质分派的单据类型。

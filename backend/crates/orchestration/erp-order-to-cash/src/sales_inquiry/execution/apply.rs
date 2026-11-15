@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::{internal as internal_permissions, sales_inquiry as sales_inquiry_permissions};
 use erp_sales::entity::sales_inquiry::{InquiryReassignmentData, SalesInquiry};
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::repository::WorkItemExt;
@@ -28,15 +29,15 @@ impl SalesInquiryProcess {
             return self.renew_work(actor, id, req, executor).await;
         }
         if let Some((task_id, version)) = command.task() {
-            let (mut inquiry, mut task) = self
-                .access()
-                .require_task(actor, command.procurement_action(), id, task_id, Some(version), executor)
-                .await?;
+            let permission = command.procurement_permission()?;
+            let (mut inquiry, mut task) =
+                self.access().require_task(actor, &permission, id, task_id, Some(version), executor).await?;
             self.apply_procurement(actor, &mut inquiry, &mut task, command, executor).await?;
             let tasks = self.active_tasks(id, executor).await?.into_iter().map(|task| task.base.id).collect();
             return Ok((inquiry, tasks));
         }
-        let mut inquiry = self.access().require_sales(actor, command.sales_action(), id, executor).await?;
+        let permission = command.sales_permission()?;
+        let mut inquiry = self.access().require_sales(actor, &permission, id, executor).await?;
         let tasks = self.apply_sales(actor, &mut inquiry, command, executor).await?;
         Ok((inquiry, tasks))
     }
@@ -54,7 +55,14 @@ impl SalesInquiryProcess {
                 self.save_requirement(actor, inquiry, req, executor).await?;
             },
             InquiryCommand::Submit(req) => {
-                self.access().ensure_selection(actor, "submit", inquiry, executor).await?;
+                self.access()
+                    .ensure_selection(
+                        actor,
+                        &sales_inquiry_permissions::COMMANDS_SALES_SUBMIT,
+                        inquiry,
+                        executor,
+                    )
+                    .await?;
                 self.require_customer(actor, &inquiry.customer_id, executor).await?;
                 normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut inquiry.draft, executor)
                     .await?;
@@ -67,7 +75,14 @@ impl SalesInquiryProcess {
             InquiryCommand::Reinquire(req) => {
                 let mut data = req.data.clone();
                 if let Some(requirement) = &mut data.requirement {
-                    self.access().ensure_selection(actor, "reinquire", inquiry, executor).await?;
+                    self.access()
+                        .ensure_selection(
+                            actor,
+                            &internal_permissions::SALES_INQUIRY_REINQUIRE_DRAFT,
+                            inquiry,
+                            executor,
+                        )
+                        .await?;
                     normalize_requirement(&self.db, self.services.catalog.as_ref(), requirement, executor)
                         .await?;
                 }
@@ -91,7 +106,9 @@ impl SalesInquiryProcess {
         request: &SaveInquiryCommand,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.access().ensure_selection(actor, "update", inquiry, executor).await?;
+        self.access()
+            .ensure_selection(actor, &sales_inquiry_permissions::COMMANDS_SALES_SAVE, inquiry, executor)
+            .await?;
         let mut data = request.data.clone();
         normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut data, executor).await?;
         self.require_customer(actor, &inquiry.customer_id, executor).await?;

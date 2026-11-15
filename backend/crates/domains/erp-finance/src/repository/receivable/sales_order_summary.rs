@@ -5,9 +5,8 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesOrderId;
 use erp_core::money::Amount;
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 
 use crate::entity::receivable::{ReceivableAccount, SalesOrderReceivableAmountSummary};
@@ -55,26 +54,12 @@ impl ReceivableAccountSalesOrderSummaryExt for persistence_core::Repository<'_, 
         executor: &mut dyn Executor,
     ) -> Result<SalesOrderReceivableAmountSummary> {
         let pipeline = sales_order_amount_summary_pipeline(sales_order_id);
-        let rows = match executor.session() {
-            Some(session) => {
-                self.collection()
-                    .aggregate(pipeline)
-                    .with_type::<SalesOrderAmountSummaryRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                self.collection()
-                    .aggregate(pipeline)
-                    .with_type::<SalesOrderAmountSummaryRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
+        let rows = aggregate::rows(
+            &self.collection().clone_with_type::<SalesOrderAmountSummaryRow>(),
+            pipeline,
+            executor,
+        )
+        .await?;
         Ok(summary_from_rows(rows))
     }
 }

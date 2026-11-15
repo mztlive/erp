@@ -1,4 +1,5 @@
 use application_core::AuditActor;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::{BpmExt, DocumentType, WorkItemReadService, WorkflowAuthorizationPort};
 use persistence_core::{Executor, Transactional};
@@ -126,7 +127,7 @@ impl SalesTimelineReadService {
         let mut sales_orders = Vec::new();
         for root in roots {
             match SalesAccess::new(self.db.clone(), self.rbac.clone())
-                .require_object(actor, "detail", &root, &[], executor)
+                .require_object(actor, &sales_order_permissions::DETAIL, &root, executor)
                 .await
             {
                 Ok(order) => {

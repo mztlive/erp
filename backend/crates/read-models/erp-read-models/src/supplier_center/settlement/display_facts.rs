@@ -9,7 +9,7 @@ use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_supply::dto::supplier_settlement::{SupplierSettlementItemView, SupplierSettlementStatementView};
 use erp_supply::repository::SupplierFulfillmentExt;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use super::SupplierSettlementReadService;
 use super::display_dto::SettlementItemDisplayView;
@@ -35,7 +35,7 @@ impl SupplierSettlementReadService {
         statements: &[&SupplierSettlementStatementView],
         extra_user_ids: Vec<String>,
     ) -> StatementDisplayFacts {
-        match self.statement_display_facts(statements, extra_user_ids).await {
+        match self.statement_display_facts(statements, extra_user_ids, &mut NoTransaction).await {
             Ok(facts) => facts,
             Err(_) => {
                 tracing::warn!("供应商结算正式命令已完成，附加名称读取失败");
@@ -49,6 +49,7 @@ impl SupplierSettlementReadService {
     /// # 参数
     /// * `statements` - 当前结算单页或详情。
     /// * `extra_user_ids` - 同一详情引用的补证或任务人员。
+    /// * `executor` - 当前结果读取使用的原执行器。
     /// # 返回
     /// 返回供应商及人员名称映射。
     /// # 错误
@@ -57,6 +58,7 @@ impl SupplierSettlementReadService {
         &self,
         statements: &[&SupplierSettlementStatementView],
         extra_user_ids: Vec<String>,
+        executor: &mut dyn Executor,
     ) -> Result<StatementDisplayFacts> {
         let supplier_ids = dedup_trimmed_nonempty(statements.iter().map(|value| value.supplier_id.as_str()))
             .into_iter()
@@ -79,9 +81,9 @@ impl SupplierSettlementReadService {
         let supplier_names = if supplier_ids.is_empty() {
             HashMap::new()
         } else {
-            current_legal_names_by_account_ids(&self.db, &supplier_ids, &mut NoTransaction).await?
+            current_legal_names_by_account_ids(&self.db, &supplier_ids, executor).await?
         };
-        let user_names = self.db.accounts().names_by_ids(&user_ids, &mut NoTransaction).await?;
+        let user_names = self.db.accounts().names_by_ids(&user_ids, executor).await?;
         Ok(StatementDisplayFacts { supplier_names, user_names })
     }
 
@@ -89,6 +91,7 @@ impl SupplierSettlementReadService {
     ///
     /// # 参数
     /// * `items` - 当前授权查询返回的明细。
+    /// * `executor` - 当前结果读取使用的原执行器。
     /// # 返回
     /// 返回同一顺序的名称视图。
     /// # 错误
@@ -96,25 +99,27 @@ impl SupplierSettlementReadService {
     pub(super) async fn item_display_views(
         &self,
         items: Vec<SupplierSettlementItemView>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SettlementItemDisplayView>> {
         if items.is_empty() {
             return Ok(Vec::new());
         }
         let facts = ItemDisplayFacts {
-            orders: self.settlement_order_labels(&items).await?,
-            item_names: self.settlement_item_names(&items).await?,
+            orders: self.settlement_order_labels(&items, executor).await?,
+            item_names: self.settlement_item_names(&items, executor).await?,
         };
         Ok(items.into_iter().map(|item| facts.item(item)).collect())
     }
 
+    /// 沿原读取执行器补齐供应商履约订单的业务单号。
     async fn settlement_order_labels(
         &self,
         items: &[SupplierSettlementItemView],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, OrderDisplayLabels>> {
         let order_ids =
             dedup_trimmed_nonempty(items.iter().map(|item| item.supplier_fulfillment_order_id.as_str()));
-        let orders =
-            self.db.supplier_fulfillment_orders().list_active_by_ids(&order_ids, &mut NoTransaction).await?;
+        let orders = self.db.supplier_fulfillment_orders().list_active_by_ids(&order_ids, executor).await?;
         Ok(orders
             .into_iter()
             .map(|order| {
@@ -126,27 +131,29 @@ impl SupplierSettlementReadService {
             .collect())
     }
 
+    /// 沿原读取执行器核对履约明细和供给修订的商品关联。
     async fn settlement_item_names(
         &self,
         items: &[SupplierSettlementItemView],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, (String, String)>> {
         let item_ids =
             dedup_trimmed_nonempty(items.iter().map(|item| item.supplier_fulfillment_item_id.as_str()));
         let fulfillment_items =
-            self.db.supplier_fulfillment_items().list_active_by_ids(&item_ids, &mut NoTransaction).await?;
+            self.db.supplier_fulfillment_items().list_active_by_ids(&item_ids, executor).await?;
         let revision_ids = dedup_trimmed_nonempty(
             fulfillment_items.iter().map(|item| item.supplier_offering_revision_id.as_ref()),
         )
         .into_iter()
         .map(SupplierOfferingRevisionId::new)
         .collect::<Vec<_>>();
-        let offerings = self
-            .db
-            .supplier_fulfillment()
-            .load_offerings_by_revision_ids(&revision_ids, &mut NoTransaction)
-            .await?;
+        let offerings =
+            self.db.supplier_fulfillment().load_offerings_by_revision_ids(&revision_ids, executor).await?;
         let sku_names = self
-            .settlement_sku_names(offerings.values().map(|offering| offering.sku_id.clone()).collect())
+            .settlement_sku_names(
+                offerings.values().map(|offering| offering.sku_id.clone()).collect(),
+                executor,
+            )
             .await?;
         Ok(fulfillment_items
             .into_iter()
@@ -158,8 +165,13 @@ impl SupplierSettlementReadService {
             .collect())
     }
 
-    async fn settlement_sku_names(&self, sku_ids: Vec<SkuId>) -> Result<HashMap<String, String>> {
-        let skus = self.db.skus().find_by_ids(&sku_ids, &mut NoTransaction).await?;
+    /// 沿原读取执行器取得 SKU 当前修订中的可读名称。
+    async fn settlement_sku_names(
+        &self,
+        sku_ids: Vec<SkuId>,
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        let skus = self.db.skus().find_by_ids(&sku_ids, executor).await?;
         let revision_ids =
             dedup_trimmed_nonempty(skus.iter().filter_map(|sku| sku.stable.current_revision_id.as_deref()))
                 .into_iter()
@@ -168,7 +180,7 @@ impl SupplierSettlementReadService {
         let revisions = self
             .db
             .sku_revisions()
-            .find_by_ids(&revision_ids, &mut NoTransaction)
+            .find_by_ids(&revision_ids, executor)
             .await?
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision))

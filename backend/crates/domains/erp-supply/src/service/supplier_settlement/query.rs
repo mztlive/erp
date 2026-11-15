@@ -1,4 +1,5 @@
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
+use erp_permissions::supplier_settlement;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
@@ -69,7 +70,7 @@ impl SupplierSettlementService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let context = self.access().resolve(actor, "list", executor).await?;
+        let context = self.access().resolve(actor, &supplier_settlement::STATEMENT_LIST, executor).await?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
         let org_ids = expand_org_filter(
             &self.access(),

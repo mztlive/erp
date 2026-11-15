@@ -1,187 +1,136 @@
-//! 工作项查询与命令共用的 identity 授权登记。
+//! 工作项授权复用进程内共享服务；业务层不声明授权政策。
 mod facts;
-
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::entity::authorization::{AccessSubject, AccessTarget, FactKind, ReadAccess};
-use erp_identity::ports::AccessMapping;
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService,
-    CompiledAccess, DataAccess, Permission, ResourceTargets, SharedRbacService,
+    AccessFactsPort, AccessMapping, AccessTarget, AuthorizationService, CompiledAccess, Permission,
 };
+use erp_permissions::work_item;
 use facts::WorkItemFacts;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::Result;
-use crate::entity::work_item::WorkItem;
+use crate::entity::work_item::WorkItemType;
+use crate::repository::WorkItemRepositoryExt;
 use crate::repository::work_item::authorization::WorkItemMapping;
+use crate::{Error, Result, WorkItemExt};
 
-/// 任务读取与管理共享的完整对象授权；不决定办理人业务资格。
+/// 任务读取与管理共享的授权服务。
 #[derive(Clone)]
 pub struct WorkItemAuthorization {
-    pub(crate) service: AuthorizationService,
-    mapping: Arc<dyn AccessMapping>,
-    assigned: AuthorizationService,
-}
-
-impl WorkItemAuthorization {
-    /// 绑定工作项模型、事实和 identity 服务。
-    /// # 参数
-    /// db 为本域数据库，rbac 为共享身份服务。
-    /// # 返回
-    /// 返回不执行查询的授权服务。
-    /// # 错误
-    /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let mapping = WorkItemMapping::shared();
-        let facts = Arc::new(WorkItemFacts { db: db.clone(), proposed: None });
-        let assigned = assigned_authorization(db.clone(), rbac.clone(), facts.clone());
-        let service = authorization(db, rbac, mapping.clone(), facts);
-        Self { service, mapping, assigned }
-    }
-
-    /// 用拟保存事实执行同一任务范围政策，不要求任务已存在于数据库。
-    /// # 参数
-    /// db、rbac 为身份设施，item 为本事务将保存的完整任务。
-    /// # 返回
-    /// 返回只对本次拟创建任务取证的授权服务。
-    /// # 错误
-    /// 固定任务登记错误时启动失败，不执行 I/O。
-    pub(super) fn proposed(db: Database, rbac: SharedRbacService, item: &WorkItem) -> Self {
-        let mapping = WorkItemMapping::shared();
-        let facts = Arc::new(WorkItemFacts { db: db.clone(), proposed: Some(item.clone()) });
-        let assigned = assigned_authorization(db.clone(), rbac.clone(), facts.clone());
-        let service = authorization(db, rbac, mapping.clone(), facts);
-        Self { service, mapping, assigned }
-    }
-}
-
-/// 同一领域模型的读取、详情和管理分别证明各自动作范围。
-fn authorization(
+    pub service: Arc<AuthorizationService>,
     db: Database,
-    rbac: SharedRbacService,
-    mapping: Arc<dyn AccessMapping>,
-    facts: Arc<WorkItemFacts>,
-) -> AuthorizationService {
-    let entries = ["list", "detail", "manage"]
-        .into_iter()
-        .map(|action| {
-            let permission = Permission::parse(format!("work_item:{action}")).expect("固定任务动作合法");
-            AccessRegistration {
-                permission: permission.clone(),
-                required_permissions: vec![],
-                access: AccessMode::QueryAndObject {
-                    data: DataAccess {
-                        subject: AccessSubject::Direct,
-                        required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                        policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
-                    },
-                    mapping: mapping.clone(),
-                    facts: facts.clone(),
-                },
-            }
-        })
-        .collect();
-    AuthorizationService::new(db, rbac, AuthorizationRegistry::new(entries).expect("固定任务登记完整"))
 }
-
-/// 指定人检查保留 detail 原范围，不能凭当前分配绕过既有读取资格。
-fn assigned_authorization(
-    db: Database,
-    rbac: SharedRbacService,
-    facts: Arc<WorkItemFacts>,
-) -> AuthorizationService {
-    let permission = Permission::parse("work_item:detail").expect("固定任务详情权限合法");
-    let registry = AuthorizationRegistry::new(vec![AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Owner, FactKind::Organization, FactKind::Assignee].into(),
-                policy: AccessPolicy::All(vec![
-                    AccessPolicy::Scope { permission, read: ReadAccess::default() },
-                    AccessPolicy::Assigned,
-                ]),
-            },
-            facts,
-        },
-    }])
-    .expect("固定任务指定人登记完整");
-    AuthorizationService::new(db, rbac, registry)
-}
-
 impl WorkItemAuthorization {
-    /// 在原执行器中证明真实任务的详情范围及当前指定人。
+    /// 注入已经完成启动绑定的共享服务。
     /// # 参数
-    /// actor 为当前办理人，id 为实际任务 ID，executor 为原业务执行器。
+    /// service 为进程共享授权服务。
     /// # 返回
-    /// 既有详情入口、范围及真实当前负责人均符合时成功；不限制任务业务状态。
+    /// 无请求状态的任务访问器。
     /// # 错误
-    /// 身份、功能权限、任务范围或分配不符合时拒绝；事实与设施错误透传。
+    /// 不执行 I/O。
+    pub fn new(db: Database, service: Arc<AuthorizationService>) -> Self {
+        Self { service, db }
+    }
+    /// 校验任务详情范围和真实当前指定人。
+    /// # 参数
+    /// actor、id 为真实账号和任务，executor 为原事务。
+    /// # 返回
+    /// 详情规则通过且当前仍分配给账号时成功。
+    /// # 错误
+    /// 权限或当前分配不符时拒绝。
     pub async fn require_assigned(
         &self,
         actor: &AuditActor,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.assigned
-            .require(
-                actor,
-                &Permission::parse("work_item:detail")?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
-            .await?;
-        Ok(())
-    }
-
-    /// 生成绑定当前事务的完整任务查询约束。
-    /// # 参数
-    /// actor 为真实账号，action 为登记动作，executor 沿用当前事务。
-    /// # 返回
-    /// 返回已经编译并验证的工作项查询凭证。
-    /// # 错误
-    /// 未登记动作、身份失效、范围或版本变化时拒绝。
-    pub(crate) async fn query(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Arc<CompiledAccess>> {
-        let query = self
-            .service
-            .query(actor, &Permission::parse(format!("work_item:{action}"))?, AccessSubject::Direct, executor)
-            .await?;
-        let compiled = query.compile(self.mapping.as_ref(), executor).await?;
-        self.service.validate(&compiled, executor).await?;
-        Ok(Arc::new(compiled))
-    }
-
-    /// 以完整对象合同检查一个任务，供详情和写命令复用。
-    /// # 参数
-    /// actor 为真实账号，action 为 detail/manage，id 为任务 ID，executor 沿用调用事务。
-    /// # 返回
-    /// 入口权限和任务责任范围均成立时成功。
-    /// # 错误
-    /// 身份失效、无权、任务缺失或事实读取失败时返回错误。
-    pub async fn require(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
+        let task = self
+            .db
+            .work_items()
+            .find_work_item(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         self.service
             .require(
                 actor,
-                &Permission::parse(format!("work_item:{action}"))?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                &work_item::DETAIL,
+                AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() },
                 executor,
             )
             .await?;
+        if task.owner_user_id.as_deref() != Some(actor.id()) {
+            return Err(Error::Forbidden("任务已指派给其他人".into()));
+        }
         Ok(())
     }
+    /// 编译固定工作项权限的读取条件。
+    /// # 参数
+    /// actor 为当前账号，permission 为内置权限常量，executor 为原读取阶段。
+    /// # 返回
+    /// 绑定当前权限和读取阶段的查询凭证。
+    /// # 错误
+    /// 资格、映射或执行边界不符时拒绝。
+    pub(crate) async fn query(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<Arc<CompiledAccess>> {
+        Ok(Arc::new(self.service.query(actor, permission, executor).await?))
+    }
+    /// 检查已有任务的完整对象访问。
+    /// # 参数
+    /// actor、permission、id 为账号、固定权限和真实任务，executor 为原执行器。
+    /// # 返回
+    /// 入口和固定数据规则均通过时成功。
+    /// # 错误
+    /// 未知动作、缺失对象或拒绝时返回错误。
+    pub async fn require(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self.service.require(actor, permission, AccessTarget::record(id)?, executor).await?)
+    }
+}
+/// 提供任务的持久化事实读取器。
+/// # 参数
+/// db 为工作项数据库。
+/// # 返回
+/// 读取真实任务版本、责任人及组织的共享读取器。
+/// # 错误
+/// 构造不执行 I/O。
+pub fn authorization_facts(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(WorkItemFacts { db })
+}
+/// 提供固定工作项查询模型。
+/// # 参数
+/// 无。
+/// # 返回
+/// 当前负责人和主属组织的静态 Mapping。
+/// # 错误
+/// 构造不执行 I/O。
+pub fn authorization_mapping() -> Arc<dyn AccessMapping> {
+    WorkItemMapping::shared()
+}
+
+/// 从服务端确定的任务业务身份构造尚未形成任务的功能资格候选。
+/// # 参数
+/// kind、source 为责任规则或已验证业务对象确定的真实任务种类和来源类型。
+/// # 返回
+/// 不携带对象身份、版本或权限列表的候选；不证明已存在任务的访问权。
+/// # 错误
+/// 构造不执行 I/O，种类及来源组合由 identity 固定入口校验。
+pub(crate) fn execution_target(kind: WorkItemType, source: &str) -> AccessTarget {
+    AccessTarget::Candidate(ObjectFacts {
+        resource: "work_item".into(),
+        subject_type: FactValue::Known(kind.as_str().into()),
+        subject_source_resource: FactValue::Known(source.into()),
+        ..Default::default()
+    })
 }

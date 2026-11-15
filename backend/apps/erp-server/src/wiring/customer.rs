@@ -124,11 +124,15 @@ impl PartyFactPort for MongoCustomerPartyFacts {
         Ok(())
     }
 
-    async fn identities_by_ids(&self, party_ids: &[PartyId]) -> erp_customer::Result<Vec<PartyIdentityFact>> {
+    async fn identities_by_ids(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> erp_customer::Result<Vec<PartyIdentityFact>> {
         let (parties, revisions) = self
             .db
             .party()
-            .list_with_current_revisions(party_ids, &mut NoTransaction)
+            .list_with_current_revisions(party_ids, executor)
             .await
             .map_err(erp_customer::Error::from)?;
         let revisions: HashMap<String, erp_party::PartyRevision> =
@@ -147,11 +151,15 @@ impl PartyFactPort for MongoCustomerPartyFacts {
             .collect())
     }
 
-    async fn matching_ids_by_name(&self, keyword: &str) -> erp_customer::Result<Vec<String>> {
+    async fn matching_ids_by_name(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_customer::Result<Vec<String>> {
         Ok(self
             .db
             .party()
-            .matching_current_party_ids(keyword, &mut NoTransaction)
+            .matching_current_party_ids(keyword, executor)
             .await
             .map_err(erp_customer::Error::from)?
             .into_iter()

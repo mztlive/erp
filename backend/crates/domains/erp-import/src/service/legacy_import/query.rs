@@ -1,4 +1,7 @@
-use persistence_core::NoTransaction;
+use application_core::AuditActor;
+use erp_identity::AccessTarget;
+use erp_permissions::legacy_import;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::LegacyImportService;
@@ -20,6 +23,7 @@ impl LegacyImportService {
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `actor` - 当前认证账号
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -29,12 +33,34 @@ impl LegacyImportService {
     pub async fn batch_list(
         &self,
         params: &LegacyImportBatchListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<LegacyImportBatchListItem>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.batch_list_snapshot(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn batch_list_snapshot(
+        &self,
+        params: &LegacyImportBatchListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<LegacyImportBatchListItem>> {
         params.validate()?;
+        self.authorization
+            .require(actor, &legacy_import::BATCH_LIST, AccessTarget::Operation, executor)
+            .await?;
         let query = params.normalized()?;
         let filter = self.batch_filter_of(query);
-        let page =
-            self.db.legacy_import_batches().search_legacy_import_batches(&filter, &mut NoTransaction).await?;
+        let page = self.db.legacy_import_batches().search_legacy_import_batches(&filter, executor).await?;
         let items = page.items.into_iter().map(LegacyImportBatchListItem::from).collect();
 
         Ok(page_view(items, page.total, filter.page, filter.page_size))
@@ -44,20 +70,43 @@ impl LegacyImportService {
     ///
     /// # 参数
     /// * `id` - 导入批次 ID
+    /// * `actor` - 当前认证账号
     ///
     /// # 返回
     /// 返回批次的响应视图（含 `background_job_id`）。
     ///
     /// # 错误
     /// 批次不存在时返回 `NotFound`。批次读取失败时返回对应的导入领域错误。后台任务身份查询失败时返回端口错误。
-    pub async fn batch_detail(&self, id: &str) -> Result<LegacyImportBatchView> {
+    pub async fn batch_detail(&self, id: &str, actor: &AuditActor) -> Result<LegacyImportBatchView> {
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.batch_detail_snapshot(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn batch_detail_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<LegacyImportBatchView> {
+        self.authorization
+            .require(actor, &legacy_import::BATCH_DETAIL, AccessTarget::Operation, executor)
+            .await?;
         let batch = self
             .db
             .legacy_import_batches()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-        self.batch_view_of(batch).await
+        self.batch_view_of(batch, executor).await
     }
 
     /// 分页查询导入行列表（按批次）。
@@ -65,6 +114,7 @@ impl LegacyImportService {
     /// # 参数
     /// * `batch_id` - 所属导入批次
     /// * `params` - 查询参数
+    /// * `actor` - 当前认证账号
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -76,9 +126,34 @@ impl LegacyImportService {
         &self,
         batch_id: &str,
         params: &LegacyImportRowListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<LegacyImportRowView>> {
-        self.ensure_batch_exists(batch_id).await?;
+        let service = self.clone();
+        let batch_id = batch_id.to_owned();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.row_list_snapshot(&batch_id, &params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn row_list_snapshot(
+        &self,
+        batch_id: &str,
+        params: &LegacyImportRowListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<LegacyImportRowView>> {
         params.validate()?;
+        self.authorization
+            .require(actor, &legacy_import::ROW_LIST, AccessTarget::Operation, executor)
+            .await?;
+        self.ensure_batch_exists(batch_id, executor).await?;
         let query = params.normalized()?;
         let filter = LegacyImportRowFilter {
             batch_id: Some(LegacyImportBatchId::new(batch_id.to_string())),
@@ -91,8 +166,7 @@ impl LegacyImportService {
             sort_by: Some(query.paging.sort_field()),
             sort_ascending: query.paging.sort_ascending(),
         };
-        let page =
-            self.db.legacy_import_rows().search_legacy_import_rows(&filter, &mut NoTransaction).await?;
+        let page = self.db.legacy_import_rows().search_legacy_import_rows(&filter, executor).await?;
         let items = page.items.into_iter().map(LegacyImportRowView::from).collect();
 
         Ok(page_view(items, page.total, filter.page, filter.page_size))
@@ -123,15 +197,20 @@ impl LegacyImportService {
     ///
     /// # 参数
     /// * `batch` - 导入批次实体
+    /// * `executor` - 公开查询已授权的原读取执行器
     ///
     /// # 返回
     /// 返回含 `background_job_id` 的响应视图。
     ///
     /// # 错误
     /// 后台任务身份查询失败时返回 [`crate::ports::BulkJobFactsPort`] 的错误，不是本方法直接查库。
-    pub(super) async fn batch_view_of(&self, batch: LegacyImportBatch) -> Result<LegacyImportBatchView> {
+    pub(super) async fn batch_view_of(
+        &self,
+        batch: LegacyImportBatch,
+        executor: &mut dyn Executor,
+    ) -> Result<LegacyImportBatchView> {
         let background_job_id =
-            self.bulk_jobs.background_job_id_by_request_id(&batch.batch_no, &mut NoTransaction).await?;
+            self.bulk_jobs.background_job_id_by_request_id(&batch.batch_no, executor).await?;
         let mut view: LegacyImportBatchView = batch.into();
         view.background_job_id = background_job_id;
         Ok(view)
@@ -147,10 +226,10 @@ impl LegacyImportService {
     ///
     /// # 错误
     /// 批次不存在时返回 `NotFound`。仓储读取失败时返回对应的导入领域错误。
-    async fn ensure_batch_exists(&self, batch_id: &str) -> Result<()> {
+    async fn ensure_batch_exists(&self, batch_id: &str, executor: &mut dyn Executor) -> Result<()> {
         self.db
             .legacy_import_batches()
-            .find_by_id(batch_id, &mut NoTransaction)
+            .find_by_id(batch_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
         Ok(())
@@ -229,6 +308,51 @@ impl From<LegacyImportRowRow> for LegacyImportRowView {
 #[cfg(test)]
 mod tests {
     use super::page_view;
+
+    /// 管理读取的事务步骤均须先经身份设施，不能先探测真实批次或行。
+    #[tokio::test]
+    async fn import_reads_require_identity_before_querying_batches_or_rows() {
+        use std::sync::Arc;
+
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use persistence_core::ReadExecutor;
+
+        use super::{Error, LegacyImportService};
+        use crate::dto::legacy_import::{LegacyImportBatchListParams, LegacyImportRowListParams};
+        use crate::ports::FailClosedBulkJobFacts;
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = LegacyImportService::new(
+            client.database("legacy_import_authorization_test"),
+            Arc::new(FailClosedBulkJobFacts),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let rows: LegacyImportRowListParams = serde_json::from_value(serde_json::json!({})).unwrap();
+        let errors = [
+            service
+                .batch_list_snapshot(
+                    &LegacyImportBatchListParams::default(),
+                    &actor,
+                    &mut ReadExecutor::default(),
+                )
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .batch_detail_snapshot("batch", &actor, &mut ReadExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .row_list_snapshot("batch", &rows, &actor, &mut ReadExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+        ];
+        for error in errors {
+            assert!(matches!(error,Error::Internal(ref reason) if reason=="测试授权设施不可用"));
+        }
+    }
 
     #[test]
     fn page_view_carries_items_total_and_paging() {

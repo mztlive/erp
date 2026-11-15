@@ -15,6 +15,27 @@ use erp_procurement::entity::purchase_order::{
 
 use super::*;
 
+/// 缺少固定授权绑定必须在任何销售或费用数据库读取之前停止。
+#[tokio::test]
+async fn list_rejects_unavailable_authorization_before_reading_sales_or_expenses() {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    let client =
+        mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+    let service = SalesExtraCostReadModel::new(
+        client.database("extra_cost_authorization"),
+        unavailable_authorization(),
+    );
+    let actor = AuditActor::new("sales".into(), "销售".into(), AccountKind::Admin);
+    let error = service
+        .read("sales-order", &actor, &mut SnapshotExecutor::default())
+        .await
+        .expect_err("没有固定成本授权绑定不能读取费用");
+    assert!(matches!(error, Error::ValidationError(reason) if reason == "缺少查询 Mapping 绑定"));
+}
+
 fn order(id: &str, sales_order: &str) -> PurchaseOrder {
     let mut order = PurchaseOrder::new(
         PurchaseOrderId::new(id),

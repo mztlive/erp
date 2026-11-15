@@ -113,20 +113,10 @@ mod tests {
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId};
     use bpm::model::types::ApprovalExecutionAssignmentSource;
     use bpm::model::{NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, Timestamp};
-    use mongodb::ClientSession;
+    use persistence_core::ReadExecutor as TrackingExecutor;
 
     use super::*;
     use crate::Error;
-
-    #[derive(Default)]
-    struct TrackingExecutor(usize);
-
-    impl Executor for TrackingExecutor {
-        fn session(&mut self) -> Option<&mut ClientSession> {
-            self.0 += 1;
-            None
-        }
-    }
 
     struct Store {
         instance: Option<ApprovalProcessInstance>,
@@ -147,8 +137,7 @@ mod tests {
             }
         }
 
-        fn record(&self, stage: &'static str, detail: &str, executor: &mut dyn Executor) -> Result<()> {
-            let _ = executor.session();
+        fn record(&self, stage: &'static str, detail: &str, _executor: &mut dyn Executor) -> Result<()> {
             self.calls.lock().unwrap().push(format!("{stage}:{detail}"));
             if self.fail_at == Some(stage) {
                 return Err(Error::Internal(format!("{stage} failed")));
@@ -226,7 +215,6 @@ mod tests {
         let loaded = summary_from_store(&store, &instance().subject, 2, &mut executor).await.unwrap();
         assert!(loaded.is_none());
         assert_eq!(*store.calls.lock().unwrap(), ["latest:order"]);
-        assert_eq!(executor.0, 1);
     }
 
     #[tokio::test]
@@ -243,7 +231,6 @@ mod tests {
         assert!(loaded.history.has_more);
         assert_eq!(loaded.history.next_cursor.as_deref(), Some("2"));
         assert_eq!(*store.calls.lock().unwrap(), ["latest:order", "current:instance", "history:instance:3"]);
-        assert_eq!(executor.0, 3);
     }
 
     #[tokio::test]

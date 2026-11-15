@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_customer::{CustomerAccountStatus, CustomerExt};
 use erp_identity::service::business_ownership::required_business_org;
 use erp_party::PartyExt;
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use id_generator::next_id;
@@ -33,12 +34,16 @@ impl SalesInquiryProcess {
         data.business_org_unit_id = required_business_org(&self.db, actor.id(), executor).await?;
         data.customer_name = self.require_customer(actor, &data.customer_id, executor).await?;
         if let Some(source) = &data.copied_from_inquiry_id {
-            self.access().require_sales(actor, "detail", source, executor).await?;
+            self.access()
+                .require_sales(actor, &sales_inquiry_permissions::QUERY_SALES_DETAIL, source, executor)
+                .await?;
         }
         normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut data.draft, executor).await?;
         let id = next_id();
         let inquiry = SalesInquiry::create(id.clone(), format!("IQ{id}"), data.clone())?;
-        self.access().ensure_selection(actor, "create", &inquiry, executor).await?;
+        self.access()
+            .ensure_selection(actor, &sales_inquiry_permissions::COMMANDS_SALES_CREATE, &inquiry, executor)
+            .await?;
         Ok(SalesInquiryService::new(self.db.clone())
             .create(id.clone(), format!("IQ{id}"), data, executor)
             .await?)

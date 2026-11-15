@@ -1,11 +1,12 @@
 use application_core::AuditActor;
-use erp_identity::Permission;
+use erp_identity::AccessTarget;
 use erp_supply::entity::supplier_api::SupplierConnectionAction;
 use erp_supply::ports::supplier_reference_registry::{
     SupplierReferenceKind, SupplierReferenceOption, SupplierReferenceTarget,
 };
+use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::context::action_permission;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use super::SupplierApiReadService;
 use crate::{Error, Result};
@@ -24,22 +25,48 @@ impl SupplierApiReadService {
         kind: SupplierReferenceKind,
         actor: &AuditActor,
     ) -> Result<Vec<SupplierReferenceOption>> {
-        let action = reference_action(kind)?;
-        if !self
-            .authorization
-            .has_permission(actor, &Permission::parse(action_permission(action))?, &mut NoTransaction)
-            .await?
-        {
-            return Err(Error::Forbidden("当前账号没有绑定该配置的权限".into()));
-        }
-        let connection = self.domain().load_connection(id, &mut NoTransaction).await?;
-        let Some(registry) = self.reference_registry.as_ref() else {
-            return Ok(Vec::new());
-        };
-        registry
-            .options(kind, &SupplierReferenceTarget::from(&connection))
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.reference_options_snapshot(&id, kind, &actor, executor).await })
+            })
             .await
-            .map_err(|failure| Error::BusinessLogicError(format!("{}: {}", failure.code, failure.summary)))
+    }
+
+    /// 在同一资格快照中读取连接并生成进程内配置选项。
+    /// # 参数
+    /// id、kind 为真实连接与配置种类，actor 为当前账号，executor 为原事务。
+    /// # 返回
+    /// 返回相应绑定资格允许的安全配置别名和短时票据。
+    /// # 错误
+    /// 资格不足、连接缺失或进程内注册表失败时拒绝。
+    pub(super) async fn reference_options_snapshot(
+        &self,
+        id: &str,
+        kind: SupplierReferenceKind,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierReferenceOption>> {
+        let action = reference_action(kind)?;
+        self.authorization
+            .require(actor, &action_permission(action), AccessTarget::Operation, executor)
+            .await?;
+        let connection = self
+            .db
+            .supplier_api_connections()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("连接不存在".into()))?;
+        if let Some(registry) = self.reference_registry.as_ref() {
+            registry.options(kind, &SupplierReferenceTarget::from(&connection)).await.map_err(|failure| {
+                Error::BusinessLogicError(format!("{}: {}", failure.code, failure.summary))
+            })
+        } else {
+            Ok(Vec::new())
+        }
     }
 }
 

@@ -3,18 +3,15 @@
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
+use erp_permissions::access_control;
 use id_generator::next_id;
 use persistence_core::{Executor, Transactional};
 use serde::Deserialize;
 
 use super::PersonDirectoryService;
-use crate::entity::person_directory::{
-    PersonDirectoryCategory, PersonQueryQualification, PersonQueryStatus, candidate_in_directory,
-};
-use crate::repository::OrganizationRepository;
+use crate::entity::person_directory::{PersonDirectoryCategory, PersonQueryQualification, PersonQueryStatus};
 use crate::repository::prelude::*;
-use crate::service::access_control::resolve::DataScopeService;
-use crate::{AccessControlExt, Error, Permission, Result};
+use crate::{AccessControlExt, AccessTarget, AuthorizationService, Error, Result};
 
 /// 资格维护请求。新建不传版本，终止或再授予必须回传读取的版本。
 #[derive(Clone, Deserialize)]
@@ -50,12 +47,12 @@ impl PersonDirectoryService {
             return Err(Error::ValidationError("后台人员目录无需查询资格".into()));
         }
         let db = self.db.clone();
-        let access = DataScopeService::new(db.clone(), self.rbac.clone());
+        let authorization = self.authorization.clone();
         db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    manage_target(&db, &access, &actor, category, &account_id, change, executor).await
+                    manage_target(&db, &authorization, &actor, category, &account_id, change, executor).await
                 })
             })
             .await
@@ -65,22 +62,21 @@ impl PersonDirectoryService {
 /// 在同一事务内校验目标范围并读写资格。
 async fn manage_target(
     db: &mongodb::Database,
-    access: &DataScopeService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     category: PersonDirectoryCategory,
     account_id: &str,
     change: Option<QualificationChange>,
     executor: &mut dyn Executor,
 ) -> Result<Option<PersonQueryQualification>> {
-    let mut scope =
-        access.resolve(actor, &Permission::parse("person_query_qualification:manage")?, executor).await?;
-    scope.facts.organizations.memberships = OrganizationRepository::new(db)
-        .directory_memberships(Some(&[account_id.to_owned()]), None, scope.as_of, executor)
+    authorization
+        .require(
+            actor,
+            &access_control::PERSON_DIRECTORY_CHANGE_QUALIFICATION,
+            AccessTarget::record(account_id)?,
+            executor,
+        )
         .await?;
-    let org = scope.organizations.own_org(account_id, scope.as_of)?;
-    if !candidate_in_directory(&scope.scope, actor.id(), account_id, org, None) {
-        return Err(Error::Forbidden("目标账号不在查询资格管理范围内".into()));
-    }
     let account = db
         .accounts()
         .find_by_id(account_id, executor)

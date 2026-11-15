@@ -10,6 +10,7 @@ use erp_catalog::service::catalog::{prepare_product_list, product_page_view};
 use erp_catalog::{CatalogAccess, ProductFilter, ProductListParams, ProductListView, ProductView};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::catalog as catalog_permissions;
 use persistence_core::Transactional;
 
 use super::CatalogCenterReadService;
@@ -62,18 +63,35 @@ impl CatalogCenterReadService {
     /// # 错误
     /// 不存在或不在范围内返回 NotFound。
     pub async fn product_detail(&self, id: &str, actor: &AuditActor) -> Result<ProductView> {
+        let db = self.db.clone();
         let access = self.access.clone();
-        let product =
-            access.require_product(actor, "detail", id, &mut persistence_core::NoTransaction).await?;
-        let mut filter = prepare_product_list(&ProductListParams {
-            page: Some(1),
-            page_size: Some(1),
-            ..ProductListParams::default()
-        })?;
-        filter.ids = Some(vec![product.base.id.clone()]);
-        let page = self.query.product_page(&filter, &mut persistence_core::NoTransaction).await?;
-        let view = product_page_view(page, &filter)?;
-        view.items.into_iter().next().ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))
+        let query = self.query.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let context = access
+                        .resolve(&actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, executor)
+                        .await?;
+                    let mut filter = prepare_product_list(&ProductListParams {
+                        page: Some(1),
+                        page_size: Some(1),
+                        ..Default::default()
+                    })?;
+                    filter.ids = Some(vec![id]);
+                    filter.scope = Some(context.clone());
+                    let page = query.product_page(&filter, executor).await?;
+                    let view = product_page_view(page, &filter)?;
+                    context.validate(executor).await?;
+                    view.items
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))
+                })
+            })
+            .await
     }
 
     /// 在同一事务装载列表快照。
@@ -114,8 +132,8 @@ async fn build_snapshot(
     actor: AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ProductSnapshot> {
-    let mut context = access.resolve(&actor, "list", executor).await?;
-    context.validate(executor).await?;
+    let mut context = access.resolve(&actor, &catalog_permissions::PRODUCT_PRODUCT_LIST, executor).await?;
+    context.ensure_current(executor)?;
     let mut filter = prepare_product_list(&params)?;
     filter.scope = Some(context.clone());
     apply_org_filter(&mut filter, &access, &params, executor).await?;

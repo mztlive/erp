@@ -1,13 +1,16 @@
 //! 责任队列写入结果、幂等回放与版本冲突投影。
 
 use std::future::Future;
+use std::result::Result as StdResult;
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_permissions::work_item;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::access::ensure_generic_work_item_mutation;
 use super::{
-    WorkItemConflict, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemScope, WorkItemService,
+    WorkItemConflict, WorkItemConflictKind, WorkItemFilter, WorkItemMutationOutcome, WorkItemScope,
+    WorkItemService,
 };
 use crate::dto::work_item::ViewAccess;
 use crate::entity::work_item::WorkItem;
@@ -139,8 +142,8 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ///
     /// # 参数
     /// * `receipt` - 本次命令收据
-    /// * `item_id` - 命令指向的任务 ID
-    /// * `actor` - 当前操作人
+    /// * `item` - 同一事务中已证明管理资格的真实任务
+    /// * `executor` - 原事务执行器
     ///
     /// # 返回
     /// 没有已提交收据时返回 `None`；同载荷且任务仍可管理时返回该任务。
@@ -150,25 +153,124 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     pub(super) async fn idempotent_replay(
         &self,
         receipt: &CommandReceipt,
-        item_id: &str,
-        actor: &AuditActor,
+        item: &WorkItem,
+        executor: &mut dyn Executor,
     ) -> Result<Option<WorkItem>> {
         let Some(committed) =
-            self.db.work_item_command_receipts().find_command(receipt.id(), &mut NoTransaction).await?
+            self.db.work_item_command_receipts().find_command(receipt.id(), executor).await?
         else {
             return Ok(None);
         };
         let (resource_id, version) = committed.committed_task(receipt)?;
-        if resource_id != item_id {
+        if resource_id != item.base.id {
             return Err(Error::Internal("幂等回执资源与命令不一致".to_string()));
         }
-        let item = self.load(item_id.to_string()).await?;
         if item.base.version < version {
             return Err(Error::Internal("幂等回执任务版本与事实不一致".to_string()));
         }
+        ensure_generic_work_item_mutation(item)?;
+        Ok(Some(item.clone()))
+    }
+
+    /// 在原事务中先授权，再读取决定写入或回放的任务。
+    /// # 参数
+    /// id、actor 为目标和管理人，executor 为原活动快照事务。
+    /// # 返回
+    /// 当前可管理且允许通用责任变更的任务。
+    /// # 错误
+    /// 无资格、目标缺失、任务类型禁止或数据库读取失败时拒绝。
+    pub(super) async fn managed_item(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkItem> {
+        self.authorization.require(actor, &work_item::MANAGE, id, executor).await?;
+        let item = self
+            .db
+            .work_items()
+            .find_work_item(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         ensure_generic_work_item_mutation(&item)?;
-        self.authorization.require(actor, "manage", &item.base.id, &mut NoTransaction).await?;
-        Ok(Some(item))
+        Ok(item)
+    }
+
+    /// 原写事务退出后记录尝试，并按原幂等合同恢复结果。
+    /// # 参数
+    /// receipt、actor、audit 为原命令上下文，result 为已经结束的写事务结果。
+    /// # 返回
+    /// 已提交的真实结果或安全的版本冲突响应。
+    /// # 错误
+    /// 保留原业务错误；对并发冲突和结果未明的存储失败执行只读查证。
+    pub(super) async fn finish_command(
+        &self,
+        receipt: &CommandReceipt,
+        actor: &AuditActor,
+        audit: &PreparedWorkflowAudit,
+        result: StdResult<WorkItemWriteOutcome, WorkItemWriteError>,
+    ) -> Result<WorkItemMutationOutcome> {
+        let result = match result {
+            Err(WorkItemWriteError::VersionConflict) => {
+                record_command_attempt(
+                    self.audit.as_ref(),
+                    audit,
+                    &Error::ConflictError("任务版本已变化".into()),
+                )
+                .await;
+                WorkItemWriteOutcome::VersionConflict
+            },
+            Err(WorkItemWriteError::Service(error)) => {
+                record_command_attempt(self.audit.as_ref(), audit, &error).await;
+                if !matches!(
+                    error,
+                    Error::OutcomeUnknown(_)
+                        | Error::ReceiptDuplicate(_)
+                        | Error::RepositoryError(_)
+                        | Error::ConflictError(_)
+                ) {
+                    return Err(error);
+                }
+                let replay = self.recover_command(receipt, actor).await;
+                WorkItemWriteOutcome::Updated(Box::new(recover_command_error(error, replay)?))
+            },
+            Ok(result) => result,
+        };
+        match result {
+            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, actor).await,
+            WorkItemWriteOutcome::VersionConflict => {
+                self.conflict_outcome(&audit.resource_id, WorkItemConflictKind::Version, actor).await
+            },
+        }
+    }
+
+    /// 失败事务结束后用新的只读快照取证原命令，禁止重放写入。
+    async fn recover_command(
+        &self,
+        receipt: &CommandReceipt,
+        actor: &AuditActor,
+    ) -> Result<Option<WorkItem>> {
+        let service = self.clone();
+        let receipt = receipt.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.replay_command(&receipt, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 原回放读取先证明当前管理资格，再核对精确任务与命令回执。
+    async fn replay_command(
+        &self,
+        receipt: &CommandReceipt,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WorkItem>> {
+        let id = receipt.scope_id().ok_or_else(|| Error::Internal("任务命令缺少目标身份".into()))?;
+        let item = self.managed_item(id, actor, executor).await?;
+        self.idempotent_replay(receipt, &item, executor).await
     }
 
     /// 将成功写入的实体映射为命令结果。
@@ -209,12 +311,24 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         kind: WorkItemConflictKind,
         actor: &AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        let _ = actor;
-        let exists = self.db.work_items().find_work_item(item_id, &mut NoTransaction).await?.is_some();
-        Ok(WorkItemMutationOutcome::Conflict(WorkItemConflict::new(
-            kind,
-            exists.then(|| item_id.to_string()),
-        )))
+        let service = self.clone();
+        let actor = actor.clone();
+        let item_id = item_id.to_owned();
+        let visible = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let access = service.authorization.query(&actor, &work_item::MANAGE, executor).await?;
+                    let filter = WorkItemFilter { authorization: Some(access.clone()), ..Default::default() };
+                    let item =
+                        service.db.work_items().find_visible_by_id(&item_id, &filter, executor).await?;
+                    service.authorization.service.validate(&access, executor).await?;
+                    Ok::<_, Error>(item.map(|item| item.base.id))
+                })
+            })
+            .await?;
+        Ok(WorkItemMutationOutcome::Conflict(WorkItemConflict::new(kind, visible)))
     }
 
     /// 为其余领域调用方授权工作项，不返回 HTTP 视图。
@@ -236,19 +350,33 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.authorized_task(&id, &actor, executor).await })
+                Box::pin(
+                    async move { service.authorize_work_item_with_executor(&id, &actor, executor).await },
+                )
             })
             .await
     }
 
-    /// 任务、业务事实和完整授权在同一事务快照读取。
-    async fn authorized_task(
+    /// 任务、业务事实和完整授权沿调用方的同一事务快照读取。
+    /// # 参数
+    /// id 为真实任务主键，actor 为当前账号，executor 为调用方的原快照事务。
+    /// # 返回
+    /// 返回任务、允许动作与处理状态。
+    /// # 错误
+    /// 非事务执行器、任务缺失、无权或事实读取失败时拒绝。
+    pub async fn authorize_work_item_with_executor(
         &self,
         id: &str,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedWorkItem> {
-        self.authorization.require(actor, "detail", id, executor).await?;
+        if !executor
+            .boundary()
+            .is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
+        {
+            return Err(Error::ValidationError("任务授权读取必须使用快照事务".into()));
+        }
+        self.authorization.require(actor, &work_item::DETAIL, id, executor).await?;
         let item = self
             .db
             .work_items()
@@ -325,7 +453,66 @@ pub fn expected_task_version(value: &str) -> Result<u64> {
 
 #[cfg(test)]
 mod receipt_recovery_tests {
+    use erp_core::AccountKind;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::unavailable_service;
     use super::*;
+
+    #[tokio::test]
+    async fn command_recovery_requires_current_snapshot_authorization_before_reading_receipts() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let receipt = CommandReceipt::from_resource_parts(
+            IDEMPOTENCY_AUDIT_PREFIX,
+            actor.id(),
+            "work_item.reassign",
+            "work_item",
+            "task",
+            "key",
+            ["1".into()],
+        )
+        .unwrap();
+        let error =
+            service.replay_command(&receipt, &actor, &mut SnapshotExecutor::default()).await.err().unwrap();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn authorization_denial_keeps_the_original_error_without_starting_receipt_recovery() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let receipt = CommandReceipt::from_resource_parts(
+            IDEMPOTENCY_AUDIT_PREFIX,
+            actor.id(),
+            "work_item.reassign",
+            "work_item",
+            "task",
+            "key",
+            ["1".into()],
+        )
+        .unwrap();
+        let audit = PreparedWorkflowAudit::resource_with_message(
+            actor.clone(),
+            receipt.action(),
+            receipt.resource_type(),
+            "task".into(),
+            None,
+        )
+        .unwrap();
+        let error = service
+            .finish_command(
+                &receipt,
+                &actor,
+                &audit,
+                Err(WorkItemWriteError::Service(Error::Forbidden("scope denied".into()))),
+            )
+            .await
+            .err()
+            .unwrap();
+        assert!(matches!(error, Error::Forbidden(reason) if reason == "scope denied"));
+    }
+
     #[test]
     fn unverified_recovery_keeps_original_unknown_commit_source() {
         for recovery in [Ok(None), Err(Error::Internal("receipt read failed".into()))] {

@@ -69,17 +69,10 @@ mod tests {
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::SupplierAccountId;
     use erp_core::money::Amount;
+    use persistence_core::ReadExecutor;
 
     use super::*;
     use crate::service::payable::supplier_settlement::{SettlementPayableSource, build_settlement_payable};
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct Recording {
         calls: Vec<&'static str>,
         executor: usize,
@@ -120,9 +113,9 @@ mod tests {
         )
         .unwrap();
         for fail in [None, Some("account"), Some("entry")] {
-            let mut ex = TestExecutor { _identity: 1 };
+            let mut ex = ReadExecutor::default();
             let mut store =
-                Recording { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail };
+                Recording { calls: vec![], executor: &mut ex as *mut ReadExecutor as usize, fail };
             let result = execute(&mut store, &account, &entry, &mut ex).await;
             if fail.is_some() {
                 assert!(matches!(result, Err(persistence_core::Error::OptimisticLockingError)));

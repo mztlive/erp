@@ -1,6 +1,7 @@
 //! 选品查询：列表、详情、预览与公开页。
 
 use erp_core::common::time::Instant;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::SalesSelectionService;
@@ -17,7 +18,7 @@ use crate::{Error, Result};
 impl SalesSelectionService {
     /// 查询方案列表（执行器与已解析范围注入）。
     ///
-    /// 调用方必须先经 DataScope v2 解析动作范围；计数与取数同一条件。
+    /// 调用方先通过统一授权查询生成范围；计数与取数使用同一条件，交付前由调用方复验。
     ///
     /// # 参数
     /// * `params` - 筛选
@@ -46,6 +47,7 @@ impl SalesSelectionService {
         };
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_proposals(&filter, authorized_scope, executor).await?;
+        authorized_scope.ensure_current(Database::SALES_SELECTION_PROPOSALS, executor)?;
         Ok(crate::dto::sales_selection::SalesSelectionProposalPage {
             items: result.items.iter().map(Self::proposal_list_item).collect(),
             total: result.total,
@@ -56,7 +58,7 @@ impl SalesSelectionService {
 
     /// 分页列出选品册（执行器与已解析范围注入）。
     ///
-    /// 调用方必须先经 DataScope v2 解析动作范围；本方法只执行条件。
+    /// 调用方先通过统一授权查询生成范围；本方法只执行条件，交付前由调用方复验。
     ///
     /// # 参数
     /// * `params` - 筛选与分页参数
@@ -91,6 +93,7 @@ impl SalesSelectionService {
                 view
             })
             .collect();
+        authorized_scope.ensure_current(Database::SALES_SELECTION_BOOKLETS, executor)?;
         Ok(SalesSelectionBookletPage {
             items,
             total: result.total,

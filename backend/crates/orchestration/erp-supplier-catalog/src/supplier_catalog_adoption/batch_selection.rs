@@ -11,7 +11,7 @@ use erp_supply::catalog_adoption::{
 };
 use erp_supply::repository::supplier_catalog;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction};
 
 use super::batch::batch_view;
 use super::{BatchView, CreateBatchRequest, SupplierCatalogAdoptionProcess};
@@ -38,11 +38,8 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
     ) -> Result<BatchView> {
         let fingerprint = request.fingerprint()?;
-        self.batch_access(connection, actor, &mut NoTransaction).await?;
         let id = adoption_identity(&["selection", connection, actor.id(), &request.idempotency_key]);
-        if let Some(batch) =
-            self.existing_selection(connection, &id, &fingerprint, actor, &mut NoTransaction).await?
-        {
+        if let Some(batch) = self.selection_replay(connection, &id, &fingerprint, actor).await? {
             return Ok(batch_view(batch, vec![]));
         }
         let batch_no = DocumentNumberGenerator::new(self.db.clone())
@@ -53,30 +50,45 @@ impl SupplierCatalogAdoptionProcess {
             )
             .await
             .map_err(|error| Error::Internal(error.to_string()))?;
-        let (process, connection, actor) = (self.clone(), connection.to_owned(), actor.clone());
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    if let Some(batch) =
-                        process.existing_selection(&connection, &id, &fingerprint, &actor, executor).await?
-                    {
-                        return Ok(batch_view(batch, vec![]));
-                    }
-                    let batch = process
-                        .register_selection(
-                            &connection,
-                            request,
-                            &actor,
-                            SelectionRegistration { request_key: id, batch_no, fingerprint },
-                            executor,
-                        )
-                        .await?;
-                    Ok(batch_view(batch, vec![]))
-                })
+        let (connection, actor) = (connection.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                if let Some(batch) =
+                    process.existing_selection(&connection, &id, &fingerprint, &actor, executor).await?
+                {
+                    return Ok(batch_view(batch, vec![]));
+                }
+                let batch = process
+                    .register_selection(
+                        &connection,
+                        request,
+                        &actor,
+                        SelectionRegistration { request_key: id, batch_no, fingerprint },
+                        executor,
+                    )
+                    .await?;
+                Ok(batch_view(batch, vec![]))
             })
-            .await
+        })
+        .await
+    }
+
+    /// 在取号前使用同一快照核对当前授权和原选择回执。
+    async fn selection_replay(
+        &self,
+        connection: &str,
+        id: &str,
+        fingerprint: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<CatalogAdoptionBatch>> {
+        let (connection, id, fingerprint, actor) =
+            (connection.to_owned(), id.to_owned(), fingerprint.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                process.existing_selection(&connection, &id, &fingerprint, &actor, executor).await
+            })
+        })
+        .await
     }
 
     /// 在原事务内核验操作号与已保存选择的归属及载荷。
@@ -88,8 +100,8 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Option<CatalogAdoptionBatch>> {
-        let Some(batch) = selection_by_request(&self.db, id, executor).await? else { return Ok(None) };
         let source = self.batch_access(connection, actor, executor).await?;
+        let Some(batch) = selection_by_request(&self.db, id, executor).await? else { return Ok(None) };
         if batch.supplier_id != source.supplier_id.as_ref()
             || batch.connection_id != connection
             || batch.actor_id != actor.id()

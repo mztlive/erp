@@ -5,11 +5,12 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::internal;
 use erp_read_models::sales_center::review::{SalesChangeOrderDetailView, SalesChangeReadService};
 use erp_sales::service::sales_review::SalesReviewService;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use crate::Result;
 use crate::services::SalesServices;
@@ -27,10 +28,11 @@ pub use adapter::sales_change_order_object_readable;
 use posting::persist_effective_writes;
 
 /// 销售变更最终通过流程，所有写入共享审批会话或本流程唯一根事务。
+#[derive(Clone)]
 pub struct SalesChangeProcess {
     services: Arc<SalesServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 impl SalesChangeProcess {
     /// 使用组合根数据库和授权源创建流程。
@@ -38,7 +40,7 @@ impl SalesChangeProcess {
     /// # 参数
     /// * `db` - 数据库
     /// * `services` - 应用已装配的领域服务与审批合同。
-    /// * `rbac` - 当前 RBAC 快照
+    /// * `authorization` - 当前 RBAC 快照
     ///
     /// # 返回
     /// 返回使用当前业务服务和身份服务的流程。
@@ -48,8 +50,8 @@ impl SalesChangeProcess {
     ///
     /// # 关键业务约束
     /// 变更命令必须沿原销售单范围独立重验，不得退回路由级授权。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
-        Self { db, rbac, services }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>, services: Arc<SalesServices>) -> Self {
+        Self { db, authorization, services }
     }
 
     /// 最终通过并生效：生成生效修订并改写销售单。
@@ -71,7 +73,7 @@ impl SalesChangeProcess {
         actor: &AuditActor,
     ) -> Result<SalesChangeOrderDetailView> {
         let service = SalesReviewService::new(self.db.clone());
-        let write = service.prepare_effective_change(id, actor, &mut NoTransaction).await?;
+        let write = service.prepare_effective_change(id, actor, &mut ReadExecutor::default()).await?;
         let delta = posting::prepare_receivable_delta(&self.db, &write, actor).await?;
         let audit = actor.clone().resource_log(
             "sales_change_order.effective",
@@ -98,8 +100,8 @@ impl SalesChangeProcess {
                 })
             })
             .await?;
-        SalesChangeReadService::with_rbac(self.db.clone(), self.rbac.clone())
-            .sales_change_order_detail(id, actor)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.authorization.clone())
+            .command_detail(id, actor, &internal::SALES_CHANGE_APPLIED_RESULT_READ)
             .await
             .map_err(crate::Error::from)
     }

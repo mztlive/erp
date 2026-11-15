@@ -6,12 +6,13 @@ pub(super) mod flow;
 pub(super) mod invoice;
 pub(super) mod invoice_sources;
 pub(super) mod invoice_summary;
-mod management;
-mod management_facts;
+pub(super) mod management;
+pub(super) mod mapping;
 mod page;
 pub(super) mod payment;
 pub(super) mod receipt;
 mod request;
+mod root_guard;
 mod source;
 
 pub(super) mod payable_source;
@@ -31,6 +32,8 @@ pub(super) mod tests {
     use super::super::{FundsAuthorization, FundsReadContext};
     pub(super) fn authorization() -> FundsAuthorization {
         FundsAuthorization {
+            access: None,
+            service: None,
             whole: Default::default(),
             sales: None,
             ledger_read: false,

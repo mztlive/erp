@@ -418,6 +418,9 @@ def scan_entity_source(path: str, source: str, *, money_exception: bool) -> list
 def scan_service_mongo(path: str, source: str) -> list[str]:
     """Flag Service/Process modules that assemble raw Mongo/BSON queries."""
     errors: list[str] = []
+    # An inner cfg(test) applies to the entire module; its BSON is unit-test data.
+    if re.match(r"\s*#!\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]", strip_comments(source)):
+        return errors
     # XML documents are technical input, not Mongo BSON. Only discard the
     # explicitly aliased XML import; Mongo imports and bare Document stay checked.
     document_source = re.sub(
@@ -573,6 +576,7 @@ def run_fixture_suite(fixture_dir: Path) -> CheckResult:
     )
     xml_document = "use roxmltree::Document as XmlDocument; fn parse() -> XmlDocument { todo!() }"
     require_empty("service_xml_document", scan_service_mongo("service_xml_document.rs", xml_document))
+    require_empty("service_test_module", scan_service_mongo("service/tests/behavior.rs", "#![cfg(test)]\nuse mongodb::bson::doc;"))
     grouped_xml = "use roxmltree::{Document as XmlDocument, ParsingOptions}; fn parse() -> XmlDocument { todo!() }"
     require_empty("service_grouped_xml", scan_service_mongo("service_xml_document.rs", grouped_xml))
     require_hit(

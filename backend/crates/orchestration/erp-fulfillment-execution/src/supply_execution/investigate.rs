@@ -4,6 +4,8 @@ mod prepare;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_core::AccountKind;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::supplier_fulfillment::{
@@ -88,8 +90,6 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierOrderInvestigationResultView> {
         command.validate()?;
-        self.require_scoped_order(command.order_id.as_ref(), actor, "investigate", &mut NoTransaction)
-            .await?;
         self.ensure_legacy_order(command.order_id.as_ref(), &mut NoTransaction).await?;
         let fingerprint = serialized_fingerprint(&command)?;
         let command_id = investigation_command_id(
@@ -145,7 +145,6 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierOrderInvestigationResultView> {
         command.validate()?;
-        self.require_task_permissions(actor, &mut NoTransaction).await?;
         self.ensure_legacy_order(command.action.order_id.as_ref(), &mut NoTransaction).await?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
@@ -199,8 +198,14 @@ impl SupplierFulfillmentProcess {
             fingerprint,
         };
         let prepared = self.prepare_investigation_result(&context, &identity, actor).await?;
-        let commit =
-            InvestigationCommit::new((self.identity)().workflow, &context, &identity, prepared, actor);
+        let commit = InvestigationCommit::new(
+            self.identity.workflow.clone(),
+            self.data_scope.clone(),
+            &context,
+            &identity,
+            prepared,
+            actor,
+        );
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
@@ -253,9 +258,43 @@ impl SupplierFulfillmentProcess {
         scope_id: &str,
         identity: (&str, &str),
     ) -> Result<Option<SupplierOrderInvestigationResultView>> {
-        let Some(stored) =
-            self.db.supply_command_receipts().find_command(command_id, &mut NoTransaction).await?
-        else {
+        if self.db.supply_command_receipts().find_command(command_id, &mut NoTransaction).await?.is_none() {
+            return Ok(None);
+        }
+        let process = self.clone();
+        let expected =
+            (command_id.to_string(), expected_fingerprint.to_string(), expected_operation_id.to_string());
+        let task = task.cloned();
+        let scope_id = scope_id.to_string();
+        let identity = (identity.0.to_string(), identity.1.to_string());
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process
+                        .current_replay(
+                            (&expected.0, &expected.1, &expected.2),
+                            task.as_ref(),
+                            &scope_id,
+                            (&identity.0, &identity.1),
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await
+    }
+
+    async fn current_replay(
+        &self,
+        expected: (&str, &str, &str),
+        task: Option<&InvestigationTaskContext>,
+        scope_id: &str,
+        identity: (&str, &str),
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOrderInvestigationResultView>> {
+        let (command_id, expected_fingerprint, expected_operation_id) = expected;
+        let Some(stored) = self.db.supply_command_receipts().find_command(command_id, executor).await? else {
             return Ok(None);
         };
         let action = if task.is_some() {
@@ -281,14 +320,15 @@ impl SupplierFulfillmentProcess {
         let evidence = self
             .db
             .supplier_order_actions()
-            .find_by_id(&receipt.evidence_id, &mut NoTransaction)
+            .find_by_id(&receipt.evidence_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("W26 调查幂等证据不存在".to_string()))?;
         let record = parse_investigation_evidence(&evidence)?;
         if record.operation_id() != expected_operation_id {
             return Err(Error::ConflictError("请求标识已用于不同的调查命令".to_string()));
         }
-        let order = self.load_order(evidence.supplier_fulfillment_order_id.as_ref()).await?;
+        let actor = AuditActor::new(identity.0.into(), identity.0.into(), AccountKind::Admin);
+        let order = self.replay_order(&evidence, task, &actor, executor).await?;
         if resource_id != order.base.id {
             return Err(Error::Internal("W26 调查幂等收据对象不一致".to_string()));
         }
@@ -299,6 +339,46 @@ impl SupplierFulfillmentProcess {
             task.map(|task| task.work_item_id.as_str()),
             receipt.task_version,
         )))
+    }
+    async fn replay_order(
+        &self,
+        evidence: &SupplierOrderAction,
+        task: Option<&InvestigationTaskContext>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierFulfillmentOrder> {
+        Ok(if let Some(task_context) = task {
+            let item = self
+                .db
+                .work_items()
+                .find_work_item(&task_context.work_item_id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("调查任务不存在".into()))?;
+            super::task_authorization::require_assignee(
+                &self.db,
+                &self.identity.rbac.clone(),
+                actor,
+                &item,
+                executor,
+            )
+            .await?;
+            if item.business_object_id != evidence.supplier_fulfillment_order_id.as_ref() {
+                return Err(Error::ConflictError("调查任务与订单不一致".into()));
+            }
+            self.db
+                .supplier_fulfillment_orders()
+                .find_by_id(&evidence.supplier_fulfillment_order_id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("供应商订单不存在".into()))?
+        } else {
+            self.require_scoped_order(
+                evidence.supplier_fulfillment_order_id.as_ref(),
+                actor,
+                &supplier_fulfillment::ORDER_INVESTIGATION,
+                executor,
+            )
+            .await?
+        })
     }
 }
 

@@ -1,6 +1,7 @@
 //! 非终结动作的回执、正式任务权限与跨域事务。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 use erp_integration::dto::{
     IntegrationTaskActionCommand, IntegrationTaskActionEvidence, IntegrationTaskActionResult,
     IntegrationWorkItemStatus, PreparedWorkItemTarget,
@@ -9,6 +10,7 @@ use erp_integration::entity::integration_ops::{ActionReceiptResult, IntegrationC
 use erp_integration::service::task_decision::action::{
     ActionFact, command_receipt_reference, execute_task_action, next_allowed_actions,
 };
+use erp_permissions::integration_ops;
 use erp_workflow::WorkItemExt;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -130,9 +132,18 @@ impl IntegrationResolutionProcess {
         let work_items = (self.work_items_factory)();
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
+        let authorization = self.authorization.clone();
         let result = self
             .run_audited(move |db, executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &integration_ops::INTEGRATION_TASK_ACTION,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     super::execution::run_action(
                         &mut ActionCommand {
                             db,

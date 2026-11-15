@@ -61,7 +61,7 @@ mod tests {
             ("supplier_offering", "list"),
             ("supplier_settlement_statement", "list"),
         ] {
-            let business = PersonBusinessOption::from_granted(resource, vec![action.into()], &[]).unwrap();
+            let business = PersonBusinessOption::from_granted(resource, vec![action.into()]).unwrap();
             assert!(DemoPersonScope::request("fukuan", &business, &[], 7).unwrap().is_none());
         }
     }
@@ -69,12 +69,7 @@ mod tests {
     #[test]
     fn explicit_cross_department_reads_and_directories_have_valid_initial_scopes() {
         for (login, resource) in [("caigou", "sales_order"), ("xiaoshou", "business_person")] {
-            let business = PersonBusinessOption::from_granted(
-                resource,
-                vec!["list".into()],
-                &[ScopeDimension::InternalOrg],
-            )
-            .unwrap();
+            let business = PersonBusinessOption::from_granted(resource, vec!["list".into()]).unwrap();
             let request = DemoPersonScope::request(login, &business, &[], 7).unwrap().unwrap();
             assert_eq!(request.grants[0].terms[0].scope_type, DataScopeType::Company);
             assert_eq!(request.expected_policy_version, 7);
@@ -84,23 +79,14 @@ mod tests {
 
     #[test]
     fn existing_sales_revocation_is_preserved_and_shared_actions_are_excluded() {
-        let business = PersonBusinessOption::from_granted(
-            "sales_order",
-            vec!["list".into(), "detail".into()],
-            &[ScopeDimension::InternalOrg],
-        )
-        .unwrap();
+        let business =
+            PersonBusinessOption::from_granted("sales_order", vec!["list".into(), "detail".into()]).unwrap();
         let mut existing = PersonDataScope::default_for("finance", "sales_order", "list");
         existing.expression.alternatives.clear();
         let request = DemoPersonScope::request("caiwu", &business, &[existing], 3).unwrap().unwrap();
         assert_eq!(request.actions, ["detail"]);
         assert!(DemoPersonScope::term("caigou", "product", true, &[]).is_err());
-        let product = PersonBusinessOption::from_granted(
-            "product",
-            vec!["list".into()],
-            &[ScopeDimension::InternalOrg],
-        )
-        .unwrap();
+        let product = PersonBusinessOption::from_granted("product", vec!["list".into()]).unwrap();
         assert!(DemoPersonScope::request("caigou", &product, &[], 3).unwrap().is_none());
     }
     #[test]

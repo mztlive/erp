@@ -1,4 +1,6 @@
 //! 正式复核事务的生产步骤与同一执行器合同。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
@@ -9,6 +11,7 @@ use erp_finance::entity::payable::{PayableAccount, PayableEntry};
 use erp_finance::service::cost::supplier_settlement::persist_settlement_costs;
 use erp_finance::service::payable::supplier_settlement::persist_settlement_payable;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
+use erp_identity::AuthorizationService;
 use erp_read_models::supplier_center::settlement::require_reviewer;
 use erp_supply::command_receipt::{ReviewDecisionReceipt, SupplyCommandResult};
 use erp_supply::dto::supplier_settlement::SettlementReviewDecisionStatus;
@@ -67,6 +70,7 @@ async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> 
 }
 pub(super) struct Posting<'a, A: WorkflowAuthorizationPort> {
     pub db: &'a Database,
+    pub authorization: &'a Arc<AuthorizationService>,
     pub actor: &'a AuditActor,
     pub actor_id: &'a str,
     pub work_items: &'a WorkItemService<A>,
@@ -128,10 +132,10 @@ async fn authorize_posting<A: WorkflowAuthorizationPort>(
     input: &Posting<'_, A>,
     ex: &mut dyn Executor,
 ) -> Result<()> {
-    require_reviewer(input.db, &input.work_items.identity, input.actor, input.work_item, ex).await?;
+    require_reviewer(input.db, input.authorization, input.actor, input.work_item, ex).await?;
     input.work_items.ensure_domain_decision_access(input.actor, input.work_item, ex).await?;
     super::reviewers::ensure_reviewer(
-        input.db,
+        input.authorization,
         &input.work_items.identity,
         input.actor_id,
         &input.statement.prepared_by,
@@ -203,15 +207,10 @@ pub(super) async fn post<A: WorkflowAuthorizationPort>(
 }
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor;
+
     use super::*;
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+
     struct Recording {
         calls: Vec<Step>,
         executor: usize,
@@ -230,19 +229,19 @@ mod tests {
     }
     #[tokio::test]
     async fn review_reloads_facts_before_writes_with_one_executor() {
-        let mut ex = TestExecutor { _identity: 1 };
+        let mut ex = ReadExecutor::default();
         let mut steps =
-            Recording { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail: None };
+            Recording { calls: vec![], executor: &mut ex as *mut ReadExecutor as usize, fail: None };
         execute(&mut steps, &mut ex).await.unwrap();
         assert_eq!(steps.calls, ORDER);
     }
     #[tokio::test]
     async fn review_propagates_every_failure_without_later_steps() {
         for (index, fail) in ORDER.into_iter().enumerate() {
-            let mut ex = TestExecutor { _identity: 1 };
+            let mut ex = ReadExecutor::default();
             let mut steps = Recording {
                 calls: vec![],
-                executor: &mut ex as *mut TestExecutor as usize,
+                executor: &mut ex as *mut ReadExecutor as usize,
                 fail: Some(fail),
             };
             let error = execute(&mut steps, &mut ex).await.unwrap_err();

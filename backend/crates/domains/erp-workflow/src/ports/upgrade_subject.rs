@@ -21,6 +21,10 @@ pub struct ApprovalUpgradeSubjectFacts {
     pub responsible_org_id: String,
     /// Immutable creator.
     pub creator_id: String,
+    /// 强实体提供的真实授权来源资源。
+    pub source_resource: String,
+    /// 强实体或固定父链提供的真实授权来源主键。
+    pub source_id: String,
 }
 
 impl ApprovalUpgradeSubjectFacts {

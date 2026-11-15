@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::{AuthorizationService, CompiledAccess, Permission, SharedRbacService};
+use erp_identity::{AuthorizationService, CompiledAccess};
+use erp_permissions::{Permission as AccessPermission, sales_inquiry as sales_inquiry_permissions};
 use erp_procure_to_pay::procure_to_pay::responsibility::eligibility::ProcurementInquiryEligibility;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
@@ -19,7 +20,7 @@ use crate::{Error, Result};
 #[derive(Clone)]
 pub struct SalesInquiryAccess {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl SalesInquiryAccess {
@@ -33,43 +34,40 @@ impl SalesInquiryAccess {
     pub async fn ensure_selection(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         inquiry: &SalesInquiry,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.require_permissions(actor, action, inquiry, &[Permission::parse("sellable_sku:list")?], executor)
-            .await
+        self.require(actor, permission, inquiry, executor).await
     }
 
     /// 按可信候选对象和额外功能资格执行统一授权。
     /// # 参数
-    /// actor、action 为服务端入口，inquiry 为业务事实，extra 为固定权限集合，executor 为原事务。
+    /// actor、action 为服务端入口，inquiry 为业务事实，executor 为原事务。
     /// # 返回
     /// 完整对象授权成立时成功。
     /// # 错误
     /// 账号、资格或范围失效时拒绝。
-    pub async fn require_permissions(
+    pub async fn require(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         inquiry: &SalesInquiry,
-        extra: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        authorization::require(self.db.clone(), self.rbac.clone(), actor, action, inquiry, extra, executor)
-            .await
+        authorization::require(&self.authorization, actor, permission, inquiry, executor).await
     }
 
     /// 绑定身份与询价事实来源，不进行预授权。
     ///
     /// # 参数
-    /// `db` 为业务库，`rbac` 为当前授权源。
+    /// `db` 为业务库，`authorization` 为当前授权源。
     /// # 返回
     /// 无授权缓存的当前事实访问器。
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     /// 编译当前询价查询约束，调用仓储前后复验。
@@ -82,10 +80,10 @@ impl SalesInquiryAccess {
     pub async fn resolve_sales(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
-    ) -> Result<(Arc<CompiledAccess>, AuthorizationService)> {
-        authorization::query(self.db.clone(), self.rbac.clone(), actor, action, executor).await
+    ) -> Result<(Arc<CompiledAccess>, Arc<AuthorizationService>)> {
+        authorization::query(&self.authorization, actor, permission, executor).await
     }
 
     /// 在当前动作范围内读取询价，销售接口不得调用采购内部报价读取。
@@ -99,12 +97,12 @@ impl SalesInquiryAccess {
     pub async fn require_sales(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesInquiry> {
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
-        self.require_permissions(actor, action, &inquiry, &[], executor).await?;
+        self.require(actor, permission, &inquiry, executor).await?;
         Ok(inquiry)
     }
 
@@ -120,13 +118,13 @@ impl SalesInquiryAccess {
     pub async fn require_task(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         id: &str,
         task_id: &str,
         task_version: Option<u64>,
         executor: &mut dyn Executor,
     ) -> Result<(SalesInquiry, WorkItem)> {
-        let item = self.authorized_task(actor, action, task_id, executor).await?;
+        let item = self.authorized_task(actor, permission, task_id, executor).await?;
         let inquiry = self.current_task_inquiry(id, &item, executor).await?;
         if task_version.is_some_and(|version| version != item.base.version) {
             return Err(Error::ConflictError("询价任务责任或版本已变化，请刷新".into()));
@@ -144,15 +142,20 @@ impl SalesInquiryAccess {
     pub async fn require_read_task(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         id: &str,
         task_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<(SalesInquiry, WorkItem)> {
-        if !matches!(action, "list" | "detail") {
+        if ![
+            sales_inquiry_permissions::QUERY_PROCUREMENT_LIST,
+            sales_inquiry_permissions::QUERY_PROCUREMENT_DETAIL,
+        ]
+        .contains(permission)
+        {
             return Err(task_missing());
         }
-        let task = self.authorized_task(actor, action, task_id, executor).await?;
+        let task = self.authorized_task(actor, permission, task_id, executor).await?;
         if task.status == WorkItemStatus::Open {
             let inquiry = self.current_task_inquiry(id, &task, executor).await?;
             return Ok((inquiry, task));
@@ -174,13 +177,12 @@ impl SalesInquiryAccess {
     async fn authorized_task(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         task_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<WorkItem> {
         let item = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
-        authorization::require_task_owner(self.db.clone(), self.rbac.clone(), actor, action, &item, executor)
-            .await?;
+        authorization::require_task_owner(&self.authorization, actor, permission, &item, executor).await?;
         Ok(item)
     }
 
@@ -214,7 +216,7 @@ impl SalesInquiryAccess {
     /// # 错误
     /// 账号、组织或必要执行权限失效时拒绝。
     pub async fn assignment_owner(&self, owner: &str, executor: &mut dyn Executor) -> Result<String> {
-        ProcurementInquiryEligibility::new(self.db.clone(), self.rbac.clone())
+        ProcurementInquiryEligibility::new(self.db.clone(), self.authorization.clone())
             .assignment_owner(owner, executor)
             .await
             .map_err(Error::from)
@@ -231,11 +233,11 @@ impl SalesInquiryAccess {
     pub async fn ensure_procurement_permission(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<u64> {
-        ProcurementInquiryEligibility::new(self.db.clone(), self.rbac.clone())
-            .ensure_permission(actor, action, executor)
+        ProcurementInquiryEligibility::new(self.db.clone(), self.authorization.clone())
+            .ensure_permission(actor, permission, executor)
             .await
             .map_err(|error| match error {
                 erp_procure_to_pay::Error::Forbidden(_) => {

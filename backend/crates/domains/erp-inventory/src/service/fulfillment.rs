@@ -497,15 +497,9 @@ async fn establish_receipt_reservation_with_store(
 mod receipt_store_tests {
     use std::str::FromStr;
 
+    use persistence_core::ReadExecutor;
+
     use super::*;
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct RecordingStore {
         calls: Vec<&'static str>,
         executor: usize,
@@ -518,10 +512,10 @@ mod receipt_store_tests {
         entry: Option<StockReservationEntry>,
     }
     impl RecordingStore {
-        fn new(ex: &mut TestExecutor, existing: bool) -> Self {
+        fn new(ex: &mut ReadExecutor, existing: bool) -> Self {
             Self {
                 calls: vec![],
-                executor: ex as *mut TestExecutor as usize,
+                executor: ex as *mut ReadExecutor as usize,
                 existing,
                 fail_at: None,
                 false_at: None,
@@ -690,7 +684,7 @@ mod receipt_store_tests {
     #[tokio::test]
     async fn receipt_existing_and_new_balance_preserve_stock_and_reservation_facts() {
         for existing in [false, true] {
-            let mut ex = TestExecutor { _identity: 1 };
+            let mut ex = ReadExecutor::default();
             let mut store = RecordingStore::new(&mut ex, existing);
             apply(&mut store, &mut ex).await.unwrap();
             assert_eq!(store.calls, order(existing));
@@ -739,7 +733,7 @@ mod receipt_store_tests {
         for existing in [false, true] {
             let expected = order(existing);
             for (index, call) in expected.iter().enumerate() {
-                let mut ex = TestExecutor { _identity: 1 };
+                let mut ex = ReadExecutor::default();
                 let mut store = RecordingStore::new(&mut ex, existing);
                 store.fail_at = Some(call);
                 assert!(
@@ -757,7 +751,7 @@ mod receipt_store_tests {
             ("lastmovement", "库存余额行不存在"),
             ("reserve", "可用库存不足，无法建立销售预占"),
         ] {
-            let mut ex = TestExecutor { _identity: 1 };
+            let mut ex = ReadExecutor::default();
             let mut store = RecordingStore::new(&mut ex, true);
             store.false_at = Some(call);
             assert!(

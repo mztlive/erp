@@ -4,13 +4,15 @@
 use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_settlement;
 use erp_supply::dto::supplier_settlement::*;
 use erp_supply::entity::supplier_settlement::SupplierSettlementDifferenceEvidence;
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::evidence::{evidence_command_hash, evidence_result};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierSettlementProcess;
@@ -40,19 +42,74 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     ) -> Result<SettlementDifferenceEvidenceResult> {
         req.validate()?;
         if difference_id != req.difference_id {
-            return Err(Error::ValidationError("差异路径ID与命令载荷不一致".to_string()));
+            return Err(Error::ValidationError("差异路径ID与命令载荷不一致".into()));
         }
-        let command_hash = evidence_command_hash(&req);
-        if let Some(result) = self
-            .domain()
-            .replay_difference_evidence(&req.request_id, &req, &command_hash, &mut NoTransaction)
-            .await?
+        let process = self.clone();
+        let command = req.clone();
+        let writer = actor.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.append_evidence(&command, &writer, executor).await })
+            })
+            .await;
+        let Err(error) = result else { return result };
+        let process = self.clone();
+        let actor = actor.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process
+                        .authorization
+                        .require(
+                            &actor,
+                            &supplier_settlement::DIFFERENCE_DECIDE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    Ok::<_, Error>(
+                        process
+                            .domain()
+                            .replay_difference_evidence(
+                                &req.request_id,
+                                &req,
+                                &evidence_command_hash(&req),
+                                executor,
+                            )
+                            .await?,
+                    )
+                })
+            })
+            .await?;
+        match recovered {
+            Some(result) => Ok(result),
+            None => Err(error),
+        }
+    }
+
+    /// 同一快照内核验固定资格、幂等收据和精确差异，再原子写入补证。
+    async fn append_evidence(
+        &self,
+        req: &SettlementDifferenceEvidenceRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementDifferenceEvidenceResult> {
+        self.authorization
+            .require(actor, &supplier_settlement::DIFFERENCE_DECIDE, AccessTarget::Operation, executor)
+            .await?;
+        let command_hash = evidence_command_hash(req);
+        if let Some(result) =
+            self.domain().replay_difference_evidence(&req.request_id, req, &command_hash, executor).await?
         {
             return Ok(result);
         }
         let evidence = self
             .domain()
-            .prepare_difference_evidence(difference_id, &req, actor.id(), &command_hash, &mut NoTransaction)
+            .prepare_difference_evidence(&req.difference_id, req, actor.id(), &command_hash, executor)
             .await?;
         let audit = actor.clone().resource_log(
             "supplier_settlement.difference_evidence.append",
@@ -67,18 +124,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             evidence: evidence.clone(),
             audit,
         };
-        let transaction_result =
-            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
-        if let Err(error) = transaction_result {
-            if let Some(result) = self
-                .domain()
-                .replay_difference_evidence(&evidence.request_id, &req, &command_hash, &mut NoTransaction)
-                .await?
-            {
-                return Ok(result);
-            }
-            return Err(error);
-        }
+        input.persist(executor).await?;
         Ok(evidence_result(evidence, "RECORDED", "差异补证已登记，不会直接改变正式差异结论"))
     }
 }

@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use application_core::AuditActor;
 use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductKind};
 use erp_core::common::time::BusinessDate;
@@ -10,13 +11,15 @@ use erp_core::delivery_coverage::{DeliveryReach, delivery_reach};
 use erp_core::delivery_policy::{DeliveryPolicy, DeliveryRuleSet, DeliveryTerm};
 use erp_core::ids::SkuId;
 use erp_core::region::RegionCode;
+use erp_identity::AuthorizationService;
 use erp_procurement::entity::facts::{AvailabilityStatus, OfferingRevisionFact};
 use erp_procurement::entity::purchase_order::CreationBasisFacts;
 use erp_supply::entity::supplier_offering::SkuDeliveryInput;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::{Deserialize, Serialize};
 
+use super::require_sellable_read;
 use crate::purchase_center::repository::load_creation_basis_facts;
 use crate::{Error, Result};
 
@@ -96,6 +99,8 @@ pub fn coverage_hint(policies: &[&DeliveryPolicy], region: &RegionCode) -> Deliv
 /// 查询销售收货地区的配送提示。
 ///
 /// # 参数
+/// * `authorization` - 组合根共享的统一授权服务。
+/// * `actor` - 本次已认证账号。
 /// * `db` - 数据库
 /// * `req` - 商品与收货地区
 ///
@@ -107,15 +112,44 @@ pub fn coverage_hint(policies: &[&DeliveryPolicy], region: &RegionCode) -> Deliv
 pub async fn sellable_delivery_coverage(
     db: &Database,
     req: DeliveryCoverageRequest,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
 ) -> Result<DeliveryCoverageView> {
+    let (db, authorization, actor) = (db.clone(), authorization.clone(), actor.clone());
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move { delivery_snapshot(&db, req, &authorization, &actor, executor).await })
+        })
+        .await
+}
+
+/// 配送提示与商品池使用同一固定资格；全部供给事实在原快照内读取。
+async fn delivery_snapshot(
+    db: &Database,
+    req: DeliveryCoverageRequest,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<DeliveryCoverageView> {
+    let boundary = require_sellable_read(authorization, actor, executor).await?;
     if req.lines.len() > MAX_LINES
         || req.lines.iter().any(|line| line.region_codes.len() > MAX_REGIONS_PER_LINE)
     {
         return Err(Error::ValidationError("配送提示的商品或地址数量超出上限".into()));
     }
     let sku_ids = req.lines.iter().map(|line| SkuId::new(line.sku_id.trim())).collect::<Vec<_>>();
-    let facts = load_creation_basis_facts(db, &sku_ids, &mut NoTransaction).await?;
-    let supplies = effective_supply(&facts, BusinessDate::today());
+    let facts = load_creation_basis_facts(db, &sku_ids, executor).await?;
+    let view = delivery_view(&req, &facts)?;
+    if !boundary.is_current(executor) {
+        return Err(Error::ValidationError("配送提示跨越授权快照".into()));
+    }
+    Ok(view)
+}
+
+/// 仅投影当前快照的供给事实，地区去重且保留请求顺序。
+fn delivery_view(req: &DeliveryCoverageRequest, facts: &CreationBasisFacts) -> Result<DeliveryCoverageView> {
+    let supplies = effective_supply(facts, BusinessDate::today());
     let mut items = Vec::new();
     for line in &req.lines {
         let sku_id = line.sku_id.trim();
@@ -257,10 +291,67 @@ fn earliest(left: Option<BusinessDate>, right: Option<BusinessDate>) -> Option<B
 
 #[cfg(test)]
 mod tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
     use erp_core::delivery_policy::{DeliveryPolicy, DeliveryRegionRule, DeliveryRuleSet, DeliveryTerm};
     use erp_core::region::RegionCode;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_procurement::entity::purchase_order::CreationBasisFacts;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
-    use super::{DeliveryCoverageHint, coverage_hint};
+    use super::{
+        DeliveryCoverageHint, DeliveryCoverageLineInput, DeliveryCoverageRequest, coverage_hint,
+        delivery_snapshot, delivery_view,
+    };
+    use crate::Error;
+
+    #[tokio::test]
+    async fn delivery_snapshot_rejects_non_snapshot_and_authorization_failure_before_supply_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("delivery_snapshot_contract");
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let authorization = unavailable_authorization();
+        let req = DeliveryCoverageRequest { lines: Vec::new() };
+        let result =
+            delivery_snapshot(&db, req.clone(), &authorization, &actor, &mut ReadExecutor::default()).await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "商品读取必须使用快照事务")
+        );
+        let result =
+            delivery_snapshot(&db, req, &authorization, &actor, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
+
+    #[test]
+    fn delivery_projection_deduplicates_regions_in_request_order_and_rejects_invalid_regions() {
+        let req = DeliveryCoverageRequest {
+            lines: vec![DeliveryCoverageLineInput {
+                sku_id: " sku ".into(),
+                region_codes: vec!["440305".into(), "440305".into(), "650102".into()],
+            }],
+        };
+        let facts = CreationBasisFacts::default();
+        let view = delivery_view(&req, &facts).unwrap();
+        assert_eq!(
+            view.items
+                .iter()
+                .map(|item| (item.sku_id.as_str(), item.region_code.as_str(), item.hint))
+                .collect::<Vec<_>>(),
+            vec![
+                ("sku", "440305", DeliveryCoverageHint::None),
+                ("sku", "650102", DeliveryCoverageHint::None)
+            ]
+        );
+        let invalid = DeliveryCoverageRequest {
+            lines: vec![DeliveryCoverageLineInput {
+                sku_id: "sku".into(),
+                region_codes: vec!["invalid".into()],
+            }],
+        };
+        assert!(matches!(delivery_view(&invalid, &facts), Err(Error::ValidationError(_))));
+    }
 
     fn code(value: &str) -> RegionCode {
         RegionCode::parse(value).unwrap()

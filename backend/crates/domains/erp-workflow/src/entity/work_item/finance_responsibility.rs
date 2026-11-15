@@ -155,27 +155,20 @@ impl FinanceResponsibilityOperation {
         }
     }
 
-    /// 返回本操作负责人必须完整持有的执行权限代码。
+    /// 返回财务操作形成的工作项种类及真实业务对象类型。
     ///
     /// # 参数
     /// 无。
-    ///
     /// # 返回
-    /// 返回对应正式工作项登记的完整、有序权限代码；领域登记缺失时返回
-    /// `None`，由应用层失败关闭并转换为内部配置错误。
-    ///
+    /// 当前付款或开票任务的业务身份；退役操作返回 None。
     /// # 错误
-    /// 不返回错误。
-    ///
-    /// # 业务约束
-    /// 权限合同必须与付款和销项开票工作项保持同一规则源。
-    pub fn required_permission_codes(self) -> Option<&'static [&'static str]> {
+    /// 无；不包含权限资格或授权结果。
+    pub fn task_identity(self) -> Option<(WorkItemType, &'static str)> {
         match self {
-            Self::SupplierPayment => WorkItemType::SupplierPaymentExecution
-                .supplier_payment_execution_permissions("purchase_payment_request"),
-            Self::SalesInvoice => {
-                WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
+            Self::SupplierPayment => {
+                Some((WorkItemType::SupplierPaymentExecution, "purchase_payment_request"))
             },
+            Self::SalesInvoice => Some((WorkItemType::SalesInvoiceExecution, "receivable_account")),
             Self::CardFundsReview => None,
         }
     }
@@ -504,6 +497,7 @@ mod tests {
     use super::{
         EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule,
         FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
+        WorkItemType,
     };
 
     fn rule(
@@ -556,28 +550,16 @@ mod tests {
     }
 
     #[test]
-    fn operation_permission_contracts_are_complete_and_ordered() {
+    fn finance_operations_resolve_current_task_identity() {
         assert_eq!(
-            FinanceResponsibilityOperation::SupplierPayment.required_permission_codes(),
-            Some(["purchase_payment_request:detail", "purchase_payment_request:pay",].as_slice())
+            FinanceResponsibilityOperation::SupplierPayment.task_identity(),
+            Some((WorkItemType::SupplierPaymentExecution, "purchase_payment_request"))
         );
         assert_eq!(
-            FinanceResponsibilityOperation::SalesInvoice.required_permission_codes(),
-            Some(
-                [
-                    "receivable_account:list",
-                    "receivable_account:detail",
-                    "invoice:list",
-                    "invoice:detail",
-                    "invoice:create",
-                    "sales_invoice_request:list",
-                    "sales_invoice_request:detail",
-                    "invoice:post",
-                ]
-                .as_slice()
-            )
+            FinanceResponsibilityOperation::SalesInvoice.task_identity(),
+            Some((WorkItemType::SalesInvoiceExecution, "receivable_account"))
         );
-        assert_eq!(FinanceResponsibilityOperation::CardFundsReview.required_permission_codes(), None);
+        assert_eq!(FinanceResponsibilityOperation::CardFundsReview.task_identity(), None);
     }
 
     #[test]

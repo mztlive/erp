@@ -1,10 +1,15 @@
 //! 显式生成时准备专用演示角色，保留共享业务角色及人员范围配置。
 
 use application_core::AuditActor;
-use erp_identity::entity::rbac::PermissionSet;
 use erp_identity::entity::role_template::BuiltinRoleState;
 use erp_identity::service::iam::builtin_role_templates;
-use erp_identity::{CreateRoleParams, GenerateBuiltinRolesRequest, Permission};
+use erp_identity::{CreateRoleParams, GenerateBuiltinRolesRequest, PermissionSet};
+use erp_permissions::{Permission, approval_instance as approval_instance_permissions};
+#[cfg(test)]
+use erp_permissions::{
+    access_control as access_control_permissions, admin as admin_permissions,
+    purchase_payment_request as purchase_payment_request_permissions,
+};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 
 use super::spec::{AccountSpec, FoundationFile};
@@ -50,8 +55,8 @@ impl DemoRole {
             permissions.push(Permission::parse(permission)?);
         }
         if foundation.approvals.iter().flat_map(|flow| &flow.nodes).any(|node| node.assignee == account.key) {
-            permissions.push(Permission::parse("approval_instance:read")?);
-            permissions.push(Permission::parse("approval_instance:decide")?);
+            permissions.push(approval_instance_permissions::INSTANCE_LIST);
+            permissions.push(approval_instance_permissions::SUBMIT_DECISION);
         }
         Ok(Self {
             id: format!("role-demo-{}", account.account),
@@ -81,7 +86,10 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         self.ensure_builtin_roles(foundation, actor).await?;
         for account in &foundation.accounts {
             let role = DemoRole::for_account(foundation, account)?;
-            let changed = self.rbac.ensure_seeded_role(&role.id, role.request, actor.clone()).await?;
+            let changed = self
+                .identity
+                .ensure_seeded_role(&role.id, role.request, actor.clone(), self.authorization.clone())
+                .await?;
             if changed {
                 report.notices.push(format!("已补齐演示账号 {} 的专用岗位权限", account.account));
             }
@@ -90,7 +98,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 
     async fn ensure_builtin_roles(&self, foundation: &FoundationFile, actor: &AuditActor) -> Result<()> {
-        let catalog = self.rbac.builtin_role_catalog(actor).await?;
+        let catalog = self.identity.builtin_role_catalog(actor, self.authorization.clone()).await?;
         let missing = catalog
             .templates
             .into_iter()
@@ -101,13 +109,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .map(|template| template.template.id)
             .collect::<Vec<_>>();
         if !missing.is_empty() {
-            self.rbac
+            self.identity
                 .generate_builtin_roles(
                     GenerateBuiltinRolesRequest {
                         template_ids: missing,
                         expected_policy_version: catalog.policy_version,
                     },
                     actor.clone(),
+                    self.authorization.clone(),
                 )
                 .await?;
         }
@@ -119,11 +128,9 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
 mod tests {
     use std::collections::HashSet;
 
-    use erp_workflow::FinanceResponsibilityOperation;
-
     use super::*;
 
-    /// 部署模板覆盖真实演示岗位合同，细分岗位满足付款与开票执行资格。
+    /// 部署模板覆盖演示岗位明确要求的业务动作。
     #[test]
     fn builtin_templates_cover_demo_and_finance_execution_contracts() {
         let catalog = builtin_role_templates().unwrap();
@@ -137,16 +144,6 @@ mod tests {
                     "{}: {required}",
                     account.key
                 );
-            }
-        }
-        for (id, operation) in [
-            ("role-cashier", FinanceResponsibilityOperation::SupplierPayment),
-            ("role-invoice-clerk", FinanceResponsibilityOperation::SalesInvoice),
-        ] {
-            let template = catalog.iter().find(|template| template.id == id).unwrap();
-            let permissions = PermissionSet::new(template.permissions.clone());
-            for required in operation.required_permission_codes().unwrap() {
-                assert!(permissions.covers_one(&Permission::parse(required).unwrap()), "{id}: {required}");
             }
         }
     }
@@ -170,7 +167,7 @@ mod tests {
             for required in &foundation.required_permissions[&account.key] {
                 assert!(permissions.covers_one(&Permission::parse(required).unwrap()), "{required}");
             }
-            assert!(!permissions.covers_one(&Permission::parse("role:create").unwrap()));
+            assert!(!permissions.covers_one(&admin_permissions::ROLE_CREATE_ROLE));
             if foundation
                 .approvals
                 .iter()
@@ -186,7 +183,12 @@ mod tests {
             }
         }
         let sales = DemoRole::for_account(foundation, &foundation.accounts[0]).unwrap();
-        assert!(sales.request.permissions.contains(&Permission::parse("sales_person:list").unwrap()));
+        assert!(
+            sales
+                .request
+                .permissions
+                .contains(&access_control_permissions::PERSON_DIRECTORY_LIST_SALESPEOPLE)
+        );
     }
 
     /// 演示授权使用与脚本种子相同的细分模板，不能重新合并财审、付款与开票写权限。
@@ -200,8 +202,8 @@ mod tests {
         let finance = permissions("finance");
         let cashier = permissions("payment");
         let invoice = permissions("invoice");
-        let approve = Permission::parse("approval_instance:decide").unwrap();
-        let pay = Permission::parse("purchase_payment_request:pay").unwrap();
+        let approve = approval_instance_permissions::SUBMIT_DECISION;
+        let pay = purchase_payment_request_permissions::CREDIT_LIST;
         assert!(finance.covers_one(&approve));
         assert!(!finance.covers_one(&pay));
         assert!(cashier.covers_one(&pay));

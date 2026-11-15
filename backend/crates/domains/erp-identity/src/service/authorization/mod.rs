@@ -1,13 +1,24 @@
 //! 业务授权唯一入口；固定规则及启动绑定不能由调用方替换。
+mod approval_query;
+mod approvals;
 mod builder;
+mod definitions;
 mod facilities;
+mod materials;
+mod operations;
+mod organization;
+pub(crate) use organization::OrganizationScope;
 mod require;
 mod resolve;
 pub(crate) mod rules;
 mod targets;
 #[cfg(test)]
 mod tests;
+mod transfers;
+#[cfg(feature = "test-support")]
+mod unavailable;
 mod validate;
+pub(crate) mod work_items;
 
 use std::collections::BTreeMap;
 use std::slice;
@@ -89,7 +100,16 @@ impl AuthorizationService {
             .mappings
             .get(permission)
             .ok_or_else(|| Error::ValidationError("缺少查询 Mapping 绑定".into()))?;
-        let proof = self.resolve(actor, permission, Some(mapping.model()), None, executor).await?;
+        let proof = self
+            .resolve_target(
+                actor,
+                permission,
+                Some(mapping.model()),
+                None,
+                rules::task_query(permission),
+                executor,
+            )
+            .await?;
         compile(&proof, mapping, mapping.model(), executor).await
     }
 }

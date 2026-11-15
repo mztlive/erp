@@ -64,7 +64,12 @@ pub(crate) fn qualifications(permission: &Permission) -> Result<Vec<Permission>>
 pub(super) fn binding_condition(permission: &Permission, output: Output) -> Result<AccessRule> {
     let partitions =
         conditions_with(permission, &|_| true, &|_, source| super::capability_scope(source), output)?;
-    Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
+    let mut rule = AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?);
+    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
+        rule = AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
+            .requiring(&BTreeSet::from([FactKind::Owner]));
+    }
+    Ok(rule)
 }
 
 /// 查询转换必须同时应用分区条件和数据条件，不能只编译 rule。
@@ -107,6 +112,8 @@ impl Source {
 fn sources(permission: &Permission) -> Result<Vec<Source>> {
     let sources = match permission.resource() {
         "cost_entry" if permission.action() == "create" => vec![Source::Sales],
+        "customer_receipt" if permission.action() == "submit" => vec![Source::Sales],
+        "invoice" if matches!(permission.action(), "post" | "posted_result_read") => vec![Source::Sales],
         "receivable_account" | "sales_invoice_request" => {
             vec![Source::Sales]
         },
@@ -118,6 +125,8 @@ fn sources(permission: &Permission) -> Result<Vec<Source>> {
         },
         "customer_refund" => vec![Source::Receipt, Source::Receivable],
         "supplier_refund" => vec![Source::Payment, Source::Payable],
+        "receipt_reversal" => vec![Source::Receipt],
+        "payment_reversal" => vec![Source::Payment],
         _ => return Err(Error::ValidationError("此权限没有固定来源规则".into())),
     };
     Ok(sources)
@@ -151,6 +160,13 @@ fn needs_ledger(permission: &Permission) -> bool {
         permission.resource(),
         "cost_entry" | "cost_allocation" | "customer_receipt" | "supplier_payment" | "invoice"
     ) && matches!(permission.action(), "list" | "detail")
+}
+
+/// 本次入口具备读取完整金额所需的同角色功能资格；不证明来源记录可见。
+pub(crate) fn whole_qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
+    qualified.same_role(&same_role_permissions(permission))
+        && (!needs_ledger(permission)
+            || qualified.same_role(&[permission.clone(), policy_permission::FINANCE_LEDGER_READ]))
 }
 
 /// 生成固定分区；查询必须保持完整原始来源集合，不能按已获准来源选分区。
@@ -191,14 +207,17 @@ fn conditions_with(
         return Err(Error::ValidationError("此权限不允许份额输出".into()));
     }
     let sources = sources(permission)?;
-    if matches!(permission.resource(), "customer_refund" | "supplier_refund") {
+    if matches!(
+        permission.resource(),
+        "customer_refund" | "supplier_refund" | "receipt_reversal" | "payment_reversal"
+    ) {
         return refund_conditions(&sources, qualifies, scopes);
     }
     let ledger = output == Output::Object && needs_ledger(permission);
     let ledger_allowed = qualifies(&[permission.clone(), policy_permission::FINANCE_LEDGER_READ]);
     let mut partitions = Vec::new();
     for mask in 0..(1usize << sources.len()) {
-        if mask == 0 && !ledger {
+        if mask == 0 && !ledger && permission != &receivable::CUSTOMER_RECEIPT_SUBMIT {
             continue;
         }
         if permission.resource() == "payable_account" && mask.count_ones() != 1 {
@@ -273,6 +292,27 @@ pub(crate) fn scoped_condition(
             .ok_or_else(|| Error::ValidationError(format!("缺少来源范围：{entry} -> {source}")))
     };
     let partitions = conditions_with(permission, &|required| qualified.same_role(required), &lookup, output)?;
+    let mut rule = AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?);
+    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
+        rule = AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
+            .requiring(&BTreeSet::from([FactKind::Owner]));
+    }
+    Ok(rule)
+}
+
+/// 审批管理已取得完整同角色资格；来源范围由该组资格解析，不追加来源菜单资格。
+pub(crate) fn management_condition(
+    permission: &Permission,
+    scopes: &[(Permission, ResolvedScope)],
+) -> Result<AccessRule> {
+    let lookup = |_: &Permission, source: &Permission| {
+        scopes
+            .iter()
+            .find(|(key, _)| key == source)
+            .map(|(_, scope)| scope.clone())
+            .ok_or_else(|| Error::ValidationError("缺少审批管理来源范围".into()))
+    };
+    let partitions = conditions_with(permission, &|_| true, &lookup, Output::Object)?;
     Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
 }
 
@@ -285,7 +325,12 @@ pub(crate) fn data_condition(
     output: Output,
 ) -> Result<AccessRule> {
     let partitions = conditions(permission, qualified, scopes, output)?;
-    Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
+    let mut rule = AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?);
+    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
+        rule = AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
+            .requiring(&BTreeSet::from([FactKind::Owner]));
+    }
+    Ok(rule)
 }
 
 impl Partition {
@@ -615,5 +660,58 @@ mod tests {
         object.owner_id = FactValue::Known(Some("actor".into()));
         object.relations.get_mut(&RelationKey::parse("receivable_source").unwrap()).unwrap().objects.clear();
         assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+    }
+
+    /// 冲正只能由真实经办人提交，并独立取得原资金根详情及同角色整账资格。
+    #[test]
+    fn reversal_requires_handler_and_independent_full_original_funds() {
+        for (permission, origin_permission, relation) in [
+            (
+                returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+                receivable::CUSTOMER_RECEIPT_DETAIL,
+                "receipt_source",
+            ),
+            (
+                returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+                payable::SUPPLIER_PAYMENT_DETAIL,
+                "payment_source",
+            ),
+        ] {
+            assert_eq!(scope_spec::kind(&permission).unwrap(), ActionKind::Source);
+            let qualified = QualifiedPermissions::test_grants(&[
+                ("submit", std::slice::from_ref(&permission)),
+                ("source", &[origin_permission.clone(), policy_permission::FINANCE_LEDGER_READ]),
+            ]);
+            let mut object = root(&permission, vec![]);
+            object.owner_id = FactValue::Known(Some("actor".into()));
+            let mut origin = root(&origin_permission, vec![child("s1", "actor")]);
+            origin.id = "original_funds".into();
+            let key = RelationKey::parse(relation).unwrap();
+            object.relations.insert(
+                key.clone(),
+                RelatedObjects { expected_ids: [origin.id.clone()].into(), objects: vec![origin] },
+            );
+            assert!(check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+            let missing_source = QualifiedPermissions::test_grants(&[(
+                "submit",
+                &[permission.clone(), policy_permission::FINANCE_LEDGER_READ],
+            )]);
+            assert!(!check(&permission, &missing_source, &object, &scopes(), &BTreeSet::new()).unwrap());
+            let split_ledger = QualifiedPermissions::test_grants(&[
+                ("submit", std::slice::from_ref(&permission)),
+                ("source", std::slice::from_ref(&origin_permission)),
+                ("ledger", &[policy_permission::FINANCE_LEDGER_READ]),
+            ]);
+            assert!(!check(&permission, &split_ledger, &object, &scopes(), &BTreeSet::new()).unwrap());
+            object.owner_id = FactValue::Known(Some("other".into()));
+            assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+            object.owner_id = FactValue::Known(Some("actor".into()));
+            let source = &mut object.relations.get_mut(&key).unwrap().objects[0];
+            let nested = source.relations.get_mut(&RelationKey::parse("sales_source").unwrap()).unwrap();
+            nested.expected_ids.insert("missing_source".into());
+            assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+            object.relations.get_mut(&key).unwrap().objects.clear();
+            assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+        }
     }
 }

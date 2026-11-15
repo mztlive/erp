@@ -5,7 +5,7 @@ use erp_supply::dto::supplier_offering::{
     ReviseSupplierOfferingRequest, UpdateSupplierOfferingAvailabilityRequest,
 };
 use erp_supply::service::supplier_offering::CommandPreparation;
-use persistence_core::NoTransaction;
+use persistence_core::Transactional;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -54,7 +54,7 @@ impl BatchOperation for Targeted<ReviseSupplierOfferingRequest> {
     fn key(&mut self) -> &mut String {
         &mut self.command.idempotency_key
     }
-    /// 使用真实修订预检，包括授权、资格和期望修订号。读取使用 `NoTransaction`。
+    /// 使用真实修订预检，包括授权、资格和期望修订号。读取使用同一快照事务。
     ///
     /// # 参数
     /// * `process` - 供给流程，提供领域服务与资质端口。
@@ -66,18 +66,28 @@ impl BatchOperation for Targeted<ReviseSupplierOfferingRequest> {
     /// # 错误
     /// 修订预检失败时返回对应错误；结果无法序列化时返回 `Internal`。
     async fn prepare(&self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Option<Value>> {
-        replay(
-            process
-                .domain()
-                .prepare_revise(
-                    &self.offering_id,
-                    &self.command,
-                    actor,
-                    process.qualification.as_ref(),
-                    &mut NoTransaction,
-                )
-                .await?,
-        )
+        let domain = process.domain();
+        let qualification = process.qualification.clone();
+        let input = self.clone();
+        let actor = actor.clone();
+        let prepared = process
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    domain
+                        .prepare_revise(
+                            &input.offering_id,
+                            &input.command,
+                            &actor,
+                            qualification.as_ref(),
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await?;
+        replay(prepared)
     }
     /// 追加条款，保留当前实时可供数量。
     ///
@@ -123,7 +133,7 @@ impl BatchOperation for Targeted<UpdateSupplierOfferingAvailabilityRequest> {
     fn key(&mut self) -> &mut String {
         &mut self.command.idempotency_key
     }
-    /// 可供批量更新必须提供列表读取时的版本。领域预检使用 `NoTransaction`。
+    /// 可供批量更新必须提供列表读取时的版本。领域预检使用同一快照事务。
     ///
     /// # 参数
     /// * `process` - 供给流程。
@@ -138,12 +148,22 @@ impl BatchOperation for Targeted<UpdateSupplierOfferingAvailabilityRequest> {
         if self.command.expected_version.is_none() {
             return Err(Error::ValidationError("缺少可供状态版本，请刷新供给列表".into()));
         }
-        replay(
-            process
-                .domain()
-                .prepare_availability(&self.offering_id, &self.command, actor, &mut NoTransaction)
-                .await?,
-        )
+        let domain = process.domain();
+        let input = self.clone();
+        let actor = actor.clone();
+        let prepared = process
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    domain
+                        .prepare_availability(&input.offering_id, &input.command, &actor, executor)
+                        .await
+                        .map_err(Error::from)
+                })
+            })
+            .await?;
+        replay(prepared)
     }
     /// 只更新可供状态与数量，不创建商业条款修订。
     ///

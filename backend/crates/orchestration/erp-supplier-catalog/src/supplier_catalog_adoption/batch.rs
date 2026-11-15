@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use entity_core::BaseModel;
+use erp_permissions::{catalog as catalog_permissions, supplier, supplier_offering};
 use erp_supply::catalog_adoption::{
     AdoptionMapping, BatchAdoptionExt, BatchCounts, BatchHistoryEntry, BatchItemStatus, BatchSalesValues,
     CatalogAdoptionBatch, CatalogAdoptionBatchItem, ValueOrigin, batch_history, batch_items,
@@ -12,7 +13,7 @@ use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::service::supplier_api::SupplierApiService;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::{BatchView, SupplierCatalogAdoptionProcess};
 use crate::{Error, Result};
@@ -26,13 +27,19 @@ impl SupplierCatalogAdoptionProcess {
     /// # 错误
     /// 越权、批次不存在或查询失败时拒绝。
     pub async fn batch(&self, connection: &str, id: &str, actor: &AuditActor) -> Result<BatchView> {
-        let batch = self.preparation_batch(connection, id, actor, &mut NoTransaction).await?;
-        if !batch.selection_complete || batch.work.as_ref().is_some_and(|work| work.blocking()) {
-            return Ok(batch_summary(batch));
-        }
-        let rows = self.all_batch_items(id, &mut NoTransaction).await?;
-        self.ensure_batch_rows_access(actor, &rows, &mut NoTransaction).await?;
-        Ok(batch_view(batch, rows))
+        let (connection, id, actor) = (connection.to_owned(), id.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let batch = process.preparation_batch(&connection, &id, &actor, executor).await?;
+                if !batch.selection_complete || batch.work.as_ref().is_some_and(|work| work.blocking()) {
+                    return Ok(batch_summary(batch));
+                }
+                let rows = process.all_batch_items(&id, executor).await?;
+                process.ensure_batch_rows_access(&actor, &rows, executor).await?;
+                Ok(batch_view(batch, rows))
+            })
+        })
+        .await
     }
 
     /// 列出当前供应商可访问的最近批次，以便离开页面后重新打开。
@@ -43,8 +50,14 @@ impl SupplierCatalogAdoptionProcess {
     /// # 错误
     /// 权限或数据范围不足及查询失败时拒绝。
     pub async fn batches(&self, connection: &str, actor: &AuditActor) -> Result<Vec<BatchHistoryEntry>> {
-        self.batch_access(connection, actor, &mut NoTransaction).await?;
-        Ok(batch_history(&self.db, connection, &mut NoTransaction).await?)
+        let (connection, actor) = (connection.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                process.batch_access(&connection, &actor, executor).await?;
+                Ok(batch_history(&process.db, &connection, executor).await?)
+            })
+        })
+        .await
     }
 
     pub(super) async fn load_batch(
@@ -73,9 +86,12 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SupplierApiConnection> {
-        self.ensure_adoption_permissions(actor).await?;
+        self.ensure_adoption_permissions(actor, executor).await?;
         let source = SupplierApiService::new(self.db.clone()).load_connection(connection, executor).await?;
-        self.services.suppliers.require_with(actor, "detail", source.supplier_id.as_ref(), executor).await?;
+        self.services
+            .suppliers
+            .require_with(actor, &supplier::DETAIL, source.supplier_id.as_ref(), executor)
+            .await?;
         Ok(source)
     }
 
@@ -103,10 +119,16 @@ impl SupplierCatalogAdoptionProcess {
             }
         }
         for product in products {
-            self.services.catalog_access.require_product(actor, "detail", product, executor).await?;
+            self.services
+                .catalog_access
+                .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, product, executor)
+                .await?;
         }
         for offering in offerings {
-            self.services.offering_access.require_offering(actor, "list", offering, executor).await?;
+            self.services
+                .offering_access
+                .require_offering(actor, &supplier_offering::LIST, offering, executor)
+                .await?;
         }
         Ok(())
     }

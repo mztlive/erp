@@ -5,7 +5,7 @@ use erp_core::ids::BackgroundJobId;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BackgroundJobItem, BulkJobExt, FileAssetExt, JobUpdate};
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 use serde_json::Value;
 
 use super::submit::row_identity;
@@ -57,7 +57,7 @@ impl DataTransferProcess {
         let mut items = self
             .db
             .background_job_items()
-            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
+            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut ReadExecutor::default())
             .await?;
         apply_recovered(&mut job, &mut items, confirmed, Instant::now())?;
         let mut asset = self

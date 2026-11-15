@@ -1,6 +1,8 @@
 //! 登记加密输入和后台任务；相同请求只能重放同一载荷。
 use application_core::AuditActor;
 use application_core::command::CommandFingerprint;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::internal;
 use erp_supplier::dto::import_job::SupplierImportJobRequest;
 use erp_support::repository::prelude::*;
 use erp_support::{
@@ -9,7 +11,8 @@ use erp_support::{
     JobType,
 };
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
 use crate::{Error, Result};
@@ -44,7 +47,7 @@ impl SupplierImportProcess {
         .digest_hex()
         .to_string();
         let (job, items) = build_job(&request, actor.id(), &source)?;
-        if let Some(existing) = self.replay(&job).await? {
+        if let Some(existing) = self.replay(&job, actor).await? {
             return Ok(existing.into());
         }
         let encrypted = self.codec.encrypt(&json)?;
@@ -56,28 +59,43 @@ impl SupplierImportProcess {
             )
             .await
             .map_err(|_| Error::Internal("保存供应商导入文件失败，请重试".into()))?;
-        self.persist(job, items).await
+        self.persist(job, items, actor).await
     }
 
     /// 查询原提交并验证操作者与完整内容；旧记录无指纹时拒绝重放。
-    async fn replay(&self, proposed: &BackgroundJob) -> Result<Option<BackgroundJob>> {
-        let existing =
-            self.db.background_jobs().find_by_request_id(&proposed.request_id, &mut NoTransaction).await?;
-        if let Some(job) = &existing {
-            ensure_replay(job, proposed)?;
-        }
-        Ok(existing)
+    async fn replay(&self, proposed: &BackgroundJob, actor: &AuditActor) -> Result<Option<BackgroundJob>> {
+        let db = self.db.clone();
+        let authorization = self.job_access.service.clone();
+        let proposed = proposed.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    replay_registration(&db, &authorization, &actor, &proposed, executor).await
+                })
+            })
+            .await
     }
 
     /// 任务与行明细在同一事务内落库；唯一竞争和未知提交结果回读原任务。
-    async fn persist(&self, job: BackgroundJob, items: Vec<BackgroundJobItem>) -> Result<BackgroundJobView> {
+    async fn persist(
+        &self,
+        job: BackgroundJob,
+        items: Vec<BackgroundJobItem>,
+        actor: &AuditActor,
+    ) -> Result<BackgroundJobView> {
+        let authorization = self.job_access.service.clone();
+        let operator = actor.clone();
         let db = self.db.clone();
         let copy = job.clone();
         let result = db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { db.bulk_job().create_job_with_items(&copy, items, executor).await })
+                Box::pin(
+                    async move { register_job(&db, &authorization, &operator, &copy, items, executor).await },
+                )
             })
             .await;
         match result {
@@ -88,13 +106,46 @@ impl SupplierImportProcess {
             },
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(conflict()),
             Err(error) => {
-                if let Some(existing) = self.replay(&job).await? {
+                if let Some(existing) = self.replay(&job, actor).await? {
                     return Ok(existing.into());
                 }
-                Err(error.into())
+                Err(error)
             },
         }
     }
+}
+
+/// 回放前重验当前入口资格，批次身份与结果读取共用原事务。
+async fn replay_registration(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    proposed: &BackgroundJob,
+    executor: &mut dyn Executor,
+) -> Result<Option<BackgroundJob>> {
+    authorization
+        .require(actor, &internal::SUPPLIER_IMPORT_SUBMIT, AccessTarget::Operation, executor)
+        .await?;
+    let existing = db.background_jobs().find_by_request_id(&proposed.request_id, executor).await?;
+    if let Some(job) = &existing {
+        ensure_replay(job, proposed)?;
+    }
+    Ok(existing)
+}
+
+/// S3 写入完成后，在原登记事务重新授权并创建任务及明细。
+async fn register_job(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    job: &BackgroundJob,
+    items: Vec<BackgroundJobItem>,
+    executor: &mut dyn Executor,
+) -> Result<BackgroundJobRegistration> {
+    authorization
+        .require(actor, &internal::SUPPLIER_IMPORT_SUBMIT, AccessTarget::Operation, executor)
+        .await?;
+    Ok(db.bulk_job().create_job_with_items(job, items, executor).await?)
 }
 
 /// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
@@ -215,6 +266,34 @@ pub(super) mod tests {
         };
         build_job(&request, "actor-1", &"a".repeat(64)).unwrap()
     }
+    /// 授权设施拒绝后，回放不读取任务，登记不写入任务或明细。
+    #[tokio::test]
+    async fn authorization_failure_stops_registration_and_replay_before_database_access() {
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("supplier_import_registration_unit");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
+        let (job, items) = fixture();
+        let replay_error =
+            replay_registration(&db, &authorization, &actor, &job, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("未授权不能回放");
+        let write_error =
+            register_job(&db, &authorization, &actor, &job, items, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("未授权不能登记");
+        for error in [replay_error, write_error] {
+            assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        }
+    }
+
     #[test]
     fn creates_pending_items_and_replays_only_identical_payload() {
         let (job, items) = fixture();

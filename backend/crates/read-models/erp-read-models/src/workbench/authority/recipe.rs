@@ -107,15 +107,6 @@ mod tests {
 
     use super::*;
     use crate::errors::Error;
-    struct TestExecutor {
-        calls: usize,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.calls += 1;
-            None
-        }
-    }
     struct Reads {
         seen: Mutex<Vec<Step>>,
         executor: usize,
@@ -132,7 +123,6 @@ mod tests {
         ) -> Result<()> {
             assert!(keys.is_empty());
             assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.executor);
-            executor.session();
             self.seen.lock().unwrap().push(step);
             if self.fail == Some(step) {
                 return Err(Error::ConflictError("first-read-failure".to_string()));
@@ -146,10 +136,10 @@ mod tests {
     }
     #[tokio::test]
     async fn command_recipe_preserves_every_step_and_same_non_zst_executor_even_for_empty_keys() {
-        let mut executor = TestExecutor { calls: 0 };
+        let mut executor = persistence_core::ReadExecutor::default();
         let port = Reads {
             seen: Mutex::new(Vec::new()),
-            executor: &mut executor as *mut TestExecutor as usize,
+            executor: &mut executor as *mut persistence_core::ReadExecutor as usize,
             fail: None,
         };
         let facts = load(&port, &HashSet::new(), &mut executor).await.unwrap();
@@ -180,22 +170,21 @@ mod tests {
                 Step::SupplierPortal,
             ]
         );
-        assert_eq!(executor.calls, 22);
+
         assert_eq!(facts.len(), 22);
     }
     #[tokio::test]
     async fn each_first_read_error_preserves_variant_and_stops_later_reads() {
         for (index, step) in ORDER.iter().enumerate() {
-            let mut executor = TestExecutor { calls: 0 };
+            let mut executor = persistence_core::ReadExecutor::default();
             let port = Reads {
                 seen: Mutex::new(Vec::new()),
-                executor: &mut executor as *mut TestExecutor as usize,
+                executor: &mut executor as *mut persistence_core::ReadExecutor as usize,
                 fail: Some(*step),
             };
             let error = load(&port, &HashSet::new(), &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(message) if message=="first-read-failure"));
             assert_eq!(&*port.seen.lock().unwrap(), &ORDER[..=index]);
-            assert_eq!(executor.calls, index + 1);
         }
     }
 }

@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use entity_core::BaseModel;
 use erp_core::AccountKind;
+use erp_core::common::time::Instant;
 use erp_permissions::MODULES;
 use persistence_core::Executor;
 
@@ -13,6 +15,7 @@ use super::super::{AuthorizationBuilder, AuthorizationService, rules};
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessContext, FactValue, ObjectFacts, ResourceTargets};
+use crate::entity::organization::{OrgMembership, OrgValidity};
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::resource_access::ResourceKind;
 use crate::ports::AccessFactsPort;
@@ -33,6 +36,8 @@ pub(super) struct Identity {
     pub grant_revision: AtomicU64,
     pub record_grants: Mutex<BTreeSet<(ResourceKind, String)>>,
     pub scopes: Mutex<BTreeMap<(Permission, Permission), ResolvedScope>>,
+    pub role_scopes: Mutex<BTreeMap<(String, Permission), ScopeClause>>,
+    pub scope_deadlines: Mutex<BTreeMap<Permission, Instant>>,
 }
 impl Default for Identity {
     fn default() -> Self {
@@ -54,6 +59,8 @@ impl Default for Identity {
             grant_revision: AtomicU64::new(1),
             record_grants: Mutex::new(BTreeSet::new()),
             scopes: Mutex::new(BTreeMap::new()),
+            role_scopes: Mutex::new(BTreeMap::new()),
+            scope_deadlines: Mutex::new(BTreeMap::new()),
         }
     }
 }
@@ -97,30 +104,52 @@ impl Facilities for Identity {
         &self,
         context: &AccessContext,
         source: &Permission,
-        _: &[Permission],
-        _: &QualifiedPermissions,
+        required: &[Permission],
+        qualified: &QualifiedPermissions,
         _: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
+        let role_scopes = self.role_scopes.lock().unwrap();
+        let scoped_roles =
+            role_scopes.keys().any(|(_, permission)| permission == source).then(|| ResolvedScope {
+                role_clauses: qualified
+                    .roles_for_all(required)
+                    .into_iter()
+                    .filter_map(|role| role_scopes.get(&(role.to_string(), source.clone())).cloned())
+                    .collect(),
+                user_limit: None,
+            });
+        let mut organizations = OrganizationState::default();
+        if let Some(deadline) = self.scope_deadlines.lock().unwrap().get(&context.permission) {
+            organizations.memberships.push(OrgMembership {
+                base: BaseModel::fake(),
+                user_id: context.actor.id().into(),
+                org_unit_id: "test".into(),
+                validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: Some(*deadline) },
+                changed_by: "admin".into(),
+                reason: "test".into(),
+            });
+        }
         Ok(AuthorizedDataScope::test_fixture(DataScopeFacts {
             resource: context.permission.resource().into(),
             action: context.permission.action().into(),
-            scope: self
-                .scopes
-                .lock()
-                .unwrap()
-                .get(&(context.permission.clone(), source.clone()))
-                .cloned()
-                .unwrap_or_else(|| {
-                    if self.state.lock().unwrap().denied_scope {
-                        ResolvedScope { role_clauses: vec![], user_limit: None }
-                    } else {
-                        ResolvedScope {
-                            role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
-                            user_limit: None,
+            scope: scoped_roles.unwrap_or_else(|| {
+                self.scopes
+                    .lock()
+                    .unwrap()
+                    .get(&(context.permission.clone(), source.clone()))
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        if self.state.lock().unwrap().denied_scope {
+                            ResolvedScope { role_clauses: vec![], user_limit: None }
+                        } else {
+                            ResolvedScope {
+                                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                                user_limit: None,
+                            }
                         }
-                    }
-                }),
-            organizations: OrganizationState::default(),
+                    })
+            }),
+            organizations,
             policy_version: 1,
             scope_version: self.revision.load(Ordering::SeqCst).to_string(),
             as_of: context.as_of,
@@ -189,9 +218,9 @@ pub(super) fn complete() -> AuthorizationBuilder {
     for permission in rules::permissions() {
         if !matches!(scope_spec::kind(permission).unwrap(), ActionKind::Function) {
             builder.facts.entry(permission.resource().into()).or_insert_with(|| Arc::new(Facts::default()));
-            if rules::query_supported(permission).unwrap() {
-                builder.mappings.insert(permission.clone(), mapping(permission));
-            }
+        }
+        if rules::query_supported(permission).unwrap() {
+            builder.mappings.insert(permission.clone(), mapping(permission));
         }
     }
     builder

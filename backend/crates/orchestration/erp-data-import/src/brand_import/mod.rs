@@ -1,4 +1,5 @@
 //! 品牌后台导入：加密持久化输入；品牌、审计、行结果与任务进度原子提交。
+use erp_permissions::catalog as catalog_permissions;
 mod execute;
 mod failures;
 mod rows;
@@ -11,11 +12,9 @@ use application_core::AuditActor;
 use erp_catalog::CatalogService;
 use erp_catalog::dto::BrandImportJobRequest;
 use erp_core::AccountKind;
-use erp_identity::{
-    AccessMode, AccessRegistration, AccessTarget, AuthorizationRegistry, AuthorizationService,
-    Error as IdentityError, Permission, SharedRbacService,
-};
+use erp_identity::{AccessTarget, AuthorizationService, Error as IdentityError};
 use erp_party::SensitiveDataCodec;
+use erp_permissions::internal;
 use erp_support::BackgroundJob;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -33,7 +32,7 @@ pub const BRAND_IMPORT_DOMAIN: &str = "BRAND_IMPORT";
 pub struct BrandImportProcess {
     db: Database,
     catalog: CatalogService,
-    authorization: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
     job_access: ImportJobAccess,
     storage: S3Storage,
     codec: Arc<SensitiveDataCodec>,
@@ -45,7 +44,7 @@ impl BrandImportProcess {
     /// # 参数
     /// * `db` - 任务数据库
     /// * `catalog` - 已装配审计的品牌服务
-    /// * `rbac` - 实时身份与权限提供者
+    /// * `authorization` - 实时身份与权限提供者
     /// * `storage` - 持久化输入的对象存储
     /// * `codec` - 输入加密及指纹密钥
     /// # 返回
@@ -55,21 +54,15 @@ impl BrandImportProcess {
     pub fn new(
         db: Database,
         catalog: CatalogService,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         storage: S3Storage,
         codec: Arc<SensitiveDataCodec>,
     ) -> Self {
-        let job_access =
-            ImportJobAccess::new(db.clone(), rbac.clone(), BRAND_IMPORT_DOMAIN, Some("product_brand:create"));
-        let registration = AccessRegistration {
-            permission: Permission::parse("product_brand:create").expect("固定品牌创建权限"),
-            required_permissions: vec![],
-            access: AccessMode::Operation,
-        };
-        let authorization = AuthorizationService::new(
+        let job_access = ImportJobAccess::new(
             db.clone(),
-            rbac,
-            AuthorizationRegistry::new(vec![registration]).expect("品牌创建是固定无对象操作"),
+            authorization.clone(),
+            BRAND_IMPORT_DOMAIN,
+            internal::BRAND_IMPORT_JOB_READ,
         );
         Self {
             db,
@@ -81,17 +74,21 @@ impl BrandImportProcess {
             sources: Arc::new(ImportSourceCache::new(20 * 1024 * 1024)),
         }
     }
+}
 
-    /// 每次提交、执行和下载都重验当前账号及品牌创建权限，不缓存授权结论。
-    async fn authorize(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        self.authorization
-            .require(actor, &Permission::parse("product_brand:create")?, AccessTarget::Operation, executor)
-            .await
-            .map_err(|error| match error {
-                IdentityError::Forbidden(_) => Error::Forbidden("当前账号无权导入品牌".into()),
-                error => error.into(),
-            })
-    }
+/// 提交、回放与执行在各自原事务重验当前账号及品牌创建权限。
+async fn authorize(
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    authorization
+        .require(actor, &catalog_permissions::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
+        .await
+        .map_err(|error| match error {
+            IdentityError::Forbidden(_) => Error::Forbidden("当前账号无权导入品牌".into()),
+            error => error.into(),
+        })
 }
 
 /// 从已保存且提交时验证过的内部提交人身份构造后台审计主体。

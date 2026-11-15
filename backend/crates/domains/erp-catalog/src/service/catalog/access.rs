@@ -3,14 +3,13 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::{
-    AccessMapping, AccessSubject, AccessTarget, AuthorizationService, OrganizationDirectoryService,
-    Permission, ResourceTargets, SharedRbacService,
-};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService, OrganizationDirectoryService};
+use erp_permissions::{Permission, catalog};
 use mongodb::Database;
-use persistence_core::Executor;
+use persistence_core::{Executor, Transactional};
 
-use crate::authorization::{self, CompiledScope};
+use crate::authorization::CompiledScope;
 use crate::entity::catalog::Product;
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
@@ -19,9 +18,7 @@ use crate::repository::CatalogExt;
 #[derive(Clone)]
 pub struct CatalogAccess {
     db: Database,
-    rbac: SharedRbacService,
-    authorization: AuthorizationService,
-    mapping: Arc<dyn AccessMapping>,
+    pub(crate) authorization: Arc<AuthorizationService>,
 }
 
 impl CatalogAccess {
@@ -29,7 +26,7 @@ impl CatalogAccess {
     ///
     /// # 参数
     /// * `db` - 商品集合所在数据库
-    /// * `rbac` - 组合层注入的共享身份设施
+    /// * `authorization` - 组合层注入的共享授权服务
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
@@ -38,18 +35,16 @@ impl CatalogAccess {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 目录由本域固定登记，不能由业务请求替换。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        let (authorization, mapping) =
-            authorization::service(&db, rbac.clone()).expect("固定商品授权目录有效");
-        Self { db, rbac, authorization, mapping }
+    /// 权限及查询绑定由注入的共享服务固定，不能由业务请求替换。
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     /// 在调用方事务内证明资源动作并映射商品责任条件。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 对应的公共商品权限常量。
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -63,13 +58,14 @@ impl CatalogAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<CompiledScope> {
-        let permission = Permission::parse(format!("product:{action}"))?;
-        let query = self.authorization.query(actor, &permission, AccessSubject::Direct, executor).await?;
-        let compiled = Arc::new(query.compile(self.mapping.as_ref(), executor).await?);
-        self.authorization.validate(&compiled, executor).await?;
+        if permission.resource() != "product" {
+            return Err(Error::ValidationError("商品访问器不能使用其他资源权限".into()));
+        }
+        let query = self.authorization.query(actor, permission, executor).await?;
+        let compiled = Arc::new(query);
         Ok(CompiledScope {
             scope_version: compiled.version(),
             compiled,
@@ -81,7 +77,7 @@ impl CatalogAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册动作
+    /// * `permission` - 对应的公共商品权限常量。
     /// * `id` - 商品主键
     /// * `executor` - 调用方执行器
     ///
@@ -96,11 +92,11 @@ impl CatalogAccess {
     pub async fn require_product(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Product> {
-        self.require(actor, action, id, executor).await?;
+        self.require(actor, permission, id, executor).await?;
         self.db
             .products()
             .find_by_id(id, executor)
@@ -108,9 +104,30 @@ impl CatalogAccess {
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))
     }
 
+    /// 在独立快照事务中读取写入预检所需的完整商品。
+    /// # 参数
+    /// actor、permission、id 为实际业务入口与商品身份。
+    /// # 返回
+    /// 当前快照中有权操作的商品；写入仍须在原写事务重新授权。
+    /// # 错误
+    /// 商品缺失、功能资格不足或数据授权失败时拒绝。
+    pub async fn product(&self, actor: &AuditActor, permission: &Permission, id: &str) -> Result<Product> {
+        let access = self.clone();
+        let actor = actor.clone();
+        let permission = permission.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { access.require_product(&actor, &permission, &id, executor).await })
+            })
+            .await
+    }
+
     /// 在原业务事务内检查已有商品的完整授权。
     /// # 参数
-    /// actor 为当前账号，action/id 为实际动作与商品，executor 为原事务。
+    /// actor 为当前账号，permission/id 为公共权限及商品，executor 为原事务。
     /// # 返回
     /// 对象授权通过时成功，不再重复装载业务实体。
     /// # 错误
@@ -118,24 +135,19 @@ impl CatalogAccess {
     pub async fn require(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(self
-            .authorization
-            .require(
-                actor,
-                &Permission::parse(format!("product:{action}"))?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
-            .await?)
+        if permission.resource() != "product" {
+            return Err(Error::ValidationError("商品访问器不能使用其他资源权限".into()));
+        }
+        Ok(self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?)
     }
 
     /// 在创建事务内检查拟写入商品的完整授权。
     /// # 参数
-    /// actor 为当前账号，id 为拟创建商品主键，executor 为原写事务。
+    /// actor 为当前账号，product为服务端拟持久化的完整商品，executor 为原写事务。
     /// # 返回
     /// 固定创建政策允许本次目标时成功。
     /// # 错误
@@ -143,15 +155,21 @@ impl CatalogAccess {
     pub async fn require_create(
         &self,
         actor: &AuditActor,
-        id: &str,
+        product: &Product,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let registry = authorization::creation_registry(id)?;
-        Ok(AuthorizationService::new(self.db.clone(), self.rbac.clone(), registry)
+        Ok(self
+            .authorization
             .require(
                 actor,
-                &Permission::parse("product:create")?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
+                &catalog::PRODUCT_PRODUCT_CREATE,
+                AccessTarget::Candidate(ObjectFacts {
+                    resource: "product".into(),
+                    id: product.base.id.clone(),
+                    owner_id: FactValue::Known(Some(product.maintainer_user_id.clone())),
+                    org_unit_id: FactValue::Known(Some(product.business_org_unit_id.clone())),
+                    ..Default::default()
+                }),
                 executor,
             )
             .await?)
@@ -235,7 +253,7 @@ impl CatalogAccess {
 
     /// 检查商品写入按钮和预检入口的功能资格。
     /// # 参数
-    /// actor 为操作人，action 为写动作，executor 为原业务执行器。
+    /// actor 为操作人，permission 为公共商品权限常量，executor 为原业务执行器。
     /// # 返回
     /// 有效账号具备该动作时成功；实际写入仍须执行对象授权。
     /// # 错误
@@ -243,14 +261,13 @@ impl CatalogAccess {
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if !matches!(action, "create" | "update") {
-            return Err(Error::ValidationError("未登记商品写动作".into()));
+        if permission.resource() != "product" {
+            return Err(Error::ValidationError("商品访问器不能使用其他资源权限".into()));
         }
-        let permission = Permission::parse(format!("product:{action}"))?;
-        if !self.authorization.has_permission(actor, &permission, executor).await? {
+        if !self.authorization.has_permission(actor, permission, executor).await? {
             return Err(Error::Forbidden("没有商品写入权限".into()));
         }
         Ok(())

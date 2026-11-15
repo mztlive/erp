@@ -1,20 +1,23 @@
 //! 转交命令的事务内策略重验与写入。
 
 use std::num::NonZeroU32;
+use std::result::Result as StdResult;
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_identity::service::resource_access::append_event;
+use erp_permissions::work_item;
 use id_generator::next_id;
-use persistence_core::{Error as PersistenceError, Executor, Transactional};
+use persistence_core::{Error as PersistenceError, Executor};
 
 use super::WorkItemService;
 use super::order_access::task_read_error;
 use super::reassign::{
-    AssignmentAuthorizationSnapshot, AssignmentPolicyAuditInput, ensure_fulfillment_tasks_candidate,
+    AssignmentPolicyAuditInput, ensure_fulfillment_tasks_candidate,
     purchase_order_fulfillment_responsibility_id,
 };
-use super::write::{WorkItemWriteOutcome, record_command_attempt, recover_command_error};
+use super::write::WorkItemWriteError;
 use crate::entity::work_item::WorkItem;
 use crate::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
 use crate::error::{Error, Result};
@@ -31,7 +34,7 @@ struct ReassignmentContext {
     actor: AuditActor,
     receipt: CommandReceipt,
     audit_detail: String,
-    authorization: AssignmentAuthorizationSnapshot,
+    assignee_kind: AccountKind,
     purchase_order_id: Option<String>,
     audit: PreparedWorkflowAudit,
     purchase_order_audit: Option<PreparedWorkflowAudit>,
@@ -41,13 +44,14 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 在同一事务内重验管理人、目标责任人及全部业务事实后执行转交与审计。
     ///
     /// # 用途
-    /// 按授权快照转交任务并写入幂等审计。
+    /// 按原事务中的账号及任务事实转交任务并写入幂等审计。
     ///
     /// # 参数
     /// * `input` - 任务、目标责任人与审计字段
+    /// * `executor` - 公开命令传入的原活动快照事务
     ///
     /// # 返回
-    /// 返回写入结果或版本冲突。
+    /// 返回已转交任务；任务版本冲突保留专用错误分类。
     ///
     /// # 错误
     /// 授权变化、版本冲突或仓储失败时返回错误。
@@ -57,35 +61,15 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     pub(super) async fn reassign_with_assignment_policy_audit(
         &self,
         input: AssignmentPolicyAuditInput<'_>,
-    ) -> Result<WorkItemWriteOutcome> {
+        executor: &mut dyn Executor,
+    ) -> StdResult<WorkItem, WorkItemWriteError> {
         let context = self.prepare_reassignment(input)?;
-        let replay_receipt = context.receipt.clone();
-        let replay_item_id = context.item_id.clone();
-        let actor = context.actor.clone();
-        let attempt_audit = context.audit.clone();
-        let validation = self.clone();
-        let result = self
-            .db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { validation.apply_reassignment(context, executor).await })
-            })
-            .await;
-        if let Err(error) = &result {
-            record_command_attempt(self.audit.as_ref(), &attempt_audit, error).await;
-        }
-        match result {
-            Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-            Err(Error::ConflictError(message)) if message == REASSIGN_VERSION_CONFLICT => {
-                Ok(WorkItemWriteOutcome::VersionConflict)
+        self.apply_reassignment(context, executor).await.map_err(|error| match error {
+            Error::ConflictError(message) if message == REASSIGN_VERSION_CONFLICT => {
+                WorkItemWriteError::VersionConflict
             },
-            Err(error) => recover_command_error(
-                error,
-                self.idempotent_replay(&replay_receipt, &replay_item_id, &actor).await,
-            )
-            .map(|item| WorkItemWriteOutcome::Updated(Box::new(item))),
-        }
+            error => WorkItemWriteError::Service(error),
+        })
     }
 
     fn prepare_reassignment(&self, input: AssignmentPolicyAuditInput<'_>) -> Result<ReassignmentContext> {
@@ -103,7 +87,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             actor: input.actor.clone(),
             receipt: input.receipt,
             audit_detail: input.audit_detail,
-            authorization: input.authorization,
+            assignee_kind: input.assignee_kind,
             purchase_order_id,
             audit,
             purchase_order_audit,
@@ -162,7 +146,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 actor: &context.actor,
                 assignee_id: &context.target_user_id,
                 item,
-                authorization: &context.authorization,
+                expected_kind: context.assignee_kind,
                 allow_current_owner,
             },
             executor,
@@ -200,7 +184,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         Ok(current)
     }
 
-    /// 在转交事务前冻结并校验任务与采购履约的安全审计上下文。
+    /// 在原转交事务内准备并校验任务与采购履约的安全审计上下文。
     /// # 参数
     /// * `actor` - 命令操作人及调用上下文。
     /// * `receipt` - 已规范化的命令身份。
@@ -237,7 +221,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
 /// 返回任务事件与可选采购事件；采购事件为一，随后任务为二，否则任务为一。
 /// # 错误
 /// 事件动作或命令关联非法时返回原错误。
-fn reassignment_audits(
+pub(super) fn reassignment_audits(
     actor: &AuditActor,
     receipt: &CommandReceipt,
     item_id: &str,
@@ -297,8 +281,8 @@ struct AssignmentPolicyCheck<'a> {
     assignee_id: &'a str,
     /// 当前任务。
     item: &'a WorkItem,
-    /// 事务外冻结的授权快照。
-    authorization: &'a AssignmentAuthorizationSnapshot,
+    /// 原事务中读取的目标账号类型。
+    expected_kind: AccountKind,
     /// 是否允许候选人为当前责任人。
     allow_current_owner: bool,
 }
@@ -326,11 +310,11 @@ async fn ensure_assignment_policy<A: WorkflowAuthorizationPort>(
     check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    service.authorization.require(check.actor, "manage", &check.item.base.id, executor).await?;
+    service.authorization.require(check.actor, &work_item::MANAGE, &check.item.base.id, executor).await?;
     service
         .ensure_assignment_candidate(
             check.assignee_id,
-            check.authorization.assignee_kind,
+            check.expected_kind,
             check.item,
             check.allow_current_owner,
             executor,

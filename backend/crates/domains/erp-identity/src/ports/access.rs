@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use mongodb::bson::Bson;
+use erp_core::common::time::Instant;
+use mongodb::bson::{Bson, Document};
 use persistence_core::Executor;
 
 use super::{QueryFragment, RelationMapping};
@@ -31,6 +32,28 @@ pub trait AccessMapping: Send + Sync {
     /// 无；缺少规则所需关系由 Builder 拒绝。
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         BTreeMap::new()
+    }
+
+    /// 描述不改变根记录集合的固定关联准备。
+    /// # 参数
+    /// 无；不得依赖请求状态或授权结果。
+    /// # 返回
+    /// 完整关联的 lookup、set 或 addFields 阶段，先于授权过滤执行。
+    /// # 错误
+    /// 非只读阶段、根过滤或展开在启动时拒绝。
+    fn stages(&self) -> Vec<Document> {
+        Vec::new()
+    }
+
+    /// 返回静态时间解释的到期边界，不读取动态数据。
+    /// # 参数
+    /// context 为本次冻结的身份及时点。
+    /// # 返回
+    /// 例如自然日归属的下一日边界；无到期约束时为 None。
+    /// # 错误
+    /// 无；执行管道拒绝已经到期的边界。
+    fn valid_until(&self, _context: &AccessContext) -> Option<Instant> {
+        None
     }
 
     /// 返回当前记录的资源主键表达式。

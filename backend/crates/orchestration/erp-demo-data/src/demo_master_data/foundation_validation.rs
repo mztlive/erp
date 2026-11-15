@@ -3,13 +3,14 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, PermissionSet};
+use erp_identity::PermissionSet;
+use erp_permissions::Permission;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::policy::{
     ALL_DOCUMENT_TYPES, ApprovalRequirement, policy_of, require_process_required,
 };
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::accounts::PreparedAccounts;
 use super::spec::{FoundationFile, document_type};
@@ -126,8 +127,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// # 错误
     /// 缺权时返回账号和具体权限；数据库或策略读取失败时停止。
     pub(super) async fn validate_demo_permissions(&self, accounts: &PreparedAccounts) -> Result<()> {
-        let service =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
+        let service = &self.authorization;
         for account in &spec::foundation_spec().accounts {
             let user = accounts
                 .by_key
@@ -139,7 +139,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             let actor = AuditActor::new(user.clone(), account.account.clone(), AccountKind::Admin);
             let granted = service
-                .permissions(&actor, &required, &mut NoTransaction)
+                .permissions(&actor, &required, &mut ReadExecutor::default())
                 .await?
                 .map(|qualified| qualified.permissions())
                 .unwrap_or_default();

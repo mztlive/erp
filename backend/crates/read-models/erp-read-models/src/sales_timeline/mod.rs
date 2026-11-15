@@ -1,4 +1,5 @@
 //! 销售全流程及任务办理动态；只读归集，不从展示事件反推业务状态。
+use erp_identity::AuthorizationService;
 mod approval;
 mod dto;
 mod finance;
@@ -18,7 +19,6 @@ pub use dto::{
     TaskTimeline, TimelineApproval, TimelineApprovalResult, TimelineCategory, TimelineEvent, TimelinePage,
     TimelineQuery, TimelineSalesSource,
 };
-use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::Executor;
 pub use sources::TimelineDocument;
@@ -48,7 +48,7 @@ pub trait TimelineAccessPort: Send + Sync {
 #[derive(Clone)]
 pub struct SalesTimelineReadService {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     access: Arc<dyn TimelineAccessPort>,
 }
 
@@ -61,7 +61,7 @@ impl SalesTimelineReadService {
     /// 返回只读服务。
     /// # 错误
     /// 构造不执行 I/O。
-    pub fn new(db: Database, rbac: SharedRbacService, access: Arc<dyn TimelineAccessPort>) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>, access: Arc<dyn TimelineAccessPort>) -> Self {
         Self { db, rbac, access }
     }
 }

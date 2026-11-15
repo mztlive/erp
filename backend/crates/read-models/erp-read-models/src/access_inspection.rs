@@ -1,8 +1,11 @@
 //! 跨域只读检查：检查人须能读取目标单据，目标账号不产生会话或业务写入。
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
 use erp_identity::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
 use erp_identity::service::access_control::inspection::AccessInspectionService;
+use erp_identity::{AuthorizationService, Error as IdentityError, SharedRbacService};
+use erp_permissions::{Permission as AccessPermission, sales_order as sales_order_permissions};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -14,6 +17,7 @@ use crate::{Error, Result};
 pub struct AccessInspectionReadService {
     db: Database,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl AccessInspectionReadService {
@@ -25,8 +29,8 @@ impl AccessInspectionReadService {
     /// 只读检查器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, rbac, authorization }
     }
 
     /// 在同一读取事务内检查配置及可选具体单据。
@@ -48,9 +52,13 @@ impl AccessInspectionReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let inspected = AccessInspectionService::new(this.db.clone(), this.rbac.clone())
-                        .inspect(&operator, &request, executor)
-                        .await?;
+                    let inspected = AccessInspectionService::new(
+                        this.db.clone(),
+                        this.rbac.clone(),
+                        this.authorization.clone(),
+                    )
+                    .inspect(&operator, &request, executor)
+                    .await?;
                     let mut view = inspected.view;
                     if let Some(target) = inspected.actor {
                         if let Some(id) = &request.object_id {
@@ -80,9 +88,11 @@ impl AccessInspectionReadService {
         view: &mut AccessInspectionView,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let service = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        service.require_object(operator, "detail", id, &[], executor).await?;
-        match service.require_object(target, action, id, &[], executor).await {
+        let service = SalesAccess::new(self.db.clone(), self.authorization.clone());
+        service.require_object(operator, &sales_order_permissions::DETAIL, id, executor).await?;
+        let permission =
+            AccessPermission::parse(format!("sales_order:{action}")).map_err(IdentityError::from)?;
+        match service.require_object(target, &permission, id, executor).await {
             Ok(order) => {
                 view.push("具体单据范围", "passed", "该人员满足此销售单的操作权限与数据范围条件。");
                 if action == "update" {

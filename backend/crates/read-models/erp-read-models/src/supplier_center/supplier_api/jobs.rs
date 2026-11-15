@@ -1,8 +1,11 @@
+use application_core::AuditActor;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_api;
 use erp_support::repository::prelude::*;
 use erp_support::{
     BackgroundJob, BulkJobExt, SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };
-use persistence_core::NoTransaction;
+use persistence_core::Transactional;
 
 use super::SupplierApiReadService;
 use super::dto::SupplierConnectionJobView;
@@ -13,6 +16,7 @@ impl SupplierApiReadService {
     /// # 参数
     /// * `connection_id` - 连接主键。
     /// * `job_id` - 后台任务主键。
+    /// * `actor` - 当前认证账号，按真实连接来源核对完整读取资格。
     ///
     /// # 返回
     /// 返回任务终态与进度视图。
@@ -23,19 +27,36 @@ impl SupplierApiReadService {
         &self,
         connection_id: &str,
         job_id: &str,
+        actor: &AuditActor,
     ) -> Result<SupplierConnectionJobView> {
-        let job = self
-            .db
-            .background_jobs()
-            .find_supplier_connection_job(
-                connection_id,
-                job_id,
-                &[SUPPLIER_HEALTH_CHECK_JOB_TYPE, SUPPLIER_CATALOG_SYNC_JOB_TYPE],
-                &mut NoTransaction,
-            )
-            .await?
-            .ok_or_else(|| Error::NotFound("连接后台任务不存在".to_string()))?;
-        Ok(job_view(job))
+        let (db, authorization, actor) = (self.db.clone(), self.authorization.clone(), actor.clone());
+        let (connection_id, job_id) = (connection_id.to_string(), job_id.to_string());
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &supplier_api::CONNECTION_JOB_DETAIL,
+                            AccessTarget::record(&connection_id)?,
+                            executor,
+                        )
+                        .await?;
+                    let job = db
+                        .background_jobs()
+                        .find_supplier_connection_job(
+                            &connection_id,
+                            &job_id,
+                            &[SUPPLIER_HEALTH_CHECK_JOB_TYPE, SUPPLIER_CATALOG_SYNC_JOB_TYPE],
+                            executor,
+                        )
+                        .await?
+                        .ok_or_else(|| Error::NotFound("连接后台任务不存在".to_string()))?;
+                    Ok(job_view(job))
+                })
+            })
+            .await
     }
 }
 fn job_view(job: BackgroundJob) -> SupplierConnectionJobView {

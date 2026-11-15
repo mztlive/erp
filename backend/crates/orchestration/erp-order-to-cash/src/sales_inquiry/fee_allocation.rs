@@ -4,9 +4,11 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::repository::SalesOrderExt;
-use persistence_core::{Executor, NoTransaction};
+use erp_sales::repository::sales_inquiry::{InquiryReadScope, SalesInquiryRepository};
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::SalesInquiryProcess;
@@ -51,8 +53,33 @@ impl SalesInquiryProcess {
     /// # 错误
     /// 询价越范围、账号失效或存储失败时拒绝。
     pub async fn fee_sales(&self, id: &str, actor: &AuditActor) -> Result<Vec<InquiryFeeSalesView>> {
-        let mut executor = NoTransaction;
-        let inquiry = self.access().require_sales(actor, "detail", id, &mut executor).await?;
+        let this = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.fee_sales_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 询价授权与台账内销售摘要读取共用原快照。
+    async fn fee_sales_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<InquiryFeeSalesView>> {
+        let (compiled, authorization) = self
+            .access()
+            .resolve_sales(actor, &sales_inquiry_permissions::QUERY_SALES_DETAIL, executor)
+            .await?;
+        let scope = InquiryReadScope::from_compiled(compiled, authorization);
+        let inquiry = SalesInquiryRepository::new(&self.db)
+            .find_authorized(id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("询价不存在或无权查看".into()))?;
         let ids =
             inquiry.quantity_ledger.iter().map(|row| row.sales_order_id.clone()).collect::<HashSet<_>>();
         if ids.len() > 200 {
@@ -60,7 +87,7 @@ impl SalesInquiryProcess {
         }
         let mut items = Vec::new();
         for id in ids {
-            if let Some(order) = self.db.sales_orders().find_by_id(&id, &mut executor).await? {
+            if let Some(order) = self.db.sales_orders().find_by_id(&id, executor).await? {
                 items.push(InquiryFeeSalesView {
                     id,
                     order_no: order.order_no.clone(),
@@ -70,6 +97,7 @@ impl SalesInquiryProcess {
             }
         }
         items.sort_by(|a, b| (&a.order_no, &a.id).cmp(&(&b.order_no, &b.id)));
+        scope.validate(executor).await?;
         Ok(items)
     }
 

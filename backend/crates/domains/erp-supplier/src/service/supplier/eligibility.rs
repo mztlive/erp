@@ -232,18 +232,13 @@ mod provider_tests {
     use std::sync::Mutex;
 
     use erp_core::ids::{PartyId, SupplierCapabilityId};
+    use persistence_core::NoTransaction;
 
     use super::*;
     use crate::entity::supplier::{
         CapabilityStatus, SupplierAccountData, SupplierAccountStatus, SupplierCapabilityData,
         SupplierCapabilityRevisionData,
     };
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct Recorder {
         pointer: usize,
         calls: Mutex<Vec<&'static str>>,
@@ -329,9 +324,9 @@ mod provider_tests {
         missing_pointer: bool,
         second_disabled: bool,
     ) -> (Result<()>, Vec<&'static str>) {
-        let mut executor = Marker(161);
+        let mut executor = NoTransaction;
         let port = Recorder {
-            pointer: &mut executor as *mut Marker as usize,
+            pointer: &mut executor as *mut NoTransaction as usize,
             calls: Mutex::new(vec![]),
             fail,
             disabled,
@@ -347,7 +342,6 @@ mod provider_tests {
             &mut executor,
         )
         .await;
-        assert_eq!(executor.0, 161);
         (result, port.calls.into_inner().unwrap())
     }
     #[tokio::test]
@@ -385,7 +379,7 @@ mod provider_tests {
     }
     #[tokio::test]
     async fn unverified_linked_contract_blocks_offering_through_real_orchestration() {
-        let mut executor = Marker(161);
+        let mut executor = NoTransaction;
         let contract = crate::SupplierQualification::new(
             erp_core::ids::SupplierQualificationId::new("contract"),
             crate::SupplierQualificationData {
@@ -402,7 +396,7 @@ mod provider_tests {
         )
         .unwrap();
         let port = Recorder {
-            pointer: &mut executor as *mut Marker as usize,
+            pointer: &mut executor as *mut NoTransaction as usize,
             calls: Mutex::new(vec![]),
             fail: None,
             disabled: false,

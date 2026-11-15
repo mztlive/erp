@@ -11,7 +11,9 @@ use bpm::model::{
 };
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::Permission;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -30,7 +32,6 @@ use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
 use crate::repository::BpmExt;
 use crate::repository::bpm::{APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX, CasWriteOutcome};
-use crate::service::authorization::features;
 
 const CREATE_DRAFT_COMMAND_DOMAIN: &str = "approval.definition.create-draft";
 const REPLACE_NODES_COMMAND_DOMAIN: &str = "approval.definition.replace-nodes";
@@ -81,25 +82,6 @@ pub(super) enum DefinitionResultExpectation {
 }
 
 impl ApprovalDefinitionService {
-    /// 校验操作人具备该类型定义管理权。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `policy` - 必须审批政策
-    ///
-    /// # 返回
-    /// 当前启用角色具备该类型定义管理权时无返回值。
-    ///
-    /// # 错误
-    /// 缺少类型级权限时返回禁止；授权读取失败时返回对应错误。
-    pub(crate) async fn ensure_definition_admin(
-        &self,
-        actor: &AuditActor,
-        policy: &ProcessRequiredApprovalPolicy,
-    ) -> Result<()> {
-        ensure_definition_admin_permission(&self.db, &self.identity, actor, policy, &mut NoTransaction).await
-    }
-
     /// 读取定义图，缺失时失败关闭。
     ///
     /// # 参数
@@ -121,33 +103,12 @@ impl ApprovalDefinitionService {
             .ok_or_else(definition_not_found)
     }
 
-    /// 单一回放入口：按策略表先查当前 V3，再查已登记历史候选。
-    ///
-    /// 调用方只传期望结果约束；身份证明规则集中在
-    /// `replay_prepared_definition_receipt` 一处（当前 V3 与历史候选顺序固定）。
-    ///
-    /// # 参数
-    /// * `identity` - 当前 V3 身份与唯一历史候选
-    /// * `expectation` - 回放结果仍属原始资源的期望约束
-    ///
-    /// # 返回
-    /// 同载荷收据回读详情；无收据返回 `None`。
-    ///
-    /// # 错误
-    /// 异载荷、结果引用漂移或旧结果无法证明完整载荷时返回稳定冲突。
-    pub(super) async fn replay_prepared_if_receipt(
-        &self,
-        identity: &PreparedDefinitionIdentity,
-        expectation: DefinitionResultExpectation,
-    ) -> Result<Option<DefinitionDetailView>> {
-        replay_prepared_definition_receipt(&self.db, identity, &expectation, &mut NoTransaction).await
-    }
-
     /// 收据竞争、瞬态事务或提交结果未知后，在新会话有限回读胜者。
     ///
     /// # 参数
     /// * `outcome` - 失败会话的原始结果
     /// * `policy` - 必须审批政策
+    /// * `permission` - 原命令固定入口权限
     /// * `actor` - 已认证操作人
     /// * `identity` - 当前命令身份
     /// * `expectation` - 回放结果必须仍属原始资源
@@ -161,10 +122,13 @@ impl ApprovalDefinitionService {
         &self,
         outcome: Result<DefinitionDetailView>,
         policy: &ProcessRequiredApprovalPolicy,
+        permission: &Permission,
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
         expectation: DefinitionResultExpectation,
     ) -> Result<DefinitionDetailView> {
+        let authorization = self.authorization.clone();
+        let permission = permission.clone();
         let Err(error) = outcome else {
             return outcome;
         };
@@ -172,9 +136,10 @@ impl ApprovalDefinitionService {
             return Err(error);
         }
         for attempt in 0..DEFINITION_COMMAND_RECOVERY_ATTEMPTS {
+            let authorization = authorization.clone();
             let db = self.db.clone();
 
-            let identity_service = self.identity.clone();
+            let permission = permission.clone();
             let actor = actor.clone();
             let policy = policy.clone();
             let identity = identity.clone();
@@ -184,7 +149,7 @@ impl ApprovalDefinitionService {
                 .client()
                 .with_transaction(move |executor| {
                     Box::pin(async move {
-                        ensure_definition_admin_permission(&db, &identity_service, &actor, &policy, executor)
+                        require_definition_access(&authorization, &actor, &permission, &policy, executor)
                             .await?;
                         replay_prepared_definition_receipt(&db, &identity, &expectation, executor).await
                     })
@@ -780,33 +745,38 @@ pub(super) fn ensure_legacy_result(
     Err(idempotency_payload_conflict())
 }
 
-/// 使用当前启用角色重新验证目标类型定义管理权。
+/// 使用统一入口检查固定动作及真实单据类型的管理资格。
 ///
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `actor` - 已认证操作人
-/// * `policy` - 目标单据类型必须审批政策
-/// * `executor` - 调用方事务或非事务执行器
+/// * `authorization` - 共享授权服务。
+/// * `actor` - 已认证操作人。
+/// * `permission` - 固定审批定义动作。
+/// * `policy` - 服务端确认的单据类型政策。
+/// * `executor` - 原事务执行器。
 ///
 /// # 返回
-/// 当前启用角色授予该类型定义管理权时返回 `Ok(())`。
+/// 入口权限与该动作固定的类型管理资格均成立时返回 `Ok(())`。
 ///
 /// # 错误
 /// 缺少权限或仅剩禁用角色残留 Casbin grant 时返回禁止。
 ///
 /// # 关键业务约束
 /// 回放与 Fresh 必须共用本检查，禁止用账号级 Casbin 判定绕过停用角色。
-pub(super) async fn ensure_definition_admin_permission(
-    db: &Database,
-    identity_service: &SharedRbacService,
+pub(in crate::service::approval) async fn require_definition_access(
+    authorization: &AuthorizationService,
     actor: &AuditActor,
+    permission: &Permission,
     policy: &ProcessRequiredApprovalPolicy,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let permission = Permission::parse(&policy.definition_admin_permission)?;
-    ensure_definition_admin_allowed(
-        features(db, identity_service).has_permission(actor, &permission, executor).await?,
-    )
+    let document_type = document_type_of(policy.process_kind);
+    let candidate = ObjectFacts {
+        resource: "approval_process".into(),
+        subject_type: FactValue::Known(document_type.as_str().into()),
+        ..Default::default()
+    };
+    authorization.require(actor, permission, AccessTarget::Candidate(candidate), executor).await?;
+    Ok(())
 }
 
 /// 仅把 receipt-first 的唯一键竞争标记为可恢复错误。
@@ -847,23 +817,6 @@ pub(super) fn definition_command_may_have_committed(error: &Error) -> bool {
 /// 并发胜者可能仍在提交，使用有界指数退避等待新会话可见。
 fn definition_recovery_delay(attempt: usize) -> Duration {
     Duration::from_millis(5_u64 << attempt.min(5))
-}
-
-/// 写端口类型级定义管理权闸门。
-///
-/// # 参数
-/// * `allowed` - 当前可见范围是否包含该类型的定义管理权
-///
-/// # 返回
-/// 允许时无返回值。
-///
-/// # 错误
-/// 缺少 `definition_admin` 时禁止写入。
-pub(super) fn ensure_definition_admin_allowed(allowed: bool) -> Result<()> {
-    if allowed {
-        return Ok(());
-    }
-    Err(Error::Forbidden("没有该单据类型的流程定义管理权限".to_string()))
 }
 
 /// 陈旧锁错误。

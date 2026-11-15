@@ -1,5 +1,8 @@
 //! 销售变更单详情与审批绑定的跨域只读服务。
 
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
 mod approval_query;
 mod dto;
 mod list;
@@ -9,13 +12,12 @@ mod query;
 mod submitted_target;
 
 pub use dto::*;
-use erp_identity::SharedRbacService;
 pub use query::SalesChangeListView;
 
 /// 销售变更详情读取器；不负责审批命令或业务写入。
 pub struct SalesChangeReadService {
     db: mongodb::Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 impl SalesChangeReadService {
     /// 使用数据库句柄和当前 RBAC 服务构造只读查询服务。
@@ -32,7 +34,7 @@ impl SalesChangeReadService {
     ///
     /// # 关键业务约束
     /// 变更单沿原销售单当前负责人和 `business_org_unit_id` 接入。
-    pub fn with_rbac(db: mongodb::Database, rbac: SharedRbacService) -> Self {
+    pub fn with_rbac(db: mongodb::Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 }

@@ -27,6 +27,7 @@ erp-core = { workspace = true }
 erp-customer = { workspace = true }
 erp-file-assets = { workspace = true }
 erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 erp-import = { workspace = true }
 erp-master-data = { workspace = true }
 erp-party = { workspace = true }
@@ -53,4 +54,6 @@ validator = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
+persistence-core = { workspace = true, features = ["test-support"] }
+erp-identity = { workspace = true, features = ["test-support"] }
 test-support = { workspace = true }

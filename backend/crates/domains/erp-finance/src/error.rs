@@ -1,6 +1,7 @@
 //! 财务领域应用错误，并保留唯一索引冲突的既有映射。
 
 use application_core::{ValidationIssues, impl_application_error_conversions, impl_domain_error_class};
+use erp_identity::Error as IdentityError;
 use persistence_core::impl_repository_error;
 
 /// 财务领域结果别名。
@@ -59,6 +60,33 @@ impl_repository_error!(
     duplicate = |_error| { Error::ConflictError("数据已存在，请勿重复提交".to_string()) }
 );
 
+impl From<IdentityError> for Error {
+    /// 保留统一授权的拒绝、接入错误、冲突及设施错误类别。
+    /// # 参数
+    /// error 为统一授权服务返回的原始错误。
+    /// # 返回
+    /// 对应财务领域错误，持久化错误保留原始来源。
+    /// # 错误
+    /// 转换不返回错误。
+    fn from(error: IdentityError) -> Self {
+        match error {
+            IdentityError::Internal(value) | IdentityError::Rbac(value) => Self::Internal(value),
+            IdentityError::NotFound(value) => Self::NotFound(value),
+            IdentityError::ValidationError(value) => Self::ValidationError(value),
+            IdentityError::InvalidInput(value) => Self::InvalidInput(value),
+            IdentityError::BusinessLogicError(value) => Self::BusinessLogicError(value),
+            IdentityError::ConflictError(value) => Self::ConflictError(value),
+            IdentityError::Forbidden(value) => Self::Forbidden(value),
+            IdentityError::Unauthenticated(value) => Self::Unauthenticated(value),
+            IdentityError::Logic(value) => Self::Logic(value),
+            IdentityError::ReceiptDuplicate(value) => Self::ReceiptDuplicate(value),
+            IdentityError::TransientTransaction(value) => Self::TransientTransaction(value),
+            IdentityError::OutcomeUnknown(value) => Self::OutcomeUnknown(value),
+            IdentityError::RepositoryError(value) => Self::RepositoryError(value),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::error::Error as StdError;
@@ -67,7 +95,23 @@ mod tests {
     use mongodb::bson::{deserialize_from_document, doc};
     use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
 
-    use super::Error;
+    use super::{Error, IdentityError};
+
+    #[test]
+    fn authorization_errors_preserve_their_original_classification() {
+        assert!(
+            matches!(Error::from(IdentityError::Forbidden("denied".into())), Error::Forbidden(value) if value == "denied")
+        );
+        assert!(
+            matches!(Error::from(IdentityError::ConflictError("expired".into())), Error::ConflictError(value) if value == "expired")
+        );
+        assert!(
+            matches!(Error::from(IdentityError::ValidationError("wrong model".into())), Error::ValidationError(value) if value == "wrong model")
+        );
+        assert!(
+            matches!(Error::from(IdentityError::Rbac("unavailable".into())), Error::Internal(value) if value == "unavailable")
+        );
+    }
 
     #[test]
     fn finance_unique_conflicts_keep_original_messages() {

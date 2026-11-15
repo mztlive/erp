@@ -243,7 +243,7 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
             .projection(work_item_projection())
             .build();
         let collection = self.collection().clone_with_type::<WorkItemRow>();
-        aggregate::find(&collection, filter.to_doc(), options, prefix(filter)?, executor).await
+        aggregate::find(&collection, filter.to_doc(), options, prefix(filter, executor)?, executor).await
     }
 
     async fn find_visible_by_id(
@@ -255,7 +255,9 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
         let mut document = filter.to_doc();
         document.insert("id", id);
         let options = FindOptions::builder().limit(1).build();
-        Ok(aggregate::find(&self.collection(), document, options, prefix(filter)?, executor).await?.pop())
+        Ok(aggregate::find(&self.collection(), document, options, prefix(filter, executor)?, executor)
+            .await?
+            .pop())
     }
 
     async fn list_active_by_object(

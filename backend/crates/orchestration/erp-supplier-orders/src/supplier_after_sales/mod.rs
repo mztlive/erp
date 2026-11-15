@@ -1,4 +1,5 @@
 //! 供应商可选退款与结算能力的公共处理器；外部 I/O 与领域事务分离。
+pub(crate) mod action_result;
 mod refund;
 mod refund_dispatch;
 mod refund_result;

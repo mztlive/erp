@@ -1,6 +1,6 @@
 //! 报表使用销售对象的当前读取范围，额外证明同角色成本查询权限。
 use application_core::AuditActor;
-use erp_identity::Permission;
+use erp_permissions::internal as internal_permissions;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use persistence_core::Executor;
 
@@ -28,6 +28,6 @@ impl ActualProfitLossReadModel {
         let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
         // 成本按来源销售分配继承范围，不存在可单独配置的成本部门范围。
         // 同角色成本查询权限由销售解析器的额外权限集合一并证明。
-        resolver.resolve(actor, "list", &[Permission::parse("cost_entry:list")?], executor).await
+        resolver.resolve(actor, &internal_permissions::SALES_ORDER_PROFIT_LOSS_READ, executor).await
     }
 }

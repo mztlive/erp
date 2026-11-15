@@ -47,7 +47,7 @@ impl InventoryService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let authorization = authorization_port
-                        .authorize(&actor, &[InventoryAction::ReservationList], executor)
+                        .authorize(&actor, InventoryAction::ReservationList, executor)
                         .await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存预占读取权限".to_string()));

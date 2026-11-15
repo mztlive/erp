@@ -1,9 +1,8 @@
 //! 同一最终条件的页面、总数、完整版本和轻量汇总分支。
 
-use futures_util::TryStreamExt;
 use mongodb::Collection;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Error as PersistenceError, Executor};
+use persistence_core::Executor;
 use serde::de::DeserializeOwned;
 
 use crate::Result;
@@ -25,26 +24,8 @@ pub(crate) async fn aggregate<T: DeserializeOwned + Send + Sync>(
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<T>> {
-    let rows = match executor.session() {
-        Some(session) => collection
-            .aggregate(pipeline)
-            .with_type::<T>()
-            .session(&mut *session)
-            .await
-            .map_err(PersistenceError::from)?
-            .stream(session)
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-        None => collection
-            .aggregate(pipeline)
-            .with_type::<T>()
-            .await
-            .map_err(PersistenceError::from)?
-            .try_collect()
-            .await
-            .map_err(PersistenceError::from)?,
-    };
+    let rows =
+        persistence_core::aggregate::rows(&collection.clone_with_type::<T>(), pipeline, executor).await?;
     Ok(rows)
 }
 

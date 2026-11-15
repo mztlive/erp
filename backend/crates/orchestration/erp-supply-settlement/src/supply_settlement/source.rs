@@ -2,12 +2,13 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_settlement;
 use erp_supplier_orders::supplier_after_sales::settlement_source;
 use erp_supply::dto::supplier_settlement::*;
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::source::source_request_hash;
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierSettlementProcess;
@@ -34,46 +35,71 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         actor: &AuditActor,
     ) -> Result<SupplierSettlementSourceEvidenceView> {
         req.validate()?;
-        let request_hash = source_request_hash(&req);
-        if let Some(existing) =
-            self.domain().replay_source(&req.request_id, &request_hash, &mut NoTransaction).await?
-        {
+        let process = self.clone();
+        let command = req.clone();
+        let writer = actor.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.record_source(&command, &writer, executor).await })
+            })
+            .await;
+        let Err(error) = result else { return result };
+        let process = self.clone();
+        let actor = actor.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process
+                        .authorization
+                        .require(
+                            &actor,
+                            &supplier_settlement::SOURCE_EVIDENCE_RECORD,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    Ok::<_, Error>(
+                        process
+                            .domain()
+                            .replay_source(&req.request_id, &source_request_hash(&req), executor)
+                            .await?,
+                    )
+                })
+            })
+            .await?;
+        match recovered {
+            Some(result) => Ok(result),
+            None => Err(error),
+        }
+    }
+
+    /// 全部来源校验、正式关联和证据写入沿用入口快照。
+    async fn record_source(
+        &self,
+        req: &RecordSettlementSourceEvidenceRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierSettlementSourceEvidenceView> {
+        self.authorization
+            .require(actor, &supplier_settlement::SOURCE_EVIDENCE_RECORD, AccessTarget::Operation, executor)
+            .await?;
+        let request_hash = source_request_hash(req);
+        if let Some(existing) = self.domain().replay_source(&req.request_id, &request_hash, executor).await? {
             return Ok(existing);
         }
-        let evidence = self
-            .domain()
-            .build_source_evidence(&req, actor.id(), &mut NoTransaction, request_hash.clone())
-            .await?;
+        let evidence = self.domain().build_source_evidence(req, actor.id(), executor, request_hash).await?;
         let audit = actor.clone().resource_log(
             "supplier_settlement.source_evidence.record",
             "supplier_settlement_source_evidence",
             evidence.base.id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let transaction_result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    settlement_source::link(&db, &evidence, executor).await.map_err(Error::from)?;
-                    SupplierSettlementService::new(db.clone())
-                        .persist_source_evidence(&evidence, executor)
-                        .await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<_, Error>(evidence)
-                })
-            })
-            .await;
-        let evidence = match transaction_result {
-            Ok(evidence) => evidence,
-            Err(error) => {
-                if let Some(existing) =
-                    self.domain().replay_source(&req.request_id, &request_hash, &mut NoTransaction).await?
-                {
-                    return Ok(existing);
-                }
-                return Err(error);
-            },
-        };
+        settlement_source::link(&self.db, &evidence, executor).await?;
+        self.domain().persist_source_evidence(&evidence, executor).await?;
+        persist_log(&self.db, &audit, executor).await?;
         Ok(evidence.into())
     }
 }

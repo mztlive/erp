@@ -4,17 +4,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use erp_catalog::repository::{ProductFilter, ProductRow, SellableSkuFilter, SellableSkuRow};
 use erp_core::money::Quantity;
-use persistence_core::PageResult;
+use persistence_core::{PageResult, ReadExecutor};
 
 use super::*;
 
-struct TestExecutor(u64);
-impl Executor for TestExecutor {
-    fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-        assert_eq!(self.0, 71);
-        None
-    }
-}
+type TestExecutor = ReadExecutor;
 
 struct RecordingQuery {
     pointer: usize,
@@ -101,7 +95,7 @@ impl CatalogSupplyQueryPort for RecordingQuery {
 
 #[tokio::test]
 async fn exact_qualification_keeps_refs_date_and_nonzero_executor() {
-    let mut executor = TestExecutor(71);
+    let mut executor = TestExecutor::default();
     let refs = vec![("sku-z".into(), "rev-2".into()), ("sku-a".into(), "rev-1".into())];
     let query = Arc::new(RecordingQuery {
         pointer: &mut executor as *mut TestExecutor as usize,
@@ -117,7 +111,7 @@ async fn exact_qualification_keeps_refs_date_and_nonzero_executor() {
 
 #[tokio::test]
 async fn exact_qualification_keeps_persistence_failure_without_retry() {
-    let mut executor = TestExecutor(71);
+    let mut executor = TestExecutor::default();
     let refs = vec![("sku-z".into(), "rev-2".into())];
     let query = Arc::new(RecordingQuery {
         pointer: &mut executor as *mut TestExecutor as usize,
@@ -134,7 +128,7 @@ async fn exact_qualification_keeps_persistence_failure_without_retry() {
 /// 按同一精确修订的数量边界解析自动报价，同时保留传入执行器。
 #[tokio::test]
 async fn reference_prices_use_catalog_quantity_rule_and_exact_revision() {
-    let mut executor = TestExecutor(71);
+    let mut executor = TestExecutor::default();
     let requests = ["9.999999", "10", "10.000001"].map(|quantity| SalesReferencePriceRequest {
         sku_id: "sku-1".into(),
         sku_revision_id: "rev-1".into(),
@@ -163,7 +157,7 @@ async fn reference_prices_use_catalog_quantity_rule_and_exact_revision() {
 /// 自动报价读取失败保持原错误类别，且不重试供应方读取。
 #[tokio::test]
 async fn reference_prices_keep_provider_failure_without_retry() {
-    let mut executor = TestExecutor(71);
+    let mut executor = TestExecutor::default();
     let requests = [SalesReferencePriceRequest {
         sku_id: "sku-1".into(),
         sku_revision_id: "rev-1".into(),

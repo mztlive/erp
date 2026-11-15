@@ -10,15 +10,19 @@ use erp_finance::entity::receivable::{
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
+use erp_finance::service::receivable::ReceivableService;
 use erp_finance::service::receivable::red_invoice_plan::{
     purchase_red_invoice_allocation_plan, purchase_red_invoice_for_account, sales_red_invoice_allocation_plan,
 };
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::receivable;
 use erp_procure_to_pay::procure_to_pay::return_finance::sync_return_accounts;
 use erp_read_models::finance::receivable::snapshot::zero_amount;
 use erp_read_models::sales_money_progress::SalesMoneyProgressReader;
 use erp_sales::service::sales_order::progress::update_sales_order_money_progress;
 use id_generator::next_id;
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -61,17 +65,36 @@ impl ReceivableProcess {
         let rbac = self.rbac.clone();
 
         let client = db.client().clone();
-        let red_invoice_id = client
+        client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let outcome = apply_red_invoice(&db, &rbac, &prepared, executor).await?;
-                    Ok::<String, crate::Error>(outcome)
+                    let id = apply_red_invoice(&db, &rbac, &prepared, executor).await?;
+                    red_invoice_result(&db, &rbac.authorization, &prepared.actor, &id, executor).await
                 })
             })
-            .await?;
-
-        self.finance.invoice_detail(&red_invoice_id).await.map_err(Error::from)
+            .await
     }
+}
+
+/// 在原事务中重验红冲资格并读取新建或幂等命中的红票视图。
+///
+/// # 参数
+/// db 为发票数据库，authorization 为共享授权服务，actor 为本次操作人，id 为实际红票身份，executor 为原事务执行器。
+///
+/// # 返回
+/// 返回同一授权快照内的完整发票及分配视图。
+///
+/// # 错误
+/// 原事务失效、资格不足或发票读取失败时拒绝交付结果。
+async fn red_invoice_result(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<InvoiceView> {
+    authorization.require(actor, &receivable::INVOICE_RED_ISSUE, AccessTarget::Operation, executor).await?;
+    Ok(ReceivableService::new(db.clone()).invoice_detail_with_executor(id, executor).await?)
 }
 
 /// 红票命令的事务外快照：落事务前的全部确定性输入。
@@ -165,6 +188,9 @@ async fn apply_red_invoice(
     command: &RedInvoiceCommand,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<String> {
+    rbac.authorization
+        .require(&command.actor, &receivable::INVOICE_RED_ISSUE, AccessTarget::Operation, executor)
+        .await?;
     let receipts = FinanceCommandReceiptService::new(db.clone());
     if let Some(id) = receipts.committed_resource_id(&command.receipt, executor).await? {
         return Ok(id);
@@ -501,4 +527,33 @@ async fn complete_red_posting(
         .save_resource(&command.receipt, red_mut.base.id.clone(), audit.base.id.clone(), executor)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod result_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 原事务或红冲资格不可用时，必须在读取发票及分配前拒绝。
+    #[tokio::test]
+    async fn red_invoice_results_require_snapshot_and_current_command_qualification() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("red_invoice_results");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error = red_invoice_result(&db, &authorization, &actor, "red", &mut ReadExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message)
+            if message == "写入授权必须使用快照事务"));
+        let error = red_invoice_result(&db, &authorization, &actor, "red", &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(message)
+            if message == "测试授权设施不可用"));
+    }
 }

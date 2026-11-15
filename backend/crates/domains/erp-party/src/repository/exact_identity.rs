@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use mongodb::{Collection, Database};
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Result, aggregate, mongo_ops};
 use serde::Deserialize;
 
 use crate::{Party, PartyExt};
@@ -114,23 +114,8 @@ async fn candidate_rows(
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<ContractIdentityCandidate>> {
-    let mut result = Vec::new();
-    if let Some(session) = executor.session() {
-        let mut cursor = collection
-            .aggregate(pipeline)
-            .with_type::<ContractIdentityCandidate>()
-            .session(&mut *session)
-            .await?;
-        while cursor.advance(session).await? {
-            result.push(cursor.deserialize_current()?);
-        }
-    } else {
-        let mut cursor = collection.aggregate(pipeline).with_type::<ContractIdentityCandidate>().await?;
-        while cursor.advance().await? {
-            result.push(cursor.deserialize_current()?);
-        }
-    }
-    Ok(result)
+    let collection = collection.clone_with_type::<ContractIdentityCandidate>();
+    aggregate::rows(&collection, pipeline, executor).await
 }
 
 /// 精确查询启用的当前法定名称，最多返回两个候选以检测歧义。
@@ -171,20 +156,8 @@ pub async fn exact_parties(
         pipeline.push(doc! { "$match": { "unified_credit_code": code } });
     }
     pipeline.push(doc! { "$limit": 2 });
-    let collection = db.collection::<Document>(<Database as PartyExt>::PARTY_REVISIONS);
-    let mut result = Vec::new();
-    if let Some(session) = executor.session() {
-        let mut cursor = collection.aggregate(pipeline).with_type::<Party>().session(&mut *session).await?;
-        while cursor.advance(session).await? {
-            result.push(cursor.deserialize_current()?);
-        }
-    } else {
-        let mut cursor = collection.aggregate(pipeline).with_type::<Party>().await?;
-        while cursor.advance().await? {
-            result.push(cursor.deserialize_current()?);
-        }
-    }
-    Ok(result)
+    let collection = db.collection::<Party>(<Database as PartyExt>::PARTY_REVISIONS);
+    aggregate::rows(&collection, pipeline, executor).await
 }
 
 #[cfg(test)]

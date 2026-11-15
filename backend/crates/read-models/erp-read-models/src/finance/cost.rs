@@ -1,4 +1,8 @@
 //! 成本读取继承销售分配来源；完整及未分配成本另需显式财务整账职责。
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
+use erp_permissions::cost as cost_permissions;
 mod paging;
 mod snapshot;
 
@@ -6,7 +10,6 @@ use application_core::{AuditActor, PageView};
 use erp_finance::dto::cost::{
     CostAllocationListParams, CostAllocationView, CostEntryListParams, ScopedCostEntryView,
 };
-use erp_identity::SharedRbacService;
 use mongodb::Database;
 use serde::Serialize;
 use snapshot::CostSelection;
@@ -31,7 +34,7 @@ pub struct CostReadResult<T> {
 #[derive(Clone)]
 pub struct CostReadModel {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 impl CostReadModel {
     /// 绑定应用数据库及身份服务，不保存授权缓存。
@@ -45,7 +48,7 @@ impl CostReadModel {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -71,8 +74,7 @@ impl CostReadModel {
             .checked(
                 &params,
                 &CostSelection::default(),
-                "cost_entry",
-                "list",
+                &cost_permissions::ENTRY_LIST,
                 actor,
                 params.scope_version.as_deref(),
             )
@@ -94,7 +96,7 @@ impl CostReadModel {
     /// 不可见与不存在统一为 NotFound；撤权后不交付旧宽范围事实。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<CostReadResult<ScopedCostEntryView>> {
         let mut snapshot = self
-            .checked(&empty_query(), &CostSelection::entry(id), "cost_entry", "detail", actor, None)
+            .checked(&empty_query(), &CostSelection::entry(id), &cost_permissions::ENTRY_DETAIL, actor, None)
             .await?;
         let row = snapshot.rows.pop().ok_or_else(|| Error::NotFound("成本不存在或无权查看".into()))?;
         Ok(snapshot.result(row))
@@ -123,8 +125,7 @@ impl CostReadModel {
             .checked(
                 &empty_query(),
                 &selection,
-                "cost_allocation",
-                "list",
+                &cost_permissions::ALLOCATION_LIST,
                 actor,
                 params.scope_version.as_deref(),
             )

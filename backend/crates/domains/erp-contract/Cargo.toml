@@ -5,7 +5,8 @@ edition = "2024"
 autotests = false
 
 [dependencies]
-erp-identity = {workspace=true}
+erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 lopdf = { workspace = true }
 application-core = { workspace = true }
 async-trait = { workspace = true }

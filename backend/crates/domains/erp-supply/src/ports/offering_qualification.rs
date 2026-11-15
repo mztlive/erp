@@ -73,15 +73,10 @@ pub trait PortalQuoteQualificationPort: QualificationPort {
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor as Marker;
+
     use super::*;
     use crate::{Error, Result};
-
-    struct Marker;
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct TargetPort {
         pointer: usize,
         current: QuoteTargetVersion,
@@ -127,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn quote_verification_keeps_caller_executor_and_does_not_replace_supplier_basis() {
-        let mut executor = Marker;
+        let mut executor = Marker::default();
         let expected = target();
         let mut port = TargetPort { pointer: &mut executor as *mut Marker as usize, current: target() };
         port.ensure_quote_target(&SkuId::new("sku"), &expected, &mut executor).await.unwrap();

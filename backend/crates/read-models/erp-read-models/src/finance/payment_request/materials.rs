@@ -10,6 +10,7 @@ use erp_finance::entity::payable::{
 };
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
+use erp_permissions::{payable as payable_permissions, purchase_payment_request as payment_permissions};
 use erp_support::repository::FileAssetExt;
 use erp_workflow::entity::approval_integration::ApprovalMaterialFile;
 use erp_workflow::repository::prelude::*;
@@ -55,11 +56,13 @@ impl PurchasePaymentRequestReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let request = this.load(&id, executor).await?;
-                    let scope = this.source_scope(&actor, "detail", executor).await?;
+                    let scope = this.source_scope(&actor, &payment_permissions::DETAIL, executor).await?;
                     if !this.readable(&request, &scope, executor).await? {
                         return Err(Error::NotFound("付款申请材料不存在或无权下载".into()));
                     }
-                    this.material(&request, &asset_id, executor).await
+                    let material = this.material(&request, &asset_id, executor).await?;
+                    scope.deliver(executor).await?;
+                    Ok(material)
                 })
             })
             .await
@@ -134,8 +137,7 @@ impl PurchasePaymentRequestReadService {
                         &this.db,
                         &this.rbac,
                         &actor_for_tx,
-                        "party_bank_account",
-                        "reveal",
+                        &payable_permissions::PAYMENT_RECIPIENT_REVEAL,
                         executor,
                     )
                     .await?

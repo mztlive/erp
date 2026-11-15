@@ -153,6 +153,7 @@ impl ProductImportProcess {
         }
         let created = create_product_category(
             self.db.clone(),
+            self.job_access.service.clone(),
             self.services.catalog.clone(),
             CreateProductCategoryRequest {
                 category_code,

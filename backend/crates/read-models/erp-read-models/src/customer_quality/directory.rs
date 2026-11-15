@@ -48,6 +48,7 @@ impl CustomerQualityReadModel {
                     let orders = CurrentSources::load_orders(&this.db, filter, &scope, executor).await?;
                     let expected = version(&context.scope_version, &orders);
                     super::ensure_version(input.scope_version.as_deref(), &expected)?;
+                    context.validate(executor).await?;
                     HistoricalDirectoryView::from_attributions(
                         orders.iter().filter_map(|row| row.attribution.as_ref()),
                         expected,

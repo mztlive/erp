@@ -245,35 +245,40 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     }
 }
 
+/// 构造不访问数据库的采购单元测试句柄。
+/// # 参数
+/// name 为测试内独立数据库名。
+/// # 返回
+/// 只供替身执行路径使用的数据库句柄。
+/// # 错误
+/// 固定客户端选项非法时测试失败；不访问 MongoDB。
+#[cfg(test)]
+pub(crate) fn test_database(name: &str) -> Database {
+    use mongodb::Client;
+    use mongodb::options::{ClientOptions, ServerAddress};
+
+    let options = ClientOptions::builder()
+        .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
+        .build();
+    Client::with_options(options).unwrap().database(name)
+}
+
 #[cfg(test)]
 mod draft_line_tests {
-    use mongodb::Client;
     use mongodb::bson::{deserialize_from_document, doc};
     use mongodb::error::{Error as MongoError, ErrorKind, InsertManyError};
-    use mongodb::options::{ClientOptions, ServerAddress};
     use persistence_core::Error as RepositoryError;
+    /// 空明细写入不得访问事务会话。
+    use persistence_core::ReadExecutor;
 
     use super::*;
-
-    /// 空明细写入不得访问事务会话。
-    struct UnusedExecutor;
-
-    impl Executor for UnusedExecutor {
-        /// 任何会话访问都代表空输入行为发生了变化。
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            panic!("empty submission lines must not access the executor")
-        }
-    }
 
     /// 领域批量入口的空输入直接成功，不执行数据库操作。
     #[tokio::test]
     async fn draft_submission_lines_empty_input_performs_no_write() {
-        let options = ClientOptions::builder()
-            .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
-            .build();
-        let db = Client::with_options(options).unwrap().database("unit_test");
+        let db = test_database("unit_test");
         PurchaseOrderDomainRepository::new(&db)
-            .create_draft_submission_lines(&[], &mut UnusedExecutor)
+            .create_draft_submission_lines(&[], &mut ReadExecutor::default())
             .await
             .unwrap();
     }

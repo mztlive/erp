@@ -1,19 +1,19 @@
 //! 原审批人恢复入口、当前授权回放与单事务提交。
 
+use erp_permissions::internal as internal_permissions;
 mod persist;
 mod prepare;
 
 use std::future::Future;
-use std::sync::Arc;
 
 use application_core::AuditActor;
 use bpm::engine::{CommitRequired, Eligibility, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::types::ApprovalProcessInstanceStatus;
-use erp_identity::SharedRbacService;
+use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
 use mongodb::Database;
 use persist::persist_resume_writes;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, ReadExecutor, Transactional};
 use prepare::PreparedResume;
 
 use super::super::idempotency::{
@@ -31,7 +31,7 @@ use super::{
     hidden_not_found, load_exact_runtime_snapshot, persisted_command_view_with_executor, recover_by_replay,
 };
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{WorkflowAuditPort, WorkflowAuthorizationPort};
+use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::BpmExt;
 use crate::service::approval::{ApprovalResumeCommand, require_approval_management_with_executor};
 
@@ -68,11 +68,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             command.expected_closed_task_version,
             actor.id(),
         )?;
-        if let Some(view) = self.replay_resume(actor, &instance_id, &identity).await? {
+        if find_receipt_for_identity(&self.db, &identity, &mut ReadExecutor::default()).await?.is_some()
+            && let Some(view) = self.replay_resume(actor, &instance_id, &identity).await?
+        {
             return Ok(view);
         }
         let Some(prepared) = self.prepare_resume_runtime(actor, &command, idempotency_key).await? else {
-            return self.persisted_command_view(&instance_id, CommitRequired::Proceed, true).await;
+            return self.persisted_resume_view(actor, &instance_id).await;
         };
         let view = self.commit_resume(actor, prepared).await;
         commit_or_recover(
@@ -88,28 +90,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         prepared: PreparedResume,
     ) -> impl Future<Output = Result<ApprovalCommandView>> + Send {
-        let db = self.db.clone();
+        let service = self.clone();
         let client = self.db.client().clone();
-        let rbac = self.auth.clone();
-        let identity_service = self.identity.clone();
-
-        let audit_port = Arc::clone(&self.audit);
         let actor = actor.clone();
         async move {
             client
                 .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        apply_resume(
-                            &identity_service,
-                            &db,
-                            &rbac,
-                            audit_port.as_ref(),
-                            &actor,
-                            &prepared,
-                            executor,
-                        )
-                        .await
-                    })
+                    Box::pin(async move { apply_resume(&service, &actor, &prepared, executor).await })
                 })
                 .await
         }
@@ -123,7 +110,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         identity: &PreparedCommandIdentity,
     ) -> Result<Option<ApprovalCommandView>> {
         let db = self.db.clone();
-        let rbac = self.auth.clone();
+        let authorization = self.authorization.clone();
         let actor = actor.clone();
         let instance_id = instance_id.to_string();
         let identity = identity.clone();
@@ -131,7 +118,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    replay_resume_apply(&db, &rbac, &actor, &instance_id, &identity, executor).await
+                    replay_resume_apply(&authorization, &db, &actor, &instance_id, &identity, executor).await
                 })
             })
             .await
@@ -148,13 +135,39 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         recover_by_replay(original_error, || self.replay_resume(actor, &instance_id, &identity)).await
     }
 
-    async fn persisted_command_view(
+    /// 无需写入时，在一个读取事务内授权并交付既有恢复结果。
+    async fn persisted_resume_view(
         &self,
+        actor: &AuditActor,
         instance_id: &str,
-        commit: CommitRequired,
-        replay: bool,
     ) -> Result<ApprovalCommandView> {
-        persisted_command_view_with_executor(&self.db, instance_id, commit, replay, &mut NoTransaction).await
+        let service = self.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .authorization
+                        .require(
+                            &actor,
+                            &internal_permissions::APPROVAL_RECOVER,
+                            AccessTarget::record(&instance_id)?,
+                            executor,
+                        )
+                        .await?;
+                    persisted_command_view_with_executor(
+                        &service.db,
+                        &instance_id,
+                        CommitRequired::Proceed,
+                        true,
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await
     }
 
     /// 实例缺失时隐藏存在性；当前 blocker 不允许该动作时返回冲突。
@@ -175,10 +188,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 
 /// 授权重验、全部写入及视图组装共用调用方的同一事务执行器。
 async fn apply_resume(
-    identity_service: &SharedRbacService,
-    db: &Database,
-    rbac: &impl WorkflowAuthorizationPort,
-    audit_port: &dyn WorkflowAuditPort,
+    service: &ApprovalRuntimeService<impl WorkflowAuthorizationPort>,
     actor: &AuditActor,
     prepared: &PreparedResume,
     executor: &mut dyn Executor,
@@ -188,9 +198,10 @@ async fn apply_resume(
             continue;
         };
         revalidate_resume_with_executor(
-            db,
-            identity_service,
-            rbac,
+            &service.authorization,
+            &service.db,
+            &service.identity,
+            &service.auth,
             actor,
             RevalidateDecisionApproverInput {
                 assignee_id: assignee.as_str(),
@@ -204,8 +215,8 @@ async fn apply_resume(
         )
         .await?;
     }
-    persist_resume_writes(db, prepared, audit_port, executor).await?;
-    rbac.append_assignment_grants(&prepared.writes, executor).await?;
+    persist_resume_writes(&service.db, prepared, service.audit.as_ref(), executor).await?;
+    service.auth.append_assignment_grants(&prepared.writes, executor).await?;
     Ok(map_command_view(
         &prepared.writes.instance,
         prepared.writes.created_executions.last(),
@@ -219,6 +230,7 @@ async fn apply_resume(
 
 /// 在恢复写入的同一事务中重验管理者及原审批人，所有单据类型一致执行。
 async fn revalidate_resume_with_executor(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
@@ -227,15 +239,16 @@ async fn revalidate_resume_with_executor(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     require_approval_management_with_executor(
-        rbac,
+        authorization,
         actor,
-        "approval_instance:resume",
+        &internal_permissions::APPROVAL_RECOVER,
         input.snapshot.document_type,
-        &input.snapshot.business_object_id,
+        input.snapshot.approval_process_instance_id.as_ref(),
         executor,
     )
     .await?;
-    let eligibility = revalidate_decision_approver(db, identity_service, rbac, input, executor).await?;
+    let eligibility =
+        revalidate_decision_approver(authorization, db, identity_service, rbac, input, executor).await?;
     ensure_resume_approver_recovered(&eligibility)
 }
 
@@ -244,8 +257,8 @@ async fn revalidate_resume_with_executor(
 /// # Panics
 /// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_resume_apply(
+    authorization: &AuthorizationService,
     db: &Database,
-    rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
     instance_id: &str,
     identity: &PreparedCommandIdentity,
@@ -258,11 +271,11 @@ async fn replay_resume_apply(
         .ok_or_else(hidden_not_found)?;
     let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, true).await?;
     require_approval_management_with_executor(
-        rbac,
+        authorization,
         actor,
-        "approval_instance:resume",
+        &internal_permissions::APPROVAL_RECOVER,
         snapshot.document_type,
-        &snapshot.business_object_id,
+        instance_id,
         executor,
     )
     .await?;

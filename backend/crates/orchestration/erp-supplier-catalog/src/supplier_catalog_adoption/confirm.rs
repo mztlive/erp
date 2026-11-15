@@ -1,10 +1,11 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_audit::AuditActorLogs;
-use erp_audit::execution::persist_log;
+use erp_audit::execution::{persist_log, recover_command};
 use erp_catalog::CatalogExt;
 use erp_catalog::source_sync::repository::ProductSourceExt;
 use erp_core::common::time::Instant;
+use erp_permissions::{catalog as catalog_permissions, supplier_offering};
 use erp_supply::catalog_adoption::{
     AdoptionResult, AdoptionRow, AdoptionTarget, BatchMatchAnchor, CatalogAdoptionCommand,
     CatalogAdoptionExt, CatalogAdoptionPreview, CatalogAdoptionReceipt, ConfirmAdoptionRequest,
@@ -13,7 +14,7 @@ use erp_supply::catalog_adoption::{
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_offering::CommandPreparation;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -40,6 +41,7 @@ pub struct AdoptionBatchResult {
     pub rows: Vec<AdoptionRowResult>,
 }
 
+#[derive(Clone)]
 pub(super) struct AdoptionExecution {
     /// 持久化旧式预览须复验创建人；批次生成的内部视图由批次入口授权。
     pub preview_id: Option<String>,
@@ -79,17 +81,8 @@ impl SupplierCatalogAdoptionProcess {
         request: ConfirmAdoptionRequest,
         actor: &AuditActor,
     ) -> Result<AdoptionBatchResult> {
-        self.ensure_adoption_permissions(actor).await?;
-        self.require_preview_owner(actor, preview_id, &mut NoTransaction).await?;
-        let preview = self
-            .db
-            .catalog_adoption_previews()
-            .find_by_id(preview_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("选品预览不存在".into()))?;
-        preview.ensure_request(connection, &request)?;
-        self.batch_access(connection, actor, &mut NoTransaction).await?;
-        let command_id = self.freeze_command(connection, preview_id, &request, actor).await?;
+        let (preview, command_id) =
+            self.confirmation_snapshot(connection, preview_id, &request, actor).await?;
         if preview.expires_at <= Instant::now() {
             return self.replay_expired_batch(&request, actor).await;
         }
@@ -117,55 +110,125 @@ impl SupplierCatalogAdoptionProcess {
         Ok(AdoptionBatchResult { rows })
     }
 
-    async fn replay_expired_batch(
-        &self,
-        request: &ConfirmAdoptionRequest,
-        actor: &AuditActor,
-    ) -> Result<AdoptionBatchResult> {
-        let mut rows = Vec::with_capacity(request.rows.len());
-        for row in &request.rows {
-            let result = self
-                .replay(&row.item_id, row, actor, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::ConflictError("选品预览已过期，未完成行须重新预览".into()))?;
-            rows.push(result.into());
-        }
-        Ok(AdoptionBatchResult { rows })
-    }
-
-    async fn freeze_command(
+    /// 同一快照核验预览归属及连接范围，再冻结幂等操作。
+    async fn confirmation_snapshot(
         &self,
         connection: &str,
         preview_id: &str,
         request: &ConfirmAdoptionRequest,
         actor: &AuditActor,
-    ) -> Result<String> {
-        let id = adoption_identity(&[connection, actor.id(), &request.idempotency_key]);
-        let payload = serde_json::to_vec(&(preview_id, request))
-            .map_err(|_| Error::Internal("选品批次无法编码".into()))?;
-        let fingerprint = hex::encode(Sha256::digest(payload));
-        let repository = self.db.catalog_adoption_commands();
-        if let Some(existing) = repository.find_by_id(&id, &mut NoTransaction).await? {
-            if existing.base.is_deleted() || existing.fingerprint != fingerprint {
-                return Err(Error::ConflictError("同一操作号已用于不同选品提交".into()));
-            }
-            return Ok(id);
-        }
-        let command = CatalogAdoptionCommand {
-            base: BaseModel::new(id.clone()),
-            connection_id: connection.into(),
-            actor_id: actor.id().into(),
-            fingerprint,
+    ) -> Result<(CatalogAdoptionPreview, String)> {
+        let command = confirmation_command(connection, preview_id, request, actor)?;
+        let outcome = self.confirmation_attempt(connection, preview_id, request, actor, &command).await;
+        let Err(error) = outcome else {
+            return outcome;
         };
-        if let Err(error) = repository.create(&command, &mut NoTransaction).await {
-            let existing = repository.find_by_id(&id, &mut NoTransaction).await?;
-            if existing.is_none_or(|existing| {
-                existing.base.is_deleted() || existing.fingerprint != command.fingerprint
-            }) {
-                return Err(error.into());
-            }
+        recover_command(
+            error,
+            self.confirmation_replay(connection, preview_id, request, actor, &command).await,
+        )
+    }
+
+    /// 首次确认在快照中检查并冻结原操作，不在失败事务中恢复。
+    async fn confirmation_attempt(
+        &self,
+        connection: &str,
+        preview_id: &str,
+        request: &ConfirmAdoptionRequest,
+        actor: &AuditActor,
+        command: &CatalogAdoptionCommand,
+    ) -> Result<(CatalogAdoptionPreview, String)> {
+        let (source, target, request, actor, command) =
+            (connection.to_owned(), preview_id.to_owned(), request.clone(), actor.clone(), command.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let preview =
+                    process.confirmation_preview(&source, &target, &request, &actor, executor).await?;
+                let id = process.freeze_command(&command, executor).await?;
+                Ok((preview, id))
+            })
+        })
+        .await
+    }
+
+    /// 新快照只回读精确原操作，不重放尚不明确的写入。
+    async fn confirmation_replay(
+        &self,
+        connection: &str,
+        preview_id: &str,
+        request: &ConfirmAdoptionRequest,
+        actor: &AuditActor,
+        command: &CatalogAdoptionCommand,
+    ) -> Result<Option<(CatalogAdoptionPreview, String)>> {
+        let (source, target, request, actor, expected) =
+            (connection.to_owned(), preview_id.to_owned(), request.clone(), actor.clone(), command.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let preview =
+                    process.confirmation_preview(&source, &target, &request, &actor, executor).await?;
+                let stored =
+                    process.db.catalog_adoption_commands().find_by_id(&expected.base.id, executor).await?;
+                stored.map(|stored| command_identity(&stored, &expected).map(|id| (preview, id))).transpose()
+            })
+        })
+        .await
+    }
+
+    /// 原操作恢复仍核验当前预览归属与来源，不在失败事务内回读。
+    async fn confirmation_preview(
+        &self,
+        connection: &str,
+        preview_id: &str,
+        request: &ConfirmAdoptionRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CatalogAdoptionPreview> {
+        self.require_preview_owner(actor, preview_id, executor).await?;
+        let preview = self
+            .db
+            .catalog_adoption_previews()
+            .find_by_id(preview_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("选品预览不存在".into()))?;
+        preview.ensure_request(connection, request)?;
+        self.batch_access(connection, actor, executor).await?;
+        Ok(preview)
+    }
+
+    async fn replay_expired_batch(
+        &self,
+        request: &ConfirmAdoptionRequest,
+        actor: &AuditActor,
+    ) -> Result<AdoptionBatchResult> {
+        let (request, actor) = (request.clone(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                let mut rows = Vec::with_capacity(request.rows.len());
+                for row in &request.rows {
+                    let result = process
+                        .replay(&row.item_id, row, &actor, executor)
+                        .await?
+                        .ok_or_else(|| Error::ConflictError("选品预览已过期，未完成行须重新预览".into()))?;
+                    rows.push(result.into());
+                }
+                Ok(AdoptionBatchResult { rows })
+            })
+        })
+        .await
+    }
+
+    /// 同一事务读取并创建原操作；并发重复由入口在新快照中恢复。
+    async fn freeze_command(
+        &self,
+        command: &CatalogAdoptionCommand,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let repository = self.db.catalog_adoption_commands();
+        if let Some(existing) = repository.find_by_id(&command.base.id, executor).await? {
+            return command_identity(&existing, command);
         }
-        Ok(id)
+        repository.create(command, executor).await?;
+        Ok(command.base.id.clone())
     }
 
     pub(super) async fn confirm_row(
@@ -195,13 +258,26 @@ impl SupplierCatalogAdoptionProcess {
         execution: AdoptionExecution,
         actor: &AuditActor,
     ) -> Result<AdoptionResult> {
-        let AdoptionExecution { preview, source: frozen, row, command, group_anchor, .. } = &execution;
-        self.require_execution_access(&execution, actor, &mut NoTransaction).await?;
-        if let Some(result) = self.replay(&frozen.base.id, row, actor, &mut NoTransaction).await? {
+        let AdoptionExecution { source: frozen, row, command, group_anchor, .. } = &execution;
+        let (check, acting) = (execution.clone(), actor.clone());
+        if let Some(result) = self
+            .with_snapshot(move |process, executor| {
+                Box::pin(async move {
+                    process.require_execution_access(&check, &acting, executor).await?;
+                    let result = process.replay(&check.row.item_id, &check.row, &acting, executor).await?;
+                    if result.is_none() {
+                        let current = process
+                            .load_item(&check.preview.connection_id, &check.row.item_id, executor)
+                            .await?;
+                        check.preview.ensure_current_item(&current)?;
+                    }
+                    Ok(result)
+                })
+            })
+            .await?
+        {
             return Ok(result);
         }
-        let current = self.load_item(&preview.connection_id, &row.item_id, &mut NoTransaction).await?;
-        preview.ensure_current_item(&current)?;
         let prepared =
             self.prepare_row_with_anchor(frozen, row, actor, command, group_anchor.as_ref()).await?;
         let cleanup = prepared.media.cleanup_handle();
@@ -371,12 +447,95 @@ impl SupplierCatalogAdoptionProcess {
         };
         self.services
             .catalog_access
-            .require_product(actor, "detail", &receipt.result.product_id, executor)
+            .require_product(
+                actor,
+                &catalog_permissions::PRODUCT_PRODUCT_DETAIL,
+                &receipt.result.product_id,
+                executor,
+            )
             .await?;
         self.services
             .offering_access
-            .require_offering(actor, "list", &receipt.result.offering_id, executor)
+            .require_offering(actor, &supplier_offering::LIST, &receipt.result.offering_id, executor)
             .await?;
         Ok(Some(receipt.replay(&row.fingerprint()?)?))
+    }
+}
+
+/// 原操作身份固定连接、账号与全部请求载荷。
+fn confirmation_command(
+    connection: &str,
+    preview_id: &str,
+    request: &ConfirmAdoptionRequest,
+    actor: &AuditActor,
+) -> Result<CatalogAdoptionCommand> {
+    let payload =
+        serde_json::to_vec(&(preview_id, request)).map_err(|_| Error::Internal("选品批次无法编码".into()))?;
+    Ok(CatalogAdoptionCommand {
+        base: BaseModel::new(adoption_identity(&[connection, actor.id(), &request.idempotency_key])),
+        connection_id: connection.into(),
+        actor_id: actor.id().into(),
+        fingerprint: hex::encode(Sha256::digest(payload)),
+    })
+}
+
+/// 精确核验原操作，软删除或异载荷不能作为幂等成功返回。
+fn command_identity(stored: &CatalogAdoptionCommand, expected: &CatalogAdoptionCommand) -> Result<String> {
+    if stored.base.is_deleted()
+        || stored.base.id != expected.base.id
+        || stored.connection_id != expected.connection_id
+        || stored.actor_id != expected.actor_id
+        || stored.fingerprint != expected.fingerprint
+    {
+        return Err(Error::ConflictError("同一操作号已用于不同选品提交".into()));
+    }
+    Ok(stored.base.id.clone())
+}
+
+#[cfg(test)]
+mod command_tests {
+    use erp_core::AccountKind;
+
+    use super::*;
+
+    /// 构造生产确认操作，不访问数据库。
+    fn command() -> CatalogAdoptionCommand {
+        confirmation_command(
+            "connection",
+            "preview",
+            &ConfirmAdoptionRequest {
+                expected_version: 1,
+                idempotency_key: "same-operation".into(),
+                rows: vec![],
+            },
+            &AuditActor::new("actor".into(), "login".into(), AccountKind::Admin),
+        )
+        .unwrap()
+    }
+
+    /// 相同操作的并发回读使用原身份；业务版本差异不改变操作身份。
+    #[test]
+    fn concurrent_confirmation_recovery_preserves_original_operation() {
+        let expected = command();
+        let mut stored = expected.clone();
+        stored.base.version += 1;
+        assert_eq!(command_identity(&stored, &expected).unwrap(), expected.base.id);
+    }
+
+    /// 任何身份、载荷或软删除差异均拒绝，不能接受其他确认回执。
+    #[test]
+    fn recovery_rejects_deleted_or_mismatched_confirmation() {
+        let expected = command();
+        for mutation in 0..5 {
+            let mut stored = expected.clone();
+            match mutation {
+                0 => stored.base.id = "other".into(),
+                1 => stored.actor_id = "other".into(),
+                2 => stored.connection_id = "other".into(),
+                3 => stored.fingerprint = "other".into(),
+                _ => stored.base.deleted_at = 1,
+            }
+            assert!(matches!(command_identity(&stored, &expected), Err(Error::ConflictError(_))));
+        }
     }
 }

@@ -12,6 +12,7 @@ use erp_finance::dto::payable::{
 use erp_finance::entity::payable::AllocationAction as PayableAllocationAction;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
+use erp_permissions::{Permission as AccessPermission, payable as payable_permissions};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -39,8 +40,7 @@ impl FundsAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人。
-    /// * `resource` - 目标资金资源。
-    /// * `action` - 目标动作。
+    /// * `permission` - 目标资金入口的公共权限常量。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -51,11 +51,10 @@ impl FundsAccess {
     pub async fn resolve_dual(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<(FundsReadContext, FundsAuthorization)> {
-        self.resolve_sources(actor, resource, action, true, true, executor).await
+        self.resolve_sources(actor, permission, true, true, executor).await
     }
 
     /// 进项发票分配按应付子账反查采购单；结算来源保留自身责任边界。
@@ -226,6 +225,7 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary = snapshot.summary(&version)?;
         let items = snapshot.items.iter().map(allocation_page_row).collect();
+        authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
             total: snapshot.total(),
@@ -248,8 +248,9 @@ impl FundsAccess {
         materialize: bool,
         executor: &mut dyn Executor,
     ) -> Result<(FundsAuthorization, AllocationSnapshot)> {
-        let (_, authorization) =
-            self.resolve_with_purchase(actor, "purchase_invoice_allocation", "list", executor).await?;
+        let (_, authorization) = self
+            .resolve_with_purchase(actor, &payable_permissions::PURCHASE_INVOICE_ALLOCATION_LIST, executor)
+            .await?;
         let condition = self.purchase_invoice_condition(query, executor).await?;
         let snapshot =
             allocation_snapshot(&self.db, query, &authorization, &condition, materialize, executor).await?;
@@ -272,6 +273,7 @@ impl FundsAccess {
                 Box::pin(async move {
                     let (authorization, snapshot) =
                         this.allocation_projection(&query, &actor, false, executor).await?;
+                    authorization.deliver(executor).await?;
                     Ok(allocation_scope_version(&authorization, &snapshot.versions))
                 })
             })

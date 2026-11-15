@@ -6,6 +6,7 @@ use std::sync::Arc;
 use erp_core::common::time::Instant;
 use persistence_core::{ExecutionBoundary, Executor};
 
+use super::approvals;
 use super::rules::{self, TargetForm};
 use crate::entity::access_control::scope_spec;
 use crate::entity::authorization::{
@@ -29,6 +30,7 @@ pub(super) struct TargetFacts {
     objects: Vec<ObjectFacts>,
     candidate: Option<ObjectFacts>,
     boundary: ExecutionBoundary,
+    task: bool,
 }
 
 impl TargetFacts {
@@ -61,13 +63,14 @@ impl TargetFacts {
             },
         };
         rules::ensure_target(&context.permission, scope_spec::kind(&context.permission)?, form)?;
-        if !rules::is_read(&context.permission) && !boundary.is_snapshot() {
+        if (form == TargetForm::Task || !rules::is_read(&context.permission)) && !boundary.is_snapshot() {
             return Err(Error::ValidationError("对象写入授权必须使用快照事务".into()));
         }
         if !matches!(form, TargetForm::Candidate) && ids.ids().is_empty() {
             return Err(Error::ValidationError("授权目标不能为空".into()));
         }
-        let objects = load_records(bindings, context, &ids, executor).await?;
+        let task = matches!(form, TargetForm::Task);
+        let objects = load_target_records(bindings, context, &ids, task, executor).await?;
         if version.is_some_and(|version| objects[0].version != version) {
             return Err(Error::ConflictError("任务版本已改变".into()));
         }
@@ -75,7 +78,7 @@ impl TargetFacts {
             Some(candidate) => Some(load_candidate(bindings, context, rule, candidate, executor).await?),
             None => None,
         };
-        let result = Self { objects, candidate, boundary };
+        let result = Self { objects, candidate, boundary, task };
         if !result.boundary.is_current(executor) {
             return Err(Error::ValidationError("目标读取跨越执行阶段".into()));
         }
@@ -102,6 +105,11 @@ impl TargetFacts {
             }
         }
         self.ensure_current()
+    }
+
+    /// 仅暴露本次可信根对象；审批管理从冻结事实确定类型及真实来源。
+    pub(super) fn roots(&self) -> impl Iterator<Item = &ObjectFacts> {
+        self.objects.iter().chain(self.candidate.iter())
     }
 
     /// 有界展开复用同一个总量计数；异步检查结束后再次核对全部到期边界。
@@ -136,13 +144,34 @@ impl TargetFacts {
     ) -> Result<()> {
         if !self.boundary.is_snapshot() {
             let ids = self.objects.iter().map(|object| object.id.as_str()).collect::<Vec<_>>();
-            let current = load_records(bindings, context, &ResourceTargets::new(&ids)?, executor).await?;
+            let current =
+                load_target_records(bindings, context, &ResourceTargets::new(&ids)?, self.task, executor)
+                    .await?;
             if current != self.objects {
                 return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象事实已改变".into()));
             }
         }
         self.ensure_current()
     }
+}
+
+/// 精确任务从固定任务资源读取；其事实仍按原入口解释，调用方不能切换提供者。
+async fn load_target_records(
+    bindings: &FactsBindings,
+    context: &AccessContext,
+    ids: &ResourceTargets,
+    task: bool,
+    executor: &mut dyn Executor,
+) -> Result<Vec<ObjectFacts>> {
+    if !task {
+        return load_records(bindings, context, ids, executor).await;
+    }
+    let resource = rules::task_facts_resource(&context.permission);
+    let port = bindings.get(resource).ok_or_else(|| Error::ValidationError("缺少任务 Facts 绑定".into()))?;
+    let mut objects = port.load(context, ids, executor).await?;
+    ids.ensure_objects(&context.resource, &objects)?;
+    ObjectFacts::canonicalize(&mut objects)?;
+    Ok(objects)
 }
 
 /// 完整根集合必须一次核对，不能将根记录缺失解释为已知空。
@@ -176,6 +205,10 @@ async fn load_candidate(
     let mut candidate = candidate.clone();
     let mut resources = BTreeMap::new();
     source_resources(rule, &mut resources)?;
+    if approvals::supports(&context.permission) {
+        let (key, resource) = approvals::candidate_source(&candidate)?;
+        resources.insert(key, resource);
+    }
     for (key, related) in &mut candidate.relations {
         if !related.objects.is_empty() {
             return Err(Error::ValidationError("候选不能提供现存来源的授权事实".into()));
@@ -188,7 +221,16 @@ async fn load_candidate(
         let port =
             bindings.get(resource).ok_or_else(|| Error::ValidationError("缺少来源 Facts 绑定".into()))?;
         let ids = related.expected_ids.iter().map(String::as_str).collect::<Vec<_>>();
-        let context = AccessContext { resource: resource.clone(), model: None, ..context.clone() };
+        let context = AccessContext {
+            permission: if approvals::supports(&context.permission) {
+                approvals::source_permission(resource)?
+            } else {
+                context.permission.clone()
+            },
+            resource: resource.clone(),
+            model: None,
+            ..context.clone()
+        };
         related.objects = port.load(&context, &ResourceTargets::new(&ids)?, executor).await?;
         related.validate()?;
         if related.objects.iter().any(|object| object.resource != *resource) {
@@ -261,7 +303,7 @@ mod tests {
     use application_core::AuditActor;
     use async_trait::async_trait;
     use erp_core::AccountKind;
-    use erp_permissions::{purchase_order, purchase_payment_request, sales_inquiry};
+    use erp_permissions::{fulfillment, purchase_order, purchase_payment_request, sales_inquiry};
     use persistence_core::ReadExecutor;
     use persistence_core::testing::SnapshotExecutor;
 
@@ -477,6 +519,22 @@ mod tests {
         }
     }
 
+    /// 复用列表权限的任务办理仍必须在快照事务中执行。
+    #[tokio::test]
+    async fn task_with_read_permission_rejects_nontransaction_executor() {
+        let context = context(&fulfillment::DELIVERY_DELIVERY_LIST);
+        let mut executor = ReadExecutor::default();
+        let result = TargetFacts::load(
+            &BTreeMap::new(),
+            &context,
+            &AccessRule::Allow,
+            Target::Task { id: "task", version: "1" },
+            &mut executor,
+        )
+        .await;
+        assert!(matches!(result, Err(Error::ValidationError(message)) if message.contains("快照事务")));
+    }
+
     #[tokio::test]
     async fn task_requires_exact_identity_version_and_current_assignment() {
         let context = context(&sales_inquiry::COMMANDS_PROCUREMENT_RENEW);
@@ -587,6 +645,7 @@ mod tests {
             objects: children,
         };
         let build = |related: RelatedObjects| TargetFacts {
+            task: false,
             objects: vec![],
             boundary: executor.boundary().unwrap(),
             candidate: Some(ObjectFacts {

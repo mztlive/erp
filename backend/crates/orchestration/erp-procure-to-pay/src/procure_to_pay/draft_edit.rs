@@ -23,7 +23,7 @@ use erp_procurement::service::purchase_order::draft_rebase::{
 use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
@@ -33,7 +33,6 @@ use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::procure_to_pay::inquiry_expense::PurchaseExpenseTarget;
 use crate::{Error, Result};
 
-const SAVE_PERMISSION: &str = "purchase_order:update";
 const SAVE_RECEIPT_PREFIX: &str = "purchase-order-save-draft-command-";
 
 /// 保存草稿幂等命令上下文。
@@ -84,7 +83,6 @@ impl PurchaseOrderProcess {
         let ports = self.ports.clone();
         req.validate()?;
         req.ensure_shape()?;
-        self.authorize_actor_permission(actor, SAVE_PERMISSION).await?;
         let fingerprint = req.request_fingerprint(id)?;
         let receipt_identity = PurchaseCommandReceipt::<SaveDraftReceipt>::identity(
             SAVE_RECEIPT_PREFIX,
@@ -94,11 +92,6 @@ impl PurchaseOrderProcess {
             &req.idempotency_key,
         )?;
         let receipt_id = receipt_identity;
-        if let Some(result) =
-            replay_saved_draft(&self.db, &receipt_id, &fingerprint, id, actor, &mut NoTransaction).await?
-        {
-            return Ok(result);
-        }
         execute_save_draft_transaction(
             DraftSaveServices { service: self, ports: ports.as_ref() },
             id,
@@ -151,9 +144,7 @@ async fn execute_save_draft_transaction(
         .clone()
         .with_transaction(move |executor| {
             Box::pin(async move {
-                object_scope
-                    .revalidate(&transaction_order_id, request.expected_lock_version, executor)
-                    .await?;
+                object_scope.current(&transaction_order_id, executor).await?;
                 let command = SaveDraftCommand {
                     purchase_order_id: &transaction_order_id,
                     request: &request,
@@ -165,7 +156,7 @@ async fn execute_save_draft_transaction(
             })
         })
         .await;
-    recover_saved_draft(transaction_result, &service.db, &receipt_id, &fingerprint, purchase_order_id, actor)
+    recover_saved_draft(transaction_result, service, &receipt_id, &fingerprint, purchase_order_id, actor)
         .await
 }
 
@@ -474,7 +465,7 @@ async fn replay_saved_draft(
 /// 回读只执行一次，不把没有收据的失败请求误判为成功。
 async fn recover_saved_draft(
     transaction_result: Result<SavePurchaseOrderDraftResult>,
-    db: &mongodb::Database,
+    service: &PurchaseOrderProcess,
     receipt_id: &PurchaseCommandReceiptIdentity,
     fingerprint: &str,
     purchase_order_id: &str,
@@ -482,11 +473,25 @@ async fn recover_saved_draft(
 ) -> Result<SavePurchaseOrderDraftResult> {
     match transaction_result {
         Ok(result) => Ok(result),
-        Err(error) => recover_command(
-            error,
-            replay_saved_draft(db, receipt_id, fingerprint, purchase_order_id, actor, &mut NoTransaction)
-                .await,
-        ),
+        Err(error) => {
+            let db = service.db.clone();
+            let access = service.command_access(actor, "update");
+            let id = purchase_order_id.to_string();
+            let identity = receipt_id.clone();
+            let fingerprint = fingerprint.to_string();
+            let actor = actor.clone();
+            let recovered = service
+                .db
+                .client()
+                .with_transaction(move |executor| {
+                    Box::pin(async move {
+                        access.current(&id, executor).await?;
+                        replay_saved_draft(&db, &identity, &fingerprint, &id, &actor, executor).await
+                    })
+                })
+                .await;
+            recover_command(error, recovered)
+        },
     }
 }
 

@@ -1,38 +1,28 @@
-//! 域 D05 `file_asset` 服务编排。
-//!
-//! 事务边界只在 Service（conventions §6.1）：
-//! - 登记/关联/检查结果/销毁：业务行 + 审计日志 → `with_transaction` 内原子提交；
-//! - 查询一律 `&mut NoTransaction`。
-//!
-//! 文件 I/O 不在事务闭包内执行（TRANSACTIONS.md：事务内不做外部 HTTP/文件 IO）：
-//! 上传落盘由 HTTP handler 在调用 Service 前完成，Service 只编排元数据。
-//!
-//! 跨域：业务单据注册经消费方 Port 读取，审计写入经审计 Port 落库；
-//! 文件资产的安全检查、保留期与销毁状态只作治理记录，不阻断业务对象关联。
+//! 文件资产管理入口统一检查功能资格；已授权业务投影复用原执行器。
+mod command;
+mod governance;
 
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
-use id_generator::next_id;
+use erp_core::ids::BusinessDocumentId;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, file_asset};
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::check_expected_version;
 pub use crate::dto::file_asset::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
     FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
     RegisterFileAssetRequest,
 };
-use crate::entity::file_asset::{AttachmentUsage, DocumentAttachment, FileAsset};
 use crate::error::{Error, Result};
 use crate::ports::{BusinessDocumentPort, SupportAuditPort};
 use crate::repository::FileAssetExt;
 use crate::repository::prelude::*;
 
-/// 文件资产列表筛选条件类型（经 `FileAssetExt` 关联类型跨 crate 可达）。
-type FileAssetFilter = <mongodb::Database as FileAssetExt>::FileAssetFilter;
+type FileAssetFilter = <Database as FileAssetExt>::FileAssetFilter;
 
 /// 区分直接元数据登记与已完成真实内容检查的受控上传。
 enum AssetRegistrationOrigin {
@@ -40,54 +30,63 @@ enum AssetRegistrationOrigin {
     ContentCheckedUpload,
 }
 
-/// 文件资产服务。
-///
-/// 提供文件资产登记、单据附件关联、安全检查与销毁编排。
+/// 文件管理用例和已授权业务使用的最小资产读取步骤。
+#[derive(Clone)]
 pub struct FileAssetService {
     db: Database,
     audit: Arc<dyn SupportAuditPort>,
     documents: Arc<dyn BusinessDocumentPort>,
+    authorization: Arc<AuthorizationService>,
 }
-
 impl FileAssetService {
-    /// 创建文件资产服务实例。
-    ///
+    /// 注入文件数据库、业务事实与共享授权服务。
     /// # 参数
-    /// * `db` - 数据库实例
-    /// * `audit` - 审计写入端口
-    /// * `documents` - 业务单据注册端口
-    ///
+    /// db、audit、documents为原文件能力，authorization为应用唯一授权服务。
     /// # 返回
-    /// 返回服务实例。
-    ///
+    /// 不缓存请求身份和授权结果的服务。
     /// # 错误
-    /// 不返回错误。
+    /// 无；构造不执行I/O。
     pub fn new(
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
         documents: Arc<dyn BusinessDocumentPort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, audit, documents }
+        Self { db, audit, documents, authorization }
     }
-
-    /// 分页查询文件资产列表。
-    ///
-    /// 列表不暴露敏感对象存储键（§6.1 对象存储地址不得写业务日志）。
-    ///
+    /// 在同一读取执行器检查文件管理列表资格并分页。
     /// # 参数
-    /// * `params` - 查询参数（`file_name`/`security_scan_status`/`retention_class` 等）
-    ///
+    /// params为业务筛选，actor为当前账号。
     /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
+    /// 原字段口径的文件分页，不包含存储键。
     /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    /// 参数非法、无功能资格或数据库错误时拒绝。
     pub async fn file_asset_list(
         &self,
         params: &FileAssetListParams,
+        actor: &AuditActor,
+    ) -> Result<PageView<FileAssetListItemView>> {
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.file_asset_list_snapshot(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn file_asset_list_snapshot(
+        &self,
+        params: &FileAssetListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<FileAssetListItemView>> {
         params.validate()?;
+        self.require_operation(actor, &file_asset::LIST, executor).await?;
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = FileAssetFilter {
@@ -100,428 +99,147 @@ impl FileAssetService {
             sort_by,
             sort_ascending,
         };
-        let page = self.db.file_assets().search_file_assets(&filter, &mut NoTransaction).await?;
-        let items = page.items.into_iter().map(FileAssetListItemView::from).collect();
-
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+        let page = self.db.file_assets().search_file_assets(&filter, executor).await?;
+        Ok(PageView {
+            items: page.items.into_iter().map(Into::into).collect(),
+            total: page.total,
+            page: filter.page,
+            page_size: filter.page_size,
+        })
     }
-
-    /// 查询文件资产详情。
-    ///
-    /// 详情返回对象存储键（供下载路由使用）；键是加密受控存储的不可猜测键。
-    ///
+    /// 检查管理详情资格后读取文件元数据。
     /// # 参数
-    /// * `id` - 文件资产 ID
-    ///
+    /// id为资产身份，actor为当前账号。
     /// # 返回
-    /// 返回完整资产视图。
-    ///
+    /// 供受控响应使用的原资产视图。
     /// # 错误
-    /// * `NotFound` - 资产不存在
-    pub async fn file_asset_detail(&self, id: &str) -> Result<FileAssetView> {
-        let asset = self
-            .db
-            .file_assets()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("文件资产不存在".to_string()))?;
-        Ok(asset.into())
-    }
-
-    /// 查询文件预览所需元数据并记录敏感读取审计。
-    ///
-    /// 实际对象存储读取仍由 HTTP handler 在事务外执行；本方法只负责元数据
-    /// 存在性校验与读取行为审计。
-    ///
-    /// # 参数
-    /// * `id` - 文件资产 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回完整资产视图。
-    ///
-    /// # 错误
-    /// 资产不存在、读取失败，或审计准备与写入失败时返回错误。
-    pub async fn file_asset_preview(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
-        let view = self.file_asset_detail(id).await?;
-        let audit =
-            self.audit.resource_log(actor.clone(), "file_asset.preview", "file_asset", id.to_string())?;
-        self.audit.persist(&audit, &mut NoTransaction).await?;
-        Ok(view)
-    }
-
-    /// 登记文件资产（元数据登记，文件已由上传 handler 落盘）。
-    ///
-    /// 登记是纯元数据写入（单集合 + 审计日志）；同对象键重复登记由唯一索引
-    /// `uk_file_assets_storage_key` 透出冲突（409）。
-    ///
-    /// # 参数
-    /// * `req` - 登记请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建的资产详情视图。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 请求体校验失败（含指纹形态非法）
-    /// * `ConflictError` - 同一对象键重复登记（唯一索引透出）
-    pub async fn register_file_asset(
-        &self,
-        req: RegisterFileAssetRequest,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        self.register_file_asset_command(req, None, AssetRegistrationOrigin::Metadata, actor).await
-    }
-
-    /// 登记文件资产，并在同一事务内建立业务单据附件关联。
-    ///
-    /// 文件对象已由上传 handler 写入对象存储；本方法只负责将文件元数据、
-    /// 附件关系及两条审计日志原子提交到 MongoDB。
-    ///
-    /// # 参数
-    /// * `req` - 文件资产登记请求
-    /// * `document_id` - 要关联的业务单据 ID
-    /// * `usage` - 附件用途
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建的资产详情视图。
-    ///
-    /// # 错误
-    /// 请求非法、业务单据不存在、唯一键冲突或事务写入失败时返回错误。
-    pub async fn register_file_asset_with_attachment(
-        &self,
-        req: RegisterFileAssetRequest,
-        document_id: BusinessDocumentId,
-        usage: AttachmentUsage,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        self.register_file_asset_command(
-            req,
-            Some((document_id, usage)),
-            AssetRegistrationOrigin::Metadata,
-            actor,
-        )
-        .await
-    }
-
-    /// 登记受控上传已完成真实基础内容检查的文件资产。
-    ///
-    /// 调用方必须先完成文件字节、大小及 MIME 检查；该入口只记录
-    /// `CONTENT_CHECKED`，不登记病毒或恶意内容安全扫描通过。
-    /// # 参数
-    /// * `req` - 已完成内容检查并保存对象字节的服务端登记数据
-    /// * `actor` - 已通过鉴权的真实上传人
-    /// # 返回
-    /// 返回基础内容已检查的文件资产，创建人固定为当前上传人。
-    /// # 错误
-    /// 元数据非法、重复对象键或登记与审计事务失败时返回错误。
-    pub async fn register_content_checked_file_asset(
-        &self,
-        req: RegisterFileAssetRequest,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        self.register_file_asset_command(req, None, AssetRegistrationOrigin::ContentCheckedUpload, actor)
+    /// 无资格、不存在或读取失败时拒绝。
+    pub async fn file_asset_detail(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.file_asset_detail_snapshot(&id, &actor, executor).await })
+            })
             .await
     }
 
-    /// 登记受控上传完成内容检查的文件，并原子建立业务附件关联。
-    ///
-    /// 调用方须先验证真实文件内容及当前单据附件资格；直接元数据登记
-    /// 不得使用本入口。该入口保持后续扫描、隔离、到期和销毁治理规则。
-    /// # 参数
-    /// * `req` - 已完成真实内容检查的服务端文件元数据
-    /// * `document_id` - 已授权的业务单据
-    /// * `usage` - 附件用途
-    /// * `actor` - 已通过鉴权的真实上传人
-    /// # 返回
-    /// 返回基础内容已检查的资产；资产、关联和审计沿同一事务保存。
-    /// # 错误
-    /// 请求非法、单据未登记、重复对象键或事务失败时返回错误。
-    pub async fn register_content_checked_file_asset_with_attachment(
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn file_asset_detail_snapshot(
         &self,
-        req: RegisterFileAssetRequest,
-        document_id: BusinessDocumentId,
-        usage: AttachmentUsage,
+        id: &str,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<FileAssetView> {
-        self.register_file_asset_command(
-            req,
-            Some((document_id, usage)),
-            AssetRegistrationOrigin::ContentCheckedUpload,
-            actor,
-        )
-        .await
+        self.require_operation(actor, &file_asset::DETAIL, executor).await?;
+        self.asset_view(id, executor).await
     }
-
-    /// 执行文件资产登记命令，并按需在同一事务内追加附件关联。
-    async fn register_file_asset_command(
-        &self,
-        req: RegisterFileAssetRequest,
-        attachment_target: Option<(BusinessDocumentId, AttachmentUsage)>,
-        origin: AssetRegistrationOrigin,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        let asset = Self::registration_asset(req, actor.id(), origin)?;
-        let asset_audit = self.audit.resource_log(
-            actor.clone(),
-            "file_asset.register",
-            "file_asset",
-            asset.base.id.clone(),
-        )?;
-        let (attachment, attachment_audit) = match attachment_target {
-            Some((document_id, usage)) => {
-                self.ensure_business_document_registered(&document_id).await?;
-                let request = AttachToDocumentRequest {
-                    document_id,
-                    file_asset_id: FileAssetId::new(asset.base.id.clone()),
-                    usage,
-                };
-                request.validate()?;
-                let attachment = DocumentAttachment::new(
-                    DocumentAttachmentId::new(next_id()),
-                    request.into_data(actor.id()),
-                )?;
-                let audit = self.audit.resource_log(
-                    actor.clone(),
-                    "document_attachment.create",
-                    "document_attachment",
-                    attachment.base.id.clone(),
-                )?;
-                (Some(attachment), Some(audit))
-            },
-            None => (None, None),
-        };
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let asset = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.file_assets().create(&asset, executor).await?;
-                    audit_port.persist(&asset_audit, executor).await?;
-                    if let (Some(attachment), Some(audit)) = (attachment.as_ref(), attachment_audit.as_ref())
-                    {
-                        db.document_attachments().create(attachment, executor).await?;
-                        audit_port.persist(audit, executor).await?;
-                    }
-                    Ok::<_, crate::error::Error>(asset)
-                })
-            })
-            .await?;
-
-        Ok(asset.into())
-    }
-
-    /// 校验受控登记输入，以真实上传人构造资产并保留来源对应检查状态。
-    fn registration_asset(
-        req: RegisterFileAssetRequest,
-        actor_id: &str,
-        origin: AssetRegistrationOrigin,
-    ) -> Result<FileAsset> {
-        req.validate()?;
-        let mut asset = FileAsset::new(FileAssetId::new(next_id()), req.into_data(actor_id)?)?;
-        if matches!(origin, AssetRegistrationOrigin::ContentCheckedUpload) {
-            asset.mark_content_checked()?;
-        }
-        Ok(asset)
-    }
-
-    /// 建立单据附件关联。
-    ///
-    /// 关联前校验业务单据已注册且文件资产存在；安全检查、保留期与销毁状态
-    /// 不阻断关联。关联只追加不删除（§4.5.7 审计留痕）。
-    ///
+    /// 检查管理预览资格，在原事务读取元数据并持久化敏感读取审计。
     /// # 参数
-    /// * `req` - 关联请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
+    /// id为资产身份，actor为当前账号。
     /// # 返回
-    /// 返回新建的附件关联视图。
-    ///
+    /// 元数据；对象存储I/O由调用方在事务外执行。
     /// # 错误
-    /// * `NotFound` - 单据未注册或资产不存在
-    pub async fn attach_to_document(
-        &self,
-        req: AttachToDocumentRequest,
-        actor: &AuditActor,
-    ) -> Result<DocumentAttachmentView> {
-        req.validate()?;
-        self.ensure_business_document_registered(&req.document_id).await?;
+    /// 无资格、不存在、读取或审计失败时拒绝。
+    pub async fn file_asset_preview(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
+        let this = self.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
         self.db
-            .file_assets()
-            .find_by_id(&req.file_asset_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("文件资产不存在".to_string()))?;
-        let attachment =
-            DocumentAttachment::new(DocumentAttachmentId::new(next_id()), req.into_data(actor.id()))?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "document_attachment.create",
-            "document_attachment",
-            attachment.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let attachment = client
+            .client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.document_attachments().create(&attachment, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<_, crate::error::Error>(attachment)
+                    this.require_operation(&actor, &file_asset::PREVIEW, executor).await?;
+                    this.preview_asset(&id, &actor, executor).await
                 })
             })
-            .await?;
-
-        Ok(attachment.into())
+            .await
     }
-
-    /// 按业务单据查询附件关联。
-    ///
+    /// 从已授权业务的原执行器读取文件元数据，不追加文件管理菜单资格。
     /// # 参数
-    /// * `document_id` - 业务单据 ID
-    ///
+    /// id必须来自调用方已核验的精确业务文件关系，executor为原业务执行器。
     /// # 返回
-    /// 返回按创建时间升序排列的附件关联视图。
-    ///
+    /// 服务器内部文件视图；调用方保持其原公开图片、Portal或审批授权合同。
     /// # 错误
-    /// * `RepositoryError` - 数据库查询失败
-    pub async fn document_attachment_list(
-        &self,
-        document_id: &BusinessDocumentId,
-    ) -> Result<Vec<DocumentAttachmentView>> {
-        let items = self.db.document_attachments().list_by_document(document_id, &mut NoTransaction).await?;
-        Ok(items.into_iter().map(Into::into).collect())
-    }
-
-    /// 记录安全检查结果。
-    ///
-    /// 迁移合法性由实体安全检查状态机校验（`PENDING/CONTENT_CHECKED → PASSED|REJECTED|QUARANTINED`，
-    /// `QUARANTINED → PASSED|REJECTED`）。
-    ///
-    /// # 参数
-    /// * `id` - 文件资产 ID
-    /// * `req` - 更新请求（含期望版本与检查结果）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回更新后的资产详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 资产不存在
-    /// * `ConflictError` - 版本陈旧或状态机不允许迁移
-    pub async fn mark_scan_result(
-        &self,
-        id: &str,
-        req: MarkScanResultRequest,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        req.validate()?;
-        let mut asset = self.load_with_version(id, req.version).await?;
-        asset.mark_scan_result(req.security_scan_status)?;
-        self.update_with_audit(asset, "file_asset.scan", actor).await
-    }
-
-    /// 销毁文件资产。
-    ///
-    /// 销毁审计只记录一次（实体校验）；已销毁资产不得再用于业务关联。
-    ///
-    /// # 参数
-    /// * `id` - 文件资产 ID
-    /// * `req` - 销毁请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回销毁后的资产详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 资产不存在
-    /// * `ConflictError` - 版本陈旧或资产已销毁
-    pub async fn destroy_file_asset(
-        &self,
-        id: &str,
-        req: DestroyFileAssetRequest,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        req.validate()?;
-        let mut asset = self.load_with_version(id, req.version).await?;
-        asset.destroy(erp_core::common::time::Instant::now())?;
-        self.update_with_audit(asset, "file_asset.destroy", actor).await
-    }
-
-    /// 按 ID 加载资产并校验期望版本。
-    ///
-    /// # 参数
-    /// * `id` - 文件资产 ID
-    /// * `expected_version` - 请求携带的期望版本
-    ///
-    /// # 返回
-    /// 返回加载的资产实体。
-    ///
-    /// # 错误
-    /// 资产不存在返回 `NotFound`；版本不一致返回 `ConflictError`。
-    async fn load_with_version(&self, id: &str, expected_version: u64) -> Result<FileAsset> {
+    /// 文件不存在或数据库读取失败时拒绝。
+    pub async fn asset_view(&self, id: &str, executor: &mut dyn Executor) -> Result<FileAssetView> {
         let asset = self
             .db
             .file_assets()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("文件资产不存在".to_string()))?;
-        check_expected_version(asset.base.version, expected_version)?;
-        Ok(asset)
+            .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
+        Ok(asset.into())
     }
-
-    /// 在单个事务中更新资产并追加审计日志。
-    ///
-    /// `Repository::update` 以 `id + version` CAS 兜底并发竞争（base.rs：
-    /// `OptimisticLockingError` → 服务层 `ConflictError`）。
-    ///
+    /// 为已通过精确业务授权的文件读取记录敏感审计。
     /// # 参数
-    /// * `mut asset` - 已由实体完成状态迁移的资产
-    /// * `action` - 审计动作名
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
+    /// id与actor来自调用方业务授权，executor为其原执行器；不签发通用文件资格。
     /// # 返回
-    /// 返回更新后的资产详情视图。
-    ///
+    /// 文件元数据；不追加文件管理菜单资格。
     /// # 错误
-    /// 并发写入冲突或审计写入失败时返回错误。
-    async fn update_with_audit(
+    /// 文件不存在、数据库或审计失败时拒绝。
+    pub async fn preview_asset(
         &self,
-        mut asset: FileAsset,
-        action: &str,
+        id: &str,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<FileAssetView> {
-        let audit = self.audit.resource_log(actor.clone(), action, "file_asset", asset.base.id.clone())?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
+        let view = self.asset_view(id, executor).await?;
+        let audit =
+            self.audit.resource_log(actor.clone(), "file_asset.preview", "file_asset", id.to_string())?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(view)
+    }
+    /// 检查附件管理列表资格后读取精确单据附件关系。
+    /// # 参数
+    /// document_id为原单据身份，actor为当前账号。
+    /// # 返回
+    /// 原创建顺序的附件关系视图。
+    /// # 错误
+    /// 无功能资格或读取失败时拒绝。
+    pub async fn document_attachment_list(
+        &self,
+        document_id: &BusinessDocumentId,
+        actor: &AuditActor,
+    ) -> Result<Vec<DocumentAttachmentView>> {
+        let service = self.clone();
+        let document_id = document_id.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.file_assets().update(&mut asset, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<FileAsset, crate::error::Error>(asset)
+                    service.document_attachment_list_snapshot(&document_id, &actor, executor).await
                 })
             })
-            .await?;
-
-        Ok(updated.into())
+            .await
     }
 
-    /// 校验业务单据已注册（跨域单据 Port 读取）。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 单据未注册时返回 `NotFound`。
-    async fn ensure_business_document_registered(&self, document_id: &BusinessDocumentId) -> Result<()> {
-        self.documents.ensure_registered(document_id.as_ref(), &mut NoTransaction).await
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn document_attachment_list_snapshot(
+        &self,
+        document_id: &BusinessDocumentId,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentAttachmentView>> {
+        self.require_operation(actor, &file_asset::DOCUMENT_ATTACHMENT_LIST, executor).await?;
+        let rows = self.db.document_attachments().list_by_document(document_id, executor).await?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+    /// 管理入口在原执行器检查固定功能资格。
+    async fn require_operation(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+        Ok(())
     }
 }
 
@@ -535,6 +253,55 @@ mod tests {
         ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
         content_fingerprint,
     };
+
+    /// 不可用授权设施必须在实际读取步骤触发，资产数据库与单据 Port 均不得被读取。
+    #[tokio::test]
+    async fn management_reads_require_identity_before_loading_assets_or_attachments() {
+        use std::sync::Arc;
+
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+        use erp_core::ids::BusinessDocumentId;
+        use erp_identity::testing::unavailable_authorization;
+        use persistence_core::ReadExecutor;
+
+        use crate::ports::{FailClosedAuditPort, FailClosedBusinessDocumentPort};
+        use crate::{Error, FileAssetListParams};
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = FileAssetService::new(
+            client.database("file_management_authorization_test"),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedBusinessDocumentPort),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let errors = [
+            service
+                .file_asset_list_snapshot(
+                    &FileAssetListParams::default(),
+                    &actor,
+                    &mut ReadExecutor::default(),
+                )
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .file_asset_detail_snapshot("asset", &actor, &mut ReadExecutor::default())
+                .await
+                .expect_err("必须拒绝"),
+            service
+                .document_attachment_list_snapshot(
+                    &BusinessDocumentId::new("document"),
+                    &actor,
+                    &mut ReadExecutor::default(),
+                )
+                .await
+                .expect_err("必须拒绝"),
+        ];
+        for error in errors {
+            assert!(matches!(error,Error::Internal(ref reason) if reason=="测试授权设施不可用"));
+        }
+    }
 
     fn registration() -> RegisterFileAssetRequest {
         RegisterFileAssetRequest {

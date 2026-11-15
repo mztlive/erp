@@ -42,16 +42,11 @@ impl AccessMapping for CopyMapping {
         &self.0
     }
 
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
-        // 收件关系、送达状态和分页统计使用同一事务快照。
-        Ok(MappingFacts::default())
-    }
-
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> Result<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
         Ok("$id".into())
     }
 
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {
             "delivered": true,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -62,7 +57,7 @@ impl AccessMapping for CopyMapping {
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> Result<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! { "recipient_user_id": context.actor.id() })),
@@ -70,7 +65,12 @@ impl AccessMapping for CopyMapping {
         }
     }
 
-    fn relation(&self, _: &RelationKey, _: &AccessContext, _: &MappingFacts) -> Result<RelationMapping> {
+    fn relation(
+        &self,
+        _: &RelationKey,
+        _: &AccessContext,
+        _: Option<&MappingFacts>,
+    ) -> Result<RelationMapping> {
         Err(Error::ValidationError("抄送不继承当前业务单据范围".into()))
     }
 }
@@ -114,7 +114,7 @@ mod tests {
     use entity_core::BaseModel;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_identity::Permission;
+    use erp_permissions::internal;
 
     use super::*;
     use crate::entity::approval_copy::CopyTrigger;
@@ -165,19 +165,18 @@ mod tests {
         });
         let context = AccessContext {
             actor: AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin),
-            permission: Permission::parse("approval_copy:list").unwrap(),
+            permission: internal::APPROVAL_COPY_LIST.clone(),
             resource: RESOURCE.into(),
             model: Some(QueryModelKey::parse(MODEL).unwrap()),
             as_of: Instant::now(),
         };
-        let facts = MappingFacts::default();
-        let QueryFragment::Match(filter) = mapping.predicate(&AccessFact::Owned, &context, &facts).unwrap()
+        let facts = None;
+        let QueryFragment::Match(filter) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
         else {
             panic!("收件人应映射为实际字段条件");
         };
         assert_eq!(filter, doc! { "recipient_user_id": "reader" });
-        assert!(mapping.predicate(&AccessFact::AssignedTo, &context, &facts).is_err());
-        assert!(facts.validate(false, context.as_of).is_err());
-        assert!(facts.validate(true, context.as_of).is_ok());
+        assert!(mapping.predicate(&AccessFact::AssignedTo, &context, facts).is_err());
+        assert!(mapping.preparation().is_none());
     }
 }

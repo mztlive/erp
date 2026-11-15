@@ -2,14 +2,17 @@
 
 use bpm::ApprovalNodeExecutionId;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use futures_util::TryStreamExt;
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
 use mongodb::bson::{Document, doc};
 use mongodb::{Collection, Database};
-use persistence_core::{Error, Executor, Result};
+use persistence_core::{Error, Executor, Result, aggregate};
 use serde::Deserialize;
 
 use super::super::super::extensions::{ApprovalIntegrationExt, BpmExt};
-use super::{DocumentApprovalWorkItemIntegrityConflict, DocumentApprovalWorkItemPage};
+use super::{
+    DocumentApprovalPageQuery, DocumentApprovalWorkItemIntegrityConflict, DocumentApprovalWorkItemPage,
+};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
 const APPROVAL_NODE_EXECUTIONS: &str = <Database as BpmExt>::APPROVAL_NODE_EXECUTIONS;
@@ -34,6 +37,8 @@ struct DocumentApprovalWorkItemFacet {
     duplicate_executions: Vec<DocumentApprovalDuplicateExecution>,
     #[serde(default)]
     duplicate_instances: Vec<DocumentApprovalDuplicateInstance>,
+    #[serde(default)]
+    authorization_conflicts: Vec<DocumentApprovalWorkItemCount>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,11 +61,8 @@ struct DocumentApprovalDuplicateInstance {
 ///
 /// # 参数
 /// * `collection` - `work_items` 集合。
-/// * `owner_user_id` - 当前任务负责人账号。
-/// * `business_object_type` - 可选业务对象类型。
-/// * `query` - 可选字面量检索；空白视为不检索。
-/// * `cursor` - 上一页最后一条的 `assigned_at` 与任务 ID；首页为 `None`。
-/// * `limit` - 页大小；必须非 0。
+/// * `query` - 当前任务负责人、业务对象类型、检索、分页游标与非零页大小。
+/// * `access` - 原读取阶段的审批实例授权条件；先于分页和计数执行。
 /// * `executor` - 数据访问执行器。
 ///
 /// # 返回
@@ -70,19 +72,70 @@ struct DocumentApprovalDuplicateInstance {
 /// 页大小为 0 或加一后无法表示为 `i64`、计数越界、页内缺少 `assigned_at`，或 MongoDB 聚合与反序列化失败时返回错误。
 pub(super) async fn page_open_document_approval_owned_by(
     collection: &Collection<WorkItem>,
-    owner_user_id: &str,
-    business_object_type: Option<&str>,
-    query: Option<&str>,
-    cursor: Option<(i64, &str)>,
-    limit: u32,
+    query: DocumentApprovalPageQuery<'_>,
+    access: &CompiledAccess,
     executor: &mut dyn Executor,
-) -> Result<DocumentApprovalWorkItemPage> {
+) -> crate::Result<DocumentApprovalWorkItemPage> {
+    let DocumentApprovalPageQuery { owner_user_id, business_object_type, query, cursor, limit } = query;
     let cursor =
         cursor.map(|(assigned_at, id)| DocumentApprovalWorkItemCursor { assigned_at, id: id.to_string() });
     let pipeline =
         document_approval_page_pipeline(owner_user_id, business_object_type, query, cursor.as_ref(), limit)?;
+    let pipeline = authorized_page_pipeline(pipeline, access, executor)?;
     let rows = aggregate_document_approval_page(collection, pipeline, executor).await?;
-    document_approval_page(rows.into_iter().next(), limit)
+    let facet = rows.into_iter().next();
+    if facet.as_ref().is_some_and(|facet| !facet.authorization_conflicts.is_empty()) {
+        return Err(crate::Error::NotFound("审批实例不存在或无权访问".into()));
+    }
+    Ok(document_approval_page(facet, limit)?)
+}
+
+/// 同一MongoDB聚合先执行中央实例条件，再分页计数；损坏责任链仍整页拒绝。
+fn authorized_page_pipeline(
+    mut pipeline: Vec<Document>,
+    access: &CompiledAccess,
+    executor: &mut dyn Executor,
+) -> crate::Result<Vec<Document>> {
+    let model = access.model();
+    if model.resource != "approval_instance"
+        || model.collection != APPROVAL_PROCESS_INSTANCES
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(crate::Error::ValidationError("本人审批授权模型不匹配".into()));
+    }
+    access.ensure_current(executor)?;
+    let mut facet = pipeline
+        .pop()
+        .and_then(|stage| stage.get_document("$facet").ok().cloned())
+        .ok_or_else(|| crate::Error::Internal("本人审批查询缺少分页分支".into()))?;
+    for branch in ["items", "total"] {
+        let stages =
+            facet.get_array_mut(branch).map_err(|_| crate::Error::Internal("本人审批分页分支缺失".into()))?;
+        stages.insert(0, doc! {"$match": {"__mine_authorized.0": {"$exists": true}}}.into());
+    }
+    facet.insert(
+        "authorization_conflicts",
+        vec![
+            doc! {"$match": {"__mine_authorized.0": {"$exists": false}}},
+            doc! {"$limit": 1},
+            doc! {"$count": "count"},
+        ],
+    );
+    let mut instance = vec![doc! {"$match": {"$expr": {"$eq": ["$id", "$$instance"]}}}];
+    instance.extend(access.stages().iter().cloned());
+    instance.push(doc! {"$project": {"_id": 0, "id": 1}});
+    pipeline.push(doc! {"$lookup": {
+        "from": APPROVAL_NODE_EXECUTIONS, "let": {"execution": "$approval_node_execution_id"},
+        "pipeline": [
+            {"$match": {"deleted_at": 0_i64, "$expr": {"$eq": ["$id", "$$execution"]}}},
+            {"$lookup": {"from": APPROVAL_PROCESS_INSTANCES, "let": {"instance": "$process_instance_id"},
+                "pipeline": instance, "as": "authorized"}},
+            {"$match": {"authorized.0": {"$exists": true}}}, {"$project": {"_id": 0, "id": 1}},
+        ], "as": "__mine_authorized",
+    }});
+    pipeline.push(doc! {"$facet": facet});
+    Ok(pipeline)
 }
 
 /// 执行本人审批任务聚合并保持调用方会话语义。
@@ -91,22 +144,7 @@ async fn aggregate_document_approval_page(
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<DocumentApprovalWorkItemFacet>> {
-    match executor.session() {
-        Some(session) => Ok(collection
-            .aggregate(pipeline)
-            .with_type::<DocumentApprovalWorkItemFacet>()
-            .session(&mut *session)
-            .await?
-            .stream(session)
-            .try_collect::<Vec<_>>()
-            .await?),
-        None => Ok(collection
-            .aggregate(pipeline)
-            .with_type::<DocumentApprovalWorkItemFacet>()
-            .await?
-            .try_collect::<Vec<_>>()
-            .await?),
-    }
+    aggregate::rows(&collection.clone_with_type::<DocumentApprovalWorkItemFacet>(), pipeline, executor).await
 }
 
 /// 构造本人审批任务的单次计数与稳定游标聚合。
@@ -380,6 +418,7 @@ fn document_approval_page(
         total: Vec::new(),
         duplicate_executions: Vec::new(),
         duplicate_instances: Vec::new(),
+        authorization_conflicts: Vec::new(),
     });
     let total = crate::repository::approval_integration::facet_total_or_empty(
         facet.total.first().map(|row| row.count),

@@ -6,9 +6,8 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{CustomerReceiptId, SupplierPaymentId};
 use erp_core::money::Amount;
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 
 use crate::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
@@ -43,26 +42,8 @@ async fn posted_total<T>(
 where
     T: Send + Sync,
 {
-    let rows = match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<PostedAmountTotalRow>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect::<Vec<_>>()
-                .await?
-        },
-        None => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<PostedAmountTotalRow>()
-                .await?
-                .try_collect::<Vec<_>>()
-                .await?
-        },
-    };
+    let rows =
+        aggregate::rows(&collection.clone_with_type::<PostedAmountTotalRow>(), pipeline, executor).await?;
 
     Ok(rows.into_iter().next().map_or_else(Amount::zero, |row| row.total))
 }

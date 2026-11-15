@@ -1,20 +1,21 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
-use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_identity::{AccessControlExt, AccessTarget};
 use erp_import::repository::legacy_import::LegacyImportConfirmationRow;
 use erp_import::repository::prelude::*;
 use erp_import::{
     ConfirmationStatus, LegacyImportConfirmation, LegacyImportConfirmationFilter,
     LegacyImportConfirmationListParams, LegacyImportExt, PageView, SortDir,
 };
+use erp_permissions::legacy_import;
 use erp_workflow::WorkItemExt;
 use erp_workflow::dto::work_item::work_item_destination;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::work_item::{ProcessingState, WorkItemAllowedAction};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::dto::{ImportBusinessConfirmationWorkItemView, LegacyImportConfirmationView};
@@ -43,6 +44,27 @@ impl ImportApplyProcess {
         actor: &AuditActor,
     ) -> Result<PageView<LegacyImportConfirmationView>> {
         params.validate()?;
+        let service = self.clone();
+        let params = params.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.confirmation_list_stage(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 入口、确认事实、姓名与工作项投影使用同一授权快照。
+    async fn confirmation_list_stage(
+        &self,
+        params: &LegacyImportConfirmationListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<LegacyImportConfirmationView>> {
+        self.authorization
+            .require(actor, &legacy_import::CONFIRMATION_LIST, AccessTarget::Operation, executor)
+            .await?;
         let query = params.normalized()?;
         let filter = LegacyImportConfirmationFilter {
             batch_id: query.batch_id,
@@ -56,37 +78,52 @@ impl ImportApplyProcess {
         let page = self
             .db
             .legacy_import_confirmations()
-            .search_legacy_import_confirmations(&filter, &mut NoTransaction)
+            .search_legacy_import_confirmations(&filter, executor)
             .await?;
-        let work_item_ids = page.items.iter().map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
+        let items = self.confirmation_views(page.items, actor, executor).await?;
+        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+    }
+
+    /// 已授权确认页的工作项与姓名在同一快照补齐。
+    async fn confirmation_views(
+        &self,
+        rows: Vec<LegacyImportConfirmationRow>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<LegacyImportConfirmationView>> {
+        let work_item_ids = rows.iter().map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
         let work_items = self
             .db
             .work_items()
-            .list_legacy_import_confirmations_by_ids(&work_item_ids, &mut NoTransaction)
+            .list_legacy_import_confirmations_by_ids(&work_item_ids, executor)
             .await?
             .into_iter()
             .map(|item| (item.base.id.clone(), item))
             .collect::<HashMap<_, _>>();
-        let mut items = Vec::with_capacity(page.items.len());
-        for row in page.items {
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
             let work_item_id = row.work_item_id.to_string();
-            let work_item =
-                match self.work_items.authorize_work_item(&work_item_id, actor).await.map_err(Error::from) {
-                    Ok(view) => Some(authorized_work_item_view(view, row.status)?),
-                    Err(Error::Forbidden(_) | Error::NotFound(_)) => {
-                        work_items.get(&work_item_id).map(read_only_work_item_view)
-                    },
-                    Err(error) => return Err(error),
-                };
+            let work_item = match self
+                .work_items
+                .authorize_work_item(&work_item_id, actor, executor)
+                .await
+                .map_err(Error::from)
+            {
+                Ok(view) => Some(authorized_work_item_view(view, row.status)?),
+                Err(Error::Forbidden(_) | Error::NotFound(_)) => {
+                    work_items.get(&work_item_id).map(read_only_work_item_view)
+                },
+                Err(error) => return Err(error),
+            };
             items.push(confirmation_row_view(row, work_item));
         }
 
         let ids = items.iter().filter_map(|item| item.decided_by.clone()).collect::<Vec<_>>();
-        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
+        let names = self.db.accounts().names_by_ids(&ids, executor).await?;
         for item in &mut items {
             item.decided_by_name = item.decided_by.as_ref().and_then(|id| names.get(id).cloned());
         }
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+        Ok(items)
     }
 }
 

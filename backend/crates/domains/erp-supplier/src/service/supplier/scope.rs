@@ -2,6 +2,7 @@
 
 use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, ScopeVersion};
 use erp_identity::AccountDirectoryService;
+use erp_permissions::supplier;
 use persistence_core::Transactional;
 use serde::Serialize;
 use validator::Validate;
@@ -112,8 +113,8 @@ impl SupplierService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut context = access.resolve(&actor, "list", executor).await?;
-                    context.validate(executor).await?;
+                    let mut context = access.resolve(&actor, &supplier::LIST, executor).await?;
+                    context.ensure_current(executor)?;
                     let input = build_list_input(&query, &context, party.as_ref(), executor).await?;
                     fingerprint_scope(&db, &mut context, &input, executor).await?;
                     if !hydrate {

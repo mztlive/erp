@@ -1,5 +1,4 @@
 //! 销售选品用例编排。
-mod authorization;
 
 pub mod access;
 mod copy;
@@ -17,6 +16,7 @@ mod session;
 pub use access::SelectionAccess;
 use application_core::AuditActor;
 use erp_core::ids::SalesSelectionBookletId;
+use erp_permissions::Permission;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -75,12 +75,17 @@ impl SalesSelectionService {
         self
     }
 
-    async fn authorize_booklet(&self, id: &str, action: &str, executor: &mut dyn Executor) -> Result<()> {
+    async fn authorize_booklet(
+        &self,
+        id: &str,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let (access, actor) = self
             .authorization
             .as_ref()
             .ok_or_else(|| Error::Internal("选品管理命令未装配统一授权".into()))?;
-        access.require_booklet(actor, action, id, executor).await?;
+        access.require_booklet(actor, permission, id, executor).await?;
         Ok(())
     }
 }

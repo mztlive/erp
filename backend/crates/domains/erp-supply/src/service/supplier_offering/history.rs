@@ -2,6 +2,7 @@
 
 use application_core::AuditActor;
 use erp_core::ids::SupplierOfferingId;
+use erp_permissions::supplier_offering;
 use persistence_core::Transactional;
 use validator::Validate;
 
@@ -39,7 +40,8 @@ impl SupplierOfferingService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let offering = access.require_offering(&actor, "list", &id, executor).await?;
+                    let offering =
+                        access.require_offering(&actor, &supplier_offering::LIST, &id, executor).await?;
                     let revisions = db
                         .supplier_offering_revisions()
                         .history_page(&SupplierOfferingId::new(id), params.before_revision_no, executor)

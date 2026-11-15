@@ -740,11 +740,7 @@ async fn keyword_filter(
     let mut name = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     insert_literal_regex_filter(&mut name, "name", Some(q));
     let collection = repo.database().collection::<Document>(WAREHOUSE_REVISIONS);
-    let mut revisions = collection.distinct("id", name);
-    if let Some(session) = executor.session() {
-        revisions = revisions.session(session);
-    }
-    let ids = revisions.await?;
+    let ids = mongo_ops::distinct(&collection, "id", name, executor).await?;
     if ids.len() > KEYWORD_REVISION_ID_CAP {
         return Err(mongodb::error::Error::custom("关键词命中修订过多，请使用更精确的关键词").into());
     }

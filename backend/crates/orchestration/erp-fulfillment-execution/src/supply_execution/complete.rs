@@ -4,8 +4,10 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
-use erp_supply::command_receipt::SupplyCommandResult;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::internal;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
+use erp_supply::command_receipt::{SupplyCommandReceipt, SupplyCommandResult};
 use erp_supply::dto::supplier_fulfillment::SupplierOrderTaskCompletionCommand;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::repository::SupplierFulfillmentExt;
@@ -54,7 +56,6 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierOrderTaskCompletionResultView> {
         command.validate()?;
-        self.require_task_permissions(actor, &mut NoTransaction).await?;
         self.ensure_legacy_order(command.decision.order_id.as_ref(), &mut NoTransaction).await?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
@@ -65,7 +66,8 @@ impl SupplierFulfillmentProcess {
                 &command_id,
                 &fingerprint,
                 command.work_item_id.as_ref(),
-                (actor.id(), &command.idempotency_key),
+                actor,
+                &command.idempotency_key,
             )
             .await?
         {
@@ -73,7 +75,7 @@ impl SupplierFulfillmentProcess {
         }
 
         let completion = TaskCompletion::new(
-            (self.identity)().workflow,
+            self.identity.workflow.clone(),
             &command,
             actor,
             expected_task_version,
@@ -93,51 +95,101 @@ impl SupplierFulfillmentProcess {
                     &command_id,
                     &fingerprint,
                     command.work_item_id.as_ref(),
-                    (actor.id(), &command.idempotency_key),
+                    actor,
+                    &command.idempotency_key,
                 )
             },
         )
         .await
     }
 
+    /// 沿当前账号完整执行资格回读精确成功回执，不要求已完成任务仍开放。
     async fn replay_task_completion(
         &self,
         command_id: &str,
         expected_fingerprint: &str,
         expected_work_item_id: &str,
-        identity: (&str, &str),
+        actor: &AuditActor,
+        idempotency_key: &str,
     ) -> Result<Option<SupplierOrderTaskCompletionResultView>> {
-        let Some(stored) =
-            self.db.supply_command_receipts().find_command(command_id, &mut NoTransaction).await?
+        let db = self.db.clone();
+        let authorization = self.identity.rbac.clone();
+        let replay = CompletionReplay {
+            command_id: command_id.into(),
+            fingerprint: expected_fingerprint.into(),
+            work_item_id: expected_work_item_id.into(),
+            actor: actor.clone(),
+            idempotency_key: idempotency_key.into(),
+        };
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { replay.load(&db, &authorization, executor).await })
+            })
+            .await
+    }
+}
+
+/// 冻结原回放请求身份；授权服务按当前账号取证，不保存旧授权结果。
+struct CompletionReplay {
+    command_id: String,
+    fingerprint: String,
+    work_item_id: String,
+    actor: AuditActor,
+    idempotency_key: String,
+}
+
+impl CompletionReplay {
+    /// 当前完整功能资格、原回执和业务终态证据均沿调用方同一快照读取。
+    async fn load(
+        &self,
+        db: &Database,
+        authorization: &AuthorizationService,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOrderTaskCompletionResultView>> {
+        authorization
+            .require(
+                &self.actor,
+                &internal::SUPPLIER_FULFILLMENT_COMPLETED_RESULT_READ,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+        let Some(stored) = db.supply_command_receipts().find_command(&self.command_id, executor).await?
         else {
             return Ok(None);
         };
-        stored.verify_identity(
-            command_id,
-            identity.0,
-            "supplier_fulfillment.task_complete",
-            expected_work_item_id,
-            &stable_digest(identity.1.trim()),
-        )?;
-        stored.verify(expected_fingerprint, None, "请求标识已用于不同的任务完成命令")?;
-        let resource_id = stored.resource_id;
-        let SupplyCommandResult::Completion(receipt) = stored.result else {
-            return Err(Error::Internal("W26 任务完成幂等收据身份非法".to_string()));
-        };
-        let action = self
-            .db
+        let (resource_id, receipt) = self.receipt(stored)?;
+        let action = db
             .supplier_order_actions()
-            .find_by_id(&receipt.terminal_action_id, &mut NoTransaction)
+            .find_by_id(&receipt.terminal_action_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("W26 任务完成业务证据不存在".to_string()))?;
         let record = parse_completion_evidence(&action)?;
         if action.supplier_fulfillment_order_id.as_ref() != resource_id
-            || record.work_item_id() != expected_work_item_id
+            || record.work_item_id() != self.work_item_id
             || record.resolution() != receipt.resolution
         {
             return Err(Error::Internal("W26 任务完成幂等收据与业务证据不一致".to_string()));
         }
-        Ok(Some(completion_result(expected_work_item_id, receipt)))
+        Ok(Some(completion_result(&self.work_item_id, receipt)))
+    }
+
+    /// 只接收原操作人、任务、幂等键及载荷完全匹配的终态回执。
+    fn receipt(&self, stored: SupplyCommandReceipt) -> Result<(String, CompletionReceipt)> {
+        stored.verify_identity(
+            &self.command_id,
+            self.actor.id(),
+            "supplier_fulfillment.task_complete",
+            &self.work_item_id,
+            &stable_digest(self.idempotency_key.trim()),
+        )?;
+        stored.verify(&self.fingerprint, None, "请求标识已用于不同的任务完成命令")?;
+        let resource_id = stored.resource_id;
+        let SupplyCommandResult::Completion(receipt) = stored.result else {
+            return Err(Error::Internal("W26 任务完成幂等收据身份非法".to_string()));
+        };
+        Ok((resource_id, receipt))
     }
 }
 
@@ -337,4 +389,91 @@ async fn load_completion_task(
     workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
 
     Ok(work_item)
+}
+
+#[cfg(test)]
+mod replay_tests {
+    use entity_core::BaseModel;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_supply::dto::supplier_fulfillment::SupplierOrderResolution;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+
+    use super::*;
+
+    /// 同一成功命令的冻结请求和独立回执，不依赖当前任务状态。
+    fn fixture() -> (CompletionReplay, SupplyCommandReceipt) {
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        let mut base = BaseModel::fake();
+        base.id = "completion-command".into();
+        let fingerprint = stable_digest("original request");
+        let replay = CompletionReplay {
+            command_id: base.id.clone(),
+            fingerprint: fingerprint.clone(),
+            work_item_id: "completed-task".into(),
+            actor,
+            idempotency_key: "original-key".into(),
+        };
+        let stored = SupplyCommandReceipt {
+            base,
+            schema_version: 1,
+            actor_id: "actor".into(),
+            action: "supplier_fulfillment.task_complete".into(),
+            resource_type: W26_BUSINESS_OBJECT_TYPE.into(),
+            resource_id: "order".into(),
+            scope_id: "completed-task".into(),
+            idempotency_key_hash: stable_digest("original-key"),
+            fingerprint,
+            fingerprint_algorithm: "sha256-serialized-v1".into(),
+            result: SupplyCommandResult::Completion(CompletionReceipt {
+                terminal_action_id: "terminal-evidence".into(),
+                order_version: 5,
+                task_version: 8,
+                resolution: SupplierOrderResolution::OrderCompleted,
+            }),
+            audit_event_id: "audit".into(),
+        };
+        (replay, stored)
+    }
+
+    #[tokio::test]
+    async fn current_authorization_failure_stops_before_receipts_or_tasks_are_read() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
+        let (replay, _) = fixture();
+        let authorization = unavailable_authorization();
+        let error = replay.load(&db, &authorization, &mut ReadExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
+
+    #[test]
+    fn matching_completed_receipt_preserves_original_result_and_versions() {
+        let (replay, stored) = fixture();
+        let (order, receipt) = replay.receipt(stored).unwrap();
+        let result = completion_result(&replay.work_item_id, receipt);
+        assert_eq!(order, "order");
+        assert_eq!(result.work_item_id, "completed-task");
+        assert_eq!(result.operation_id, "terminal-evidence");
+        assert_eq!(result.work_item_status, WorkItemStatus::Completed);
+        assert_eq!(result.task_version, 8);
+        assert_eq!(result.order_lock_version, 5);
+        assert_eq!(result.resolution, SupplierOrderResolution::OrderCompleted);
+    }
+
+    #[test]
+    fn another_actor_task_or_key_cannot_replay_the_original_receipt() {
+        let mutations: [fn(&mut CompletionReplay); 3] = [
+            |replay| replay.actor = AuditActor::new("other".into(), "other".into(), AccountKind::Admin),
+            |replay| replay.work_item_id = "other-task".into(),
+            |replay| replay.idempotency_key = "other-key".into(),
+        ];
+        for mutate in mutations {
+            let (mut replay, stored) = fixture();
+            mutate(&mut replay);
+            assert!(matches!(replay.receipt(stored), Err(Error::Internal(_))));
+        }
+        let (mut replay, stored) = fixture();
+        replay.fingerprint = stable_digest("changed request");
+        assert!(matches!(replay.receipt(stored), Err(Error::ConflictError(_))));
+    }
 }

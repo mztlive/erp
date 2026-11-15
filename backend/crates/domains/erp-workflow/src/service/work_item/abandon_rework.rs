@@ -2,6 +2,7 @@
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
 use erp_core::validation::normalize_required_text;
+use erp_permissions::work_item;
 use persistence_core::{Executor, Transactional};
 use serde::Deserialize;
 
@@ -86,7 +87,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         ensure_rework_owner(&item, actor.id())?;
-        self.authorization.require(actor, "manage", &item.base.id, executor).await?;
+        self.authorization.require(actor, &work_item::MANAGE, &item.base.id, executor).await?;
         if let Some(committed) =
             self.db.work_item_command_receipts().find_command(receipt.id(), executor).await?
         {

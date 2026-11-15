@@ -3,10 +3,10 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_supply::dto::supplier_offering::*;
 use erp_supply::service::supplier_offering::CommandPreparation;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 
-use super::SupplierOfferingProcess;
-use crate::Result;
+use super::{SupplierOfferingProcess, recovery};
+use crate::{Error, Result};
 impl SupplierOfferingProcess {
     /// 新增公司 SKU 的供应商供给。
     ///
@@ -24,39 +24,36 @@ impl SupplierOfferingProcess {
         req: CreateSupplierOfferingRequest,
         actor: &AuditActor,
     ) -> Result<CreateSupplierOfferingResult> {
-        let prepared = self
-            .domain()
-            .prepare_create(&req, actor, self.qualification.as_ref(), &mut NoTransaction)
-            .await?;
-        let CommandPreparation::Apply(prepared) = prepared else {
-            let CommandPreparation::Replay(result) = prepared else { unreachable!() };
-            return Ok(result);
-        };
-        let fingerprint = prepared.fingerprint.clone();
-        let result = prepared.result.clone();
-        let audit = actor.clone().resource_log_with_message(
-            "supplier_offering.create",
-            "supplier_offering",
-            prepared.offering.base.id.clone(),
-            Some(req.change_reason),
-        )?;
+        let recovery_request = req.clone();
+        let recovery_actor = actor.clone();
+        let domain = self.domain();
+        let qualification = self.qualification.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
-        let client = db.client().clone();
-        let transaction_result = client
+        let transaction_result = self
+            .db
+            .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { super::commit::created(&db, &prepared, &audit, executor).await })
+                Box::pin(async move {
+                    let prepared =
+                        domain.prepare_create(&req, &actor, qualification.as_ref(), executor).await?;
+                    match prepared {
+                        CommandPreparation::Replay(result) => Ok(result),
+                        CommandPreparation::Apply(prepared) => {
+                            let audit = actor.clone().resource_log_with_message(
+                                "supplier_offering.create",
+                                "supplier_offering",
+                                prepared.offering.base.id.clone(),
+                                Some(req.change_reason),
+                            )?;
+                            super::commit::created(&db, &prepared, &audit, executor).await?;
+                            Ok::<_, Error>(prepared.result)
+                        },
+                    }
+                })
             })
             .await;
-        self.domain()
-            .resolve_command_result(
-                transaction_result,
-                result,
-                &req.idempotency_key,
-                "create_offering",
-                &fingerprint,
-                &mut NoTransaction,
-            )
-            .await
+        recovery::resolve(transaction_result, || self.created_result(recovery_request, recovery_actor)).await
     }
     /// 追加新的供给商业条款修订。
     ///
@@ -76,37 +73,40 @@ impl SupplierOfferingProcess {
         req: ReviseSupplierOfferingRequest,
         actor: &AuditActor,
     ) -> Result<ReviseSupplierOfferingResult> {
-        let prepared = self
-            .domain()
-            .prepare_revise(id, &req, actor, self.qualification.as_ref(), &mut NoTransaction)
-            .await?;
-        let CommandPreparation::Apply(mut prepared) = prepared else {
-            let CommandPreparation::Replay(result) = prepared else { unreachable!() };
-            return Ok(result);
-        };
-        let fingerprint = prepared.fingerprint.clone();
-        let audit = actor.clone().resource_log_with_message(
-            "supplier_offering.revise",
-            "supplier_offering",
-            prepared.offering.base.id.clone(),
-            Some(req.change_reason),
-        )?;
+        let recovery_request = req.clone();
+        let recovery_actor = actor.clone();
+        let recovery_id = id.to_owned();
+        let id = id.to_owned();
+        let domain = self.domain();
+        let qualification = self.qualification.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
-        let client = db.client().clone();
-        let transaction_result = client
+        let transaction_result = self
+            .db
+            .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { super::commit::revised(&db, &mut prepared, &audit, executor).await })
+                Box::pin(async move {
+                    let prepared =
+                        domain.prepare_revise(&id, &req, &actor, qualification.as_ref(), executor).await?;
+                    match prepared {
+                        CommandPreparation::Replay(result) => Ok(result),
+                        CommandPreparation::Apply(mut prepared) => {
+                            let audit = actor.clone().resource_log_with_message(
+                                "supplier_offering.revise",
+                                "supplier_offering",
+                                prepared.offering.base.id.clone(),
+                                Some(req.change_reason),
+                            )?;
+                            super::commit::revised(&db, &mut prepared, &audit, executor).await
+                        },
+                    }
+                })
             })
             .await;
-        self.domain()
-            .resolve_written_result(
-                transaction_result,
-                &req.idempotency_key,
-                "revise_offering",
-                &fingerprint,
-                &mut NoTransaction,
-            )
-            .await
+        recovery::resolve(transaction_result, || {
+            self.revised_result(recovery_id, recovery_request, recovery_actor)
+        })
+        .await
     }
     /// 更新供给的实时可供状态与数量。
     ///
@@ -126,35 +126,37 @@ impl SupplierOfferingProcess {
         req: UpdateSupplierOfferingAvailabilityRequest,
         actor: &AuditActor,
     ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-        let prepared = self.domain().prepare_availability(id, &req, actor, &mut NoTransaction).await?;
-        let CommandPreparation::Apply(mut prepared) = prepared else {
-            let CommandPreparation::Replay(result) = prepared else { unreachable!() };
-            return Ok(result);
-        };
-        let fingerprint = prepared.fingerprint.clone();
-        let audit = actor.clone().resource_log_with_message(
-            "supplier_offering.availability.update",
-            "supplier_offering",
-            id.to_string(),
-            Some(req.change_reason),
-        )?;
+        let recovery_request = req.clone();
+        let recovery_actor = actor.clone();
+        let recovery_id = id.to_owned();
+        let id = id.to_owned();
+        let domain = self.domain();
+        let actor = actor.clone();
         let db = self.db.clone();
-        let client = db.client().clone();
-        let transaction_result = client
+        let transaction_result = self
+            .db
+            .client()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { super::commit::availability(&db, &mut prepared, &audit, executor).await },
-                )
+                Box::pin(async move {
+                    let prepared = domain.prepare_availability(&id, &req, &actor, executor).await?;
+                    match prepared {
+                        CommandPreparation::Replay(result) => Ok(result),
+                        CommandPreparation::Apply(mut prepared) => {
+                            let audit = actor.clone().resource_log_with_message(
+                                "supplier_offering.availability.update",
+                                "supplier_offering",
+                                id,
+                                Some(req.change_reason),
+                            )?;
+                            super::commit::availability(&db, &mut prepared, &audit, executor).await
+                        },
+                    }
+                })
             })
             .await;
-        self.domain()
-            .resolve_written_result(
-                transaction_result,
-                &req.idempotency_key,
-                "update_offering_availability",
-                &fingerprint,
-                &mut NoTransaction,
-            )
-            .await
+        recovery::resolve(transaction_result, || {
+            self.availability_result(recovery_id, recovery_request, recovery_actor)
+        })
+        .await
     }
 }

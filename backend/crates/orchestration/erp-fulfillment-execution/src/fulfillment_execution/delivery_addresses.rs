@@ -1,6 +1,7 @@
 //! 授权发货详情的地址读取与来源快照；敏感资料只加密落库。
 use std::collections::BTreeMap;
 
+use application_core::AuditActor;
 use erp_core::ids::{DeliveryId, SalesOrderRevisionId};
 use erp_core::money::Quantity;
 use erp_fulfillment::dto::DeliveryDetailView;
@@ -8,13 +9,15 @@ use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryAddressSnapshot, DeliveryDestination, DeliveryLine, PackingItem,
 };
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_identity::AccessTarget;
 use erp_party::SensitiveDataCodec;
+use erp_permissions::fulfillment;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_supply::api_order::for_purchase;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 
 use super::FulfillmentProcess;
 use crate::{Error, Result};
@@ -22,40 +25,51 @@ use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 在已有发货详情权限下读取地址和包裹，正式记录只使用冻结快照。
     /// # 参数
-    /// `id` 为已授权路由中的发货单身份。
+    /// id为真实发货单身份，actor为已认证账号。
     /// # 返回
     /// 表头、真实行、地址分配及包裹；无可信地址时返回空分配。
     /// # 错误
     /// 来源缺失、快照损坏或数据库读取失败时拒绝。
-    pub async fn delivery_packing_detail(&self, id: &str) -> Result<DeliveryDetailView> {
-        let mut view = self.domain().delivery_detail(id).await?;
+    pub async fn delivery_packing_detail(&self, id: &str, actor: &AuditActor) -> Result<DeliveryDetailView> {
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.delivery_packing_snapshot(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 发货详情资格、来源资料和解密地址沿用同一个快照执行器。
+    async fn delivery_packing_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<DeliveryDetailView> {
+        self.task_identity
+            .require(actor, &fulfillment::DELIVERY_DELIVERY_DETAIL, AccessTarget::Operation, executor)
+            .await?;
+        let mut view = self.domain().load_delivery_view(id, executor).await?;
         let delivery = self
             .db
             .deliveries()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("发货单不存在".into()))?;
-        let lines = self
-            .db
-            .fulfillment()
-            .delivery_lines_by_delivery_ids(&[DeliveryId::new(id)], &mut NoTransaction)
-            .await?;
+        let lines =
+            self.db.fulfillment().delivery_lines_by_delivery_ids(&[DeliveryId::new(id)], executor).await?;
         view.address_snapshot = if delivery.is_editable() {
-            address_source(
-                &self.db,
-                &self.sensitive_data,
-                &self.fingerprint_key,
-                &delivery,
-                &lines,
-                &mut NoTransaction,
-            )
-            .await?
+            address_source(&self.db, &self.sensitive_data, &self.fingerprint_key, &delivery, &lines, executor)
+                .await?
         } else {
             frozen_addresses(&self.sensitive_data, &delivery)?
         };
         if delivery.is_editable()
             && view.address_snapshot.is_none()
-            && !external_delivery(&self.db, &delivery, &mut NoTransaction).await?
+            && !external_delivery(&self.db, &delivery, executor).await?
         {
             view.packing_unavailable_reason = Some("此草稿的数量无法与来源收货地址完整对应，请先核对来源交付安排并重新分配发货任务。原物流记录已保留。".into());
         }

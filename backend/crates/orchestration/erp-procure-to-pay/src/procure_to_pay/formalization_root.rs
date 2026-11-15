@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
@@ -21,7 +21,7 @@ const FORMALIZE_SOURCE_AFFECTED: &str = "来源销售已变更并影响本采购
 /// 采购最终通过流程，财务与履约步骤严格复用原 Executor 和写入顺序。
 pub struct PurchaseOrderFormalizationProcess {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: Arc<PurchaseOrderPorts>,
 }
 impl PurchaseOrderFormalizationProcess {
@@ -37,7 +37,7 @@ impl PurchaseOrderFormalizationProcess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, ports: Arc<PurchaseOrderPorts>) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>, ports: Arc<PurchaseOrderPorts>) -> Self {
         Self { db, rbac, ports }
     }
 

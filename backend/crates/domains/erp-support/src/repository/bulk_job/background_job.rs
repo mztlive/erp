@@ -2,8 +2,8 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::BackgroundJobId;
+use erp_identity::CompiledAccess;
 use erp_identity::entity::authorization::QueryOutput;
-use erp_identity::{AuthorizationService, CompiledAccess};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
@@ -133,18 +133,19 @@ impl From<BackgroundJobListQuery> for BackgroundJobFilter {
 pub async fn authorized_background_page(
     db: &Database,
     filter: &BackgroundJobFilter,
-    authorization: &AuthorizationService,
     access: &CompiledAccess,
     executor: &mut dyn Executor,
 ) -> crate::Result<PageResult<BackgroundJobRow>> {
     let model = access.model();
-    if model.collection != Database::BACKGROUND_JOBS
+    if model.resource != "background_job"
+        || model.key.as_str() != "background_jobs"
+        || model.collection != Database::BACKGROUND_JOBS
         || model.id_field != "id"
         || model.output != QueryOutput::Object
     {
         return Err(crate::Error::ValidationError("后台任务分页要求完整后台任务模型".into()));
     }
-    authorization.validate(access, executor).await?;
+    access.ensure_current(executor)?;
     let collection = db.background_jobs().collection().clone_with_type::<BackgroundJobRow>();
     let options = FindOptions::builder()
         .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
@@ -163,7 +164,6 @@ pub async fn authorized_background_page(
     let total =
         persistence_core::aggregate::count(&collection, filter.to_doc(), access.stages().to_vec(), executor)
             .await?;
-    authorization.validate(access, executor).await?;
     let total = i64::try_from(total).map_err(|_| crate::Error::ValidationError("后台任务总数超限".into()))?;
     Ok(PageResult { items, total })
 }

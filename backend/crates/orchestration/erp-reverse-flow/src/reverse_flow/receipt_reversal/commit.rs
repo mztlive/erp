@@ -8,6 +8,8 @@ use erp_core::common::time::Instant;
 use erp_core::ids::CustomerReceiptId;
 use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_finance::repository::ReceivableExt;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
 use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::CommitReceiptReversalRequest;
@@ -73,7 +75,14 @@ impl ReturnsProcess {
             .committed_resource_id(&command_receipt, &mut NoTransaction)
             .await?
         {
-            return self.reads().receipt_reversal_detail(&id).await.map_err(Error::from);
+            return self
+                .receipt_reversal_result(
+                    &id,
+                    actor,
+                    &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+                    AccessTarget::record(&id)?,
+                )
+                .await;
         }
         let input = self.prepare_receipt_reversal_commit(&req, actor, &command_receipt).await?;
         let id = input.reversal.base.id.clone();
@@ -95,7 +104,13 @@ impl ReturnsProcess {
             Ok(None) => id,
             Err(error) => self.recover_receipt_commit(error, &command_receipt).await?,
         };
-        self.reads().receipt_reversal_detail(&detail_id).await.map_err(Error::from)
+        self.receipt_reversal_result(
+            &detail_id,
+            actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+            AccessTarget::record(&detail_id)?,
+        )
+        .await
     }
 
     /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。

@@ -181,6 +181,7 @@ where
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalDefinitionBinding>> {
         Ok(bind_published_definition_on_document_create(
+            &self.service.authorization.service,
             &self.service.identity,
             &self.service.db,
             self.service.audit.as_ref(),
@@ -197,8 +198,14 @@ where
         assets: &[FileAsset],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(authorize_material_transfer(&self.service.identity, &self.service.db, actor, assets, executor)
-            .await?)
+        Ok(authorize_material_transfer(
+            &self.service.authorization.service,
+            &self.service.db,
+            actor,
+            assets,
+            executor,
+        )
+        .await?)
     }
 
     async fn authorize_stock_adjustment_cancel(
@@ -207,7 +214,7 @@ where
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustmentCancelAuthorization> {
-        authorize_with(&self.service.identity, &self.service.db, instance, actor, executor).await
+        authorize_with(&self.service.authorization.service, &self.service.db, instance, actor, executor).await
     }
 
     async fn persist_start_snapshot(
@@ -224,7 +231,14 @@ where
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        authorize_submit_with(&self.service.identity, &self.service.db, adjustment, actor, executor).await
+        authorize_submit_with(
+            &self.service.authorization.service,
+            &self.service.db,
+            adjustment,
+            actor,
+            executor,
+        )
+        .await
     }
 
     async fn revalidate_stock_adjustment_candidates(
@@ -235,7 +249,7 @@ where
         executor: &mut dyn Executor,
     ) -> Result<()> {
         revalidate_candidates_with(
-            &self.service.identity,
+            &self.service.authorization.service,
             &self.service.db,
             graph,
             initiator_id,
@@ -257,7 +271,7 @@ where
     ) -> Result<()> {
         crate::supply_execution::task_authorization::require_assignee(
             &self.service.db,
-            &self.service.identity,
+            &self.service.authorization.service,
             actor,
             item,
             executor,

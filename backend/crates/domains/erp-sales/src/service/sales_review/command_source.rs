@@ -1,6 +1,6 @@
 //! 销售变更命令的版本与状态读取守卫，保留调用方安排的回执前读取时点。
 
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::SalesReviewService;
 use crate::entity::sales_review::SalesChangeOrder;
@@ -13,17 +13,23 @@ impl SalesReviewService {
     /// # 参数
     /// * `id` - 销售变更单。
     /// * `expected_version` - 客户端持有的版本。
+    /// * `executor` - 原用例事务执行器。
     ///
     /// # 返回
     /// 返回仍为草稿且版本匹配的变更单。
     ///
     /// # 错误
     /// 缺单、过期版本及非草稿状态保留原错误类别与文案。
-    pub async fn load_for_submission(&self, id: &str, expected_version: u64) -> Result<SalesChangeOrder> {
+    pub async fn load_for_submission(
+        &self,
+        id: &str,
+        expected_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesChangeOrder> {
         let change_order = self
             .db
             .sales_change_orders()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
         if !change_order.matches_version(expected_version) {
@@ -39,17 +45,23 @@ impl SalesReviewService {
     /// # 参数
     /// * `id` - 销售变更单。
     /// * `expected_version` - 客户端持有的版本。
+    /// * `executor` - 原用例事务执行器。
     ///
     /// # 返回
     /// 返回版本匹配的变更单；不检查是否草稿，也不修改状态。
     ///
     /// # 错误
     /// 缺单或过期版本保持原错误；本方法不修改状态。
-    pub async fn load_for_cancellation(&self, id: &str, expected_version: u64) -> Result<SalesChangeOrder> {
+    pub async fn load_for_cancellation(
+        &self,
+        id: &str,
+        expected_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesChangeOrder> {
         let change_order = self
             .db
             .sales_change_orders()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
         if !change_order.matches_version(expected_version) {

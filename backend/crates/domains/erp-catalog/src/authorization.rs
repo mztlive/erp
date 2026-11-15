@@ -5,14 +5,11 @@ use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, MappingFacts, ObjectFacts, QueryModel, QueryModelKey, QueryOutput, ReadAccess,
-    RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
+    QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
-use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry, AuthorizationService,
-    CompiledAccess, DataAccess, Permission, ResourceTargets, SharedRbacService,
-};
+use erp_identity::{AuthorizationService, CompiledAccess, ResourceTargets};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, mongo_ops};
@@ -21,7 +18,7 @@ use persistence_core::{Executor, mongo_ops};
 #[derive(Clone)]
 pub struct CompiledScope {
     pub(crate) compiled: Arc<CompiledAccess>,
-    pub(crate) authorization: AuthorizationService,
+    pub(crate) authorization: Arc<AuthorizationService>,
     pub scope_version: String,
 }
 impl std::fmt::Debug for CompiledScope {
@@ -73,6 +70,17 @@ impl CompiledScope {
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
+    /// 核验当前事务、读取阶段及有效期，不读取数据库。
+    /// # 参数
+    /// executor 为原读取执行器。
+    /// # 返回
+    /// 凭证仍属于当前阶段时成功。
+    /// # 错误
+    /// 跨事务、跨阶段或已经到期时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
+        self.compiled.ensure_current(executor)
+    }
+
     /// 复验账号、权限、版本和有效期。
     /// # 参数
     /// executor 必须为原执行器。
@@ -93,28 +101,31 @@ impl AccessMapping for Mapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
         Ok(Bson::String("$id".into()))
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> erp_identity::Result<MappingFacts> {
-        Ok(MappingFacts { version: Some("company_shared_v1".into()), valid_until: None })
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":NOT_DELETED_TIMESTAMP_BSON}))
     }
     fn predicate(
         &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: &MappingFacts,
+        fact: &AccessFact,
+        context: &AccessContext,
+        _: Option<&MappingFacts>,
     ) -> erp_identity::Result<QueryFragment> {
-        Err(erp_identity::Error::ValidationError("共享资料未登记人员范围映射".into()))
+        match fact {
+            AccessFact::Owned => Ok(QueryFragment::Match(doc! {"maintainer_user_id":context.actor.id()})),
+            AccessFact::OrganizationIn(orgs) => Ok(QueryFragment::Match(
+                doc! {"business_org_unit_id":{"$in":orgs.iter().collect::<Vec<_>>()}},
+            )),
+            _ => Err(erp_identity::Error::ValidationError("共享资料未登记该授权事实".into())),
+        }
     }
     fn relation(
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("共享资料未登记来源关系".into()))
     }
@@ -139,134 +150,159 @@ impl AccessFactsPort for Facts {
             executor,
         )
         .await?;
-        rows.into_iter()
-            .map(|row| {
-                Ok(ObjectFacts {
-                    resource: self.resource.clone(),
-                    id: row
-                        .get_str("id")
-                        .map_err(|_| erp_identity::Error::ValidationError("授权对象缺少主键".into()))?
-                        .into(),
-                    version: row
-                        .get("version")
-                        .ok_or_else(|| erp_identity::Error::ValidationError("授权对象缺少业务版本".into()))?
-                        .to_string(),
-                    ..Default::default()
-                })
-            })
-            .collect()
+        rows.into_iter().map(|row| object(&self.resource, row)).collect()
     }
 }
 
-/// 构造商品固定目录和查询映射；权限判断由身份域执行。
-pub(crate) fn service(
-    db: &Database,
-    rbac: SharedRbacService,
-) -> erp_identity::Result<(AuthorizationService, Arc<dyn AccessMapping>)> {
-    let mapping: Arc<dyn AccessMapping> = Arc::new(Mapping {
+/// 直接翻译真实维护人与业务组织；历史无值保持已知空，不以创建人回填。
+fn object(resource: &str, row: Document) -> erp_identity::Result<ObjectFacts> {
+    Ok(ObjectFacts {
+        resource: resource.into(),
+        id: row
+            .get_str("id")
+            .map_err(|_| erp_identity::Error::ValidationError("授权对象缺少主键".into()))?
+            .into(),
+        version: row
+            .get("version")
+            .ok_or_else(|| erp_identity::Error::ValidationError("授权对象缺少业务版本".into()))?
+            .to_string(),
+        owner_id: FactValue::Known(responsibility_text(&row, "maintainer_user_id")?),
+        org_unit_id: FactValue::Known(responsibility_text(&row, "business_org_unit_id")?),
+        ..Default::default()
+    })
+}
+/// 缺值与无有效值均表示已知无归属，损坏类型必须拒绝。
+fn responsibility_text(row: &Document, field: &str) -> erp_identity::Result<Option<String>> {
+    match row.get(field) {
+        None | Some(Bson::Null) => Ok(None),
+        Some(Bson::String(value)) => Ok((!value.trim().is_empty()).then(|| value.clone())),
+        _ => Err(erp_identity::Error::ValidationError(format!("授权责任字段{field}类型无效"))),
+    }
+}
+
+/// 构造真实对象事实与静态查询映射，供统一授权装配复用。
+/// # 参数
+/// db 为拥有领域的数据库。
+/// # 返回
+/// 不包含授权政策的事实读取器与映射。
+/// # 错误
+/// 固定查询模型非法时返回错误，构造不执行 I/O。
+pub fn bindings(db: Database) -> erp_identity::Result<(Arc<dyn AccessFactsPort>, Arc<dyn AccessMapping>)> {
+    let facts = Arc::new(Facts { db, resource: "product".into(), collection: "products".into() });
+    let mapping = Arc::new(Mapping {
         model: QueryModel {
             key: QueryModelKey::parse("product")?,
             resource: "product".into(),
             collection: "products".into(),
             id_field: "id".into(),
             output: QueryOutput::Object,
-            facts: Default::default(),
+            facts: [FactKind::Owner, FactKind::Organization].into(),
         },
     });
-    let facts: Arc<dyn AccessFactsPort> =
-        Arc::new(Facts { db: db.clone(), resource: "product".into(), collection: "products".into() });
-    let entries = ["list", "detail", "create", "update"]
-        .into_iter()
-        .map(|action| {
-            let permission = Permission::parse(format!("product:{action}"))?;
-            Ok(AccessRegistration {
-                permission: permission.clone(),
-                required_permissions: vec![],
-                access: AccessMode::QueryAndObject {
-                    data: DataAccess {
-                        subject: AccessSubject::Direct,
-                        required_facts: Default::default(),
-                        policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
-                    },
-                    mapping: mapping.clone(),
-                    facts: facts.clone(),
-                },
-            })
-        })
-        .collect::<erp_identity::Result<Vec<_>>>()?;
-    Ok((AuthorizationService::new(db.clone(), rbac, AuthorizationRegistry::new(entries)?), mapping))
-}
-
-/// 创建事实只绑定本次命令的真实新商品身份，不读取尚未持久化的行。
-struct CreationFacts(ObjectFacts);
-
-#[async_trait]
-impl AccessFactsPort for CreationFacts {
-    async fn load(
-        &self,
-        _: &AccessContext,
-        _: &ResourceTargets,
-        _: &mut dyn Executor,
-    ) -> erp_identity::Result<Vec<ObjectFacts>> {
-        Ok(vec![self.0.clone()])
-    }
-}
-
-pub(crate) fn creation_registry(id: &str) -> erp_identity::Result<AuthorizationRegistry> {
-    let permission = Permission::parse("product:create")?;
-    let facts = ObjectFacts {
-        resource: "product".into(),
-        id: id.into(),
-        version: "proposed".into(),
-        ..Default::default()
-    };
-    AuthorizationRegistry::new(vec![AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: Default::default(),
-                policy: AccessPolicy::Scope { permission, read: ReadAccess::default() },
-            },
-            facts: Arc::new(CreationFacts(facts)),
-        },
-    }])
+    Ok((facts, mapping))
 }
 
 #[cfg(test)]
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use persistence_core::NoTransaction;
+    use erp_permissions::catalog;
 
     use super::*;
 
-    fn context() -> AccessContext {
-        AccessContext {
-            actor: AuditActor::new("actor".into(), "Actor".into(), AccountKind::Admin),
-            permission: Permission::parse("product:create").unwrap(),
-            resource: "product".into(),
-            model: None,
-            as_of: Instant::from_unix_secs(0),
+    fn mapping() -> Mapping {
+        Mapping {
+            model: QueryModel {
+                key: QueryModelKey::parse("product").unwrap(),
+                resource: "product".into(),
+                collection: "products".into(),
+                id_field: "id".into(),
+                output: QueryOutput::Object,
+                facts: [FactKind::Owner, FactKind::Organization].into(),
+            },
         }
     }
 
-    #[tokio::test]
-    async fn proposed_creation_facts_are_stable_and_bound_to_the_new_product() {
-        let fact = ObjectFacts {
+    #[test]
+    fn static_mapping_excludes_deleted_rows_and_rejects_unsupported_facts() {
+        let mapping = mapping();
+        let context = AccessContext {
+            actor: AuditActor::new("a".into(), "A".into(), AccountKind::Admin),
+            permission: catalog::PRODUCT_PRODUCT_LIST,
             resource: "product".into(),
-            id: "new-product".into(),
-            version: "proposed".into(),
-            ..Default::default()
+            model: None,
+            as_of: Instant::from_unix_secs(0),
         };
-        let port = CreationFacts(fact.clone());
-        let targets = ResourceTargets::new(&["new-product"]).unwrap();
-        let mut executor = NoTransaction;
-        assert_eq!(port.load(&context(), &targets, &mut executor).await.unwrap(), vec![fact]);
-        assert!(creation_registry("new-product").is_ok());
-        // 根目标与资源匹配由 identity 在装载事实后统一校验。
-        let other = ResourceTargets::new(&["other-product"]).unwrap();
-        assert_eq!(port.load(&context(), &other, &mut executor).await.unwrap()[0].id, "new-product");
+        assert!(mapping.preparation().is_none());
+        assert_eq!(mapping.key(&context, None).unwrap(), Bson::String("$id".into()));
+        assert!(matches!(mapping.records(&context, None).unwrap(), QueryFragment::Match(filter)
+            if filter == doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}));
+        assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context, None).is_err());
+        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None).is_err());
+    }
+    /// 真实维护人与组织在对象及查询两端一致；创建人不能补负责人，历史缺值保持已知空。
+    #[test]
+    fn real_responsibility_and_legacy_empty_values_match_object_and_query_checks() {
+        use erp_identity::entity::access_control::{ScopeClause, ScopedObject};
+        let mapping = mapping();
+        for row in [
+            doc! {"id":"row","version":1_i64,"maintainer_user_id":"owner","business_org_unit_id":"org","created_by":"creator"},
+            doc! {"id":"row","version":1_i64,"created_by":"creator"},
+            doc! {"id":"row","version":1_i64,"maintainer_user_id":"","business_org_unit_id":""},
+            doc! {"id":"row","version":1_i64,"maintainer_user_id":null,"business_org_unit_id":null},
+        ] {
+            let facts = object("product", row.clone()).unwrap();
+            let owner = facts.owner_id.get().expect("Owner必须已知").as_deref();
+            let org = facts.org_unit_id.get().expect("Organization必须已知").as_deref();
+            for actor in ["owner", "creator", "unrelated"] {
+                let context = AccessContext {
+                    actor: AuditActor::new(actor.into(), actor.into(), AccountKind::Admin),
+                    permission: catalog::PRODUCT_PRODUCT_DETAIL,
+                    resource: "product".into(),
+                    model: None,
+                    as_of: Instant::from_unix_secs(0),
+                };
+                let QueryFragment::Match(filter) =
+                    mapping.predicate(&AccessFact::Owned, &context, None).unwrap()
+                else {
+                    panic!("负责人必须使用真实字段");
+                };
+                let query_owned =
+                    row.get_str("maintainer_user_id").ok() == filter.get_str("maintainer_user_id").ok();
+                let scoped = ScopedObject {
+                    owned: owner == Some(actor),
+                    collaborating: false,
+                    historical_read_participant: false,
+                    org_unit_id: org,
+                    settlement_party_id: None,
+                    warehouse_id: None,
+                };
+                assert_eq!(
+                    ScopeClause { self_owned: true, ..Default::default() }.covers(&scoped),
+                    query_owned
+                );
+                let organizations = ["org".into()].into();
+                let QueryFragment::Match(filter) =
+                    mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
+                else {
+                    panic!("组织必须使用真实字段");
+                };
+                let accepted = filter.get_document("business_org_unit_id").unwrap().get_array("$in").unwrap();
+                let query_org = row.get("business_org_unit_id").is_some_and(|value| accepted.contains(value));
+                assert_eq!(
+                    ScopeClause { org_unit_ids: ["org".into()].into(), ..Default::default() }.covers(&scoped),
+                    query_org
+                );
+                assert!(ScopeClause { company: true, ..Default::default() }.covers(&scoped));
+            }
+        }
+        let no_owner = object("product", doc! {"id":"row","version":1_i64,"created_by":"creator"}).unwrap();
+        assert_eq!(no_owner.owner_id.get().unwrap(), &None);
+        assert_eq!(no_owner.org_unit_id.get().unwrap(), &None);
+        for field in ["maintainer_user_id", "business_org_unit_id"] {
+            let mut malformed = doc! {"id":"row","version":1_i64};
+            malformed.insert(field, 123);
+            assert!(object("product", malformed).is_err());
+        }
     }
 }

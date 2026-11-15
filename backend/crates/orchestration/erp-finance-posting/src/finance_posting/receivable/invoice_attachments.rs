@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 use erp_finance::dto::receivable::CommitInvoiceRequest;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_support::authorization::files::require_owned;
 use erp_support::{
     AttachmentUsage, DocumentAttachment, DocumentAttachmentData, FileAssetExt, PendingAttachmentBatch,
@@ -59,7 +59,7 @@ pub(crate) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBa
 /// 文件登记失败、附件不存在、不是发票证据、不是本人上传或附件关系写入失败时返回错误。
 pub(crate) async fn persist(
     db: &Database,
-    identity: &SharedRbacService,
+    authorization: &AuthorizationService,
     invoice_id: &str,
     ids: &[FileAssetId],
     pending: &dyn PendingAttachmentBatch,
@@ -68,7 +68,7 @@ pub(crate) async fn persist(
 ) -> Result<()> {
     pending.persist(db, executor).await?;
     let file_ids = ids.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
-    require_owned(db, identity, actor, &file_ids, executor).await?;
+    require_owned(authorization, actor, &file_ids, executor).await?;
     for id in ids {
         let asset = db
             .file_assets()

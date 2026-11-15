@@ -6,6 +6,8 @@ use std::hash::{Hash, Hasher};
 use application_core::{
     AuditActor, PageView, SortDir, normalize_sort, page_or_default, page_size_or_default,
 };
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{sales_order as sales_order_permissions, sales_review};
 use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
 use erp_sales::repository::SalesReviewExt;
 use erp_sales::repository::prelude::*;
@@ -44,9 +46,9 @@ impl SalesChangeReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let access = SalesAccess::new(db.clone(), rbac);
+                    let access = SalesAccess::new(db.clone(), rbac.clone());
                     let (mut context, scope, filter) =
-                        change_list_query(&access, &params, &actor, executor).await?;
+                        change_list_query(&access, &rbac, &params, &actor, executor).await?;
                     let page = db
                         .sales_change_orders()
                         .search_authorized_sales_change_orders(&filter, &scope, executor)
@@ -90,9 +92,9 @@ impl SalesChangeReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let access = SalesAccess::new(db.clone(), rbac);
+                    let access = SalesAccess::new(db.clone(), rbac.clone());
                     let (context, scope, filter) =
-                        change_list_query(&access, &params, &actor, executor).await?;
+                        change_list_query(&access, &rbac, &params, &actor, executor).await?;
                     let versions =
                         db.sales_change_orders().query_change_versions(&filter, &scope, executor).await?;
                     context.validate(executor).await?;
@@ -106,11 +108,15 @@ impl SalesChangeReadService {
 /// 每次快照独立解析动作范围与合法来源，筛选只收窄授权结果。
 async fn change_list_query(
     access: &SalesAccess,
+    authorization: &AuthorizationService,
     params: &SalesChangeOrderListParams,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(SalesReadContext, SalesReadScope, SalesChangeOrderFilter)> {
-    let (context, scope) = access.resolve(actor, "list", &[], executor).await?;
+    authorization
+        .require(actor, &sales_review::SALES_CHANGE_ORDER_LIST, AccessTarget::Operation, executor)
+        .await?;
+    let (context, scope) = access.resolve(actor, &sales_order_permissions::LIST, executor).await?;
     Ok((context, scope, change_list_filter(params)?))
 }
 
@@ -173,6 +179,34 @@ mod tests {
     use persistence_core::QueryFilter;
 
     use super::*;
+
+    #[tokio::test]
+    async fn entry_facility_failure_stops_before_source_query_or_business_read() {
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::testing::SnapshotExecutor;
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("change_entry_test");
+        let authorization = unavailable_authorization();
+        let access = SalesAccess::new(db, authorization.clone());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let params = SalesChangeOrderListParams {
+            scope_version: None,
+            sales_order_id: None,
+            status: None,
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        };
+        let result =
+            change_list_query(&access, &authorization, &params, &actor, &mut SnapshotExecutor::default())
+                .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
 
     /// 翻页和排序不改变业务来源与状态，非法排序拒绝。
     #[test]

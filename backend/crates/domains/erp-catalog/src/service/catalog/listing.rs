@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::ids::ProductId;
+use erp_permissions::catalog as catalog_permissions;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -95,7 +96,8 @@ impl CatalogService {
         target: ListingStatus,
         actor: &AuditActor,
     ) -> Result<ProductListingChange> {
-        let product = self.access().require_product(actor, "update", product_id, &mut NoTransaction).await?;
+        let product =
+            self.access().product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, product_id).await?;
         product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用的商品不能上架".to_string()));
@@ -135,7 +137,14 @@ impl CatalogService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require(&actor, "update", product_id.as_ref(), executor).await?;
+                    access
+                        .require(
+                            &actor,
+                            &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                            product_id.as_ref(),
+                            executor,
+                        )
+                        .await?;
                     for sku in &mut changed {
                         db.skus().update(sku, executor).await?;
                     }
@@ -161,7 +170,7 @@ impl CatalogService {
         ensure_version(sku.base.version, version)?;
         let product = self
             .access()
-            .require_product(actor, "update", sku.product_id.as_ref(), &mut NoTransaction)
+            .product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, sku.product_id.as_ref())
             .await?;
         product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
@@ -193,7 +202,14 @@ impl CatalogService {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require(&actor, "update", sku.product_id.as_ref(), executor).await?;
+                    access
+                        .require(
+                            &actor,
+                            &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                            sku.product_id.as_ref(),
+                            executor,
+                        )
+                        .await?;
                     db.skus().update(&mut sku, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<Sku, crate::error::Error>(sku)

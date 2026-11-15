@@ -11,7 +11,7 @@ use erp_procurement::service::purchase_order::change::mapping::{
     enrich_change_lines, prepare_submission_header,
 };
 use erp_sales::repository::SalesOrderExt;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::super::PurchaseOrderProcess;
 use super::super::adapters::current_revision_lines;
@@ -36,11 +36,12 @@ impl PurchaseOrderProcess {
         &self,
         order: &PurchaseOrder,
         lines: &[SavePurchaseOrderLine],
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SavePurchaseOrderLine>> {
         let sales_order = self
             .db
             .sales_orders()
-            .find_by_id(&order.sales_order_id, &mut NoTransaction)
+            .find_by_id(&order.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
         let revision_id = sales_order
@@ -49,8 +50,7 @@ impl PurchaseOrderProcess {
             .as_ref()
             .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".to_string()))?;
         let revision_lines =
-            current_revision_lines(&self.db, &SalesOrderRevisionId::new(revision_id), &mut NoTransaction)
-                .await?;
+            current_revision_lines(&self.db, &SalesOrderRevisionId::new(revision_id), executor).await?;
         let by_stable_id = revision_lines
             .into_iter()
             .map(|line| {
@@ -86,6 +86,7 @@ impl PurchaseOrderProcess {
         base_revision: &PurchaseOrderRevision,
         _supplier_name: &str,
         req: &SubmitPurchaseChangeRequest,
+        executor: &mut dyn Executor,
     ) -> Result<PurchaseChangeSubmission> {
         let header = prepare_submission_header(base_revision, req)?;
         let payment_term_snapshot = self.payment_term_snapshot(&header.payment_term_code).await?;
@@ -96,7 +97,7 @@ impl PurchaseOrderProcess {
         let sales = self
             .db
             .sales_orders()
-            .find_by_id(&order.sales_order_id, &mut NoTransaction)
+            .find_by_id(&order.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
         let current = sales
@@ -108,7 +109,7 @@ impl PurchaseOrderProcess {
             &self.db,
             &order.sales_order_id,
             &SalesOrderRevisionId::new(current.clone()),
-            &mut NoTransaction,
+            executor,
         )
         .await?;
         Ok(submission)

@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
+use erp_permissions::internal;
 use persistence_core::Executor;
 
 use super::targets::{Target, TargetFacts};
-use super::{AuthorizationService, rules};
+use super::{AuthorizationService, definitions, operations, rules};
 use crate::entity::access_control::scope_spec;
 use crate::entity::authorization::{AccessContext, AccessRule, AccessTarget, ResourceTargets};
 use crate::entity::resource_access::ResourceKind;
@@ -29,31 +30,69 @@ impl AuthorizationService {
         let kind = scope_spec::kind(permission)?;
         let form = target.form();
         rules::ensure_target(permission, kind, form)?;
-        if !rules::is_read(permission) && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
+        if (form == rules::TargetForm::Task
+            || !rules::is_read(permission)
+            || operations::source(permission).is_some())
+            && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
         {
             return Err(Error::ValidationError("写入授权必须使用快照事务".into()));
         }
+        if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
+            return self.require_work_item_qualification(actor, &target, executor).await;
+        }
+        if form == rules::TargetForm::Candidate && definitions::entry(permission).is_some() {
+            return self.require_definition(actor, permission, &target, executor).await;
+        }
         if matches!(target, AccessTarget::Operation) {
             let boundary = executor.boundary();
-            self.qualify(actor, permission, executor).await?;
+            let qualified = self.qualify(actor, permission, executor).await?;
+            self.require_operation_scope(actor, permission, &qualified, executor).await?;
             if boundary.is_some_and(|boundary| !boundary.is_current(executor)) {
                 return Err(Error::ValidationError("操作检查跨越执行阶段".into()));
             }
             return Ok(());
         }
-        let proof = self.resolve(actor, permission, None, None, executor).await?;
+        self.require_target(actor, permission, &target, executor).await
+    }
+
+    /// 读取完整目标及来源，并在全部异步取证结束后检查原阶段与有效期。
+    async fn require_target(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        target: &AccessTarget,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let proof = self
+            .resolve_target(
+                actor,
+                permission,
+                None,
+                None,
+                matches!(target, AccessTarget::Task { .. }),
+                executor,
+            )
+            .await?;
         let facts =
             TargetFacts::load(&self.facts, &proof.context, &proof.rule, target.borrowed()?, executor).await?;
+        let mut source_proofs = self.approval_sources(&proof, &facts, executor).await?;
+        source_proofs.extend(self.work_item_sources(&proof, &facts, executor).await?);
         let grants = self.target_grants(&proof.context, &proof.rule, &facts, executor).await?;
         facts.require(&proof.context, &proof.rule, &grants, executor)?;
         self.validate_proof(&proof, executor).await?;
         facts.revalidate(&self.facts, &proof.context, executor).await?;
+        for source in &source_proofs {
+            self.validate_proof(source, executor).await?;
+        }
         facts.require(&proof.context, &proof.rule, &grants, executor)?;
+        for source in &source_proofs {
+            source.ensure_current(executor)?;
+        }
         proof.ensure_current(executor)
     }
 
     /// 授权行只读取本次目标及真实来源；不读取账号历史授权全集。
-    async fn target_grants(
+    pub(super) async fn target_grants(
         &self,
         context: &AccessContext,
         rule: &AccessRule,

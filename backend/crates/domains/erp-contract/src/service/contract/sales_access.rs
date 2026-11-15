@@ -1,6 +1,9 @@
 //! 合同明确共享只影响本合同读取与选用，不交接客户、销售单或历史业绩。
 
 use application_core::AuditActor;
+use erp_identity::{AccessTarget, AccountDirectoryService};
+use erp_permissions::customer;
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::{ContractService, TxAuthorization, execute_authorized_transaction};
@@ -26,6 +29,8 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractDetailView> {
         request.validate()?;
+        let authorization = self.data_scope.authorization.clone();
+        let qualification_actor = actor.clone();
         let db = self.db.clone();
         let access = self.data_scope.clone();
         let audit = self.audit.resource_log(actor.clone(), "contract.share", "contract", id.to_string())?;
@@ -41,6 +46,14 @@ impl ContractService {
             actor.clone(),
             Box::new(move |db, executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &qualification_actor,
+                            &customer::ASSIGNMENT_APPLY,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     let mut contract = db
                         .contracts()
                         .find_by_id(&contract_id, executor)
@@ -52,15 +65,7 @@ impl ContractService {
                     contract.set_shared_sales(request.shared_sales_user_ids)?;
                     contract.sales_access_change_reason = Some(request.change_reason.trim().to_string());
                     contract.stable.updated_by = actor_id;
-                    for id in &contract.shared_sales_user_ids {
-                        let account = accounts
-                            .account(id, executor)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("共享销售账号不存在".into()))?;
-                        account
-                            .ensure_can_login()
-                            .map_err(|error| Error::ValidationError(error.to_string()))?;
-                    }
+                    require_active_sales(&accounts, &contract.shared_sales_user_ids, executor).await?;
                     db.contracts().update(&mut contract, executor).await?;
                     Ok(())
                 })
@@ -69,4 +74,20 @@ impl ContractService {
         .await?;
         self.contract_detail(id, actor).await
     }
+}
+
+/// 共享关系只接受当前可登录的真实账号。
+async fn require_active_sales(
+    accounts: &AccountDirectoryService,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    for id in ids {
+        let account = accounts
+            .account(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("共享销售账号不存在".into()))?;
+        account.ensure_can_login().map_err(|error| Error::ValidationError(error.to_string()))?;
+    }
+    Ok(())
 }

@@ -13,14 +13,13 @@ use erp_finance::repository::cost::read_scope::{ALLOCATION_LIMIT, ENTRY_LIMIT};
 use erp_finance::repository::cost::{CostEntryFilter, CostEntryRow};
 use erp_finance::repository::prelude::*;
 use erp_finance::service::cost::{cost_entry_filter, cost_entry_row_view};
-use erp_identity::Permission;
-use erp_sales::repository::sales_order::scope::SalesReadScope;
+use erp_permissions::Permission as AccessPermission;
 use persistence_core::{Executor, Transactional};
 use versions::VersionFacts;
 
 use super::*;
-use crate::finance::funds_scope::WholeAccess;
-use crate::sales_center::access::{SalesAccess, SalesReadContext};
+use crate::finance::funds_scope::{SourceQuery, WholeAccess};
+use crate::sales_center::access::SalesReadContext;
 
 #[derive(Clone, Default)]
 pub(super) struct CostSelection {
@@ -62,7 +61,8 @@ pub(super) struct Snapshot {
 }
 
 struct CostAuthorization {
-    sales: SalesReadScope,
+    access: Arc<erp_identity::CompiledAccess>,
+    sales: SourceQuery,
     whole: WholeAccess,
     context: SalesReadContext,
     fingerprint: DefaultHasher,
@@ -140,38 +140,33 @@ impl CostReadModel {
         &self,
         params: &CostEntryListParams,
         selection: &CostSelection,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         actor: &AuditActor,
         expected: Option<&str>,
     ) -> Result<Snapshot> {
-        let snapshot = self.snapshot(params, selection, resource, action, actor).await?;
-        checked_snapshot(snapshot, expected, || {
-            self.current_version(params, selection, resource, action, actor)
-        })
-        .await
+        let snapshot = self.snapshot(params, selection, permission, actor).await?;
+        checked_snapshot(snapshot, expected, || self.current_version(params, selection, permission, actor))
+            .await
     }
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
     async fn snapshot(
         &self,
         params: &CostEntryListParams,
         selection: &CostSelection,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         actor: &AuditActor,
     ) -> Result<Snapshot> {
         let filter = cost_entry_filter(params)?;
         let this = self.clone();
         let actor = actor.clone();
         let selection = selection.clone();
-        let resource = resource.to_owned();
-        let action = action.to_owned();
+        let permission = permission.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let access = this.authorize(&actor, &resource, &action, executor).await?;
+                    let access = this.authorize(&actor, &permission, executor).await?;
                     this.load_snapshot(&filter, &selection, access, executor).await
                 })
             })
@@ -181,26 +176,18 @@ impl CostReadModel {
     async fn authorize(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
+        permission: &AccessPermission,
         executor: &mut dyn Executor,
     ) -> Result<CostAuthorization> {
-        let resolver = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        let entry = Permission::parse(format!("{resource}:{action}"))?;
-        let (context, sales) = resolver.resolve_source(actor, &entry, executor).await?;
-        let whole = WholeAccess::query(
-            &self.db,
-            &self.rbac,
-            actor,
-            &entry,
-            <Database as CostExt>::COST_ENTRIES,
-            executor,
-        )
-        .await?;
+        let access = Arc::new(self.rbac.query(actor, permission, executor).await?);
+        let sales = SourceQuery::new(access.clone(), "sales_source")?
+            .ok_or_else(|| Error::ValidationError("成本入口没有销售来源".into()))?;
+        let context = SalesReadContext::from_access(access.clone(), self.rbac.clone());
+        let whole = WholeAccess::new(access.clone());
         let mut fingerprint = DefaultHasher::new();
         context.scope_version.hash(&mut fingerprint);
         whole.version().hash(&mut fingerprint);
-        Ok(CostAuthorization { sales, whole, context, fingerprint })
+        Ok(CostAuthorization { access, sales, whole, context, fingerprint })
     }
     /// 隐藏来源条件拒绝，空范围保持空集；完整装载并裁剪后才允许分页。
     async fn load_snapshot(
@@ -210,18 +197,19 @@ impl CostReadModel {
         mut access: CostAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Snapshot> {
-        access.context.validate(executor).await?;
-        access.whole.validate(executor).await?;
+        access.context.ensure_current(executor)?;
+        access.whole.ensure_current(executor)?;
         let mut snapshot = Snapshot::new(&access);
         access.require_filter(filter)?;
-        let (candidates, allocations, versions) = self.candidate_facts(filter, selection, executor).await?;
+        let (candidates, allocations, versions) =
+            self.candidate_facts(filter, selection, &access, executor).await?;
         let orders = self.authorized_orders(&versions, &mut access, executor).await?;
         let whole_ids = self.whole_orders(&versions, &access.whole, executor).await?;
         whole_ids.hash(&mut access.fingerprint);
         versions.hash(&mut access.fingerprint);
         snapshot.project(candidates, allocations, &orders, &whole_ids)?;
+        // 来源与整账计划共享根凭证，交付后不得再使用旧读取阶段。
         access.context.validate(executor).await?;
-        access.whole.validate(executor).await?;
         snapshot.version = format!("{:x}", access.fingerprint.finish());
         Ok(snapshot)
     }
@@ -230,9 +218,11 @@ impl CostReadModel {
         &self,
         filter: &CostEntryFilter,
         id: Option<&str>,
+        access: &CostAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Vec<CostEntryRow>> {
-        let candidates = self.db.cost_entries().scope_candidates(filter, id, executor).await?;
+        let candidates =
+            self.db.cost_entries().scope_candidates(filter, id, &access.access, executor).await?;
         if candidates.len() > ENTRY_LIMIT {
             return Err(Error::ValidationError("成本查询超过上限，请指定供应商或成本类型".into()));
         }
@@ -244,15 +234,16 @@ impl CostReadModel {
         &self,
         filter: &CostEntryFilter,
         selection: &CostSelection,
+        access: &CostAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<(Vec<CostEntryRow>, Vec<CostAllocation>, VersionFacts)> {
         let Some(query) = &selection.allocations else {
-            let entries = self.cost_candidates(filter, selection.id.as_deref(), executor).await?;
+            let entries = self.cost_candidates(filter, selection.id.as_deref(), access, executor).await?;
             let allocations = self.candidate_allocations(&entries, executor).await?;
             let versions = VersionFacts::from_rows(&entries, &allocations);
             return Ok((entries, allocations, versions));
         };
-        let versions = self.candidate_versions(filter, selection.id.as_deref(), executor).await?;
+        let versions = self.candidate_versions(filter, selection.id.as_deref(), access, executor).await?;
         let ids = versions.entries.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let matching = self
             .db

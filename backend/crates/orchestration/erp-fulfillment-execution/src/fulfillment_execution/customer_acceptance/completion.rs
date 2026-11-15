@@ -1,5 +1,7 @@
 //! 验收事实写入后的销售进度、责任任务与审计顺序；三条入口共用生产编排。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
@@ -8,6 +10,7 @@ use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::FulfillmentCommandReceiptService;
 use erp_fulfillment::entity::fulfillment::{AcceptanceProgress, CustomerAcceptance};
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_identity::AuthorizationService;
 use erp_read_models::sales_money_progress::SalesMoneyProgressReader;
 use erp_sales::entity::sales_order::FulfillmentProgress;
 use erp_sales::service::sales_order::progress::update_sales_order_money_progress;
@@ -16,7 +19,6 @@ use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::super::task::FulfillmentIdentityFactory;
 use super::task::{
     CustomerAcceptanceTaskReason, ensure_customer_acceptance_task,
     persist_customer_acceptance_task_after_posting,
@@ -61,7 +63,7 @@ impl CompletionKind {
 /// 进度刷新、任务写入、审计或回执保存失败时返回错误并停止后续步骤。回执操作人与当前账号不一致时拒绝。
 pub(super) async fn complete_acceptance(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     acceptance: &CustomerAcceptance,
     actor: &AuditActor,
     kind: CompletionKind,
@@ -98,7 +100,7 @@ async fn finish(
 
 struct DatabaseCompletion<'a> {
     db: &'a Database,
-    task_identity: &'a FulfillmentIdentityFactory,
+    task_identity: &'a Arc<AuthorizationService>,
     acceptance: &'a CustomerAcceptance,
     actor: &'a AuditActor,
     kind: CompletionKind,
@@ -259,19 +261,10 @@ mod tests {
     use async_trait::async_trait;
     use erp_fulfillment::entity::fulfillment::AcceptanceProgress;
     use erp_sales::entity::sales_order::FulfillmentProgress;
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::{AcceptanceCompletion, AcceptanceSalesProgress, CompletionMode, apply_projection, finish};
     use crate::{Error, Result};
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Default)]
     struct RecordingCompletion {
         events: Vec<&'static str>,
@@ -319,7 +312,7 @@ mod tests {
         for (mode, steps) in cases() {
             for remaining in [false, true] {
                 let mut port = RecordingCompletion { remaining, ..Default::default() };
-                let mut executor = TestExecutor { _identity: 1 };
+                let mut executor = TestExecutor::default();
                 let expected = &mut executor as *mut TestExecutor as usize;
                 finish(&mut port, mode, &mut executor).await.unwrap();
                 assert_eq!(port.events, steps);
@@ -333,7 +326,7 @@ mod tests {
         for (mode, steps) in cases() {
             for (index, step) in steps.iter().enumerate() {
                 let mut port = RecordingCompletion { fail: Some(step), ..Default::default() };
-                let mut executor = TestExecutor { _identity: 1 };
+                let mut executor = TestExecutor::default();
                 let error = finish(&mut port, mode, &mut executor).await.unwrap_err();
                 assert!(matches!(error, Error::ConflictError(message) if message == *step));
                 assert_eq!(port.events, steps[..=index]);
@@ -356,7 +349,7 @@ mod tests {
     #[tokio::test]
     async fn absent_projection_skips_sales_and_present_projection_keeps_remaining_fact() {
         let mut sales = RecordingSales::default();
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
         assert!(!apply_projection(&mut sales, None, &mut executor).await.unwrap());
         assert!(sales.progress.is_empty());
@@ -375,7 +368,7 @@ mod tests {
     async fn fulfillment_progress_mapping_preserves_each_sales_variant_and_executor() {
         use erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress as Local;
         let mut sales = RecordingSales::default();
-        let mut executor = TestExecutor { _identity: 2 };
+        let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
         let cases = [
             (Local::NotStarted, FulfillmentProgress::NotStarted),

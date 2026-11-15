@@ -2,6 +2,7 @@
 
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_identity::AccountDirectoryService;
+use erp_permissions::contract;
 use persistence_core::Transactional;
 use serde_json::to_vec;
 
@@ -53,7 +54,7 @@ impl ContractService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let context = access.resolve(&actor, "list", executor).await?;
+                    let context = access.resolve(&actor, &contract::LIST, executor).await?;
                     let (filter, search, versions) = load_list_filter_and_search(
                         &db,
                         &data_scope,
@@ -64,7 +65,7 @@ impl ContractService {
                         executor,
                     )
                     .await?;
-                    context.validate(executor).await?;
+                    context.ensure_current(executor)?;
                     finish_list_snapshot(&db, filter, search, versions, context, executor)
                         .await
                         .map(|(view, context)| ContractSnapshot { view, context })
@@ -96,7 +97,7 @@ impl ContractService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut context = access.resolve(&actor, "list", executor).await?;
+                    let mut context = access.resolve(&actor, &contract::LIST, executor).await?;
                     let (_, search, versions) = load_list_filter_and_search(
                         &db,
                         &data_scope,

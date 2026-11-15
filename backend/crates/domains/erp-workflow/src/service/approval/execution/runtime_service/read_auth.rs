@@ -8,7 +8,7 @@ use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_core::AccountKind;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -27,11 +27,11 @@ use crate::service::approval::process_kind::process_kind_of;
 use crate::service::approval::scope::approver_qualification;
 
 /// 单实例读取授权所需的持久化事实。
-pub(super) struct RuntimeReadSubject {
-    pub(super) instance: ApprovalProcessInstance,
-    pub(super) current_execution: Option<ApprovalNodeExecution>,
-    pub(super) snapshot: ApprovalSubjectSnapshot,
-    pub(super) document_type: DocumentType,
+pub(crate) struct RuntimeReadSubject {
+    pub(crate) instance: ApprovalProcessInstance,
+    pub(crate) current_execution: Option<ApprovalNodeExecution>,
+    pub(crate) snapshot: ApprovalSubjectSnapshot,
+    pub(crate) document_type: DocumentType,
 }
 
 /// 决定审批人写时重验输入。
@@ -80,6 +80,7 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 /// # 关键业务约束
 /// 任一资格失败必须收敛为 blocker，不得回滚为空。
 pub(super) async fn revalidate_decision_approver(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
@@ -101,7 +102,7 @@ pub(super) async fn revalidate_decision_approver(
         .cloned()
         .unwrap_or_else(|| AuditActor::new(assignee_id.into(), assignee_id.into(), AccountKind::Admin));
     let qualified = if actor.id() == assignee_id {
-        approver_qualification(db, identity_service, &actor, executor).await?
+        approver_qualification(authorization, db, identity_service, &actor, executor).await?
     } else {
         ApprovalQualification::Inactive
     };
@@ -188,7 +189,7 @@ pub(super) fn current_execution_matches_instance(
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn task_proves_current_responsibility(
+pub(crate) fn task_proves_current_responsibility(
     task: &WorkItem,
     execution: &ApprovalNodeExecution,
     subject: &RuntimeReadSubject,
@@ -400,7 +401,7 @@ where
 /// 非空、人数不超出冻结集合且每人恰有一项时返回 true。
 /// # 错误
 /// 无。
-pub(super) fn open_tasks_match(execution: &ApprovalNodeExecution, tasks: &[WorkItem]) -> bool {
+pub(crate) fn open_tasks_match(execution: &ApprovalNodeExecution, tasks: &[WorkItem]) -> bool {
     let mut owners = HashSet::new();
     !tasks.is_empty()
         && tasks.len() <= 1 + execution.additional_assignees.len()

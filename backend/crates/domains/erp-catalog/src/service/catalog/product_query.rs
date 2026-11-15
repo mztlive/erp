@@ -1,5 +1,7 @@
-use application_core::QueryIds;
-use persistence_core::NoTransaction;
+use application_core::{AuditActor, QueryIds};
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -32,7 +34,42 @@ impl CatalogService {
     /// 分页或排序参数非法，以及仓储查询失败时返回错误。
     pub async fn product_revision_list(
         &self,
+        actor: &AuditActor,
         params: &ProductRevisionListParams,
+    ) -> Result<PageView<ProductRevisionView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.product_revision_list_snapshot(&actor, &params, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn product_revision_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &ProductRevisionListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<ProductRevisionView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_PRODUCT_REVISION_LIST, AccessTarget::Operation, executor)
+            .await?;
+        self.product_revision_rows(params, executor).await
+    }
+
+    /// 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
+    pub(super) async fn product_revision_rows(
+        &self,
+        params: &ProductRevisionListParams,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<ProductRevisionView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -44,7 +81,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.catalog().product_revision_page(&filter, &mut NoTransaction).await?;
+        let page = self.db.catalog().product_revision_page(&filter, executor).await?;
         let items = page.items.into_iter().map(ProductRevisionView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
@@ -59,7 +96,39 @@ impl CatalogService {
     ///
     /// # 错误
     /// 分页或排序参数非法，以及仓储查询失败时返回错误。
-    pub async fn sku_list(&self, params: &SkuListParams) -> Result<PageView<SkuView>> {
+    pub async fn sku_list(&self, actor: &AuditActor, params: &SkuListParams) -> Result<PageView<SkuView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.sku_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn sku_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &SkuListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SkuView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_SKU_LIST, AccessTarget::Operation, executor)
+            .await?;
+        self.sku_rows(params, executor).await
+    }
+
+    /// 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
+    pub(super) async fn sku_rows(
+        &self,
+        params: &SkuListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SkuView>> {
         params.validate()?;
         let query = params.normalized()?;
         let keyword = query.q;
@@ -74,7 +143,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.catalog().sku_page(keyword.as_deref(), &filter, &mut NoTransaction).await?;
+        let page = self.db.catalog().sku_page(keyword.as_deref(), &filter, executor).await?;
         let items = page.items.into_iter().map(SkuView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }
@@ -91,7 +160,40 @@ impl CatalogService {
     /// 分页或排序参数非法，以及仓储查询失败时返回错误。
     pub async fn sku_revision_list(
         &self,
+        actor: &AuditActor,
         params: &SkuRevisionListParams,
+    ) -> Result<PageView<SkuRevisionView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.sku_revision_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn sku_revision_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &SkuRevisionListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SkuRevisionView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_SKU_REVISION_LIST, AccessTarget::Operation, executor)
+            .await?;
+        self.sku_revision_rows(params, executor).await
+    }
+
+    /// 读取已由拥有入口校验过的商品明细，不追加其他入口资格。
+    pub(super) async fn sku_revision_rows(
+        &self,
+        params: &SkuRevisionListParams,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<SkuRevisionView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -105,7 +207,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.catalog().sku_revision_page(&filter, &mut NoTransaction).await?;
+        let page = self.db.catalog().sku_revision_page(&filter, executor).await?;
         let items = page.items.into_iter().map(SkuRevisionView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
     }

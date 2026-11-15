@@ -1,18 +1,17 @@
-//! 内部材料资格政策；调用方先证明任务或申请入口，再检查真实申请的完整来源。
-
+//! 内部材料事实适配；固定资格及来源规则由 identity 执行。
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_catalog::portal::{CatalogPortalExt, NewProductDraft};
 use erp_identity::entity::authorization::{
-    AccessContext, ObjectFacts, ReadAccess, RelatedObjects, RelationKey, RelationMatch,
+    AccessContext, FactValue, ObjectFacts, RelatedObjects, RelationKey,
 };
 use erp_identity::{
-    AccessFactsPort, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget,
-    AuthorizationRegistry, AuthorizationService, DataAccess, Error as IdentityError, Permission,
-    ResourceTargets, Result as IdentityResult, SharedRbacService,
+    AccessFactsPort, AccessTarget, AuthorizationService, Error as IdentityError, ResourceTargets,
+    Result as IdentityResult,
 };
+use erp_permissions::{Permission, internal};
 use erp_supplier::SupplierExt;
 use erp_supplier::portal::{CooperationApplication, CooperationRepository};
 use erp_supply::SupplierOfferingExt;
@@ -21,25 +20,25 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
-
 const MATERIAL_RESOURCE: &str = "supplier_portal_material";
-
 #[derive(Clone, Copy)]
 pub(super) enum RequestAction {
     Read,
     Review,
 }
-
 impl RequestAction {
-    fn permission(self) -> IdentityResult<Permission> {
-        Ok(Permission::parse(match self {
-            Self::Read => "supplier_portal_material:read",
-            Self::Review => "supplier_portal_material:review",
-        })?)
+    fn permission(self, kind: RequestKind) -> Permission {
+        match (self, kind) {
+            (Self::Read, RequestKind::OfferingUpdate) => internal::PORTAL_MATERIAL_READ_OFFERING,
+            (Self::Read, _) => internal::PORTAL_MATERIAL_READ,
+            (Self::Review, RequestKind::OfferingCreate) => internal::PORTAL_MATERIAL_REVIEW_OFFERING_CREATE,
+            (Self::Review, RequestKind::OfferingUpdate) => internal::PORTAL_MATERIAL_REVIEW_OFFERING_UPDATE,
+            (Self::Review, RequestKind::NewProduct) => internal::PORTAL_MATERIAL_REVIEW_NEW_PRODUCT,
+            (Self::Review, RequestKind::Cooperation) => internal::PORTAL_MATERIAL_REVIEW_COOPERATION,
+        }
     }
 }
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum RequestKind {
     OfferingCreate,
     OfferingUpdate,
@@ -119,156 +118,178 @@ impl RequestTarget {
     }
 }
 
-/// 在原执行器执行申请固定政策，来源功能资格允许分别来自不同有效角色。
+/// 按持久化申请种类执行固定材料授权。
 /// # 参数
-/// db、rbac 为共享身份设施，target 为可信申请事实，action 为固定读取或审核入口。
+/// authorization 为共享服务，target 为同一执行器读取的真实申请。
 /// # 返回
-/// 真实来源的功能资格、范围及必要启用状态均成立时成功。
+/// 完整来源和功能资格均成立时成功。
 /// # 错误
-/// 缺失来源、无权、事实变化或身份设施失败时返回原错误。
+/// 任一来源、真实申请种类或必要资格不符时拒绝。
 pub(super) async fn require_request(
-    db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     target: RequestTarget,
     action: RequestAction,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let permission = action.permission()?;
-    let targets = ResourceTargets::new(&[target.id.as_str()])?;
-    let policy = request_policy(target.kind, action)?;
-    let registry = AuthorizationRegistry::new(vec![AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess { subject: AccessSubject::Direct, required_facts: Default::default(), policy },
-            facts: Arc::new(RequestFacts { db: db.clone(), target, action }),
-        },
-    }])?;
-    AuthorizationService::new(db.clone(), rbac.clone(), registry)
-        .require(
-            actor,
-            &permission,
-            AccessTarget::Records { subject: AccessSubject::Direct, ids: targets },
-            executor,
-        )
+    authorization
+        .require(actor, &action.permission(target.kind), AccessTarget::record(&target.id)?, executor)
         .await?;
     Ok(())
 }
 
-fn request_policy(kind: RequestKind, action: RequestAction) -> IdentityResult<AccessPolicy> {
-    let supplier = match (kind, action) {
-        (RequestKind::Cooperation, RequestAction::Review) => "supplier:update",
-        _ => "supplier:detail",
-    };
-    let mut rules = vec![source_policy("supplier", supplier)?];
-    match (kind, action) {
-        (RequestKind::OfferingUpdate, RequestAction::Read) => {
-            rules.push(source_policy("offering", "supplier_offering:list")?);
-        },
-        (RequestKind::OfferingUpdate, RequestAction::Review) => {
-            rules.push(source_policy("offering", "supplier_offering:update")?);
-        },
-        (RequestKind::OfferingCreate | RequestKind::NewProduct, RequestAction::Review) => {
-            if matches!(kind, RequestKind::NewProduct) {
-                rules.push(AccessPolicy::Permission(Permission::parse("product:create")?));
-            }
-            rules.push(AccessPolicy::Permission(Permission::parse("supplier_offering:create")?));
-        },
-        _ => {},
-    }
-    // 任务和材料入口已有自己的功能资格；此处只证明精确申请的来源资格。
-    Ok(AccessPolicy::Account { policy: Box::new(AccessPolicy::All(rules)) })
+/// 构造从拥有领域读取真实申请和完整来源的事实适配器。
+/// # 参数
+/// db 为各拥有领域所在数据库。
+/// # 返回
+/// 不保存请求种类或临时目标的资源事实读取器。
+/// # 错误
+/// 不执行 I/O。
+pub fn material_facts_port(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(RequestFacts { db })
 }
-
-fn source_policy(relation: &str, code: &str) -> IdentityResult<AccessPolicy> {
-    let permission = Permission::parse(code)?;
-    Ok(AccessPolicy::Related {
-        relation: RelationKey::parse(relation)?,
-        resource: permission.resource().into(),
-        mode: RelationMatch::AllNonEmpty,
-        required_facts: Default::default(),
-        policy: Box::new(AccessPolicy::Independent {
-            permission: permission.clone(),
-            policy: Box::new(AccessPolicy::Scope { permission, read: ReadAccess::default() }),
-        }),
-    })
-}
-
 struct RequestFacts {
     db: Database,
-    target: RequestTarget,
-    action: RequestAction,
 }
-
 #[async_trait]
 impl AccessFactsPort for RequestFacts {
     async fn load(
         &self,
-        _: &AccessContext,
-        _: &ResourceTargets,
+        context: &AccessContext,
+        ids: &ResourceTargets,
         executor: &mut dyn Executor,
     ) -> IdentityResult<Vec<ObjectFacts>> {
-        let mut root = ObjectFacts {
-            resource: MATERIAL_RESOURCE.into(),
-            id: self.target.id.clone(),
-            version: self.target.version.clone(),
-            ..Default::default()
-        };
-        let supplier = self.db.supplier_accounts().find_by_id(&self.target.supplier, executor).await?;
-        if matches!(self.action, RequestAction::Review)
-            && supplier.as_ref().is_some_and(|row| !row.is_active())
+        let mut objects = Vec::new();
+        for id in ids.ids() {
+            let Some(target) = RequestTarget::load(&self.db, id, executor).await.map_err(identity_error)?
+            else {
+                continue;
+            };
+            check_kind(&context.permission, target.kind)?;
+            objects.push(self.object(context, target, executor).await?);
+        }
+        Ok(objects)
+    }
+}
+impl RequestFacts {
+    async fn object(
+        &self,
+        context: &AccessContext,
+        target: RequestTarget,
+        executor: &mut dyn Executor,
+    ) -> IdentityResult<ObjectFacts> {
+        let supplier = self
+            .db
+            .supplier_accounts()
+            .find_by_id(&target.supplier, executor)
+            .await?
+            .ok_or_else(|| IdentityError::NotFound("申请供应商不存在".into()))?;
+        if (context.permission.action().starts_with("review_")
+            || context.permission == internal::WORK_ITEM_EXECUTE)
+            && !supplier.is_active()
         {
             return Err(IdentityError::Forbidden("供应商已停用".into()));
         }
-        root.relations.insert(
-            RelationKey::parse("supplier")?,
-            RelatedObjects {
-                expected_ids: [self.target.supplier.clone()].into(),
-                objects: vec![source_facts("supplier", supplier.map(|row| (row.base.id, row.base.version)))?],
-            },
+        let supplier_facts = source_facts(
+            "supplier",
+            supplier.base.id,
+            supplier.base.version,
+            supplier.maintainer_user_id,
+            supplier.business_org_unit_id,
         );
-        if let Some(id) = &self.target.offering {
-            let offering = self.db.supplier_offerings().find_by_id(id, executor).await?;
+        let mut root = request_root(&target, supplier_facts)?;
+        if let Some(id) = target.offering {
+            let offering = self
+                .db
+                .supplier_offerings()
+                .find_by_id(&id, executor)
+                .await?
+                .ok_or_else(|| IdentityError::NotFound("申请供给不存在".into()))?;
             root.relations.insert(
                 RelationKey::parse("offering")?,
                 RelatedObjects {
-                    expected_ids: [id.clone()].into(),
+                    expected_ids: [id].into(),
                     objects: vec![source_facts(
                         "supplier_offering",
-                        offering.map(|row| (row.base.id, row.base.version)),
-                    )?],
+                        offering.base.id,
+                        offering.base.version,
+                        offering.maintainer_user_id,
+                        offering.business_org_unit_id,
+                    )],
                 },
             );
         }
-        Ok(vec![root])
+        Ok(root)
     }
 }
-
-fn source_facts(resource: &str, source: Option<(String, u64)>) -> IdentityResult<ObjectFacts> {
-    let (id, version) = source.ok_or_else(|| IdentityError::NotFound("对象不存在或必要目标不完整".into()))?;
-    Ok(ObjectFacts { resource: resource.into(), id, version: version.to_string(), ..Default::default() })
+/// 原申请身份、种类及供应商引用均来自同次持久化读取。
+fn request_root(target: &RequestTarget, supplier: ObjectFacts) -> IdentityResult<ObjectFacts> {
+    let mut root = ObjectFacts {
+        resource: MATERIAL_RESOURCE.into(),
+        id: target.id.clone(),
+        version: target.version.clone(),
+        subject_type: FactValue::Known(
+            match target.kind {
+                RequestKind::OfferingCreate => "offering_create",
+                RequestKind::OfferingUpdate => "offering_update",
+                RequestKind::NewProduct => "new_product",
+                RequestKind::Cooperation => "cooperation",
+            }
+            .into(),
+        ),
+        ..Default::default()
+    };
+    root.relations.insert(
+        RelationKey::parse("supplier")?,
+        RelatedObjects { expected_ids: [target.supplier.clone()].into(), objects: vec![supplier] },
+    );
+    Ok(root)
 }
-
+fn source_facts(resource: &str, id: String, version: u64, owner: String, org: String) -> ObjectFacts {
+    ObjectFacts {
+        resource: resource.into(),
+        id,
+        version: version.to_string(),
+        owner_id: FactValue::Known(Some(owner)),
+        org_unit_id: FactValue::Known(Some(org)),
+        ..Default::default()
+    }
+}
+fn check_kind(permission: &Permission, kind: RequestKind) -> IdentityResult<()> {
+    if permission == &internal::WORK_ITEM_EXECUTE {
+        return Ok(());
+    }
+    let expected =
+        if permission.action().starts_with("review_") { RequestAction::Review } else { RequestAction::Read };
+    if permission != &expected.permission(kind) {
+        return Err(IdentityError::ValidationError("材料权限与持久化申请种类不符".into()));
+    }
+    Ok(())
+}
+fn identity_error(error: crate::Error) -> IdentityError {
+    match error {
+        crate::Error::Internal(value) => IdentityError::Internal(value),
+        crate::Error::NotFound(value) => IdentityError::NotFound(value),
+        crate::Error::ValidationError(value) => IdentityError::ValidationError(value),
+        crate::Error::InvalidInput(value) => IdentityError::InvalidInput(value),
+        crate::Error::BusinessLogicError(value) => IdentityError::BusinessLogicError(value),
+        crate::Error::ConflictError(value) => IdentityError::ConflictError(value),
+        crate::Error::ReceiptDuplicate(value) => IdentityError::ReceiptDuplicate(value),
+        crate::Error::TransientTransaction(value) => IdentityError::TransientTransaction(value),
+        crate::Error::Forbidden(value) => IdentityError::Forbidden(value),
+        crate::Error::Unauthenticated(value) => IdentityError::Unauthenticated(value),
+        crate::Error::Logic(value) => IdentityError::Logic(value),
+        crate::Error::Rbac(value) => IdentityError::Rbac(value),
+        crate::Error::OutcomeUnknown(value) => IdentityError::OutcomeUnknown(value),
+        crate::Error::RepositoryError(value) => IdentityError::RepositoryError(value),
+        crate::Error::Coded(value) => IdentityError::BusinessLogicError(value.to_string()),
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct UnusedFacts;
-    #[async_trait]
-    impl AccessFactsPort for UnusedFacts {
-        async fn load(
-            &self,
-            _: &AccessContext,
-            _: &ResourceTargets,
-            _: &mut dyn Executor,
-        ) -> IdentityResult<Vec<ObjectFacts>> {
-            panic!("目录构造不读取事实")
-        }
-    }
-
     #[test]
-    fn every_request_shape_registers_complete_object_policy_without_extra_portal_feature() {
+    fn weaker_material_actions_cannot_access_another_persisted_request_kind() {
         for kind in [
             RequestKind::OfferingCreate,
             RequestKind::OfferingUpdate,
@@ -276,31 +297,32 @@ mod tests {
             RequestKind::Cooperation,
         ] {
             for action in [RequestAction::Read, RequestAction::Review] {
-                let registration = AccessRegistration {
-                    permission: action.permission().unwrap(),
-                    required_permissions: vec![],
-                    access: AccessMode::Object {
-                        data: DataAccess {
-                            subject: AccessSubject::Direct,
-                            required_facts: Default::default(),
-                            policy: request_policy(kind, action).unwrap(),
-                        },
-                        facts: Arc::new(UnusedFacts),
-                    },
-                };
-                assert!(AuthorizationRegistry::new(vec![registration]).is_ok());
+                assert!(check_kind(&action.permission(kind), kind).is_ok());
             }
         }
+        assert!(check_kind(&internal::PORTAL_MATERIAL_READ, RequestKind::OfferingUpdate).is_err());
+        assert!(
+            check_kind(&internal::PORTAL_MATERIAL_REVIEW_OFFERING_CREATE, RequestKind::NewProduct).is_err()
+        );
+        assert!(
+            check_kind(&internal::PORTAL_MATERIAL_REVIEW_COOPERATION, RequestKind::OfferingUpdate).is_err()
+        );
+    }
+    #[test]
+    fn material_source_errors_preserve_business_and_identity_categories() {
+        assert!(
+            matches!(identity_error(crate::Error::BusinessLogicError("blocked".into())), IdentityError::BusinessLogicError(value) if value == "blocked")
+        );
+        assert!(
+            matches!(identity_error(crate::Error::Unauthenticated("expired".into())), IdentityError::Unauthenticated(value) if value == "expired")
+        );
     }
 
     #[test]
-    fn missing_sources_keep_not_found_in_direct_review_paths() {
-        for resource in ["supplier", "supplier_offering"] {
-            assert!(matches!(source_facts(resource, None), Err(IdentityError::NotFound(_))));
-            let fact = source_facts(resource, Some(("source".into(), 3))).unwrap();
-            assert_eq!(fact.resource, resource);
-            assert_eq!(fact.id, "source");
-            assert_eq!(fact.version, "3");
-        }
+    fn material_sources_keep_current_ownership_and_version() {
+        let facts = source_facts("supplier", "supplier".into(), 7, "owner".into(), "org".into());
+        assert_eq!(facts.version, "7");
+        assert_eq!(facts.owner_id, FactValue::Known(Some("owner".into())));
+        assert_eq!(facts.org_unit_id, FactValue::Known(Some("org".into())));
     }
 }

@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use erp_core::ids::SalesChangeOrderId;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::SalesReviewService;
@@ -61,6 +61,7 @@ impl SalesReviewService {
     /// * `id` - 变更单 ID
     /// * `req` - 作废请求（含期望版本）
     /// * `actor` - 已通过鉴权的审计操作人
+    /// * `executor` - 完成授权、版本读取和写入的原事务执行器。
     ///
     /// # 返回
     /// 返回已作废、尚未落库的变更单；存在工作副本时一并返回已放弃的副本。
@@ -75,12 +76,13 @@ impl SalesReviewService {
         id: &str,
         req: VoidSalesChangeOrderRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<VoidChangeWrite> {
         req.validate()?;
         let mut change_order = self
             .db
             .sales_change_orders()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
         if !change_order.matches_version(req.version) {
@@ -90,7 +92,7 @@ impl SalesReviewService {
         let mut working_copy = self
             .db
             .sales_order_working_copies()
-            .find_by_sales_change_order(&SalesChangeOrderId::new(id), &mut NoTransaction)
+            .find_by_sales_change_order(&SalesChangeOrderId::new(id), executor)
             .await?;
         working_copy = working_copy.filter(|copy| !copy.is_submitted());
         if let Some(copy) = &mut working_copy {

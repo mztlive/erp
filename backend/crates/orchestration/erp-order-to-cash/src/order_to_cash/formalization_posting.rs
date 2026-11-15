@@ -124,7 +124,7 @@ async fn revalidate_procurement(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if let Some(plan) = write.procurement.as_ref() {
-        ProcurementResponsibilityProcess::new(write.db.clone(), write.rbac.clone())
+        ProcurementResponsibilityProcess::new(write.db.clone(), write.authorization.clone())
             .claim_plan(&plan.inputs, &plan.resolution, executor)
             .await?;
     }
@@ -231,16 +231,10 @@ mod tests {
 
     use erp_core::ids::CustomerAccountId;
     use erp_sales::entity::sales_order::{OriginSystem, SalesOrderData};
+    use persistence_core::ReadExecutor;
 
     use super::*;
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type TestExecutor = ReadExecutor;
 
     struct RecordingSteps {
         calls: Vec<PostingStep>,
@@ -309,7 +303,7 @@ mod tests {
 
     #[tokio::test]
     async fn formalization_preserves_all_domain_steps_and_executor() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingSteps { calls: vec![], executor: identity, fail_at: None };
         execute(&mut steps, &mut executor).await.unwrap();
@@ -319,7 +313,7 @@ mod tests {
     #[tokio::test]
     async fn every_failure_stops_later_domains_and_preserves_original_error() {
         for (index, step) in expected().into_iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let mut steps = RecordingSteps { calls: vec![], executor: identity, fail_at: Some(step) };
             let error = execute(&mut steps, &mut executor).await.unwrap_err();

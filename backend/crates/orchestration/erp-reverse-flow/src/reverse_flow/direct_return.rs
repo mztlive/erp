@@ -6,6 +6,8 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseReturnLineId, PurchaseReturnOrderId, SalesReturnCaseId, SalesReturnLineId};
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use erp_procure_to_pay::procure_to_pay::return_finance::sync_return_finance;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, ReturnSettlementDecision};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -52,17 +54,19 @@ impl ReturnsProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut order = rbac
-                        .purchase
-                        .clone()
-                        .require_object(
+                    rbac.identity
+                        .require(
                             &actor,
-                            "update",
-                            &id,
-                            &["purchase_return_order:create".into()],
+                            &internal::PURCHASE_RETURN_SOURCE,
+                            AccessTarget::record(&id)?,
                             executor,
                         )
                         .await?;
+                    let mut order = db
+                        .purchase_orders()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("采购单不存在".into()))?;
                     if !save_settlement_decision(&db, &order, &decision, executor).await? {
                         return Ok(());
                     }
@@ -101,17 +105,19 @@ impl ReturnsProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let order = rbac
-                        .purchase
-                        .clone()
-                        .require_object(
+                    rbac.identity
+                        .require(
                             &actor,
-                            "update",
-                            &id,
-                            &["purchase_return_order:create".into()],
+                            &internal::PURCHASE_RETURN_SOURCE,
+                            AccessTarget::record(&id)?,
                             executor,
                         )
                         .await?;
+                    let order = db
+                        .purchase_orders()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("采购单不存在".into()))?;
                     let number = format!("PR-{}", req.idempotency_key);
                     if let Some(existing) = direct_return_command(&db, &number, executor).await? {
                         ensure_replay(&existing, &id, &req, &actor)?;

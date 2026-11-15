@@ -2,19 +2,13 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
+#[cfg(test)]
+use persistence_core::ReadExecutor;
+
 use super::*;
 use crate::Error;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct TestExecutor {
-    _identity: u8,
-}
-
-impl Executor for TestExecutor {
-    fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-        None
-    }
-}
+type TestExecutor = ReadExecutor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {
@@ -125,7 +119,7 @@ async fn action_uses_one_executor_and_stops_at_every_failed_step() {
         Step::Receipt,
     ];
     for stop in 0..=steps.len() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut port = TestPort::new(steps.get(stop).copied());
         let result = run_action(&mut port, &mut executor).await;
@@ -146,7 +140,7 @@ async fn completion_receipt_follows_task_write_and_precedes_result() {
         Step::Result,
     ];
     for stop in 0..=steps.len() {
-        let mut executor = TestExecutor { _identity: 2 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut port = TestPort::new(steps.get(stop).copied());
         let result = run_completion(&mut port, &mut executor).await;
@@ -159,7 +153,7 @@ async fn completion_receipt_follows_task_write_and_precedes_result() {
 async fn direct_task_guard_precedes_domain_read_and_each_failure_stops() {
     let steps = [Step::NoTask, Step::Domain, Step::Receipt, Step::Result];
     for stop in 0..steps.len() {
-        let mut executor = TestExecutor { _identity: 3 };
+        let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut port = TestPort::new(if stop == 3 { None } else { Some(steps[stop]) });
         let result = run_direct(&mut port, &mut executor).await;

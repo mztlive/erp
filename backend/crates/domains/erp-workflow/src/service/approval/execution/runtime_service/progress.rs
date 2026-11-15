@@ -2,15 +2,15 @@
 
 use application_core::AuditActor;
 use bpm::ids::ApprovalProcessInstanceId;
-use erp_identity::Permission;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
+use persistence_core::{Executor, Transactional};
 
 use super::{ApprovalRuntimeService, hidden_not_found};
 use crate::entity::approval_progress::ViewedApprovalProgress;
 use crate::error::Result;
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::BpmExt;
-use crate::service::authorization::features;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 查询当前有效账号发起的未读审批数量。
@@ -21,8 +21,23 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 账号停用、没有读取权限或数据库失败时返回错误。
     pub async fn started_unread_count(&self, actor: &AuditActor) -> Result<u64> {
-        self.ensure_active_instance_reader(actor).await?;
-        Ok(self.db.bpm_workflow().started_unread_count(actor.id(), &mut NoTransaction).await?)
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let access = service
+                        .authorization
+                        .query(&actor, &internal::APPROVAL_STARTED_LIST, executor)
+                        .await?;
+                    let count =
+                        service.db.bpm_workflow().started_unread_count(actor.id(), &access, executor).await?;
+                    service.authorization.validate(&access, executor).await?;
+                    Ok(count)
+                })
+            })
+            .await
     }
 
     /// 确认当前账号实际看过的审批进展。
@@ -57,12 +72,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         version: u64,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if !features(&self.db, &self.identity)
-            .has_permission(actor, &Permission::parse("approval_instance:read")?, executor)
-            .await?
-        {
-            return Err(hidden_not_found());
-        }
+        self.authorization
+            .require(actor, &internal::APPROVAL_STARTED_LIST, AccessTarget::record(instance_id)?, executor)
+            .await?;
         let repository = self.db.bpm_workflow();
         let instance = repository
             .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)

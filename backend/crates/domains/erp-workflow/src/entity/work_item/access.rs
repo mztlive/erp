@@ -77,32 +77,3 @@ impl TaskAccess {
         actions
     }
 }
-/// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
-///
-/// # 参数
-/// * `work_item_type` - 工作项类型
-/// * `business_object_type` - 业务对象类型稳定码
-///
-/// # 返回
-/// 供应商履约异常、供给异常和实体已注册的执行任务返回权限码；普通任务返回空向量。未注册执行对象返回 `None`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn required_execution_permissions(
-    work_item_type: WorkItemType,
-    business_object_type: &str,
-) -> Option<Vec<&'static str>> {
-    if business_object_type == "SUPPLIER_FULFILLMENT_ORDER"
-        && matches!(work_item_type, WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException)
-    {
-        return Some(vec![
-            "supplier_fulfillment_order:detail",
-            "supplier_fulfillment_order:investigate",
-            "supplier_fulfillment_order:complete",
-        ]);
-    }
-    if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
-        return Some(vec!["supplier_offering:resolve_supply_exception"]);
-    }
-    work_item_type.required_execution_permissions(business_object_type).map(|codes| codes.to_vec())
-}

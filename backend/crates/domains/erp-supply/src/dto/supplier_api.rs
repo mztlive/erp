@@ -21,6 +21,7 @@ use crate::entity::supplier_api::{
     SupplierConnectionAction, SupplierConnectorType, SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
 use crate::ports::connector::description::ConnectorDescription;
+use crate::repository::supplier_api::SupplierApiConnectionRow;
 
 /// 接口类型的稳定代码与展示名称，不包含供应商账号或凭据。
 #[derive(Serialize)]
@@ -447,6 +448,48 @@ pub struct SupplierApiConnectionView {
     pub created_at: u64,
 }
 
+impl SupplierApiConnectionView {
+    /// 将列表投影转换为脱敏连接视图，不读取完整凭据或推断治理动作。
+    /// # 参数
+    /// row 为已经通过统一查询过滤的最小列表投影。
+    /// # 返回
+    /// 保留列表事实，引用只展示绑定状态，动作和内部配置保持空值。
+    /// # 错误
+    /// 不返回错误；无效的负健康检查时间不进入无符号响应。
+    pub fn from_row(row: SupplierApiConnectionRow) -> Self {
+        Self {
+            id: row.id,
+            supplier_id: row.supplier_id,
+            connection_code: row.connection_code,
+            connector_type: row.connector_type,
+            connector_type_label: row.connector_type.map(|kind| kind.label()),
+            status: row.status,
+            rate_limit_policy: None,
+            last_health_at: row.last_health_at.and_then(|at| u64::try_from(at).ok()),
+            last_health_result: row.last_health_result,
+            safe_references: SafeReferencesView {
+                endpoint: SafeReferenceView {
+                    state: if row.endpoint_reference_bound { "BOUND" } else { "MISSING" },
+                    alias: None,
+                    version: None,
+                    visible: false,
+                },
+                credential: SafeReferenceView {
+                    state: if row.credential_reference_bound { "BOUND" } else { "MISSING" },
+                    alias: None,
+                    version: None,
+                    visible: false,
+                },
+            },
+            technical_config_version: row.technical_config_version,
+            allowed_actions: Vec::new(),
+            action_blockers: Vec::new(),
+            version: row.version,
+            created_at: row.created_at,
+        }
+    }
+}
+
 /// 连接列表中的最小能力摘要。
 ///
 /// 列表只展示能力代码和启停状态；确认、技术证据与动作阻塞属于详情读模型，
@@ -670,10 +713,40 @@ mod tests {
     use validator::Validate;
 
     use super::{
-        CreateSupplierApiConnectionRequest, SortDir, SupplierApiConnectionListParams, SupplierConnectorType,
-        normalize_sort,
+        CreateSupplierApiConnectionRequest, SortDir, SupplierApiConnectionListParams,
+        SupplierApiConnectionView, SupplierConnectorType, normalize_sort,
     };
     use crate::entity::supplier_api::SupplierApiConnectionStatus;
+    use crate::repository::supplier_api::SupplierApiConnectionRow;
+
+    #[test]
+    fn authorized_list_rows_keep_binding_states_without_exposing_configuration_or_actions() {
+        let row = SupplierApiConnectionRow {
+            id: "connection".into(),
+            supplier_id: "supplier".into(),
+            connection_code: "CONN".into(),
+            connector_type: None,
+            status: SupplierApiConnectionStatus::Disabled,
+            last_health_at: Some(-1),
+            last_health_result: None,
+            endpoint_reference_bound: true,
+            credential_reference_bound: false,
+            technical_config_version: 3,
+            last_healthy_technical_config_version: None,
+            version: 7,
+            created_at: 100,
+        };
+        let view = SupplierApiConnectionView::from_row(row);
+        assert_eq!(view.id, "connection");
+        assert_eq!(view.version, 7);
+        assert_eq!(view.safe_references.endpoint.state, "BOUND");
+        assert_eq!(view.safe_references.credential.state, "MISSING");
+        assert!(!view.safe_references.endpoint.visible);
+        assert!(view.safe_references.endpoint.alias.is_none());
+        assert!(view.allowed_actions.is_empty());
+        assert!(view.rate_limit_policy.is_none());
+        assert!(view.last_health_at.is_none());
+    }
 
     /// 创建请求不要求环境；旧调用方的环境参数不改变当前部署的连接身份。
     #[test]

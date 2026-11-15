@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_read_models::supplier_center::settlement::require_reviewer;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
@@ -24,7 +26,7 @@ use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::{WorkItemExt, WorkItemService};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::review_posting::{self, Posting};
@@ -69,45 +71,85 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: SubmitSettlementReviewRequest,
         actor: &AuditActor,
     ) -> Result<SubmitSettlementReviewResult> {
+        let process = self.clone();
+        let command = req.clone();
+        let writer = actor.clone();
+        let id = id.to_owned();
+        let write_id = id.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { process.submit_review_apply(&write_id, command, &writer, executor).await },
+                )
+            })
+            .await;
+        let Err(error) = result else { return result };
+        let process = self.clone();
+        let actor = actor.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let fingerprint = submit_review_fingerprint(&req);
+                    let audit_id = command_audit_id(
+                        actor.id(),
+                        "supplier_settlement.submit_review",
+                        &id,
+                        &req.idempotency_key,
+                    );
+                    process
+                        .data_scope
+                        .require_action(&actor, SettlementAction::Submit, &id, executor)
+                        .await?;
+                    process
+                        .replay_review_submission(
+                            &audit_id,
+                            &fingerprint,
+                            &id,
+                            (actor.id(), &req.idempotency_key),
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await;
+        recover_command(error, recovered)
+    }
+
+    /// 在入口事务内完成授权、准备、重放与持久化。
+    async fn submit_review_apply(
+        &self,
+        id: &str,
+        req: SubmitSettlementReviewRequest,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<SubmitSettlementReviewResult> {
         req.validate()?;
         let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.statement_id, "结算单")?;
-        self.domain()
-            .access()
-            .require_action(actor, SettlementAction::Submit, id, &mut NoTransaction)
-            .await?;
+        self.domain().access().require_action(actor, SettlementAction::Submit, id, executor).await?;
         let fingerprint = submit_review_fingerprint(&req);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.submit_review", id, &req.idempotency_key);
-        if let Some(result) =
-            self.replay_review_submission(&audit_id, &fingerprint, id, (actor.id(), &replay_key)).await?
+        if let Some(result) = self
+            .replay_review_submission(&audit_id, &fingerprint, id, (actor.id(), &replay_key), executor)
+            .await?
         {
             return Ok(result);
         }
-        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        let statement = self.domain().load_statement(id, executor).await?;
         validate_submission_command(&statement, &req)?;
-        self.authorize_reviewer(&req.reviewer_user_id, actor.id()).await?;
+        self.authorize_reviewer(&req.reviewer_user_id, actor.id(), executor).await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let operation_id = req.operation_id.clone();
         let prepared = PreparedSubmission { statement, work_item };
         let input = SubmissionCommit::new(self, req, actor, prepared, (&audit_id, &fingerprint));
-        let transaction_result = self
-            .db
-            .client()
-            .clone()
-            .with_transaction(move |executor| Box::pin(input.persist(executor)))
-            .await;
-        let (statement, work_item) = match transaction_result {
-            Ok(result) => result,
-            Err(error) => {
-                return recover_command(
-                    error,
-                    self.replay_review_submission(&audit_id, &fingerprint, id, (actor.id(), &replay_key))
-                        .await,
-                );
-            },
-        };
+        let (statement, work_item) = input.persist(executor).await?;
         Ok(SubmitSettlementReviewResult {
             result_status: dto::SettlementReviewSubmissionStatus::Submitted,
             message: "结算主题已冻结并提交财务复核".to_string(),
@@ -139,6 +181,56 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: SettlementReviewCommand,
         actor: &AuditActor,
     ) -> Result<SettlementReviewDecisionResult> {
+        let process = self.clone();
+        let command = req.clone();
+        let writer = actor.clone();
+        let id = id.to_owned();
+        let write_id = id.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { process.decide_review_apply(&write_id, command, &writer, executor).await },
+                )
+            })
+            .await;
+        let Err(error) = result else { return result };
+        let process = self.clone();
+        let actor = actor.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let action = review_action(req.decision.action);
+                    let fingerprint = review_decision_fingerprint(&req);
+                    let audit_id = command_audit_id(actor.id(), action, &id, &req.idempotency_key);
+                    process
+                        .replay_review_decision(
+                            &audit_id,
+                            &fingerprint,
+                            (&id, &req.work_item_id),
+                            &actor,
+                            (&req.idempotency_key, action),
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await;
+        recover_command(error, recovered)
+    }
+
+    /// 在入口事务内完成授权、准备、重放与持久化。
+    async fn decide_review_apply(
+        &self,
+        id: &str,
+        req: SettlementReviewCommand,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementReviewDecisionResult> {
         req.validate()?;
         let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
@@ -151,37 +243,20 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .replay_review_decision(
                 &audit_id,
                 &fingerprint,
-                id,
-                &req.work_item_id,
+                (id, &req.work_item_id),
                 actor,
                 (&replay_key, action),
+                executor,
             )
             .await?
         {
             return Ok(result);
         }
-        let prepared = self.prepare_decision(id, &req, actor, expected_task_version, reject_reason).await?;
+        let prepared =
+            self.prepare_decision(id, &req, actor, expected_task_version, reject_reason, executor).await?;
         let operation_id = req.decision.operation_id.clone();
         let input = DecisionCommit::new(self, &req, actor, prepared, (&audit_id, &fingerprint, action));
-        let transaction_result =
-            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
-        let (statement, work_item, receipt) = match transaction_result {
-            Ok(result) => result,
-            Err(error) => {
-                return recover_command(
-                    error,
-                    self.replay_review_decision(
-                        &audit_id,
-                        &fingerprint,
-                        id,
-                        &req.work_item_id,
-                        actor,
-                        (&replay_key, action),
-                    )
-                    .await,
-                );
-            },
-        };
+        let (statement, work_item, receipt) = input.persist(executor).await?;
         Ok(review_decision_result(statement, work_item, operation_id, receipt))
     }
 
@@ -193,11 +268,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         actor: &AuditActor,
         expected_task_version: u64,
         reject_reason: Option<SettlementReviewRejectReason>,
+
+        executor: &mut dyn Executor,
     ) -> Result<PreparedDecision> {
         let (mut statement, mut work_item) =
-            self.load_review_decision_state(id, req, actor, expected_task_version).await?;
-        let items = self.domain().load_statement_items(id, &mut NoTransaction).await?;
-        let differences = self.domain().load_statement_differences(&items, &mut NoTransaction).await?;
+            self.load_review_decision_state(id, req, actor, expected_task_version, executor).await?;
+        let items = self.domain().load_statement_items(id, executor).await?;
+        let differences = self.domain().load_statement_differences(&items, executor).await?;
         ensure_current_subject_and_resolved_differences(&statement, &differences)?;
         let now = Instant::now();
         let financial = review_preparation::prepare(
@@ -218,15 +295,17 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: &SettlementReviewCommand,
         actor: &AuditActor,
         expected_task_version: u64,
+
+        executor: &mut dyn Executor,
     ) -> Result<(SupplierSettlementStatement, WorkItem)> {
-        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        let statement = self.domain().load_statement(id, executor).await?;
         statement
             .ensure_version(req.decision.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         let work_item = self
             .db
             .work_items()
-            .find_by_id(&req.work_item_id, &mut NoTransaction)
+            .find_by_id(&req.work_item_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商结算复核待办不存在".to_string()))?;
         validate_settlement_review_work_item(
@@ -235,7 +314,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             expected_task_version,
             &req.expected_subject_version,
         )?;
-        require_reviewer(&self.db, &self.work_items.identity, actor, &work_item, &mut NoTransaction).await?;
+        require_reviewer(&self.db, &self.authorization, actor, &work_item, executor).await?;
         Ok((statement, work_item))
     }
 
@@ -246,10 +325,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         expected_fingerprint: &str,
         statement_id: &str,
         identity: (&str, &str),
+
+        executor: &mut dyn Executor,
     ) -> Result<Option<SubmitSettlementReviewResult>> {
-        let Some(stored) =
-            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
-        else {
+        let Some(stored) = self.db.supply_command_receipts().find_command(audit_id, executor).await? else {
             return Ok(None);
         };
         stored.verify_identity(
@@ -263,12 +342,12 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let SupplyCommandResult::ReviewSubmission(receipt) = stored.result else {
             return Err(Error::Internal("提交复核回执类型非法".to_string()));
         };
-        let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
+        let statement = self.domain().load_statement(statement_id, executor).await?;
         ensure_submission_statement(&statement, &receipt)?;
         let work_item = self
             .db
             .work_items()
-            .find_by_id(&receipt.work_item_id, &mut NoTransaction)
+            .find_by_id(&receipt.work_item_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("提交复核收据引用的任务不存在".to_string()))?;
         ensure_submission_task(&statement, &work_item, &receipt)?;
@@ -286,14 +365,14 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         &self,
         audit_id: &str,
         expected_fingerprint: &str,
-        statement_id: &str,
-        work_item_id: &str,
+        targets: (&str, &str),
         actor: &AuditActor,
         request: (&str, &str),
+
+        executor: &mut dyn Executor,
     ) -> Result<Option<SettlementReviewDecisionResult>> {
-        let Some(stored) =
-            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
-        else {
+        let (statement_id, work_item_id) = targets;
+        let Some(stored) = self.db.supply_command_receipts().find_command(audit_id, executor).await? else {
             return Ok(None);
         };
         stored.verify_identity(
@@ -307,17 +386,17 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let SupplyCommandResult::ReviewDecision(receipt) = stored.result else {
             return Err(Error::Internal("结算复核决定回执类型非法".to_string()));
         };
-        let statement = self.domain().load_statement(statement_id, &mut NoTransaction).await?;
+        let statement = self.domain().load_statement(statement_id, executor).await?;
         let work_item = self
             .db
             .work_items()
-            .find_by_id(work_item_id, &mut NoTransaction)
+            .find_by_id(work_item_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("复核决定收据引用的任务不存在".to_string()))?;
         if statement.is_prepared_by(actor.id()) {
             return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
         }
-        require_reviewer(&self.db, &self.work_items.identity, actor, &work_item, &mut NoTransaction).await?;
+        require_reviewer(&self.db, &self.authorization, actor, &work_item, executor).await?;
         ensure_decision_replay(&statement, &work_item, &receipt)?;
         Ok(Some(review_decision_result(statement, work_item, receipt.operation_id.clone(), receipt)))
     }
@@ -325,6 +404,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
 struct SubmissionCommit {
     identity: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     context: SettlementWriteContext,
     request: SubmitSettlementReviewRequest,
     prepared: PreparedSubmission,
@@ -342,6 +422,7 @@ impl SubmissionCommit {
     ) -> Self {
         Self {
             identity: process.work_items.identity.clone(),
+            authorization: process.authorization.clone(),
             context: process.write_context(actor),
             request,
             prepared,
@@ -372,7 +453,7 @@ impl SubmissionCommit {
         }
         ensure_review_submission_ready(&context.db, &current, executor).await?;
         reviewers::ensure_reviewer(
-            &context.db,
+            &self.authorization,
             &self.identity,
             &self.request.reviewer_user_id,
             &current.prepared_by,
@@ -403,6 +484,7 @@ struct DecisionCommit<A: WorkflowAuthorizationPort> {
     db: Database,
     actor: AuditActor,
     work_items: WorkItemService<A>,
+    authorization: Arc<AuthorizationService>,
     prepared: PreparedDecision,
     operation_id: String,
     fingerprint: String,
@@ -422,7 +504,8 @@ impl<A: WorkflowAuthorizationPort> DecisionCommit<A> {
         Self {
             db: process.db.clone(),
             actor: actor.clone(),
-            work_items: (process.fresh_work_items)(),
+            work_items: process.work_items.clone(),
+            authorization: process.authorization.clone(),
             prepared,
             operation_id: request.decision.operation_id.clone(),
             fingerprint: identity.1.to_string(),
@@ -440,6 +523,7 @@ impl<A: WorkflowAuthorizationPort> DecisionCommit<A> {
         let receipt = review_posting::post(
             Posting {
                 db: &self.db,
+                authorization: &self.authorization,
                 actor: &self.actor,
                 actor_id: self.actor.id(),
                 work_items: &self.work_items,

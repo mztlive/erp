@@ -1,7 +1,6 @@
 //! 客户回款过账与创建持久化：审批运行时持有的事务内过账/撤回与创建绑定写入。
 
 use application_core::{AuditActor, CommandReceipt};
-use async_trait::async_trait;
 use bpm::engine::DefinitionGraph;
 use bpm::model::{ApprovalCommandReceipt, SubjectRef};
 use erp_approval_runtime::approver_directory::resolve_start_approvers;
@@ -12,10 +11,12 @@ use erp_core::ids::{CustomerReceiptId, SalesOrderId};
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
-use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::customer_receipt_commit::PreparedCustomerReceiptCommit;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_finance::service::receivable::receipt_capacity::release_receipt;
+use erp_identity::AccessTarget;
+use erp_permissions::receivable;
+use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_read_models::sales_money_progress::SalesMoneyProgressReader;
 use erp_sales::service::sales_order::progress::update_sales_order_money_progress;
 use erp_workflow::DocumentRegistryExt;
@@ -36,8 +37,9 @@ use super::adapter::{
     customer_receipt_subject_ref, ensure_final_approve_posting, execute_customer_receipt_domain_action,
     require_frozen_binding, start_customer_receipt_approval,
 };
+use super::customer_receipt::{ReceiptCommitRecovery, receipt_command_result};
 use super::customer_receipt_command::{
-    MongoReceiptCommandWrites, ReceiptReplayPort, persist_receipt_command_success, receipt_command_context,
+    MongoReceiptCommandWrites, persist_receipt_command_success, receipt_command_context,
     replay_receipt_command,
 };
 use super::start_approval::{
@@ -72,7 +74,7 @@ pub(super) struct CommitTransactionRequest {
 /// * `request` - 待提交候选、分配与幂等身份
 ///
 /// # 返回
-/// 返回进入审批后的回款实体。
+/// 返回在原事务重验提交资格并装配的回款视图。
 ///
 /// # 错误
 /// 新建冲突、草稿缺失、装配或写入失败时返回错误。
@@ -80,50 +82,68 @@ pub(super) async fn run_commit_transaction(
     db: &Database,
     rbac: &FinancePostingPorts,
     request: CommitTransactionRequest,
-) -> Result<CustomerReceipt> {
-    let CommitTransactionRequest {
-        resubmission_reason,
-        pending,
-        allocations,
-        idempotency_key,
-        owner_role,
-        actor,
-        command_receipt,
-    } = request;
+) -> Result<CustomerReceiptView> {
     let db = db.clone();
     let rbac = rbac.clone();
     let client = db.client().clone();
-    let context = receipt_command_context(&command_receipt, &actor)?;
     client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                let replay = MongoReceiptCommitReplay { db: &db };
-                if let Some(receipt) =
-                    replay_receipt_command(&replay, &command_receipt, None, executor).await?
-                {
-                    return Ok(receipt);
-                }
-                let (receipt, binding) = load_commit_receipt(&db, &rbac, pending, &actor, executor).await?;
-                persist_loaded_commit_start(
-                    &db,
-                    &rbac,
-                    LoadedCommitStart {
-                        resubmission_reason,
-                        receipt,
-                        binding,
-                        allocations,
-                        idempotency_key,
-                        owner_role,
-                        actor: actor.clone(),
-                    },
-                    &command_receipt,
-                    &context,
-                    executor,
-                )
-                .await
-            })
+            Box::pin(async move { commit_receipt_snapshot(&db, &rbac, request, executor).await })
         })
         .await
+}
+
+/// 首次提交和幂等重放在同一快照完成，回包前重新取得提交资格。
+async fn commit_receipt_snapshot(
+    db: &Database,
+    rbac: &FinancePostingPorts,
+    request: CommitTransactionRequest,
+    executor: &mut dyn Executor,
+) -> Result<CustomerReceiptView> {
+    let replay = ReceiptCommitRecovery { db, authorization: &rbac.authorization, actor: &request.actor };
+    if let Some(view) = replay_receipt_command(&replay, &request.command_receipt, None, executor).await? {
+        return Ok(view);
+    }
+    let actor = request.actor.clone();
+    let receipt = persist_receipt_commit(db, rbac, request, executor).await?;
+    receipt_command_result(
+        db,
+        &rbac.authorization,
+        &actor,
+        &receipt.base.id,
+        &receivable::CUSTOMER_RECEIPT_SUBMIT,
+        AccessTarget::record(&receipt.base.id)?,
+        executor,
+    )
+    .await
+}
+
+/// 仅首次提交准备候选并落盘启动事实，重放不进入该步骤。
+async fn persist_receipt_commit(
+    db: &Database,
+    rbac: &FinancePostingPorts,
+    request: CommitTransactionRequest,
+    executor: &mut dyn Executor,
+) -> Result<CustomerReceipt> {
+    let context = receipt_command_context(&request.command_receipt, &request.actor)?;
+    let (receipt, binding) = load_commit_receipt(db, rbac, request.pending, &request.actor, executor).await?;
+    persist_loaded_commit_start(
+        db,
+        rbac,
+        LoadedCommitStart {
+            resubmission_reason: request.resubmission_reason,
+            receipt,
+            binding,
+            allocations: request.allocations,
+            idempotency_key: request.idempotency_key,
+            owner_role: request.owner_role,
+            actor: request.actor,
+        },
+        &request.command_receipt,
+        &context,
+        executor,
+    )
+    .await
 }
 
 /// 在审批运行时持有的事务内过账客户回款并写入核销事实。
@@ -270,7 +290,7 @@ pub async fn reject_customer_receipt_approval_apply(
 /// * `actor` - 提交人
 ///
 /// # 返回
-/// 回款单、绑定与审计在同一事务提交成功时无返回值。
+/// 回款单、绑定、审计及结果视图在同一事务完成后返回。
 ///
 /// # 错误
 /// 责任组织无效、单据或审计构造失败、无发布定义、人员重验失败或事务写入失败时返回错误。
@@ -279,7 +299,7 @@ pub(super) async fn persist_created_customer_receipt(
     rbac: &FinancePostingPorts,
     receipt: CustomerReceipt,
     actor: AuditActor,
-) -> Result<()> {
+) -> Result<CustomerReceiptView> {
     let organization_id = customer_receipt_responsible_org_id(&receipt)?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::CustomerReceipt,
@@ -299,6 +319,9 @@ pub(super) async fn persist_created_customer_receipt(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.authorization
+                    .require(&actor, &receivable::CUSTOMER_RECEIPT_CREATE, AccessTarget::Operation, executor)
+                    .await?;
                 persist_bound_customer_receipt_document(
                     &db,
                     &rbac,
@@ -310,7 +333,16 @@ pub(super) async fn persist_created_customer_receipt(
                 .await?;
                 db.customer_receipts().create(&receipt, executor).await?;
                 persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
+                receipt_command_result(
+                    &db,
+                    &rbac.authorization,
+                    &actor,
+                    &receipt.base.id,
+                    &receivable::CUSTOMER_RECEIPT_CREATE,
+                    AccessTarget::Operation,
+                    executor,
+                )
+                .await
             })
         })
         .await
@@ -534,7 +566,7 @@ pub(super) async fn load_commit_receipt(
             let version =
                 expected_version.ok_or_else(|| Error::ValidationError("已有回款缺少期望版本".to_string()))?;
             let (receipt, binding) = load_existing_commit_records(db, receipt_id, version, executor).await?;
-            super::receipt_access::require_receipt_owner(db, &rbac.identity, actor, receipt_id, executor)
+            super::receipt_access::require_receipt_owner(&rbac.authorization, actor, receipt_id, executor)
                 .await?;
             receipt.ensure_draft_editable()?;
             Ok((receipt, binding))
@@ -635,7 +667,8 @@ async fn load_receipt_start_graph(
     )
     .await?;
     let graph =
-        resolve_start_approvers(db, &rbac.identity, graph, actor.id(), existing.as_ref(), executor).await?;
+        resolve_start_approvers(db, &rbac.authorization, graph, actor.id(), existing.as_ref(), executor)
+            .await?;
     Ok((graph, subject, existing))
 }
 
@@ -649,34 +682,6 @@ fn receipt_start_metadata(
     let organization_id = customer_receipt_responsible_org_id(receipt)?;
     let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
     Ok((snapshot, organization_id))
-}
-
-/// 事务内命中财务回执时只回读原单，禁止创建候选或启动审批。
-struct MongoReceiptCommitReplay<'a> {
-    db: &'a Database,
-}
-
-#[async_trait]
-impl ReceiptReplayPort for MongoReceiptCommitReplay<'_> {
-    type Output = CustomerReceipt;
-
-    async fn committed_resource_id(
-        &self,
-        command: &CommandReceipt,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<String>> {
-        Ok(FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(command, executor)
-            .await?)
-    }
-
-    async fn current_result(&self, id: &str, executor: &mut dyn Executor) -> Result<CustomerReceipt> {
-        self.db
-            .customer_receipts()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))
-    }
 }
 
 /// 由绑定与快照装配分发路径的统一启动输入。
@@ -714,7 +719,7 @@ pub(super) async fn prepare_dispatch_start(
     let existing_receipt = load_start_receipt(db, subject, subject_version, idempotency_key).await?;
     let graph = resolve_start_approvers(
         db,
-        &rbac.identity,
+        &rbac.authorization,
         graph,
         actor_id,
         existing_receipt.as_ref(),

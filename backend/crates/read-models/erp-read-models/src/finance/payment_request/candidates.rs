@@ -1,6 +1,7 @@
 //! 申请候选读取显式正式来源和余额，不预填供应商总付款金额。
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
@@ -12,10 +13,12 @@ use erp_finance::repository::prelude::*;
 use erp_finance::repository::supplier_deposit_query::eligible_accounts;
 use erp_party::repository::prelude::*;
 use erp_party::{PartyBankAccountView, PartyExt};
+use erp_permissions::internal;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevision, PurchaseOrderStatus};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
+use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_sales::repository::SalesOrderExt;
 use erp_supplier::SupplierExt;
 use persistence_core::{Executor, Transactional};
@@ -60,7 +63,8 @@ impl PurchasePaymentRequestReadService {
         supplier_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<PurchasePaymentRequestCandidate>> {
-        let scope = self.source_scope(actor, "create", executor).await?;
+        let access = Arc::new(self.rbac.query(actor, &internal::PAYMENT_REQUEST_CANDIDATES, executor).await?);
+        let scope = PurchaseReadScope::from_compiled(access, self.rbac.clone());
         let filter = PurchaseOrderFilter {
             supplier_id: supplier_id.map(SupplierAccountId::new),
             ..Default::default()
@@ -105,6 +109,7 @@ impl PurchasePaymentRequestReadService {
             }
             result.push(self.candidate_view(&order, &revision, account, executor).await?);
         }
+        scope.validate(executor).await?;
         Ok(result)
     }
 

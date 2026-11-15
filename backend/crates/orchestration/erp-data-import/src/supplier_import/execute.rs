@@ -11,7 +11,7 @@ use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult};
 use erp_supplier::dto::import_job::SupplierImportJobRequest;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt, ItemStatus, JobStatus};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 
 use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
 use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, import_budget};
@@ -35,7 +35,11 @@ impl SupplierImportProcess {
         let jobs = self
             .db
             .background_jobs()
-            .list_open_by_domain_job_type(SUPPLIER_IMPORT_DOMAIN, IMPORT_JOBS_PER_POLL, &mut NoTransaction)
+            .list_open_by_domain_job_type(
+                SUPPLIER_IMPORT_DOMAIN,
+                IMPORT_JOBS_PER_POLL,
+                &mut ReadExecutor::default(),
+            )
             .await?;
         self.sources.retain_jobs(&jobs).await;
         let count = jobs.len();
@@ -59,12 +63,12 @@ impl SupplierImportProcess {
             job.start(Instant::now())?;
         }
         job.last_progress_at = Some(Instant::now());
-        self.db.background_jobs().update(job, &mut NoTransaction).await?;
+        self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         let request = match self.execution_source(job).await {
             Ok(request) => request,
             _ => {
                 job.mark_failed(Some("导入源文件读取失败，请使用原文件重新提交核对".into()), Instant::now())?;
-                self.db.background_jobs().update(job, &mut NoTransaction).await?;
+                self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
                 return Ok(());
             },
         };
@@ -95,7 +99,7 @@ impl SupplierImportProcess {
         let items = self
             .db
             .background_job_items()
-            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
+            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut ReadExecutor::default())
             .await?;
         let service = self.profile.clone();
         let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
@@ -108,14 +112,14 @@ impl SupplierImportProcess {
         let current = self
             .db
             .background_jobs()
-            .find_by_id(&job.base.id, &mut NoTransaction)
+            .find_by_id(&job.base.id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
         if current.base.version != job.base.version || current.finished_at.is_some() {
             return Ok(false);
         }
         job.last_progress_at = Some(Instant::now());
-        self.db.background_jobs().update(job, &mut NoTransaction).await?;
+        self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         Ok(true)
     }
 

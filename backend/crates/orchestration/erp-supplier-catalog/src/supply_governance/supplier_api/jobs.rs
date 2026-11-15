@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use erp_core::ids::BackgroundJobId;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierCommandOutcome, SupplierConnectionAction, SupplierHealthCheckType,
@@ -7,6 +8,7 @@ use erp_supply::entity::supplier_api::{
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
+use erp_supply::service::supplier_api::context::action_permission;
 use erp_support::{BackgroundJob, BulkJobExt, SupplierGovernanceJobKind, SupplierGovernanceJobSpec};
 use id_generator::next_id;
 use mongodb::Database;
@@ -40,13 +42,13 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
         let deployment = self.deployment(id).await?;
-        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let (db, actor, connection_id_value) = (self.db.clone(), actor.clone(), id.to_string());
         let client = db.client().clone();
-        let actor = actor.clone();
-        let connection_id_value = id.to_string();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    require_job(&authorization, &actor, &identity, executor).await?;
                     let domain = SupplierApiService::new(db.clone());
                     let (mut connection, capabilities) = domain
                         .prepare_job_target(
@@ -110,15 +112,15 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
         let deployment = self.deployment(id).await?;
-        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let (db, actor, connection_id_value) = (self.db.clone(), actor.clone(), id.to_string());
         let client = db.client().clone();
-        let actor = actor.clone();
-        let connection_id_value = id.to_string();
         let gateway =
             self.gateway.clone().ok_or_else(|| Error::BusinessLogicError("目录网关未配置".into()))?;
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    require_job(&authorization, &actor, &identity, executor).await?;
                     let domain = SupplierApiService::new(db.clone());
                     let (mut connection, _capabilities) = domain
                         .prepare_job_target(
@@ -160,6 +162,19 @@ impl SupplierApiGovernanceProcess {
             })
             .await
     }
+}
+
+/// 在创建任何后台任务事实前核对该精确命令对应的固定入口。
+async fn require_job(
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    identity: &CommandIdentity,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    authorization
+        .require(actor, &action_permission(identity.action), AccessTarget::Operation, executor)
+        .await?;
+    Ok(())
 }
 
 /// 复用连接任务身份生成，任务和回执由调用方统一保存。

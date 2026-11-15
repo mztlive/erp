@@ -7,6 +7,9 @@ use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
+use erp_identity::AccessTarget;
+use erp_identity::entity::authorization::{FactValue, ObjectFacts, RelatedObjects, RelationKey};
+use erp_permissions::receivable;
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_workflow::service::approval::execution::{PreparedExecution, command_recovery_delay};
 use erp_workflow::service::document_registry::find_approval_binding;
@@ -18,6 +21,7 @@ use super::adapter::{
     self, build_customer_receipt_snapshot, customer_receipt_object_readable,
     customer_receipt_responsible_org_id, customer_receipt_subject_ref, require_frozen_binding,
 };
+use super::customer_receipt::receipt_command_result;
 use super::customer_receipt_command::{
     MongoReceiptCommandWrites, ReceiptReplayPort, ensure_committed_resource, persist_receipt_command_success,
     receipt_command_context, replay_receipt_command,
@@ -233,7 +237,7 @@ async fn recover_authorized_submit<P: ReceiptSubmitRecoveryPort>(
 /// * `command` - 原提交命令回执。
 ///
 /// # 返回
-/// 返回已提交的原回款单；同载荷已提交时回读该原单。
+/// 返回原事务内重验提交资格并读取的视图；同载荷已提交时回读原单。
 ///
 /// # 错误
 /// 资格不足、原单不存在、版本变化、历史启动缺少完整收据或事务写入失败时返回错误。
@@ -242,7 +246,7 @@ pub(super) async fn persist_receipt_submit(
     rbac: &FinancePostingPorts,
     input: CustomerReceiptStartPersistInput,
     command: CommandReceipt,
-) -> Result<CustomerReceipt> {
+) -> Result<CustomerReceiptView> {
     let db = db.clone();
     let rbac = rbac.clone();
     db.client()
@@ -250,30 +254,46 @@ pub(super) async fn persist_receipt_submit(
         .with_transaction(move |executor| {
             Box::pin(async move {
                 let current = authorized_receipt(&db, &rbac, &input.actor, &input.id, executor).await?;
-                if committed_submit(&db, &command, &input.id, executor).await? {
-                    return Ok(current);
-                }
-                if !matches!(&input.prepared, PreparedExecution::Apply(_)) {
-                    return Err(Error::ConflictError(
-                        "历史回款启动缺少完整提交收据，不能确认本次载荷".into(),
-                    ));
-                }
-                current.ensure_draft_editable()?;
-                ensure_expected_version(current.base.version, input.receipt.base.version)?;
-                let context = receipt_command_context(&command, &input.actor)?;
-                let receipt = persist_customer_receipt_start_apply(&db, &rbac, input, executor).await?;
-                persist_receipt_command_success(
-                    &MongoReceiptCommandWrites { db: &db },
-                    &command,
-                    &context,
-                    &receipt,
+                let actor = input.actor.clone();
+                let receipt = if committed_submit(&db, &command, &input.id, executor).await? {
+                    current
+                } else {
+                    apply_receipt_submit(&db, &rbac, input, &command, current, executor).await?
+                };
+                receipt_command_result(
+                    &db,
+                    &rbac.authorization,
+                    &actor,
+                    &receipt.base.id,
+                    &receivable::CUSTOMER_RECEIPT_SUBMIT,
+                    AccessTarget::record(&receipt.base.id)?,
                     executor,
                 )
-                .await?;
-                Ok(receipt)
+                .await
             })
         })
         .await
+}
+
+/// 首次提交保留原状态、版本、完整收据及审计写入顺序。
+async fn apply_receipt_submit(
+    db: &Database,
+    rbac: &FinancePostingPorts,
+    input: CustomerReceiptStartPersistInput,
+    command: &CommandReceipt,
+    current: CustomerReceipt,
+    executor: &mut dyn Executor,
+) -> Result<CustomerReceipt> {
+    if !matches!(&input.prepared, PreparedExecution::Apply(_)) {
+        return Err(Error::ConflictError("历史回款启动缺少完整提交收据，不能确认本次载荷".into()));
+    }
+    current.ensure_draft_editable()?;
+    ensure_expected_version(current.base.version, input.receipt.base.version)?;
+    let context = receipt_command_context(command, &input.actor)?;
+    let receipt = persist_customer_receipt_start_apply(db, rbac, input, executor).await?;
+    persist_receipt_command_success(&MongoReceiptCommandWrites { db }, command, &context, &receipt, executor)
+        .await?;
+    Ok(receipt)
 }
 
 /// 资格和原登记人事实必须在当前执行器内重新取得，不能沿用缓存授权。
@@ -384,7 +404,24 @@ pub(super) async fn require_allocation_sources(
             .ok_or_else(|| Error::NotFound("核销来源子账不存在".into()))?;
         sources.push(account.sales_order_id.to_string());
     }
-    rbac.funds.require_sales_sources(actor, "customer_receipt:submit", &sources, executor).await?;
+    let candidate = ObjectFacts {
+        resource: "customer_receipt".into(),
+        owner_id: FactValue::Known(Some(receipt.created_by.clone())),
+        relations: [(
+            RelationKey::parse("sales_source")?,
+            RelatedObjects { expected_ids: sources.into_iter().collect(), objects: vec![] },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    rbac.authorization
+        .require(
+            actor,
+            &receivable::CUSTOMER_RECEIPT_SUBMIT,
+            AccessTarget::OwnershipChange { id: receipt.base.id.to_string(), candidate },
+            executor,
+        )
+        .await?;
     Ok(())
 }
 

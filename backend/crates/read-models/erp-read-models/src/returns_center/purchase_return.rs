@@ -152,6 +152,7 @@ impl ReturnsReadService {
                             .await?;
                         views.push(purchase_return_row_view(row, lines));
                     }
+                    scope.validate(executor).await?;
                     Ok(PurchaseReturnListView {
                         page: PageView {
                             items: views,
@@ -200,7 +201,9 @@ impl ReturnsReadService {
                 Box::pin(async move {
                     let (context, scope, filter) = list_query(&access, &params, &actor, executor).await?;
                     let versions = authorized_returns::versions(&db, &filter, &scope, executor).await?;
-                    list_scope_version(&context.scope_version, &versions)
+                    let version = list_scope_version(&context.scope_version, &versions)?;
+                    scope.validate(executor).await?;
+                    Ok(version)
                 })
             })
             .await
@@ -248,6 +251,7 @@ impl ReturnsReadService {
                     let view = purchase_return_order_view(&db, order.base.id.clone(), executor).await?;
                     let version =
                         format!("{}:{}:{}", context.scope_version, source.base.id, source.base.version);
+                    scope.validate(executor).await?;
                     Ok((view, version))
                 })
             })

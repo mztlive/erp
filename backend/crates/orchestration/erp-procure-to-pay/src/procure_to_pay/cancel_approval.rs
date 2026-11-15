@@ -1,6 +1,6 @@
 //! 采购单撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use application_core::AuditActor;
 use async_trait::async_trait;
@@ -24,12 +24,11 @@ use erp_workflow::service::approval::execution::{
     PreparedExecution, claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason,
     prepare_document_cancel, replay_committed_document_cancel,
 };
-use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::find_approval_binding;
 use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::PurchaseOrderProcess;
@@ -37,7 +36,8 @@ use super::adapter::{
     execute_purchase_order_domain_action, purchase_order_adapter, purchase_order_subject_ref,
     require_frozen_binding,
 };
-use super::start_approval::load_bound_definition_graph;
+use super::authorization::PurchaseCommandAccess;
+use super::start_approval::load_bound_definition_graph_with_executor;
 use crate::procure_to_pay::PurchaseOrderPorts;
 use crate::{Error, Result};
 
@@ -66,7 +66,50 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         req.validate()?;
-        let mut order = self.command_access(actor, "cancel_approval").current(id, &mut NoTransaction).await?;
+        let process = self.clone();
+        let request = req;
+        let actor_owned = actor.clone();
+        let id_owned = id.to_string();
+        let command_cell = Arc::new(OnceLock::new());
+        let transaction_command = command_cell.clone();
+        let outcome = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process
+                        .cancel_request(&id_owned, &request, &actor_owned, &transaction_command, executor)
+                        .await
+                })
+            })
+            .await;
+        match outcome {
+            Err(error) if error.command_may_have_committed() => match command_cell.get() {
+                Some(command) => {
+                    recover_purchase_order_cancel(
+                        &self.db,
+                        command,
+                        self.command_access(actor, "cancel_approval"),
+                        error,
+                    )
+                    .await
+                },
+                None => Err(error),
+            },
+            other => other,
+        }
+    }
+
+    async fn cancel_request(
+        &self,
+        id: &str,
+        req: &CancelPurchaseOrderApprovalRequest,
+        actor: &AuditActor,
+        command_cell: &OnceLock<DocumentCancelCommand>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let access = self.command_access(actor, "cancel_approval");
+        let mut order = access.current(id, executor).await?;
         let subject = purchase_order_subject_ref(id)?;
         let command = DocumentCancelCommand::new(
             subject.clone(),
@@ -76,12 +119,14 @@ impl PurchaseOrderProcess {
             actor.id(),
             &req.idempotency_key,
         )?;
-        if replay_purchase_order_cancel(&self.db, &command).await?.is_some() {
+        command_cell.set(command.clone()).map_err(|_| Error::Internal("撤回命令身份只能冻结一次".into()))?;
+        if replay_committed_document_cancel(&self.db, &command, executor).await?.is_some() {
             return Ok(());
         }
         self.domain().ensure_version(&order, req.expected_lock_version)?;
         let adapter = purchase_order_adapter()?;
-        let (prepared, open_tasks, now) = self.prepare_user_cancel(&order, &subject, &command, actor).await?;
+        let (prepared, open_tasks, now) =
+            self.prepare_user_cancel(&order, &subject, &command, actor, executor).await?;
         let submission_id = order.current_submission_id.clone().unwrap_or_default();
         execute_purchase_order_domain_action(
             &mut order,
@@ -89,7 +134,6 @@ impl PurchaseOrderProcess {
             submission_id.as_str(),
             actor.id(),
         )?;
-        let _ = ApprovalDomainAction::PurchaseOrderCancelApproval;
         let audit =
             actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
         let input = PurchaseOrderCancelPersistInput {
@@ -101,15 +145,9 @@ impl PurchaseOrderProcess {
             reason: command.reason().to_string(),
             now,
             audit,
-            object_scope: Some(self.command_access(actor, "cancel_approval")),
+            object_scope: None,
         };
-        match persist_purchase_order_cancel(&self.db, input).await {
-            Ok(()) => Ok(()),
-            Err(error) if error.command_may_have_committed() => {
-                recover_purchase_order_cancel(&self.db, &command, error).await
-            },
-            Err(error) => Err(error),
-        }
+        apply_purchase_order_cancel(&self.db, input, executor).await
     }
 }
 
@@ -133,19 +171,14 @@ impl PurchaseOrderProcess {
         subject: &bpm::SubjectRef,
         command: &DocumentCancelCommand,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(PreparedExecution, Vec<WorkItem>, Instant)> {
-        let binding = find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
-            .await
-            .map_err(crate::Error::from)?;
+        let binding =
+            find_approval_binding(&self.db, &order.base.id, executor).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let runtime = load_cancel_runtime(
-            &self.db,
-            &binding,
-            subject,
-            order.approval_subject_version,
-            &mut NoTransaction,
-        )
-        .await?;
+        let runtime =
+            load_cancel_runtime(&self.db, &binding, subject, order.approval_subject_version, executor)
+                .await?;
         let now = Instant::now();
         let input = build_purchase_order_cancel_input(
             &runtime,
@@ -164,6 +197,7 @@ impl PurchaseOrderProcess {
 async fn replay_purchase_order_cancel(
     db: &Database,
     command: &DocumentCancelCommand,
+    access: PurchaseCommandAccess,
 ) -> Result<Option<DocumentCancelReplayProof>> {
     let db = db.clone();
     let command = command.clone();
@@ -171,7 +205,11 @@ async fn replay_purchase_order_cancel(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
-                replay_committed_document_cancel(&db, &command, executor).await.map_err(Error::from)
+                let replay = replay_committed_document_cancel(&db, &command, executor).await?;
+                if replay.is_some() {
+                    access.current(command.subject().subject_id(), executor).await?;
+                }
+                Ok(replay)
             })
         })
         .await
@@ -181,9 +219,11 @@ async fn replay_purchase_order_cancel(
 async fn recover_purchase_order_cancel(
     db: &Database,
     command: &DocumentCancelCommand,
+    access: PurchaseCommandAccess,
     original_error: Error,
 ) -> Result<()> {
-    recover_approval_command(original_error, || replay_purchase_order_cancel(db, command)).await?;
+    recover_approval_command(original_error, || replay_purchase_order_cancel(db, command, access.clone()))
+        .await?;
     Ok(())
 }
 
@@ -247,7 +287,7 @@ pub(super) async fn load_cancel_runtime(
     })
     .map_err(map_cancel_plan_error)?;
     Ok(LoadedCancelRuntime {
-        graph: load_bound_definition_graph(db, binding).await?,
+        graph: load_bound_definition_graph_with_executor(db, binding, executor).await?,
         instance,
         current,
         plan,
@@ -384,9 +424,10 @@ pub(super) struct PurchaseOrderCancelPersistInput {
 /// # 关键业务约束
 /// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 /// 写事务必须重验采购对象范围，历史参与不授予撤回。
-pub(super) async fn persist_purchase_order_cancel(
+async fn apply_purchase_order_cancel(
     db: &Database,
     input: PurchaseOrderCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let PurchaseOrderCancelPersistInput {
         ports,
@@ -403,30 +444,22 @@ pub(super) async fn persist_purchase_order_cancel(
         return Ok(());
     };
     let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                if let Some(scope) = &object_scope {
-                    scope.current(&order.base.id, executor).await?;
-                }
-                execute_cancel_steps(
-                    &mut CancelPosting {
-                        actor_id: &actor_id,
-                        approval: ports.approval.as_ref(),
-                        db: &db,
-                        writes: &writes,
-                        closed_tasks: &closed_tasks,
-                        order: &mut order,
-                        audit: &audit,
-                    },
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+    if let Some(scope) = &object_scope {
+        scope.current(&order.base.id, executor).await?;
+    }
+    execute_cancel_steps(
+        &mut CancelPosting {
+            actor_id: &actor_id,
+            approval: ports.approval.as_ref(),
+            db,
+            writes: &writes,
+            closed_tasks: &closed_tasks,
+            order: &mut order,
+            audit: &audit,
+        },
+        executor,
+    )
+    .await
 }
 
 /// 审批撤回的既有写序：运行事实及任务、采购单 CAS、审计。
@@ -679,15 +712,7 @@ mod tests {
         ));
     }
     /// 非零大小执行器用于核验传入生产步骤的实例身份。
-    struct TestExecutor {
-        _identity: u8,
-    }
-
-    impl persistence_core::Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use persistence_core::ReadExecutor as TestExecutor;
 
     struct RecordingSteps {
         expected_executor: usize,
@@ -718,7 +743,7 @@ mod tests {
     #[tokio::test]
     async fn cancel_posting_keeps_original_order_and_executor() {
         use super::CancelStep::*;
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = RecordingSteps {
             expected_executor: &mut executor as *mut TestExecutor as usize,
             seen: vec![],
@@ -734,7 +759,7 @@ mod tests {
         use super::CancelStep::*;
         let expected = [Runtime, Order, Audit];
         for (index, step) in expected.iter().copied().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
                 expected_executor: &mut executor as *mut TestExecutor as usize,
                 seen: vec![],

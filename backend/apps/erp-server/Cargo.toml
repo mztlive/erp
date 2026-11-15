@@ -108,5 +108,6 @@ syn = { workspace = true, features = ["full", "visit"] }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+persistence-core = { workspace = true, features = ["test-support"] }
 syn = { workspace = true, features = ["full", "visit"] }
 test-support = { workspace = true }

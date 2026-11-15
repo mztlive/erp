@@ -2,7 +2,7 @@
 
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::Executor;
+use persistence_core::{Executor, mongo_ops};
 
 use super::PartyExt;
 use super::exact_identity::{ContractIdentityCandidate, contract_identity_candidates};
@@ -40,13 +40,17 @@ pub async fn lock_name(db: &Database, name: &str, executor: &mut dyn Executor) -
     if name.is_empty() {
         return Err(Error::ValidationError("法定名称不能为空".into()));
     }
-    let session = executor.session().ok_or_else(|| Error::Internal("主体身份校验必须位于写事务".into()))?;
-    db.collection::<Document>(<Database as PartyExt>::PARTY_IDENTITY_GUARDS)
-        .update_one(doc! { "_id": name }, doc! { "$inc": { "generation": 1_i64 } })
-        .upsert(true)
-        .session(session)
-        .await
-        .map_err(persistence_core::Error::from)?;
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::Internal("主体身份校验必须位于写事务".into()));
+    }
+    mongo_ops::update_one(
+        &db.collection::<Document>(<Database as PartyExt>::PARTY_IDENTITY_GUARDS),
+        doc! {"_id": name},
+        doc! {"$inc": {"generation": 1_i64}},
+        true,
+        executor,
+    )
+    .await?;
     Ok(())
 }
 

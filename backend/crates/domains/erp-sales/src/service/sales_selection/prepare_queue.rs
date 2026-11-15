@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPrepareTaskId};
+use erp_permissions::sales_selection;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::{IdempotencyStoreInput, SalesSelectionService};
@@ -56,7 +57,9 @@ impl SalesSelectionService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.authorize_booklet(&req.booklet_id, "prepare", executor).await?;
+                    service
+                        .authorize_booklet(&req.booklet_id, &sales_selection::BOOKLET_PREPARE, executor)
+                        .await?;
                     service.enqueue_prepare(req, &actor, executor).await
                 })
             })

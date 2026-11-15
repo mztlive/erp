@@ -1,11 +1,12 @@
 //! 销售单附加费用列表：财务登记费用与采购费用行（§7.5.1）。
 //!
-//! 读取前在独立事务中证明操作人可查看该销售单；成本读取权限由路由
-//! `cost_entry:list` 校验。附加费用只按销售单归属读取，不按供应商成本推导。
+//! 在同一事务证明成本列表资格和销售单详情范围，读取全部费用后完成交付复验。
+//! 附加费用只按销售单归属读取，不按供应商成本推导。
 //! 采购费用行取每张非作废采购单的当前生效版本：已确认发生的按确认事实展示，
 //! 其余金额为正的费用行为待发生。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::ids::PurchaseOrderRevisionId;
@@ -16,7 +17,8 @@ use erp_finance::dto::extra_cost::{
 use erp_finance::entity::cost::{CostAllocation, CostEntry, ExtraCostCategory, business_day_start};
 use erp_finance::repository::CostExt;
 use erp_finance::repository::cost::{CostAllocationProfitLossExt, CostEntryProfitLossExt};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::internal;
 use erp_procurement::entity::purchase_order::{
     PurchaseExpenseCategory, PurchaseExpenseOccurrence, PurchaseLineType, PurchaseOrder,
     PurchaseOrderRevisionLine,
@@ -24,16 +26,18 @@ use erp_procurement::entity::purchase_order::{
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_procurement::repository::purchase_expense::{formal_orders_by_sales_orders, occurrences_by_orders};
+use erp_sales::repository::sales_order::scope::SalesReadScope;
+use erp_sales::repository::{SalesOrderExt, SalesOrderRepositoryScopeExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 
-use crate::Result;
-use crate::sales_center::access::SalesAccess;
+use crate::{Error, Result};
 
 /// 销售单附加费用读取服务。
+#[derive(Clone)]
 pub struct SalesExtraCostReadModel {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl SalesExtraCostReadModel {
@@ -48,7 +52,7 @@ impl SalesExtraCostReadModel {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -56,20 +60,46 @@ impl SalesExtraCostReadModel {
     ///
     /// # 参数
     /// * `sales_order_id` - 销售单
-    /// * `actor` - 已通过 `cost_entry:list` 鉴权的操作人
+    /// * `actor` - 当前身份；本用例验证成本列表资格和销售详情授权。
     ///
     /// # 返回
     /// 返回按发生时间排序的附加费用及待发生、已发生合计。
     ///
     /// # 错误
-    /// 销售单不存在或不可见时返回 `NotFound`；仓储读取失败时返回对应错误。
+    /// 成本资格缺失时拒绝；销售单不存在或不可见时返回 `NotFound`；读取或交付失败原样返回。
     pub async fn list(&self, sales_order_id: &str, actor: &AuditActor) -> Result<SalesExtraCostListView> {
-        SalesAccess::new(self.db.clone(), self.rbac.clone()).detail(actor, sales_order_id).await?;
-        let (entries, allocations) = order_costs(&self.db, sales_order_id, &mut NoTransaction).await?;
+        let this = self.clone();
+        let actor = actor.clone();
+        let sales_order_id = sales_order_id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.read(&sales_order_id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 以本次快照完成固定入口授权、费用读取和最终结果交付检查。
+    async fn read(
+        &self,
+        sales_order_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesExtraCostListView> {
+        let access =
+            Arc::new(self.rbac.query(actor, &internal::SALES_ORDER_EXTRA_COST_READ, executor).await?);
+        let scope = SalesReadScope::from_compiled(access.clone(), self.rbac.clone());
+        self.db
+            .sales_orders()
+            .find_authorized(sales_order_id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单不存在或无权查看附加费用".into()))?;
+        let (entries, allocations) = order_costs(&self.db, sales_order_id, executor).await?;
         let mut items = SalesExtraCostView::registrations(&entries, &allocations);
-        let facts =
-            purchase_expense_facts(&self.db, &[sales_order_id.to_string()], &mut NoTransaction).await?;
+        let facts = purchase_expense_facts(&self.db, &[sales_order_id.to_string()], executor).await?;
         items.extend(purchase_expense_views(&facts));
+        self.rbac.validate(&access, executor).await?;
         Ok(SalesExtraCostListView::from_items(items))
     }
 }

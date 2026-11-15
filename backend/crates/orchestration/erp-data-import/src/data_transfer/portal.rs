@@ -2,18 +2,13 @@ use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::{PortalActor, PortalIdentityService};
 use erp_supplier_catalog::supplier_portal::PortalBatchInput;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, ReadExecutor};
 use serde_json::Value;
 
 use super::BusinessTransfers;
 use super::imports::{decode, required};
 use crate::{Error, Result};
 impl BusinessTransfers {
-    pub(super) async fn portal_context_access(&self, input: &Value, actor: &AuditActor) -> Result<()> {
-        self.portal_actor(input, actor).await?.require_write()?;
-        Ok(())
-    }
-
     pub(super) async fn portal_recover(&self, input: &Value, actor: &AuditActor) -> Result<Value> {
         let portal = self.portal_actor(input, actor).await?;
         portal.require_write()?;
@@ -25,6 +20,22 @@ impl BusinessTransfers {
     }
 
     async fn portal_actor(&self, input: &Value, actor: &AuditActor) -> Result<PortalActor> {
+        self.portal_actor_with(input, actor, &mut ReadExecutor::default()).await
+    }
+
+    /// 门户会话按原提交事务取证，不把事务外身份检查当作登记资格。
+    /// # 参数
+    /// input 含服务器冻结的会话版本，actor 为原身份，executor 为当前业务执行器。
+    /// # 返回
+    /// 当前有效的门户身份。
+    /// # 错误
+    /// 非门户身份、会话版本无效或取证失败时拒绝。
+    pub(super) async fn portal_actor_with(
+        &self,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PortalActor> {
         if actor.kind() != AccountKind::Supplier {
             return Err(Error::Forbidden("此任务仅供供应商门户使用".into()));
         }
@@ -40,7 +51,7 @@ impl BusinessTransfers {
                 required(&input["session"], "account")?,
                 account_version,
                 binding_version,
-                &mut NoTransaction,
+                executor,
             )
             .await
             .map_err(Into::into)

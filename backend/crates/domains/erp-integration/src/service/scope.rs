@@ -3,6 +3,7 @@
 use application_core::{EmptyScopeVersion, ScopeVersion};
 use erp_core::common::time::Instant;
 use erp_identity::CompiledAccess;
+use erp_permissions::Permission;
 
 use crate::error::{Error, Result};
 
@@ -105,7 +106,7 @@ pub struct ResolvedListScope {
 /// # 参数
 /// * `access` - 当前列表访问器
 /// * `actor` - 已认证操作人
-/// * `resource` - `integration_error_task` 或 `reconciliation_difference`
+/// * `permission` - 两类列表入口的内置权限
 /// * `org_unit_ids` - 请求组织筛选；空表示不按组织收窄
 /// * `include_descendants` - 是否包含有效下级
 /// * `scope_version` - 客户端回传的范围版本；第一页可空
@@ -119,13 +120,13 @@ pub struct ResolvedListScope {
 pub async fn resolve_list_scope(
     access: &super::IntegrationAccess,
     actor: &application_core::AuditActor,
-    resource: &str,
+    permission: &Permission,
     org_unit_ids: &[String],
     include_descendants: bool,
     scope_version: Option<&str>,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ResolvedListScope> {
-    let read_scope = access.resolve(actor, resource, "list", executor).await?;
+    let read_scope = access.resolve(actor, permission, executor).await?;
     let owner_org_unit_ids = expand_org_filter(access, org_unit_ids, include_descendants, executor).await?;
     let meta = ScopedIntegrationList::from_access(&read_scope);
     ensure_scope_version(scope_version, &meta.scope_version)?;

@@ -14,7 +14,7 @@ use erp_support::{
     product_import_job_no,
 };
 use id_generator::next_id;
-use persistence_core::{Error as PersistenceError, NoTransaction, Transactional};
+use persistence_core::{Error as PersistenceError, ReadExecutor, Transactional};
 
 use super::ProductImportProcess;
 use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
@@ -168,7 +168,7 @@ impl ProductImportProcess {
         let existing = self
             .db
             .background_jobs()
-            .find_by_request_id(request_id, &mut NoTransaction)
+            .find_by_request_id(request_id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::ConflictError("导入任务唯一竞争结果已变化，请刷新后重试".into()))?;
         Ok(job_view(&existing, None))

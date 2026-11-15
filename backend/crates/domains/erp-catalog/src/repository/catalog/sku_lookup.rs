@@ -463,28 +463,20 @@ impl CatalogRepository<'_> {
         let mut name_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut name_filter, "name", Some(keyword));
         let revisions = self.db.collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCT_REVISIONS);
-        let mut query = revisions.distinct("id", name_filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        let revision_ids = query.await?;
+        let revision_ids = mongo_ops::distinct(&revisions, "id", name_filter, executor).await?;
         let mut number = Document::new();
         insert_literal_regex_filter(&mut number, "product_no", Some(keyword));
         let products = self.db.collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCTS);
-        let mut query = products.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": [number, doc! { "current_revision_id": { "$in": revision_ids } }] });
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        let product_ids = query.await?;
+        let product_ids = mongo_ops::distinct(&products, "id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": [number, doc! { "current_revision_id": { "$in": revision_ids } }] }, executor).await?;
         let skus = self.db.collection::<Document>(SKUS);
-        let mut query = skus.distinct(
+        let values = mongo_ops::distinct(
+            &skus,
             "id",
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "product_id": { "$in": product_ids } },
-        );
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        ids.extend(query.await?.into_iter().filter_map(|id| match id {
+            executor,
+        )
+        .await?;
+        ids.extend(values.into_iter().filter_map(|id| match id {
             Bson::String(value) => Some(SkuId::new(value)),
             _ => None,
         }));

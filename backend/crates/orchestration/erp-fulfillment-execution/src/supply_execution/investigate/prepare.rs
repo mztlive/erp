@@ -3,6 +3,8 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_permissions::supplier_fulfillment;
+use erp_supply::FulfillmentOrderAccess;
 use erp_supply::dto::supplier_fulfillment::SupplierOrderInvestigationAction;
 use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
 use erp_supply::entity::supplier_fulfillment::{
@@ -32,6 +34,7 @@ struct InvestigationIntent {
     identity: InvestigationIdentity,
     actor: AuditActor,
     workflow: Arc<dyn FulfillmentWorkflow>,
+    access: FulfillmentOrderAccess,
 }
 
 impl SupplierFulfillmentProcess {
@@ -55,7 +58,8 @@ impl SupplierFulfillmentProcess {
             context: context.clone(),
             identity: identity.clone(),
             actor: actor.clone(),
-            workflow: (self.identity)().workflow,
+            workflow: self.identity.workflow.clone(),
+            access: self.data_scope.clone(),
         };
         let db = self.db.clone();
         let client = db.client().clone();
@@ -124,21 +128,13 @@ impl SupplierFulfillmentProcess {
     ) -> Result<PreparedInvestigation> {
         let (order, target_action) = load_investigation_facts(&self.db, context, &mut NoTransaction).await?;
         if let Some(task_context) = &context.task {
-            let work_item = load_investigation_task(
+            load_investigation_task(
                 &self.db,
                 task_context,
                 &order.base.id,
                 order.base.version,
                 actor,
                 None,
-                &mut NoTransaction,
-            )
-            .await?;
-            super::super::task_authorization::require_assignee(
-                &self.db,
-                &(self.identity)().rbac,
-                actor,
-                &work_item,
                 &mut NoTransaction,
             )
             .await?;
@@ -194,6 +190,16 @@ impl InvestigationIntent {
         db: &Database,
         executor: &mut dyn Executor,
     ) -> Result<Option<PreparedInvestigation>> {
+        if self.context.task.is_none() {
+            self.access
+                .require_order(
+                    &self.actor,
+                    &supplier_fulfillment::ORDER_INVESTIGATION,
+                    &self.context.order_id,
+                    executor,
+                )
+                .await?;
+        }
         let (order, target_action) = load_investigation_facts(db, &self.context, executor).await?;
         if let Some(task_context) = &self.context.task {
             load_investigation_task(

@@ -30,6 +30,7 @@ impl PartyService {
             db: self.db.clone(),
             audit: self.audit.clone(),
             supplier_roles: self.supplier_roles.clone(),
+            authorization: self.authorization.clone(),
         };
         let actor = AuditActor::new(ACTOR.into(), ACTOR.into(), AccountKind::Admin);
         let today = BusinessDate::today();

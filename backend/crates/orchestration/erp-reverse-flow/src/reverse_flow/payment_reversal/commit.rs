@@ -6,6 +6,8 @@ use erp_approval_runtime::approver_directory::resolve_approvers;
 use erp_audit::AuditLog;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierPaymentId;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::dto::PaymentReversalView;
 use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::CommitPaymentReversalRequest;
@@ -71,7 +73,14 @@ impl ReturnsProcess {
             .committed_resource_id(&command_receipt, &mut NoTransaction)
             .await?
         {
-            return self.reads().payment_reversal_detail(&id).await.map_err(Error::from);
+            return self
+                .payment_reversal_result(
+                    &id,
+                    actor,
+                    &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+                    AccessTarget::record(&id)?,
+                )
+                .await;
         }
         let input = self.prepare_payment_reversal_commit(&req, actor, &command_receipt).await?;
         let id = input.reversal.base.id.clone();
@@ -91,15 +100,26 @@ impl ReturnsProcess {
         let detail_id = match transaction_result {
             Ok(Some(existing_id)) => existing_id,
             Ok(None) => id,
-            Err(error) => recovered_resource(
-                error,
-                ReturnsCommandReceiptService::new(self.db.clone())
-                    .committed_resource_id(&command_receipt, &mut NoTransaction)
-                    .await
-                    .map_err(Error::from),
-            )?,
+            Err(error) => self.recover_payment_commit(error, &command_receipt).await?,
         };
-        self.reads().payment_reversal_detail(&detail_id).await.map_err(Error::from)
+        self.payment_reversal_result(
+            &detail_id,
+            actor,
+            &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+            AccessTarget::record(&detail_id)?,
+        )
+        .await
+    }
+
+    /// 只读恢复精确命令收据；不能确认提交时保留原错误分类。
+    async fn recover_payment_commit(&self, error: Error, receipt: &CommandReceipt) -> Result<String> {
+        recovered_resource(
+            error,
+            ReturnsCommandReceiptService::new(self.db.clone())
+                .committed_resource_id(receipt, &mut NoTransaction)
+                .await
+                .map_err(Error::from),
+        )
     }
 
     /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。

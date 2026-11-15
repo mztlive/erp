@@ -1,4 +1,4 @@
-//! 采购详情有序读取与纯视图装配；调用方继续负责读取前后的采购授权重验。
+//! 采购详情有序读取与纯视图装配；全部事实沿已授权的原快照读取。
 
 use erp_procurement::dto::purchase_order::{
     PurchaseChangeSummaryView, PurchaseOrderLineView, PurchaseSalesAllocationView, TotalsView,
@@ -11,7 +11,7 @@ use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_warehouse::repository::WarehouseExt;
 use erp_workflow::service::document_registry::find_approval_binding;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::source_update::purchase_source_update_view;
 use super::{center_content_source, owner_display, payment_progress, sales_no_for, supplier_display};
@@ -52,24 +52,29 @@ struct CenterRelations {
 }
 
 impl PurchaseOrderReadService {
-    /// 按原有顺序装配已授权采购对象中心；本方法不替代入口前后的授权重验。
+    /// 按原有顺序装配已授权采购对象中心；交付检查由原读取入口执行。
     ///
     /// # 参数
     /// * `id` - 调用方已经证明采购详情资格的采购单身份。
+    /// * `executor` - 当前查询凭证所属的原事务执行器。
     /// # 返回
     /// 返回原采购事实、可选关联销售投影及审批结构。
     /// # 错误
     /// 采购主表缺失、销售编号或责任关系异常、审批关联或仓储读取失败时拒绝。
-    pub(super) async fn detail_view(&self, id: &str) -> Result<PurchaseOrderCenterView> {
-        let mut facts = load_purchase_order_center_facts(&self.db, id, &mut NoTransaction).await?;
+    pub(super) async fn detail_view(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseOrderCenterView> {
+        let mut facts = load_purchase_order_center_facts(&self.db, id, executor).await?;
         let order = facts.order.take().ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
         let identity = center_identity(&order, &facts)?;
         let mut content = center_content(&facts);
-        attach_inquiry_number(&self.db, &order, &mut content.lines).await?;
+        attach_inquiry_number(&self.db, &order, &mut content.lines, executor).await?;
         let occurrences =
-            occurrences_by_orders(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
+            occurrences_by_orders(&self.db, std::slice::from_ref(&order.base.id), executor).await?;
         PurchaseOrderLineView::attach_occurrences(&mut content.lines, &occurrences);
-        let source = match source_sales(&self.db, &order, &content.lines, &mut NoTransaction).await {
+        let source = match source_sales(&self.db, &order, &content.lines, executor).await {
             Ok(source) => Some(source),
             Err(error) => {
                 tracing::warn!(purchase_order_id = %id, error = %error, "采购关联销售资料暂不可读取");
@@ -77,22 +82,21 @@ impl PurchaseOrderReadService {
             },
         };
         let relations = center_relations(facts);
-        let binding = match find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
-            .await
-            .map_err(Error::from)
-        {
-            Ok(binding) => binding,
-            Err(Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
-        };
+        let binding =
+            match find_approval_binding(&self.db, &order.base.id, executor).await.map_err(Error::from) {
+                Ok(binding) => binding,
+                Err(Error::NotFound(_)) => None,
+                Err(error) => return Err(error),
+            };
         let approval =
-            load_document_approval(&self.db, &order.base.id, binding.as_ref(), order.stable.status).await?;
+            load_document_approval(&self.db, &order.base.id, binding.as_ref(), order.stable.status, executor)
+                .await?;
         let mut view = center_view(&order, identity, content, source, relations, approval);
-        view.target_warehouse_name = target_warehouse_name(&self.db, &order).await?;
-        view.source_update = purchase_source_update_view(&self.db, &order, &mut NoTransaction).await?;
-        view.delivery = delivery_summary(&self.db, &order).await?;
+        view.target_warehouse_name = target_warehouse_name(&self.db, &order, executor).await?;
+        view.source_update = purchase_source_update_view(&self.db, &order, executor).await?;
+        view.delivery = delivery_summary(&self.db, &order, executor).await?;
         let (api_executions, fulfillment_quantities) =
-            super::fulfillment::fulfillment_views(&self.db, &order).await?;
+            super::fulfillment::fulfillment_views(&self.db, &order, executor).await?;
         view.api_executions = api_executions;
         view.fulfillment_quantities = fulfillment_quantities;
         Ok(view)
@@ -103,11 +107,12 @@ async fn attach_inquiry_number(
     db: &Database,
     order: &PurchaseOrder,
     lines: &mut [PurchaseOrderLineView],
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     if !lines.iter().any(|line| line.inquiry_quote_source.is_some()) {
         return Ok(());
     }
-    let source = inquiry_sources(db).find_by_id(order.sales_order_id.as_ref(), &mut NoTransaction).await?;
+    let source = inquiry_sources(db).find_by_id(order.sales_order_id.as_ref(), executor).await?;
     if let Some(source) = source {
         for line in lines {
             if let Some(quote) = &mut line.inquiry_quote_source
@@ -134,13 +139,13 @@ async fn attach_inquiry_number(
 async fn delivery_summary(
     db: &Database,
     order: &PurchaseOrder,
+    executor: &mut dyn Executor,
 ) -> Result<Option<PurchaseDeliverySummaryView>> {
     let Some(price_basis) = order.sourcing_delivery.supply_price_basis else {
         return Ok(None);
     };
     let sales_order_id = order.sales_order_id.to_string();
-    let follow_ups =
-        freight_follow_ups(db, std::slice::from_ref(&sales_order_id), &mut NoTransaction).await?;
+    let follow_ups = freight_follow_ups(db, std::slice::from_ref(&sales_order_id), executor).await?;
     let pending = follow_ups
         .get(&sales_order_id)
         .into_iter()
@@ -308,21 +313,21 @@ fn center_view(
 }
 
 /// 已授权采购详情只解析其关联目标仓的名称。
-async fn target_warehouse_name(db: &Database, order: &PurchaseOrder) -> Result<Option<String>> {
+async fn target_warehouse_name(
+    db: &Database,
+    order: &PurchaseOrder,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
     let Some(id) = &order.target_warehouse_id else {
         return Ok(None);
     };
-    let Some(warehouse) = db.warehouses().find_by_id(id.as_ref(), &mut NoTransaction).await? else {
+    let Some(warehouse) = db.warehouses().find_by_id(id.as_ref(), executor).await? else {
         return Ok(None);
     };
     let Some(revision_id) = warehouse.stable.current_revision_id else {
         return Ok(None);
     };
-    Ok(db
-        .warehouse_revisions()
-        .find_by_id(&revision_id, &mut NoTransaction)
-        .await?
-        .map(|revision| revision.name))
+    Ok(db.warehouse_revisions().find_by_id(&revision_id, executor).await?.map(|revision| revision.name))
 }
 
 #[cfg(test)]

@@ -1,15 +1,12 @@
 //! 指定结算复核人的启用账号、完整财务角色资格及岗位分离。
-use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{
-    AccountSummary, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
-};
+use erp_identity::{AccountSummary, AuthorizationService, SharedRbacService};
+use erp_permissions::{supplier_settlement, work_item};
 use erp_supply::service::supplier_settlement::SettlementAction;
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::SupplierSettlementProcess;
@@ -28,17 +25,16 @@ pub struct SettlementReviewerOption {
 
 /// 返回同一启用角色具备完整复核资格时读取的账号摘要；岗位分离由业务检查。
 async fn qualified_reviewer(
-    db: &Database,
-    identity: &SharedRbacService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Option<AccountSummary>> {
-    let required =
-        ["supplier_settlement_statement:detail", "supplier_settlement_statement:confirm", "work_item:detail"]
-            .into_iter()
-            .map(Permission::parse)
-            .collect::<StdResult<Vec<_>, _>>()?;
-    Ok(AuthorizationService::new(db.clone(), identity.clone(), AuthorizationRegistry::default())
+    let required = [
+        supplier_settlement::STATEMENT_DETAIL,
+        supplier_settlement::STATEMENT_REVIEW_DECIDE,
+        work_item::DETAIL,
+    ];
+    Ok(authorization
         .permissions(actor, &required, executor)
         .await?
         .filter(|qualified| qualified.same_role(&required))
@@ -60,30 +56,39 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<SettlementReviewerOption>> {
-        self.domain()
-            .access()
-            .require_action(actor, SettlementAction::Submit, id, &mut NoTransaction)
-            .await?;
-        let statement = self.domain().load_statement(id, &mut NoTransaction).await?;
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.reviewer_options_apply(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一读取快照内检查结算资格并返回合格复核人。
+    async fn reviewer_options_apply(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SettlementReviewerOption>> {
+        self.domain().access().require_action(actor, SettlementAction::Submit, id, executor).await?;
+        let statement = self.domain().load_statement(id, executor).await?;
         if !statement.is_editable() {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
-        let accounts = self
-            .work_items
-            .identity
-            .directory()
-            .accounts_by_kind(AccountKind::Admin, &mut NoTransaction)
-            .await?;
+        let accounts =
+            self.work_items.identity.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
         let mut options = Vec::new();
         for account in accounts {
             if account.id == actor.id() {
                 continue;
             }
             let candidate = AuditActor::new(account.id, account.login_account, account.kind);
-            if let Some(account) =
-                qualified_reviewer(&self.db, &self.work_items.identity, &candidate, &mut NoTransaction)
-                    .await?
-            {
+            if let Some(account) = qualified_reviewer(&self.authorization, &candidate, executor).await? {
                 options.push(SettlementReviewerOption {
                     user_id: account.id,
                     display_name: account.display_name,
@@ -102,8 +107,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// 当前资格与岗位分离满足时成功。
     /// # 错误
     /// 人员或资格失效时拒绝。
-    pub(super) async fn authorize_reviewer(&self, reviewer_id: &str, preparer_id: &str) -> Result<()> {
-        ensure_reviewer(&self.db, &self.work_items.identity, reviewer_id, preparer_id, &mut NoTransaction)
+    pub(super) async fn authorize_reviewer(
+        &self,
+        reviewer_id: &str,
+        preparer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        ensure_reviewer(&self.authorization, &self.work_items.identity, reviewer_id, preparer_id, executor)
             .await
     }
 }
@@ -123,7 +133,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// 复核人不存在时返回 `ValidationError`。资格、权限或财务角色不满足时返回 `Forbidden`。
 /// 账号或权限读取失败时返回对应错误。
 pub(super) async fn ensure_reviewer(
-    db: &Database,
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     reviewer_id: &str,
     preparer_id: &str,
@@ -138,7 +148,7 @@ pub(super) async fn ensure_reviewer(
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
     }
     let actor = AuditActor::new(reviewer_id.into(), reviewer_id.into(), AccountKind::Admin);
-    let qualified = qualified_reviewer(db, identity_service, &actor, executor).await?;
+    let qualified = qualified_reviewer(authorization, &actor, executor).await?;
     if qualified.is_some() {
         return Ok(());
     }

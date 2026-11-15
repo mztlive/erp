@@ -5,9 +5,12 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::{PartyBankAccountId, PayableAccountId};
 use erp_finance::repository::PayableExt;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_party::SensitiveDataCodec;
+use erp_permissions::payable;
 use erp_procurement::repository::PurchaseOrderExt;
-use persistence_core::{NoTransaction, Transactional};
+use erp_read_models::finance::payable::PayableReadService;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::{
@@ -103,12 +106,7 @@ impl PayableProcess {
         actor: &AuditActor,
     ) -> Result<PayableAccountView> {
         req.validate()?;
-        self.db
-            .purchase_orders()
-            .find_by_id(&req.source_document_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
-
+        let source_id = req.source_document_id.clone();
         let (account, entry) = erp_finance::service::payable::prepare_payable_account(req, actor.id())?;
         let account_id = PayableAccountId::new(account.base.id.clone());
         let audit = actor.clone().resource_log(
@@ -119,16 +117,76 @@ impl PayableProcess {
 
         let db = self.db.clone();
         let client = db.client().clone();
+        let authorization = self.authorization_rbac.authorization.clone();
+        let writer = actor.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&writer, &payable::ACCOUNT_CREATE, AccessTarget::Operation, executor)
+                        .await?;
+                    db.purchase_orders()
+                        .find_by_id(&source_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("来源采购单不存在".into()))?;
                     db.payable().create_payable_with_entry(&account, &entry, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), crate::Error>(())
+                    created_account_view(
+                        &PayableReadService::new(db.clone()),
+                        &authorization,
+                        &writer,
+                        &account.base.id,
+                        executor,
+                    )
+                    .await
                 })
             })
-            .await?;
+            .await
+    }
+}
 
-        self.read().payable_account_detail(&account_id).await.map_err(crate::Error::from)
+/// 写后以原创建资格开启读取阶段，完整投影沿用原事务，不追加详情菜单资格。
+async fn created_account_view(
+    read: &PayableReadService,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<PayableAccountView> {
+    authorization.require(actor, &payable::ACCOUNT_CREATE, AccessTarget::Operation, executor).await?;
+    Ok(read.payable_account_view(id.to_owned(), true, executor).await?)
+}
+
+#[cfg(test)]
+mod result_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 纯创建资格也必须在原快照检查；不可用资格不能回读供应商与账户数据。
+    #[tokio::test]
+    async fn created_account_reauthorizes_before_account_or_supplier_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("created_payable");
+        let read = PayableReadService::new(db);
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        for (executor, snapshot) in [
+            (&mut ReadExecutor::default() as &mut dyn Executor, false),
+            (&mut SnapshotExecutor::default() as &mut dyn Executor, true),
+        ] {
+            let error =
+                created_account_view(&read, &authorization, &actor, "account", executor).await.unwrap_err();
+            if snapshot {
+                assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+            } else {
+                assert!(
+                    matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务")
+                );
+            }
+        }
     }
 }

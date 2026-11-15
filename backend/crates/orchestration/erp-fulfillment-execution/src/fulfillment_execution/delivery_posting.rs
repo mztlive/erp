@@ -1,5 +1,7 @@
 //! 发货过账根事务：逐行库存或采购门槛、发货状态、任务与审计。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
@@ -11,6 +13,7 @@ use erp_fulfillment::dto::{DeliveryView, PostDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine, DeliveryType, DeliveryUpdate};
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::delivery_posting::supplier_purchase_source;
+use erp_identity::AuthorizationService;
 use erp_inventory::service::fulfillment::delivery::{WarehouseShipmentLine, post_warehouse_ship_line};
 use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
@@ -21,7 +24,7 @@ use super::FulfillmentProcess;
 use super::customer_acceptance::task::{CustomerAcceptanceTaskReason, ensure_customer_acceptance_task};
 use super::delivery_tracking::ensure_tracking_sources;
 use super::purchase_context::ensure_po_fulfillable;
-use super::task::{FulfillmentIdentityFactory, FulfillmentTaskObject, complete_fulfillment_task};
+use super::task::{FulfillmentTaskObject, complete_fulfillment_task};
 use crate::{Error, Result};
 
 impl FulfillmentProcess {
@@ -150,7 +153,7 @@ async fn execute_posting(
 
 struct DeliveryPosting<'a> {
     db: &'a Database,
-    task_identity: &'a FulfillmentIdentityFactory,
+    task_identity: &'a Arc<AuthorizationService>,
     delivery_id: DeliveryId,
     delivery: Delivery,
     lines: Vec<DeliveryLine>,
@@ -216,7 +219,7 @@ impl PostingSteps for DeliveryPosting<'_> {
 /// 非直发、采购/预付/任务权限门槛未满足或任一步写入失败时拒绝。
 pub async fn post_observed_supplier_delivery(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     delivery: Delivery,
     lines: Vec<DeliveryLine>,
     source_shipped_at: Option<Instant>,
@@ -296,17 +299,10 @@ impl DeliveryPosting<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     /// 实例具有非零大小，执行器身份断言不得依赖零大小地址。
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use persistence_core::ReadExecutor as TestExecutor;
+
+    use super::*;
     struct RecordingSteps {
         executor: usize,
         calls: Vec<PostingStep>,
@@ -330,7 +326,7 @@ mod tests {
     /// 生产入口先逐行完成仓发库存，再写发货状态、执行任务、验收任务与审计。
     #[tokio::test]
     async fn warehouse_posting_preserves_each_line_and_following_task_order() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = recording(&mut executor);
         execute_posting(&mut steps, DeliveryType::WarehouseShip, 2, &mut executor).await.unwrap();
         assert_eq!(
@@ -349,7 +345,7 @@ mod tests {
     /// 供应商直发只校验采购可履约状态，不调用任何自有库存行步骤。
     #[tokio::test]
     async fn supplier_direct_posting_checks_purchase_before_delivery_without_stock() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = recording(&mut executor);
         execute_posting(&mut steps, DeliveryType::SupplierDirect, 2, &mut executor).await.unwrap();
         assert_eq!(
@@ -392,7 +388,7 @@ mod tests {
             ),
         ] {
             for (index, step) in expected.iter().copied().enumerate() {
-                let mut executor = TestExecutor { _identity: 1 };
+                let mut executor = TestExecutor::default();
                 let mut steps = recording(&mut executor);
                 steps.fail_at = Some(step);
                 let error = execute_posting(&mut steps, delivery_type, 3, &mut executor).await.unwrap_err();

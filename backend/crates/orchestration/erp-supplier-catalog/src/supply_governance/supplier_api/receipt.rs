@@ -10,6 +10,8 @@ use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
 use erp_support::BulkJobExt;
 use persistence_core::Executor;
+#[cfg(test)]
+use persistence_core::ReadExecutor;
 
 use crate::Result;
 
@@ -120,15 +122,8 @@ mod tests {
 
     use super::*;
     use crate::Error;
-    struct TestExecutor {
-        visits: usize,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
+    type TestExecutor = ReadExecutor;
+
     struct RecordingWrite {
         identity: usize,
         fail_at: Option<usize>,
@@ -137,7 +132,6 @@ mod tests {
     impl RecordingWrite {
         fn step(&self, name: &'static str, executor: &mut dyn Executor) -> Result<()> {
             assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.identity);
-            assert!(executor.session().is_none());
             let mut calls = self.calls.lock().unwrap();
             let index = calls.len();
             calls.push(name);
@@ -166,7 +160,7 @@ mod tests {
     }
     #[tokio::test]
     async fn receipt_audit_and_job_read_share_executor_in_original_order() {
-        let mut executor = TestExecutor { visits: 0 };
+        let mut executor = TestExecutor::default();
         let port = RecordingWrite {
             identity: &mut executor as *mut TestExecutor as usize,
             fail_at: None,
@@ -177,13 +171,12 @@ mod tests {
             Some("JOB-001")
         );
         assert_eq!(*port.calls.lock().unwrap(), ["receipt", "audit", "job_no"]);
-        assert_eq!(executor.visits, 3);
     }
     #[tokio::test]
     async fn receipt_failure_stops_before_each_later_write_or_read() {
         let expected = ["receipt", "audit", "job_no"];
         for fail_at in 0..3 {
-            let mut executor = TestExecutor { visits: 0 };
+            let mut executor = TestExecutor::default();
             let port = RecordingWrite {
                 identity: &mut executor as *mut TestExecutor as usize,
                 fail_at: Some(fail_at),
@@ -194,12 +187,11 @@ mod tests {
                 matches!(error,Error::ConflictError(message) if message==format!("failed {}",expected[fail_at]))
             );
             assert_eq!(*port.calls.lock().unwrap(), expected[..=fail_at]);
-            assert_eq!(executor.visits, fail_at + 1);
         }
     }
     #[tokio::test]
     async fn synchronous_receipt_never_reads_a_background_job() {
-        let mut executor = TestExecutor { visits: 0 };
+        let mut executor = TestExecutor::default();
         let port = RecordingWrite {
             identity: &mut executor as *mut TestExecutor as usize,
             fail_at: None,
@@ -207,6 +199,5 @@ mod tests {
         };
         assert_eq!(persist_receipt(&port, &1, &2, None, &mut executor).await.unwrap(), None);
         assert_eq!(*port.calls.lock().unwrap(), ["receipt", "audit"]);
-        assert_eq!(executor.visits, 2);
     }
 }

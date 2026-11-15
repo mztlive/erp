@@ -1,11 +1,12 @@
 //! 有界导出真实显式配置，不把默认或退休政策编译成新授权。
 use application_core::AuditActor;
+use erp_permissions::access_control;
 use persistence_core::{Executor, Transactional};
 
 use super::PolicyBundleService;
 use crate::dto::authorization_bundle::{ExportPolicyRequest, PolicyExport};
 use crate::entity::authorization_bundle::PolicyDocument;
-use crate::{Error, Result};
+use crate::{AccessTarget, Error, Result};
 
 impl PolicyBundleService {
     /// 导出明确选择的角色及人员当前配置。
@@ -35,6 +36,10 @@ impl PolicyBundleService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PolicyExport> {
+        self.access
+            .authorization
+            .require(actor, &access_control::POLICY_BUNDLE_EXPORT, AccessTarget::Operation, executor)
+            .await?;
         let authorization = self
             .company_access(
                 actor,

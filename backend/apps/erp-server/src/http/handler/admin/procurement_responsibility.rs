@@ -57,11 +57,12 @@ pub async fn update_rule(
 /// 逐行预览采购责任解析结果。
 pub async fn resolve(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Json(request): Json<ProcurementResponsibilityResolveRequest>,
 ) -> Result<ProcurementResponsibilityResolveView> {
     request.validate()?;
     let view = ProcurementResponsibilityProcess::new(state.application().db(), state.application().rbac())
-        .resolve_preview(request)
+        .resolve_preview(request, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

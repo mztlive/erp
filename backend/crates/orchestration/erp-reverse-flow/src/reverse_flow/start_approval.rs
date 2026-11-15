@@ -11,8 +11,7 @@ mod reversal_submit;
 mod supplier_refund;
 
 pub(super) use authorization::{
-    ensure_replay_authorized as ensure_return_start_replay_authorized, ensure_source_authorized,
-    ensure_submit_permission,
+    ensure_replay_authorized as ensure_return_start_replay_authorized, ensure_submit_permission,
 };
 pub(super) use common::ReverseStartInput;
 pub(super) use customer_refund::{

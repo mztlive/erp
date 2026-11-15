@@ -2,6 +2,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::SalesReturnCaseView;
 use erp_returns::dto::CreateSalesReturnCaseRequest;
@@ -52,11 +54,7 @@ impl ReturnsProcess {
     ) -> Result<SalesReturnCaseView> {
         req.validate()?;
         let (case, line) = build_sales_return_case_and_line(req, actor.id())?;
-        persist_created_sales_return_case(&self.db, &self.rbac, case.clone(), line, actor.clone()).await?;
-        ReturnsReadService::new(self.db.clone())
-            .sales_return_case_detail(&case.base.id)
-            .await
-            .map_err(crate::Error::from)
+        persist_created_sales_return_case(&self.db, &self.rbac, case, line, actor.clone()).await
     }
 }
 
@@ -222,7 +220,7 @@ async fn persist_created_sales_return_case(
     case: SalesReturnCase,
     line: SalesReturnLine,
     actor: AuditActor,
-) -> Result<()> {
+) -> Result<SalesReturnCaseView> {
     let audit =
         actor.clone().resource_log("sales_return_case.create", "sales_return_case", case.base.id.clone())?;
     let db = db.clone();
@@ -232,6 +230,14 @@ async fn persist_created_sales_return_case(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.identity
+                    .require(
+                        &actor,
+                        &returns::SALES_RETURN_SALES_RETURN_CASE_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 let mut creation = MongoCreation {
                     db: &db,
                     rbac: &rbac,
@@ -241,7 +247,17 @@ async fn persist_created_sales_return_case(
                     audit: &audit,
                 };
                 persist_creation(&mut creation, executor).await?;
-                Ok::<(), crate::Error>(())
+                rbac.identity
+                    .require(
+                        &actor,
+                        &returns::SALES_RETURN_SALES_RETURN_CASE_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
+                Ok(ReturnsReadService::new(db.clone(), rbac.identity.clone())
+                    .load_sales_return_case_view(&case.base.id, executor)
+                    .await?)
             })
         })
         .await
@@ -365,19 +381,10 @@ mod sales_return_case_no_approval_tests {
 
 #[cfg(test)]
 mod creation_sequence_tests {
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::{CreationSteps, persist_creation};
     use crate::{Error, Result};
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Default)]
     struct RecordingCreation {
         events: Vec<&'static str>,
@@ -408,7 +415,7 @@ mod creation_sequence_tests {
     }
     #[tokio::test]
     async fn no_approval_creation_keeps_one_executor_and_write_order() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let id = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingCreation::default();
         persist_creation(&mut steps, &mut executor).await.unwrap();
@@ -419,7 +426,7 @@ mod creation_sequence_tests {
     async fn no_approval_creation_preserves_first_error_and_stops_later_writes() {
         let all = ["document", "return_head_and_first_line", "audit"];
         for (at, fail) in all.iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingCreation { fail: Some(*fail), ..Default::default() };
             let error = persist_creation(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *fail));

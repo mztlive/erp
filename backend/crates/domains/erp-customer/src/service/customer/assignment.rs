@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, normalize_sort, page_or_default, page_size_or_default};
 use erp_core::ids::CustomerAccountId;
-use erp_identity::AccountDirectoryService;
+use erp_identity::{AccessTarget, AccountDirectoryService};
+use erp_permissions::{customer as customer_permissions, customer};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -22,12 +23,13 @@ use crate::dto::customer::{
     CustomerAssignmentView, PageView, SortDir,
 };
 use crate::entity::customer::{
-    AssignCustomerAssignment, CustomerAssignment, CustomerAssignmentCommand, CustomerAssignmentId,
-    EndCustomerAssignment,
+    AssignCustomerAssignment, AssignmentRole, CustomerAssignment, CustomerAssignmentCommand,
+    CustomerAssignmentId, EndCustomerAssignment,
 };
 use crate::error::{Error, Result};
 use crate::ports::CustomerAuditPort;
 use crate::repository::CustomerExt;
+use crate::repository::customer::CustomerAssignmentRow;
 use crate::repository::prelude::*;
 
 /// 客户归属列表筛选条件类型（经 `CustomerExt` 关联类型跨 crate 可达）。
@@ -76,9 +78,39 @@ impl CustomerAssignmentService {
     /// 归属查询失败时返回仓储错误。
     pub async fn customer_assignment_list(
         &self,
+        actor: &AuditActor,
         customer_id: &str,
         params: &CustomerAssignmentListParams,
     ) -> Result<PageView<CustomerAssignmentView>> {
+        let db = self.db.clone();
+        let service = Self::new(db.clone(), self.audit.clone(), self.access.clone());
+        let actor = actor.clone();
+        let customer_id = customer_id.to_owned();
+        let params = params.clone();
+        db.client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.assignment_page(&actor, &customer_id, &params, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在同一快照内校验功能资格并读取完整归属分页与计数。
+    async fn assignment_page(
+        &self,
+        actor: &AuditActor,
+        customer_id: &str,
+        params: &CustomerAssignmentListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<CustomerAssignmentView>> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("客户归属列表必须使用快照事务".into()));
+        }
+        self.access
+            .service
+            .require(actor, &customer::ASSIGNMENT_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let (sort_by, sort_dir) =
             normalize_sort(&params.sort_by, &params.sort_dir, CUSTOMER_ASSIGNMENT_SORT_FIELDS)?;
@@ -96,24 +128,8 @@ impl CustomerAssignmentService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.customer_assignments().search_customer_assignments(&filter, &mut NoTransaction).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| CustomerAssignmentView {
-                id: row.id,
-                customer_id: row.customer_id,
-                user_name: row.user_id.clone(),
-                user_id: row.user_id,
-                assignment_role: row.assignment_role,
-                valid_from: row.valid_from,
-                valid_to: row.valid_to,
-                change_reason: row.change_reason,
-                version: row.version,
-                created_at: row.created_at,
-            })
-            .collect();
+        let page = self.db.customer_assignments().search_customer_assignments(&filter, executor).await?;
+        let items = page.items.into_iter().map(assignment_view).collect();
 
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -203,13 +219,15 @@ impl CustomerAssignmentService {
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    accounts
-                        .account(&new_assignment.user_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
-                        .ensure_can_login()
-                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
+                    require_assignment(
+                        &accounts,
+                        &access,
+                        &actor_for_tx,
+                        &customer_id_for_tx,
+                        &new_assignment,
+                        executor,
+                    )
+                    .await?;
                     persist_assign(&db, &customer_id_for_tx, &new_assignment, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAssignment, crate::error::Error>(new_assignment)
@@ -243,8 +261,18 @@ impl CustomerAssignmentService {
         let ended = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
-                    let ended = persist_end(&db, &customer_id_for_tx, &command, executor).await?;
+                    access
+                        .service
+                        .require(
+                            &actor_for_tx,
+                            &customer::ASSIGNMENT_APPLY,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    let ended =
+                        persist_end(&db, &access, &actor_for_tx, &customer_id_for_tx, &command, executor)
+                            .await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAssignment, crate::error::Error>(ended)
                 })
@@ -252,6 +280,45 @@ impl CustomerAssignmentService {
             .await?;
 
         Ok(vec![ended.into()])
+    }
+}
+
+/// 将已授权快照中的单行归属投影为原响应形状。
+fn assignment_view(row: CustomerAssignmentRow) -> CustomerAssignmentView {
+    CustomerAssignmentView {
+        id: row.id,
+        customer_id: row.customer_id,
+        user_name: row.user_id.clone(),
+        user_id: row.user_id,
+        assignment_role: row.assignment_role,
+        valid_from: row.valid_from,
+        valid_to: row.valid_to,
+        change_reason: row.change_reason,
+        version: row.version,
+        created_at: row.created_at,
+    }
+}
+
+/// 在原事务中校验分配入口、原客户以及真实目标负责人。
+async fn require_assignment(
+    accounts: &AccountDirectoryService,
+    access: &CustomerAccess,
+    actor: &AuditActor,
+    customer_id: &str,
+    assignment: &CustomerAssignment,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    accounts
+        .account(&assignment.user_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
+        .ensure_can_login()
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    access.service.require(actor, &customer::ASSIGNMENT_APPLY, AccessTarget::Operation, executor).await?;
+    if assignment.assignment_role == AssignmentRole::Owner {
+        access.require_owner_change(actor, customer_id, &assignment.user_id, executor).await
+    } else {
+        access.require_with(actor.clone(), &customer_permissions::UPDATE, customer_id, executor).await
     }
 }
 
@@ -278,10 +345,13 @@ async fn persist_assign(
 /// 在原事务校验目标版本与区间覆盖，串行化同一客户的全部人员调整。
 async fn persist_end(
     db: &Database,
+    access: &CustomerAccess,
+    actor: &AuditActor,
     customer_id: &str,
     command: &EndCustomerAssignment,
     executor: &mut dyn Executor,
 ) -> Result<CustomerAssignment> {
+    access.require_with(actor.clone(), &customer_permissions::UPDATE, customer_id, executor).await?;
     let mut customer = db
         .customer_accounts()
         .find_customer(customer_id, executor)
@@ -298,12 +368,79 @@ async fn persist_end(
     assignment.ensure_version(command.version()).map_err(|error| Error::ConflictError(error.to_string()))?;
     let assignments =
         db.customer_assignments().list_for_customer(&CustomerAccountId::new(customer_id), executor).await?;
-    assignment
-        .ensure_owner_retained(&assignments, command.valid_to())
+    let owners = assignment
+        .owners_after_end(&assignments, command.valid_to())
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+    for owners in owners {
+        access.require_owner_set_change(actor, customer_id, &owners, executor).await?;
+    }
     assignment.end_directly(command.valid_to()).map_err(|error| Error::ValidationError(error.to_string()))?;
     assignment.change_reason = command.change_reason().to_string();
     db.customer_accounts().update(&mut customer, executor).await?;
     db.customer_assignments().update(&mut assignment, executor).await?;
     Ok(assignment)
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_core::common::time::BusinessDate;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::FailClosedAuditPort;
+
+    #[tokio::test]
+    async fn ending_assignment_authorizes_original_before_detail_or_version_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("customer_assignment_end_authorization");
+        let access = CustomerAccess::new(db.clone(), unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for version in [1, 999] {
+            let command = EndCustomerAssignment::new(
+                "unread-assignment".into(),
+                BusinessDate::from_ymd(2026, 11, 13).unwrap(),
+                version,
+                "结束归属".into(),
+            )
+            .unwrap();
+            let error = persist_end(
+                &db,
+                &access,
+                &actor,
+                "unread-customer",
+                &command,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .expect_err("原客户授权失败不得探测归属存在性或版本");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    #[tokio::test]
+    async fn assignment_list_checks_qualification_before_reading_any_rows() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("customer_assignment_authorization");
+        let access = CustomerAccess::new(db.clone(), unavailable_authorization());
+        let service = CustomerAssignmentService::new(db, Arc::new(FailClosedAuditPort), access);
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let params: CustomerAssignmentListParams = serde_json::from_value(serde_json::json!({})).unwrap();
+        let error = service
+            .assignment_page(&actor, "customer", &params, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("功能授权失败必须停止");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        let error = service
+            .assignment_page(&actor, "customer", &params, &mut ReadExecutor::default())
+            .await
+            .expect_err("非快照执行器必须拒绝");
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "客户归属列表必须使用快照事务")
+        );
+    }
 }

@@ -428,7 +428,7 @@ pub(crate) async fn persist_runtime_writes(
     } = input;
     let mut snapshot = persist_start_runtime(
         db,
-        &rbac.identity,
+        &rbac.authorization,
         writes,
         snapshot_payload,
         now,

@@ -38,3 +38,6 @@ pub use service::iam::{
 };
 pub use service::organization_directory::OrganizationDirectoryService;
 pub use service::portal::{PortalIdentityService, PreparedPortalAccount, PreparedPortalPassword};
+
+#[cfg(feature = "test-support")]
+pub mod testing;

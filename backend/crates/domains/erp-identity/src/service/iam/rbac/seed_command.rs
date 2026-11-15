@@ -3,16 +3,18 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_permissions::admin;
 use persistence_core::NoTransaction;
 
 use super::{ROOT_ROLE_ID, RbacService};
-use crate::entity::role::RoleData;
-use crate::{AccessControlExt, CreateRoleParams, Error, Result, UpdateRoleParams};
+use crate::entity::role::{Role, RoleData};
+use crate::service::iam::management::ManagementAccess;
+use crate::{AccessControlExt, AuthorizationService, CreateRoleParams, Error, Result, UpdateRoleParams};
 
 impl RbacService {
     /// 以发起人的权限创建固定种子角色，或补齐已有同身份角色的缺失权限。
     /// # 参数
-    /// `id` 为调用方固定种子键；`params` 为名称和权限；`actor` 为命令发起人。
+    /// id 为固定种子键，params 为名称和权限，actor 为发起人，authorization 为共享授权服务。
     /// # 返回
     /// 创建或补齐返回 true，已满足声明返回 false。
     /// # 错误
@@ -22,7 +24,10 @@ impl RbacService {
         id: &str,
         params: CreateRoleParams,
         actor: AuditActor,
+        authorization: Arc<AuthorizationService>,
     ) -> Result<bool> {
+        let access = ManagementAccess::new(authorization.clone(), actor.clone(), &admin::ROLE_CREATE_ROLE);
+        access.preflight(&self.db).await?;
         if id == ROOT_ROLE_ID {
             return Err(Error::Forbidden("超级管理员角色不能通过种子命令配置".into()));
         }
@@ -43,18 +48,17 @@ impl RbacService {
                     ..Default::default()
                 },
                 actor,
+                authorization,
             )
             .await?;
         } else {
             let audit = self.audit.resource_log(actor, "role.create", "role", id.to_owned())?;
-            self.create_role_with_id(
-                id.to_owned(),
+            let role = Role::new(
+                crate::RoleId::parse(id)?,
                 RoleData { workbenches: params.workbenches, ..RoleData::new(params.name) },
-                authorized.permissions.into_vec(),
-                Some(audit),
-                Some(authorized.policy_revision),
-            )
-            .await?;
+            )?;
+            self.create_managed_role(role, authorized.permissions, audit, authorized.policy_revision, access)
+                .await?;
         }
         Ok(true)
     }

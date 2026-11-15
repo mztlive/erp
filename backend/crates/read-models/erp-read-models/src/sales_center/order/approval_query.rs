@@ -5,7 +5,7 @@
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, ReviewStatus};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::adapter::{RECENT_HISTORY_LIMIT, document_approval_view_with_history};
 use super::dto::DocumentApprovalView;
@@ -41,6 +41,7 @@ pub(super) async fn load_document_approval(
     binding: Option<&ApprovalDefinitionBinding>,
     commercial: CommercialStatus,
     review: ReviewStatus,
+    executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     let subject = super::subject_ref_for_sales_business(business_type, sales_order_id)
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
@@ -48,7 +49,7 @@ pub(super) async fn load_document_approval(
         db,
         &subject,
         u32::try_from(RECENT_HISTORY_LIMIT).expect("审批历史首屏条数在 u32 范围内"),
-        &mut NoTransaction,
+        executor,
     )
     .await?;
     let mut view = document_approval_view_with_history(
@@ -60,7 +61,7 @@ pub(super) async fn load_document_approval(
         review,
     );
     if let (Some(binding), Some(definition)) = (binding, view.definition.as_mut()) {
-        let (name, nodes) = binding_route(db, binding, &mut NoTransaction).await?;
+        let (name, nodes) = binding_route(db, binding, executor).await?;
         definition.name = name;
         definition.nodes = nodes;
     }

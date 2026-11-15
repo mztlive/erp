@@ -6,6 +6,7 @@ use std::sync::Arc;
 use application_core::{AuditActor, EmptyScopeVersion, PageView, ScopeVersion};
 use erp_core::common::time::BusinessDate;
 use erp_identity::AccountDirectoryService;
+use erp_permissions::customer as customer_permissions;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
@@ -162,11 +163,12 @@ async fn run_list_snapshot(
     executor: &mut dyn Executor,
 ) -> Result<CustomerSnapshot> {
     let (mut context, authorized, as_of) = resolve_list_authorized(&deps, executor).await?;
-    let filter = build_account_filter(&deps, authorized).await?;
+    let filter = build_account_filter(&deps, authorized, executor).await?;
     let versions = authorized_versions(&deps.db, &filter, &context, &deps.access, executor).await?;
     ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
     apply_version_fingerprint(&mut context, &versions);
     if !hydrate {
+        deps.access.validate(&context, executor).await?;
         return Ok(CustomerSnapshot {
             items: Vec::new(),
             total: 0,
@@ -205,7 +207,7 @@ async fn resolve_list_authorized(
     deps: &ListTxDeps,
     executor: &mut dyn Executor,
 ) -> Result<(CustomerResolvedScope, Option<Vec<String>>, BusinessDate)> {
-    let (context, scope) = deps.access.query(&deps.actor, "list", executor).await?;
+    let (context, scope) = deps.access.query(&deps.actor, &customer_permissions::LIST, executor).await?;
     let authorized =
         apply_list_filters(&deps.db, &deps.access, &context, &scope, &deps.query, executor).await?;
     let as_of = super::access::business_date(context.as_of)?;
@@ -226,9 +228,10 @@ async fn resolve_list_authorized(
 async fn build_account_filter(
     deps: &ListTxDeps,
     authorized: Option<Vec<String>>,
+    executor: &mut dyn Executor,
 ) -> Result<CustomerAccountFilter> {
     let keyword_party_ids = match deps.query.keyword.as_deref() {
-        Some(keyword) => Some(deps.party.matching_ids_by_name(keyword).await?),
+        Some(keyword) => Some(deps.party.matching_ids_by_name(keyword, executor).await?),
         None => None,
     };
     Ok(CustomerAccountFilter {
@@ -570,7 +573,7 @@ async fn hydrate_rows(
     }
     let party_ids: Vec<erp_core::ids::PartyId> =
         rows.iter().map(|row| erp_core::ids::PartyId::new(row.party_id.clone())).collect();
-    let identities = party.identities_by_ids(&party_ids).await?;
+    let identities = party.identities_by_ids(&party_ids, executor).await?;
     let customer_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
     let assignments =
         db.customer_assignments().list_active_for_customers(&customer_ids, as_of, executor).await?;

@@ -354,6 +354,19 @@ impl From<IdentityError> for Error {
     }
 }
 
+impl From<erp_permissions::ParsePermissionError> for Error {
+    /// 将外部权限码解析失败保留为请求校验错误。
+    /// # 参数
+    /// `error` 为权限目录解析失败。
+    /// # 返回
+    /// 返回保留原始错误说明的工作流错误。
+    /// # 错误
+    /// 转换不失败。
+    fn from(error: erp_permissions::ParsePermissionError) -> Self {
+        Self::ValidationError(error.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;

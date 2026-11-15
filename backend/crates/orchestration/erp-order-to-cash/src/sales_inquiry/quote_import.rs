@@ -2,6 +2,7 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
+use erp_permissions::supplier;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_supply::inquiry::InquirySupplyService;
 use erp_workflow::entity::work_item::WorkItem;
@@ -105,7 +106,7 @@ impl SalesInquiryProcess {
             }
             self.services
                 .suppliers
-                .require_with(actor, "detail", row.quote.supplier_id.as_ref(), executor)
+                .require_with(actor, &supplier::DETAIL, row.quote.supplier_id.as_ref(), executor)
                 .await
                 .map_err(|error| row_error(&row.source, error.into()))?;
             self.append_resolved_quote(actor, inquiry, quote, executor)

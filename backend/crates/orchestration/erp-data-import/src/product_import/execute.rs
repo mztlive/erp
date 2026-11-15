@@ -13,7 +13,7 @@ use erp_support::{
     BackgroundJob, BackgroundJobItem, BulkJobExt, FileAssetExt, ItemStatus, JobStatus,
     PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
 };
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 
 use super::ProductImportProcess;
 use super::images::RowMediaSource;
@@ -50,7 +50,7 @@ impl ProductImportProcess {
             .list_open_by_domain_job_type(
                 PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
                 IMPORT_JOBS_PER_POLL,
-                &mut NoTransaction,
+                &mut ReadExecutor::default(),
             )
             .await?;
         self.sources.retain_jobs(&jobs).await;
@@ -87,7 +87,7 @@ impl ProductImportProcess {
         let items = self
             .db
             .background_job_items()
-            .list_entities_by_job(&BackgroundJobId::new(job.base.id.clone()), &mut NoTransaction)
+            .list_entities_by_job(&BackgroundJobId::new(job.base.id.clone()), &mut ReadExecutor::default())
             .await?;
         let actor = AuditActor::new(job.requested_by.clone(), job.requested_by.clone(), AccountKind::Admin);
         let mut cache = ImportDictionaryCache::default();
@@ -98,7 +98,7 @@ impl ProductImportProcess {
                 && matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded)
             {
                 job.record_import_result_batch(0, 0, 0, true, Instant::now())?;
-                self.db.background_jobs().update(&mut job, &mut NoTransaction).await?;
+                self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await?;
             }
             return Ok(());
         }
@@ -122,7 +122,7 @@ impl ProductImportProcess {
         let mut job = self
             .db
             .background_jobs()
-            .find_by_id(job_id, &mut NoTransaction)
+            .find_by_id(job_id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
         if job.domain_job_type.as_deref() != Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE) {
@@ -130,7 +130,8 @@ impl ProductImportProcess {
         }
         if job.status == JobStatus::Pending {
             job.start(Instant::now())?;
-            if let Err(error) = self.db.background_jobs().update(&mut job, &mut NoTransaction).await {
+            if let Err(error) = self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await
+            {
                 if matches!(error, persistence_core::Error::OptimisticLockingError) {
                     return Ok(None);
                 }
@@ -232,8 +233,11 @@ impl ProductImportProcess {
     /// 私有输入读取失败时保留持久化错误；其余清单与源文件均不可用时返回错误。
     async fn load_row_source(&self, job: &BackgroundJob) -> Result<JobRowSource> {
         let job_id = BackgroundJobId::new(job.base.id.clone());
-        let input =
-            self.db.bulk_job().job_input(&job_id, ROW_MANIFEST_INPUT_FORMAT, &mut NoTransaction).await?;
+        let input = self
+            .db
+            .bulk_job()
+            .job_input(&job_id, ROW_MANIFEST_INPUT_FORMAT, &mut ReadExecutor::default())
+            .await?;
         if let Some(bytes) = input {
             match decode_row_manifest(&bytes, &job.request_id) {
                 Ok(manifest) => return Ok(JobRowSource::Manifest(manifest)),
@@ -313,7 +317,7 @@ impl ProductImportProcess {
         let asset = self
             .db
             .file_assets()
-            .find_by_id(file_id.as_ref(), &mut NoTransaction)
+            .find_by_id(file_id.as_ref(), &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("导入源文件不存在".into()))?;
         let bytes = self
@@ -463,7 +467,7 @@ impl ImportRowExecution for ProductImportRows<'_> {
             .process
             .db
             .background_jobs()
-            .find_by_id(&job.base.id, &mut NoTransaction)
+            .find_by_id(&job.base.id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
         Ok(current.base.version == job.base.version && current.finished_at.is_none())

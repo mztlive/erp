@@ -15,18 +15,25 @@ pub trait ImportWorkItems: Send + Sync {
     /// # 参数
     /// * `id` - 正式工作项身份。
     /// * `actor` - 当前认证操作人。
+    /// * `executor` - 导入查询持有的原快照执行器。
     ///
     /// # 返回
     /// 返回按当前责任资格生成的安全任务视图。
     ///
     /// # 错误
     /// 任务不存在、无权查看或授权读取失败时返回工作流错误。
-    async fn authorize_work_item(&self, id: &str, actor: &AuditActor) -> WorkflowResult<AuthorizedWorkItem>;
+    async fn authorize_work_item(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<AuthorizedWorkItem>;
 
     /// 在原确认事务中重验当前决定资格。
     ///
     /// # 参数
     /// * `actor` - 当前认证操作人。
+    /// * `executor` - 导入查询持有的原快照执行器。
     /// * `item` - 已核对身份、版本和责任的正式工作项。
     /// * `executor` - 确认命令沿用的同一事务执行器。
     ///
@@ -62,8 +69,13 @@ impl<A> ImportWorkItems for WorkItemService<A>
 where
     A: WorkflowAuthorizationPort + Send + Sync + 'static,
 {
-    async fn authorize_work_item(&self, id: &str, actor: &AuditActor) -> WorkflowResult<AuthorizedWorkItem> {
-        self.authorize_work_item(id, actor).await
+    async fn authorize_work_item(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<AuthorizedWorkItem> {
+        self.authorize_work_item_with_executor(id, actor, executor).await
     }
 
     async fn ensure_domain_decision_access(

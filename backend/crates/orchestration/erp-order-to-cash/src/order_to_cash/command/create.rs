@@ -1,6 +1,7 @@
 use application_core::{AuditActor, CommandFingerprint};
 use erp_contract::{Contract, ContractExt, ContractRevision, ContractStatus};
 use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, PartyId};
+use erp_permissions::{internal, sales_order as sales_order_permissions};
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::{
     CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDraftRequest, SalesOrderEditableDraftRequest,
@@ -76,7 +77,7 @@ impl SalesOrderCommandProcess {
         contract_id: &Option<ContractId>,
         customer_id: &Option<CustomerAccountId>,
     ) -> Result<CustomerAccountId> {
-        let access = self.command_access(actor, "detail");
+        let access = self.command_access(actor, sales_order_permissions::DETAIL);
         let contract_id = contract_id.clone();
         let customer_id = customer_id.clone();
         self.db
@@ -215,8 +216,8 @@ impl SalesOrderCommandProcess {
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
         let access = self
-            .command_access(actor, "create")
-            .require_submit(req.intent == SalesOrderCreateIntent::Submit)?;
+            .command_access(actor, sales_order_permissions::CREATE)
+            .require_submit(req.intent == SalesOrderCreateIntent::Submit);
         let identity = CreationIdentity::new(&mut req, actor)?;
         if let Some(order_id) = self
             .replay_sales_order_creation(
@@ -228,7 +229,7 @@ impl SalesOrderCommandProcess {
             )
             .await?
         {
-            return Ok(self.read_model().sales_order_detail(&order_id, None).await?);
+            return self.command_result(&order_id, actor, &internal::SALES_CREATED_RESULT_READ).await;
         }
         let this = self.clone();
         let request = req.clone();
@@ -253,7 +254,7 @@ impl SalesOrderCommandProcess {
             .await;
         let detail_id =
             self.creation_result(transaction_result, detail_id, &identity, actor, &access).await?;
-        Ok(self.read_model().sales_order_detail(&detail_id, None).await?)
+        self.command_result(&detail_id, actor, &internal::SALES_CREATED_RESULT_READ).await
     }
 
     /// 只读查证失败结果，不因未知提交重新执行创建。

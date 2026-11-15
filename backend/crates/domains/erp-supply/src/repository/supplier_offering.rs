@@ -351,7 +351,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SupplierOfferingRow>> {
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_offering", executor)?;
         }
 
         let options = FindOptions::builder()
@@ -365,7 +365,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         let items = aggregate::find(&collection, filter.to_doc(), options, prefix.clone(), executor).await?;
         let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_offering", executor)?;
         }
         Ok(PageResult { items, total: total as i64 })
     }
@@ -413,7 +413,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
-        scope.validate(executor).await?;
+        scope.ensure_model("supplier_offering", executor)?;
 
         #[derive(serde::Deserialize)]
         struct OfferingIdRow {
@@ -427,7 +427,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_model("supplier_offering", executor)?;
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 

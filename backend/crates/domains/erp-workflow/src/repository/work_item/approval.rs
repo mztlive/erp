@@ -1,5 +1,6 @@
 use bpm::ApprovalNodeExecutionId;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_identity::CompiledAccess;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Error, Executor, Repository, Result, mongo_ops};
@@ -9,6 +10,20 @@ use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
 mod cas;
 mod query;
+
+/// 本人开放审批页的业务筛选与稳定游标；授权凭证独立传入。
+pub struct DocumentApprovalPageQuery<'a> {
+    /// 当前任务负责人。
+    pub owner_user_id: &'a str,
+    /// 可选业务对象类型。
+    pub business_object_type: Option<&'a str>,
+    /// 可选字面量检索。
+    pub query: Option<&'a str>,
+    /// 原分派时间与任务ID游标。
+    pub cursor: Option<(i64, &'a str)>,
+    /// 非零页大小。
+    pub limit: u32,
+}
 
 /// 本人开放审批任务仓储页。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,11 +104,8 @@ pub trait WorkItemRepositoryApprovalExt {
     /// 分页查询指定账号当前开放的单据审批任务。
     ///
     /// # 参数
-    /// * `owner_user_id` - 当前责任人账号 ID
-    /// * `business_object_type` - 可选业务对象类型稳定码
-    /// * `query` - 可选字面量检索；由 Service 完成空白规范化
-    /// * `cursor` - 上一页最后一条任务的首次分派时间与任务 ID
-    /// * `limit` - 非零页大小
+    /// * `query` - 当前责任人、业务对象类型、规范化检索、上一页游标与非零页大小。
+    /// * `access` - 原读取阶段的完整审批实例授权条件。
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -110,13 +122,10 @@ pub trait WorkItemRepositoryApprovalExt {
     /// subject 三元组完全一致的快照命中。Repository 不解释 RBAC 或业务授权。
     async fn page_open_document_approval_owned_by(
         &self,
-        owner_user_id: &str,
-        business_object_type: Option<&str>,
-        query: Option<&str>,
-        cursor: Option<(i64, &str)>,
-        limit: u32,
+        query: DocumentApprovalPageQuery<'_>,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
-    ) -> Result<DocumentApprovalWorkItemPage>;
+    ) -> crate::Result<DocumentApprovalWorkItemPage>;
 
     /// 查询指定账号当前开放的单据审批任务。
     ///
@@ -328,23 +337,11 @@ impl WorkItemRepositoryApprovalExt for Repository<'_, WorkItem> {
 
     async fn page_open_document_approval_owned_by(
         &self,
-        owner_user_id: &str,
-        business_object_type: Option<&str>,
-        query: Option<&str>,
-        cursor: Option<(i64, &str)>,
-        limit: u32,
+        query: DocumentApprovalPageQuery<'_>,
+        access: &CompiledAccess,
         executor: &mut dyn Executor,
-    ) -> Result<DocumentApprovalWorkItemPage> {
-        query::page_open_document_approval_owned_by(
-            &self.collection(),
-            owner_user_id,
-            business_object_type,
-            query,
-            cursor,
-            limit,
-            executor,
-        )
-        .await
+    ) -> crate::Result<DocumentApprovalWorkItemPage> {
+        query::page_open_document_approval_owned_by(&self.collection(), query, access, executor).await
     }
 
     async fn list_open_document_approval_owned_by(

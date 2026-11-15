@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
@@ -10,13 +11,14 @@ use bpm::model::{
 use erp_core::common::time::Instant;
 use erp_core::ids::StockAdjustmentId;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, AccountCore, SharedRbacService};
+use erp_identity::{AccessControlExt, AccountCore, AuthorizationService};
 use erp_inventory::authorization::require_submit;
 use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentApprovalSnapshot,
     StockAdjustmentLine, StockAdjustmentState, SubmitStockAdjustmentRequest,
 };
+use erp_permissions::approval_instance;
 use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -34,7 +36,7 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use erp_workflow::service::approval::{approval_participant_permissions_with_executor, read};
+use erp_workflow::service::approval::read;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
@@ -438,14 +440,21 @@ async fn legacy_balance_versions_match(
     Ok(StockAdjustmentBalanceVersions::new(&balances).matches_legacy_result(adjustment, lines, &expected))
 }
 
+/// 在原快照事务中检查库存调整提交的固定资格及当前对象。
+/// # 参数
+/// identity_service为共享授权服务，adjustment为真实单据，actor和executor沿用原用例。
+/// # 返回
+/// 当前提交条件成立时成功。
+/// # 错误
+/// 账号、范围、对象状态或执行边界失效时返回原错误。
 pub(crate) async fn authorize_submit_with(
-    identity_service: &SharedRbacService,
-    db: &Database,
+    identity_service: &Arc<AuthorizationService>,
+    _db: &Database,
     adjustment: &StockAdjustment,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    require_submit(db.clone(), identity_service.clone(), actor, &adjustment.base.id, executor).await?;
+    require_submit(identity_service, actor, &adjustment.base.id, executor).await?;
     Ok(())
 }
 
@@ -606,8 +615,15 @@ pub(crate) async fn revalidate_stock_adjustment_start_candidates(
     rbac.revalidate_stock_adjustment_candidates(graph, initiator_id, organization_id, executor).await
 }
 
+/// 在原事务重读审批候选并检查完整同角色资格。
+/// # 参数
+/// identity_service、db为共享设施；graph为发布图，其余参数为申请人与真实责任组织。
+/// # 返回
+/// 全部候选仍合格时成功。
+/// # 错误
+/// 账号、角色、职责分离或定义失效时拒绝。
 pub(crate) async fn revalidate_candidates_with(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
     db: &Database,
     graph: &DefinitionGraph,
     initiator_id: &str,
@@ -634,8 +650,11 @@ pub(crate) async fn revalidate_candidates_with(
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
-        if !approval_participant_permissions_with_executor(db, identity_service, &assignee_actor, executor)
+        let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
+        if !identity_service
+            .permissions(&assignee_actor, &required, executor)
             .await?
+            .is_some_and(|qualified| qualified.same_role(&required))
         {
             return Err(Error::ValidationError("指定审批人缺少审批读取和决定权限".to_string()));
         }
@@ -652,7 +671,7 @@ async fn stock_adjustment_candidate_accounts(
     assignee_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<Option<HashMap<String, AccountCore>>> {
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Ok(None);
     }
     let ids = assignee_ids.iter().cloned().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();

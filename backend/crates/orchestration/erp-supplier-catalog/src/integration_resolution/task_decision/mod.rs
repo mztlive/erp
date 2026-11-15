@@ -1,4 +1,6 @@
 //! W29 强类型任务动作、任务完成与无任务直接对账决定。
+#[cfg(test)]
+use persistence_core::ReadExecutor;
 
 mod action;
 mod complete;
@@ -178,12 +180,8 @@ mod receipt_event_tests {
 
     use super::*;
 
-    struct TestExecutor;
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type TestExecutor = ReadExecutor;
+
     struct Sinks {
         executor_id: usize,
         fail_receipt: bool,
@@ -257,7 +255,7 @@ mod receipt_event_tests {
     }
     #[tokio::test]
     async fn w29_receipt_and_event_execute_true_boundary_in_order_with_separate_business_unknown() {
-        let mut executor = TestExecutor;
+        let mut executor = TestExecutor::default();
         let sink = sink(&mut executor, false, false);
         store_receipt_with_sinks(&actor(), &identity(), result(), &mut executor, &sink, &sink).await.unwrap();
         assert_eq!(*sink.calls.lock().unwrap(), ["receipt", "event"]);
@@ -280,7 +278,7 @@ mod receipt_event_tests {
     #[tokio::test]
     async fn w29_receipt_or_audit_failure_stops_boundary_and_preserves_first_error() {
         for (fail_receipt, fail_event) in [(true, false), (false, true)] {
-            let mut executor = TestExecutor;
+            let mut executor = TestExecutor::default();
             let sink = sink(&mut executor, fail_receipt, fail_event);
             let error =
                 store_receipt_with_sinks(&actor(), &identity(), result(), &mut executor, &sink, &sink)

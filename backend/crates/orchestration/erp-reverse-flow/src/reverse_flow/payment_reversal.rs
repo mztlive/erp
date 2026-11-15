@@ -1,3 +1,6 @@
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
+
 use crate::ReverseFlowPorts;
 mod commit;
 
@@ -78,7 +81,13 @@ impl ReturnsProcess {
         req.validate()?;
         let reversal = new_payment_reversal(req, actor.id())?;
         persist_created_payment_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
-        self.reads().payment_reversal_detail(&reversal.base.id).await.map_err(crate::Error::from)
+        self.payment_reversal_result(
+            &reversal.base.id,
+            actor,
+            &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CREATE,
+            AccessTarget::Operation,
+        )
+        .await
     }
 
     /// 按原顺序读取原付款及版本，准备一次创建提交所需的冲正事实。
@@ -134,7 +143,15 @@ impl ReturnsProcess {
             actor: actor.clone(),
         };
         if let Some(id) = self.replay_reversal_submit(&submission).await? {
-            return self.reads().payment_reversal_detail(&id).await.map_err(reversal_result_read_error);
+            return self
+                .payment_reversal_result(
+                    &id,
+                    actor,
+                    &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+                    AccessTarget::record(&id)?,
+                )
+                .await
+                .map_err(reversal_result_read_error);
         }
         let adapter = payment_reversal_adapter()?;
         let mut reversal = self.domain().load_payment_reversal(id, &mut NoTransaction).await?;
@@ -175,7 +192,13 @@ impl ReturnsProcess {
         let mut reversal = self.domain().load_payment_reversal(id, &mut NoTransaction).await?;
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         self.persist_cancelled_payment_reversal(id, &mut reversal, &req, actor).await?;
-        self.reads().payment_reversal_detail(id).await.map_err(crate::Error::from)
+        self.payment_reversal_result(
+            id,
+            actor,
+            &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+        )
+        .await
     }
 
     /// 从绑定读取定义并持久化启动事实。
@@ -246,7 +269,14 @@ impl ReturnsProcess {
     ) -> Result<PaymentReversalView> {
         let persisted = persist_payment_reversal_start(&self.db, &self.rbac, input).await.map(|_| ());
         self.finish_reversal_submit(submission, persisted).await?;
-        self.reads().payment_reversal_detail(&submission.id).await.map_err(reversal_result_read_error)
+        self.payment_reversal_result(
+            &submission.id,
+            &submission.actor,
+            &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+            AccessTarget::record(&submission.id)?,
+        )
+        .await
+        .map_err(reversal_result_read_error)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -261,8 +291,7 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         let adapter = payment_reversal_adapter()?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_payment_reversal_binding(binding.as_ref())?.clone();
         let subject = payment_reversal_subject_ref(id)?;
         let runtime =
@@ -354,6 +383,14 @@ async fn persist_created_payment_reversal(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.identity
+                    .require(
+                        &actor,
+                        &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 persist_bound_payment_reversal_document(
                     &db,
                     &rbac,

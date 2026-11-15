@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use erp_core::common::time::Instant;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
@@ -26,6 +26,7 @@ impl SupplierFulfillmentService {
     ///
     /// # 参数
     /// * `req` - 下单请求
+    /// * `executor` - 创建用例的原事务执行器
     ///
     /// # 返回
     /// 返回已校验的供应商连接，以及按修订 ID 索引的供给。
@@ -38,12 +39,13 @@ impl SupplierFulfillmentService {
     pub async fn ensure_placeable(
         &self,
         req: &PlaceFulfillmentOrderRequest,
+        executor: &mut dyn Executor,
     ) -> Result<(SupplierApiConnection, HashMap<String, crate::entity::supplier_offering::SupplierOffering>)>
     {
         let connection = self
             .db
             .supplier_api_connections()
-            .find_by_id(&req.connection_id, &mut NoTransaction)
+            .find_by_id(&req.connection_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
         if !connection.is_active() {
@@ -58,11 +60,8 @@ impl SupplierFulfillmentService {
             req.items.iter().map(|item| item.supplier_offering_revision_id.clone()).collect::<Vec<_>>();
         revision_ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
         revision_ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
-        let by_revision = self
-            .db
-            .supplier_fulfillment()
-            .load_offerings_by_revision_ids(&revision_ids, &mut NoTransaction)
-            .await?;
+        let by_revision =
+            self.db.supplier_fulfillment().load_offerings_by_revision_ids(&revision_ids, executor).await?;
         if by_revision.len() != revision_ids.len() {
             return Err(Error::NotFound("供应商供给修订或供给不存在".to_string()));
         }

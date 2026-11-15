@@ -3,17 +3,10 @@ use std::str::FromStr;
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
+use persistence_core::ReadExecutor;
 
 use super::*;
 use crate::entity::receivable::{AccountReviewStatus, CustomerReceiptData, ReceivableAccountData};
-struct TestExecutor {
-    _identity: u8,
-}
-impl Executor for TestExecutor {
-    fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-        None
-    }
-}
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Call {
     Allocations,
@@ -35,11 +28,11 @@ struct RecordingStore {
     reverses: Vec<ReceiptAllocation>,
 }
 impl RecordingStore {
-    fn new(ex: &mut TestExecutor) -> Self {
+    fn new(ex: &mut ReadExecutor) -> Self {
         let entries = vec![entry("entry-1", "account-1"), entry("entry-2", "account-2")];
         let accounts = vec![account("account-1"), account("account-2")];
         Self {
-            executor: ex as *mut TestExecutor as usize,
+            executor: ex as *mut ReadExecutor as usize,
             calls: vec![],
             fail_at: None,
             settlement_false: false,
@@ -221,7 +214,7 @@ fn order() -> Vec<Call> {
 /// 真实算法保持逐chunk抵销先写、唯一减少分录后写、反向核销最后写，原回款保持Posted。
 #[tokio::test]
 async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_frozen_facts() {
-    let mut ex = TestExecutor { _identity: 1 };
+    let mut ex = ReadExecutor::default();
     let mut store = RecordingStore::new(&mut ex);
     let receipt = receipt();
     let input = refund();
@@ -258,7 +251,7 @@ async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_fro
 async fn refund_stops_at_each_repository_failure_with_same_executor() {
     let expected = order();
     for (index, call) in expected.iter().enumerate() {
-        let mut ex = TestExecutor { _identity: 1 };
+        let mut ex = ReadExecutor::default();
         let mut store = RecordingStore::new(&mut ex);
         store.fail_at = Some(call.clone());
         assert!(
@@ -271,7 +264,7 @@ async fn refund_stops_at_each_repository_failure_with_same_executor() {
 #[tokio::test]
 async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
     for case in 0..4 {
-        let mut ex = TestExecutor { _identity: 1 };
+        let mut ex = ReadExecutor::default();
         let mut store = RecordingStore::new(&mut ex);
         match case {
             0 => {
@@ -304,7 +297,7 @@ async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
 /// 第二次部分退款消费第一次反向分配；累计可逆分配不足在批读事实和任何写入之前拒绝。
 #[tokio::test]
 async fn refund_reloads_interleaved_reverse_facts_and_rejects_over_reversal() {
-    let mut ex = TestExecutor { _identity: 1 };
+    let mut ex = ReadExecutor::default();
     let mut store = RecordingStore::new(&mut ex);
     post_with_store(&mut store, &refund(), &receipt(), "actor-1", &mut ex).await.unwrap();
     store.allocations.extend(store.reverses.clone());

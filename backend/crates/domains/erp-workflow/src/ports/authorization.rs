@@ -5,7 +5,6 @@ use std::future::Future;
 use application_core::AuditActor;
 #[cfg(test)]
 use erp_core::AccountKind;
-use erp_identity::Permission;
 use persistence_core::Executor;
 
 use super::ApprovalBindingFacts;
@@ -133,25 +132,6 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
         _executor: &mut dyn Executor,
     ) -> impl Future<Output = Result<bool>> + Send {
         async { Err(Error::Internal("审批来源读取授权未装配".into())) }
-    }
-
-    /// 以真实管理入口及完整同角色资格证明整个审批业务来源。
-    /// # 参数
-    /// actor、entry 为真实账号和固定管理动作；required 为该类型的固定必需权限，目标和executor沿原事务。
-    /// # 返回
-    /// 同一次 identity 对象检查同时证明完整功能资格及全部真实来源。
-    /// # 错误
-    /// 未装配、组合未登记、来源缺失或授权失败时拒绝。
-    fn require_approval_management(
-        &self,
-        _actor: &AuditActor,
-        _entry: &Permission,
-        _required: &[Permission],
-        _document_type: DocumentType,
-        _document_id: &str,
-        _executor: &mut dyn Executor,
-    ) -> impl Future<Output = Result<()>> + Send {
-        async { Err(Error::Internal("审批管理完整来源授权未装配".into())) }
     }
 
     /// 在原提交事务内证明提交者可以读取本次锁定的合同。

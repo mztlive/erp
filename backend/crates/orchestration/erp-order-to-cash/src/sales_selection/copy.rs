@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_customer::{CustomerAccountStatus, CustomerExt};
 use erp_party::PartyExt;
+use erp_permissions::sales_selection;
 use erp_sales::dto::sales_selection::{CopySalesSelectionBookletRequest, SalesSelectionBookletView};
 use erp_sales::entity::sales_selection::IdempotencyOperation;
 use erp_sales::ports::sales_selection::SelectionCustomerFact;
@@ -40,7 +41,9 @@ impl SalesSelectionProcess {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let source = access.require_booklet(&actor, "get", &id, executor).await?;
+                    let source = access
+                        .require_booklet(&actor, &sales_selection::BOOKLET_DETAIL, &id, executor)
+                        .await?;
                     customer_access.require_current(&actor, &req.customer_id, executor).await?;
                     check_create_scope(
                         &access,

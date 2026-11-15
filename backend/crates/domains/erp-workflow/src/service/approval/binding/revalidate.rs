@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use bpm::model::types::ModelError;
 use erp_core::AccountKind;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -52,6 +52,7 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 /// # 关键业务约束
 /// 审批人集合由 BPM 图确定性提取，Service 只编排外部资格判断。
 pub async fn revalidate_binding_graph(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     policy: &ProcessRequiredApprovalPolicy,
@@ -63,7 +64,7 @@ pub async fn revalidate_binding_graph(
     ensure_separation_of_duties(policy.separation_of_duties_policy, &context.creator_id, &assignee_ids)?;
     for user_id in &assignee_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
-        match approver_qualification(db, identity_service, &actor, executor).await? {
+        match approver_qualification(authorization, db, identity_service, &actor, executor).await? {
             ApprovalQualification::Inactive => {
                 return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
             },

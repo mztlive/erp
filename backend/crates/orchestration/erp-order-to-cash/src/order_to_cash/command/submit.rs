@@ -5,6 +5,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
 };
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_sales::dto::sales_order::{SalesOrderDraftRequest, SubmissionView, SubmitSalesOrderRequest};
 use erp_sales::entity::command_receipt::SalesCommandResult;
 use erp_sales::entity::sales_order::{
@@ -27,7 +28,7 @@ use erp_workflow::service::approval::execution::{PreparedExecution, command_reco
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
@@ -171,25 +172,6 @@ pub(super) fn ensure_unified_start_command(start: &SalesOrderStartCommand) -> Re
     Ok(())
 }
 
-/// 读取销售单最新提交号，作为撤回查找实例的 `subject_version`。
-///
-/// # 参数
-/// * `db` - 业务数据库。
-/// * `sales_order_id` - 销售单主键。
-///
-/// # 返回
-/// 返回最新提交的 `submission_no`。
-///
-/// # 错误
-/// 没有提交时返回冲突；仓储读取失败时返回对应错误。
-pub(super) async fn latest_submission_no(db: &mongodb::Database, sales_order_id: &str) -> Result<u32> {
-    db.sales_order_submissions()
-        .find_latest_by_order(&SalesOrderId::new(sales_order_id), &mut NoTransaction)
-        .await?
-        .map(|submission| submission.submission_no)
-        .ok_or_else(|| Error::ConflictError("销售单没有可撤回的提交版本".to_string()))
-}
-
 impl SalesOrderCommandProcess {
     /// 提交销售单并冻结提交快照。
     ///
@@ -220,8 +202,13 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SubmissionView> {
         req.validate()?;
-        let access = self.command_access(actor, "submit");
-        let authorized_order = access.current(id, &mut NoTransaction).await?;
+        let access = self.command_access(actor, sales_order_permissions::SUBMIT);
+        let authorized_order = self
+            .db
+            .sales_orders()
+            .find_by_id(id, &mut ReadExecutor::default())
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))?;
         let identity = SubmissionIdentity::new(id, &req, actor)?;
         if let Some(existing) = self
             .replay_sales_submission(&identity.audit_id, &identity.fingerprint, &identity.key_hash, id, actor)
@@ -299,7 +286,7 @@ impl SalesOrderCommandProcess {
         let latest = self
             .db
             .sales_order_submissions()
-            .find_latest_by_order(&order_id, &mut NoTransaction)
+            .find_latest_by_order(&order_id, &mut ReadExecutor::default())
             .await?
             .map(|submission| submission.submission_no)
             .unwrap_or(0);
@@ -319,7 +306,11 @@ impl SalesOrderCommandProcess {
         let active_working_copy = self
             .db
             .sales_order_working_copies()
-            .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
+            .find_active_by_order_and_purpose(
+                &order_id,
+                WorkingPurpose::FirstSubmission,
+                &mut ReadExecutor::default(),
+            )
             .await?;
         let stable = self.sales().collect_stable_lines_for_draft(&order_id, &draft.lines).await?;
         let (working_copy, copy_lines, working_copy_plan) = self
@@ -339,7 +330,7 @@ impl SalesOrderCommandProcess {
             .sales_order_submissions()
             .find_by_working_copy(
                 &SalesOrderWorkingCopyId::new(working_copy.base.id.clone()),
-                &mut NoTransaction,
+                &mut ReadExecutor::default(),
             )
             .await?;
         let Some(existing) = existing else {
@@ -349,7 +340,7 @@ impl SalesOrderCommandProcess {
         let existing_lines = self
             .db
             .sales_order_submission_lines()
-            .list_lines_by_submissions(&[existing_id], &mut NoTransaction)
+            .list_lines_by_submissions(&[existing_id], &mut ReadExecutor::default())
             .await?;
         Ok(Some(submission_view(existing, existing_lines)))
     }
@@ -430,14 +421,14 @@ impl SalesOrderCommandProcess {
             .ensure_sellable_refs(
                 &sellable_refs,
                 &CatalogQualificationAdapter::new(self.services.catalog.clone()),
-                &mut NoTransaction,
+                &mut ReadExecutor::default(),
             )
             .await?;
         Ok(PreparedSalesSubmission {
             access: context.access,
             expected_order_version: context.expected_order_version,
             input: SalesOrderStartPersistInput {
-                identity: self.rbac.clone(),
+                identity: self.authorization.clone(),
                 resubmission_reason: start.resubmission_reason,
                 order: start.order,
                 working_copy: start.working_copy,
@@ -464,13 +455,14 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
         idempotency_key: &str,
     ) -> Result<SalesSubmissionApprovalContext> {
-        let access = self.command_access(actor, "submit");
+        let access = self.command_access(actor, sales_order_permissions::SUBMIT);
         let expected_order_version = start.order.base.version;
         let ports = sales_approval_ports(start.order.business_type)?;
         let subject = subject_ref_for_sales_business(start.order.business_type, start.id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let binding =
-            find_approval_binding(&self.db, start.id, &mut NoTransaction).await.map_err(Error::from)?;
+        let binding = find_approval_binding(&self.db, start.id, &mut ReadExecutor::default())
+            .await
+            .map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         execute_sales_order_domain_action(&mut start.order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
@@ -522,11 +514,11 @@ impl SalesOrderCommandProcess {
         .await?;
         let graph = resolve_start_approvers(
             &self.db,
-            &self.rbac,
+            &self.authorization,
             graph,
             actor.id(),
             receipt.as_ref(),
-            &mut NoTransaction,
+            &mut ReadExecutor::default(),
         )
         .await?;
         let input = build_sales_order_start_input(SalesOrderStartInput {
@@ -560,7 +552,7 @@ impl SalesOrderCommandProcess {
         let expected_key_hash = expected_key_hash.clone();
         let sales_order_id = sales_order_id.to_string();
         let actor_id = actor.id().to_string();
-        let access = self.command_access(actor, "submit");
+        let access = self.command_access(actor, sales_order_permissions::SUBMIT);
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -594,7 +586,7 @@ impl SalesOrderCommandProcess {
             document_type: input.document_type,
             subject_version: input.subject_version,
         };
-        let access = self.command_access(input.actor, "submit");
+        let access = self.command_access(input.actor, sales_order_permissions::SUBMIT);
         let started = self
             .db
             .client()

@@ -10,6 +10,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId, PartyId};
+use erp_identity::AccessTarget;
 use erp_import::repository::prelude::*;
 use erp_import::{
     ApplyLegacyImportBatchRequest, ApplyResultDraft, ApplyResultItem, ApplyResultOutcome, ApplyResultSet,
@@ -19,10 +20,11 @@ use erp_import::{
 };
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
+use erp_permissions::legacy_import;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ImportApplyProcess;
@@ -85,36 +87,60 @@ impl ImportApplyProcess {
         actor: &AuditActor,
     ) -> Result<LegacyImportBatchView> {
         let result_set = apply_result_set_from_request(req)?;
+        let service = self.clone();
+        let batch_id = batch_id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.apply_batch_stage(&batch_id, result_set, &actor, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 授权、决定写入的读取、批次增量和回包沿用同一事务。
+    async fn apply_batch_stage(
+        &self,
+        batch_id: &str,
+        result_set: ApplyResultSet,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<LegacyImportBatchView> {
+        self.authorization
+            .require(actor, &legacy_import::BATCH_APPLY, AccessTarget::Operation, executor)
+            .await?;
         let mut batch = self
             .db
             .legacy_import_batches()
-            .find_by_id(batch_id, &mut NoTransaction)
+            .find_by_id(batch_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
         if batch.is_terminal() {
             tracing::info!(batch_id, status = ?batch.status, "批次已终态，按幂等返回");
-            return self.batch_view_of(batch).await;
+            return self.batch_view_of(batch, executor).await;
         }
         if !batch.is_importing() {
             return Err(Error::BusinessLogicError("批次尚未进入导入阶段，禁止应用".to_string()));
         }
-        let job = self.load_running_import_job(&batch).await?;
+        let job = self.load_running_import_job(&batch, executor).await?;
         let scope_batch_id = LegacyImportBatchId::new(batch_id.to_string());
         let mut scope = self
             .db
             .legacy_import_rows()
-            .apply_row_scope(&scope_batch_id, &result_set.row_ids(), &mut NoTransaction)
+            .apply_row_scope(&scope_batch_id, &result_set.row_ids(), executor)
             .await?;
         ensure_no_missing_apply_rows(&scope.missing_row_ids)?;
-        let party_ok = self.customer_import_party_ok(&result_set, &scope.rows).await?;
+        let party_ok = self.customer_import_party_ok(&result_set, &scope.rows, executor).await?;
         let deltas = collect_apply_deltas(&result_set, &mut scope.rows, &party_ok)?;
         let pending_rows = scope.pending_outside_request;
         let all_terminal = pending_rows == 0;
         if deltas.rows.is_empty() && !all_terminal {
-            return self.batch_view_of(batch).await;
+            return self.batch_view_of(batch, executor).await;
         }
         advance_batch_counts(&mut batch, &deltas, pending_rows)?;
-        self.persist_apply_batch(batch, job, deltas, all_terminal, actor).await
+        self.persist_apply_batch(batch, job, deltas, all_terminal, actor, executor).await
     }
 
     /// 装载已由 `START_APPLY` 启动的后台任务。
@@ -127,11 +153,15 @@ impl ImportApplyProcess {
     ///
     /// # 错误
     /// 任务缺失或尚未启动时返回错误。
-    async fn load_running_import_job(&self, batch: &LegacyImportBatch) -> Result<BackgroundJob> {
+    async fn load_running_import_job(
+        &self,
+        batch: &LegacyImportBatch,
+        executor: &mut dyn Executor,
+    ) -> Result<BackgroundJob> {
         let job = self
             .db
             .background_jobs()
-            .find_by_request_id(&batch.batch_no, &mut NoTransaction)
+            .find_by_request_id(&batch.batch_no, executor)
             .await?
             .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
         if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
@@ -160,6 +190,7 @@ impl ImportApplyProcess {
         &self,
         result_set: &ApplyResultSet,
         rows: &HashMap<String, LegacyImportRow>,
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, bool>> {
         let targets = collect_customer_import_targets(result_set, rows);
         if targets.is_empty() {
@@ -172,7 +203,7 @@ impl ImportApplyProcess {
                 party_ids.push(PartyId::new(target.clone()));
             }
         }
-        let found = self.db.parties().find_parties_by_ids(&party_ids, &mut NoTransaction).await?;
+        let found = self.db.parties().find_parties_by_ids(&party_ids, executor).await?;
         Ok(map_customer_party_ok(&targets, &found))
     }
 
@@ -197,6 +228,7 @@ impl ImportApplyProcess {
         deltas: ApplyBatchDeltas,
         all_terminal: bool,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<LegacyImportBatchView> {
         let audit = actor.clone().resource_log(
             "legacy_import_batch.apply",
@@ -204,37 +236,26 @@ impl ImportApplyProcess {
             batch.base.id.clone(),
         )?;
         let now = Instant::now();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut rows_for_tx = deltas.rows;
-        let mut batch_for_tx = batch;
-        let mut job_for_tx = job;
-        let success = deltas.success;
-        let skipped = deltas.skipped;
-        let failed = deltas.failed;
-        let updated_batch = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    persist_apply_transaction(
-                        PersistApplyWrite {
-                            db: &db,
-                            rows: &mut rows_for_tx,
-                            batch: &mut batch_for_tx,
-                            job: &mut job_for_tx,
-                            audit: &audit,
-                            success,
-                            skipped,
-                            failed,
-                            all_terminal,
-                            now,
-                        },
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await?;
-        self.batch_view_of(updated_batch).await
+        let mut rows = deltas.rows;
+        let mut batch = batch;
+        let mut job = job;
+        let updated_batch = persist_apply_transaction(
+            PersistApplyWrite {
+                db: &self.db,
+                rows: &mut rows,
+                batch: &mut batch,
+                job: &mut job,
+                audit: &audit,
+                success: deltas.success,
+                skipped: deltas.skipped,
+                failed: deltas.failed,
+                all_terminal,
+                now,
+            },
+            executor,
+        )
+        .await?;
+        self.batch_view_of(updated_batch, executor).await
     }
 }
 
@@ -514,12 +535,27 @@ mod tests {
         ApplyLegacyImportBatchRequest, ApplyResultDraft, ApplyResultOutcome, ApplyResultSet, ApplyRowOutcome,
         ApplyRowResult, ImportStatus, LegacyImportRow, LegacyImportRowData, ParseStatus,
     };
+    use persistence_core::ReadExecutor;
 
     use super::{
         PersistApplyWrite, advance_batch_counts, apply_result_set_from_request, collect_apply_deltas,
         collect_customer_import_targets, ensure_no_missing_apply_rows, map_customer_party_ok,
         persist_apply_transaction,
     };
+
+    /// 批次应用在读取既有批次及幂等分支前必须进入写授权事务。
+    #[tokio::test]
+    async fn apply_batch_rejects_unproven_transaction_before_reading_existing_batch() {
+        let (service, actor) = super::super::testing::fixture().await;
+        let results = ApplyResultSet::try_from_drafts(vec![imported_draft("row", "target")]).unwrap();
+        let error = service
+            .apply_batch_stage("batch", results, &actor, &mut ReadExecutor::default())
+            .await
+            .expect_err("必须先验证写入边界");
+        assert!(
+            matches!(error, crate::Error::ValidationError(reason) if reason == "写入授权必须使用快照事务")
+        );
+    }
 
     fn applicable_row(id: &str) -> LegacyImportRow {
         let mut row = LegacyImportRow::new(
@@ -757,7 +793,7 @@ mod tests {
             LegacyImportBatch, LegacyImportBatchData, LegacyImportBatchStatus, LegacyImportExt,
         };
         use erp_support::{BackgroundJob, BackgroundJobData, BulkJobExt, JobStatus, JobType};
-        use persistence_core::{NoTransaction, Transactional};
+        use persistence_core::{ReadExecutor, Transactional};
         use test_support::{TestDb, require_mongo};
 
         require_mongo!(async {
@@ -803,10 +839,19 @@ mod tests {
             job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
             let pending_ok = applicable_row("row-ok");
             let pending_stale = applicable_row("row-stale");
-            db.legacy_import_batches().create(&batch, &mut NoTransaction).await.expect("批次写入失败");
-            db.background_jobs().create(&job, &mut NoTransaction).await.expect("任务写入失败");
-            db.legacy_import_rows().create(&pending_ok, &mut NoTransaction).await.expect("行写入失败");
-            db.legacy_import_rows().create(&pending_stale, &mut NoTransaction).await.expect("冲突行写入失败");
+            db.legacy_import_batches()
+                .create(&batch, &mut ReadExecutor::default())
+                .await
+                .expect("批次写入失败");
+            db.background_jobs().create(&job, &mut ReadExecutor::default()).await.expect("任务写入失败");
+            db.legacy_import_rows()
+                .create(&pending_ok, &mut ReadExecutor::default())
+                .await
+                .expect("行写入失败");
+            db.legacy_import_rows()
+                .create(&pending_stale, &mut ReadExecutor::default())
+                .await
+                .expect("冲突行写入失败");
 
             let set = ApplyResultSet::try_from_drafts(vec![
                 imported_draft("row-ok", "SO-1"),
@@ -818,12 +863,12 @@ mod tests {
             let mut deltas = collect_apply_deltas(&set, &mut rows, &HashMap::new()).unwrap();
             let mut bumped = db
                 .legacy_import_rows()
-                .find_by_id("row-stale", &mut NoTransaction)
+                .find_by_id("row-stale", &mut ReadExecutor::default())
                 .await
                 .expect("重读冲突行失败")
                 .expect("冲突行必须存在");
             db.legacy_import_rows()
-                .update(&mut bumped, &mut NoTransaction)
+                .update(&mut bumped, &mut ReadExecutor::default())
                 .await
                 .expect("抬升冲突行版本失败");
             advance_batch_counts(&mut batch, &deltas, 0).unwrap();
@@ -867,18 +912,32 @@ mod tests {
                 .await;
             assert!(persist.is_err(), "后行乐观锁失败必须整体回滚");
 
-            let ok = db.legacy_import_rows().find_by_id("row-ok", &mut NoTransaction).await.unwrap().unwrap();
-            let stale =
-                db.legacy_import_rows().find_by_id("row-stale", &mut NoTransaction).await.unwrap().unwrap();
-            let stored_batch = db
-                .legacy_import_batches()
-                .find_by_id("batch-cas", &mut NoTransaction)
+            let ok = db
+                .legacy_import_rows()
+                .find_by_id("row-ok", &mut ReadExecutor::default())
                 .await
                 .unwrap()
                 .unwrap();
-            let stored_job =
-                db.background_jobs().find_by_id("job-cas", &mut NoTransaction).await.unwrap().unwrap();
-            let stored_audit = db.audit_logs().find_by_id("audit-cas-1", &mut NoTransaction).await.unwrap();
+            let stale = db
+                .legacy_import_rows()
+                .find_by_id("row-stale", &mut ReadExecutor::default())
+                .await
+                .unwrap()
+                .unwrap();
+            let stored_batch = db
+                .legacy_import_batches()
+                .find_by_id("batch-cas", &mut ReadExecutor::default())
+                .await
+                .unwrap()
+                .unwrap();
+            let stored_job = db
+                .background_jobs()
+                .find_by_id("job-cas", &mut ReadExecutor::default())
+                .await
+                .unwrap()
+                .unwrap();
+            let stored_audit =
+                db.audit_logs().find_by_id("audit-cas-1", &mut ReadExecutor::default()).await.unwrap();
             assert_eq!(ok.import_status, ImportStatus::PendingImport);
             assert_eq!(stale.import_status, ImportStatus::PendingImport);
             assert_eq!(stored_batch.status, LegacyImportBatchStatus::Importing);

@@ -7,6 +7,8 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_fulfillment::dto::{CreateDeliveryRequest, DeliveryView, UpdateDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::fulfillment;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::repository::prelude::*;
@@ -20,7 +22,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::FulfillmentProcess;
-use super::task::FulfillmentIdentityFactory;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
@@ -253,7 +254,7 @@ async fn register_created_delivery_document(
 async fn persist_created_delivery(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     delivery: Delivery,
     lines: Vec<DeliveryLine>,
     actor: AuditActor,
@@ -266,6 +267,14 @@ async fn persist_created_delivery(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                task_identity
+                    .require(
+                        &actor,
+                        &fulfillment::DELIVERY_DELIVERY_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor).await?;
                 register_created_delivery_document(&db, workflow.as_ref(), &delivery, &actor, executor)
                     .await?;

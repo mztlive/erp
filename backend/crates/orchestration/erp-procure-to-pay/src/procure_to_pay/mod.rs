@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use erp_audit::execution::persist_log;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use mongodb::Database;
 
@@ -74,9 +74,10 @@ pub use source_withdraw::SalesChangeWithdrawal;
 /// 采购单服务。
 ///
 /// 提供采购单从依据创建绑定、草稿保存、提交启动审批、最终通过生效与撤回编排。
+#[derive(Clone)]
 pub struct PurchaseOrderProcess {
     db: Database,
-    rbac: Option<SharedRbacService>,
+    rbac: Option<Arc<AuthorizationService>>,
     ports: Arc<PurchaseOrderPorts>,
 }
 impl PurchaseOrderProcess {
@@ -106,7 +107,7 @@ impl PurchaseOrderProcess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn with_rbac(db: Database, rbac: SharedRbacService, ports: Arc<PurchaseOrderPorts>) -> Self {
+    pub fn with_rbac(db: Database, rbac: Arc<AuthorizationService>, ports: Arc<PurchaseOrderPorts>) -> Self {
         Self { db, rbac: Some(rbac), ports }
     }
     /// 为单域采购构造和事务内写入提供本地服务。
@@ -123,7 +124,7 @@ impl PurchaseOrderProcess {
     ///
     /// # 错误
     /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
-    pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
+    pub(super) fn require_rbac(&self) -> Result<&Arc<AuthorizationService>> {
         self.rbac.as_ref().ok_or_else(|| Error::Internal("采购单写命令需要授权源".to_string()))
     }
 }

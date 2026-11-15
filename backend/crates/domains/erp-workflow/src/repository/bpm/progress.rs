@@ -1,8 +1,10 @@
 //! 发起人进展计数与已读确认；只修改提醒字段，不推进审批版本。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Result, aggregate, mongo_ops};
 
 use super::{BpmWorkflowRepository, INSTANCES, i64_version};
 use crate::entity::approval_progress::ViewedApprovalProgress;
@@ -15,13 +17,34 @@ impl BpmWorkflowRepository<'_> {
     /// 未软删除且有未读进展的审批单数量。
     /// # 错误
     /// 数据库读取失败时返回错误。
-    pub async fn started_unread_count(&self, actor_id: &str, executor: &mut dyn Executor) -> Result<u64> {
-        mongo_ops::count_documents(
-            &self.db.collection::<Document>(INSTANCES),
-            doc! { "started_by": actor_id, "initiator_unread": true, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-            executor,
-        )
-        .await
+    pub async fn started_unread_count(
+        &self,
+        actor_id: &str,
+        access: &CompiledAccess,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<u64> {
+        let model = access.model();
+        if model.resource != "approval_instance"
+            || model.collection != INSTANCES
+            || model.id_field != "id"
+            || model.output != QueryOutput::Object
+        {
+            return Err(crate::Error::ValidationError("审批进展授权模型不匹配".into()));
+        }
+        access.ensure_current(executor)?;
+        let mut pipeline = access.stages().to_vec();
+        pipeline.push(doc! {"$match": {
+            "started_by": actor_id, "initiator_unread": true, "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        }});
+        pipeline.push(doc! {"$count": "count"});
+        let rows = aggregate::rows(&self.db.collection::<Document>(INSTANCES), pipeline, executor).await?;
+        let count = rows
+            .first()
+            .map(|row| row.get_i64("count"))
+            .transpose()
+            .map_err(|_| crate::Error::Internal("审批进展计数类型非法".into()))?
+            .unwrap_or_default();
+        u64::try_from(count).map_err(|_| crate::Error::Internal("审批进展计数越界".into()))
     }
 
     /// 原子清除已展示版本以内的进展，保留并发产生的更新。

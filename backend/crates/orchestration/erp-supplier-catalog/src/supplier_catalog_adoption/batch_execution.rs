@@ -45,7 +45,12 @@ impl SupplierCatalogAdoptionProcess {
                 })
             })
             .await?;
-        let batch = self.load_batch(connection, id, actor, &mut NoTransaction).await?;
+        let (source, target, acting) = (connection.to_owned(), id.to_owned(), actor.clone());
+        let batch = self
+            .with_snapshot(move |process, executor| {
+                Box::pin(async move { process.load_batch(&source, &target, &acting, executor).await })
+            })
+            .await?;
         if !batch.published_operations.contains(&command)
             && let Err(error) = self.prepare_batch_operation(&batch, &command).await
         {
@@ -64,12 +69,31 @@ impl SupplierCatalogAdoptionProcess {
         request: &SubmitBatchRequest,
         actor: &AuditActor,
     ) -> Result<String> {
-        let batch = self.load_batch(connection, id, actor, &mut NoTransaction).await?;
-        let rows = self.all_batch_items(id, &mut NoTransaction).await?;
-        self.ensure_batch_rows_access(actor, &rows, &mut NoTransaction).await?;
+        let (connection, id, request, actor) =
+            (connection.to_owned(), id.to_owned(), request.clone(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                process.submission_preflight(&connection, &id, &request, &actor, executor).await
+            })
+        })
+        .await
+    }
+
+    /// 在同一读取快照中核对确认范围、逐项访问与原操作号。
+    async fn submission_preflight(
+        &self,
+        connection: &str,
+        id: &str,
+        request: &SubmitBatchRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        let batch = self.load_batch(connection, id, actor, executor).await?;
+        let rows = self.all_batch_items(id, executor).await?;
+        self.ensure_batch_rows_access(actor, &rows, executor).await?;
         let command = adoption_identity(&[connection, actor.id(), &request.idempotency_key]);
         let fingerprint = submission_fingerprint(id, request, &rows)?;
-        if self.db.catalog_adoption_commands().find_by_id(&command, &mut NoTransaction).await?.is_none() {
+        if self.db.catalog_adoption_commands().find_by_id(&command, executor).await?.is_none() {
             batch.ensure_version(request.expected_version)?;
             batch.ensure_submission(request.preview_version, &request.item_ids)?;
             for item in &request.item_ids {
@@ -329,7 +353,6 @@ impl SupplierCatalogAdoptionProcess {
         row: &CatalogAdoptionBatchItem,
     ) -> Result<AdoptionResult> {
         let actor = self.batch_execution_actor(row).await?;
-        self.batch_access(&batch.connection_id, &actor, &mut NoTransaction).await?;
         self.confirm_batch_row(batch, row, &actor).await
     }
 
@@ -368,7 +391,12 @@ impl SupplierCatalogAdoptionProcess {
     /// # 错误
     /// 当前用户越权或读取持久化失败时拒绝。
     pub async fn reconcile_batch(&self, connection: &str, id: &str, actor: &AuditActor) -> Result<BatchView> {
-        let batch = self.load_batch(connection, id, actor, &mut NoTransaction).await?;
+        let (source, target, acting) = (connection.to_owned(), id.to_owned(), actor.clone());
+        let batch = self
+            .with_snapshot(move |process, executor| {
+                Box::pin(async move { process.load_batch(&source, &target, &acting, executor).await })
+            })
+            .await?;
         self.reconcile_batch_rows(&batch, Some(actor)).await?;
         self.batch(connection, id, actor).await
     }
@@ -417,10 +445,18 @@ impl SupplierCatalogAdoptionProcess {
             Some(actor) => actor.clone(),
             None => self.batch_execution_actor(row).await?,
         };
-        self.batch_access(&batch.connection_id, &actor, &mut NoTransaction).await?;
-        let original =
-            row.frozen_row.as_ref().ok_or_else(|| Error::Internal("原入库资料缺失，禁止重复提交".into()))?;
-        self.replay(&row.source.base.id, original, &actor, &mut NoTransaction).await
+        let (connection, row) = (batch.connection_id.clone(), row.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move {
+                process.batch_access(&connection, &actor, executor).await?;
+                let original = row
+                    .frozen_row
+                    .as_ref()
+                    .ok_or_else(|| Error::Internal("原入库资料缺失，禁止重复提交".into()))?;
+                process.replay(&row.source.base.id, original, &actor, executor).await
+            })
+        })
+        .await
     }
 }
 

@@ -1,225 +1,158 @@
-//! W29 异常任务受控关闭。
-
+//! W29 异常任务的授权、重放与关闭共用同一写事务。
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::ensure_generic_work_item_mutation;
 use super::write::{
-    IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version,
-    record_command_attempt, recover_command_error, required_text, work_item_update_error,
+    IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version, required_text,
+    work_item_update_error,
 };
-use super::{CloseWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemService};
+use super::{CloseWorkItemRequest, WorkItemMutationOutcome, WorkItemService};
 use crate::entity::work_item::{WorkItem, WorkItemCloseData};
 use crate::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
 use crate::error::{Error, Result};
 use crate::ports::{PreparedWorkflowAudit, W29CloseFact, WorkflowAuditOperation, WorkflowAuthorizationPort};
 use crate::repository::{WorkItemCommandExt, WorkItemExt};
 
-/// W29 关闭命令的领域证据与审计输入。
-///
-/// # 用途
-/// 将关闭事务所需字段打包，供 [`WorkItemService::close_with_domain_evidence`] 使用。
-///
-/// # 参数
-/// 无
-///
-/// # 返回
-/// 无
-///
-/// # 错误
-/// 无
-///
-/// # 关键业务约束
-/// 关闭必须在同一事务内写入领域证据与任务终态。
-struct CloseDomainEvidenceInput<'a> {
-    /// 待关闭任务。
-    item: WorkItem,
-    /// 操作人。
-    actor: &'a AuditActor,
-    /// 已规范化的 W29 关闭决策。
+/// 服务端规范化的关闭命令；不保存事务外的任务或授权快照。
+struct CloseCommand {
+    id: String,
+    actor: AuditActor,
+    expected_version: u64,
     decision: W29CloseFact,
-    /// 强类型幂等命令收据。
     receipt: CommandReceipt,
+    audit: PreparedWorkflowAudit,
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 关闭重复、误派或已有有效替代任务。
-    ///
+    /// 在同一事务授权并关闭重复、误派或已有有效替代任务。
     /// # 参数
-    /// * `id` - 待关闭任务 ID
-    /// * `req` - 关闭原因、预期版本与幂等键
-    /// * `actor` - 当前操作人
-    ///
+    /// id 为真实任务，req 为关闭原因、预期版本和幂等键，actor 为当前操作人。
     /// # 返回
-    /// 关闭成功或同载荷回放时返回已应用结果。预期版本与当前版本不一致，或写入遇到版本冲突时，返回版本冲突结果。
-    ///
+    /// 成功或同载荷回放返回已应用结果；版本变化返回冲突结果。
     /// # 错误
-    /// 缺少管理权限、任务类型禁止通用关闭、原因或替代任务非法、对象不可访问或仓储失败时返回错误。版本陈旧本身不是错误。
+    /// 无管理资格、任务不支持通用关闭、替代任务非法或持久化失败时拒绝。
     pub async fn close(
         self,
         id: String,
         req: CloseWorkItemRequest,
         actor: AuditActor,
     ) -> Result<WorkItemMutationOutcome> {
-        self.authorization.require(&actor, "manage", &id, &mut NoTransaction).await?;
-        let item = self.load(id.clone()).await?;
-        ensure_generic_work_item_mutation(&item)?;
+        let command = Arc::new(self.close_command(id, req, actor)?);
+        let transaction_command = command.clone();
+        let service = self.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.apply_close(&transaction_command, executor).await })
+            })
+            .await;
+        self.finish_command(&command.receipt, &command.actor, &command.audit, result).await
+    }
+
+    /// 只规范化输入和审计；决定关闭的读取全部留在原事务。
+    fn close_command(
+        &self,
+        id: String,
+        req: CloseWorkItemRequest,
+        actor: AuditActor,
+    ) -> Result<CloseCommand> {
         req.validate()?;
-        let idempotency_key = required_text(&req.idempotency_key, "幂等键不能为空")?;
-        let reason_code = required_text(&req.reason_code, "关闭原因代码不能为空")?;
-        let replacement_id = req
+        let key = required_text(&req.idempotency_key, "幂等键不能为空")?;
+        let reason = required_text(&req.reason_code, "关闭原因代码不能为空")?;
+        let replacement = req
             .replacement_work_item_id
             .as_deref()
             .map(|value| required_text(value, "替代任务ID不能为空"))
             .transpose()?;
         let decision =
-            self.facts.prepare_w29_close(&reason_code, req.comment.as_deref(), replacement_id.as_deref())?;
-        let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let receipt = close_command_receipt(&id, &actor, &idempotency_key, expected_task_version, &decision)?;
-        if let Some(replayed) = self.idempotent_replay(&receipt, &id, &actor).await? {
-            ensure_generic_work_item_mutation(&replayed)?;
-            self.authorization.require(&actor, "manage", &replayed.base.id, &mut NoTransaction).await?;
-            return self.applied_outcome(replayed, &actor).await;
-        }
-        if item.base.version != expected_task_version {
-            return self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await;
-        }
-        self.authorization.require(&actor, "manage", &item.base.id, &mut NoTransaction).await?;
-        if !item.is_w29_closable() {
-            return Err(Error::BusinessLogicError("只有 W29 登记的异常任务允许受控关闭".to_string()));
-        }
-        if let Some(replacement_id) = decision.replacement_work_item_id.as_deref() {
-            self.ensure_w29_replacement(&item, replacement_id, &actor).await?;
-        }
-        let updated = self
-            .close_with_domain_evidence(CloseDomainEvidenceInput { item, actor: &actor, decision, receipt })
-            .await?;
-        match updated {
-            WorkItemWriteOutcome::Updated(item) => self.applied_outcome(*item, &actor).await,
-            WorkItemWriteOutcome::VersionConflict => {
-                self.conflict_outcome(&id, WorkItemConflictKind::Version, &actor).await
-            },
-        }
+            self.facts.prepare_w29_close(&reason, req.comment.as_deref(), replacement.as_deref())?;
+        let expected_version = expected_task_version(&req.expected_task_version)?;
+        let receipt = close_command_receipt(&id, &actor, &key, expected_version, &decision)?;
+        let audit = self.prepare_close_audit(&actor, &receipt, &id)?;
+        Ok(CloseCommand { id, actor, expected_version, decision, receipt, audit })
     }
 
-    /// 校验重复关闭所引用的替代任务仍是同类、开放且位于当前管理范围。
+    /// 首次执行和回放都从原快照中的真实任务取证。
+    async fn apply_close(
+        &self,
+        command: &CloseCommand,
+        executor: &mut dyn Executor,
+    ) -> StdResult<WorkItemWriteOutcome, WorkItemWriteError> {
+        let item = self.managed_item(&command.id, &command.actor, executor).await?;
+        if let Some(replayed) = self.idempotent_replay(&command.receipt, &item, executor).await? {
+            return Ok(WorkItemWriteOutcome::Updated(Box::new(replayed)));
+        }
+        if item.base.version != command.expected_version {
+            return Ok(WorkItemWriteOutcome::VersionConflict);
+        }
+        if !item.is_w29_closable() {
+            return Err(Error::BusinessLogicError("只有 W29 登记的异常任务允许受控关闭".into()).into());
+        }
+        if let Some(id) = command.decision.replacement_work_item_id.as_deref() {
+            self.ensure_w29_replacement(&item, id, &command.actor, executor).await?;
+        }
+        let item = self.close_with_domain_evidence(item, command, executor).await?;
+        Ok(WorkItemWriteOutcome::Updated(Box::new(item)))
+    }
+
+    /// 替代任务必须来自同一快照、仍开放、同类并处于当前管理范围。
     async fn ensure_w29_replacement(
         &self,
         current: &WorkItem,
         replacement_id: &str,
         actor: &AuditActor,
-    ) -> Result<()> {
-        if replacement_id == current.base.id {
-            return Err(Error::ValidationError("替代任务不能引用自身".to_string()));
-        }
-        let replacement = self.load(replacement_id.to_string()).await?;
-        if !replacement.is_w29_replacement_for(current) {
-            return Err(Error::ConflictError("替代任务必须是同一 W29 对象类别的开放正式任务".to_string()));
-        }
-        self.authorization.require(actor, "manage", &replacement.base.id, &mut NoTransaction).await
-    }
-
-    /// 关闭目标及替代目标都必须在原写事务中重新证明管理资格。
-    async fn require_close_access(
-        &self,
-        actor: &AuditActor,
-        item: &WorkItem,
-        decision: &W29CloseFact,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.authorization.require(actor, "manage", &item.base.id, executor).await?;
-        if let Some(id) = decision.replacement_work_item_id.as_deref() {
-            self.authorization.require(actor, "manage", id, executor).await?;
+        if replacement_id == current.base.id {
+            return Err(Error::ValidationError("替代任务不能引用自身".into()));
+        }
+        let replacement = self.managed_item(replacement_id, actor, executor).await?;
+        if !replacement.is_w29_replacement_for(current) {
+            return Err(Error::ConflictError("替代任务必须是同一 W29 对象类别的开放正式任务".into()));
         }
         Ok(())
     }
 
-    /// 在同一事务内写入 W29 领域证据、关闭任务并登记审计。
-    ///
-    /// # 用途
-    /// 将任务关闭与领域对象证据写入同一事务。
-    ///
-    /// # 参数
-    /// * `input` - 任务、关闭原因与审计字段
-    ///
-    /// # 返回
-    /// 返回写入结果或版本冲突。
-    ///
-    /// # 错误
-    /// 替代任务非法、领域对象不存在或仓储失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 仅 W29 可关闭任务允许走此路径；替代任务必须是同类开放正式任务。
+    /// 沿原执行器原子保存领域证据、任务终态、审计与强类型回执。
     async fn close_with_domain_evidence(
         &self,
-        input: CloseDomainEvidenceInput<'_>,
-    ) -> Result<WorkItemWriteOutcome> {
-        let CloseDomainEvidenceInput { mut item, actor, decision, receipt } = input;
+        mut item: WorkItem,
+        command: &CloseCommand,
+        executor: &mut dyn Executor,
+    ) -> StdResult<WorkItem, WorkItemWriteError> {
         let closed_at = Instant::now();
-        item.close(actor.id(), WorkItemCloseData { close_reason: decision.close_reason.clone() }, closed_at)?;
-        let evidence_reference = decision.evidence_reference(&item.base.id, receipt.id());
-        let replay_receipt = receipt.clone();
-        let replay_item_id = item.base.id.clone();
-        let audit = self.prepare_close_audit(actor, &receipt, &item.base.id)?;
-        let actor_id = actor.id().to_string();
-        let receipt_id = receipt.id().to_string();
-        let db = self.db.clone();
-        let facts = Arc::clone(&self.facts);
-        let attempt_audit = audit.clone();
-        let audit_port = Arc::clone(&self.audit);
-        let client = db.client().clone();
-        let service = self.clone();
-        let close_actor = actor.clone();
-        let result = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service.require_close_access(&close_actor, &item, &decision, executor).await?;
-                    facts
-                        .persist_w29_close(
-                            &item,
-                            &decision,
-                            &evidence_reference,
-                            &actor_id,
-                            &receipt_id,
-                            closed_at,
-                            executor,
-                        )
-                        .await?;
-                    db.work_items().update(&mut item, executor).await.map_err(work_item_update_error)?;
-                    audit_port.persist(&audit, executor).await?;
-                    persist_close_receipt(&db, &receipt, &item, &evidence_reference, &audit.id, executor)
-                        .await?;
-                    Ok::<WorkItem, WorkItemWriteError>(item)
-                })
-            })
-            .await;
-        self.record_close_attempt(&attempt_audit, &result).await;
-        match result {
-            Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-            Err(WorkItemWriteError::VersionConflict) => Ok(WorkItemWriteOutcome::VersionConflict),
-            Err(WorkItemWriteError::Service(error)) => recover_command_error(
-                error,
-                self.idempotent_replay(&replay_receipt, &replay_item_id, actor).await,
+        item.close(
+            command.actor.id(),
+            WorkItemCloseData { close_reason: command.decision.close_reason.clone() },
+            closed_at,
+        )?;
+        let evidence = command.decision.evidence_reference(&item.base.id, command.receipt.id());
+        self.facts
+            .persist_w29_close(
+                &item,
+                &command.decision,
+                &evidence,
+                command.actor.id(),
+                command.receipt.id(),
+                closed_at,
+                executor,
             )
-            .map(|item| WorkItemWriteOutcome::Updated(Box::new(item))),
-        }
+            .await?;
+        self.db.work_items().update(&mut item, executor).await.map_err(work_item_update_error)?;
+        self.audit.persist(&command.audit, executor).await?;
+        persist_close_receipt(&self.db, &command.receipt, &item, &evidence, &command.audit.id, executor)
+            .await?;
+        Ok(item)
     }
 
-    /// 在关闭写入前冻结并校验安全审计上下文。
-    /// # 参数
-    /// * `actor` - 命令操作人及调用上下文。
-    /// * `receipt` - 已规范化的命令身份。
-    /// * `item_id` - 原任务编号。
-    /// # 返回
-    /// 返回保留调用上下文的关闭审计事实。
-    /// # 错误
-    /// 审计动作或上下文校验失败时返回原错误。
+    /// 写入前冻结并校验关闭事件的安全上下文。
     fn prepare_close_audit(
         &self,
         actor: &AuditActor,
@@ -236,29 +169,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         .for_command(receipt.id().to_string(), WorkflowAuditOperation::Closed)?;
         self.audit.validate(&audit)?;
         Ok(audit)
-    }
-
-    /// 在关闭事务结束后按原错误分类记录一次尝试。
-    /// # 参数
-    /// * `audit` - 写入前冻结的安全上下文。
-    /// * `result` - 关闭事务的原始结果。
-    /// # 返回
-    /// 无；保留原事务结果，尝试失败不覆盖业务错误。
-    /// # 错误
-    /// 无；尝试持久化错误由统一记录入口处理。
-    async fn record_close_attempt(
-        &self,
-        audit: &PreparedWorkflowAudit,
-        result: &StdResult<WorkItem, WorkItemWriteError>,
-    ) {
-        let version_error = Error::ConflictError("任务版本已变化".into());
-        if let Err(error) = result {
-            let error = match error {
-                WorkItemWriteError::Service(error) => error,
-                WorkItemWriteError::VersionConflict => &version_error,
-            };
-            record_command_attempt(self.audit.as_ref(), audit, error).await;
-        }
     }
 }
 
@@ -326,4 +236,31 @@ async fn persist_close_receipt(
     )?;
     db.work_item_command_receipts().create(&committed, executor).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::unavailable_service;
+    use super::*;
+
+    #[tokio::test]
+    async fn close_uses_the_callers_snapshot_and_stops_before_task_or_receipt_reads_on_denial() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let decision = W29CloseFact { close_reason: "误派".into(), replacement_work_item_id: None };
+        let receipt = close_command_receipt("task", &actor, "key", 1, &decision).unwrap();
+        let audit = service.prepare_close_audit(&actor, &receipt, "task").unwrap();
+        let command =
+            CloseCommand { id: "task".into(), actor, expected_version: 1, decision, receipt, audit };
+        let error = service.apply_close(&command, &mut NoTransaction).await.err().unwrap();
+        assert!(matches!(error, WorkItemWriteError::Service(Error::ValidationError(_))));
+        let error = service.apply_close(&command, &mut SnapshotExecutor::default()).await.err().unwrap();
+        assert!(
+            matches!(error, WorkItemWriteError::Service(Error::Internal(reason)) if reason == "测试授权设施不可用")
+        );
+    }
 }

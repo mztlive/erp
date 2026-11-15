@@ -34,10 +34,10 @@ pub(crate) async fn snapshot(
     query: &DirectoryQuery,
     executor: &mut dyn Executor,
 ) -> Result<Vec<DirectoryItem>> {
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let collection = db.collection::<DirectoryItem>(<Database as WarehouseExt>::WAREHOUSES);
     let items = aggregate::rows(&collection, pipeline(scope.stages(), query), executor).await?;
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     Ok(items)
 }
 
@@ -87,13 +87,13 @@ pub(crate) async fn warehouses(
     filter: &WarehouseFilter,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<WarehouseRow>> {
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let collection = db.collection::<WarehouseRow>(<Database as WarehouseExt>::WAREHOUSES);
     let prefix = warehouse_prefix(scope.stages(), filter);
     let items =
         aggregate::find(&collection, doc! {}, warehouse_options(filter), prefix.clone(), executor).await?;
     let total = aggregate::count(&collection, doc! {}, prefix, executor).await?;
-    scope.validate(executor).await?;
+    scope.ensure_current(executor)?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("仓库总数超过上限".into()))?;
     Ok(PageResult { items, total })
 }
@@ -164,33 +164,22 @@ pub(crate) async fn authorized_ids_in(
     ids: &[String],
     executor: &mut dyn Executor,
 ) -> RepositoryResult<Vec<String>> {
+    access.ensure_current(executor).map_err(|error| {
+        persistence_core::Error::DatabaseError(mongodb::error::Error::custom(error.to_string()))
+    })?;
     let collection = db.collection::<Document>(<Database as WarehouseExt>::WAREHOUSES);
     let mut pipeline = vec![doc! {"$match": {"id": {"$in": ids}}}];
     pipeline.extend_from_slice(access.stages());
     pipeline.push(doc! {"$project":{"_id":0,"id":1}});
-    let mut ids = Vec::new();
-    if let Some(session) = executor.session() {
-        let mut cursor = collection.aggregate(pipeline).session(&mut *session).await?;
-        while cursor.advance(session).await? {
-            let row = cursor.deserialize_current()?;
-            ids.push(
-                row.get_str("id")
-                    .map_err(|error| mongodb::error::Error::custom(error.to_string()))?
-                    .to_owned(),
-            );
-        }
-    } else {
-        let mut cursor = collection.aggregate(pipeline).await?;
-        while cursor.advance().await? {
-            let row = cursor.deserialize_current()?;
-            ids.push(
-                row.get_str("id")
-                    .map_err(|error| mongodb::error::Error::custom(error.to_string()))?
-                    .to_owned(),
-            );
-        }
-    }
-    Ok(ids)
+    aggregate::rows(&collection, pipeline, executor)
+        .await?
+        .into_iter()
+        .map(|row| {
+            row.get_str("id")
+                .map(str::to_owned)
+                .map_err(|error| mongodb::error::Error::custom(error.to_string()).into())
+        })
+        .collect()
 }
 
 #[cfg(test)]

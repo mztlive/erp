@@ -1,15 +1,19 @@
 //! 按固定清单分批生成演示主数据。
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_catalog::CatalogService;
-use erp_identity::{AccessControlExt, AccountCoreRepositoryExt, SharedRbacService};
+use erp_identity::{
+    AccessControlExt, AccessTarget, AccountCoreRepositoryExt, AuthorizationService, SharedRbacService,
+};
 use erp_master_data::{CustomerProfileProcess, SupplierProfileProcess};
 use erp_party::PartyStatus;
+use erp_permissions::demo_master_data;
 use erp_warehouse::WarehouseService;
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, ReadExecutor, Transactional};
 use storage::S3Storage;
 
 use super::ensure_dictionary::EnsureOutcome;
@@ -70,7 +74,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// # 参数
     /// * `db` - 目标数据库
     /// * `ports` - 演示入口实际消费的已装配领域与编排合同
-    /// * `rbac` - 当前授权快照
+    /// * `identity` - 账号、角色和演示数据重置的身份管理设施
+    /// * `authorization` - 进程共享授权服务
     /// * `enabled` - 配置是否允许写入
     /// * `storage` - 演示商品图片使用的受控对象存储
     /// * `image_secret` - 内容指纹密钥
@@ -83,37 +88,36 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     pub fn new(
         db: mongodb::Database,
         ports: DemoRuntimePorts<A>,
-        rbac: SharedRbacService,
+        identity: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         enabled: bool,
         storage: S3Storage,
         image_secret: &[u8],
     ) -> Self {
-        Self { db, ports, rbac, enabled, storage, image_secret: image_secret.to_vec() }
+        Self { db, ports, identity, authorization, enabled, storage, image_secret: image_secret.to_vec() }
     }
 
     /// 返回各类演示主数据的计划数量和当前数量。
     ///
     /// # 参数
-    /// 无。
+    /// actor 为当前认证账号，必须具有演示状态读取权限。
     ///
     /// # 返回
     /// 环境关闭时仍返回数量，`enabled` 为 false。
     ///
     /// # 错误
-    /// 清单查询或嵌入种子校验失败时返回错误。
-    pub async fn status(&self) -> Result<DemoStatus> {
-        let records = record::load_all(&self.db).await?;
-        let rows = records
-            .iter()
-            .filter_map(|record| record.kind().map(|kind| (kind, record.removed)))
-            .collect::<Vec<_>>();
-        let (active, removed) = plan::count_records(&rows);
-        Ok(DemoStatus {
-            enabled: self.enabled,
-            planned: plan::planned_counts(&plan::demo_steps()?),
-            active,
-            removed,
-        })
+    /// 身份或权限失效、授权交付检查失败、清单查询或种子校验失败时返回错误。
+    pub async fn status(&self, actor: &AuditActor) -> Result<DemoStatus> {
+        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let enabled = self.enabled;
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { status_snapshot(&db, &authorization, enabled, &actor, executor).await })
+            })
+            .await
     }
 
     /// 生成或恢复下一批演示主数据。
@@ -129,6 +133,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 环境未开放或某条主数据写入失败时返回错误。已写入的条数会留在清单里。
     pub async fn apply_chunk(&self, actor: &AuditActor, cursor: u32) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
+        self.authorize_apply(actor).await?;
         let steps = plan::demo_steps()?;
         let offerings = offerings::load(&steps)?;
         let range = plan::apply_window(cursor as usize, steps.len());
@@ -155,6 +160,29 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             tally(&mut report, outcome)?;
         }
         Ok(report)
+    }
+
+    /// 在生成步骤开始前核对演示入口资格，领域写入和恢复继续执行各自的事务授权。
+    /// # 参数
+    /// actor 为发起演示生成的当前账号。
+    /// # 返回
+    /// 当前快照中的账号具备演示生成权限时成功。
+    /// # 错误
+    /// 身份失效、缺少功能权限或事务取证失败时拒绝。
+    pub(super) async fn authorize_apply(&self, actor: &AuditActor) -> Result<()> {
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization
+                        .require(&actor, &demo_master_data::APPLY, AccessTarget::Operation, executor)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .await
     }
 
     /// 拒绝在未开放演示功能的环境执行写入。
@@ -212,7 +240,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         actor: &AuditActor,
         notices: &mut Vec<String>,
     ) -> Result<Option<String>> {
-        if let Some(id) = self.active_company_id().await? {
+        if let Some(id) = self.active_company_id(actor).await? {
             return Ok(Some(id));
         }
         match self.ports.party.create_company(super::spec::foundation_spec().company.clone(), actor).await {
@@ -226,16 +254,19 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 
     /// 读取已有启用公司主体。
-    async fn active_company_id(&self) -> Result<Option<String>> {
+    async fn active_company_id(&self, actor: &AuditActor) -> Result<Option<String>> {
         let page = self
             .ports
             .party
-            .company_list(&erp_party::dto::company::CompanyListParams {
-                keyword: None,
-                status: Some(PartyStatus::Active),
-                page: Some(1),
-                page_size: Some(1),
-            })
+            .company_list(
+                actor,
+                &erp_party::dto::company::CompanyListParams {
+                    keyword: None,
+                    status: Some(PartyStatus::Active),
+                    page: Some(1),
+                    page_size: Some(1),
+                },
+            )
             .await?;
         Ok(page.items.first().map(|company| company.id.clone()))
     }
@@ -243,7 +274,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     /// 解析基础 JSON 指定的仓储岗位账号。
     async fn warehouse_handler_id(&self) -> Result<Option<String>> {
         let login = super::spec::foundation_spec().warehouse_handler_account.as_str();
-        let account = self.db.accounts().find_by_account(login, &mut NoTransaction).await?;
+        let account = self.db.accounts().find_by_account(login, &mut ReadExecutor::default()).await?;
         Ok(account.map(|account| account.base.id))
     }
 
@@ -304,6 +335,25 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     }
 }
 
+/// 状态资格和完整清单统计使用公开入口提供的同一事务快照。
+async fn status_snapshot(
+    db: &mongodb::Database,
+    authorization: &AuthorizationService,
+    enabled: bool,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<DemoStatus> {
+    authorization.require(actor, &demo_master_data::STATUS, AccessTarget::Operation, executor).await?;
+    let records = record::load(db, executor).await?;
+    let rows = records
+        .iter()
+        .filter_map(|record| record.kind().map(|kind| (kind, record.removed)))
+        .collect::<Vec<_>>();
+    let (active, removed) = plan::count_records(&rows);
+    let view = DemoStatus { enabled, planned: plan::planned_counts(&plan::demo_steps()?), active, removed };
+    Ok(view)
+}
+
 /// 累计本批主数据创建或恢复结果。
 fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) -> Result<()> {
     match outcome {
@@ -343,6 +393,25 @@ fn empty_report(next_cursor: usize, total: usize) -> DemoChunkReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn status_rejects_missing_authorization_before_reading_demo_records() {
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = record::testing::database("demo_status_authorization");
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        let result = status_snapshot(
+            &db,
+            &unavailable_authorization(),
+            true,
+            &actor,
+            &mut SnapshotExecutor::default(),
+        )
+        .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
 
     #[test]
     fn prerequisites_and_owner_handover_failures_cannot_report_completion() {

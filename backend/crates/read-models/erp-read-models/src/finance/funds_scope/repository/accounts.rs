@@ -155,6 +155,7 @@ impl FundsAccess {
             );
             let scope = linked_condition_document(condition, "sales_owner_user_id");
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+            pipeline.extend(authorization.guard_stages());
             if let Some(ids) = &condition.operator_user_ids {
                 pipeline.push(doc! { "$match": { "created_by": { "$in": ids } } });
             }
@@ -227,6 +228,7 @@ impl FundsAccess {
                 keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payable).await?,
             );
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
+            pipeline.extend(authorization.guard_stages());
             pipeline.extend(payable_source_stages(authorization, condition));
             pipeline.push(doc! { "$match": { "_source_allowed": true } });
             let sort = sort_document(
@@ -380,6 +382,8 @@ mod tests {
     /// 构造已解析上下文；版本测试不访问持久化或静态资格。
     fn authorization() -> FundsAuthorization {
         FundsAuthorization {
+            access: None,
+            service: None,
             whole: Default::default(),
             sales: None,
             ledger_read: false,

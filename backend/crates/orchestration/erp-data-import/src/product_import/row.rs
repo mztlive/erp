@@ -9,7 +9,7 @@ use erp_catalog::{
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 use erp_master_data::product_create_with_assets;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::identity::{NormalizedImportRow, normalize_import_row};
 use super::images::{RowMediaSource, resolve_row_media};
@@ -102,7 +102,7 @@ impl ProductImportProcess {
         }
         let row = normalize_import_row(row_number, cells)?;
         if let Some(existing) =
-            self.db.products().find_by_product_no(&row.product_no, &mut NoTransaction).await?
+            self.db.products().find_by_product_no(&row.product_no, &mut ReadExecutor::default()).await?
         {
             if row.coded_spu {
                 return self.import_sku_into_spu(existing, row, cells, media_source, actor).await;
@@ -110,7 +110,8 @@ impl ProductImportProcess {
             return self.import_existing_with_images(existing, cells, media_source, actor).await;
         }
         if let Some(barcode) = &row.barcode {
-            let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
+            let owners =
+                self.db.catalog().barcode_owner_sku_ids(barcode, &mut ReadExecutor::default()).await?;
             if !owners.is_empty() {
                 return Ok(RowImportOutcome::new(format!("条码 {barcode} 已被其他商品使用，本行未写入"))
                     .with_skipped(true));
@@ -156,7 +157,7 @@ impl ProductImportProcess {
                     .products()
                     .find_by_product_no(
                         &normalize_import_row(row_number, cells)?.product_no,
-                        &mut NoTransaction,
+                        &mut ReadExecutor::default(),
                     )
                     .await?;
                 Ok(RowImportOutcome::new("商品已存在，本行未重复写入".into())

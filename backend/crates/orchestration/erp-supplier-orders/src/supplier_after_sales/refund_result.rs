@@ -8,6 +8,7 @@ use erp_integration::entity::integration_ops::{
     InboxMessage, InboxMessageData, InboxMessageStatus, MessageType,
 };
 use erp_integration::repository::IntegrationOpsExt;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::after_sales::{AfterSalesExt, RefundExecution, RefundExecutionState, refunds_for_order};
 use erp_supply::api_order::ApiOrderExt;
 use erp_supply::dto::supplier_fulfillment::{RecordRefundResultRequest, SupplierRefundFactView};
@@ -18,7 +19,7 @@ use erp_supply::repository::{
 use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use erp_supply::service::supplier_fulfillment::refund_result::persist_refund_result;
 use erp_supply::service::supplier_fulfillment::{FulfillmentOrderAccess, SupplierFulfillmentService};
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierAfterSalesProcess;
@@ -40,11 +41,6 @@ impl SupplierAfterSalesProcess {
         actor: &AuditActor,
         access: &FulfillmentOrderAccess,
     ) -> Result<Option<SupplierRefundFactView>> {
-        access.require_order(actor, "refund", id, &mut NoTransaction).await?;
-        if self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?.is_none() {
-            return Ok(None);
-        }
-        request.validate()?;
         let process = self.clone();
         let id = id.to_string();
         let actor = actor.clone();
@@ -54,7 +50,14 @@ impl SupplierAfterSalesProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    process.apply_refund(&id, &request, &actor, &access, executor).await.map(Some)
+                    let order = access
+                        .require_order(&actor, &supplier_fulfillment::ORDER_REFUND, &id, executor)
+                        .await?;
+                    if process.db.supplier_api_order_executions().find_by_id(&id, executor).await?.is_none() {
+                        return Ok(None);
+                    }
+                    request.validate()?;
+                    process.apply_refund(&id, &request, &actor, order, executor).await.map(Some)
                 })
             })
             .await
@@ -65,10 +68,9 @@ impl SupplierAfterSalesProcess {
         id: &str,
         request: &RecordRefundResultRequest,
         actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
+        mut order: SupplierFulfillmentOrder,
         executor: &mut dyn Executor,
     ) -> Result<SupplierRefundFactView> {
-        let mut order = access.require_order(actor, "refund", id, executor).await?;
         let rows = refunds_for_order(&self.db, id, executor).await?;
         if rows.len() > 1000 {
             return Err(Error::BusinessLogicError("退款记录超出核对上限".into()));

@@ -192,9 +192,9 @@ async fn apply_reserve(
     command: ReserveDepositExecution,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositReservation> {
-    let DepositManagementContext { db, rbac, account, actor, codec, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, codec, .. } = context;
 
-    let funds_account = account_access(&db, &rbac, &account, &actor, "reserve", executor).await?;
+    let funds_account = account_access(&db, &authorization, &account, &actor, "reserve", executor).await?;
     let mut execution = db
         .supplier_api_order_executions()
         .find_by_id(&command.execution_group_id, executor)
@@ -238,9 +238,9 @@ async fn apply_record_debit(
     command: RecordDepositDebit,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositUsage> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "use", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "use", executor).await?;
     let reservation = db
         .supplier_deposit_reservations()
         .find_by_id(&command.reservation_id, executor)
@@ -286,9 +286,9 @@ async fn apply_settle_usage(
     usage: String,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositUsage> {
-    let DepositManagementContext { db, rbac, account, actor, payment_tasks, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, payment_tasks, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "use", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "use", executor).await?;
     db.supplier_deposit_usages()
         .find_by_id(&usage, executor)
         .await?
@@ -307,9 +307,9 @@ async fn apply_return_usage(
     command: ReturnDepositUsage,
     executor: &mut dyn Executor,
 ) -> Result<SupplierDepositUsage> {
-    let DepositManagementContext { db, rbac, account, actor, payment_tasks, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, payment_tasks, .. } = context;
 
-    account_access(&db, &rbac, &account, &actor, "refund", executor).await?;
+    account_access(&db, &authorization, &account, &actor, "refund", executor).await?;
     db.supplier_deposit_usages()
         .find_by_id(&command.usage_id, executor)
         .await?
@@ -335,9 +335,9 @@ async fn apply_bind_connection(
     command: BindDepositConnection,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let DepositManagementContext { db, rbac, account, actor, .. } = context;
+    let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
-    let source = account_access(&db, &rbac, &account, &actor, "bind", executor).await?;
+    let source = account_access(&db, &authorization, &account, &actor, "bind", executor).await?;
     let mut connection = db
         .supplier_api_connections()
         .find_by_id(&command.connection_id, executor)

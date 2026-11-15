@@ -4,7 +4,7 @@
 //! - 创建主体（party + 首版 party_revision + 审计）→ 跨集合，必须事务；
 //! - 更新主体（追加 party_revision + CAS 更新生效指针 + 审计）→
 //!   `PartyDomainRepository::append_party_revision` 声明「必须收到事务执行器」；
-//! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
+//! - 管理读取 → 授权和数据读取使用同一快照事务。
 
 mod builtin;
 pub mod company;
@@ -15,6 +15,8 @@ use std::sync::Arc;
 use application_core::{AuditActor, normalized_text};
 use erp_core::common::revision::RevisionBase;
 use erp_core::field_update::FieldUpdate;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, party};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -71,10 +73,12 @@ pub struct PartyDetailView {
 /// 主体服务。
 ///
 /// 提供主体与修订链的创建、查询与更新编排（§6.2：稳定主体 + 不可变修订）。
+#[derive(Clone)]
 pub struct PartyService {
     db: Database,
     audit: Arc<dyn PartyAuditPort>,
     supplier_roles: Arc<dyn SupplierRolePort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl PartyService {
@@ -94,8 +98,9 @@ impl PartyService {
         db: Database,
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, audit, supplier_roles }
+        Self { db, audit, supplier_roles, authorization }
     }
 
     /// 创建主体（跨集合事务：party + 首版 party_revision + 审计原子写入）。
@@ -115,7 +120,7 @@ impl PartyService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - party_no 或统一社会信用代码与既有主体重复
     pub async fn create_party(&self, req: CreatePartyRequest, actor: &AuditActor) -> Result<PartyView> {
-        self.create_party_record(req, None, actor).await
+        self.create_party_record(req, None, actor, party::CREATE).await
     }
 
     /// 公司入口复用主体与首版名称事务。
@@ -124,6 +129,7 @@ impl PartyService {
         req: CreatePartyRequest,
         company: Option<crate::entity::party::company::CompanyProfile>,
         actor: &AuditActor,
+        permission: Permission,
     ) -> Result<PartyView> {
         req.validate()?;
         let party_id = PartyId::new(next_id());
@@ -157,8 +163,21 @@ impl PartyService {
             },
         )?;
         party.stable.current_revision_id = Some(revision_id.to_string());
-        let audit = self.audit.resource_log(actor.clone(), "party.create", "party", party_id.to_string())?;
+        self.write_party_record(party, revision, actor, permission).await
+    }
 
+    /// 在单一事务内校验功能资格并持久化主体与首个修订。
+    async fn write_party_record(
+        &self,
+        party: Party,
+        revision: PartyRevision,
+        actor: &AuditActor,
+        permission: Permission,
+    ) -> Result<PartyView> {
+        let audit = self.audit.resource_log(actor.clone(), "party.create", "party", party.base.id.clone())?;
+
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -167,6 +186,7 @@ impl PartyService {
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization.require(&actor, &permission, AccessTarget::Operation, executor).await?;
                     ensure_identity_available(&db, &party_for_tx, &revision_for_tx, executor).await?;
                     db.party_revisions().create(&revision_for_tx, executor).await?;
                     db.parties().create(&party_for_tx, executor).await?;
@@ -191,13 +211,35 @@ impl PartyService {
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    pub async fn party_list(&self, params: &PartyListParams) -> Result<PageView<PartyView>> {
+    pub async fn party_list(
+        &self,
+        actor: &AuditActor,
+        params: &PartyListParams,
+    ) -> Result<PageView<PartyView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.party_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &PartyListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<PartyView>> {
+        self.authorization.require(actor, &party::LIST, AccessTarget::Operation, executor).await?;
         params.validate()?;
         let query = params.normalized()?;
         let matching_name_ids = match query.keyword.as_deref() {
-            Some(keyword) => {
-                self.db.party().matching_current_party_ids_by_name(keyword, &mut NoTransaction).await?
-            },
+            Some(keyword) => self.db.party().matching_current_party_ids_by_name(keyword, executor).await?,
             None => Vec::new(),
         };
         let filter = PartyFilter {
@@ -210,7 +252,7 @@ impl PartyService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.parties().search_parties(&filter, &mut NoTransaction).await?;
+        let page = self.db.parties().search_parties(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -241,11 +283,31 @@ impl PartyService {
     ///
     /// # 错误
     /// * `NotFound` - 主体不存在
-    pub async fn party_detail(&self, id: &str) -> Result<PartyDetailView> {
+    pub async fn party_detail(&self, actor: &AuditActor, id: &str) -> Result<PartyDetailView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.party_detail_snapshot(&actor, &id, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_detail_snapshot(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyDetailView> {
+        self.authorization.require(actor, &party::DETAIL, AccessTarget::Operation, executor).await?;
         let (party, revision) = self
             .db
             .party()
-            .find_with_current_revision(&PartyId::new(id), &mut NoTransaction)
+            .find_with_current_revision(&PartyId::new(id), executor)
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
         let current_revision = revision.and_then(|revision| {
@@ -279,7 +341,7 @@ impl PartyService {
         req: UpdatePartyRequest,
         actor: &AuditActor,
     ) -> Result<PartyView> {
-        self.update_party_record(id, req, None, actor).await
+        self.update_party_record(id, req, None, actor, party::UPDATE).await
     }
 
     /// 公司和名称修订在同一主体事务中更新。
@@ -289,6 +351,7 @@ impl PartyService {
         req: UpdatePartyRequest,
         company: Option<crate::entity::party::company::CompanyProfile>,
         actor: &AuditActor,
+        permission: Permission,
     ) -> Result<PartyView> {
         req.validate()?;
         let prepared = self.load_party_for_update(id, req, company.as_ref(), actor).await?;
@@ -301,12 +364,15 @@ impl PartyService {
         let updated_by = actor.id().to_string();
 
         // 下一修订号必须在写事务快照内读取，避免并发复用序号。
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization.require(&actor, &permission, AccessTarget::Operation, executor).await?;
                     let next_no = db
                         .party_revisions()
                         .next_revision_no(&PartyId::new(prepared.party_id().to_string()), executor)
@@ -414,9 +480,34 @@ impl PartyService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn party_revision_list(
         &self,
+        actor: &AuditActor,
         party_id: &str,
         params: &PartyRevisionListParams,
     ) -> Result<PageView<PartyRevisionView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.party_revision_list_snapshot(&actor, &party_id, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_revision_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        party_id: &str,
+        params: &PartyRevisionListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<PartyRevisionView>> {
+        self.authorization.require(actor, &party::REVISION_LIST, AccessTarget::Operation, executor).await?;
         params.validate()?;
         let paging = crate::dto::party::normalize_paging(
             &params.sort_by,
@@ -434,7 +525,7 @@ impl PartyService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.party_revisions().search_party_revisions(&filter, &mut NoTransaction).await?;
+        let page = self.db.party_revisions().search_party_revisions(&filter, executor).await?;
         let items = page
             .items
             .into_iter()

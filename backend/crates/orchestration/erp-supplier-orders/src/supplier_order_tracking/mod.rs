@@ -1,4 +1,5 @@
 //! 供应商订单查询、接收意图消费与真实 ERP 履约应用。
+use erp_identity::AuthorizationService;
 
 mod application;
 mod callbacks;
@@ -10,7 +11,6 @@ mod shipment_tracking;
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
-use erp_fulfillment_execution::fulfillment_execution::task::FulfillmentIdentityFactory;
 use erp_supply::connector_registry::SupplierConnectorRegistry;
 use erp_supply::order_tracking::{OrderObservation, OrderTracking, repository};
 use erp_supply::ports::connector::common::{Lookup, SupplierSku};
@@ -27,7 +27,7 @@ use crate::{Error, Result};
 pub struct SupplierOrderTrackingProcess {
     db: Database,
     runtime: Arc<SupplierConnectorRegistry>,
-    task_identity: FulfillmentIdentityFactory,
+    task_identity: Arc<AuthorizationService>,
 }
 
 impl SupplierOrderTrackingProcess {
@@ -42,7 +42,7 @@ impl SupplierOrderTrackingProcess {
     pub fn new(
         db: Database,
         runtime: Arc<SupplierConnectorRegistry>,
-        task_identity: FulfillmentIdentityFactory,
+        task_identity: Arc<AuthorizationService>,
     ) -> Self {
         Self { db, runtime, task_identity }
     }

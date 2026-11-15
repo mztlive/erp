@@ -7,10 +7,10 @@ use erp_catalog::dto::BrandImportJobRequest;
 use erp_core::common::time::Instant;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt, JobStatus};
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use super::rows::{BrandRowExecution, execute_rows, record};
-use super::{BRAND_IMPORT_DOMAIN, BrandImportProcess, job_actor};
+use super::{BRAND_IMPORT_DOMAIN, BrandImportProcess, authorize, job_actor};
 use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, import_budget};
 use crate::{Error, Result};
 
@@ -26,7 +26,11 @@ impl BrandImportProcess {
         let jobs = self
             .db
             .background_jobs()
-            .list_open_by_domain_job_type(BRAND_IMPORT_DOMAIN, IMPORT_JOBS_PER_POLL, &mut NoTransaction)
+            .list_open_by_domain_job_type(
+                BRAND_IMPORT_DOMAIN,
+                IMPORT_JOBS_PER_POLL,
+                &mut ReadExecutor::default(),
+            )
             .await?;
         self.sources.retain_jobs(&jobs).await;
         let count = jobs.len();
@@ -49,7 +53,7 @@ impl BrandImportProcess {
             job.start(Instant::now())?;
         }
         job.last_progress_at = Some(Instant::now());
-        self.db.background_jobs().update(job, &mut NoTransaction).await?;
+        self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         let request = match self.execution_source(job).await {
             Ok(request) => request,
             Err(_) => return self.fail_job(job, "导入源文件读取失败，请使用原文件重新提交核对").await,
@@ -57,7 +61,7 @@ impl BrandImportProcess {
         let items = self
             .db
             .background_job_items()
-            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut NoTransaction)
+            .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut ReadExecutor::default())
             .await?;
         let mut execution = BrandRows { process: self, request: &request };
         let result = execute_rows(&mut execution, job, items, import_budget()).await;
@@ -78,7 +82,7 @@ impl BrandImportProcess {
     /// 失败终态只保存概括信息，不覆盖并发取消或其他执行器的版本。
     async fn fail_job(&self, job: &mut BackgroundJob, message: &str) -> Result<()> {
         job.mark_failed(Some(message.into()), Instant::now())?;
-        self.db.background_jobs().update(job, &mut NoTransaction).await?;
+        self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         self.sources.remove(&job.base.id).await;
         Ok(())
     }
@@ -130,7 +134,7 @@ impl BrandImportProcess {
                         return Err(Error::ConflictError("导入行已由其他执行器处理".into()));
                     }
                     let actor = job_actor(&current);
-                    process.authorize(&actor, executor).await?;
+                    authorize(&process.authorization, &actor, executor).await?;
                     let outcome =
                         process.catalog.product_brand_import_row(&key, row, &actor, executor).await?;
                     record(&mut current, &mut item, outcome)?;
@@ -182,7 +186,7 @@ impl BrandRowExecution for BrandRows<'_> {
     async fn release(&mut self, job: &mut BackgroundJob) -> Result<()> {
         if job.finished_at.is_none() {
             job.last_progress_at = None;
-            self.process.db.background_jobs().update(job, &mut NoTransaction).await?;
+            self.process.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         }
         Ok(())
     }

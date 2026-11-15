@@ -1,8 +1,9 @@
 //! 只读身份检查；先证明检查人的公司配置读取边界，再解析目标账号。
-use std::result::Result as StdResult;
 use std::slice;
+use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_permissions::access_control;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -10,7 +11,10 @@ use crate::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
 use crate::entity::access_control::scope_spec;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use crate::{AccessControlExt, Error, Permission, Result, RoleRepositoryExt, SharedRbacService};
+use crate::{
+    AccessControlExt, AccessTarget, AuthorizationService, Error, Permission, Result, RoleRepositoryExt,
+    SharedRbacService,
+};
 
 /// 为跨域单据检查提供经授权的目标身份；不能作为登录或操作令牌。
 pub struct InspectedAccess {
@@ -23,19 +27,21 @@ pub struct InspectedAccess {
 pub struct AccessInspectionService {
     db: Database,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl AccessInspectionService {
     /// 绑定身份数据与权限服务。
     /// # 参数
     /// * `db` - 身份数据库。
-    /// * `rbac` - 现有 RBAC 服务。
+    /// * `rbac` - 现有 RBAC 设施。
+    /// * `authorization` - 应用注入的共享授权服务。
     /// # 返回
     /// 无 I/O 的检查服务。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, rbac, authorization }
     }
 
     /// 在调用方读取事务内检查账号和操作范围。
@@ -54,7 +60,9 @@ impl AccessInspectionService {
         executor: &mut dyn Executor,
     ) -> Result<InspectedAccess> {
         request.validate()?;
-        self.authorize(operator, executor).await?;
+        self.authorization
+            .require(operator, &access_control::INSPECTION_INSPECT, AccessTarget::Operation, executor)
+            .await?;
         let account = self
             .db
             .accounts()
@@ -143,25 +151,6 @@ impl AccessInspectionService {
                 "passed",
                 "已按此人、本业务、本操作的基础政策及已保存范围检查；部门关系不授予操作权限。",
             );
-        }
-        Ok(())
-    }
-
-    /// 检查能力要求同角色提供账号、角色、范围及公司组织读取边界。
-    async fn authorize(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        let permissions = ["admin:list", "role:list", "data_scope:list"]
-            .into_iter()
-            .map(Permission::parse)
-            .collect::<StdResult<Vec<_>, _>>()?;
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, &Permission::parse("org_unit:list")?, &permissions, executor)
-            .await?;
-        if !access.scope.role_clauses.iter().any(|scope| scope.company)
-            || access.scope.user_limit.as_ref().is_some_and(|limit| !limit.company)
-        {
-            return Err(Error::Forbidden(
-                "检查他人权限需要公司范围的组织读取及账号、角色、数据范围读取权限".into(),
-            ));
         }
         Ok(())
     }

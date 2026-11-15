@@ -4,14 +4,14 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use erp_approval_runtime::ApprovalRuntimePort;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_procurement::{PurchaseAccess, PurchaseDataScopePort};
 use erp_workflow::ports::FinanceResponsibilityPort;
 
 /// 逆向命令需要的身份、审批运行、采购范围和财务任务责任能力。
 #[derive(Clone)]
 pub struct ReverseFlowPorts {
-    pub(crate) identity: SharedRbacService,
+    pub(crate) identity: Arc<AuthorizationService>,
     pub(crate) runtime: Arc<dyn ApprovalRuntimePort>,
     pub(crate) purchase: PurchaseAccess,
     pub(crate) purchase_scope: Arc<dyn PurchaseDataScopePort>,
@@ -27,7 +27,7 @@ impl ReverseFlowPorts {
     /// # 错误
     /// 构造时不返回错误，业务校验仍在原调用点执行。
     pub fn new(
-        identity: SharedRbacService,
+        identity: Arc<AuthorizationService>,
         runtime: Arc<dyn ApprovalRuntimePort>,
         purchase: PurchaseAccess,
         purchase_scope: Arc<dyn PurchaseDataScopePort>,
@@ -38,7 +38,7 @@ impl ReverseFlowPorts {
 }
 
 impl Deref for ReverseFlowPorts {
-    type Target = SharedRbacService;
+    type Target = Arc<AuthorizationService>;
 
     fn deref(&self) -> &Self::Target {
         &self.identity

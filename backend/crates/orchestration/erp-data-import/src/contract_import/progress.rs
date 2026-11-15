@@ -1,9 +1,9 @@
 //! 进度随任务版本持久化；后台等待写入成功后才能开始下一阶段。
+use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_contract::ContractAccess;
 use erp_contract::entity::recognition::{ContractImport, ImportStage};
-use erp_contract::repository::recognition::ContractImportExt;
 use mongodb::Database;
-use persistence_core::NoTransaction;
 
 use crate::Result;
 
@@ -21,6 +21,8 @@ pub(super) trait RecognitionProgress: Send {
 
 pub(super) struct TaskProgress<'a> {
     pub db: &'a Database,
+    pub access: &'a ContractAccess,
+    pub actor: &'a AuditActor,
     pub task: &'a mut ContractImport,
 }
 
@@ -28,7 +30,7 @@ pub(super) struct TaskProgress<'a> {
 impl RecognitionProgress for TaskProgress<'_> {
     async fn advance(&mut self, stage: ImportStage) -> Result<()> {
         self.task.advance(stage)?;
-        self.db.contract_imports().update(self.task, &mut NoTransaction).await?;
+        *self.task = super::save_task(self.db, self.access, self.actor, self.task.clone()).await?;
         Ok(())
     }
 }

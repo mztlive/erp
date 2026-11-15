@@ -11,7 +11,7 @@ use erp_sales::entity::sales_inquiry_pool::{
 };
 use erp_support::FileAssetExt;
 use image::{DynamicImage, GrayImage, ImageFormat, RgbImage};
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 use rust_xlsxwriter::{
     ConditionalFormatText, ConditionalFormatTextRule, DocProperties, Format, FormatAlign, FormatBorder,
     Formula, Image, ObjectMovement, Table, TableColumn, TableStyle, Workbook, Worksheet, XlsxError,
@@ -64,7 +64,7 @@ impl BusinessTransfers {
             let asset = self
                 .db
                 .file_assets()
-                .find_by_id(id, &mut NoTransaction)
+                .find_by_id(id, &mut ReadExecutor::default())
                 .await?
                 .ok_or_else(|| Error::NotFound("商品图片不存在，请核对商品资料".into()))?;
             if asset.destroyed_at.is_some()

@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use erp_permissions::sales_selection;
+
 use crate::services::SalesServices;
 mod adapters;
 mod copy;
@@ -9,6 +11,7 @@ mod password_audit;
 mod pricing;
 mod public_access;
 mod public_retry;
+mod read;
 mod scope_checks;
 
 use application_core::AuditActor;
@@ -24,9 +27,10 @@ use erp_sales::dto::sales_selection::{
 use erp_sales::entity::sales_selection::{IdempotencyOperation, LinkTokenCrypto};
 use erp_sales::ports::sales_selection::SelectionImagePort;
 use erp_sales::repository::prelude::*;
+use erp_sales::repository::sales_selection::SalesSelectionDomainRepository;
 use erp_sales::service::sales_selection::SalesSelectionService;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 use storage::S3Storage;
 
 use self::adapters::{CatalogAdapter, CustomerAdapter, ImageAdapter};
@@ -148,7 +152,7 @@ impl SalesSelectionProcess {
 
     /// 详情。
     ///
-    /// 纯读快照不开启事务会话；负责人显示名与详情读取共用同一无事务执行器。
+    /// 授权、负责人显示名、来源商品与详情共用同一快照执行器。
     ///
     /// # 参数
     /// * `id` - 选品册
@@ -160,19 +164,45 @@ impl SalesSelectionProcess {
     /// # 错误
     /// 不存在或无权查看。
     pub async fn booklet_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionBookletView> {
-        let access = self.services.selections.clone();
-        let mut executor = NoTransaction;
-        let book = access.require_booklet(actor, "get", id, &mut executor).await?;
-        let mut view = SalesSelectionService::new(self.db.clone())
-            .detail_view(&book, None, &mut executor)
+        let db = self.db.clone();
+        let services = self.services.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let access = services.selections.clone();
+                    read::checked(
+                        &access,
+                        &actor,
+                        &sales_selection::BOOKLET_DETAIL,
+                        executor,
+                        move |scope, executor| {
+                            Box::pin(async move {
+                                let book = SalesSelectionDomainRepository::new(&db)
+                                    .find_authorized_booklet(&id, scope, executor)
+                                    .await?
+                                    .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                                let mut view = SalesSelectionService::new(db.clone())
+                                    .detail_view(&book, None, executor)
+                                    .await?;
+                                view.sales_owner_name =
+                                    owner_display_names(&db, &[view.sales_owner_user_id.clone()], executor)
+                                        .await?
+                                        .remove(&view.sales_owner_user_id);
+                                view.source_skus =
+                                    adapters::source_skus(services.catalog.as_ref(), &view.sku_ids, executor)
+                                        .await?;
+                                enrich_selection_prices(&db, &mut view, executor).await?;
+                                Ok(view)
+                            })
+                        },
+                    )
+                    .await
+                })
+            })
             .await
-            .map_err(Error::from)?;
-        view.sales_owner_name = owner_display_names(&self.db, &[view.sales_owner_user_id.clone()])
-            .await?
-            .remove(&view.sales_owner_user_id);
-        view.source_skus = adapters::source_skus(self.services.catalog.as_ref(), &view.sku_ids).await?;
-        enrich_selection_prices(&self.db, &mut view, &mut executor).await?;
-        Ok(view)
     }
 
     /// 启动准备。
@@ -285,11 +315,37 @@ impl SalesSelectionProcess {
     /// 无链接或无权操作。
     pub async fn copy_link_url(&self, id: &str, actor: &AuditActor) -> Result<CopyLinkView> {
         let access = self.services.selections.clone();
-        let mut executor = NoTransaction;
-        access.require_booklet(actor, "copy_link", id, &mut executor).await?;
-        let token = SalesSelectionService::new(self.db.clone()).copy_link(id, &self.crypto).await?;
-        let path = format!("/s/{token}");
-        Ok(CopyLinkView { public_url: path.clone(), public_path: path })
+        let db = self.db.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        let crypto = self.crypto.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    read::checked(
+                        &access,
+                        &actor,
+                        &sales_selection::BOOKLET_COPY_LINK,
+                        executor,
+                        move |scope, executor| {
+                            Box::pin(async move {
+                                let book = SalesSelectionDomainRepository::new(&db)
+                                    .find_authorized_booklet(&id, scope, executor)
+                                    .await?
+                                    .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+                                let token = SalesSelectionService::new(db)
+                                    .copy_link(&book.base.id, &crypto, executor)
+                                    .await?;
+                                let path = format!("/s/{token}");
+                                Ok(CopyLinkView { public_url: path.clone(), public_path: path })
+                            })
+                        },
+                    )
+                    .await
+                })
+            })
+            .await
     }
 
     /// 内部会话快照。
@@ -422,7 +478,7 @@ impl SalesSelectionProcess {
 
     /// 方案详情。
     ///
-    /// 纯读快照不开启事务会话，直接用无事务执行器读取。
+    /// 授权与方案详情共用同一快照执行器。
     ///
     /// # 参数
     /// * `id` - 方案
@@ -435,12 +491,34 @@ impl SalesSelectionProcess {
     /// 不存在或无权查看。
     pub async fn proposal_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionProposalView> {
         let access = self.services.selections.clone();
-        let mut executor = NoTransaction;
-        let proposal = access.require_proposal(actor, "get", id, &mut executor).await?;
-        SalesSelectionService::new(self.db.clone())
-            .proposal_view_of(&proposal, &mut executor)
+        let db = self.db.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    read::checked(
+                        &access,
+                        &actor,
+                        &sales_selection::PROPOSAL_DETAIL,
+                        executor,
+                        move |scope, executor| {
+                            Box::pin(async move {
+                                let proposal = SalesSelectionDomainRepository::new(&db)
+                                    .find_authorized_proposal(&id, scope, executor)
+                                    .await?
+                                    .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
+                                Ok(SalesSelectionService::new(db)
+                                    .proposal_view_of(&proposal, executor)
+                                    .await?)
+                            })
+                        },
+                    )
+                    .await
+                })
+            })
             .await
-            .map_err(Error::from)
     }
 
     /// 运行到期准备任务。
@@ -531,7 +609,7 @@ impl SalesSelectionProcess {
         if self
             .db
             .sales_selection_booklets()
-            .find_by_token_hash(&hash, &mut persistence_core::NoTransaction)
+            .find_by_token_hash(&hash, &mut ReadExecutor::default())
             .await?
             .is_none()
         {

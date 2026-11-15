@@ -4,9 +4,11 @@
 //! W02 责任 API。本模块不保留旧动作入口。
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_identity::AccessTarget;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::IntegrationErrorTask;
 use erp_integration::service::error_task::prepare_error_task;
+use erp_permissions::integration_ops;
 use validator::Validate;
 
 use super::IntegrationResolutionProcess;
@@ -61,8 +63,18 @@ impl IntegrationResolutionProcess {
             "integration_error_task",
             task.base.id.clone(),
         )?;
+        let authorization = self.authorization.clone();
+        let current_actor = actor.clone();
         self.run_audited(move |db, executor| {
             Box::pin(async move {
+                authorization
+                    .require(
+                        &current_actor,
+                        &integration_ops::ERROR_TASK_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 persist_created(db, CreatedFact::ErrorTask(&task), &work_item, &audit, executor).await?;
                 Ok(())
             })

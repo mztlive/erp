@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use erp_core::common::time::BusinessDate;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Pagination, QueryFilter, Result, insert_literal_regex_filter};
+use persistence_core::{Executor, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter};
 use serde::Deserialize;
 
 use super::ContractExt;
@@ -191,7 +191,7 @@ impl ContractDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         let result: persistence_core::Result<_> = async {
             let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
@@ -206,7 +206,7 @@ impl ContractDomainRepository<'_> {
         .await;
         let result = result?;
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(result)
     }
@@ -226,7 +226,7 @@ impl ContractDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         let result: persistence_core::Result<_> = async {
             let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
@@ -241,7 +241,7 @@ impl ContractDomainRepository<'_> {
         .await;
         let result = result?;
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(result)
     }
@@ -268,7 +268,7 @@ impl ContractDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<ContractSearchResult> {
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         let result: persistence_core::Result<_> = async {
             let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
@@ -279,7 +279,7 @@ impl ContractDomainRepository<'_> {
         .await;
         let result = result?;
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(result)
     }
@@ -302,39 +302,8 @@ async fn run_search_aggregate(
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<ContractSearchResult> {
-    if let Some(session) = executor.session() {
-        let mut cursor =
-            collection.aggregate(pipeline).with_type::<ContractSearchResult>().session(&mut *session).await?;
-        let advanced = cursor.advance(session).await.map_err(persistence_core::Error::from)?;
-        return advance_search_result(advanced, || cursor.deserialize_current());
-    }
-    let mut cursor = collection.aggregate(pipeline).with_type::<ContractSearchResult>().await?;
-    let advanced = cursor.advance().await.map_err(persistence_core::Error::from)?;
-    advance_search_result(advanced, || cursor.deserialize_current())
-}
-
-/// 由游标推进结果反序列化首文档；空命中返回默认值（两分支共用）。
-///
-/// 会话/非会话游标类型不同，推进后的反序列化经本函数收敛：调用方只传
-/// `deserialize_current()` 闭包结果的映射入口，两分支的推进差异保留在调用点。
-///
-/// # 参数
-/// * `advanced` - 游标是否定位到首文档
-/// * `deserialize` - 首文档反序列化闭包（仅 `advanced` 为真时调用）
-///
-/// # 返回
-/// 有首文档时返回反序列化结果，否则返回默认值。
-///
-/// # 错误
-/// 反序列化失败时返回仓储错误。
-fn advance_search_result(
-    advanced: bool,
-    deserialize: impl FnOnce() -> mongodb::error::Result<ContractSearchResult>,
-) -> Result<ContractSearchResult> {
-    if advanced {
-        return deserialize().map_err(persistence_core::Error::from);
-    }
-    Ok(ContractSearchResult::default())
+    let collection = collection.clone_with_type::<ContractSearchResult>();
+    Ok(aggregate::rows(&collection, pipeline, executor).await?.into_iter().next().unwrap_or_default())
 }
 
 /// 查询流水线：授权及基础条件 → 当前修订 → 派生字段 → 列表与范围指标分面。

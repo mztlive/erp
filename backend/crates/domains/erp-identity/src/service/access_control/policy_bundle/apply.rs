@@ -1,6 +1,7 @@
 //! 原子应用及已提交命令回放。
 use application_core::{AuditActor, CommandReceipt};
 use entity_core::BaseModel;
+use erp_permissions::access_control;
 use persistence_core::Executor;
 
 use super::PolicyBundleService;
@@ -9,7 +10,7 @@ use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::authorization_bundle::plan::PolicyPlan;
 use crate::entity::authorization_bundle::receipt::PolicyReceipt;
 use crate::repository::policy_receipt::receipts;
-use crate::{AccessControlExt, Error, Result};
+use crate::{AccessControlExt, AccessTarget, Error, Result};
 
 impl PolicyBundleService {
     /// 根据原审核摘要原子应用文件。
@@ -56,6 +57,10 @@ impl PolicyBundleService {
         actor: AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(PolicyApplyResult, bool)> {
+        self.access
+            .authorization
+            .require(&actor, &access_control::POLICY_BUNDLE_APPLY, AccessTarget::Operation, executor)
+            .await?;
         let authorization = self.authorize(&request.document, &actor, executor).await?;
         if let Some(receipt) = receipts(&self.access.db).find_by_id(command.id(), executor).await? {
             return Ok((receipt.replay(&command)?, false));

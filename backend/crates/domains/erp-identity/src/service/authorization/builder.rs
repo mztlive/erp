@@ -88,11 +88,17 @@ impl AuthorizationBuilder {
         self.ensure_complete()?;
         let mut cache = Vec::new();
         let mut mappings = BTreeMap::new();
+        let mut errors = Vec::new();
         for (permission, mapping) in self.mappings {
             let mapping = FrozenMapping::freeze(mapping, &mut cache, 0)?;
             let rule = rules::binding_condition(&permission, &mapping.model().output)?;
-            validate_rule(&rule, mapping.as_ref(), 0)?;
+            if let Err(error) = validate_rule(&rule, mapping.as_ref(), 0) {
+                errors.push(format!("授权绑定 {permission}：{error}"));
+            }
             mappings.insert(permission, mapping);
+        }
+        if !errors.is_empty() {
+            return Err(Error::ValidationError(errors.join("\n")));
         }
         Ok(AuthorizationService {
             facilities: self.facilities,
@@ -104,17 +110,27 @@ impl AuthorizationBuilder {
 
     fn ensure_complete(&self) -> Result<()> {
         for permission in rules::permissions() {
-            if scope_spec::kind(permission)? == ActionKind::Function {
-                continue;
-            }
-            if !self.facts.contains_key(permission.resource()) {
+            let function = scope_spec::kind(permission)? == ActionKind::Function;
+            let only_task = scope_spec::kind(permission)? == ActionKind::Task
+                && !rules::query_supported(permission)?
+                && rules::records::condition(permission).is_none()
+                && !super::approvals::supports(permission);
+            if !function && !only_task && !self.facts.contains_key(permission.resource()) {
                 return Err(Error::ValidationError(format!("缺少资源 Facts：{}", permission.resource())));
+            }
+            if rules::task_supported(permission) {
+                let resource = rules::task_facts_resource(permission);
+                if !self.facts.contains_key(resource) {
+                    return Err(Error::ValidationError(format!("缺少任务 Facts：{resource}")));
+                }
             }
             if rules::query_supported(permission)? && !self.mappings.contains_key(permission) {
                 return Err(Error::ValidationError(format!("缺少查询 Mapping：{permission}")));
             }
-            // 同时验证没有查询入口的命令具有可执行的固定目标规则。
-            rules::binding_condition(permission, &QueryOutput::Object)?;
+            // 无数据规则的功能命令不需要 Mapping；精确任务的事实仍由上面的检查约束。
+            if !function || rules::query_supported(permission)? {
+                rules::binding_condition(permission, &QueryOutput::Object)?;
+            }
         }
         Ok(())
     }

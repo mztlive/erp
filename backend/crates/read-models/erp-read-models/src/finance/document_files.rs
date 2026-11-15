@@ -1,7 +1,11 @@
 //! 业务单据关联的财务文件；仅返回文件展示字段，存储位置不进入业务响应。
 
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
 mod attachments;
 mod fulfillment_payment;
+mod sales_read;
 use std::collections::{BTreeMap, BTreeSet};
 
 use application_core::AuditActor;
@@ -13,7 +17,6 @@ use erp_finance::entity::receivable::{InvoiceDirection, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use erp_fulfillment::repository::FulfillmentExt;
-use erp_identity::SharedRbacService;
 use erp_support::repository::prelude::*;
 use erp_support::{FileAsset, FileAssetExt, SecurityScanStatus};
 pub use fulfillment_payment::{FulfillmentPaymentView, FulfillmentRequestView};
@@ -22,7 +25,6 @@ use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::purchase_payments::payment_records;
-use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
 /// 业务文件列表中的安全展示字段。
@@ -60,7 +62,7 @@ impl FinancialFileView {
 #[derive(Clone)]
 pub struct BusinessFinanceFiles {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl BusinessFinanceFiles {
@@ -71,7 +73,7 @@ impl BusinessFinanceFiles {
     /// 返回无授权缓存的读取服务。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 
@@ -90,12 +92,7 @@ impl BusinessFinanceFiles {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    SalesAccess::new(this.db.clone(), this.rbac.clone())
-                        .require_object(&actor, "detail", &sales_id, &[], executor)
-                        .await?;
-                    this.sales_files(&sales_id, executor).await
-                })
+                Box::pin(async move { sales_read::read(&this, &actor, &sales_id, executor).await })
             })
             .await
     }

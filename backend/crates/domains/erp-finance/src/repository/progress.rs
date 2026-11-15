@@ -4,7 +4,7 @@ use std::future::Future;
 
 use erp_core::money::Amount;
 use mongodb::bson::{Bson, Document, doc};
-use persistence_core::{Executor, Repository, Result};
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -121,10 +121,7 @@ where
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let collection = self.collection();
-        let result = match executor.session() {
-            Some(session) => collection.update_one(filter, pipeline).session(session).await?,
-            None => collection.update_one(filter, pipeline).await?,
-        };
+        let result = mongo_ops::update_one_pipeline(&collection, filter, pipeline, executor).await?;
         Ok(result.matched_count == 1)
     }
 }

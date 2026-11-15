@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_support::BackgroundJob;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::{DataTransferProcess, TransferKind};
 use crate::{Error, Result};
@@ -19,14 +19,18 @@ impl DataTransferProcess {
             return portal_owner(job, actor).map(|()| true);
         }
         if !kind.is_export() {
-            return self.job_access.require(&job.base.id, actor, &mut NoTransaction).await.map(|()| true);
+            return self
+                .job_access
+                .require(&job.base.id, actor, &mut ReadExecutor::default())
+                .await
+                .map(|()| true);
         }
         self.job_access
             .service
-            .permissions(actor, &[], &mut NoTransaction)
+            .permissions(actor, &[], &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::Forbidden("当前账号不能读取导出任务".into()))?;
-        match self.job_access.require(&job.base.id, actor, &mut NoTransaction).await {
+        match self.job_access.require(&job.base.id, actor, &mut ReadExecutor::default()).await {
             Ok(()) => Ok(true),
             Err(Error::Forbidden(_)) => Ok(false),
             Err(error) => Err(error),
@@ -38,7 +42,7 @@ impl DataTransferProcess {
         if actor.kind() == AccountKind::Supplier {
             return portal_owner(job, actor);
         }
-        self.job_access.require(&job.base.id, actor, &mut NoTransaction).await
+        self.job_access.require(&job.base.id, actor, &mut ReadExecutor::default()).await
     }
 }
 

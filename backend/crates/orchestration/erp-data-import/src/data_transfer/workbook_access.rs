@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_support::FileAssetExt;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -47,7 +47,7 @@ impl BusinessTransfers {
             let asset = self
                 .db
                 .file_assets()
-                .find_by_id(id, &mut NoTransaction)
+                .find_by_id(id, &mut ReadExecutor::default())
                 .await?
                 .ok_or_else(|| Error::NotFound("商品图片不存在，请核对商品资料".into()))?;
             if asset.destroyed_at.is_some() || asset.expires_at.is_some_and(|at| at <= Instant::now()) {

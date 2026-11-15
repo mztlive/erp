@@ -20,14 +20,17 @@ impl CatalogRepository<'_> {
     /// # 错误
     /// 缺少事务或 MongoDB 并发写冲突时失败。
     pub async fn lock_match_name(&self, name: &str, executor: &mut dyn Executor) -> Result<()> {
-        let session = executor.session().ok_or_else(|| Error::Internal("商品匹配写入必须使用事务".into()))?;
-        self.db
-            .collection::<Document>("catalog_match_guards")
-            .update_one(doc! {"_id": match_text(name)}, doc! {"$inc": {"version": 1_i64}})
-            .upsert(true)
-            .session(session)
-            .await
-            .map_err(persistence_core::Error::from)?;
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::Internal("商品匹配写入必须使用事务".into()));
+        }
+        mongo_ops::update_one(
+            &self.db.collection::<Document>("catalog_match_guards"),
+            doc! {"_id": match_text(name)},
+            doc! {"$inc": {"version": 1_i64}},
+            true,
+            executor,
+        )
+        .await?;
         Ok(())
     }
 
@@ -68,17 +71,17 @@ impl CatalogRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let version = i64::try_from(version).map_err(|_| Error::Internal("商品版本超出存储范围".into()))?;
-        let session = executor.session().ok_or_else(|| Error::Internal("商品匹配锁定必须使用事务".into()))?;
-        let result = self
-            .db
-            .collection::<Document>(collection)
-            .update_one(
-                doc! {"id": id, "version": version, "deleted_at": NOT_DELETED_TIMESTAMP_BSON},
-                doc! {"$inc": {"match_guard": 1_i64}},
-            )
-            .session(session)
-            .await
-            .map_err(persistence_core::Error::from)?;
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::Internal("商品匹配锁定必须使用事务".into()));
+        }
+        let result = mongo_ops::update_one(
+            &self.db.collection::<Document>(collection),
+            doc! {"id": id, "version": version, "deleted_at": NOT_DELETED_TIMESTAMP_BSON},
+            doc! {"$inc": {"match_guard": 1_i64}},
+            false,
+            executor,
+        )
+        .await?;
         if result.matched_count != 1 {
             return Err(Error::ConflictError("匹配商品已变化，请重新匹配".into()));
         }

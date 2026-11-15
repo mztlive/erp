@@ -6,12 +6,14 @@ use erp_audit::execution::persist_log;
 use erp_catalog::SkuRevision;
 use erp_catalog::entity::catalog::{EnableStatus, Sku, UnitOfMeasure};
 use erp_catalog::repository::CatalogExt;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{catalog as catalog_permissions, catalog, supplier_api, supplier_offering};
 use erp_supply::dto::supplier_catalog::{CatalogIdentityReviewView, ReviewCatalogIdentityRequest};
 use erp_supply::entity::supplier_catalog::{CatalogIdentityReviewReceipt, SupplierCatalogItem};
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_api::context::digest;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 
 use super::SupplierApiGovernanceProcess;
@@ -33,9 +35,19 @@ impl SupplierApiGovernanceProcess {
         item: &str,
         actor: &AuditActor,
     ) -> Result<CatalogIdentityReviewView> {
-        self.ensure_permission(actor, "supplier_api_connection:detail").await?;
         let services = self.services.clone();
-        Ok(load_review(&self.db, &services, connection, item, actor, false, &mut NoTransaction).await?.1)
+        let authorization = self.authorization.clone();
+        let (db, connection, item, actor) =
+            (self.db.clone(), connection.to_owned(), item.to_owned(), actor.clone());
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorize_review_read(&authorization, &connection, &actor, executor).await?;
+                    Ok(load_review(&db, &services, &connection, &item, &actor, false, executor).await?.1)
+                })
+            })
+            .await
     }
 
     /// 确认来源文案仍对应当前实际销售项；实体身份变化须专门重新建档。
@@ -52,9 +64,9 @@ impl SupplierApiGovernanceProcess {
         request: ReviewCatalogIdentityRequest,
         actor: &AuditActor,
     ) -> Result<CatalogIdentityReviewView> {
-        self.ensure_permission(actor, "supplier_api_connection:catalog_sync").await?;
-        self.ensure_permission(actor, "product:update").await?;
-        self.ensure_permission(actor, "supplier_offering:update").await?;
+        self.ensure_permission(actor, &supplier_api::ADOPTIONS_PREVIEW).await?;
+        self.ensure_permission(actor, &catalog::PRODUCT_PRODUCT_UPDATE).await?;
+        self.ensure_permission(actor, &supplier_offering::REVISE).await?;
         let services = self.services.clone();
         let (db, connection, item, actor) =
             (self.db.clone(), connection.to_owned(), item.to_owned(), actor.clone());
@@ -63,14 +75,41 @@ impl SupplierApiGovernanceProcess {
         let fingerprint = hex::encode(Sha256::digest(bytes));
         let id =
             format!("catalog-review-{}", digest(&[&connection, &item, actor.id(), &request.idempotency_key]));
+        let authorization = self.authorization.clone();
         let command = IdentityReviewCommand { connection, item, request, actor, id, fingerprint };
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { confirm_review(&db, &services, command, executor).await })
+                Box::pin(async move {
+                    authorization
+                        .require(
+                            &command.actor,
+                            &supplier_api::ADOPTIONS_PREVIEW,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    confirm_review(&db, &services, command, executor).await
+                })
             })
             .await
     }
+}
+
+/// 连接、供给、商品和资料必须沿同一快照读取，不将对象授权带入非事务查询。
+async fn authorize_review_read(
+    authorization: &AuthorizationService,
+    connection: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("商品身份核对读取必须使用快照事务".into()));
+    }
+    authorization
+        .require(actor, &supplier_api::CONNECTION_DETAIL, AccessTarget::record(connection)?, executor)
+        .await?;
+    Ok(())
 }
 
 async fn load_review(
@@ -92,19 +131,23 @@ async fn load_review(
         .offering_id
         .as_deref()
         .ok_or_else(|| Error::BusinessLogicError("当前来源尚未完成选品".into()))?;
-    let offering = services
-        .offering_access
-        .require_offering(actor, if write { "update" } else { "list" }, offering_id, executor)
-        .await?;
+    let offering_permission = if write { supplier_offering::REVISE } else { supplier_offering::LIST };
+    let offering =
+        services.offering_access.require_offering(actor, &offering_permission, offering_id, executor).await?;
     let sku = db
         .skus()
         .find_by_id(offering.sku_id.as_ref(), executor)
         .await?
         .filter(|sku| item.sku_id.as_deref() == Some(sku.base.id.as_str()) && sku.is_active())
         .ok_or_else(|| Error::ConflictError("当前公司SKU关联不一致或已停用".into()))?;
+    let product_permission = if write {
+        catalog_permissions::PRODUCT_PRODUCT_UPDATE
+    } else {
+        catalog_permissions::PRODUCT_PRODUCT_DETAIL
+    };
     let product = services
         .catalog_access
-        .require_product(actor, if write { "update" } else { "detail" }, sku.product_id.as_ref(), executor)
+        .require_product(actor, &product_permission, sku.product_id.as_ref(), executor)
         .await?;
     if !product.is_active() {
         return Err(Error::BusinessLogicError("公司商品已停用，不能恢复自动使用".into()));
@@ -230,4 +273,32 @@ async fn confirm_review(
     )?;
     persist_log(db, &audit, executor).await?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod read_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 禁止非事务读取；同一快照内的授权失败必须先于来源及商品资料读取。
+    #[tokio::test]
+    async fn review_read_requires_snapshot_and_propagates_authorization_failure() {
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        let authorization = unavailable_authorization();
+        let error = authorize_review_read(&authorization, "connection", &actor, &mut ReadExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "商品身份核对读取必须使用快照事务")
+        );
+        let error =
+            authorize_review_read(&authorization, "connection", &actor, &mut SnapshotExecutor::default())
+                .await
+                .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
 }

@@ -16,7 +16,7 @@ pub mod import;
 
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_party::SensitiveDataCodec;
 use erp_supplier::{
     SupplierAccess, SupplierExt, SupplierProfileCommand, SupplierProfileMutationView, command_view,
@@ -36,7 +36,7 @@ pub struct SupplierProfileProcess {
 /// 同一启动期装配的身份资格与供应商范围服务，不包含具体跨域 adapter。
 #[derive(Clone)]
 struct SupplierProfileAuthorization {
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     access: SupplierAccess,
 }
 /// 携带文件资产的供应商根命令执行结果。
@@ -59,7 +59,7 @@ impl SupplierProfileProcess {
     pub fn new(
         db: Database,
         sensitive_data: Arc<SensitiveDataCodec>,
-        rbac: SharedRbacService,
+        rbac: Arc<AuthorizationService>,
         access: SupplierAccess,
     ) -> Self {
         Self { db, sensitive_data, authorization: SupplierProfileAuthorization { rbac, access } }

@@ -10,10 +10,9 @@ use std::str::FromStr;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Bson, Decimal128, Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 
 use crate::entity::receivable::{EntryDirection, ReceivableAccount};
@@ -69,26 +68,9 @@ impl ReceivableAccountCustomerCenterExt for persistence_core::Repository<'_, Rec
     ) -> Result<CustomerCenterReceivableRow> {
         let pipeline = receivable_pipeline(customer_id, account_ids, &today.to_string());
         let collection = self.collection();
-        let rows = match executor.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<CustomerCenterReceivableRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<CustomerCenterReceivableRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
+        let rows =
+            aggregate::rows(&collection.clone_with_type::<CustomerCenterReceivableRow>(), pipeline, executor)
+                .await?;
         rows.into_iter().next().map_or_else(zero_summary, Ok)
     }
 }

@@ -1,4 +1,4 @@
-//! 采购范围授权 Port：只接收已解析事实，不暴露身份域实体或 Service。
+//! 采购范围授权 Port：只接收固定入口，并复用原执行器和共享授权凭证。
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -6,15 +6,18 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
+use erp_identity::{AuthorizationService, CompiledAccess};
+use erp_permissions::Permission;
 use persistence_core::Executor;
 
+use crate::entity::purchase_order::PurchaseOrder;
 use crate::error::{Error, Result};
 
 /// 当前采购查询阶段凭证与分页元数据；不暴露权限规则。
 #[derive(Clone)]
 pub struct PurchaseResolvedScope {
-    pub compiled: Arc<erp_identity::CompiledAccess>,
-    pub authorization: erp_identity::AuthorizationService,
+    pub compiled: Arc<CompiledAccess>,
+    pub authorization: Arc<AuthorizationService>,
     pub policy_version: u64,
     pub scope_version: String,
     pub as_of: Instant,
@@ -25,24 +28,18 @@ pub struct PurchaseResolvedScope {
 pub trait PurchaseDataScopePort: Send + Sync {
     /// 证明账号及同角色完整功能资格，不编译查询或读取业务对象。
     /// # 参数
-    /// actor、action 为当前入口，permissions 为固定额外功能资格，executor 为原执行器。
+    /// actor、action 为固定当前入口，executor 为原执行器。
     /// # 返回
     /// 账号有效且同一角色提供本次全部资格时成功。
     /// # 错误
     /// 未接线、账号失效、无完整资格或身份设施失败时拒绝。
-    async fn qualify(
-        &self,
-        _actor: &AuditActor,
-        _action: &str,
-        _permissions: &[String],
-        _executor: &mut dyn Executor,
-    ) -> Result<()> {
+    async fn qualify(&self, _actor: &AuditActor, _action: &str, _executor: &mut dyn Executor) -> Result<()> {
         Err(unwired())
     }
 
     /// 以原事务可信对象执行统一权限检查。
     /// # 参数
-    /// actor、action 为入口，order 为当前业务事实，permissions 为同角色额外资格，executor 为原事务。
+    /// actor、action 为固定入口，order 为当前业务事实，executor 为原事务。
     /// # 返回
     /// 完整对象资格成立时成功。
     /// # 错误
@@ -51,8 +48,7 @@ pub trait PurchaseDataScopePort: Send + Sync {
         &self,
         _actor: &AuditActor,
         _action: &str,
-        _order: &crate::entity::purchase_order::PurchaseOrder,
-        _permissions: &[String],
+        _order: &PurchaseOrder,
         _executor: &mut dyn Executor,
     ) -> Result<()> {
         Err(unwired())
@@ -60,34 +56,50 @@ pub trait PurchaseDataScopePort: Send + Sync {
 
     /// 按实际业务入口检查完整采购来源集合。
     /// # 参数
-    /// actor、entry 为当前入口，ids 为完整来源，executor 为原事务。
+    /// actor、entry 为当前固定入口，ids 为完整来源，executor 为原事务。
     /// # 返回
     /// 全部来源可读时成功。
     /// # 错误
     /// 未接线或来源无权时拒绝。
     async fn require_source(
         &self,
-        actor: &AuditActor,
-        entry: &erp_identity::Permission,
-        ids: &[String],
-        executor: &mut dyn Executor,
+        _actor: &AuditActor,
+        _entry: &Permission,
+        _ids: &[String],
+        _executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.require_source_permissions(actor, entry, ids, &[], executor).await
+        Err(unwired())
     }
 
-    /// 按固定管理入口完整资格检查采购来源集合。
+    /// 在原事务内以固定内部入口检查持久化采购身份。
     /// # 参数
-    /// actor、entry 为真实身份和入口，ids 为完整来源，required 为服务端固定完整功能资格，executor 为原事务。
+    /// actor、entry 为真实身份与中央固定入口，id 为采购身份，executor 为原事务。
     /// # 返回
-    /// 同一有效角色提供全部资格且所有来源有权时成功。
+    /// 统一服务的完整记录授权成立时成功；调用方随后读取同快照对象。
     /// # 错误
-    /// 未接线、未登记组合或来源无权时拒绝。
-    async fn require_source_permissions(
+    /// 未接线、未登记入口、功能或对象无权时拒绝。
+    async fn require_record_entry(
         &self,
         _actor: &AuditActor,
-        _entry: &erp_identity::Permission,
-        _ids: &[String],
-        _required: &[erp_identity::Permission],
+        _entry: &Permission,
+        _id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Err(unwired())
+    }
+
+    /// 按固定内部入口检查当前采购对象。
+    /// # 参数
+    /// actor 为已认证身份，entry 为中央登记入口，order 为当前事实，executor 为原事务。
+    /// # 返回
+    /// 入口的完整固定条件成立时成功。
+    /// # 错误
+    /// 未接线、入口不匹配或对象无权时拒绝。
+    async fn require_entry(
+        &self,
+        _actor: &AuditActor,
+        _entry: &Permission,
+        _order: &PurchaseOrder,
         _executor: &mut dyn Executor,
     ) -> Result<()> {
         Err(unwired())
@@ -115,29 +127,21 @@ pub trait PurchaseDataScopePort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<PurchaseResolvedScope>;
 
-    /// 在调用方事务内证明同角色完整权限集合，范围仍绑定目标采购动作。
-    ///
+    /// 按中央登记的固定查询入口返回采购查询凭证。
     /// # 参数
-    /// * `actor` - 服务端已认证身份
-    /// * `action` - 采购资源已注册动作
-    /// * `permissions` - 同角色必须同时持有的额外权限码
-    /// * `executor` - 调用方执行器
-    ///
+    /// actor 为已认证身份，entry 为固定权限常量，executor 为原读取执行器。
     /// # 返回
-    /// 返回已通过资格检查的范围事实。
-    ///
+    /// 通过完整固定资格及范围条件的查询凭证。
     /// # 错误
-    /// 未装配、权限码非法、无动作权限或版本变化必须明确失败。
-    ///
-    /// # 关键业务约束
-    /// 解析器必须包含目标动作自身；额外权限不得改写资源标识。
-    async fn resolve_permissions(
+    /// 未接线、入口未登记或无权时拒绝。
+    async fn resolve_entry(
         &self,
-        actor: &AuditActor,
-        action: &str,
-        permissions: &[String],
-        executor: &mut dyn Executor,
-    ) -> Result<PurchaseResolvedScope>;
+        _actor: &AuditActor,
+        _entry: &Permission,
+        _executor: &mut dyn Executor,
+    ) -> Result<PurchaseResolvedScope> {
+        Err(unwired())
+    }
 
     /// 展开请求中的组织及其可选下级。
     ///
@@ -247,29 +251,6 @@ impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
         &self,
         _actor: &AuditActor,
         _action: &str,
-        _executor: &mut dyn Executor,
-    ) -> Result<PurchaseResolvedScope> {
-        Err(unwired())
-    }
-
-    /// 未接线时拒绝按额外权限解析采购范围。
-    ///
-    /// # 参数
-    /// * `_actor` - 已认证身份；本实现不读取。
-    /// * `_action` - 采购动作；本实现不读取。
-    /// * `_permissions` - 额外权限码；本实现不读取。
-    /// * `_executor` - 调用方执行器；本实现不读取。
-    ///
-    /// # 返回
-    /// 不返回范围事实。
-    ///
-    /// # 错误
-    /// 始终返回 `Error::Internal`，文案为采购范围端口未接线。
-    async fn resolve_permissions(
-        &self,
-        _actor: &AuditActor,
-        _action: &str,
-        _permissions: &[String],
         _executor: &mut dyn Executor,
     ) -> Result<PurchaseResolvedScope> {
         Err(unwired())

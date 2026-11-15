@@ -20,7 +20,7 @@ use erp_workflow::service::approval::execution::{PreparedExecution, prepare_star
 use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use erp_workflow::service::document_registry::{find_approval_binding, find_registered_document};
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::{PurchaseOrderProcess, PurchaseSubmitCommand};
 use crate::procure_to_pay::adapter::{
@@ -30,7 +30,7 @@ use crate::procure_to_pay::adapter::{
 };
 use crate::procure_to_pay::start_approval::{
     PurchaseOrderStartInput, PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
-    build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
+    build_purchase_order_start_input, load_bound_definition_graph_with_executor,
 };
 use crate::{Error, Result};
 
@@ -82,30 +82,34 @@ impl PurchaseOrderProcess {
     pub(super) async fn prepare_purchase_submit(
         &self,
         command: &PurchaseSubmitCommand<'_>,
+        executor: &mut dyn Executor,
     ) -> Result<PreparedPurchaseSubmit> {
         let adapter = purchase_order_adapter()?;
         let subject = purchase_order_subject_ref(command.purchase_order_id)?;
-        let draft = self.load_submit_draft(command).await?;
-        let mut context = self.prepare_submit_source(draft, command).await?;
+        let draft = self.load_submit_draft(command, executor).await?;
+        let mut context = self.prepare_submit_source(draft, command, executor).await?;
         self.freeze_submit_draft(&mut context, command).await?;
-        let approval =
-            self.prepare_submit_approval(&mut context, command, subject, adapter.owner_role).await?;
+        let approval = self
+            .prepare_submit_approval(&mut context, command, subject, adapter.owner_role, executor)
+            .await?;
         self.prepare_submit_persistence(context, approval, command)
     }
 
     /// 读取当前有提交资格的采购单、冻结绑定和仍可编辑的草稿。
-    async fn load_submit_draft(&self, command: &PurchaseSubmitCommand<'_>) -> Result<PurchaseSubmitDraft> {
-        let order = self
-            .command_access(command.actor, "submit")
-            .current(command.purchase_order_id, &mut NoTransaction)
-            .await?;
+    async fn load_submit_draft(
+        &self,
+        command: &PurchaseSubmitCommand<'_>,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseSubmitDraft> {
+        let order =
+            self.command_access(command.actor, "submit").current(command.purchase_order_id, executor).await?;
         order
             .ensure_expected_version(command.request.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         order
             .ensure_draft_for_submission()
             .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
-        let binding = find_approval_binding(&self.db, command.purchase_order_id, &mut NoTransaction)
+        let binding = find_approval_binding(&self.db, command.purchase_order_id, executor)
             .await
             .map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
@@ -114,11 +118,11 @@ impl PurchaseOrderProcess {
         let submission = self
             .db
             .purchase_order_submissions()
-            .find_by_id(&draft_id, &mut NoTransaction)
+            .find_by_id(&draft_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
         submission.ensure_draft().map_err(|_| Error::ConflictError("草稿提交已冻结".to_string()))?;
-        let lines = self.db.purchase_order().list_submission_lines(&draft_id, &mut NoTransaction).await?;
+        let lines = self.db.purchase_order().list_submission_lines(&draft_id, executor).await?;
         Ok(PurchaseSubmitDraft { order, binding, submission, lines })
     }
 
@@ -127,17 +131,18 @@ impl PurchaseOrderProcess {
         &self,
         mut draft: PurchaseSubmitDraft,
         command: &PurchaseSubmitCommand<'_>,
+        executor: &mut dyn Executor,
     ) -> Result<PurchaseSubmitContext> {
         let sales_order = self
             .db
             .sales_orders()
-            .find_by_id(&draft.order.sales_order_id, &mut NoTransaction)
+            .find_by_id(&draft.order.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
         let organization_id = purchase_order_responsible_org_id(&draft.order)?;
         let _ = purchase_order_object_readable(&organization_id, command.actor.id())?;
         assign_formal_purchase_no(&mut draft.order)?;
-        let mut document = find_registered_document(&self.db, command.purchase_order_id, &mut NoTransaction)
+        let mut document = find_registered_document(&self.db, command.purchase_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
         let now = Instant::now();
@@ -204,6 +209,7 @@ impl PurchaseOrderProcess {
         command: &PurchaseSubmitCommand<'_>,
         subject: SubjectRef,
         owner_role: &'static str,
+        executor: &mut dyn Executor,
     ) -> Result<PurchaseSubmitApproval> {
         let draft = &mut context.draft;
         execute_purchase_order_domain_action(
@@ -220,12 +226,14 @@ impl PurchaseOrderProcess {
             command.actor.id(),
             context.now,
         )?;
-        let graph = load_bound_definition_graph(&self.db, &draft.binding).await?;
-        let receipt = load_start_receipt(
+        let graph = load_bound_definition_graph_with_executor(&self.db, &draft.binding, executor).await?;
+        let receipt = erp_workflow::service::approval::read::start_receipt(
             &self.db,
+            erp_workflow::entity::document_registry::DocumentType::PurchaseOrder,
             &subject,
             draft.order.approval_subject_version,
             &command.request.idempotency_key,
+            executor,
         )
         .await?;
         let graph = resolve_start_approvers(
@@ -234,7 +242,7 @@ impl PurchaseOrderProcess {
             graph,
             command.actor.id(),
             receipt.as_ref(),
-            &mut NoTransaction,
+            executor,
         )
         .await?;
         let input = build_purchase_order_start_input(PurchaseOrderStartInput {

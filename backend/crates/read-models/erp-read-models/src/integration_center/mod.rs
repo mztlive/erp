@@ -8,20 +8,18 @@ mod reconciliation_difference;
 mod repository;
 use std::sync::Arc;
 
-use application_core::AuditActor;
 use erp_integration::IntegrationAccess;
 use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use mongodb::Database;
-use persistence_core::NoTransaction;
-
-use crate::Result;
 
 /// 只读详情服务；权威证据实现与写入口由组合根共享。
+#[derive(Clone)]
 pub struct IntegrationCenterReadService {
     db: Database,
     evidence: Arc<dyn IntegrationEvidenceAuthority>,
     access: IntegrationAccess,
 }
+
 impl IntegrationCenterReadService {
     /// 绑定数据库、权威证据和授权服务。
     ///
@@ -45,13 +43,71 @@ impl IntegrationCenterReadService {
     ) -> Self {
         Self { db, evidence, access }
     }
+}
 
-    fn access(&self) -> IntegrationAccess {
-        self.access.clone()
+#[cfg(test)]
+mod testing {
+    use erp_identity::testing::unavailable_authorization;
+    use erp_integration::dto::ControlledEvidenceRef;
+    use erp_integration::ports::evidence::{
+        EvidenceFuture, EvidenceSubject, OriginalResultFact, VerifiedEvidence,
+    };
+    use mongodb::Client;
+    use persistence_core::Executor;
+
+    use super::*;
+
+    struct UnusedEvidence;
+    impl IntegrationEvidenceAuthority for UnusedEvidence {
+        fn query_original<'a>(
+            &'a self,
+            _: &'a EvidenceSubject,
+            _: &'a mut dyn Executor,
+        ) -> EvidenceFuture<'a, OriginalResultFact> {
+            panic!("授权失败不得读取证据")
+        }
+        fn replay_original<'a>(
+            &'a self,
+            _: &'a EvidenceSubject,
+            _: &'a mut dyn Executor,
+        ) -> EvidenceFuture<'a, String> {
+            panic!("详情不得重放动作")
+        }
+        fn verify_reattribution<'a>(
+            &'a self,
+            _: &'a EvidenceSubject,
+            _: &'a mut dyn Executor,
+        ) -> EvidenceFuture<'a, String> {
+            panic!("授权失败不得验证证据")
+        }
+        fn verify_evidence<'a>(
+            &'a self,
+            _: &'a EvidenceSubject,
+            _: &'a ControlledEvidenceRef,
+            _: &'a str,
+            _: &'a mut dyn Executor,
+        ) -> EvidenceFuture<'a, VerifiedEvidence> {
+            panic!("授权失败不得验证证据")
+        }
+        fn discover_evidence<'a>(
+            &'a self,
+            _: &'a EvidenceSubject,
+            _: &'a mut dyn Executor,
+        ) -> EvidenceFuture<'a, Vec<ControlledEvidenceRef>> {
+            panic!("授权失败不得发现证据")
+        }
     }
 
-    async fn require_visible(&self, actor: &AuditActor, resource: &str, id: &str) -> Result<()> {
-        self.access().require_handler(actor, resource, "detail", id, &mut NoTransaction).await?;
-        Ok(())
+    /// 创建不连接数据库的拒绝式服务；业务读取一旦执行便无法成功。
+    pub(super) async fn service() -> IntegrationCenterReadService {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .expect("合法测试地址");
+        let db = client.database("integration_detail_authorization");
+        IntegrationCenterReadService::new(
+            db.clone(),
+            Arc::new(UnusedEvidence),
+            IntegrationAccess::new(db, unavailable_authorization()),
+        )
     }
 }

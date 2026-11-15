@@ -3,15 +3,15 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
-use erp_identity::Permission;
 use erp_identity::service::business_ownership::required_business_org;
+use erp_permissions::internal;
 use erp_sales::entity::sales_inquiry::{InquiryCreateData, InquiryRequirementData, SalesInquiry};
 use erp_sales::entity::sales_inquiry_import::{
     INQUIRY_IMPORT_MAX_BYTES, InquiryImportPreview, InquiryImportValidation,
 };
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 
 use super::facts::sku_facts;
@@ -35,7 +35,6 @@ impl SalesInquiryImportProcess {
         file_name: &str,
         bytes: Vec<u8>,
     ) -> Result<InquiryImportPreviewView> {
-        self.creation_header(actor, customer, &mut NoTransaction).await?;
         if bytes.is_empty()
             || bytes.len() > INQUIRY_IMPORT_MAX_BYTES
             || !file_name.to_ascii_lowercase().ends_with(".xlsx")
@@ -65,8 +64,6 @@ impl SalesInquiryImportProcess {
         customer: &str,
         executor: &mut dyn Executor,
     ) -> Result<InquiryCreateData> {
-        let permissions =
-            [Permission::parse("sales_inquiry:import")?, Permission::parse("sellable_sku:list")?];
         let name = self.inquiry.require_customer(actor, customer, executor).await?;
         let data = InquiryCreateData {
             customer_id: customer.into(),
@@ -78,7 +75,7 @@ impl SalesInquiryImportProcess {
             draft: InquiryRequirementData::default(),
         };
         let candidate = SalesInquiry::create("preview".into(), "preview".into(), data.clone())?;
-        self.access().require_permissions(actor, "create", &candidate, &permissions, executor).await?;
+        self.access().require(actor, &internal::SALES_INQUIRY_IMPORT_CREATE, &candidate, executor).await?;
         Ok(data)
     }
 

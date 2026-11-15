@@ -19,7 +19,7 @@ pub enum TransferResumeState {
 }
 
 /// 本人任务的受控业务上下文；不包含任意导航地址或原命令载荷。
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct TransferContext {
     pub kind: TransferKind,
     pub context: Value,

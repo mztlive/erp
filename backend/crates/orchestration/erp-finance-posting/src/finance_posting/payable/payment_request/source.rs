@@ -7,7 +7,7 @@ use erp_finance::entity::payable::{
     PayableAccount, PayableSourceType, PaymentRequestAccountSnapshot, PaymentRequestSubmission,
     PurchasePaymentRequestLine,
 };
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_party::PartyExt;
 use erp_party::repository::prelude::PartyBankAccountRepositoryExt;
 use erp_procure_to_pay::procure_to_pay::sync_payment_arrangement;
@@ -30,7 +30,7 @@ use super::*;
 /// 来源不在授权结果中、业务事实变化、余额不足、附件或账户无效时拒绝。
 pub(super) async fn prepare_submission(
     db: &Database,
-    identity: &SharedRbacService,
+    authorization: &AuthorizationService,
     sources: &[PurchaseOrder],
     request: &PurchasePaymentRequest,
     actor: &AuditActor,
@@ -71,7 +71,7 @@ pub(super) async fn prepare_submission(
     if reserve {
         sync_reserved_arrangements(db, &lines, executor).await?;
     }
-    validate_attachments(db, identity, request, actor, executor).await?;
+    validate_attachments(db, authorization, request, actor, executor).await?;
     let (payer_party_id, payer_party_name, org_unit_id) =
         subject.ok_or_else(|| Error::ValidationError("付款申请缺少采购来源".into()))?;
     let (payee_account, deposit_account) =
@@ -219,13 +219,13 @@ async fn selected_account(
 
 async fn validate_attachments(
     db: &Database,
-    identity: &SharedRbacService,
+    authorization: &AuthorizationService,
     request: &PurchasePaymentRequest,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let ids = request.data.attachment_ids.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
-    require_owned(db, identity, actor, &ids, executor).await?;
+    require_owned(authorization, actor, &ids, executor).await?;
     for id in &request.data.attachment_ids {
         let asset = db
             .file_assets()

@@ -3,12 +3,10 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_identity::entity::authorization::{AccessContext, FactKind, FactValue, ObjectFacts};
-use erp_identity::{
-    AccessFactsPort, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AccessTarget,
-    AuthorizationRegistry, AuthorizationService, DataAccess, Permission, ResourceTargets,
-    Result as IdentityResult, SharedRbacService,
-};
+use erp_core::common::time::Instant;
+use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts};
+use erp_identity::{AccessFactsPort, AccessTarget, ResourceTargets, Result as IdentityResult};
+use erp_permissions::internal;
 use erp_sales::entity::sales_inquiry_import::InquiryImportPreview;
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use mongodb::Database;
@@ -18,30 +16,6 @@ use super::SalesInquiryImportProcess;
 use crate::Result;
 
 const PREVIEW_RESOURCE: &str = "sales_inquiry_import_preview";
-
-pub(super) fn authorization(db: Database, rbac: SharedRbacService) -> AuthorizationService {
-    let registry = AuthorizationRegistry::new(vec![AccessRegistration {
-        permission: Permission::parse("sales_inquiry_import_preview:detail").expect("固定预览读取权限"),
-        required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Owner].into(),
-                policy: AccessPolicy::Account {
-                    policy: Box::new(AccessPolicy::All(vec![
-                        AccessPolicy::Owned,
-                        AccessPolicy::Permission(
-                            Permission::parse("sales_inquiry:import").expect("固定询价导入权限"),
-                        ),
-                    ])),
-                },
-            },
-            facts: Arc::new(PreviewFacts(db.clone())),
-        },
-    }])
-    .expect("固定询价导入预览授权目录");
-    AuthorizationService::new(db, rbac, registry)
-}
 
 impl SalesInquiryImportProcess {
     /// 在当前读取或写事务内证明询价导入预览的本人资格。
@@ -58,18 +32,13 @@ impl SalesInquiryImportProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         Ok(self
-            .preview_access
-            .require(
-                actor,
-                &Permission::parse("sales_inquiry_import_preview:detail")?,
-                AccessTarget::Records { subject: AccessSubject::Direct, ids: ResourceTargets::new(&[id])? },
-                executor,
-            )
+            .authorization
+            .require(actor, &internal::SALES_INQUIRY_IMPORT_PREVIEW, AccessTarget::record(id)?, executor)
             .await?)
     }
 }
 
-struct PreviewFacts(Database);
+pub(crate) struct PreviewFacts(Database);
 #[async_trait]
 impl AccessFactsPort for PreviewFacts {
     async fn load(
@@ -93,9 +62,21 @@ fn preview_facts(preview: &InquiryImportPreview) -> ObjectFacts {
         resource: PREVIEW_RESOURCE.into(),
         id: preview.base.id.clone(),
         version: preview.base.version.to_string(),
+        valid_until: Some(Instant::from_unix_secs(preview.expires_at)),
         owner_id: FactValue::Known(Some(preview.actor_id.clone())),
         ..Default::default()
     }
+}
+
+/// 构造询价导入预览的真实事实读取器。
+/// # 参数
+/// db 为业务数据库。
+/// # 返回
+/// 读取持久化预览发起人及版本的实现。
+/// # 错误
+/// 无。
+pub fn preview_facts_reader(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(PreviewFacts(db))
 }
 
 #[cfg(test)]

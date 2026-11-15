@@ -3,6 +3,7 @@
 use application_core::{ErrorClass, ValidationIssues};
 use erp_audit::AuditAttemptResult;
 use erp_audit::execution::AuditFailure;
+use erp_permissions::ParsePermissionError;
 use erp_workflow::ErrorCode as WorkflowErrorCode;
 
 /// 应用边界结果，不通过旧 services 或另一应用边界定义别名。
@@ -287,6 +288,12 @@ from_domain!(erp_read_models, Rbac, Coded);
 impl erp_approval_runtime::approval_recovery::ApprovalCommandFailure for Error {
     fn command_may_have_committed(&self) -> bool {
         self.command_may_have_committed()
+    }
+}
+
+impl From<ParsePermissionError> for Error {
+    fn from(value: ParsePermissionError) -> Self {
+        Self::ValidationError(value.to_string())
     }
 }
 

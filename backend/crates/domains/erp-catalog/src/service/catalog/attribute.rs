@@ -1,5 +1,7 @@
 use application_core::AuditActor;
-use persistence_core::{NoTransaction, Transactional};
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -34,8 +36,32 @@ impl CatalogService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn sku_attribute_list(
         &self,
+        actor: &AuditActor,
         params: &SkuAttributeListParams,
     ) -> Result<PageView<SkuAttributeView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.sku_attribute_list_snapshot(&actor, &params, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn sku_attribute_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &SkuAttributeListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SkuAttributeView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::SKU_ATTRIBUTE_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = SkuAttributeFilter {
@@ -48,7 +74,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.sku_attributes().search_sku_attributes(&filter, &mut NoTransaction).await?;
+        let page = self.db.sku_attributes().search_sku_attributes(&filter, executor).await?;
         let items = page.items.into_iter().map(SkuAttributeView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -73,7 +99,7 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<SkuAttributeView> {
         req.validate()?;
-        let mut attribute = self.load_attribute(id).await?;
+        let mut attribute = self.load_attribute(id, &mut NoTransaction).await?;
         ensure_version(attribute.base.version, req.version)?;
         attribute.update(
             SkuAttributeUpdate { name: req.name, value_type: req.value_type, status: req.status },
@@ -85,12 +111,17 @@ impl CatalogService {
             "sku_attribute",
             attribute.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::SKU_ATTRIBUTE_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     db.sku_attributes().update(&mut attribute, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<SkuAttribute, crate::error::Error>(attribute)
@@ -113,19 +144,24 @@ impl CatalogService {
     /// * `NotFound` - 属性不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn sku_attribute_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut attribute = self.load_attribute(id).await?;
+        let mut attribute = self.load_attribute(id, &mut NoTransaction).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "sku_attribute.delete",
             "sku_attribute",
             attribute.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &catalog::SKU_ATTRIBUTE_DELETE, AccessTarget::Operation, executor)
+                        .await?;
                     db.sku_attributes().soft_delete(&mut attribute, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
@@ -148,8 +184,34 @@ impl CatalogService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn sku_attribute_value_list(
         &self,
+        actor: &AuditActor,
         params: &SkuAttributeValueListParams,
     ) -> Result<PageView<SkuAttributeValueView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.sku_attribute_value_list_snapshot(&actor, &params, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn sku_attribute_value_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        params: &SkuAttributeValueListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SkuAttributeValueView>> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::SKU_ATTRIBUTE_VALUE_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         let query = params.normalized()?;
         let filter = SkuAttributeValueFilter {
@@ -162,8 +224,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.sku_attribute_values().search_sku_attribute_values(&filter, &mut NoTransaction).await?;
+        let page = self.db.sku_attribute_values().search_sku_attribute_values(&filter, executor).await?;
         let items = page.items.into_iter().map(SkuAttributeValueView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -204,12 +265,22 @@ impl CatalogService {
             "sku_attribute_value",
             value.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::SKU_ATTRIBUTE_VALUE_UPDATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     db.sku_attribute_values().update(&mut value, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<SkuAttributeValue, crate::error::Error>(value)
@@ -239,12 +310,22 @@ impl CatalogService {
             "sku_attribute_value",
             value.base.id.clone(),
         )?;
+        let authorization = self.data_scope.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &catalog::SKU_ATTRIBUTE_VALUE_DELETE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     db.sku_attribute_values().soft_delete(&mut value, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())
@@ -257,16 +338,17 @@ impl CatalogService {
     ///
     /// # 参数
     /// * `id` - 属性 ID
+    /// * `executor` - 调用方读取或写入事务的原执行器
     ///
     /// # 返回
     /// 返回属性实体。
     ///
     /// # 错误
     /// 属性不存在时返回 `NotFound`。
-    pub async fn load_attribute(&self, id: &str) -> Result<SkuAttribute> {
+    pub async fn load_attribute(&self, id: &str, executor: &mut dyn Executor) -> Result<SkuAttribute> {
         self.db
             .sku_attributes()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("规格属性不存在".to_string()))
     }

@@ -1,6 +1,8 @@
 //! 品牌导入单行步骤；事务由后台任务流程持有，品牌、审计、行结果和进度共同提交。
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
+use erp_identity::AccessTarget;
+use erp_permissions::catalog;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind};
 use persistence_core::Executor;
 
@@ -30,6 +32,10 @@ impl CatalogService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<BrandImportResult> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
+            .await?;
         let number = row.row_number;
         if let Some(error) = row.error.filter(|value| !value.trim().is_empty()) {
             return Ok(BrandImportResult::failed(number, error));

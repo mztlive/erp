@@ -5,15 +5,15 @@ mod bootstrap;
 pub mod leader;
 mod profile;
 
-use std::mem::take;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 pub(crate) use bootstrap::ensure_home_department;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
+use erp_permissions::organization;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use self::access::{prepare_organization_change, visible_state};
 use crate::dto::{OrgPersonView, OrgRoleView, OrganizationStateView};
@@ -21,14 +21,16 @@ use crate::entity::organization_change::*;
 use crate::ports::OrganizationBusinessPort;
 use crate::repository::OrganizationRepository;
 use crate::repository::prelude::*;
-use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use crate::{AccessControlExt, Error, Permission, Result, SharedRbacService};
+use crate::service::access_control::resolve::AuthorizedDataScope;
+use crate::service::authorization::OrganizationScope;
+use crate::{AccessControlExt, AuthorizationService, Error, Result, SharedRbacService};
 
 /// 组织管理应用服务；停用检查必须显式装配真实业务事实 Port。
 #[derive(Clone)]
 pub struct OrganizationService {
     db: Database,
     rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     business: Arc<dyn OrganizationBusinessPort>,
 }
 
@@ -39,14 +41,20 @@ impl OrganizationService {
     /// * `db` - 身份数据库。
     /// * `rbac` - 共享 RBAC 服务。
     /// * `business` - 外域未结事实端口。
+    /// * `authorization` - 应用注入的共享统一授权服务。
     ///
     /// # 返回
     /// 返回无宽范围兜底的组织服务。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, business: Arc<dyn OrganizationBusinessPort>) -> Self {
-        Self { db, rbac, business }
+    pub fn new(
+        db: Database,
+        rbac: SharedRbacService,
+        business: Arc<dyn OrganizationBusinessPort>,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self { db, rbac, authorization, business }
     }
 
     /// 返回当前有权配置的组织、关系及展示字段。
@@ -63,15 +71,31 @@ impl OrganizationService {
     /// # 关键业务约束
     /// 缺范围返回空集并标记 `no_scope`；所属部门不代替 `org_unit:list`。
     pub async fn state(&self, actor: &AuditActor) -> Result<OrganizationStateView> {
-        let mut no_tx = NoTransaction;
-        let mut access = self.access(actor, "list", &mut no_tx).await?;
-        let organizations = take(&mut access.facts.organizations);
-        let visible = visible_state(organizations, &access);
-        let people = people_for(&self.db, &visible, access.as_of, &mut no_tx).await?;
-        let roles = roles_for(&self.db, &mut no_tx).await?;
+        let this = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.state_snapshot(&actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原快照内取得配置范围、展示事实并完成交付期限检查。
+    async fn state_snapshot(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<OrganizationStateView> {
+        let access = self.access(actor, executor).await?;
+        let visible = visible_state(access.organizations.clone(), &access);
+        let people = people_for(&self.db, &visible, access.as_of, executor).await?;
+        let roles = roles_for(&self.db, executor).await?;
+        access.ensure_current(executor)?;
         Ok(OrganizationStateView::compose(
             visible,
-            access.facts.scope_version,
+            access.facts.scope_version.clone(),
             access.facts.policy_version,
             access.facts.as_of.as_utc().to_rfc3339(),
             !access.facts.scope.has_role_scope(),
@@ -185,6 +209,7 @@ impl OrganizationService {
             actor.id(),
             Instant::from_unix_secs(Instant::now().unix_secs()),
         )?;
+        access.ensure_current(executor)?;
         if persist {
             self.update_profile_name(&receipt.request.change, true, executor).await?;
             self.assign_profile_roles(actor, &receipt.request.change, access.facts.policy_version, executor)
@@ -195,15 +220,8 @@ impl OrganizationService {
     }
 
     /// 解析组织配置资源；所属部门与操作权限分别校验。
-    async fn access(
-        &self,
-        actor: &AuditActor,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, &Permission::parse(format!("{}:{}", "org_unit", action))?, executor)
-            .await
+    async fn access(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<OrganizationScope> {
+        self.authorization.organization_scope(actor, &organization::LIST, executor).await
     }
 
     /// 核对修改目标、原边界及接收方资格，组织关系不自动交接业务对象。

@@ -5,6 +5,7 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     FileAssetId, ProductId, ProductRevisionId, ProductRevisionMediaId, SkuId, SkuRevisionId, UnitOfMeasureId,
 };
+use erp_permissions::catalog as catalog_permissions;
 use id_generator::next_id;
 use persistence_core::Executor;
 use serde::{Deserialize, Serialize};
@@ -88,7 +89,12 @@ impl CatalogPortalService {
             let product = self
                 .catalog
                 .access()
-                .require_product(&command.actor, "update", &target.product_id, executor)
+                .require_product(
+                    &command.actor,
+                    &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                    &target.product_id,
+                    executor,
+                )
                 .await?;
             ensure_version(product.base.version, target.version)?;
             if !product.is_active()
@@ -145,7 +151,7 @@ impl CatalogPortalService {
             },
             actor.id(),
         )?;
-        self.catalog.access().require_create(actor, &product.base.id, executor).await?;
+        self.catalog.access().require_create(actor, &product, executor).await?;
         let revision = ProductRevision::new(
             ProductRevisionId::new(next_id()),
             ProductRevisionData {

@@ -1,7 +1,10 @@
 //! 读取销售变更事实并组合创建时冻结的审批绑定。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, PageView};
-use erp_identity::SharedRbacService;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, internal, sales_order as sales_order_permissions, sales_review};
 use erp_sales::dto::sales_review::{SalesChangeOrderListParams, SalesChangeOrderView};
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::prelude::*;
@@ -87,7 +90,7 @@ impl SalesChangeReadService {
     ///
     /// # 错误
     /// * `NotFound` - 变更单不存在或来源销售单不可见
-    /// * `ConflictError` - 两次读取之间数据范围或变更单已变化
+    /// * `ConflictError` - 授权交付阶段或有效期已变化
     ///
     /// 仓储或事务失败会返回对应错误。
     ///
@@ -98,13 +101,35 @@ impl SalesChangeReadService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SalesChangeOrderDetailView> {
-        let (mut view, version) = load_authorized_change(&self.db, &self.rbac, actor, id).await?;
-        view.procurement = self.change_procurement(&view, actor).await?;
-        let current = load_change_version(&self.db, &self.rbac, actor, id).await?;
-        if version != current {
-            return Err(crate::support::data_scope_changed("数据范围或销售变更单已变化，请刷新"));
-        }
+        let (view, _) =
+            load_authorized_change(&self.db, &self.rbac, actor, id, &sales_review::SALES_CHANGE_ORDER_DETAIL)
+                .await?;
         Ok(view)
+    }
+    /// 在新快照按原命令资格及来源详情权限重新读取结果。
+    /// # 参数
+    /// id、actor 为原命令对象及当前账号，permission 为固定的创建、提交、作废或生效回包入口。
+    /// # 返回
+    /// 本次授权快照中的完整变更结果。
+    /// # 错误
+    /// 不支持的入口、撤权、来源无权、交付失效或数据库错误均拒绝。
+    pub async fn command_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        permission: &Permission,
+    ) -> Result<SalesChangeOrderDetailView> {
+        if ![
+            sales_review::SALES_CHANGE_ORDER_CREATE,
+            sales_review::SALES_CHANGE_DRAFT,
+            sales_review::SALES_CHANGE_ORDER_VOID,
+            internal::SALES_CHANGE_APPLIED_RESULT_READ,
+        ]
+        .contains(permission)
+        {
+            return Err(Error::ValidationError("不支持的销售变更回包入口".into()));
+        }
+        Ok(load_authorized_change(&self.db, &self.rbac, actor, id, permission).await?.0)
     }
 }
 
@@ -126,10 +151,12 @@ impl SalesChangeReadService {
 /// 不泄露越权变更单的存在性。
 async fn load_authorized_change(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     actor: &AuditActor,
     id: &str,
+    permission: &Permission,
 ) -> Result<(SalesChangeOrderDetailView, String)> {
+    let permission = permission.clone();
     let actor = actor.clone();
     let id = id.to_string();
     let rbac = rbac.clone();
@@ -137,7 +164,9 @@ async fn load_authorized_change(
     db.client()
         .clone()
         .with_transaction(move |executor| {
-            Box::pin(async move { load_change_snapshot(&db, &rbac, &actor, &id, executor).await })
+            Box::pin(
+                async move { load_change_snapshot(&db, &rbac, &actor, &id, &permission, executor).await },
+            )
         })
         .await
 }
@@ -158,25 +187,37 @@ async fn load_authorized_change(
 /// 来源不可见、缺单、审批关系非法或仓储失败时拒绝。
 async fn load_change_snapshot(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     actor: &AuditActor,
     id: &str,
+    permission: &Permission,
     executor: &mut dyn Executor,
 ) -> Result<(SalesChangeOrderDetailView, String)> {
-    let AuthorizedChange { change, context, version } =
-        load_change_facts(db, rbac, actor, id, executor).await?;
+    rbac.require(actor, permission, AccessTarget::Operation, executor).await?;
+    let change = db
+        .sales_change_orders()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".into()))?;
+    SalesAccess::new(db.clone(), rbac.clone())
+        .require_object(actor, &sales_order_permissions::DETAIL, change.sales_order_id.as_ref(), executor)
+        .await?;
     let binding = match find_approval_binding(db, id, executor).await.map_err(crate::Error::from) {
         Ok(binding) => binding,
         Err(Error::NotFound(_)) => None,
         Err(error) => return Err(error),
     };
-    let view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
+    let mut view = runtime_detail_view(db, rbac, actor, change, binding, executor).await?;
+    view.procurement = SalesChangeReadService::with_rbac(db.clone(), rbac.clone())
+        .change_procurement(&view, actor, executor)
+        .await?;
+    // 按钮检查可能开始新的授权阶段；根查询在这些检查结束后签发并交付。
+    let AuthorizedChange { context, version, .. } = load_change_facts(db, rbac, actor, id, executor).await?;
     context.validate(executor).await?;
     Ok((view, version))
 }
 
 struct AuthorizedChange {
-    change: SalesChangeOrder,
     context: SalesReadContext,
     version: String,
 }
@@ -184,7 +225,7 @@ struct AuthorizedChange {
 /// 在原执行器内独立证明变更单与来源销售单资格，并绑定两者业务版本。
 async fn load_change_facts(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     actor: &AuditActor,
     id: &str,
     executor: &mut dyn Executor,
@@ -195,7 +236,7 @@ async fn load_change_facts(
         .await?
         .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
     let access = SalesAccess::new(db.clone(), rbac.clone());
-    let (context, scope) = access.resolve(actor, "detail", &[], executor).await?;
+    let (context, scope) = access.resolve(actor, &sales_order_permissions::DETAIL, executor).await?;
     let order = db
         .sales_orders()
         .find_authorized(change.sales_order_id.as_ref(), &scope, executor)
@@ -203,30 +244,7 @@ async fn load_change_facts(
         .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
     let version =
         format!("{}:{}:{}:{}", context.scope_version, order.base.id, order.base.version, change.base.version);
-    Ok(AuthorizedChange { change, context, version })
-}
-
-/// 在独立事务只复核授权与业务版本，不重复读取审批图、工作副本和详情投影。
-async fn load_change_version(
-    db: &Database,
-    rbac: &SharedRbacService,
-    actor: &AuditActor,
-    id: &str,
-) -> Result<String> {
-    let actor = actor.clone();
-    let id = id.to_string();
-    let rbac = rbac.clone();
-    let db = db.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let facts = load_change_facts(&db, &rbac, &actor, &id, executor).await?;
-                facts.context.validate(executor).await?;
-                Ok(facts.version)
-            })
-        })
-        .await
+    Ok(AuthorizedChange { context, version })
 }
 
 /// 使用已授权原单装配定义、真实运行审批与冻结目标身份。
@@ -246,7 +264,7 @@ async fn load_change_version(
 /// 定义缺失、当前提交来源或审批事实不一致时拒绝。
 async fn runtime_detail_view(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     actor: &AuditActor,
     change: SalesChangeOrder,
     binding: Option<ApprovalDefinitionBinding>,
@@ -309,5 +327,42 @@ fn detail_view(
         created_at: change_order.base.created_at,
         approval: document_approval_view(binding.as_ref(), None, change_order.stable.status()),
         procurement: SalesChangeProcurementView::default(),
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn native_detail_and_command_reply_check_their_entry_before_loading_change_data() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("sales_change_entry_test");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for entry in [
+            sales_review::SALES_CHANGE_ORDER_DETAIL,
+            sales_review::SALES_CHANGE_ORDER_CREATE,
+            sales_review::SALES_CHANGE_DRAFT,
+            sales_review::SALES_CHANGE_ORDER_VOID,
+        ] {
+            let result = load_change_snapshot(
+                &db,
+                &authorization,
+                &actor,
+                "change",
+                &entry,
+                &mut SnapshotExecutor::default(),
+            )
+            .await;
+            assert!(matches!(result,Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+        }
     }
 }

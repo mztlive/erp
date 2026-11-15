@@ -8,6 +8,7 @@ use erp_fulfillment::entity::address_arrangement::{
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryAddressSnapshot, DeliveryLine};
 use erp_fulfillment::repository::{AddressArrangementExt, FulfillmentExt};
 use erp_party::SensitiveDataCodec;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_order::{CloseStatus, CommercialStatus, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
@@ -305,8 +306,10 @@ pub(super) async fn authorize_sales(
     writing: bool,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    SalesAccess::new(process.db.clone(), (process.task_identity)())
-        .require_object(actor, if writing { "update" } else { "detail" }, id, &[], executor)
+    let permission =
+        if writing { sales_order_permissions::HANDOVER } else { sales_order_permissions::DETAIL };
+    SalesAccess::new(process.db.clone(), process.task_identity.clone())
+        .require_object(actor, &permission, id, executor)
         .await?;
     Ok(())
 }
@@ -338,7 +341,7 @@ pub(super) async fn authorize_delivery(
     task::ensure_task_matches_frozen_identity(&task, &task::FulfillmentTaskObject::Delivery(&delivery))?;
     super::super::task_access::require_assignee(
         &process.db,
-        &(process.task_identity)(),
+        &process.task_identity.clone(),
         actor,
         &task,
         super::super::task_access::TaskPurpose::Fulfillment,

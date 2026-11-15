@@ -1,169 +1,88 @@
-//! 财务入口统一证明操作权限及真实来源数据资格。
-
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+//! 资金查询一次解析并共享固定来源计划及交付凭证。
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::entity::policy_permission::FINANCE_LEDGER_READ;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
-use erp_procurement::authorization::PurchaseMapping;
-use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
+use erp_permissions::Permission as AccessPermission;
 use persistence_core::Executor;
 
 use super::authorization::FundsReadContext;
-use super::repository::settlement_mapping::SettlementMapping;
-use super::repository::source_access::{SourceQuery, source_query};
+use super::repository::source_access::SourceQuery;
 use super::repository::whole_access::WholeAccess;
 use super::{FundsAccess, FundsAuthorization};
 use crate::Result;
-use crate::sales_center::access::SalesAccess;
-
 impl FundsAccess {
-    /// 在同一执行器取得资金入口及各实际来源的完整查询凭证。
+    /// 用同一次解析取得固定根及全部来源计划。
     /// # 参数
-    /// actor 为账号，resource/action 为固定入口，purchase/dual 指定实际业务来源。
+    /// actor 为账号；resource/action 为固定业务入口，purchase/dual 只决定业务读取方向。
     /// # 返回
-    /// 本阶段元信息和可执行来源凭证。
+    /// 共享单一凭证的查询元信息和各来源只读计划。
     /// # 错误
-    /// 身份、入口、来源事实或映射失效时拒绝。
+    /// 入口、绑定或授权失败原样返回。
     pub(super) async fn resolve_sources(
         &self,
         actor: &AuditActor,
-        resource: &str,
-        action: &str,
-        purchase: bool,
-        dual: bool,
+        permission: &AccessPermission,
+        _purchase: bool,
+        _dual: bool,
         executor: &mut dyn Executor,
     ) -> Result<(FundsReadContext, FundsAuthorization)> {
-        let entry = Permission::parse(format!("{resource}:{action}"))?;
-        let mut versions = Vec::new();
-        let sales = if !purchase || dual {
-            let (context, scope) = SalesAccess::new(self.db.clone(), self.rbac.clone())
-                .resolve_source(actor, &entry, executor)
-                .await?;
-            versions.push(context.scope_version);
-            Some(scope)
-        } else {
-            None
-        };
-        let (purchase_scope, settlement) = self.purchase_sources(actor, &entry, purchase, executor).await?;
-        if let Some(scope) = &purchase_scope {
-            versions.push(scope.version());
-        }
-        if let Some(scope) = &settlement {
-            versions.push(scope.access.version());
-        }
-        let ledger_read =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
-                .has_permission(actor, &Permission::parse(FINANCE_LEDGER_READ)?, executor)
-                .await?;
-        let mut hash = DefaultHasher::new();
-        versions.hash(&mut hash);
-        ledger_read.hash(&mut hash);
-        let whole = if let Some(collection) = whole_collection(resource) {
-            WholeAccess::query(&self.db, &self.rbac, actor, &entry, collection, executor).await?
-        } else {
-            WholeAccess::default()
-        };
-        whole.version().hash(&mut hash);
+        let ledger_read = self
+            .rbac
+            .has_permission(actor, &erp_permissions::policy_permission::FINANCE_LEDGER_READ, executor)
+            .await?;
+        let access = Arc::new(self.rbac.query(actor, permission, executor).await?);
+        let sales = SourceQuery::new(access.clone(), "sales_source")?;
+        let purchase_scope = SourceQuery::new(access.clone(), "purchase_source")?;
+        let settlement = SourceQuery::new(access.clone(), "settlement_source")?;
+        let whole = WholeAccess::new(access.clone());
         let context = FundsReadContext {
-            resource: resource.into(),
-            scope_version: format!("{:x}", hash.finish()),
+            resource: permission.resource().into(),
+            scope_version: access.version(),
             as_of: Instant::now(),
         };
-        let authorization = FundsAuthorization {
-            whole,
-            sales,
-            ledger_read,
-            settlement,
-            purchase_scope,
-            context: context.clone(),
-        };
-        authorization.validate(executor).await?;
-        Ok((context, authorization))
-    }
-    /// 为固定资金入口只编译真实采购来源。
-    /// # 参数
-    /// actor 为真实账号，resource/action 为固定入口，executor 为原执行器。
-    /// # 返回
-    /// 不包含结算或整账能力的完整采购来源凭证。
-    /// # 错误
-    /// 入口、账号、来源映射或授权失效时返回原错误。
-    pub(crate) async fn purchase_source(
-        &self,
-        actor: &AuditActor,
-        resource: &str,
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<PurchaseReadScope> {
-        let entry = Permission::parse(format!("{resource}:{action}"))?;
-        let access = source_query(
-            &self.db,
-            &self.rbac,
-            actor,
-            &entry,
-            Arc::new(PurchaseMapping::new("purchase_order")?),
-            executor,
-        )
-        .await?;
-        Ok(PurchaseReadScope::from_compiled(access.access, access.service))
-    }
-
-    async fn purchase_sources(
-        &self,
-        actor: &AuditActor,
-        entry: &Permission,
-        purchase: bool,
-        executor: &mut dyn Executor,
-    ) -> Result<(Option<PurchaseReadScope>, Option<SourceQuery>)> {
-        if purchase {
-            let scope = self.purchase_source(actor, entry.resource(), entry.action(), executor).await?;
-            let settlement = source_query(
-                &self.db,
-                &self.rbac,
-                actor,
-                entry,
-                Arc::new(SettlementMapping::new()?),
-                executor,
-            )
-            .await?;
-            Ok((Some(scope), Some(settlement)))
-        } else {
-            Ok((None, None))
-        }
+        Ok((
+            context.clone(),
+            FundsAuthorization {
+                access: Some(access),
+                service: Some(self.rbac.clone()),
+                whole,
+                sales,
+                ledger_read,
+                settlement,
+                purchase_scope,
+                context,
+            },
+        ))
     }
 }
 
 impl FundsAuthorization {
-    /// 仓储在执行完整授权查询之前及交付之后复验全部来源凭证。
+    /// 仓储只核验边界和期限；交付时由读取用例统一复验根凭证。
     /// # 参数
-    /// executor 为原读取阶段执行器。
+    /// executor 为原读取执行器。
     /// # 返回
-    /// 所有授权与映射事实保持当前时成功。
+    /// 所有来源仍属于同一阶段时成功。
     /// # 错误
-    /// 账号、权限、有效期、映射或身份设施失效时失败。
+    /// 跨阶段、事务失效或到期拒绝。
     pub(super) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.whole.validate(executor).await?;
-        if let Some(scope) = &self.sales {
-            scope.validate(executor).await?;
-        }
-        if let Some(scope) = &self.purchase_scope {
-            scope.validate(executor).await?;
-        }
-        if let Some(scope) = &self.settlement {
-            scope.validate(executor).await?;
+        if let Some(access) = &self.access {
+            access.ensure_current(executor)?;
         }
         Ok(())
     }
-}
 
-fn whole_collection(resource: &str) -> Option<&'static str> {
-    match resource {
-        "customer_receipt" => Some("customer_receipts"),
-        "supplier_payment" => Some("supplier_payments"),
-        "invoice" => Some("invoices"),
-        _ => None,
+    /// 完成所有仓储读取后执行一次结果交付检查。
+    /// # 参数
+    /// executor 为本次原执行器。
+    /// # 返回
+    /// 当前模式的边界、期限和必要依赖都有效时成功。
+    /// # 错误
+    /// 任一授权依赖变化或阶段失效即丢弃结果。
+    pub(crate) async fn deliver(&self, executor: &mut dyn Executor) -> Result<()> {
+        if let (Some(access), Some(service)) = (&self.access, &self.service) {
+            service.validate(access, executor).await?;
+        }
+        Ok(())
     }
 }

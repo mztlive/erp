@@ -3,8 +3,12 @@
 //! 两个口径各自调用身份域公共解析入口；冻结归属快照永不提供访问资格，
 //! 现任负责人回填历史贡献在此处即被阻断。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_customer::{CustomerAccess, CustomerResolvedScope};
+use erp_customer::CustomerAccess;
+use erp_identity::AuthorizationService;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -16,8 +20,7 @@ use crate::sales_center::access::{SalesAccess, SalesReadContext};
 #[derive(Clone)]
 pub struct QualityAccess {
     db: Database,
-    rbac: erp_identity::SharedRbacService,
-    customer_scope: CustomerAccess,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl QualityAccess {
@@ -33,34 +36,8 @@ impl QualityAccess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: erp_identity::SharedRbacService, customer_scope: CustomerAccess) -> Self {
-        Self { db, rbac, customer_scope }
-    }
-
-    /// 在调用方事务内证明现任口径的客户与销售双重动作范围。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回客户范围事实、客户授权条件与销售读取范围。
-    ///
-    /// # 错误
-    /// 任一动作无权限、范围未注册或查询超限时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 订单行必须同时满足客户范围与销售范围；缺一保持空集。
-    pub async fn resolve_current(
-        &self,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<(CustomerResolvedScope, SalesReadContext, SalesReadScope)> {
-        let customer = &self.customer_scope;
-        let (customer_context, _) = customer.query(actor, "list", executor).await?;
-        let sales = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        let (sales_context, sales_scope) = sales.resolve(actor, "list", &[], executor).await?;
-        Ok((customer_context, sales_context, sales_scope))
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>, _customer_scope: CustomerAccess) -> Self {
+        Self { db, rbac }
     }
 
     /// 在调用方事务内证明历史口径的销售读取范围。
@@ -79,6 +56,8 @@ impl QualityAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(SalesReadContext, SalesReadScope)> {
-        SalesAccess::new(self.db.clone(), self.rbac.clone()).resolve(actor, "list", &[], executor).await
+        SalesAccess::new(self.db.clone(), self.rbac.clone())
+            .resolve(actor, &sales_order_permissions::LIST, executor)
+            .await
     }
 }

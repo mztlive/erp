@@ -1,4 +1,7 @@
 //! 供应商结算跨域详情的唯一读模型。
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
 mod display;
 pub mod display_dto;
 mod display_facts;
@@ -8,13 +11,12 @@ mod statement_result;
 pub use statement_result::SettlementStatementResult;
 mod query;
 mod review_access;
-use erp_identity::SharedRbacService;
 use mongodb::Database;
 pub use review_access::require_reviewer;
 /// 供应链快照与正式财务复核任务的读取入口。
 pub struct SupplierSettlementReadService {
     db: Database,
-    identity: SharedRbacService,
+    identity: Arc<AuthorizationService>,
 }
 impl SupplierSettlementReadService {
     /// 使用原数据库构造结算读模型。
@@ -28,10 +30,7 @@ impl SupplierSettlementReadService {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, identity: SharedRbacService) -> Self {
+    pub fn new(db: Database, identity: Arc<AuthorizationService>) -> Self {
         Self { db, identity }
     }
 }
-
-#[cfg(test)]
-mod tests;

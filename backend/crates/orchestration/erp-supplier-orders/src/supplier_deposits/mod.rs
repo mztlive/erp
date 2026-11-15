@@ -4,6 +4,7 @@ mod access;
 mod replacement;
 mod repository;
 pub use replacement::prepare_execution_funds_replacement;
+pub use repository::authorization::deposit_bindings;
 mod automatic;
 pub use automatic::prepare_automatic_execution_funds;
 mod investigation;

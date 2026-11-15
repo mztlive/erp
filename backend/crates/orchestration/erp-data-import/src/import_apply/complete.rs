@@ -2,6 +2,7 @@ use application_core::{AuditActor, StructuredCommandReceipt};
 use erp_audit::BusinessEventContext;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, MongoAuditEventSink, execute_audited};
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 pub(super) use erp_import::entity::command_receipt::ConfirmationCompletionReceipt;
 use erp_import::entity::command_receipt::{
     ImportCommandReceipt, ImportCommandResult, ImportConfirmationOutcome,
@@ -14,6 +15,7 @@ use erp_import::{
     LegacyImportBatchStatus, LegacyImportCommandIdentity, LegacyImportConfirmation, LegacyImportExt,
     PreparedConfirmationCompletion,
 };
+use erp_permissions::legacy_import;
 use erp_workflow::entity::document_registry::WorkflowActionId;
 use erp_workflow::entity::work_item::{ImportConfirmationTaskIdentity, WorkItem, WorkItemStatus};
 use erp_workflow::{DocumentRegistryExt, WorkItemExt};
@@ -81,10 +83,19 @@ impl ImportApplyProcess {
         let prepared = prepared.clone();
         let actor = actor.clone();
         let work_items = self.work_items.clone();
+        let authorization = self.authorization.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &legacy_import::CONFIRMATION_COMPLETE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     replay_confirmation_step(&db, &identity, &prepared, &actor, work_items.as_ref(), executor)
                         .await
                 })
@@ -107,10 +118,19 @@ impl ImportApplyProcess {
         let context = context.clone();
         let decided_at = Instant::now();
         let work_items = self.work_items.clone();
+        let authorization = self.authorization.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &legacy_import::CONFIRMATION_COMPLETE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     let command = ConfirmationWrite {
                         db: &db,
                         identity: &identity,

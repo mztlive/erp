@@ -202,14 +202,7 @@ mod tests {
         row
     }
 
-    struct TestExecutor(u8);
-    impl Executor for TestExecutor {
-        /// 非零大小执行器仅提供身份，不接触真实数据库会话。
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            assert_eq!(self.0, 71);
-            None
-        }
-    }
+    use persistence_core::ReadExecutor;
 
     struct RecordingWriter {
         calls: Vec<(WriteAction, String, u64, usize, bool)>,
@@ -272,8 +265,8 @@ mod tests {
             plan_changes(&SalesOrderWorkingCopyId::new("copy-1"), &[existing], &[incoming]).unwrap();
         assert_eq!(changes[0].kind, ChangeKind::Restored);
         let mut writer = RecordingWriter { calls: Vec::new(), fail_at: None };
-        let mut executor = TestExecutor(71);
-        let pointer = &mut executor as *mut TestExecutor as usize;
+        let mut executor = ReadExecutor::default();
+        let pointer = &mut executor as *mut ReadExecutor as usize;
         persist_changes(&mut writer, changes, &mut executor).await.unwrap();
         assert_eq!(
             writer.calls.iter().map(|call| (call.0, call.1.as_str(), call.2, call.4)).collect::<Vec<_>>(),

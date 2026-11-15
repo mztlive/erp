@@ -1,22 +1,25 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use application_core::AuditActor;
-use casbin::RbacApi;
+use casbin::{CoreApi, DefaultModel, Enforcer, MemoryAdapter, RbacApi};
 use erp_core::AccountKind;
-use persistence_core::{Executor, NoTransaction};
+use erp_permissions::admin;
+use persistence_core::{Executor, Transactional};
 
 use super::policy::{
     collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
     permissions_for_actor, role_ids_for_account, role_key,
 };
-use super::{RbacService, subject};
+use super::{RBAC_MODEL, RbacService, subject};
 use crate::dto::RoleItem;
 use crate::entity::rbac::{PermissionSet, RoleId};
 use crate::entity::role::Role;
 use crate::error::Result;
 use crate::repository::prelude::*;
-use crate::{AccessControlExt, MongoCasbinAdapter};
+use crate::service::iam::management::ManagementAccess;
+use crate::{AccessControlExt, AuthorizationService, MongoCasbinAdapter};
 
 /// 由批量直接权限装配角色响应项（两个列表入口共用该映射）。
 ///
@@ -93,6 +96,7 @@ impl RbacService {
     /// 查询全部角色及其直接权限。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// 无。
     ///
     /// # 返回
@@ -100,14 +104,30 @@ impl RbacService {
     ///
     /// # 错误
     /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
-    pub async fn role_list(&self) -> Result<Vec<RoleItem>> {
-        let roles = self.db.roles().list_all(&mut NoTransaction).await?;
-        self.role_items(roles).await
+    pub async fn role_list(
+        self: &Arc<Self>,
+        actor: &AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<Vec<RoleItem>> {
+        let service = self.clone();
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_LIST_ROLES);
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    let roles = service.db.roles().list_all(executor).await?;
+                    let policy = service.role_query_policy(&roles, None, executor).await?;
+                    role_items(roles, &policy)
+                })
+            })
+            .await
     }
 
     /// 查询全部可分配角色及其直接权限。
     ///
     /// # 参数
+    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
     /// * `actor` - 已认证操作人，用于按自身权限过滤。
     ///
     /// # 返回
@@ -115,49 +135,62 @@ impl RbacService {
     ///
     /// # 错误
     /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
-    pub async fn assignable_role_list(&self, actor: &AuditActor) -> Result<Vec<RoleItem>> {
-        let roles = self
-            .db
-            .roles()
-            .list_enabled(&mut NoTransaction)
-            .await?
-            .into_iter()
-            .filter(|role| role.ensure_assignable().is_ok())
-            .collect::<Vec<_>>();
-        self.assignable_role_items(roles, actor).await
+    pub async fn assignable_role_list(
+        self: &Arc<Self>,
+        actor: &AuditActor,
+        authorization: Arc<AuthorizationService>,
+    ) -> Result<Vec<RoleItem>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_LIST_ASSIGNABLE_ROLES);
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.require(executor).await?;
+                    let roles = service
+                        .db
+                        .roles()
+                        .list_enabled(executor)
+                        .await?
+                        .into_iter()
+                        .filter(|role| role.ensure_assignable().is_ok())
+                        .collect::<Vec<_>>();
+                    let policy = service.role_query_policy(&roles, Some(&actor), executor).await?;
+                    assignable_role_items(roles, &actor, &policy)
+                })
+            })
+            .await
     }
 
-    /// 按操作人权限范围过滤可分配角色；整个批次只读取一次 Enforcer。
-    async fn assignable_role_items(&self, roles: Vec<Role>, actor: &AuditActor) -> Result<Vec<RoleItem>> {
+    /// 沿原执行器读取当前批次及其继承策略，临时计算不修改共享 Enforcer。
+    async fn role_query_policy(
+        &self,
+        roles: &[Role],
+        actor: Option<&AuditActor>,
+        executor: &mut dyn Executor,
+    ) -> Result<Enforcer> {
+        self.ensure_policy_consistency_known()?;
+        let subjects = roles.iter().map(|role| role_key(&role.base.id));
+        let mut policy = QueryPolicy::new(subjects.collect()).await?;
         if roles.is_empty() {
-            return Ok(Vec::new());
+            return Ok(policy.enforcer);
         }
-
-        let role_ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
-        let mut permissions = collect_role_permissions(&enforcer, &role_ids)?;
-        let mut manageable = Vec::with_capacity(roles.len());
-        for role in roles {
-            let required_permissions = implicit_permissions_for_role(&enforcer, role.base.id.as_str())?;
-            if actor_permissions.covers(&required_permissions) {
-                manageable.push(role);
+        if let Some(actor) = actor {
+            policy.pending.push(subject(actor.kind(), actor.id()));
+        }
+        loop {
+            let subjects = policy.next_subjects();
+            if subjects.is_empty() {
+                break;
+            }
+            let mut rows = self.policy_store.subject_policies(&subjects, executor).await?;
+            for subject in subjects {
+                let row = rows.remove(&subject).unwrap_or_default();
+                policy.include(&subject, row.roles, row.permissions).await?;
             }
         }
-        Ok(role_items_from_map(manageable, &mut permissions))
-    }
-
-    /// 为一批角色装配直接权限；整个批次只读取一次 Enforcer。
-    async fn role_items(&self, roles: Vec<Role>) -> Result<Vec<RoleItem>> {
-        if roles.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let role_ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let mut permissions = collect_role_permissions(&enforcer, &role_ids)?;
-
-        Ok(role_items_from_map(roles, &mut permissions))
+        Ok(policy.enforcer)
     }
 
     /// 查询账号直接绑定的角色 ID。
@@ -249,13 +282,76 @@ impl RbacService {
     }
 }
 
+/// 一次角色查询私有的策略图；每个主体只沿当前事务读取一次。
+struct QueryPolicy {
+    pending: Vec<String>,
+    visited: HashSet<String>,
+    enforcer: Enforcer,
+}
+
+impl QueryPolicy {
+    /// 创建不连接数据库、也不保存策略的临时 Casbin 模型。
+    async fn new(subjects: Vec<String>) -> Result<Self> {
+        let model = DefaultModel::from_str(RBAC_MODEL).await?;
+        let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await?;
+        enforcer.enable_auto_save(false);
+        Ok(Self { pending: subjects, visited: HashSet::new(), enforcer })
+    }
+
+    /// 跳过已读取主体，包含重复引用或继承循环时也不重复取证。
+    fn next_subjects(&mut self) -> Vec<String> {
+        let mut subjects = Vec::new();
+        while subjects.len() < 500 {
+            let Some(subject) = self.pending.pop() else { break };
+            if self.visited.insert(subject.clone()) {
+                subjects.push(subject);
+            }
+        }
+        subjects
+    }
+
+    /// 只装载原执行器读取的直接权限与完整父角色，不借用共享缓存。
+    async fn include(
+        &mut self,
+        subject: &str,
+        inherited: Vec<String>,
+        permissions: Vec<(String, String)>,
+    ) -> Result<()> {
+        for parent in inherited {
+            self.enforcer.add_role_for_user(subject, &parent, None).await?;
+            self.pending.push(parent);
+        }
+        for (resource, action) in permissions {
+            self.enforcer.add_permission_for_user(subject, vec![resource, action]).await?;
+        }
+        Ok(())
+    }
+}
+
+/// 直接权限仅用于响应内容，保持原角色顺序和空权限角色。
+fn role_items(roles: Vec<Role>, policy: &Enforcer) -> Result<Vec<RoleItem>> {
+    let ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
+    let mut permissions = collect_role_permissions(policy, &ids)?;
+    Ok(role_items_from_map(roles, &mut permissions))
+}
+
+/// 用同一事务策略图中的隐式权限检查授予上限，响应仍只输出角色直接权限。
+fn assignable_role_items(roles: Vec<Role>, actor: &AuditActor, policy: &Enforcer) -> Result<Vec<RoleItem>> {
+    let actor_permissions = permissions_for_actor(policy, actor)?;
+    let mut manageable = Vec::with_capacity(roles.len());
+    for role in roles {
+        let required = implicit_permissions_for_role(policy, &role.base.id)?;
+        if actor_permissions.covers(&required) {
+            manageable.push(role);
+        }
+    }
+    role_items(manageable, policy)
+}
+
 #[cfg(test)]
 mod tests {
-    use casbin::{CoreApi, DefaultModel, Enforcer, MemoryAdapter};
-
     use super::*;
-    use crate::service::iam::rbac::RBAC_MODEL;
-    use crate::{Permission, RoleData};
+    use crate::{Error, Permission, RoleData};
 
     /// 实际批量读取结果可装配完整列表或筛选子集，空权限角色不会缺失。
     #[tokio::test]
@@ -282,5 +378,73 @@ mod tests {
         let items = role_items_from_map(vec![roles[0].clone()], &mut permissions);
         assert_eq!(items.len(), 1);
         assert!(items[0].permissions.is_empty());
+    }
+
+    /// 角色响应和授予上限使用冻结策略，后续策略修改不混入当前列表。
+    #[tokio::test]
+    async fn role_queries_keep_direct_permissions_and_inherited_limits_in_one_snapshot() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let roles = vec![role("candidate"), role("empty")];
+        let frozen = query_policy("customer", "customer").await;
+        let current = query_policy("customer", "supplier").await;
+
+        let items = role_items(roles.clone(), &frozen.enforcer).unwrap();
+        assert_eq!(items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["candidate", "empty"]);
+        assert_eq!(items[0].permissions, [Permission::parse("contract:list").unwrap()]);
+        assert!(items[1].permissions.is_empty());
+        let allowed = assignable_role_items(roles.clone(), &actor, &frozen.enforcer).unwrap();
+        assert_eq!(allowed.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["candidate", "empty"]);
+        let changed = assignable_role_items(roles.clone(), &actor, &current.enforcer).unwrap();
+        assert_eq!(changed.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["empty"]);
+        assert_eq!(
+            assignable_role_items(roles, &actor, &frozen.enforcer).unwrap()[0].permissions,
+            allowed[0].permissions
+        );
+    }
+
+    /// 遍历完整父角色，但重复引用及循环不会重复读取同一主体。
+    #[tokio::test]
+    async fn query_policy_visits_each_subject_once_even_with_cycles() {
+        let mut policy = QueryPolicy::new(vec![role_key("a"), role_key("a")]).await.unwrap();
+        assert_eq!(policy.next_subjects(), ["role:a"]);
+        policy.include("role:a", vec![role_key("b"), role_key("b")], vec![]).await.unwrap();
+        assert_eq!(policy.next_subjects(), ["role:b"]);
+        policy.include("role:b", vec![role_key("a")], vec![]).await.unwrap();
+        assert!(policy.next_subjects().is_empty());
+        assert_eq!(policy.visited, HashSet::from([role_key("a"), role_key("b")]));
+    }
+
+    /// 损坏策略不能被列表输出或可分配性判断降级为零权限。
+    #[tokio::test]
+    async fn role_queries_reject_invalid_snapshot_permissions() {
+        let mut policy = QueryPolicy::new(vec![]).await.unwrap();
+        policy.include("role:bad", vec![], vec![("bad resource".into(), "list".into())]).await.unwrap();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        assert!(matches!(role_items(vec![role("bad")], &policy.enforcer), Err(Error::Logic(_))));
+        assert!(matches!(
+            assignable_role_items(vec![role("bad")], &actor, &policy.enforcer),
+            Err(Error::Logic(_))
+        ));
+    }
+
+    /// 使用生产策略装载步骤构造两条独立的角色继承链。
+    async fn query_policy(actor_resource: &str, candidate_resource: &str) -> QueryPolicy {
+        let mut policy = QueryPolicy::new(vec![]).await.unwrap();
+        policy.include("user:admin:actor", vec![role_key("actor")], vec![]).await.unwrap();
+        for (id, parent) in [("actor", "actor-parent"), ("candidate", "candidate-parent")] {
+            policy
+                .include(&role_key(id), vec![role_key(parent)], vec![("contract".into(), "list".into())])
+                .await
+                .unwrap();
+        }
+        for (id, resource) in [("actor-parent", actor_resource), ("candidate-parent", candidate_resource)] {
+            policy.include(&role_key(id), vec![], vec![(resource.into(), "*".into())]).await.unwrap();
+        }
+        policy
+    }
+
+    /// 构造可普通分配的生产角色实体。
+    fn role(id: &str) -> Role {
+        Role::new(RoleId::parse(id).unwrap(), RoleData::new(id)).unwrap()
     }
 }

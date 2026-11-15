@@ -4,7 +4,7 @@ use std::slice;
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::Permission;
+use erp_permissions::purchase_order;
 use erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView;
 use erp_procurement::entity::procurement_responsibility::{
     ProcurementResponsibilityResolutionIdentity, ProcurementResponsibilityResolutionLine,
@@ -123,7 +123,7 @@ impl ProcurementResponsibilityProcess {
     /// 目录事实缺失、规则零/多命中、负责人不可登录或无采购建单权限时失败关闭。
     pub async fn resolve_strict(&self, inputs: &[ResolutionInput]) -> Result<AuthorizedResolutionPlan> {
         let candidates = self.resolve_candidates(inputs, &mut NoTransaction).await?;
-        self.authorize_candidates(candidates).await
+        self.authorize_candidates(candidates, &mut NoTransaction).await
     }
 
     /// 在销售形式化事务中重验既定计划，并为实际采购任务占用整单默认轮次。
@@ -162,9 +162,10 @@ impl ProcurementResponsibilityProcess {
     /// # 错误
     /// 账号失效、缺少权限或身份设施读取失败时返回对应错误。
     pub async fn authorize_owner_eligibility(&self, owner_user_id: &str) -> Result<u64> {
-        let permission = purchase_create_permission()?;
+        let permission = purchase_order::CREATE;
         let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
-        let qualified = crate::authorization::features(self.db.clone(), self.rbac.clone())
+        let qualified = self
+            .rbac
             .permissions(&actor, slice::from_ref(&permission), &mut NoTransaction)
             .await?
             .ok_or_else(|| {
@@ -213,21 +214,23 @@ impl ProcurementResponsibilityProcess {
             .await?)
     }
 
-    /// 对候选负责人执行 RBAC 校验并冻结策略版本。
+    /// 对候选负责人执行 RBAC 校验并冻结原执行器内的策略版本。
     ///
     /// # 参数
     /// * `candidates` - 账号状态已通过的候选责任
+    /// * `executor` - 候选解析使用的原执行器。
     ///
     /// # 返回
     /// 返回授权计划和稳定策略版本。
     ///
     /// # 错误
     /// 任一负责人缺少采购建单权限或策略无法稳定读取时返回错误。
-    async fn authorize_candidates(
+    pub(super) async fn authorize_candidates(
         &self,
         candidates: Vec<CandidateResolution>,
+        executor: &mut dyn Executor,
     ) -> Result<AuthorizedResolutionPlan> {
-        super::authorization::authorize_candidates(&self.db, &self.rbac, candidates).await
+        super::authorization::authorize_candidates(&self.db, &self.rbac, candidates, executor).await
     }
 }
 
@@ -283,20 +286,6 @@ pub(super) fn plan_identities(
             .map_err(Error::Logic)
         })
         .collect()
-}
-
-/// 构造采购建单权限值对象。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回固定 `purchase_order:create` 权限。
-///
-/// # 错误
-/// 固定权限代码无法解析时返回实体错误。
-pub(super) fn purchase_create_permission() -> Result<Permission> {
-    Permission::parse("purchase_order:create").map_err(Error::Logic)
 }
 
 #[cfg(test)]

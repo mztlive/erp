@@ -14,7 +14,8 @@ use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::customer_receipt_commit::convert_allocations;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
+use erp_identity::AccessTarget;
+use erp_permissions::receivable;
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
@@ -73,7 +74,7 @@ impl ReceivableProcess {
         req.validate_identity()?;
         let command = receipt_files::receipt(&req, actor, pending.as_ref())?;
         receipt_files::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
-        let process = Self::new(self.db.clone(), self.rbac.fresh_receivable()?);
+        let process = Self::new(self.db.clone(), self.rbac.clone());
         let actor = actor.clone();
         self.db
             .client()
@@ -158,17 +159,10 @@ impl ReceivableProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<CustomerReceipt> {
-        let authorization = AuthorizationService::new(
-            self.db.clone(),
-            self.rbac.identity.clone(),
-            AuthorizationRegistry::default(),
-        );
-        if !authorization
-            .has_permission(actor, &Permission::parse("customer_receipt:create")?, executor)
-            .await?
-        {
-            return Err(Error::Forbidden("当前账号缺少回款登记权限".into()));
-        }
+        self.rbac
+            .authorization
+            .require(actor, &receivable::CUSTOMER_RECEIPT_CREATE, AccessTarget::Operation, executor)
+            .await?;
         let receipt = CustomerReceipt::new(
             CustomerReceiptId::new(next_id()),
             CustomerReceiptData {

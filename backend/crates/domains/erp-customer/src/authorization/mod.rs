@@ -3,24 +3,18 @@ mod context;
 mod facts;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 pub use context::CustomerResolvedScope;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, AccessSubject, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput,
-    ReadAccess, RelationKey,
+    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
-use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
+use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
-use erp_identity::{
-    AccessMode, AccessPolicy, AccessRegistration, AuthorizationRegistry, AuthorizationService, DataAccess,
-    Error as IdentityError, Permission, Result as IdentityResult, SharedRbacService,
-};
+use erp_identity::{Error as IdentityError, Result as IdentityResult};
 pub use facts::CustomerFacts;
 use mongodb::Database;
 use mongodb::bson::{Bson, doc};
-use persistence_core::Executor;
 
 use crate::repository::CustomerExt;
 use crate::repository::customer_shared::active_window_filter;
@@ -51,79 +45,32 @@ impl CustomerMapping {
                 collection: Database::CUSTOMER_ACCOUNTS.into(),
                 id_field: "id".into(),
                 output: QueryOutput::Object,
-                facts: [FactKind::Owner, FactKind::Organization, FactKind::HistoryParticipants].into(),
+                facts: [
+                    FactKind::Owner,
+                    FactKind::Collaborators,
+                    FactKind::Organization,
+                    FactKind::HistoryParticipants,
+                ]
+                .into(),
             },
         }
     }
 }
 
-/// 登记客户固定动作；列表与详情按接线参数开启历史参与。
-/// # 参数
-/// db、rbac 为身份设施；mapping 为登记及编译使用的同一实例；history 控制读取历史补充。
-/// # 返回
-/// 固定目录的统一授权服务。
-/// # 错误
-/// 固定登记非法时启动失败；不执行 I/O。
-pub fn service(
-    db: Database,
-    rbac: SharedRbacService,
-    mapping: Arc<dyn AccessMapping>,
-    history: bool,
-) -> AuthorizationService {
-    let entries = ["list", "detail", "create", "update", "delete"]
-        .into_iter()
-        .map(|action| {
-            registration(action, mapping.clone(), Arc::new(CustomerFacts::new(db.clone())), history)
-        })
-        .collect();
-    let registry = AuthorizationRegistry::new(entries).expect("客户固定目录完整");
-    AuthorizationService::new(db, rbac, registry)
-}
-
-fn registration(
-    action: &str,
-    mapping: Arc<dyn AccessMapping>,
-    facts: Arc<dyn AccessFactsPort>,
-    history: bool,
-) -> AccessRegistration {
-    let permission = Permission::parse(format!("customer:{action}")).expect("固定权限");
-    AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::QueryAndObject {
-            data: DataAccess {
-                subject: AccessSubject::Direct,
-                required_facts: [FactKind::Owner, FactKind::Organization].into(),
-                policy: AccessPolicy::Scope {
-                    permission,
-                    read: ReadAccess {
-                        history: history && matches!(action, "list" | "detail"),
-                        records: false,
-                    },
-                },
-            },
-            mapping,
-            facts,
-        },
-    }
-}
-
-#[async_trait]
 impl AccessMapping for CustomerMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
 
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
 
-    async fn prepare(&self, context: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        // 归属读取仅使用原事务快照；跨页完整成员版本由客户仓储指纹校验。
-        Ok(MappingFacts { version: None, valid_until: Some(next_day(context.as_of)) })
+    fn valid_until(&self, context: &AccessContext) -> Option<Instant> {
+        Some(next_day(context.as_of))
     }
 
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}))
     }
 
@@ -131,8 +78,11 @@ impl AccessMapping for CustomerMapping {
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<QueryFragment> {
+        if fact == &AccessFact::Collaborating {
+            return Ok(QueryFragment::Match(doc! {"$expr": false}));
+        }
         let date = business_date(context.as_of)
             .map_err(|error| IdentityError::ValidationError(error.to_string()))?;
         let mut filter = doc! {
@@ -173,7 +123,7 @@ impl AccessMapping for CustomerMapping {
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("客户没有来源关系".into()))
     }
@@ -189,44 +139,30 @@ fn next_day(at: Instant) -> Instant {
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_identity::ResourceTargets;
-    use erp_identity::entity::authorization::ObjectFacts;
-    use persistence_core::NoTransaction;
+    use erp_permissions::customer;
 
     use super::*;
-
-    struct UnusedFacts;
-    #[async_trait]
-    impl AccessFactsPort for UnusedFacts {
-        async fn load(
-            &self,
-            _: &AccessContext,
-            _: &ResourceTargets,
-            _: &mut dyn Executor,
-        ) -> IdentityResult<Vec<ObjectFacts>> {
-            unreachable!("登记检查不读取客户事实")
-        }
-    }
 
     fn context(action: &str, at: i64) -> AccessContext {
         AccessContext {
             actor: AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin),
-            permission: Permission::parse(format!("customer:{action}")).unwrap(),
+            permission: match action {
+                "create" => customer::CREATE,
+                "update" => customer::UPDATE,
+                _ => customer::DETAIL,
+            },
             resource: "customer".into(),
             model: None,
             as_of: Instant::from_unix_secs(at),
         }
     }
 
-    #[tokio::test]
-    async fn mapping_requires_the_original_transaction_and_expires_at_shanghai_midnight() {
+    #[test]
+    fn static_mapping_expires_at_shanghai_midnight() {
         let mapping = CustomerMapping::new();
         for (at, midnight) in [(0, 57600), (57599, 57600), (57600, 144000)] {
-            let facts = mapping.prepare(&context("detail", at), &mut NoTransaction).await.unwrap();
-            assert_eq!(facts.valid_until, Some(Instant::from_unix_secs(midnight)));
-            assert!(facts.validate(true, Instant::from_unix_secs(at)).is_ok());
-            assert!(facts.validate(false, Instant::from_unix_secs(at)).is_err());
-            assert!(facts.validate(true, Instant::from_unix_secs(midnight)).is_err());
+            assert_eq!(mapping.valid_until(&context("detail", at)), Some(Instant::from_unix_secs(midnight)));
+            assert!(mapping.preparation().is_none());
         }
     }
 
@@ -240,7 +176,7 @@ mod tests {
             ("detail", AccessFact::HistoryParticipant, false),
         ] {
             let QueryFragment::Exists { bindings, pipeline, .. } =
-                mapping.predicate(&fact, &context(action, 0), &MappingFacts::default()).unwrap()
+                mapping.predicate(&fact, &context(action, 0), None).unwrap()
             else {
                 panic!("客户责任事实必须来自实际归属");
             };
@@ -255,38 +191,10 @@ mod tests {
 
     #[test]
     fn history_supplements_are_read_only_and_unsupported_facts_fail_closed() {
-        let mapping: Arc<dyn AccessMapping> = Arc::new(CustomerMapping::new());
-        for (action, history, expected) in [
-            ("list", true, true),
-            ("detail", true, true),
-            ("detail", false, false),
-            ("create", true, false),
-            ("update", true, false),
-            ("delete", true, false),
-        ] {
-            let entry = registration(action, mapping.clone(), Arc::new(UnusedFacts), history);
-            let AccessMode::QueryAndObject { data, .. } = &entry.access else {
-                panic!("客户共用完整对象及查询政策")
-            };
-            let AccessPolicy::Scope { read, .. } = &data.policy else {
-                panic!("客户使用标准范围政策")
-            };
-            assert_eq!(*read, ReadAccess { history: expected, records: false });
-            assert!(AuthorizationRegistry::new(vec![entry]).is_ok());
-        }
+        let mapping = CustomerMapping::new();
+        assert!(mapping.predicate(&AccessFact::Participant, &context("detail", 0), None).is_err());
         assert!(
-            mapping
-                .predicate(&AccessFact::Participant, &context("detail", 0), &MappingFacts::default())
-                .is_err()
-        );
-        assert!(
-            mapping
-                .relation(
-                    &RelationKey::parse("orders").unwrap(),
-                    &context("detail", 0),
-                    &MappingFacts::default()
-                )
-                .is_err()
+            mapping.relation(&RelationKey::parse("orders").unwrap(), &context("detail", 0), None).is_err()
         );
     }
 }

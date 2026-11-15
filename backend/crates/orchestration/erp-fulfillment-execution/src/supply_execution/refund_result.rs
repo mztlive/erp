@@ -5,13 +5,14 @@ use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierApiConnectionId, Sup
 use erp_integration::entity::integration_ops::{
     InboxMessage, InboxMessageData, InboxMessageStatus, MessageType,
 };
+use erp_permissions::supplier_fulfillment;
 use erp_supply::dto::supplier_fulfillment::{RecordRefundResultRequest, SupplierRefundFactView};
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::repository::prelude::*;
 use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
@@ -44,17 +45,36 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierRefundFactView> {
         req.validate()?;
-        let mut order = self.require_scoped_order(id, actor, "refund", &mut NoTransaction).await?;
-        self.ensure_legacy_order(id, &mut NoTransaction).await?;
+        let process = self.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.refund_result(&id, &req, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn refund_result(
+        &self,
+        id: &str,
+        req: &RecordRefundResultRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierRefundFactView> {
+        let mut order =
+            self.require_scoped_order(id, actor, &supplier_fulfillment::ORDER_REFUND, executor).await?;
+        self.ensure_legacy_order(id, executor).await?;
         let connection_id = order.connection_id.clone();
-        if let Some(view) = self.replayed_refund_result(id, &req, &connection_id, actor).await? {
+        if let Some(view) = self.replayed_refund_result(id, req, &connection_id, actor, executor).await? {
             return Ok(view);
         }
         self.domain().advance_refund_result(id, &mut order, req.refund_amount).await?;
-        let message = build_refund_message(&order, &req, &connection_id, InboxMessageStatus::Received)?;
+        let message = build_refund_message(&order, req, &connection_id, InboxMessageStatus::Received)?;
         let (fact, allocations) = self.domain().build_refund_fact(
             &order,
-            &req,
+            req,
             &connection_id,
             &InboxMessageId::new(message.base.id.as_str()),
         )?;
@@ -63,29 +83,7 @@ impl SupplierFulfillmentProcess {
             "supplier_refund_fact",
             fact.base.id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut order_for_tx = order.clone();
-        let fact_for_tx = fact.clone();
-        let allocations_for_tx = allocations.clone();
-        let message_for_tx = message.clone();
-        let audit_for_tx = audit.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    super::refund_writes::persist(
-                        &db,
-                        &message_for_tx,
-                        &mut order_for_tx,
-                        &fact_for_tx,
-                        &allocations_for_tx,
-                        &audit_for_tx,
-                        executor,
-                    )
-                    .await?;
-                    Ok::<(), crate::Error>(())
-                })
-            })
+        super::refund_writes::persist(&self.db, &message, &mut order, &fact, &allocations, &audit, executor)
             .await?;
         Ok(refund_fact_view(&fact, &allocations))
     }
@@ -96,6 +94,7 @@ impl SupplierFulfillmentProcess {
         req: &RecordRefundResultRequest,
         connection_id: &SupplierApiConnectionId,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<Option<SupplierRefundFactView>> {
         if let Some(existing) = self
             .db
@@ -104,7 +103,7 @@ impl SupplierFulfillmentProcess {
                 connection_id,
                 &req.external_refund_no,
                 &req.external_refund_version,
-                &mut NoTransaction,
+                executor,
             )
             .await?
         {
@@ -113,7 +112,7 @@ impl SupplierFulfillmentProcess {
             let allocations = self
                 .db
                 .supplier_refund_allocations()
-                .find_allocations_by_fact_ids(&[fact_id], &mut NoTransaction)
+                .find_allocations_by_fact_ids(&[fact_id], executor)
                 .await?;
             return Ok(Some(refund_fact_view(&existing, &allocations)));
         }

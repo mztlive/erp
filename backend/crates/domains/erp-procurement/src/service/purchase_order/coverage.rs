@@ -57,18 +57,11 @@ mod tests {
     use std::sync::Mutex;
 
     use async_trait::async_trait;
+    use persistence_core::ReadExecutor;
 
     use super::*;
     use crate::entity::purchase_order::ProcurementCoverageFacts;
-    struct RecordingExecutor {
-        marker: u64,
-    }
-    impl Executor for RecordingExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.marker += 1;
-            None
-        }
-    }
+
     struct FactsPort {
         expected_executor: usize,
         calls: Mutex<Vec<(String, String)>>,
@@ -89,9 +82,9 @@ mod tests {
     /// 当前版本缺失不得触发外域读取，保留原首错。
     #[tokio::test]
     async fn missing_current_revision_stops_before_facts_read() {
-        let mut executor = RecordingExecutor { marker: 91 };
+        let mut executor = ReadExecutor::default();
         let port = FactsPort {
-            expected_executor: (&mut executor as *mut RecordingExecutor) as usize,
+            expected_executor: (&mut executor as *mut ReadExecutor) as usize,
             calls: Mutex::new(Vec::new()),
         };
         let result =
@@ -100,14 +93,13 @@ mod tests {
             matches!(result,Err(Error::BusinessLogicError(message)) if message=="销售单缺少当前版本，无法计算采购剩余量")
         );
         assert!(port.calls.into_inner().unwrap().is_empty());
-        assert_eq!(executor.marker, 91);
     }
     /// 覆盖事实必须使用同一非零大小执行器，提供方失败阻止规则构造。
     #[tokio::test]
     async fn coverage_port_preserves_executor_and_provider_failure() {
-        let mut executor = RecordingExecutor { marker: 91 };
+        let mut executor = ReadExecutor::default();
         let port = FactsPort {
-            expected_executor: (&mut executor as *mut RecordingExecutor) as usize,
+            expected_executor: (&mut executor as *mut ReadExecutor) as usize,
             calls: Mutex::new(Vec::new()),
         };
         let result = load_sales_procurement_coverage(
@@ -119,6 +111,5 @@ mod tests {
         .await;
         assert!(matches!(result,Err(Error::Internal(message)) if message=="coverage provider failed"));
         assert_eq!(port.calls.into_inner().unwrap(), vec![("revision-1".to_string(), "so-1".to_string())]);
-        assert_eq!(executor.marker, 91);
     }
 }

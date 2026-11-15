@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_catalog::portal::NewProductDraft;
-use erp_identity::{PortalActor, SharedRbacService};
+use erp_identity::{AuthorizationService, PortalActor};
+use erp_permissions::{catalog as catalog_permissions, supplier_offering, supplier_portal};
 use erp_supply::portal::OfferingApplication;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -23,7 +24,7 @@ impl SupplierPortalProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let result =
-            require_request(&self.db, &self.rbac, actor, target, RequestAction::Review, executor).await;
+            require_request(&self.authorization, actor, target, RequestAction::Review, executor).await;
         if matches!(&result, Err(Error::Forbidden(_))) {
             self.internal_actor(actor, executor).await?;
         }
@@ -52,7 +53,7 @@ impl SupplierPortalProcess {
         let reviewer = self
             .reviewer_actor(
                 &owner,
-                &["supplier_portal.application_approve", "supplier_portal.application_detail"],
+                &[supplier_portal::ADMIN_REVIEW, supplier_portal::ADMIN_IMPACTS],
                 executor,
             )
             .await?;
@@ -79,7 +80,7 @@ impl SupplierPortalProcess {
         let reviewer = self
             .reviewer_actor(
                 &supplier.maintainer_user_id,
-                &["supplier_portal.new_product_approve", "supplier_portal.application_detail"],
+                &[supplier_portal::ADMIN_REVIEW, supplier_portal::ADMIN_IMPACTS],
                 executor,
             )
             .await?;
@@ -107,7 +108,7 @@ impl SupplierPortalProcess {
         let (owner, org) = self.offering_maintainer(owner, actor, executor).await?;
         let maintainer = self.reviewer_actor(&owner, &[], executor).await?;
         let catalog = &self.services.catalog_access;
-        catalog.ensure_writable(&maintainer, "update", executor).await?;
+        catalog.ensure_writable(&maintainer, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, executor).await?;
         Ok((owner, org))
     }
 
@@ -132,7 +133,7 @@ impl SupplierPortalProcess {
         let maintainer = self.reviewer_actor(owner, &[], executor).await?;
         let access = &self.services.offering_access;
         let (owner, org) = access.maintainer_org(Some(owner), actor, executor).await?;
-        access.ensure_writable(&maintainer, "update", executor).await?;
+        access.ensure_writable(&maintainer, &supplier_offering::REVISE, executor).await?;
         Ok((owner, org))
     }
 }
@@ -147,13 +148,13 @@ impl SupplierPortalProcess {
 /// 身份、权限版本、配置或持久化错误保持失败关闭。
 pub async fn request_reviewable(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     services: Arc<CatalogServices>,
     actor: &AuditActor,
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let process = SupplierPortalProcess::new(db.clone(), rbac.clone(), services);
+    let process = SupplierPortalProcess::new(db.clone(), authorization.clone(), services);
     let Some(target) = RequestTarget::load(db, id, executor).await? else {
         return Ok(false);
     };

@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, SubjectRef, Timestamp};
 use erp_approval_runtime::ApprovalRuntimePort;
@@ -10,7 +9,7 @@ use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runti
 use erp_audit::AuditLog;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_sales::entity::sales_review::{
     SalesChangeSubmissionCommand, SalesChangeSubmissionFact, SalesChangeSubmissionReceipt,
 };
@@ -33,10 +32,10 @@ use erp_workflow::service::approval::read;
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use super::adapter::sales_change_order_object_readable;
-use super::submission_receipt::{receipt_write_error, replay_submission};
+use super::submission_receipt::receipt_write_error;
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -53,8 +52,9 @@ use crate::{Error, Result};
 pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    read::bound_definition_graph(db, binding, "销售变更单绑定的审批定义不存在", &mut NoTransaction)
+    read::bound_definition_graph(db, binding, "销售变更单绑定的审批定义不存在", executor)
         .await
         .map_err(Error::from)
 }
@@ -77,6 +77,7 @@ pub(super) async fn load_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandReceipt>> {
     read::start_receipt(
         db,
@@ -84,7 +85,7 @@ pub(super) async fn load_start_receipt(
         subject,
         subject_version,
         idempotency_key,
-        &mut NoTransaction,
+        executor,
     )
     .await
     .map_err(Error::from)
@@ -247,10 +248,8 @@ pub(super) struct SalesChangeStartPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: AuditLog,
-    /// 已认证操作人，用于事务内重验来源销售单范围。
-    pub actor: AuditActor,
     /// 与写事务绑定的授权源。
-    pub rbac: SharedRbacService,
+    pub authorization: Arc<AuthorizationService>,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -273,18 +272,14 @@ pub(super) struct SalesChangeStartPersistInput {
 pub(super) async fn persist_sales_change_start(
     db: &Database,
     input: SalesChangeStartPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let db = db.clone();
-    let client = db.client().clone();
-    client.with_transaction(move |executor| Box::pin(async move { input.persist(&db, executor).await })).await
+    input.persist(db, executor).await
 }
 
 impl SalesChangeStartPersistInput {
     /// 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
-        if replay_submission(db, self.rbac.clone(), &self.actor, &self.command, executor).await?.is_some() {
-            return Ok(());
-        }
         let PreparedExecution::Apply(writes) = self.prepared else {
             return Err(Error::ConflictError("销售变更历史启动缺少完整请求回执，不能安全回放".into()));
         };
@@ -323,7 +318,7 @@ impl SalesChangeStartPersistInput {
             &writes,
             &self.snapshot_payload,
             (self.owner_role, &self.organization_id, self.resubmission_reason.as_deref()),
-            (self.approvals.as_ref(), &self.rbac),
+            (self.approvals.as_ref(), &self.authorization),
             self.now,
             executor,
         )
@@ -343,7 +338,7 @@ async fn persist_runtime_writes(
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     (owner_role, organization_id, resubmission_reason): (&str, &str, Option<&str>),
-    (approvals, identity): (&dyn ApprovalRuntimePort, &SharedRbacService),
+    (approvals, identity): (&dyn ApprovalRuntimePort, &Arc<AuthorizationService>),
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<()> {

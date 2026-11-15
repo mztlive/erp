@@ -1,3 +1,5 @@
+use std::slice;
+
 use application_core::AuditActor;
 use erp_core::ids::ReconciliationDifferenceId;
 use erp_identity::AccessControlExt;
@@ -14,12 +16,14 @@ use erp_integration::repository::prelude::*;
 use erp_integration::service::evidence::{
     blocker_view, difference_evidence_policy, domain_kinds, reconciliation_reason_registry,
 };
+use erp_permissions::integration_ops;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use super::IntegrationCenterReadService;
 use super::display::evidence_label;
+use super::repository::difference as authorized_difference;
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
@@ -35,32 +39,35 @@ impl IntegrationCenterReadService {
     /// # 错误
     /// 差异不存在或不在范围内时返回 NotFound。
     pub async fn difference_detail(&self, id: &str, actor: &AuditActor) -> Result<DifferenceDetailView> {
-        let difference = self.load_visible_difference(id, actor).await?;
-        let history = self
-            .db
-            .reconciliation_difference_resolutions()
-            .search_resolutions(
-                &ReconciliationDifferenceId::new(difference.base.id.clone()),
-                &mut NoTransaction,
-            )
-            .await?;
-        self.assemble_difference_detail(difference, history).await
+        let this = self.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.difference_snapshot(&id, &actor, executor).await })
+            })
+            .await
     }
 
-    /// 差异不存在时返回 `NotFound`，存在后再按负责人重验可见性。
-    async fn load_visible_difference(
+    /// 原查询凭证覆盖根记录、处理历史及证据装配，全部读取后再交付。
+    async fn difference_snapshot(
         &self,
         id: &str,
         actor: &AuditActor,
-    ) -> Result<ReconciliationDifference> {
-        let difference = self
+        executor: &mut dyn Executor,
+    ) -> Result<DifferenceDetailView> {
+        let access = self.access.resolve(actor, &integration_ops::DIFFERENCE_DETAIL, executor).await?;
+        let difference = authorized_difference(&self.db, id, &access, executor).await?;
+        let history = self
             .db
-            .reconciliation_differences()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("差异不存在".to_string()))?;
-        self.require_visible(actor, "reconciliation_difference", &difference.base.id).await?;
-        Ok(difference)
+            .reconciliation_difference_resolutions()
+            .search_resolutions(&ReconciliationDifferenceId::new(difference.base.id.clone()), executor)
+            .await?;
+        let view = self.assemble_difference_detail(difference, history, executor).await?;
+        self.access.validate(&access, executor).await?;
+        Ok(view)
     }
 
     /// 最近一条决议覆盖状态与版本；终态不再附证据策略。
@@ -68,6 +75,7 @@ impl IntegrationCenterReadService {
         &self,
         difference: ReconciliationDifference,
         history: Vec<ResolutionHistoryRow>,
+        executor: &mut dyn Executor,
     ) -> Result<DifferenceDetailView> {
         let subject = EvidenceSubject::difference(&difference);
         let mut view: DifferenceView = difference.clone().into();
@@ -77,12 +85,12 @@ impl IntegrationCenterReadService {
         }
         let mut resolutions = resolution_views(history);
         let terminal = view.status.is_some_and(|status| status.is_terminal());
-        let has_work_item = self.has_difference_work_item(&view.id).await?;
-        let linked_evidence = self.evidence.discover_evidence(&subject, &mut NoTransaction).await?;
-        self.difference_names(std::slice::from_mut(&mut view)).await?;
+        let has_work_item = self.has_difference_work_item(&view.id, executor).await?;
+        let linked_evidence = self.evidence.discover_evidence(&subject, executor).await?;
+        self.difference_names(slice::from_mut(&mut view), executor).await?;
         view.left_fact_label = evidence_label(view.left_fact_reference.as_deref(), &linked_evidence);
         view.right_fact_label = evidence_label(view.right_fact_reference.as_deref(), &linked_evidence);
-        self.resolution_names(&mut resolutions, &linked_evidence).await?;
+        self.resolution_names(&mut resolutions, &linked_evidence, executor).await?;
         let policy = difference_evidence_policy(&difference);
         let (allowed_actions, action_blockers) =
             difference_action_projection(&difference, terminal, has_work_item, &linked_evidence);
@@ -102,9 +110,10 @@ impl IntegrationCenterReadService {
         &self,
         resolutions: &mut [ResolutionView],
         linked_evidence: &[ControlledEvidenceRef],
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let ids = resolutions.iter().map(|item| item.handled_by.clone()).collect::<Vec<_>>();
-        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
+        let names = self.db.accounts().names_by_ids(&ids, executor).await?;
         for resolution in resolutions {
             resolution.handled_by_name = names.get(&resolution.handled_by).cloned();
             resolution.evidence_label =
@@ -114,12 +123,13 @@ impl IntegrationCenterReadService {
     }
 
     /// 多个正式责任关联时返回 `ConflictError`。
-    async fn has_difference_work_item(&self, difference_id: &str) -> Result<bool> {
-        let items = self
-            .db
-            .work_items()
-            .find_unique_for_reconciliation_difference(difference_id, &mut NoTransaction)
-            .await?;
+    async fn has_difference_work_item(
+        &self,
+        difference_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let items =
+            self.db.work_items().find_unique_for_reconciliation_difference(difference_id, executor).await?;
         if items.len() > 1 {
             return Err(Error::ConflictError("对账差异存在多个正式责任关联".to_string()));
         }
@@ -170,4 +180,21 @@ fn difference_action_projection(
         actions.iter().map(|action| action.as_str().to_string()).collect(),
         blockers.iter().map(blocker_view).collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::integration_center::testing::service;
+
+    #[tokio::test]
+    async fn detail_stops_before_root_history_or_evidence_reads_when_authorization_is_unavailable() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result =
+            service().await.difference_snapshot("difference", &actor, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"));
+    }
 }

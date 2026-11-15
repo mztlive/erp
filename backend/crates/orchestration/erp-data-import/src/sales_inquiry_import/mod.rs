@@ -16,7 +16,7 @@ mod views;
 use std::sync::Arc;
 
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
-use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_identity::AuthorizationService;
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
 use mongodb::Database;
 pub use views::{ConfirmInquiryImportCommand, CreateInquiryImportCommand, InquiryImportPreviewView};
@@ -26,26 +26,26 @@ pub use views::{ConfirmInquiryImportCommand, CreateInquiryImportCommand, Inquiry
 pub struct SalesInquiryImportProcess {
     inquiry: Arc<SalesInquiryProcess>,
     db: Database,
-    rbac: SharedRbacService,
-    preview_access: AuthorizationService,
+    authorization: Arc<AuthorizationService>,
     supply: Arc<dyn CatalogSupplyQueryPort>,
 }
 
 impl SalesInquiryImportProcess {
     /// 绑定数据库及授权源。
     /// # 参数
-    /// `db` 为业务数据库，`rbac` 为当前权限服务，`supply` 为目录事实 Port，`inquiry` 为已装配的询价编排。
+    /// `db` 为业务数据库，`authorization` 为当前权限服务，`supply` 为目录事实 Port，`inquiry` 为已装配的询价编排。
     /// # 返回
     /// 未读取业务事实的导入流程。
     /// # 错误
     /// 无。
     pub fn new(
         db: Database,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         supply: Arc<dyn CatalogSupplyQueryPort>,
         inquiry: Arc<SalesInquiryProcess>,
     ) -> Self {
-        let preview_access = access::authorization(db.clone(), rbac.clone());
-        Self { db, rbac, preview_access, supply, inquiry }
+        Self { db, authorization, supply, inquiry }
     }
 }
+
+pub use access::preview_facts_reader;

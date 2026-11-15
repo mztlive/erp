@@ -17,6 +17,8 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use erp_workflow::service::work_item::expected_task_version;
 use mongodb::Database;
+#[cfg(test)]
+use persistence_core::ReadExecutor;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
@@ -319,12 +321,8 @@ mod completion_tests {
     use persistence_core::Executor;
 
     use super::*;
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type Marker = ReadExecutor;
+
     struct Recorder {
         pointer: usize,
         calls: Vec<&'static str>,
@@ -356,7 +354,7 @@ mod completion_tests {
     #[tokio::test]
     async fn completion_preserves_executor_and_stops_each_original_write_failure() {
         for fail in [None, Some(0), Some(1), Some(2)] {
-            let mut executor = Marker(165);
+            let mut executor = Marker::default();
             let mut port = Recorder { pointer: &mut executor as *mut Marker as usize, calls: vec![], fail };
             let result = persist_completion(&mut port, &mut executor).await;
             if let Some(i) = fail {
@@ -366,7 +364,6 @@ mod completion_tests {
                 result.unwrap();
                 assert_eq!(port.calls, ["task", "decision", "receipt"]);
             }
-            assert_eq!(executor.0, 165);
         }
     }
 }

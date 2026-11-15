@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::SalesOrderService;
 use super::mapper::revision_view;
@@ -45,6 +45,7 @@ impl SalesOrderService {
     ///
     /// # 参数
     /// * `order_id` - 稳定销售单
+    /// * `executor` - 调用方授权和业务读取使用的原执行器。
     ///
     /// # 返回
     /// 返回按版本号倒序的版本视图。
@@ -54,16 +55,17 @@ impl SalesOrderService {
     ///
     /// # 关键业务约束
     /// 公共行按版本 ID、子类型按公共行 ID 批量取出，禁止按版本循环查询。
-    pub async fn load_revision_views(&self, order_id: &SalesOrderId) -> Result<Vec<RevisionView>> {
-        let revisions = self.db.sales_order_revisions().list_by_order(order_id, &mut NoTransaction).await?;
+    pub async fn load_revision_views(
+        &self,
+        order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<RevisionView>> {
+        let revisions = self.db.sales_order_revisions().list_by_order(order_id, executor).await?;
         let revision_ids =
             revisions.iter().map(|row| SalesOrderRevisionId::new(row.base.id.clone())).collect::<Vec<_>>();
-        let lines = self
-            .db
-            .sales_order_revision_lines()
-            .list_lines_by_revisions(&revision_ids, &mut NoTransaction)
-            .await?;
-        let mut commercial_by_line = self.revision_commercial_lines(&lines).await?;
+        let lines =
+            self.db.sales_order_revision_lines().list_lines_by_revisions(&revision_ids, executor).await?;
+        let mut commercial_by_line = self.revision_commercial_lines(&lines, executor).await?;
         let mut lines_by_revision = group_revision_lines(lines);
         let previous_nos = previous_revision_numbers(&revisions);
         Ok(revisions
@@ -82,19 +84,17 @@ impl SalesOrderService {
     async fn revision_commercial_lines(
         &self,
         lines: &[SalesOrderRevisionLine],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, SalesOrderWorkingCopyLineView>> {
         let ids =
             lines.iter().map(|line| SalesOrderRevisionLineId::new(line.base.id.clone())).collect::<Vec<_>>();
         let goods = self
             .db
             .sales_order_goods_service_line_revisions()
-            .list_by_revision_line_ids(&ids, &mut NoTransaction)
+            .list_by_revision_line_ids(&ids, executor)
             .await?;
-        let vouchers = self
-            .db
-            .sales_order_voucher_line_revisions()
-            .list_by_revision_line_ids(&ids, &mut NoTransaction)
-            .await?;
+        let vouchers =
+            self.db.sales_order_voucher_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
         let goods_by_line: HashMap<_, _> =
             goods.into_iter().map(|line| (line.revision_line_id.to_string(), line)).collect();
         let vouchers_by_line: HashMap<_, _> =
@@ -116,17 +116,22 @@ impl SalesOrderService {
     ///
     /// # 参数
     /// * `copy` - 工作副本实体
+    /// * `executor` - 调用方授权和业务读取使用的原执行器。
     ///
     /// # 返回
     /// 返回行视图集合。
     ///
     /// # 错误
     /// 数据库读取失败时返回错误。
-    pub async fn working_copy_view(&self, copy: &SalesOrderWorkingCopy) -> Result<WorkingCopyView> {
+    pub async fn working_copy_view(
+        &self,
+        copy: &SalesOrderWorkingCopy,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkingCopyView> {
         let lines = self
             .db
             .sales_order_working_copy_lines()
-            .list_lines_by_working_copy(&copy.base.id.clone().into(), &mut NoTransaction)
+            .list_lines_by_working_copy(&copy.base.id.clone().into(), executor)
             .await?;
         Ok(WorkingCopyView {
             id: copy.base.id.clone(),

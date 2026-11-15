@@ -9,10 +9,14 @@ use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, receivable};
+use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::prepare_cancel;
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
+use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
@@ -78,8 +82,7 @@ impl ReceivableProcess {
             },
             actor.id(),
         )?;
-        persist_created_customer_receipt(&self.db, &self.rbac, receipt.clone(), actor.clone()).await?;
-        self.read.customer_receipt_detail(&receipt.base.id).await.map_err(crate::Error::from)
+        persist_created_customer_receipt(&self.db, &self.rbac, receipt, actor.clone()).await
     }
 
     /// 原子创建或提交客户回款并启动审批。
@@ -113,7 +116,7 @@ impl ReceivableProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(view) = self.replay_committed_receipt(&command_receipt).await? {
+        if let Some(view) = self.replay_committed_receipt(&command_receipt, actor).await? {
             return Ok(view);
         }
         let prepared = req.prepare()?;
@@ -135,15 +138,13 @@ impl ReceivableProcess {
         )
         .await;
 
-        let committed = match transaction_result {
-            Ok(committed) => committed,
-            Err(error) => return self.recover_committed_receipt(&command_receipt, error).await,
-        };
-
-        self.read.customer_receipt_detail(&committed.base.id).await.map_err(crate::Error::from)
+        match transaction_result {
+            Ok(view) => Ok(view),
+            Err(error) => self.recover_committed_receipt(&command_receipt, actor, error).await,
+        }
     }
 
-    /// 幂等重放已提交回款：收据已落盘时直接返回其视图，不再进入事务。
+    /// 幂等重放已提交回款：同一新快照核对回执、当前提交资格并读取原结果。
     ///
     /// # 参数
     /// * `command_receipt` - 提交幂等收据
@@ -153,8 +154,22 @@ impl ReceivableProcess {
     async fn replay_committed_receipt(
         &self,
         command_receipt: &CommandReceipt,
+        actor: &AuditActor,
     ) -> Result<Option<CustomerReceiptView>> {
-        replay_receipt_command(&ReceiptCommitRecovery(self), command_receipt, None, &mut NoTransaction).await
+        let db = self.db.clone();
+        let authorization = self.rbac.authorization.clone();
+        let actor = actor.clone();
+        let command_receipt = command_receipt.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let port =
+                        ReceiptCommitRecovery { db: &db, authorization: &authorization, actor: &actor };
+                    replay_receipt_command(&port, &command_receipt, None, executor).await
+                })
+            })
+            .await
     }
 
     /// 事务失败后以幂等收据有界回读已提交回款，避免重复提交产生两条事实。
@@ -168,10 +183,11 @@ impl ReceivableProcess {
     async fn recover_committed_receipt(
         &self,
         command_receipt: &CommandReceipt,
+        actor: &AuditActor,
         error: Error,
     ) -> Result<CustomerReceiptView> {
-        recover_receipt_command(&ReceiptCommitRecovery(self), command_receipt, error, &mut NoTransaction)
-            .await
+        let probe = self.replay_committed_receipt(command_receipt, actor).await;
+        recover_receipt_command(probe, error)
     }
 
     /// 提交客户回款并调用统一 `start_approval`。
@@ -234,8 +250,7 @@ impl ReceivableProcess {
         req.validate()?;
         let mut receipt = self.load_customer_receipt(id).await?;
         ensure_expected_version(receipt.base.version, req.expected_version)?;
-        self.persist_cancelled_customer_receipt(id, &mut receipt, &req, actor).await?;
-        self.read.customer_receipt_detail(id).await.map_err(crate::Error::from)
+        self.persist_cancelled_customer_receipt(id, &mut receipt, &req, actor).await
     }
 
     /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
@@ -267,13 +282,13 @@ impl ReceivableProcess {
     ) -> Result<CustomerReceiptView> {
         let input = self.prepare_receipt_submit_input(id, receipt, req, actor, adapter).await?;
         let persisted = persist_receipt_submit(&self.db, &self.rbac, input, command.clone()).await;
-        if let Err(error) = persisted {
-            if !error.command_may_have_committed() {
-                return Err(error);
-            }
-            return self.recover_customer_receipt_submit(id, &command, actor, error).await;
+        match persisted {
+            Ok(view) => Ok(view),
+            Err(error) if error.command_may_have_committed() => {
+                self.recover_customer_receipt_submit(id, &command, actor, error).await
+            },
+            Err(error) => Err(error),
         }
-        self.read.customer_receipt_detail(id).await.map_err(crate::Error::from)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -286,7 +301,7 @@ impl ReceivableProcess {
         receipt: &mut CustomerReceipt,
         req: &CancelCustomerReceiptApprovalRequest,
         actor: &AuditActor,
-    ) -> Result<()> {
+    ) -> Result<CustomerReceiptView> {
         let adapter = customer_receipt_adapter()?;
         let binding =
             find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
@@ -318,7 +333,7 @@ impl ReceivableProcess {
                 receipt: receipt.clone(),
                 prepared,
                 open_tasks: runtime.open_tasks,
-                actor_id: actor.id().to_string(),
+                actor: actor.clone(),
                 reason: req.reason.clone(),
                 now,
                 audit,
@@ -362,21 +377,41 @@ impl ReceivableProcess {
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let receipt_id = id.to_string();
-        let detail_id = receipt_id.clone();
+        let authorization = self.rbac.authorization.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    post_customer_receipt_apply(&db, &receipt_id, &actor_owned, executor).await
+                    authorization
+                        .require(
+                            &actor_owned,
+                            &receivable::CUSTOMER_RECEIPT_POST,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    post_customer_receipt_apply(&db, &receipt_id, &actor_owned, executor).await?;
+                    receipt_command_result(
+                        &db,
+                        &authorization,
+                        &actor_owned,
+                        &receipt_id,
+                        &receivable::CUSTOMER_RECEIPT_POST,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await
                 })
             })
-            .await?;
-
-        self.read.customer_receipt_detail(&detail_id).await.map_err(crate::Error::from)
+            .await
     }
 }
 
-/// 新建提交入口沿用原财务详情当前视图的恢复语义。
-struct ReceiptCommitRecovery<'a>(&'a ReceivableProcess);
+/// 新建提交入口在查证快照按当前提交资格读取原结果。
+pub(super) struct ReceiptCommitRecovery<'a> {
+    pub(super) db: &'a Database,
+    pub(super) authorization: &'a AuthorizationService,
+    pub(super) actor: &'a AuditActor,
+}
 
 #[async_trait]
 impl ReceiptReplayPort for ReceiptCommitRecovery<'_> {
@@ -387,23 +422,109 @@ impl ReceiptReplayPort for ReceiptCommitRecovery<'_> {
         command: &CommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        Ok(FinanceCommandReceiptService::new(self.0.db.clone())
+        Ok(FinanceCommandReceiptService::new(self.db.clone())
             .committed_resource_id(command, executor)
             .await?)
     }
 
-    /// 按读模型当前详情回读，不使用查证执行器。
+    /// 在查证回执的原快照中重验提交资格，并读取完整命令结果。
     ///
     /// # 参数
     /// * `id` - 回执确认的回款单 ID。
-    /// * `_executor` - 未使用。详情读取不走查证执行器。
+    /// * `executor` - 原回执查证事务执行器。
     ///
     /// # 返回
     /// 返回当前回款详情视图。
     ///
     /// # 错误
     /// 回款单不存在时返回 `NotFound`；详情读取失败时返回对应错误。
-    async fn current_result(&self, id: &str, _executor: &mut dyn Executor) -> Result<CustomerReceiptView> {
-        Ok(self.0.read.customer_receipt_detail(id).await?)
+    async fn current_result(&self, id: &str, executor: &mut dyn Executor) -> Result<CustomerReceiptView> {
+        receipt_command_result(
+            self.db,
+            self.authorization,
+            self.actor,
+            id,
+            &receivable::CUSTOMER_RECEIPT_SUBMIT,
+            AccessTarget::record(id)?,
+            executor,
+        )
+        .await
+    }
+}
+
+/// 写入或幂等查证完成后，在原快照重验本次命令资格并投影完整回包。
+/// # 参数
+/// 数据库、共享授权、当前账号、原单身份、命令权限和目标及原事务执行器。
+/// # 返回
+/// 通过当前命令资格后的完整回款视图，不追加详情菜单资格。
+/// # 错误
+/// 原命令资格失效、目标错配或视图读取失败时拒绝。
+pub(super) async fn receipt_command_result(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    id: &str,
+    permission: &Permission,
+    target: AccessTarget,
+    executor: &mut dyn Executor,
+) -> Result<CustomerReceiptView> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("回款命令结果必须使用原授权快照".into()));
+    }
+    authorization.require(actor, permission, target, executor).await?;
+    Ok(ReceivableReadService::new(db.clone()).customer_receipt_view_with_executor(id, executor).await?)
+}
+
+#[cfg(test)]
+mod result_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 无原快照或命令资格取证失败时，不得继续读取完整资金视图。
+    #[tokio::test]
+    async fn command_results_require_original_snapshot_and_current_command_authorization() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .unwrap()
+            .database("receipt_command_results");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for (permission, target) in [
+            (receivable::CUSTOMER_RECEIPT_CREATE, AccessTarget::Operation),
+            (receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL, AccessTarget::Operation),
+            (receivable::CUSTOMER_RECEIPT_POST, AccessTarget::Operation),
+            (receivable::CUSTOMER_RECEIPT_SUBMIT, AccessTarget::record("receipt").unwrap()),
+        ] {
+            let no_snapshot = receipt_command_result(
+                &db,
+                &authorization,
+                &actor,
+                "receipt",
+                &permission,
+                target.clone(),
+                &mut ReadExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(no_snapshot, Error::ValidationError(message)
+                if message == "回款命令结果必须使用原授权快照"));
+            let unavailable = receipt_command_result(
+                &db,
+                &authorization,
+                &actor,
+                "receipt",
+                &permission,
+                target,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(unavailable, Error::Internal(message)
+                if message == "测试授权设施不可用"));
+        }
     }
 }

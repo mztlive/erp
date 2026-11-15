@@ -8,7 +8,7 @@ use std::fmt;
 use application_core::AuditActor;
 use erp_core::money::Quantity;
 use erp_fulfillment::entity::address_arrangement::{AddressAllocation, ArrangementCapacity, ArrangementLine};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::FulfillmentProcess;
@@ -67,11 +67,18 @@ impl FulfillmentProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<AddressArrangementView> {
-        let mut executor = NoTransaction;
-        context::authorize_sales(self, id, actor, false, &mut executor).await?;
-        let mut context = context::Context::load(self, id, &mut executor).await?;
-        context.load_snapshots(self, &mut executor).await?;
-        context.view(None)
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    context::authorize_sales(&process, &id, &actor, false, executor).await?;
+                    process.address_arrangement_snapshot(&id, None, executor).await
+                })
+            })
+            .await
     }
     /// 查询当前发货任务收货安排，限定当前任务商品与数量。
     /// # 参数
@@ -85,12 +92,32 @@ impl FulfillmentProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<AddressArrangementView> {
-        let mut executor = NoTransaction;
-        let delivery = context::authorize_delivery(self, id, actor, &mut executor).await?;
-        let mut context =
-            context::Context::load(self, delivery.sales_order_id.as_ref(), &mut executor).await?;
-        context.load_snapshots(self, &mut executor).await?;
-        context.view(Some(id))
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let delivery = context::authorize_delivery(&process, &id, &actor, executor).await?;
+                    process
+                        .address_arrangement_snapshot(delivery.sales_order_id.as_ref(), Some(&id), executor)
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 在原授权快照中读取销售需求、地址及发货资料，事务成功后才交付视图。
+    async fn address_arrangement_snapshot(
+        &self,
+        sales_id: &str,
+        delivery_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<AddressArrangementView> {
+        let mut context = context::Context::load(self, sales_id, executor).await?;
+        context.load_snapshots(self, executor).await?;
+        context.view(delivery_id)
     }
 }
 pub(super) use context::planned_source;

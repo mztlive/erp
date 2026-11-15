@@ -1,5 +1,7 @@
 //! 商品维护人交接：目标资格、组织启用、幂等收据。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::AuditAction;
@@ -11,10 +13,11 @@ use erp_catalog::repository::handover_receipt::ProductHandoverReceiptExt;
 use erp_catalog::{
     CatalogAccess, CatalogService, HandoverCandidateView, HandoverProductRequest, HandoverProductView,
 };
+use erp_identity::AuthorizationService;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{Permission, SharedRbacService};
+use erp_permissions::{catalog as catalog_permissions, catalog};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use crate::handover_common::{
@@ -60,7 +63,7 @@ impl CatalogHandoverPorts {
 /// 账号失效、无维护资格、版本冲突或同幂等键异载荷时拒绝。
 pub async fn handover_product(
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: CatalogHandoverPorts,
     id: &str,
     req: HandoverProductRequest,
@@ -78,11 +81,6 @@ pub async fn handover_product(
         &key,
         [fingerprint],
     )?;
-    if let Some(existing) = replay(&db, &ports.access, &command, id, actor, &mut NoTransaction).await? {
-        return Ok(existing);
-    }
-    ensure_target_qualified(&db, &rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
-    ensure_org_enabled(&db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
     let context = handover_context(
         actor,
         &command,
@@ -123,27 +121,39 @@ pub async fn handover_product(
 /// 对象不可见时拒绝。
 pub async fn handover_candidates(
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: CatalogHandoverPorts,
     id: &str,
     actor: &AuditActor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let product = ports.access.require_product(actor, "update", id, &mut NoTransaction).await?;
-    Ok(qualified_candidates(
-        &db,
-        &rbac,
-        &product.maintainer_user_id,
-        &Permission::parse("product:update")?,
-        &mut NoTransaction,
-    )
-    .await?
-    .into_iter()
-    .map(|candidate| HandoverCandidateView {
-        user_id: candidate.user_id,
-        display_name: candidate.display_name,
-        account: candidate.account,
-    })
-    .collect())
+    let client = db.client().clone();
+    let actor = actor.clone();
+    let id = id.to_string();
+    client
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                let product = ports
+                    .access
+                    .require_product(&actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &id, executor)
+                    .await?;
+                Ok(qualified_candidates(
+                    &db,
+                    &rbac,
+                    &product.maintainer_user_id,
+                    &catalog::PRODUCT_PRODUCT_UPDATE,
+                    executor,
+                )
+                .await?
+                .into_iter()
+                .map(|candidate| HandoverCandidateView {
+                    user_id: candidate.user_id,
+                    display_name: candidate.display_name,
+                    account: candidate.account,
+                })
+                .collect())
+            })
+        })
+        .await
 }
 
 /// 在原执行器中匹配独立回执，并重验当前访问读取当前责任视图。
@@ -173,7 +183,8 @@ async fn replay(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
-    let product = access.require_product(actor, "update", id, executor).await?;
+    let product =
+        access.require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id, executor).await?;
     Ok(Some(HandoverProductView {
         product_id: product.base.id,
         maintainer_user_id: product.maintainer_user_id,
@@ -185,7 +196,7 @@ async fn replay(
 /// 命名 Process 的执行边界，持有首次请求和安全审计关联。
 struct ProductHandoverCommand {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: CatalogHandoverPorts,
     id: String,
     req: HandoverProductRequest,
@@ -248,11 +259,11 @@ impl AuditedCommand for ProductHandoverCommand {
 /// 账号缺失、失效或缺少 `product:update` 时返回既有拒绝文案。
 async fn ensure_target_qualified(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if target_qualified(db, rbac, target, &Permission::parse("product:update")?, executor).await? {
+    if target_qualified(db, rbac, target, &catalog::PRODUCT_PRODUCT_UPDATE, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备商品维护资格".into()))

@@ -6,11 +6,11 @@ use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CustomerAcceptanceView, PostCustomerAcceptanceRequest};
 use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceUpdate};
 use erp_fulfillment::service::FulfillmentService;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::super::task::FulfillmentIdentityFactory;
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
 use super::evidence::ensure_evidence;
@@ -78,7 +78,7 @@ struct AcceptancePosting {
     acceptance_id: CustomerAcceptanceId,
     actor: AuditActor,
     db: Database,
-    task_identity: FulfillmentIdentityFactory,
+    task_identity: Arc<AuthorizationService>,
     workflow: Arc<dyn FulfillmentWorkflow>,
     request: PostCustomerAcceptanceRequest,
 }

@@ -14,6 +14,8 @@ pub mod electronic_delivery_crypto;
 pub mod purchase_receipt;
 pub mod purchase_receipt_lines;
 pub mod purchase_receipt_posting;
+mod read;
+pub use read::FulfillmentReadService;
 pub mod service_fulfillment;
 pub mod service_fulfillment_confirm;
 pub mod service_fulfillment_crypto;

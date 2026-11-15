@@ -12,7 +12,7 @@ use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::purchase_source_update::list_by_trigger_change;
 use erp_sales::entity::sales_review::SalesChangeOrderStatus;
 use erp_sales::repository::SalesOrderExt;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::{
     SalesChangeOrderDetailView, SalesChangeProcurementItemView, SalesChangeProcurementView,
@@ -50,13 +50,14 @@ impl SalesChangeReadService {
         &self,
         view: &SalesChangeOrderDetailView,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<SalesChangeProcurementView> {
-        let updates = list_by_trigger_change(&self.db, &view.id, &mut NoTransaction).await?;
-        let visible = can_list_purchases(&self.db, &self.rbac, Some(actor)).await?;
+        let updates = list_by_trigger_change(&self.db, &view.id, executor).await?;
+        let visible = can_list_purchases(&self.db, &self.rbac, Some(actor), executor).await?;
         if updates.is_empty() {
             return match (&view.status, &view.current_submission_id) {
                 (SalesChangeOrderStatus::InApproval, Some(submission_id)) => {
-                    self.predicted_procurement(&view.sales_order_id, submission_id, visible).await
+                    self.predicted_procurement(&view.sales_order_id, submission_id, visible, executor).await
                 },
                 _ => Ok(SalesChangeProcurementView::default()),
             };
@@ -65,8 +66,8 @@ impl SalesChangeReadService {
             return Ok(procurement_view(&updates, None));
         }
         let ids = updates.iter().map(|update| update.purchase_order_id.clone()).collect::<Vec<_>>();
-        let purchases = self.db.purchase_orders().list_active_by_ids(&ids, &mut NoTransaction).await?;
-        let labels = self.purchase_labels(&purchases).await?;
+        let purchases = self.db.purchase_orders().list_active_by_ids(&ids, executor).await?;
+        let labels = self.purchase_labels(&purchases, executor).await?;
         Ok(procurement_view(&updates, Some(&labels)))
     }
 
@@ -76,12 +77,12 @@ impl SalesChangeReadService {
         sales_order_id: &str,
         submission_id: &str,
         visible: bool,
+        executor: &mut dyn Executor,
     ) -> Result<SalesChangeProcurementView> {
-        let Some(order) = self.db.sales_orders().find_by_id(sales_order_id, &mut NoTransaction).await? else {
+        let Some(order) = self.db.sales_orders().find_by_id(sales_order_id, executor).await? else {
             return Ok(SalesChangeProcurementView::default());
         };
-        let (purchases, impacts) =
-            predict_change_impacts(&self.db, &order, submission_id, &mut NoTransaction).await?;
+        let (purchases, impacts) = predict_change_impacts(&self.db, &order, submission_id, executor).await?;
         if !visible {
             return Ok(predicted_view(&impacts, None));
         }
@@ -89,7 +90,7 @@ impl SalesChangeReadService {
             .into_iter()
             .filter(|purchase| impacts.iter().any(|impact| impact.purchase_order_id == purchase.base.id))
             .collect::<Vec<_>>();
-        let labels = self.purchase_labels(&affected).await?;
+        let labels = self.purchase_labels(&affected, executor).await?;
         Ok(predicted_view(&impacts, Some(&labels)))
     }
 
@@ -103,12 +104,15 @@ impl SalesChangeReadService {
     ///
     /// # 错误
     /// 供应商或账号名称读取失败时返回错误。
-    async fn purchase_labels(&self, purchases: &[PurchaseOrder]) -> Result<HashMap<String, PurchaseLabel>> {
+    async fn purchase_labels(
+        &self,
+        purchases: &[PurchaseOrder],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, PurchaseLabel>> {
         let supplier_ids = purchases.iter().map(|order| order.supplier_id.clone()).collect::<Vec<_>>();
-        let suppliers =
-            current_legal_names_by_account_ids(&self.db, &supplier_ids, &mut NoTransaction).await?;
+        let suppliers = current_legal_names_by_account_ids(&self.db, &supplier_ids, executor).await?;
         let owner_ids = purchases.iter().filter_map(|order| order.owner_user_id.clone()).collect::<Vec<_>>();
-        let owners = self.db.accounts().names_by_ids(&owner_ids, &mut NoTransaction).await?;
+        let owners = self.db.accounts().names_by_ids(&owner_ids, executor).await?;
         Ok(purchases
             .iter()
             .map(|order| {

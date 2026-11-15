@@ -4,12 +4,13 @@
 
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use mongodb::Database;
 
 use crate::ports::{FailClosedAuditPort, WorkflowAuditPort};
 
 mod command;
+pub(super) use command::require_definition_access;
 mod create;
 mod mapping;
 mod publish;
@@ -20,8 +21,10 @@ mod retire;
 pub use super::scope::{DefinitionManagementVisibility, definition_management_visibility};
 
 /// 审批流程定义管理服务。
+#[derive(Clone)]
 pub struct ApprovalDefinitionService {
     pub(crate) identity: SharedRbacService,
+    pub(crate) authorization: Arc<AuthorizationService>,
     pub(super) db: Database,
     pub(crate) audit: Arc<dyn WorkflowAuditPort>,
 }
@@ -38,8 +41,8 @@ impl ApprovalDefinitionService {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, identity: SharedRbacService) -> Self {
-        Self { db, identity, audit: Arc::new(FailClosedAuditPort) }
+    pub fn new(db: Database, identity: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, identity, authorization, audit: Arc::new(FailClosedAuditPort) }
     }
 
     /// 创建注入审计端口的定义管理服务。
@@ -54,19 +57,68 @@ impl ApprovalDefinitionService {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn with_audit(db: Database, identity: SharedRbacService, audit: Arc<dyn WorkflowAuditPort>) -> Self {
-        Self { db, identity, audit }
+    pub fn with_audit(
+        db: Database,
+        identity: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
+        audit: Arc<dyn WorkflowAuditPort>,
+    ) -> Self {
+        Self { db, identity, authorization, audit }
     }
 }
 
 #[cfg(test)]
 pub(super) mod test_support {
+    use std::sync::Arc;
+
+    use application_core::AuditActor;
+    use async_trait::async_trait;
     use bpm::graph::DefinitionGraph;
     use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
     use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
     use bpm::{ParticipantId, ProcessKind, Timestamp};
+    use erp_core::AccountKind;
+    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
+    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::{RbacService, Result as IdentityResult};
+    use mongodb::Client;
+    use persistence_core::Executor;
 
+    use super::ApprovalDefinitionService;
     use super::replace::next_transition_ids;
+
+    struct NoAudit;
+    #[async_trait]
+    impl IdentityAuditPort for NoAudit {
+        fn resource_log(
+            &self,
+            _: AuditActor,
+            _: &str,
+            _: &str,
+            _: String,
+        ) -> IdentityResult<PreparedResourceAudit> {
+            panic!("授权拒绝前不得准备审计")
+        }
+        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> IdentityResult<()> {
+            panic!("授权拒绝前不得写入审计")
+        }
+    }
+
+    /// 创建必须在任何业务或审计访问之前拒绝的定义服务。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 不可用授权设施与当前认证账号。
+    /// # 错误
+    /// 不执行 I/O。
+    pub async fn unavailable_service() -> (ApprovalDefinitionService, AuditActor) {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("definition_authorization_unit");
+        let identity = Arc::new(RbacService::new(db.clone(), Arc::new(NoAudit)));
+        let service = ApprovalDefinitionService::new(db, identity, unavailable_authorization());
+        let actor = AuditActor::new("admin".into(), "admin".into(), AccountKind::Admin);
+        (service, actor)
+    }
 
     pub fn draft_definition(process_kind: ProcessKind, entry: &str) -> ApprovalProcessDefinition {
         ApprovalProcessDefinition::new_draft(

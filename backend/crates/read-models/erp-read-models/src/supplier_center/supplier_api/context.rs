@@ -1,18 +1,15 @@
 use application_core::AuditActor;
-use erp_core::Result as CoreResult;
 use erp_core::ids::SupplierApiConnectionId;
-use erp_identity::{Permission, PermissionSet};
+use erp_identity::PermissionSet;
 use erp_supply::entity::supplier_api::{
     SupplierApiConnection, SupplierConnectionAction, SupplierHealthCheckRun,
 };
 use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::context::action_permission;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::SupplierApiReadService;
 use crate::Result;
-
-pub(super) const REFERENCE_METADATA_PERMISSION: &str = "supplier_api_connection:view_reference_metadata";
 
 pub(super) struct GovernanceContext {
     pub(super) health_runs: Vec<SupplierHealthCheckRun>,
@@ -32,7 +29,7 @@ impl SupplierApiReadService {
     pub(super) async fn governance_context(
         &self,
         connection: &SupplierApiConnection,
-        executor: &mut dyn persistence_core::Executor,
+        executor: &mut dyn Executor,
     ) -> Result<GovernanceContext> {
         let health_runs = self
             .db
@@ -51,15 +48,17 @@ impl SupplierApiReadService {
     ///
     /// # 错误
     /// 权限码无法解析或 RBAC 执行失败时返回对应错误。
-    pub(super) async fn connection_permissions(&self, actor: &AuditActor) -> Result<PermissionSet> {
-        let mut permissions = SupplierConnectionAction::all()
-            .into_iter()
-            .map(|action| Permission::parse(action_permission(action)))
-            .collect::<CoreResult<Vec<_>>>()?;
-        permissions.push(Permission::parse(REFERENCE_METADATA_PERMISSION)?);
+    pub(super) async fn connection_permissions(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PermissionSet> {
+        let mut permissions =
+            SupplierConnectionAction::all().into_iter().map(action_permission).collect::<Vec<_>>();
+        permissions.push(erp_permissions::supplier_api::REFERENCES_OPTIONS);
         Ok(self
             .authorization
-            .permissions(actor, &permissions, &mut NoTransaction)
+            .permissions(actor, &permissions, executor)
             .await?
             .map(|qualified| qualified.permissions())
             .unwrap_or_default())

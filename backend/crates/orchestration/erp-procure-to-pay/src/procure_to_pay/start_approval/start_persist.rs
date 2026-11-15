@@ -11,7 +11,7 @@ use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runti
 use erp_audit::AuditLog;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_procurement::dto::purchase_order::SavePurchaseOrderLine;
 use erp_procurement::entity::purchase_order::{
     PurchaseCommandReceipt, PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission,
@@ -351,7 +351,7 @@ impl StartPosting<'_> {
         let PreparedExecution::Apply(writes) = &input.prepared else { return Ok(()) };
         self.first_task = persist_runtime_writes(
             self.db,
-            (self.input.ports.approval.as_ref(), &(self.input.ports.task_identity)()),
+            (self.input.ports.approval.as_ref(), &self.input.ports.task_identity.clone()),
             writes,
             &input.snapshot_payload,
             StartTaskContext {
@@ -398,7 +398,7 @@ async fn persist_submit_command_receipt(
 /// 计划缺少入口执行或写入失败时返回错误。
 async fn persist_runtime_writes(
     db: &Database,
-    runtime: (&dyn ApprovalRuntimePort, &SharedRbacService),
+    runtime: (&dyn ApprovalRuntimePort, &Arc<AuthorizationService>),
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartTaskContext<'_>,

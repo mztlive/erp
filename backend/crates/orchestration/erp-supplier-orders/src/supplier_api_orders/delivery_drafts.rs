@@ -1,12 +1,14 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use erp_core::ids::{DeliveryId, DeliveryLineId, PurchaseLineSalesAllocationId};
 use erp_fulfillment::entity::fulfillment::{DeliveryLine, DeliveryLineData, DeliveryType};
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment_execution::fulfillment_execution::direct_delivery_draft::prepare_direct_delivery;
 use erp_fulfillment_execution::fulfillment_execution::task::{
-    FulfillmentIdentityFactory, FulfillmentTaskObject, ensure_fulfillment_task,
+    FulfillmentTaskObject, ensure_fulfillment_task,
 };
+use erp_identity::AuthorizationService;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_supply::api_order::for_purchase;
 use mongodb::Database;
@@ -24,7 +26,7 @@ use crate::{Error, Result};
 /// 来源销售行、分配、明细或任务写入失败时回滚根事务。
 pub async fn create_api_delivery_drafts(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     order: &PurchaseOrder,
     allocations: &HashMap<String, PurchaseLineSalesAllocationId>,
     executor: &mut dyn Executor,

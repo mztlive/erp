@@ -396,7 +396,8 @@ pub async fn cancel_stock_adjustment_approval_apply(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let _ = executor
-        .session()
+        .boundary()
+        .filter(|boundary| boundary.is_snapshot())
         .ok_or_else(|| Error::Internal("库存调整受阻取消缺少运行时事务会话".to_string()))?;
     if context.business_object_type() != DocumentType::StockAdjustment.as_str()
         || context.actor_id() != actor.id()

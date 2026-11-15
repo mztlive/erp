@@ -5,7 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use bpm::engine::DefinitionGraph;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_support::FileAsset;
 use erp_workflow::WorkflowAuthorizationPort;
@@ -129,7 +129,8 @@ pub trait ApprovalRuntimePort: Send + Sync {
 /// 由应用装配原授权与审计提供者的审批共有运行能力。
 pub struct ApprovalRuntime<A> {
     db: Database,
-    pub(crate) identity: SharedRbacService,
+    pub(crate) identity: Arc<AuthorizationService>,
+    rbac: SharedRbacService,
     auth: A,
     audit: Arc<dyn WorkflowAuditPort>,
 }
@@ -144,11 +145,12 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntime<A> {
     /// 不返回错误。
     pub fn new(
         db: Database,
-        identity: SharedRbacService,
+        identity: Arc<AuthorizationService>,
+        rbac: SharedRbacService,
         auth: A,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        Self { db, identity, auth, audit }
+        Self { db, identity, rbac, auth, audit }
     }
 }
 
@@ -160,7 +162,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         snapshot: ApprovalSubjectSnapshot,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_start_snapshot(&self.identity, db, snapshot, &self.auth, executor).await
+        persist_start_snapshot(&self.identity, &self.rbac, db, snapshot, &self.auth, executor).await
     }
 
     async fn persist_cancel_copies(
@@ -169,7 +171,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         writes: &PlannedWrites,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_cancel_copies(&self.identity, db, writes, executor).await
+        persist_cancel_copies(&self.rbac, db, writes, executor).await
     }
 
     async fn bind_document(
@@ -181,6 +183,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
     ) -> Result<Option<ApprovalDefinitionBinding>> {
         Ok(bind_published_definition_on_document_create(
             &self.identity,
+            &self.rbac,
             db,
             self.audit.as_ref(),
             command,
@@ -219,6 +222,7 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         graph: &DefinitionGraph,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        Ok(revalidate_binding_graph(&self.db, &self.identity, policy, context, graph, executor).await?)
+        Ok(revalidate_binding_graph(&self.identity, &self.db, &self.rbac, policy, context, graph, executor)
+            .await?)
     }
 }

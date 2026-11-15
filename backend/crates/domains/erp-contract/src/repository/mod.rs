@@ -1,5 +1,6 @@
 //! 合同 MongoDB 仓储与访问器。
 
+pub mod authorization;
 pub mod contract;
 pub mod extensions;
 pub mod owned;

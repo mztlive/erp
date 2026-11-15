@@ -422,15 +422,7 @@ pub(crate) mod tests {
         item
     }
     /// 非零大小执行器用于核验传入生产步骤的实例身份。
-    struct TestExecutor {
-        _identity: u8,
-    }
-
-    impl persistence_core::Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use persistence_core::ReadExecutor as TestExecutor;
 
     struct RecordingSteps {
         expected_executor: usize,
@@ -461,7 +453,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn start_posting_keeps_original_order_and_executor() {
         use super::StartStep::*;
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = RecordingSteps {
             expected_executor: &mut executor as *mut TestExecutor as usize,
             seen: vec![],
@@ -504,7 +496,7 @@ pub(crate) mod tests {
             Audit,
         ];
         for (index, step) in expected.iter().copied().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
                 expected_executor: &mut executor as *mut TestExecutor as usize,
                 seen: vec![],

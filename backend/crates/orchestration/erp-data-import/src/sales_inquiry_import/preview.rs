@@ -3,8 +3,8 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
-use erp_identity::Permission;
 use erp_order_to_cash::sales_inquiry::access::SalesInquiryAccess;
+use erp_permissions::sales_inquiry;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::entity::sales_inquiry_import::{
     INQUIRY_IMPORT_MAX_BYTES, InquiryImportDelivery, InquiryImportIssue, InquiryImportPreview,
@@ -13,7 +13,7 @@ use erp_sales::entity::sales_inquiry_import::{
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 
 use super::facts::sku_facts;
@@ -38,7 +38,6 @@ impl SalesInquiryImportProcess {
         file_name: &str,
         bytes: Vec<u8>,
     ) -> Result<InquiryImportPreviewView> {
-        self.require_import(actor, id, &mut NoTransaction).await?.ensure_version(expected_version)?;
         if bytes.is_empty() || bytes.len() > INQUIRY_IMPORT_MAX_BYTES {
             return Err(Error::ValidationError("工作簿不能为空且不得超过 5 MiB".into()));
         }
@@ -63,7 +62,7 @@ impl SalesInquiryImportProcess {
     }
 
     pub(super) fn access(&self) -> SalesInquiryAccess {
-        SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
+        SalesInquiryAccess::new(self.db.clone(), self.authorization.clone())
     }
 
     pub(crate) async fn require_import(
@@ -72,9 +71,8 @@ impl SalesInquiryImportProcess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesInquiry> {
-        let catalog = Permission::parse("sellable_sku:list")?;
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
-        self.access().require_permissions(actor, "import", &inquiry, &[catalog], executor).await?;
+        self.access().require(actor, &sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW, &inquiry, executor).await?;
         Ok(inquiry)
     }
 

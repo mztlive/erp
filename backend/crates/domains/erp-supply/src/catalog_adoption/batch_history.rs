@@ -2,10 +2,9 @@
 
 use std::collections::HashMap;
 
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::doc;
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::{Deserialize, Serialize};
 
 use super::{BatchItemStatus, BatchWorkStatus, CatalogAdoptionBatch, PreparationStatus, recent_batches};
@@ -88,19 +87,7 @@ pub async fn batch_history(
         doc! {"$group":{"_id":"$batch_id","states":{"$addToSet":"$status"}}},
     ];
     let collection = db.collection::<BatchStates>("supplier_catalog_adoption_batch_items");
-    let states: Vec<BatchStates> = match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<BatchStates>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect()
-                .await?
-        },
-        None => collection.aggregate(pipeline).with_type::<BatchStates>().await?.try_collect().await?,
-    };
+    let states: Vec<BatchStates> = aggregate::rows(&collection, pipeline, executor).await?;
     let states: HashMap<_, _> = states.into_iter().map(|entry| (entry.batch_id, entry.states)).collect();
     Ok(batches
         .into_iter()

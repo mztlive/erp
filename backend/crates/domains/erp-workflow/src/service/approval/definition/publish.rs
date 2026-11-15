@@ -2,7 +2,8 @@ use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::approval_process;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -13,9 +14,9 @@ use super::super::policy::{
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PUBLISH_DEFINITION_COMMAND_DOMAIN,
-    PreparedDefinitionIdentity, applied_definition, ensure_definition_admin_permission,
-    lock_command_identity, map_model_error, now, parse_idempotency_key, participant, policy_for_definition,
-    replay_prepared_definition_receipt, write_definition_audit, write_receipt,
+    PreparedDefinitionIdentity, applied_definition, lock_command_identity, map_model_error, now,
+    parse_idempotency_key, participant, policy_for_definition, replay_prepared_definition_receipt,
+    require_definition_access, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_with_copies;
 use super::replace::{
@@ -56,16 +57,6 @@ impl ApprovalDefinitionService {
         )?;
         let graph = self.require_graph(&request.definition_id).await?;
         let policy = policy_for_definition(&graph.definition)?;
-        self.ensure_definition_admin(actor, &policy).await?;
-        if let Some(view) = self
-            .replay_prepared_if_receipt(
-                &identity,
-                DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
-            )
-            .await?
-        {
-            return Ok(view);
-        }
         self.commit_publish(graph, policy, request, actor, identity).await
     }
 
@@ -81,6 +72,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
 
         let identity_service = self.identity.clone();
@@ -93,6 +85,7 @@ impl ApprovalDefinitionService {
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 publish_tx(
+                    &authorization,
                     &identity_service,
                     &db,
                     graph,
@@ -108,7 +101,15 @@ impl ApprovalDefinitionService {
                 .await
             })
         });
-        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation).await
+        self.recover_definition_command(
+            outcome.await,
+            &policy,
+            &approval_process::PUBLISH_DEFINITION,
+            actor,
+            identity,
+            expectation,
+        )
+        .await
     }
 }
 
@@ -162,6 +163,7 @@ struct PublishTxInput<'a> {
 /// # 关键业务约束
 /// 任一校验失败必须整体回滚。
 async fn publish_tx(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     graph: DefinitionGraph,
@@ -169,7 +171,8 @@ async fn publish_tx(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let PublishTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(db, identity_service, actor, &policy, executor).await?;
+    require_definition_access(authorization, actor, &approval_process::PUBLISH_DEFINITION, &policy, executor)
+        .await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -181,6 +184,7 @@ async fn publish_tx(
         return Ok(view);
     }
     let current = publish_candidate(
+        authorization,
         identity_service,
         db,
         &graph,
@@ -251,6 +255,7 @@ async fn plan_publication(
 }
 
 async fn publish_candidate(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     graph: &DefinitionGraph,
@@ -261,7 +266,8 @@ async fn publish_candidate(
     let current = reload_draft_for_cas(db, &graph.definition, expected_lock, executor).await?;
     current.validate_linear().map_err(map_model_error)?;
     validate_required_purposes(policy, &current.purpose_refs())?;
-    let snapshots = validate_assignees(db, identity_service, &current.assignee_ids(), executor).await?;
+    let snapshots =
+        validate_assignees(authorization, db, identity_service, &current.assignee_ids(), executor).await?;
     ensure_actions_registered(policy)?;
     if let Some(config) = db.approval_copies().config(&current.definition.base.id, executor).await? {
         let rules = ApprovalCopyRule::prepare(config.rules, current.nodes.len())?;

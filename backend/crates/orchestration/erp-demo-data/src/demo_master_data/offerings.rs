@@ -22,7 +22,7 @@ use erp_supply::entity::supplier_offering::{
     SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 use validator::Validate;
 
 use super::plan::{DemoKind, DemoStep};
@@ -207,7 +207,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let skus = self
             .db
             .skus()
-            .find_by_product_ids(&[ProductId::new(product_id.clone())], &mut NoTransaction)
+            .find_by_product_ids(&[ProductId::new(product_id.clone())], &mut ReadExecutor::default())
             .await?;
         let SeedRequest::Product(product) = &step.request else {
             return Err(Error::ValidationError("可售准备只接受商品".into()));
@@ -238,7 +238,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let rows = self
             .ports
             .catalog_supply
-            .find_sellable_skus_by_ids(ids, BusinessDate::today(), &mut NoTransaction)
+            .find_sellable_skus_by_ids(ids, BusinessDate::today(), &mut ReadExecutor::default())
             .await?;
         let found = rows.iter().map(|row| row.sku_id.as_str()).collect::<HashSet<_>>();
         if ids.iter().any(|id| !found.contains(id.as_str())) {

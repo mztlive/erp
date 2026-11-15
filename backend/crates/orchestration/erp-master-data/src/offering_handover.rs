@@ -1,11 +1,14 @@
 //! 供给维护人交接：目标资格、组织启用、幂等收据。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::AuditAction;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
+use erp_identity::AuthorizationService;
 use erp_identity::service::organization_access::ensure_org_enabled;
-use erp_identity::{Permission, SharedRbacService};
+use erp_permissions::supplier_offering;
 use erp_supply::entity::handover_receipt::{
     HANDOVER_ACTION, HANDOVER_LABEL, HANDOVER_RESOURCE, OfferingHandoverReceipt,
 };
@@ -15,7 +18,7 @@ use erp_supply::{
     SupplierOfferingService,
 };
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use crate::handover_common::{
@@ -60,7 +63,7 @@ impl OfferingHandoverPorts {
 /// 账号失效、无维护资格、版本冲突或同幂等键异载荷时拒绝。
 pub async fn handover_offering(
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: OfferingHandoverPorts,
     id: &str,
     req: HandoverSupplierOfferingRequest,
@@ -78,11 +81,6 @@ pub async fn handover_offering(
         &key,
         [fingerprint],
     )?;
-    if let Some(existing) = replay(&db, &ports.access, &command, id, actor, &mut NoTransaction).await? {
-        return Ok(existing);
-    }
-    ensure_target_qualified(&db, &rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
-    ensure_org_enabled(&db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
     let context = handover_context(
         actor,
         &command,
@@ -123,27 +121,37 @@ pub async fn handover_offering(
 /// 对象不可见时拒绝。
 pub async fn handover_candidates(
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: OfferingHandoverPorts,
     id: &str,
     actor: &AuditActor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    let offering = ports.access.require_offering(actor, "update", id, &mut NoTransaction).await?;
-    Ok(qualified_candidates(
-        &db,
-        &rbac,
-        &offering.maintainer_user_id,
-        &Permission::parse("supplier_offering:update")?,
-        &mut NoTransaction,
-    )
-    .await?
-    .into_iter()
-    .map(|candidate| HandoverCandidateView {
-        user_id: candidate.user_id,
-        display_name: candidate.display_name,
-        account: candidate.account,
-    })
-    .collect())
+    let client = db.client().clone();
+    let actor = actor.clone();
+    let id = id.to_string();
+    client
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                let offering =
+                    ports.access.require_offering(&actor, &supplier_offering::REVISE, &id, executor).await?;
+                Ok(qualified_candidates(
+                    &db,
+                    &rbac,
+                    &offering.maintainer_user_id,
+                    &supplier_offering::REVISE,
+                    executor,
+                )
+                .await?
+                .into_iter()
+                .map(|candidate| HandoverCandidateView {
+                    user_id: candidate.user_id,
+                    display_name: candidate.display_name,
+                    account: candidate.account,
+                })
+                .collect())
+            })
+        })
+        .await
 }
 
 /// 在原执行器中匹配独立回执，并重验当前访问读取当前责任视图。
@@ -173,7 +181,7 @@ async fn replay(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
-    let offering = access.require_offering(actor, "update", id, executor).await?;
+    let offering = access.require_offering(actor, &supplier_offering::REVISE, id, executor).await?;
     Ok(Some(HandoverSupplierOfferingView {
         offering_id: offering.base.id,
         maintainer_user_id: offering.maintainer_user_id,
@@ -185,7 +193,7 @@ async fn replay(
 /// 命名 Process 的执行边界，持有首次请求和安全审计关联。
 struct OfferingHandoverCommand {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     ports: OfferingHandoverPorts,
     id: String,
     req: HandoverSupplierOfferingRequest,
@@ -248,11 +256,11 @@ impl AuditedCommand for OfferingHandoverCommand {
 /// 账号缺失、失效或缺少 `supplier_offering:update` 时返回既有拒绝文案。
 async fn ensure_target_qualified(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if target_qualified(db, rbac, target, &Permission::parse("supplier_offering:update")?, executor).await? {
+    if target_qualified(db, rbac, target, &supplier_offering::REVISE, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备供给维护资格".into()))

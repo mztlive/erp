@@ -17,6 +17,7 @@ mod payment_posting;
 mod payment_reversal;
 mod purchase_return;
 mod receipt_reversal;
+mod result;
 mod return_settlement;
 mod sales_return;
 mod start_approval;
@@ -26,7 +27,6 @@ pub use adapter::{
     customer_refund_object_readable, payment_reversal_object_readable, receipt_reversal_object_readable,
     supplier_refund_object_readable,
 };
-use erp_read_models::returns_center::ReturnsReadService;
 use erp_returns::service::ReturnsService;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -83,20 +83,6 @@ impl ReturnsProcess {
     /// 不返回错误。
     pub(super) fn domain(&self) -> ReturnsService {
         ReturnsService::new(self.db.clone())
-    }
-
-    /// 用当前数据库构造退货退款读模型。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回绑定当前数据库的 `ReturnsReadService`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(super) fn reads(&self) -> ReturnsReadService {
-        ReturnsReadService::new(self.db.clone())
     }
 }
 
@@ -210,7 +196,7 @@ pub async fn reject_approval(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if executor.session().is_none() {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("退款冲正驳回缺少运行时事务".into()));
     }
     let expected = match document_type {
@@ -236,4 +222,34 @@ pub async fn reject_approval(
         executor,
     )
     .await
+}
+
+#[cfg(test)]
+mod boundary_tests {
+    use erp_core::AccountKind;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+
+    use super::*;
+
+    /// 运行时写步骤拒绝普通读取执行器，且检查本身保留原读取阶段。
+    #[tokio::test]
+    async fn rejection_requires_snapshot_without_revoking_read_phase() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        let mut executor = ReadExecutor::default();
+        let boundary = executor.boundary().unwrap();
+        let result = reject_approval(
+            &db,
+            DocumentType::CustomerRefund,
+            "refund",
+            1,
+            ApprovalDomainAction::CustomerRefundReject,
+            &actor,
+            &mut executor,
+        )
+        .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message.contains("运行时事务")));
+        assert!(boundary.is_current(&executor));
+    }
 }

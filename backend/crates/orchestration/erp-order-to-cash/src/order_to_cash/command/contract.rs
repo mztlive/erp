@@ -5,6 +5,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_contract::{ContractExt, ContractStatus};
 use erp_core::ids::ContractRevisionId;
+use erp_permissions::{sales_order as sales_order_permissions, sales_order};
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::BindSalesOrderContractRequest;
 use erp_sales::entity::sales_order::contract_terms::{ContractBindingCheck, ContractTerms};
@@ -13,7 +14,7 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::contract_binding::ContractBindingBasis;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
@@ -73,11 +74,11 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
-        let access = self.command_access(actor, "update");
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let db = self.db.clone();
         let client = db.client().clone();
         let id_owned = id.to_string();
-        let actor = actor.clone();
+        let command_actor = actor.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -85,15 +86,17 @@ impl SalesOrderCommandProcess {
                     if !order.matches_version(req.version) {
                         return Err(Error::ConflictError("销售单版本已变化，请刷新后重试".into()));
                     }
-                    verify_and_bind_contract(&db, &access, &mut order, &req, &actor, executor).await?;
+                    verify_and_bind_contract(&db, &access, &mut order, &req, &command_actor, executor)
+                        .await?;
                     db.sales_orders().update(&mut order, executor).await?;
-                    let audit = actor.resource_log("sales_order.bind_contract", "sales_order", id_owned)?;
+                    let audit =
+                        command_actor.resource_log("sales_order.bind_contract", "sales_order", id_owned)?;
                     persist_log(&db, &audit, executor).await?;
                     Ok::<(), Error>(())
                 })
             })
             .await?;
-        self.read_model().sales_order_detail(id, None).await.map_err(Error::from)
+        self.command_result(id, actor, &sales_order::BIND_CONTRACT).await
     }
 }
 
@@ -113,10 +116,32 @@ impl SalesOrderCommandProcess {
         req: BindSalesOrderContractRequest,
         actor: &AuditActor,
     ) -> Result<ContractBindingCheck> {
+        let this = self.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
+        let req = req.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { this.check_sales_order_contract_stage(&id, &req, &actor, executor).await },
+                )
+            })
+            .await
+    }
+
+    async fn check_sales_order_contract_stage(
+        &self,
+        id: &str,
+        req: &BindSalesOrderContractRequest,
+        actor: &AuditActor,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> Result<ContractBindingCheck> {
         req.validate()?;
-        let access = self.command_access(actor, "update");
-        let order = access.current(id, &mut NoTransaction).await?;
-        let (check, _) = contract_binding_check(&self.db, &access, &order, &req, &mut NoTransaction).await?;
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
+        let order = access.current(id, executor).await?;
+        let (check, _) = contract_binding_check(&self.db, &access, &order, req, executor).await?;
         Ok(check)
     }
 

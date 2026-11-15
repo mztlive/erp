@@ -6,9 +6,10 @@ use erp_contract::entity::recognition::{
 };
 use erp_contract::repository::recognition::{self, ContractImportExt};
 use erp_core::ids::FileAssetId;
+use erp_permissions::contract;
 use erp_support::{FileAsset, FileAssetExt, RegisterFileAssetRequest, SecurityScanStatus};
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -80,6 +81,7 @@ impl ContractImportProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(ImportView, bool)> {
+        self.services.contract_access.require_import(actor, executor).await?;
         if let Some(original) =
             recognition::replay(&self.db, actor.id(), &command.request_key, executor).await?
         {
@@ -90,7 +92,7 @@ impl ContractImportProcess {
             self.services
                 .contract_access
                 .clone()
-                .require_with(actor.clone(), "update", &target.contract_id, executor)
+                .require_with(actor.clone(), &contract::TERMINATE, &target.contract_id, executor)
                 .await?;
         }
         let task = ContractImport::new(
@@ -107,18 +109,6 @@ impl ContractImportProcess {
         self.db.file_assets().create(&asset, executor).await?;
         self.db.contract_imports().create(&task, executor).await?;
         Ok((task.into(), true))
-    }
-
-    /// 获取本人任务的可用源文件；文件 ID 不独立授权。
-    /// # 参数
-    /// * `id` / `actor` - 任务与认证人。
-    /// # 返回
-    /// 仅供受控读取的源文件。
-    /// # 错误
-    /// 无权、文件销毁、隔离或缺失。
-    pub async fn source(&self, id: &str, actor: &AuditActor) -> Result<FileAsset> {
-        let task = recognition::owned(&self.db, actor.id(), id, &mut NoTransaction).await?;
-        self.require_source(&task, &mut NoTransaction).await
     }
 
     /// 读取任务绑定的源文件，并拒绝已销毁、拒绝或隔离的文件。

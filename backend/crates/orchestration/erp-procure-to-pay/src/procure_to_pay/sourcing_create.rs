@@ -5,6 +5,7 @@
 //! 付款条件和履约责任拆成采购单并启动审批。
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::execution::{persist_log, recover_command};
@@ -17,8 +18,9 @@ use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment_execution::fulfillment_execution::task::{
     FulfillmentTaskObject, ensure_fulfillment_task,
 };
-use erp_identity::SharedRbacService;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_inventory::StockReservation;
+use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::{
     CREATE_SOURCING_ACTION, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest,
     CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
@@ -36,10 +38,9 @@ use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::authorization::PurchaseOrderAuthorization;
 use super::creation_basis::{
     CreateBasisCommand, VerifiedBasisInput, basis_groups_and_facts, load_effective_sales_order,
     persist_basis_draft, procurement_quantity_changed, stock_basis_groups_for_order,
@@ -58,7 +59,6 @@ use apply::create_from_sourcing_apply;
 use sequence::{PurchaseCreationEventSequence, SourcingEventSequencePlan};
 use stock_posting::{PersistedStockAllocation, persist_stock_allocations};
 
-const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_SOURCING_RECEIPT_PREFIX: &str = "purchase-order-sourcing-command-";
 const CREATE_SOURCING_ITEM_PREFIX: &str = "purchase-order-sourcing-item-";
 
@@ -111,7 +111,7 @@ impl PurchaseOrderProcess {
             Some(sales_order_id.as_ref()),
             &req.idempotency_key,
         )?;
-        let authorization = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
+        let authorization = self.require_rbac()?.clone();
         let command = SourcingTransactionInput {
             req: &req,
             sales_order_id: &sales_order_id,
@@ -119,15 +119,10 @@ impl PurchaseOrderProcess {
             request_fingerprint: &request_fingerprint,
             actor,
         };
-        if let Some(result) = replay_sourcing_command(&self.db, command, &mut NoTransaction).await? {
-            return Ok(result);
-        }
         let transaction_result = self.sourcing_transaction(command, assignments, authorization).await;
         match transaction_result {
             Ok(result) => Ok(result),
-            Err(error) => {
-                recover_command(error, replay_sourcing_command(&self.db, command, &mut NoTransaction).await)
-            },
+            Err(error) => recover_command(error, self.replay_sourcing_result(command).await),
         }
     }
 
@@ -136,10 +131,10 @@ impl PurchaseOrderProcess {
         &self,
         input: SourcingTransactionInput<'_>,
         assignments: SourcingAssignmentSet,
-        authorization: PurchaseOrderAuthorization,
+        authorization: Arc<AuthorizationService>,
     ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
         let ports = self.ports.clone();
-        let rbac = authorization.rbac.clone();
+        let rbac = authorization;
         let SourcingTransactionInput { req, sales_order_id, receipt_identity, request_fingerprint, actor } =
             input;
         let db = self.db.clone();
@@ -154,7 +149,6 @@ impl PurchaseOrderProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    authorization.require(&transaction_actor, executor).await?;
                     create_from_sourcing_apply(
                         &db,
                         ports.as_ref(),
@@ -176,28 +170,41 @@ impl PurchaseOrderProcess {
     }
 }
 
-/// 保持入口与提交结果查证共用相同资源身份和任务引用。
-async fn replay_sourcing_command(
-    db: &mongodb::Database,
-    command: SourcingTransactionInput<'_>,
-    executor: &mut dyn Executor,
-) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
-    replay_sourcing(
-        db,
-        command.receipt_identity,
-        command.request_fingerprint,
-        command.actor,
-        command.sales_order_id.as_ref(),
-        &command.req.work_item_id,
-        executor,
-    )
-    .await
+impl PurchaseOrderProcess {
+    /// 仅在原批次可能已提交后，用同一快照授权精确来源并投影原结果。
+    async fn replay_sourcing_result(
+        &self,
+        command: SourcingTransactionInput<'_>,
+    ) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
+        let db = self.db.clone();
+        let authorization = self.require_rbac()?.clone();
+        let req = command.req.clone();
+        let sales_order_id = command.sales_order_id.clone();
+        let identity = command.receipt_identity.clone();
+        let fingerprint = command.request_fingerprint.to_string();
+        let actor = command.actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let command = SourcingTransactionInput {
+                        req: &req,
+                        sales_order_id: &sales_order_id,
+                        receipt_identity: &identity,
+                        request_fingerprint: &fingerprint,
+                        actor: &actor,
+                    };
+                    replay_sourcing(&db, &authorization, command, executor).await
+                })
+            })
+            .await
+    }
 }
 
 /// 选源建单事务内写入所需上下文。
 struct CreateFromSourcingApplyInput<'a> {
     /// 审批绑定授权源。
-    rbac: &'a SharedRbacService,
+    rbac: &'a Arc<AuthorizationService>,
     /// 原始选源请求。
     req: &'a CreatePurchaseOrdersFromSourcingRequest,
     /// 已规范化且稳定行不重复的选源集合。
@@ -470,13 +477,17 @@ pub(super) fn sourcing_audit(
 /// 事务前、事务内和事务失败后均复用同一校验逻辑。
 async fn replay_sourcing(
     db: &mongodb::Database,
-    receipt_identity: &PurchaseCommandReceiptIdentity,
-    expected_fingerprint: &str,
-    _actor: &AuditActor,
-    sales_order_id: &str,
-    _work_item_id: &str,
+    authorization: &AuthorizationService,
+    command: SourcingTransactionInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
+    let SourcingTransactionInput {
+        receipt_identity,
+        request_fingerprint: expected_fingerprint,
+        sales_order_id,
+        actor,
+        ..
+    } = command;
     let Some(record) = db
         .purchase_command_receipts::<SourcingReceipt>()
         .find_by_id_including_deleted(receipt_identity.receipt_id(), executor)
@@ -498,8 +509,26 @@ async fn replay_sourcing(
         },
     }
     .into_payload();
+    if receipt_identity.actor_id != actor.id()
+        || receipt_identity.scope_id.as_deref() != Some(sales_order_id.as_ref())
+    {
+        return Err(Error::ConflictError("选源回执与操作人或来源销售单不一致".into()));
+    }
+    authorization
+        .require(
+            actor,
+            &internal::SOURCING_CREATED_RESULT_READ,
+            AccessTarget::record(sales_order_id.as_ref())?,
+            executor,
+        )
+        .await?;
+    Ok(Some(sourcing_result(receipt, sales_order_id.as_ref())))
+}
+
+/// 将已授权的冻结批次回执投影为首次命令结果，不读取当前任务状态。
+fn sourcing_result(receipt: SourcingReceipt, sales_order_id: &str) -> CreatePurchaseOrdersFromSourcingResult {
     let work_item_status = receipt.work_item_status.as_str().to_string();
-    Ok(Some(CreatePurchaseOrdersFromSourcingResult {
+    CreatePurchaseOrdersFromSourcingResult {
         orders: receipt
             .orders
             .into_iter()
@@ -517,7 +546,7 @@ async fn replay_sourcing(
         work_item_status,
         replayed: true,
         reference: sales_order_id.to_string(),
-    }))
+    }
 }
 
 /// 将工作流任务状态显式转换为采购拥有的命令结果状态。

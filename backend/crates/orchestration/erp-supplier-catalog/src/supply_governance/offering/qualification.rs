@@ -7,6 +7,8 @@ use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use erp_supply::ports::offering_qualification::QualificationPort;
 use mongodb::Database;
 use persistence_core::Executor;
+#[cfg(test)]
+use persistence_core::ReadExecutor;
 
 use crate::{Error, Result};
 /// 生产资格适配器；构造不读取任何事实。
@@ -133,12 +135,8 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    struct Marker(u64);
-    impl Executor for Marker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    type Marker = ReadExecutor;
+
     struct Recorder {
         pointer: usize,
         calls: Mutex<Vec<&'static str>>,
@@ -208,7 +206,7 @@ mod tests {
         missing_product: bool,
         fail: Option<usize>,
     ) -> (Result<()>, Vec<&'static str>) {
-        let mut executor = Marker(162);
+        let mut executor = Marker::default();
         let port = Recorder {
             pointer: &mut executor as *mut Marker as usize,
             calls: Mutex::new(vec![]),
@@ -227,7 +225,7 @@ mod tests {
             &mut executor,
         )
         .await;
-        assert_eq!(executor.0, 162);
+
         (result, port.calls.into_inner().unwrap())
     }
     #[tokio::test]

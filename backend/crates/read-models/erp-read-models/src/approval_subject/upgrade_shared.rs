@@ -227,6 +227,7 @@ pub(crate) fn ensure_initial_purchase_change_state(
 ///
 /// # 错误
 /// 查询主键与实体主键不一致、版本为 0，或责任组织、创建人空白或未修剪时返回内部错误。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_facts(
     document_type: DocumentType,
     requested_id: &str,
@@ -235,6 +236,7 @@ pub(crate) fn build_facts(
     document_no: String,
     responsible_org_id: &str,
     creator_id: &str,
+    source: (&str, &str),
 ) -> Result<ApprovalUpgradeSubjectFacts> {
     if requested_id != actual_id {
         return Err(Error::Internal("强业务对象主键与查询主键不一致".to_string()));
@@ -244,6 +246,8 @@ pub(crate) fn build_facts(
     }
     ensure_exact_nonempty_fact(responsible_org_id, "强业务对象责任组织缺失或非法")?;
     ensure_exact_nonempty_fact(creator_id, "强业务对象不可变创建人缺失或非法")?;
+    ensure_exact_nonempty_fact(source.0, "强业务授权来源资源缺失或非法")?;
+    ensure_exact_nonempty_fact(source.1, "强业务授权来源主键缺失或非法")?;
     Ok(ApprovalUpgradeSubjectFacts {
         document_type,
         document_id: actual_id.to_string(),
@@ -251,6 +255,8 @@ pub(crate) fn build_facts(
         document_no,
         responsible_org_id: responsible_org_id.to_string(),
         creator_id: creator_id.to_string(),
+        source_resource: source.0.to_string(),
+        source_id: source.1.to_string(),
     })
 }
 

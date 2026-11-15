@@ -4,7 +4,6 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditLog;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
-use erp_read_models::Error as ReadModelError;
 use erp_returns::ReturnsCommandReceiptService;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -203,7 +202,7 @@ pub(super) async fn mark_reversal_started(
 ///
 /// # 错误
 /// 不返回错误。
-pub(in crate::reverse_flow) fn reversal_result_read_error(error: ReadModelError) -> Error {
+pub(in crate::reverse_flow) fn reversal_result_read_error(error: Error) -> Error {
     Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(format!(
         "退款或冲正已提交但结果读取失败: {error}"
     ))))

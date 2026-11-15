@@ -5,13 +5,12 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::{
-    AuthorizationRegistry, AuthorizationService, Permission, PermissionSet, SharedRbacService,
-};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{Permission, internal};
 use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use erp_supplier_catalog::supply_governance::SupplierOfferingProcess;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, ReadExecutor};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use storage::S3Storage;
@@ -54,7 +53,7 @@ pub struct BusinessTransferServices {
 /// 默认导入导出业务实现。
 pub struct BusinessTransfers {
     pub(super) db: Database,
-    pub(super) rbac: SharedRbacService,
+    pub(super) authorization: Arc<AuthorizationService>,
     pub(super) reader: Arc<dyn TransferReader>,
     pub(super) storage: S3Storage,
     pub(super) services: BusinessTransferServices,
@@ -69,33 +68,38 @@ impl BusinessTransfers {
     /// 无。
     pub fn new(
         db: Database,
-        rbac: SharedRbacService,
+        authorization: Arc<AuthorizationService>,
         reader: Arc<dyn TransferReader>,
         storage: S3Storage,
         services: BusinessTransferServices,
     ) -> Self {
-        Self { db, rbac, reader, storage, services }
+        Self { db, authorization, reader, storage, services }
     }
     pub(super) async fn access(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<()> {
+        self.access_with(kind, input, actor, &mut ReadExecutor::default()).await
+    }
+    /// 在调用方执行器核验本任务原有功能资格，目标条件由所属业务入口执行。
+    /// # 参数
+    /// kind、input 为固定业务任务，actor 为当前身份，executor 为本次原执行器。
+    /// # 返回
+    /// 原功能权限或门户写资格成立时成功。
+    /// # 错误
+    /// 任务类型、身份或功能资格无效时拒绝。
+    pub(super) async fn access_with(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         if actor.kind() == AccountKind::Supplier && kind != TransferKind::PortalBatch {
             return Err(Error::Forbidden("此任务仅供管理端使用".into()));
         }
         if kind == TransferKind::PortalBatch {
-            return self.portal_context_access(input, actor).await;
+            return self.portal_actor_with(input, actor, executor).await?.require_write().map_err(Into::into);
         }
-        let permissions = permissions(kind, input)?
-            .into_iter()
-            .map(Permission::parse)
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        let authorization =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default());
-        let qualification = authorization
-            .permissions(actor, &permissions, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::Forbidden("操作账号已停用或身份变化".into()))?;
-        if !qualification.permissions().covers(&PermissionSet::new(permissions)) {
-            return Err(Error::Forbidden("当前账号无权执行此任务".into()));
-        }
+        let permission = transfer_permission(kind, input)?;
+        self.authorization.require(actor, &permission, AccessTarget::Operation, executor).await?;
         Ok(())
     }
     pub(super) async fn collect(
@@ -224,6 +228,15 @@ impl BusinessTransfers {
 }
 #[async_trait]
 impl TransferHandler for BusinessTransfers {
+    async fn authorize_submission(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.submission_access(kind, input, actor, executor).await
+    }
     async fn context(
         &self,
         kind: TransferKind,
@@ -303,58 +316,64 @@ pub(super) fn is_report(kind: TransferKind) -> bool {
             | TransferKind::CustomerQualityHistory
     )
 }
-fn permissions(kind: TransferKind, input: &Value) -> Result<Vec<&'static str>> {
+/// 选择固定任务入口；完整功能资格由 identity 定义，业务输入只选择既有用例。
+fn transfer_permission(kind: TransferKind, input: &Value) -> Result<Permission> {
     use TransferKind::*;
     Ok(match kind {
-        ProductPoolExcel => vec!["sellable_sku:list"],
-        SupplierQuoteArchive | SupplierQuotePreview => {
-            vec!["procurement_inquiry:internal_quote", "sellable_sku:list", "supplier_offering:list"]
-        },
-        SalesOrders => vec!["sales_order:list"],
-        PurchaseOrders => vec!["purchase_order:list"],
-        Contracts => vec!["contract:list"],
-        Customers => {
-            if input["scope"] == "all_authorized" {
-                vec!["customer:list", "customer_scope:detail"]
-            } else {
-                vec!["customer:list"]
-            }
-        },
-        InventoryBalance => vec!["stock_balance:list"],
-        InventoryMovement => vec!["stock_movement:list"],
-        InventoryAdjustment => vec!["stock_adjustment:list"],
-        InventoryReservation => vec!["stock_reservation:list"],
-        SupplierOrders => vec!["supplier_fulfillment_order:list"],
-        Receivables => vec![match input["view"].as_str() {
-            Some("receipt") => "customer_receipt:list",
-            Some("sales_invoice") => "invoice:list",
-            _ => "receivable_account:list",
-        }],
-        SupplierPayables => vec![match input["view"].as_str() {
-            Some("payment") => "supplier_payment:list",
-            Some("allocation") => "purchase_invoice_allocation:list",
-            _ => "payable_account:list",
-        }],
-        InvoiceRequests => vec!["sales_invoice_request:list"],
-        ProfitLoss => vec!["cost_entry:list", "sales_order:list"],
-        CustomerQualityCurrent | CustomerQualityHistory => vec!["customer:list", "sales_order:list"],
-        MasterData => vec![match input["resource"].as_str() {
-            Some("product") => "product:list",
-            Some("supplier") => "supplier:list",
-            Some("sellable") => "sellable_sku:list",
-            _ => return Err(Error::ValidationError("该目录不支持后台导出".into())),
-        }],
-        InquiryPreview => vec!["sales_inquiry:import"],
-        InquiryCreationPreview => vec!["sales_inquiry:create", "sales_inquiry:import", "sellable_sku:list"],
-        SupplyBatch => vec![supply_batch_permission(input)?],
-        PortalBatch => vec![],
+        ProductPoolExcel => internal::DATA_TRANSFER_PRODUCT_POOL,
+        SupplierQuoteArchive | SupplierQuotePreview => internal::DATA_TRANSFER_SUPPLIER_QUOTES,
+        SalesOrders => internal::DATA_TRANSFER_SALES_ORDERS,
+        PurchaseOrders => internal::DATA_TRANSFER_PURCHASE_ORDERS,
+        Contracts => internal::DATA_TRANSFER_CONTRACTS,
+        Customers if input["scope"] == "all_authorized" => internal::DATA_TRANSFER_ALL_CUSTOMERS,
+        Customers => internal::DATA_TRANSFER_CUSTOMERS,
+        InventoryBalance => internal::DATA_TRANSFER_STOCK_BALANCE,
+        InventoryMovement => internal::DATA_TRANSFER_STOCK_MOVEMENT,
+        InventoryAdjustment => internal::DATA_TRANSFER_STOCK_ADJUSTMENT,
+        InventoryReservation => internal::DATA_TRANSFER_STOCK_RESERVATION,
+        SupplierOrders => internal::DATA_TRANSFER_SUPPLIER_ORDERS,
+        Receivables => receivable_entry(input),
+        SupplierPayables => payable_entry(input),
+        InvoiceRequests => internal::DATA_TRANSFER_INVOICE_REQUESTS,
+        ProfitLoss => internal::DATA_TRANSFER_PROFIT_LOSS,
+        CustomerQualityCurrent | CustomerQualityHistory => internal::DATA_TRANSFER_CUSTOMER_QUALITY,
+        MasterData => master_entry(input)?,
+        InquiryPreview => internal::DATA_TRANSFER_INQUIRY_PREVIEW,
+        InquiryCreationPreview => internal::DATA_TRANSFER_INQUIRY_CREATION,
+        SupplyBatch => supply_batch_entry(input)?,
+        PortalBatch => return Err(Error::ValidationError("门户任务使用会话写入资格".into())),
     })
 }
 
-fn supply_batch_permission(input: &Value) -> Result<&'static str> {
+fn receivable_entry(input: &Value) -> Permission {
+    match input["view"].as_str() {
+        Some("receipt") => internal::DATA_TRANSFER_RECEIPTS,
+        Some("sales_invoice") => internal::DATA_TRANSFER_INVOICES,
+        _ => internal::DATA_TRANSFER_RECEIVABLES,
+    }
+}
+
+fn payable_entry(input: &Value) -> Permission {
+    match input["view"].as_str() {
+        Some("payment") => internal::DATA_TRANSFER_PAYMENTS,
+        Some("allocation") => internal::DATA_TRANSFER_INVOICE_ALLOCATIONS,
+        _ => internal::DATA_TRANSFER_PAYABLES,
+    }
+}
+
+fn master_entry(input: &Value) -> Result<Permission> {
+    match input["resource"].as_str() {
+        Some("product") => Ok(internal::DATA_TRANSFER_PRODUCTS),
+        Some("supplier") => Ok(internal::DATA_TRANSFER_SUPPLIERS),
+        Some("sellable") => Ok(internal::DATA_TRANSFER_PRODUCT_POOL),
+        _ => Err(Error::ValidationError("该目录不支持后台导出".into())),
+    }
+}
+
+fn supply_batch_entry(input: &Value) -> Result<Permission> {
     match input["mode"].as_str() {
-        Some("revise") => Ok("supplier_offering:update"),
-        Some("availability") => Ok("supplier_offering_availability:update"),
+        Some("revise") => Ok(internal::DATA_TRANSFER_OFFERING_REVISE),
+        Some("availability") => Ok(internal::DATA_TRANSFER_OFFERING_AVAILABILITY),
         _ => Err(Error::ValidationError("仅支持批量调价或更新可供情况，批量建档请使用商品导入".into())),
     }
 }
@@ -368,16 +387,19 @@ mod tests {
     #[test]
     fn supply_batch_permissions_allow_maintenance_and_reject_creation() {
         for (mode, permission) in [
-            ("revise", "supplier_offering:update"),
-            ("availability", "supplier_offering_availability:update"),
+            ("revise", internal::DATA_TRANSFER_OFFERING_REVISE),
+            ("availability", internal::DATA_TRANSFER_OFFERING_AVAILABILITY),
         ] {
             assert_eq!(
-                permissions(TransferKind::SupplyBatch, &json!({ "mode": mode })).unwrap(),
-                vec![permission]
+                transfer_permission(TransferKind::SupplyBatch, &json!({ "mode": mode })).unwrap(),
+                permission
             );
         }
         for input in [json!({ "mode": "create" }), json!({ "mode": "invalid" }), json!({})] {
-            assert!(matches!(permissions(TransferKind::SupplyBatch, &input), Err(Error::ValidationError(_))));
+            assert!(matches!(
+                transfer_permission(TransferKind::SupplyBatch, &input),
+                Err(Error::ValidationError(_))
+            ));
         }
     }
 }

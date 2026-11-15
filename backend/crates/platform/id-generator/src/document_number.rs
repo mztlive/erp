@@ -248,7 +248,7 @@ impl DocumentNumberGenerator {
         date: NaiveDate,
         executor: &mut dyn Executor,
     ) -> Result<String> {
-        let in_transaction = executor.session().is_some();
+        let in_transaction = executor.boundary().is_some_and(|boundary| boundary.is_snapshot());
         tracing::debug!(kind = %kind.counter_id_str(), in_transaction, "taking next document number");
         let seq = self.next_seq(kind, date).await?;
         Ok(format_number(kind, date, seq))

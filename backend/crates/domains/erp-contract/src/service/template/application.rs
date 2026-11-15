@@ -3,6 +3,8 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::BusinessDate;
+use erp_identity::AccessTarget;
+use erp_permissions::contract;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::ContractTemplateService;
@@ -47,6 +49,15 @@ impl ContractTemplateService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    service
+                        .authorization
+                        .require(
+                            &transaction_actor,
+                            &contract::TEMPLATES_APPLY,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     service.apply_step(transaction_request, &transaction_actor, executor).await
                 })
             })
@@ -141,18 +152,36 @@ impl ContractTemplateService {
     /// # 错误
     /// 非本人申请统一返回不存在，避免暴露他人合同号。
     pub async fn download_source(&self, id: &str, actor: &AuditActor) -> Result<TemplateDownloadSource> {
-        let application = owned_application(&self.db, id, actor.id(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同申请不存在或无权下载".into()))?;
-        let template = self.template(&application.template_id, &mut NoTransaction).await?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract_application.download",
-            "contract_application",
-            application.base.id,
-        )?;
-        self.audit.persist(&audit, &mut NoTransaction).await?;
-        Ok(TemplateDownloadSource { object_key: template.object_key(), contract_no: application.contract_no })
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .authorization
+                        .require(&actor, &contract::TEMPLATES_DOWNLOAD, AccessTarget::Operation, executor)
+                        .await?;
+
+                    let application = owned_application(&service.db, &id, actor.id(), executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("合同申请不存在或无权下载".into()))?;
+                    let template = service.template(&application.template_id, executor).await?;
+                    let audit = service.audit.resource_log(
+                        actor.clone(),
+                        "contract_application.download",
+                        "contract_application",
+                        application.base.id,
+                    )?;
+                    service.audit.persist(&audit, executor).await?;
+                    Ok(TemplateDownloadSource {
+                        object_key: template.object_key(),
+                        contract_no: application.contract_no,
+                    })
+                })
+            })
+            .await
     }
 
     /// 管理员下载样张核对首页布局；不占用任何流水。
@@ -164,17 +193,32 @@ impl ContractTemplateService {
     /// # 错误
     /// 模板不存在或审计失败。
     pub async fn sample_source(&self, id: &str, actor: &AuditActor) -> Result<TemplateDownloadSource> {
-        let template = self.template(id, &mut NoTransaction).await?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract_template.sample",
-            "contract_template",
-            id.into(),
-        )?;
-        self.audit.persist(&audit, &mut NoTransaction).await?;
-        Ok(TemplateDownloadSource {
-            object_key: template.object_key(),
-            contract_no: format!("{}-S-SAMPLE", template.group.prefix()),
-        })
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .authorization
+                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
+                        .await?;
+
+                    let template = service.template(&id, executor).await?;
+                    let audit = service.audit.resource_log(
+                        actor.clone(),
+                        "contract_template.sample",
+                        "contract_template",
+                        id,
+                    )?;
+                    service.audit.persist(&audit, executor).await?;
+                    Ok(TemplateDownloadSource {
+                        object_key: template.object_key(),
+                        contract_no: format!("{}-S-SAMPLE", template.group.prefix()),
+                    })
+                })
+            })
+            .await
     }
 }

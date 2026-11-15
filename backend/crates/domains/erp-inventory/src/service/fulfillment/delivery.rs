@@ -157,15 +157,7 @@ mod tests {
     }
 
     /// 非零大小执行器，避免零大小地址相等掩盖替换实例。
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
-
+    use persistence_core::ReadExecutor;
     struct RecordingStore {
         executor: usize,
         calls: Vec<Call>,
@@ -180,9 +172,9 @@ mod tests {
         on_hand: i64,
     }
     impl RecordingStore {
-        fn new(executor: &mut TestExecutor) -> Self {
+        fn new(executor: &mut ReadExecutor) -> Self {
             Self {
-                executor: executor as *mut TestExecutor as usize,
+                executor: executor as *mut ReadExecutor as usize,
                 calls: vec![],
                 fail_at: None,
                 false_at: None,
@@ -366,7 +358,7 @@ mod tests {
     /// 从可用量为零的已预占余额出发，生产算法必须先释放再扣减，并保留源引用、时间和操作人。
     #[tokio::test]
     async fn shipment_releases_reserved_before_deducting_and_keeps_frozen_facts() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = ReadExecutor::default();
         let mut store = RecordingStore::new(&mut executor);
         let occurred_at = Instant::from_unix_secs(12345);
         post_with_store(&mut store, &mut executor, &input(), occurred_at, "actor-1").await.unwrap();
@@ -400,7 +392,7 @@ mod tests {
     async fn shipment_stops_after_each_repository_failure_with_same_executor() {
         let expected = sequence();
         for (index, call) in expected.into_iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = ReadExecutor::default();
             let mut store = RecordingStore::new(&mut executor);
             store.fail_at = Some(call);
             let error =
@@ -421,7 +413,7 @@ mod tests {
             (Call::Deduct, "可用库存不足，无法发货"),
             (Call::LastMovement, "库存余额行不存在"),
         ] {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = ReadExecutor::default();
             let mut store = RecordingStore::new(&mut executor);
             store.false_at = Some(call);
             let error =
@@ -438,7 +430,7 @@ mod tests {
     /// 缺少预占引用优先于仓库与其他行事实，不触发任何仓储读取。
     #[tokio::test]
     async fn shipment_requires_reservation_before_any_read() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = ReadExecutor::default();
         let mut store = RecordingStore::new(&mut executor);
         let mut line = input();
         line.stock_reservation_id = None;
@@ -459,7 +451,7 @@ mod tests {
             (2, "仓发缺少发货仓"),
             (3, "库存预占不属于本发货仓，无法发货"),
         ] {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = ReadExecutor::default();
             let mut store = RecordingStore::new(&mut executor);
             let mut line = input();
             let reservation = store.reservation.as_mut().unwrap();
@@ -487,7 +479,7 @@ mod tests {
     #[tokio::test]
     async fn shipment_preserves_missing_stock_fact_errors() {
         for missing_reservation in [true, false] {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = ReadExecutor::default();
             let mut store = RecordingStore::new(&mut executor);
             if missing_reservation {
                 store.reservation = None;

@@ -9,7 +9,7 @@ use erp_catalog::repository::prelude::*;
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, UpdateProductRequest};
 use erp_core::ids::{FileAssetId, ProductId};
 use erp_master_data::product_update_with_assets;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::ProductImportProcess;
 use super::backfill::sku_inputs_with_main_image;
@@ -44,10 +44,10 @@ impl ProductImportProcess {
         let skus = self
             .db
             .skus()
-            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
+            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut ReadExecutor::default())
             .await?;
         let signature = sku_signature(&row)?;
-        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
         let same_sku = skus.iter().any(|sku| sku.specification_signature == signature)
             || row.barcode.as_ref().is_some_and(|barcode| {
                 revisions.values().any(|revision| revision.barcode.as_ref() == Some(barcode))
@@ -56,7 +56,8 @@ impl ProductImportProcess {
             return self.import_existing_with_images(product, cells, media_source, actor).await;
         }
         if let Some(barcode) = &row.barcode {
-            let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
+            let owners =
+                self.db.catalog().barcode_owner_sku_ids(barcode, &mut ReadExecutor::default()).await?;
             if !owners.is_empty() {
                 return Ok(RowImportOutcome::new(format!("条码 {barcode} 已被其他 SKU 使用，本行未写入"))
                     .with_product_id(Some(product.base.id))
@@ -98,13 +99,13 @@ impl ProductImportProcess {
         let snapshot = self
             .db
             .catalog()
-            .product_disable_snapshot(&product.base.id, &mut NoTransaction)
+            .product_disable_snapshot(&product.base.id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("商品不存在".into()))?;
         let revision = snapshot
             .current_revision
             .ok_or_else(|| Error::BusinessLogicError("商品缺少当前资料，无法新增 SKU".into()))?;
-        let revisions = self.db.catalog().current_sku_revisions(skus, &mut NoTransaction).await?;
+        let revisions = self.db.catalog().current_sku_revisions(skus, &mut ReadExecutor::default()).await?;
         let sku_inputs = sku_inputs_with_main_image(skus, &revisions, None)?;
         append_request(product, row, revision, &snapshot.media, sku_inputs, media)
     }

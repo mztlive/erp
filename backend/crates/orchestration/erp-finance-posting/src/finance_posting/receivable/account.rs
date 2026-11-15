@@ -12,7 +12,11 @@ use erp_finance::entity::receivable::{
 };
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::zero_amount;
+use erp_identity::entity::authorization::{ObjectFacts, RelatedObjects, RelationKey};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::receivable;
 use erp_read_models::finance::dto::ReceivableAccountView;
+use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
@@ -56,8 +60,7 @@ impl ReceivableProcess {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = actor.clone();
-        let account_id = db
-            .client()
+        db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -76,13 +79,43 @@ impl ReceivableProcess {
 
                     db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<_, Error>(account_id)
+                    created_account_view(
+                        &ReceivableReadService::new(db.clone()),
+                        &rbac.authorization,
+                        &actor,
+                        &account.base.id,
+                        account.sales_order_id.as_ref(),
+                        executor,
+                    )
+                    .await
                 })
             })
-            .await?;
-
-        self.read.receivable_account_detail(&account_id).await.map_err(Error::from)
+            .await
     }
+}
+
+/// 写入已推进阶段，按原创建入口和实际销售来源重新授权后读取当前事务结果。
+async fn created_account_view(
+    read: &ReceivableReadService,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    id: &str,
+    sales_order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<ReceivableAccountView> {
+    let candidate = ObjectFacts {
+        resource: "receivable_account".into(),
+        relations: [(
+            RelationKey::parse("sales_source")?,
+            RelatedObjects { expected_ids: [sales_order_id.to_owned()].into(), objects: vec![] },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    authorization
+        .require(actor, &receivable::ACCOUNT_CREATE, AccessTarget::Candidate(candidate), executor)
+        .await?;
+    Ok(read.receivable_account_view(id.to_owned(), executor).await?)
 }
 
 /// 把已持久化的销售业务类型显式映射为财务消费的稳定事实。
@@ -178,13 +211,17 @@ async fn authorized_source(
         .find_by_id(&req.sales_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-    rbac.funds
-        .require_sales_sources(
-            actor,
-            "receivable_account:create",
-            std::slice::from_ref(&sales_order.base.id),
-            executor,
-        )
+    let candidate = ObjectFacts {
+        resource: "receivable_account".into(),
+        relations: [(
+            RelationKey::parse("sales_source")?,
+            RelatedObjects { expected_ids: [sales_order.base.id.clone()].into(), objects: vec![] },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    rbac.authorization
+        .require(actor, &receivable::ACCOUNT_CREATE, AccessTarget::Candidate(candidate), executor)
         .await?;
     if sales_order.customer_id != req.customer_id {
         return Err(Error::ConflictError("应收客户与来源销售单不一致".into()));
@@ -195,4 +232,39 @@ async fn authorized_source(
         .filter(|revision| revision.sales_order_id.as_ref() == req.sales_order_id)
         .ok_or_else(|| Error::ConflictError("应收绑定版本与来源销售单不一致".into()))?;
     Ok(sales_order)
+}
+
+#[cfg(test)]
+mod result_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 写后回包仍须原创建资格；错误必须先于台账及跨域事实读取。
+    #[tokio::test]
+    async fn created_account_reauthorizes_original_source_before_result_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("created_receivable");
+        let read = ReceivableReadService::new(db);
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        for (executor, snapshot) in [
+            (&mut ReadExecutor::default() as &mut dyn Executor, false),
+            (&mut SnapshotExecutor::default() as &mut dyn Executor, true),
+        ] {
+            let error = created_account_view(&read, &authorization, &actor, "account", "sale", executor)
+                .await
+                .unwrap_err();
+            if snapshot {
+                assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+            } else {
+                assert!(
+                    matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务")
+                );
+            }
+        }
+    }
 }

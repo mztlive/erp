@@ -4,17 +4,13 @@ use application_core::AuditActor;
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::ProcurementResponsibilityRuleId;
-use erp_identity::{
-    AccessMode, AccessRegistration, AccessTarget, AuthorizationRegistry, AuthorizationService, Permission,
-};
+use erp_identity::AccessTarget;
+use erp_permissions::admin;
 use erp_procurement::dto::procurement_responsibility::{
-    CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveLineView,
-    ProcurementResponsibilityResolveRequest, ProcurementResponsibilityResolveView,
-    UpdateProcurementResponsibilityRuleRequest,
+    CreateProcurementResponsibilityRuleRequest, UpdateProcurementResponsibilityRuleRequest,
 };
 use erp_procurement::entity::procurement_responsibility::{
-    ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityRule,
-    ProcurementResponsibilityRuleData,
+    ProcurementResponsibilityRule, ProcurementResponsibilityRuleData,
 };
 use erp_procurement::service::procurement_responsibility::ProcurementResponsibilityService;
 use erp_read_models::purchase_center::procurement_responsibility::dto::ProcurementResponsibilityRuleView;
@@ -25,7 +21,6 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::ProcurementResponsibilityProcess;
 use super::adapter::ResponsibilityFactsAdapter;
-use super::resolver::ResolutionInput;
 use crate::{Error, Result};
 
 impl ProcurementResponsibilityProcess {
@@ -179,62 +174,10 @@ impl ProcurementResponsibilityProcess {
 
     /// 在原事务证明责任配置管理的当前功能资格。
     async fn require_management(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        let permission = Permission::parse("procurement_responsibility:manage")?;
-        let entry = AccessRegistration {
-            permission: permission.clone(),
-            required_permissions: vec![],
-            access: AccessMode::Operation,
-        };
-        let service = AuthorizationService::new(
-            self.db.clone(),
-            self.rbac.clone(),
-            AuthorizationRegistry::new(vec![entry])?,
-        );
-        service.require(actor, &permission, AccessTarget::Operation, executor).await?;
+        self.rbac
+            .require(actor, &admin::PROCUREMENT_RESPONSIBILITY_CREATE_RULE, AccessTarget::Operation, executor)
+            .await?;
         Ok(())
-    }
-
-    /// 逐行预览采购责任解析结果。
-    ///
-    /// # 参数
-    /// * `request` - 行键、SKU 与服务区域
-    ///
-    /// # 返回
-    /// 返回与请求顺序一致的逐行成功或失败诊断。
-    ///
-    /// # 错误
-    /// 请求行键重复时整体返回错误；单行业务失败写入对应结果。
-    pub async fn resolve_preview(
-        &self,
-        request: ProcurementResponsibilityResolveRequest,
-    ) -> Result<ProcurementResponsibilityResolveView> {
-        let inputs = request
-            .lines
-            .into_iter()
-            .map(|line| ResolutionInput::new(line.line_key, line.sku_id))
-            .collect::<erp_core::Result<Vec<_>>>()
-            .map_err(Error::Logic)?;
-        ProcurementResponsibilityResolutionBatch::new(&inputs).map_err(Error::Logic)?;
-        // 正常预览整批读取一次轮转位置，保证同单默认行展示同一人；失败时保留逐行诊断。
-        if let Ok(views) = self.preview_batch(&inputs, request.purpose).await {
-            return Ok(ProcurementResponsibilityResolveView {
-                lines: views.into_iter().map(success_preview).collect(),
-            });
-        }
-
-        let mut lines = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            let line_key = input.line_key.clone();
-            let result = self.preview_batch(std::slice::from_ref(&input), request.purpose).await;
-            lines.push(match result {
-                Ok(views) => {
-                    let resolution = views.into_iter().next().expect("单行解析必须返回单行");
-                    success_preview(resolution)
-                },
-                Err(error) => failed_preview(line_key, error),
-            });
-        }
-        Ok(ProcurementResponsibilityResolveView { lines })
     }
 
     /// 在事务外预检和原授权提交事务内使用相同目录事实端口校验引用。
@@ -246,33 +189,5 @@ impl ProcurementResponsibilityProcess {
         Ok(ProcurementResponsibilityService::new(self.db.clone())
             .validate_selector_reference(data, &ResponsibilityFactsAdapter { db: self.db.clone() }, executor)
             .await?)
-    }
-}
-
-/// 将成功解析转换为逐行预览视图。
-fn success_preview(
-    resolution: erp_procurement::dto::procurement_responsibility::ProcurementResponsibilityResolutionView,
-) -> ProcurementResponsibilityResolveLineView {
-    ProcurementResponsibilityResolveLineView {
-        line_key: resolution.line_key,
-        resolved: true,
-        owner_user_id: Some(resolution.owner_user_id),
-        owner_name: Some(resolution.owner_name),
-        rule_id: Some(resolution.rule_id),
-        rule_type: Some(resolution.rule_type),
-        error: None,
-    }
-}
-
-/// 将单行解析错误转换为失败预览。
-fn failed_preview(line_key: String, error: Error) -> ProcurementResponsibilityResolveLineView {
-    ProcurementResponsibilityResolveLineView {
-        line_key,
-        resolved: false,
-        owner_user_id: None,
-        owner_name: None,
-        rule_id: None,
-        rule_type: None,
-        error: Some(error.to_string()),
     }
 }

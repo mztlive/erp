@@ -1,6 +1,6 @@
 use application_core::AuditActor;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission};
-use persistence_core::NoTransaction;
+use erp_permissions::Permission;
+use persistence_core::ReadExecutor;
 
 use super::SupplierApiGovernanceProcess;
 use crate::{Error, Result};
@@ -16,12 +16,8 @@ impl SupplierApiGovernanceProcess {
     ///
     /// # 错误
     /// 无权时返回 `Forbidden`；权限码无法解析或鉴权读取失败时返回对应错误。
-    pub(super) async fn ensure_permission(&self, actor: &AuditActor, permission: &str) -> Result<()> {
-        let permission = Permission::parse(permission)?;
-        if !AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
-            .has_permission(actor, &permission, &mut NoTransaction)
-            .await?
-        {
+    pub(super) async fn ensure_permission(&self, actor: &AuditActor, permission: &Permission) -> Result<()> {
+        if !self.authorization.has_permission(actor, permission, &mut ReadExecutor::default()).await? {
             return Err(Error::Forbidden("当前角色不能执行该连接治理动作".to_string()));
         }
         Ok(())

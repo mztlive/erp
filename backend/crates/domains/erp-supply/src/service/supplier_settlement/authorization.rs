@@ -2,11 +2,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use erp_identity::entity::authorization::{AccessContext, FactKind, FactValue, ObjectFacts, ReadAccess};
-use erp_identity::{
-    AccessFactsPort, AccessMode, AccessPolicy, AccessRegistration, AccessSubject, AuthorizationRegistry,
-    AuthorizationService, DataAccess, Permission, ResourceTargets, SharedRbacService,
-};
+use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts};
+use erp_identity::{AccessFactsPort, ResourceTargets};
+use erp_permissions::{Permission, internal, supplier_settlement};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -28,13 +26,14 @@ pub enum SettlementAction {
     Submit,
 }
 impl SettlementAction {
-    pub(super) fn permission(self) -> erp_identity::Result<Permission> {
-        Ok(Permission::parse(match self {
-            Self::Submit => "supplier_settlement_statement:submit",
-            Self::AppendEvidence | Self::Refresh | Self::Void | Self::ResolveDifference => {
-                "supplier_settlement_statement:update"
-            },
-        })?)
+    pub(super) fn permission(self) -> Permission {
+        match self {
+            Self::Submit => supplier_settlement::STATEMENT_SUBMIT_REVIEW,
+            Self::AppendEvidence => supplier_settlement::STATEMENT_REFRESH,
+            Self::Refresh => internal::SETTLEMENT_REFRESH_PREPARED,
+            Self::Void => internal::SETTLEMENT_VOID_PREPARED,
+            Self::ResolveDifference => internal::SETTLEMENT_RESOLVE_DIFFERENCE,
+        }
     }
 }
 
@@ -53,31 +52,8 @@ pub struct SettlementActionAccess {
     pub submit: bool,
 }
 
-pub(super) fn service(
-    db: &Database,
-    rbac: SharedRbacService,
-    action: SettlementAction,
-) -> erp_identity::Result<AuthorizationService> {
-    let permission = action.permission()?;
-    let (facts, responsibility) = match action {
-        SettlementAction::AppendEvidence => (Default::default(), None),
-        SettlementAction::ResolveDifference => ([FactKind::Assignee].into(), Some(AccessPolicy::Assigned)),
-        _ => ([FactKind::Owner].into(), Some(AccessPolicy::Owned)),
-    };
-    let scope = AccessPolicy::Scope { permission: permission.clone(), read: ReadAccess::default() };
-    let policy = match responsibility {
-        Some(responsibility) => AccessPolicy::All(vec![scope, responsibility]),
-        None => scope,
-    };
-    let registry = AuthorizationRegistry::new(vec![AccessRegistration {
-        permission: permission.clone(),
-        required_permissions: vec![],
-        access: AccessMode::Object {
-            data: DataAccess { subject: AccessSubject::Direct, required_facts: facts, policy },
-            facts: Arc::new(SettlementFacts(db.clone())),
-        },
-    }])?;
-    Ok(AuthorizationService::new(db.clone(), rbac, registry))
+pub(crate) fn facts(db: Database) -> Arc<dyn AccessFactsPort> {
+    Arc::new(SettlementFacts(db))
 }
 
 struct SettlementFacts(Database);
@@ -106,7 +82,10 @@ fn statement_fact(statement: SupplierSettlementStatement) -> ObjectFacts {
         resource: "supplier_settlement_statement".into(),
         id: statement.base.id.clone(),
         version: statement.base.version.to_string(),
-        owner_id: FactValue::Known(Some(statement.prepared_by.clone())),
+        owner_id: FactValue::Known(crate::authorization::optional_identity(&statement.prepared_by)),
+        org_unit_id: FactValue::Known(crate::authorization::optional_identity(
+            &statement.business_org_unit_id,
+        )),
         assignee_id: FactValue::Known(Some(statement.difference_handler().into())),
         ..Default::default()
     }
@@ -162,7 +141,16 @@ mod tests {
         assert_eq!(facts.id, "statement");
         assert_eq!(facts.version, "9");
         assert_eq!(facts.owner_id, fallback.owner_id);
+        assert_eq!(facts.org_unit_id, FactValue::Known(Some("org".into())));
         assert_eq!(facts.assignee_id, FactValue::Known(Some("handler".into())));
+    }
+
+    /// 旧结算无业务组织时显式无组织，不将供应商或创建人填入内部范围。
+    #[test]
+    fn empty_statement_organization_remains_known_absent() {
+        let mut statement = statement();
+        statement.business_org_unit_id.clear();
+        assert_eq!(statement_fact(statement).org_unit_id, FactValue::Known(None));
     }
 
     #[test]

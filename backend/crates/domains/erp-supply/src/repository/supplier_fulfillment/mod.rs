@@ -24,12 +24,11 @@ use erp_core::ids::{
     SupplierOrderActionId, SupplierRefundFactId,
 };
 use erp_core::money::Amount;
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -359,20 +358,7 @@ async fn aggregate_rows<T>(
 where
     T: serde::de::DeserializeOwned + Send + Sync,
 {
-    match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<T>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect::<Vec<_>>()
-                .await
-        },
-        None => collection.aggregate(pipeline).with_type::<T>().await?.try_collect::<Vec<_>>().await,
-    }
-    .map_err(persistence_core::Error::from)
+    aggregate::rows(collection, pipeline, executor).await
 }
 
 /// 执行订单金额合计管道并返回合计金额。

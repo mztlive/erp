@@ -3,7 +3,7 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result, insert_literal_regex_filter};
+use persistence_core::{Executor, Result, insert_literal_regex_filter, mongo_ops};
 
 use crate::repository::{PayableExt, ReceivableExt};
 
@@ -112,11 +112,11 @@ impl<'a> FinanceKeywordRepository<'a> {
     ) -> Result<Vec<String>> {
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
         let collection = self.db.collection::<Document>(collection);
-        let mut query = collection.distinct(field, filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|value| value.as_str().map(str::to_owned)).collect())
+        Ok(mongo_ops::distinct(&collection, field, filter, executor)
+            .await?
+            .into_iter()
+            .filter_map(|value| value.as_str().map(str::to_owned))
+            .collect())
     }
 
     /// 空关联身份直接短路；不得去掉空集合条件扩大范围。

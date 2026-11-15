@@ -26,6 +26,20 @@ impl PurchaseFacts {
         Self { db }
     }
 
+    /// 构造即将持久化采购单的责任候选。
+    /// # 参数
+    /// order 为创建用例已校验的拟持久化采购责任。
+    /// # 返回
+    /// 固定采购资源、无记录身份版本且不携带来源对象的候选事实。
+    /// # 错误
+    /// 不执行 I/O；输入合法性由创建用例保证。
+    pub fn candidate(order: &PurchaseOrder) -> ObjectFacts {
+        let mut candidate = Self::object(order, "purchase_order");
+        candidate.id.clear();
+        candidate.version.clear();
+        candidate
+    }
+
     /// 将原执行器读取的真实采购单转换为统一授权对象事实。
     /// # 参数
     /// order 为当前采购事实，resource 为服务端固定的根或来源资源。
@@ -101,6 +115,19 @@ mod tests {
             |code| Ok(PaymentTermFact::new(code)),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn creation_candidate_keeps_actual_responsibility_without_persisted_identity() {
+        let order = order();
+        let candidate = PurchaseFacts::candidate(&order);
+        assert_eq!(candidate.resource, "purchase_order");
+        assert!(candidate.id.is_empty());
+        assert!(candidate.version.is_empty());
+        assert!(candidate.relations.is_empty());
+        assert_eq!(candidate.owner_id, FactValue::Known(Some("buyer".into())));
+        assert_eq!(candidate.org_unit_id, FactValue::Known(Some("procurement-org".into())));
+        assert_eq!(candidate.warehouse_id, FactValue::Known(Some("warehouse".into())));
     }
 
     #[test]

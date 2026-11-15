@@ -4,9 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::ProductId;
-use futures_util::TryStreamExt;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::{Deserialize, Serialize};
 
 use super::CatalogRepository;
@@ -157,27 +156,8 @@ async fn aggregate_listing_summaries(
     executor: &mut dyn Executor,
 ) -> Result<Vec<ProductListingSummary>> {
     let pipeline = listing_summary_pipeline(product_ids);
-    match executor.session() {
-        Some(session) => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<ProductListingSummary>()
-                .session(&mut *session)
-                .await?
-                .stream(session)
-                .try_collect::<Vec<_>>()
-                .await
-        },
-        None => {
-            collection
-                .aggregate(pipeline)
-                .with_type::<ProductListingSummary>()
-                .await?
-                .try_collect::<Vec<_>>()
-                .await
-        },
-    }
-    .map_err(persistence_core::Error::from)
+    let collection = collection.clone_with_type::<ProductListingSummary>();
+    aggregate::rows(&collection, pipeline, executor).await
 }
 
 /// 按输入首次出现顺序去重商品 ID。

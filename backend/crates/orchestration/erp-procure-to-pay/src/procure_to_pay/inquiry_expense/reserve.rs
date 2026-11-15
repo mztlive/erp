@@ -90,20 +90,10 @@ mod tests {
         InquiryFeedbackSnapshot, InquiryRequirementData, InquiryStatus,
     };
     use erp_supply::inquiry::{InquiryFeeBasis, InquiryFeeBasisData};
-    use mongodb::ClientSession;
+    use persistence_core::ReadExecutor as TestExecutor;
 
     use super::*;
     use crate::Error;
-
-    struct TestExecutor {
-        identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut ClientSession> {
-            assert_eq!(self.identity, 42);
-            None
-        }
-    }
 
     #[derive(Debug, PartialEq, Eq)]
     enum Step {
@@ -314,7 +304,7 @@ mod tests {
     #[tokio::test]
     async fn reuses_saved_inquiries_but_keeps_each_cas_save_and_single_basis_read() {
         let persistence = RecordedPersistence::new(&["first", "second"], true);
-        let mut executor = TestExecutor { identity: 42 };
+        let mut executor = TestExecutor::default();
         let expected_executor = &mut executor as *mut TestExecutor as usize;
         reserve_lines(
             &persistence,
@@ -355,7 +345,7 @@ mod tests {
             &order(),
             &[line("a", "first", "60"), line("b", "first", "60"), line("c", "later", "1")],
             "buyer",
-            &mut TestExecutor { identity: 42 },
+            &mut TestExecutor::default(),
         )
         .await;
         assert!(
@@ -377,7 +367,7 @@ mod tests {
             &order(),
             &[line("a", "first", "30"), line("b", "later", "20")],
             "buyer",
-            &mut TestExecutor { identity: 42 },
+            &mut TestExecutor::default(),
         )
         .await;
         assert!(matches!(result, Err(Error::ConflictError(message)) if message == "保存失败"));
@@ -395,7 +385,7 @@ mod tests {
             &order(),
             &[line("a", "first", "30")],
             "buyer",
-            &mut TestExecutor { identity: 42 },
+            &mut TestExecutor::default(),
         )
         .await
         .unwrap();
@@ -412,15 +402,9 @@ mod tests {
     async fn duplicate_source_replay_keeps_per_line_versions_without_double_reservation() {
         let persistence = RecordedPersistence::new(&["first"], true);
         let line = line("a", "first", "30");
-        reserve_lines(
-            &persistence,
-            &order(),
-            &[line.clone(), line],
-            "buyer",
-            &mut TestExecutor { identity: 42 },
-        )
-        .await
-        .unwrap();
+        reserve_lines(&persistence, &order(), &[line.clone(), line], "buyer", &mut TestExecutor::default())
+            .await
+            .unwrap();
         let store = persistence.0.lock().unwrap();
         assert_eq!(store.inquiries["first"].fee_ledger.len(), 1);
         assert_eq!(store.inquiries["first"].base.version, 3);

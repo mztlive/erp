@@ -3,6 +3,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::run_audited;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::returns_center::dto::{
     CustomerRefundView, PaymentReversalView, ReceiptReversalView, SupplierRefundView,
 };
@@ -39,7 +41,13 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
         self.update_financial_draft(DocumentType::CustomerRefund, id, req, actor).await?;
-        Ok(self.reads().customer_refund_detail(id).await?)
+        self.customer_refund_result(
+            id,
+            actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+            AccessTarget::record(id)?,
+        )
+        .await
     }
 
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
@@ -61,7 +69,13 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<SupplierRefundView> {
         self.update_financial_draft(DocumentType::SupplierRefund, id, req, actor).await?;
-        Ok(self.reads().supplier_refund_detail(id).await?)
+        self.supplier_refund_result(
+            id,
+            actor,
+            &returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
+            AccessTarget::record(id)?,
+        )
+        .await
     }
 
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
@@ -83,7 +97,13 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<ReceiptReversalView> {
         self.update_financial_draft(DocumentType::ReceiptReversal, id, req, actor).await?;
-        Ok(self.reads().receipt_reversal_detail(id).await?)
+        self.receipt_reversal_result(
+            id,
+            actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+            AccessTarget::record(id)?,
+        )
+        .await
     }
 
     /// 保存原单的可编辑财务字段，并保留原单号、资金来源和岗位。
@@ -105,7 +125,13 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<PaymentReversalView> {
         self.update_financial_draft(DocumentType::PaymentReversal, id, req, actor).await?;
-        Ok(self.reads().payment_reversal_detail(id).await?)
+        self.payment_reversal_result(
+            id,
+            actor,
+            &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+            AccessTarget::record(id)?,
+        )
+        .await
     }
 
     /// 在同一事务重验当前资格，保存草稿并追加成功审计。

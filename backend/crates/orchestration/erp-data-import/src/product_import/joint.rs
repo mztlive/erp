@@ -11,11 +11,12 @@ use erp_catalog::{CatalogExt, ProductMediaInput};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductId, SupplierAccountId};
 use erp_file_assets::{CatalogPendingAttachments, PendingFileAssets};
+use erp_permissions::{catalog as catalog_permissions, supplier_offering as supplier_offering_permissions};
 use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use erp_supplier::repository::SupplierExt;
 use erp_supplier::repository::prelude::*;
 use erp_supplier::service::supplier::eligibility::ensure_offering_capability_qualified;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use super::ProductImportProcess;
 use super::identity::{NormalizedImportRow, normalize_import_row};
@@ -50,7 +51,7 @@ impl ProductImportProcess {
         cache: &mut ImportDictionaryCache,
     ) -> Result<RowImportOutcome> {
         let input = SupplyImportInput::from_cells(cells, BusinessDate::today())?;
-        self.import_supplier(&input, actor, &mut NoTransaction).await?;
+        self.import_supplier(&input, actor, &mut ReadExecutor::default()).await?;
         let row = normalize_import_row(row_number, cells)?;
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let prepared = self.prepare_supply_product(&row, media, actor, cache).await?;
@@ -80,7 +81,11 @@ impl ProductImportProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SupplierAccountId> {
-        self.services.offering_access.clone().resolve(actor, "create", executor).await?;
+        self.services
+            .offering_access
+            .clone()
+            .ensure_writable(actor, &supplier_offering_permissions::CREATE, executor)
+            .await?;
         let supplier =
             self.db.supplier_accounts().find_by_number(&input.supplier_no, executor).await?.ok_or_else(
                 || {
@@ -111,7 +116,7 @@ impl ProductImportProcess {
         cache: &mut ImportDictionaryCache,
     ) -> Result<PreparedProduct> {
         if let Some(product) =
-            self.db.products().find_by_product_no(&row.product_no, &mut NoTransaction).await?
+            self.db.products().find_by_product_no(&row.product_no, &mut ReadExecutor::default()).await?
         {
             return self.prepare_existing_supply_product(product, row, media, actor).await;
         }
@@ -148,14 +153,19 @@ impl ProductImportProcess {
         self.services
             .catalog_access
             .clone()
-            .require_product(actor, "detail", &product.base.id, &mut NoTransaction)
+            .require_product(
+                actor,
+                &catalog_permissions::PRODUCT_PRODUCT_DETAIL,
+                &product.base.id,
+                &mut ReadExecutor::default(),
+            )
             .await?;
         let skus = self
             .db
             .skus()
-            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut NoTransaction)
+            .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut ReadExecutor::default())
             .await?;
-        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut NoTransaction).await?;
+        let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
         let same = row.matching_sku(&skus, &revisions)?.is_some();
         if same && (media.pending.is_empty() || self.product_has_images(&product).await?) {
             let pending = CatalogPendingAttachments::from_support(

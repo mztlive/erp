@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
+use erp_permissions::catalog as catalog_permissions;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
@@ -225,7 +226,7 @@ impl CatalogService {
             pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
-        let product = self.access().require_product(actor, "update", id, &mut NoTransaction).await?;
+        let product = self.access().product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id).await?;
         product.ensure_has_responsibility()?;
         ensure_version(product.base.version, req.version)?;
         self.build_spec_edit_plan(product, req, actor, pending_assets.as_ref()).await
@@ -419,7 +420,9 @@ impl CatalogService {
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor = actor.clone();
-        access.require(&actor, "update", &product.base.id, executor).await?;
+        access
+            .require(&actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &product.base.id, executor)
+            .await?;
         pending_assets.persist(&db, executor).await?;
         db.products().update(&mut product, executor).await?;
         db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;

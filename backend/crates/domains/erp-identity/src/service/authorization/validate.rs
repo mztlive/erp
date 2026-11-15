@@ -36,17 +36,36 @@ impl AuthorizationService {
             .get(&proof.context.permission)
             .filter(|_| proof.context.model.is_some())
             .map(|mapping| mapping.model());
-        let current = self
-            .resolve(
+        let current = if let Some(source) = &proof.approval_source {
+            let qualified = self
+                .qualify(&proof.context.actor, &proof.context.permission, executor)
+                .await
+                .map_err(revalidation_error)?;
+            self.resolve_approval_source(
+                &proof.context,
+                &source.source,
+                &source.required,
+                &qualified,
+                executor,
+            )
+            .await
+        } else {
+            self.resolve_target(
                 &proof.context.actor,
                 &proof.context.permission,
                 model,
                 Some(proof.context.as_of),
+                proof.task,
                 executor,
             )
             .await
-            .map_err(revalidation_error)?;
-        if current.version != proof.version || current.rule != proof.rule {
+        }
+        .map_err(revalidation_error)?;
+        if current.version != proof.version
+            || current.rule != proof.rule
+            || current.whole_rule != proof.whole_rule
+            || current.management_rule != proof.management_rule
+        {
             return Err(changed());
         }
         proof.ensure_current(executor)

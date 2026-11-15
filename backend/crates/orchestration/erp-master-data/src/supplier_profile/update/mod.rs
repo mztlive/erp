@@ -9,6 +9,7 @@ use erp_core::ids::{
 };
 use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyExt, PartyRevision};
+use erp_permissions::supplier;
 use erp_supplier::{
     SaveSupplierProfileRequest, SupplierAccount, SupplierCommercialProfileRevision, SupplierExt,
     SupplierProfileMutationView, SupplierProfileUpdateViolation, SupplierRatingRevision,
@@ -101,7 +102,10 @@ impl SupplierProfileProcess {
         let transaction_result = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.access.clone().require_with(&actor, "update", &scoped_id, executor).await?;
+                    rbac.access
+                        .clone()
+                        .require_with(&actor, &supplier::HANDOVER, &scoped_id, executor)
+                        .await?;
                     prepared.persist(&db, executor).await
                 })
             })

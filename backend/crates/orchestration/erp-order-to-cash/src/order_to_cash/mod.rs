@@ -21,7 +21,7 @@ mod procurement;
 mod start_approval;
 
 pub use adapter::sales_order_object_readable;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_workflow::entity::document_registry::DocumentType;
@@ -36,14 +36,14 @@ use crate::{Error, Result};
 pub struct SalesOrderCommandProcess {
     services: Arc<SalesServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 impl SalesOrderCommandProcess {
     /// 用共享授权源构造销售命令流程。
     ///
     /// # 参数
     /// * `db` - 业务数据库。
-    /// * `rbac` - 共享授权源。
+    /// * `authorization` - 共享授权源。
     /// * `services` - 应用已装配的领域服务、范围及审批能力。
     ///
     /// # 返回
@@ -51,8 +51,8 @@ impl SalesOrderCommandProcess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
-        Self { db, services, rbac }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>, services: Arc<SalesServices>) -> Self {
+        Self { db, services, authorization }
     }
     fn sales(&self) -> SalesOrderService {
         SalesOrderService::new(self.db.clone())
@@ -60,7 +60,7 @@ impl SalesOrderCommandProcess {
     fn read_model(&self) -> erp_read_models::sales_center::order::SalesOrderReadService {
         erp_read_models::sales_center::order::SalesOrderReadService::with_rbac(
             self.db.clone(),
-            self.rbac.clone(),
+            self.authorization.clone(),
         )
     }
     fn catalog(&self) -> adapters::catalog::CatalogQualificationAdapter {

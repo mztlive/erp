@@ -1,7 +1,10 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
+use erp_core::AccountKind;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_settlement;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{DifferenceDecisionReceipt, SupplyCommandResult};
 use erp_supply::entity::supplier_settlement::{
@@ -15,7 +18,7 @@ use erp_supply::service::supplier_settlement::difference::{
 use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::dto::{SettlementDifferenceDecisionRequest, SettlementDifferenceDecisionResult};
@@ -44,6 +47,74 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: SettlementDifferenceDecisionRequest,
         actor: &AuditActor,
     ) -> Result<SettlementDifferenceDecisionResult> {
+        let process = self.clone();
+        let command = req.clone();
+        let writer = actor.clone();
+        let id = id.to_owned();
+        let write_id = id.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process.decide_difference_apply(&write_id, command, &writer, executor).await
+                })
+            })
+            .await;
+        let Err(error) = result else { return result };
+        let process = self.clone();
+        let actor = actor.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { process.recover_difference_decision(&id, &req, &actor, executor).await },
+                )
+            })
+            .await;
+        recover_command(error, recovered)
+    }
+
+    /// 在独立读取事务内重新授权并恢复已提交的差异决定回执。
+    async fn recover_difference_decision(
+        &self,
+        id: &str,
+        req: &SettlementDifferenceDecisionRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SettlementDifferenceDecisionResult>> {
+        self.authorization
+            .require(actor, &supplier_settlement::DIFFERENCE_DECIDE, AccessTarget::Operation, executor)
+            .await?;
+        let fingerprint = difference_decision_fingerprint(req, &parse_difference_conclusion(req)?);
+        let audit_id =
+            command_audit_id(actor.id(), "supplier_settlement.difference_decision", id, &req.idempotency_key);
+        self.data_scope
+            .require_statement(actor, &supplier_settlement::STATEMENT_REFRESH, &req.statement_id, executor)
+            .await?;
+        self.replay_difference_decision(
+            &audit_id,
+            &fingerprint,
+            id,
+            (actor.id(), &req.idempotency_key),
+            executor,
+        )
+        .await
+    }
+
+    /// 在入口事务内完成授权、准备、重放与持久化。
+    async fn decide_difference_apply(
+        &self,
+        id: &str,
+        req: SettlementDifferenceDecisionRequest,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementDifferenceDecisionResult> {
+        self.authorization
+            .require(actor, &supplier_settlement::DIFFERENCE_DECIDE, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
         let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.difference_id, "结算差异")?;
@@ -51,34 +122,22 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let fingerprint = difference_decision_fingerprint(&req, &conclusion);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.difference_decision", id, &req.idempotency_key);
-        if let Some(result) =
-            self.replay_difference_decision(&audit_id, &fingerprint, id, (actor.id(), &replay_key)).await?
+        if let Some(result) = self
+            .replay_difference_decision(&audit_id, &fingerprint, id, (actor.id(), &replay_key), executor)
+            .await?
         {
             return Ok(result);
         }
         self.domain()
             .access()
-            .require_statement(actor, "update", &req.statement_id, &mut NoTransaction)
+            .require_statement(actor, &supplier_settlement::STATEMENT_REFRESH, &req.statement_id, executor)
             .await?;
-        let (statement, difference) = self
-            .domain()
-            .prepare_difference_decision(id, &req, &conclusion, actor, &mut NoTransaction)
-            .await?;
+        let (statement, difference) =
+            self.domain().prepare_difference_decision(id, &req, &conclusion, actor, executor).await?;
         let operation_id = req.operation_id.clone();
         let input =
             DifferenceCommit::new(self, req, actor, (statement, difference), (&audit_id, &fingerprint));
-        let transaction_result =
-            self.db.client().with_transaction(move |executor| Box::pin(input.persist(executor))).await;
-        let (statement, difference) = match transaction_result {
-            Ok(result) => result,
-            Err(error) => {
-                return recover_command(
-                    error,
-                    self.replay_difference_decision(&audit_id, &fingerprint, id, (actor.id(), &replay_key))
-                        .await,
-                );
-            },
-        };
+        let (statement, difference) = input.persist(executor).await?;
         Ok(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,
             message: "结算差异正式结论已登记".to_string(),
@@ -96,10 +155,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         expected_fingerprint: &str,
         difference_id: &str,
         identity: (&str, &str),
+
+        executor: &mut dyn Executor,
     ) -> Result<Option<SettlementDifferenceDecisionResult>> {
-        let Some(stored) =
-            self.db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await?
-        else {
+        let Some(stored) = self.db.supply_command_receipts().find_command(audit_id, executor).await? else {
             return Ok(None);
         };
         stored.verify_identity(
@@ -116,13 +175,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let difference = self
             .db
             .supplier_settlement_differences()
-            .find_by_id(difference_id, &mut NoTransaction)
+            .find_by_id(difference_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("差异决定收据引用的差异不存在".to_string()))?;
         let item = self
             .db
             .supplier_settlement_items()
-            .find_by_id(&difference.statement_item_id, &mut NoTransaction)
+            .find_by_id(&difference.statement_item_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("差异决定收据引用的结算明细不存在".to_string()))?;
         ensure_difference_replay(
@@ -131,7 +190,15 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             difference.base.version,
             difference.is_pending(),
         )?;
-        let statement = self.domain().load_statement(&receipt.statement_id, &mut NoTransaction).await?;
+        self.data_scope
+            .require_statement(
+                &AuditActor::new(identity.0.into(), identity.0.into(), AccountKind::Admin),
+                &supplier_settlement::STATEMENT_REFRESH,
+                &receipt.statement_id,
+                executor,
+            )
+            .await?;
+        let statement = self.domain().load_statement(&receipt.statement_id, executor).await?;
         ensure_difference_statement_version(&receipt, statement.base.version)?;
         Ok(Some(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,

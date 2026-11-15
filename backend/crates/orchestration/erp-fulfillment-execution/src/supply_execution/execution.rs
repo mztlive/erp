@@ -9,21 +9,20 @@ use crate::Result;
 ///
 /// # 参数
 /// * `intent` - 必须先成功的原意图。
-/// * `next` - 意图成功后才执行的供应商步骤。
+/// * `next` - 接收已提交意图，成功后才执行的供应商步骤。
 ///
 /// # 返回
 /// 返回 `next` 的成功结果。
 ///
 /// # 错误
 /// `intent` 失败时返回该错误且不调用 `next`。`next` 失败时返回其错误。
-pub(super) async fn after_intent<I, N, F, T>(intent: I, next: N) -> Result<T>
+pub(super) async fn after_intent<I, N, F, U, T>(intent: I, next: N) -> Result<T>
 where
-    I: Future<Output = Result<()>>,
-    N: FnOnce() -> F,
+    I: Future<Output = Result<U>>,
+    N: FnOnce(U) -> F,
     F: Future<Output = Result<T>>,
 {
-    intent.await?;
-    next().await
+    next(intent.await?).await
 }
 
 /// 已冻结的供应商结果直接复用；外呼及持久化只在不存在结果时执行。
@@ -84,9 +83,10 @@ mod tests {
         let value = after_intent(
             async move {
                 intent_steps.lock().unwrap().push("intent_committed");
-                Ok(())
+                Ok(17)
             },
-            move || async move {
+            move |intent| async move {
+                assert_eq!(intent, 17);
                 next_steps.lock().unwrap().extend(["gateway", "result"]);
                 Ok(7)
             },
@@ -100,15 +100,19 @@ mod tests {
     async fn failed_intent_never_dispatches_and_result_error_is_preserved() {
         let called = Arc::new(Mutex::new(false));
         let external = called.clone();
-        let result = after_intent(async { Err(Error::ConflictError("intent".into())) }, move || async move {
-            *external.lock().unwrap() = true;
-            Ok(())
-        })
+        let result = after_intent(
+            async { Err::<(), _>(Error::ConflictError("intent".into())) },
+            move |_| async move {
+                *external.lock().unwrap() = true;
+                Ok(())
+            },
+        )
         .await;
         assert!(matches!(result,Err(Error::ConflictError(message)) if message=="intent"));
         assert!(!*called.lock().unwrap());
         let result =
-            after_intent(async { Ok(()) }, || async { Err::<(), _>(Error::NotFound("result".into())) }).await;
+            after_intent(async { Ok(()) }, |_| async { Err::<(), _>(Error::NotFound("result".into())) })
+                .await;
         assert!(matches!(result,Err(Error::NotFound(message)) if message=="result"));
     }
 

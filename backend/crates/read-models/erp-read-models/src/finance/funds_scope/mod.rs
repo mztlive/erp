@@ -27,6 +27,7 @@ pub use authorization::{
     FundsScopedResult, ensure_page, ensure_version, matches_linked_condition, scope_version,
     summarize_matched_shares, whole_amount,
 };
+pub(crate) use repository::source_access::{SalesSourceFact, SourceQuery};
 pub(crate) use repository::whole_access::WholeAccess;
 pub use rows::{
     FundsCandidate, FundsPersonShare, FundsScopedPage, FundsSummaryView, ScopedCustomerReceiptRow,
@@ -36,3 +37,5 @@ pub use rows::{
 
 mod allocation_source;
 pub use allocation_source::{AllocationSource, AllocationSourceKind};
+pub use repository::management::FinancialFacts;
+pub use repository::mapping::FundsMapping;

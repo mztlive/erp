@@ -37,12 +37,13 @@ mod work_item;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_permissions::Permission;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
 use erp_supply::{FulfillmentExceptionHandlerPort, FulfillmentOrderAccess};
-pub use identity::{SupplierFulfillmentIdentity, SupplierFulfillmentIdentityFactory};
+pub use identity::SupplierFulfillmentIdentity;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -51,8 +52,9 @@ use crate::Result;
 ///
 /// 提供供应商子订单的下单、查询、取消/退款动作提交与外部结果登记编排。
 /// 本类型承接跨域写入与外部调用，纯列表由本域服务提供。
+#[derive(Clone)]
 pub struct SupplierFulfillmentProcess {
-    identity: SupplierFulfillmentIdentityFactory,
+    identity: SupplierFulfillmentIdentity,
     db: Database,
     registry: Option<Arc<dyn SupplierReferenceRegistry>>,
     gateway: Arc<dyn SupplierGateway>,
@@ -79,7 +81,7 @@ impl SupplierFulfillmentProcess {
     /// * `gateway` - 供应商动作派发网关（真实 Connector 接入点，只在事务外调用）
     /// * `data_scope` - 履约订单授权能力
     /// * `handlers` - 当前开放 W26 处理人 Port
-    /// * `identity` - 每次核验创建独立身份及同源任务、范围能力的工厂。
+    /// * `identity` - 固定共享的授权、任务和范围能力。
     ///
     /// # 返回
     /// 返回流程实例。
@@ -92,7 +94,7 @@ impl SupplierFulfillmentProcess {
         gateway: Arc<dyn SupplierGateway>,
         data_scope: FulfillmentOrderAccess,
         handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
-        identity: SupplierFulfillmentIdentityFactory,
+        identity: SupplierFulfillmentIdentity,
     ) -> Self {
         Self { identity, db, gateway, data_scope, handlers, registry: None }
     }
@@ -119,16 +121,13 @@ impl SupplierFulfillmentProcess {
             None => service,
         }
     }
-    async fn load_order(&self, id: &str) -> Result<SupplierFulfillmentOrder> {
-        Ok(self.domain().load_order(id).await?)
-    }
 
     /// 按动作重验普通订单范围；任务专用入口单独证明任务、责任与版本。
     ///
     /// # 参数
     /// * `id` - 供应商履约订单 ID。
     /// * `actor` - 当前操作人。
-    /// * `action` - 本次范围动作。
+    /// * `permission` - 内置操作权限。
     /// * `executor` - 调用方执行器。
     ///
     /// # 返回
@@ -140,9 +139,9 @@ impl SupplierFulfillmentProcess {
         &self,
         id: &str,
         actor: &AuditActor,
-        action: &str,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrder> {
-        Ok(self.domain().access().require_order(actor, action, id, executor).await?)
+        Ok(self.domain().access().require_order(actor, permission, id, executor).await?)
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
@@ -9,8 +10,7 @@ use erp_fulfillment::entity::fulfillment::{
 };
 use erp_fulfillment::repository::{DeliveryRepositoryExt, FulfillmentExt};
 use erp_fulfillment_execution::fulfillment_execution::post_observed_supplier_delivery;
-use erp_fulfillment_execution::fulfillment_execution::task::FulfillmentIdentityFactory;
-use erp_identity::AccessControlExt;
+use erp_identity::{AccessControlExt, AuthorizationService};
 use erp_procurement::entity::purchase_order::{FulfillmentResponsibility, PurchaseOrder};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_supply::api_order::ApiOrderExt;
@@ -67,7 +67,7 @@ impl SupplierOrderTrackingProcess {
 
 struct MongoObservationApplication<'a> {
     db: &'a Database,
-    task_identity: &'a FulfillmentIdentityFactory,
+    task_identity: &'a Arc<AuthorizationService>,
 }
 
 #[async_trait]
@@ -99,7 +99,7 @@ impl ObservationApplication for MongoObservationApplication<'_> {
 
 async fn apply_erp_deliveries(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     tracking: &mut OrderTracking,
     observation: &OrderObservation,
     executor: &mut dyn Executor,
@@ -137,7 +137,7 @@ async fn apply_erp_deliveries(
 
 async fn apply_complete_deliveries(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     tracking: &OrderTracking,
     observation: &OrderObservation,
     executor: &mut dyn Executor,
@@ -221,7 +221,7 @@ async fn coverage(
 
 async fn apply_one_delivery(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     tracking: &OrderTracking,
     observation: &OrderObservation,
     delivery: &mut Delivery,

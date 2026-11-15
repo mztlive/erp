@@ -1,3 +1,5 @@
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_read_models::sales_money_progress::SalesMoneyProgressReader;
 use erp_sales::service::sales_order::progress::update_sales_order_money_progress;
 
@@ -46,9 +48,8 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     CustomerRefundStartPersistInput, ReversalSubmitReplayInput, ReverseStartInput,
-    build_customer_refund_start_input, ensure_return_start_replay_authorized, ensure_source_authorized,
-    ensure_submit_permission, load_start_graph, load_start_receipt, persist_customer_refund_start,
-    reversal_result_read_error,
+    build_customer_refund_start_input, ensure_return_start_replay_authorized, ensure_submit_permission,
+    load_start_graph, load_start_receipt, persist_customer_refund_start, reversal_result_read_error,
 };
 use crate::{Error, Result};
 
@@ -78,7 +79,13 @@ impl ReturnsProcess {
     ) -> Result<CustomerRefundView> {
         let refund = erp_returns::service::ReturnsService::prepare_customer_refund(req, actor.id())?;
         persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone()).await?;
-        self.reads().customer_refund_detail(&refund.base.id).await.map_err(crate::Error::from)
+        self.customer_refund_result(
+            &refund.base.id,
+            actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
+            AccessTarget::Operation,
+        )
+        .await
     }
 
     /// 提交客户退款并调用统一 `start_approval`。
@@ -113,7 +120,15 @@ impl ReturnsProcess {
             actor: actor.clone(),
         };
         if let Some(id) = self.replay_reversal_submit(&submission).await? {
-            return self.reads().customer_refund_detail(&id).await.map_err(reversal_result_read_error);
+            return self
+                .customer_refund_result(
+                    &id,
+                    actor,
+                    &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+                    AccessTarget::record(&id)?,
+                )
+                .await
+                .map_err(reversal_result_read_error);
         }
         let adapter = customer_refund_adapter()?;
         let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
@@ -154,44 +169,13 @@ impl ReturnsProcess {
         let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_customer_refund(id, &mut refund, &req, actor).await?;
-        self.reads().customer_refund_detail(id).await.map_err(crate::Error::from)
-    }
-
-    /// 最终通过过账（§8.3-3 事务不变量）。
-    ///
-    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
-    /// 按原回款（或其核销分配）反向写入 `REVERSE` 回款核销分配；按条件原子
-    /// 冲减子账已核销进度；写反向应收分录（减少）与分录抵销；退款单迁移为
-    /// 已过账。任一校验失败整体回滚，保留原事实。
-    ///
-    /// # 参数
-    /// * `id` - 退款单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后退款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 退款单或原回款不存在
-    /// * `ConflictError` - 非审批中
-    /// * `BusinessLogicError` - 累计退款超原回款、重复过账或超额冲减
-    pub async fn post_customer_refund(&self, id: &str, actor: &AuditActor) -> Result<CustomerRefundView> {
-        let db = self.db.clone();
-
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let actor_id = actor.id().to_string();
-        let refund_id = id.to_string();
-        let detail_id = refund_id.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    apply_customer_refund_final_post(&db, &refund_id, &actor_id, &actor_owned, executor).await
-                })
-            })
-            .await?;
-
-        self.reads().customer_refund_detail(&detail_id).await.map_err(crate::Error::from)
+        self.customer_refund_result(
+            id,
+            actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+        )
+        .await
     }
 }
 
@@ -339,6 +323,14 @@ async fn persist_created_customer_refund(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                rbac.identity
+                    .require(
+                        &actor,
+                        &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 persist_bound_customer_refund_document(&db, &rbac, document, &bind_command, &actor, executor)
                     .await?;
                 erp_returns::service::ReturnsService::new(db.clone())
@@ -497,15 +489,9 @@ fn customer_refund_source_fact(
 
 #[cfg(test)]
 mod posting_contract_tests {
+    use persistence_core::ReadExecutor as TestExecutor;
+
     use super::*;
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     struct RecordingSteps {
         executor: usize,
         calls: Vec<RefundPostingStep>,
@@ -524,7 +510,7 @@ mod posting_contract_tests {
     }
     #[tokio::test]
     async fn refund_finance_status_audit_keep_original_order_and_same_executor() {
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let mut steps = RecordingSteps {
             executor: &mut executor as *mut TestExecutor as usize,
             calls: vec![],
@@ -550,7 +536,7 @@ mod posting_contract_tests {
             RefundPostingStep::SalesProgress,
         ];
         for (index, step) in order.iter().enumerate() {
-            let mut executor = TestExecutor { _identity: 1 };
+            let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
                 executor: &mut executor as *mut TestExecutor as usize,
                 calls: vec![],

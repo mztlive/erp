@@ -3,7 +3,7 @@ use application_core::AuditActor;
 use erp_catalog::dto::{BrandImportFailures, BrandImportJobRequest, BrandImportResult};
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt, ItemStatus};
-use persistence_core::NoTransaction;
+use persistence_core::Transactional;
 
 use super::BrandImportProcess;
 use crate::{Error, Result};
@@ -21,21 +21,26 @@ impl BrandImportProcess {
     /// # 错误
     /// 任务不存在、不是原提交人或不是品牌导入、任务尚未结束、源数据不可读或不完整，或仓储失败时返回错误。
     pub async fn failures(&self, id: &str, actor: &AuditActor) -> Result<BrandImportFailures> {
-        self.job_access.require(id, actor, &mut NoTransaction).await?;
-        let job = self
-            .db
-            .background_jobs()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("导入任务不存在".into()))?;
+        let job = self.job_access.snapshot(id, actor).await?;
         ensure_download(&job)?;
         let source = self.source(&job).await?;
-        let items = self
-            .db
-            .background_job_items()
-            .list_entities_by_job(&BackgroundJobId::new(id), &mut NoTransaction)
-            .await?;
-        failure_rows(&source, items)
+        let db = self.db.clone();
+        let access = self.job_access.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let current = access.reload(&job, &actor, executor).await?;
+                    ensure_download(&current)?;
+                    let items = db
+                        .background_job_items()
+                        .list_entities_by_job(&BackgroundJobId::new(&current.base.id), executor)
+                        .await?;
+                    failure_rows(&source, items)
+                })
+            })
+            .await
     }
 }
 

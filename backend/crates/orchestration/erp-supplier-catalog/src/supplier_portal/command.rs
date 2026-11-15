@@ -12,6 +12,7 @@ use erp_audit::{
 };
 use erp_core::money::Quantity;
 use erp_identity::PortalActor;
+use erp_permissions::Permission;
 use erp_supply::entity::supplier_offering::AvailabilityStatus;
 use erp_supply::portal::{PortalAvailabilityUpdateResult, PortalOfferingService};
 use persistence_core::{Executor, Transactional};
@@ -121,7 +122,7 @@ impl SupplierPortalProcess {
     /// # 参数
     /// * `actor` - 内部操作人。
     /// * `supplier_id` - 命令作用域中的供应商。
-    /// * `action` - 命令动作。
+    /// * `action` - 审计动作、供应商来源权限及门户入口权限。
     /// * `key` - 幂等键。
     /// * `payload` - 纳入命令指纹的载荷。
     /// * `write` - 尚无回执时执行的业务写入。
@@ -135,7 +136,7 @@ impl SupplierPortalProcess {
         &self,
         actor: &AuditActor,
         supplier_id: &str,
-        action: &'static str,
+        action: (&'static str, Permission, Permission),
         key: &str,
         payload: &P,
         write: F,
@@ -147,6 +148,7 @@ impl SupplierPortalProcess {
             + Send
             + 'static,
     {
+        let (action, supplier_permission, portal_permission) = action;
         let command = scoped_command(actor.id(), supplier_id, action, key, payload)?;
         let this = self.clone();
         let actor = actor.clone();
@@ -156,8 +158,8 @@ impl SupplierPortalProcess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.internal_supplier(&actor, supplier_action(action), &supplier_id, executor).await?;
-                    this.internal_permission(&actor, action, executor).await?;
+                    this.internal_supplier(&actor, &supplier_permission, &supplier_id, executor).await?;
+                    this.internal_permission(&actor, &portal_permission, executor).await?;
                     let service = PortalOfferingService::new(this.db.clone());
                     if let Some(result) = service.command_result(&command, executor).await? {
                         return decode(result);
@@ -197,13 +199,6 @@ impl SupplierPortalProcess {
             .command_commit(command, supplier_id, &value, executor)
             .await?;
         Ok(())
-    }
-}
-
-fn supplier_action(action: &str) -> &'static str {
-    match action {
-        "supplier_portal.commercial_approve" => "update",
-        _ => "detail",
     }
 }
 
@@ -322,23 +317,6 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-
-    #[test]
-    fn supplier_profile_write_is_required_only_for_commercial_activation() {
-        assert_eq!(supplier_action("supplier_portal.commercial_approve"), "update");
-        for action in [
-            "supplier_portal.application_approve",
-            "supplier_portal.application_return",
-            "supplier_portal.new_product_approve",
-            "supplier_portal.new_product_return",
-            "supplier_portal.commercial_return",
-            "supplier_portal.account_create",
-            "supplier_portal.account_update",
-            "supplier_portal.quote_access_update",
-        ] {
-            assert_eq!(supplier_action(action), "detail");
-        }
-    }
 
     #[test]
     fn terminal_rejections_decode_to_the_original_error_before_normal_result_deserialization() {

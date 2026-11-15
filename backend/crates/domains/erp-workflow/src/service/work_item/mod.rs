@@ -5,8 +5,8 @@
 
 mod abandon_rework;
 mod authorization;
-pub use authorization::WorkItemAuthorization;
-use erp_identity::SharedRbacService;
+pub use authorization::{WorkItemAuthorization, authorization_facts, authorization_mapping};
+use erp_identity::{AuthorizationService, SharedRbacService};
 
 pub mod access;
 pub mod approval_rework;
@@ -19,6 +19,8 @@ pub use read::WorkItemReadService;
 mod reassign;
 mod reassign_apply;
 mod supplier_portal;
+#[cfg(test)]
+mod testing;
 mod write;
 
 use std::sync::Arc;
@@ -78,8 +80,15 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, auth: A) -> Self {
-        Self::with_ports(db, rbac, auth, Arc::new(FailClosedObjectFactPort), Arc::new(FailClosedAuditPort))
+    pub fn new(db: Database, rbac: SharedRbacService, service: Arc<AuthorizationService>, auth: A) -> Self {
+        Self::with_ports(
+            db,
+            rbac,
+            service,
+            auth,
+            Arc::new(FailClosedObjectFactPort),
+            Arc::new(FailClosedAuditPort),
+        )
     }
 
     /// 创建注入对象事实与审计端口的任务服务。
@@ -99,11 +108,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     pub fn with_ports(
         db: Database,
         rbac: SharedRbacService,
+        service: Arc<AuthorizationService>,
         auth: A,
         facts: Arc<dyn ObjectFactPort>,
         audit: Arc<dyn WorkflowAuditPort>,
     ) -> Self {
-        let authorization = WorkItemAuthorization::new(db.clone(), rbac.clone());
+        let authorization = WorkItemAuthorization::new(db.clone(), service);
         Self { db, auth, identity: rbac, authorization, facts, audit }
     }
 }
@@ -266,7 +276,6 @@ mod tests {
         let policy = WorkItemType::BusinessException.brief_relation("integration_error_task").unwrap();
 
         assert_eq!(policy.object_kind, ObjectKind::IntegrationErrorTask);
-        assert_eq!(policy.read_permission, "integration_error_task:detail");
     }
 
     #[test]

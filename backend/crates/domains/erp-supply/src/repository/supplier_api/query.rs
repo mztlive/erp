@@ -4,7 +4,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter, mongo_ops,
+    Executor, PageResult, Pagination, QueryFilter, Result, aggregate, insert_literal_regex_filter, mongo_ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +19,7 @@ use crate::repository::owned::{
     SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
     SupplierHealthCheckRunRepository,
 };
+use crate::{Error, Result as SupplyResult};
 
 /// 连接列表投影行（列表接口只取必要字段，禁止返回整文档；密钥引用
 /// `credential_reference` 属于敏感字段，不进入任何列表投影）。
@@ -158,7 +159,7 @@ pub trait SupplierApiConnectionRepositoryExt {
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
     ///
     /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
@@ -169,7 +170,7 @@ pub trait SupplierApiConnectionRepositoryExt {
         &self,
         filter: &SupplierApiConnectionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierApiConnectionRow>>;
+    ) -> SupplyResult<PageResult<SupplierApiConnectionRow>>;
 }
 
 impl SupplierApiConnectionRepositoryExt for SupplierApiConnectionRepository<'_> {
@@ -177,7 +178,7 @@ impl SupplierApiConnectionRepositoryExt for SupplierApiConnectionRepository<'_> 
         &self,
         filter: &SupplierApiConnectionFilter,
         executor: &mut dyn Executor,
-    ) -> Result<PageResult<SupplierApiConnectionRow>> {
+    ) -> SupplyResult<PageResult<SupplierApiConnectionRow>> {
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -185,10 +186,10 @@ impl SupplierApiConnectionRepositoryExt for SupplierApiConnectionRepository<'_> 
             .projection(supplier_api_connection_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierApiConnectionRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult { items, total: total as i64 })
+        let items = aggregate::find(&collection, filter.to_doc(), options, Vec::new(), executor).await?;
+        let total = aggregate::count(&collection, filter.to_doc(), Vec::new(), executor).await?;
+        let total = i64::try_from(total).map_err(|_| Error::ValidationError("连接总数超限".into()))?;
+        Ok(PageResult { items, total })
     }
 }
 
@@ -295,7 +296,7 @@ pub trait SupplierApiCapabilityRepositoryExt {
     ///
     /// # 参数
     /// * `connection_ids` - 当前页连接 ID；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
     ///
     /// # 返回
     /// 返回按连接 ID、能力代码稳定排序的完整能力实体。
@@ -315,7 +316,7 @@ pub trait SupplierApiCapabilityRepositoryExt {
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
     ///
     /// # 返回
     /// 返回当前页投影行与满足筛选条件的总数。
@@ -335,7 +336,7 @@ pub trait SupplierApiCapabilityRepositoryExt {
     ///
     /// # 参数
     /// * `connection_id` - 所属连接
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// * `executor` - 已完成列表功能资格检查的原快照事务执行器
     ///
     /// # 返回
     /// 返回该连接下按 `capability_code` 升序的能力声明。

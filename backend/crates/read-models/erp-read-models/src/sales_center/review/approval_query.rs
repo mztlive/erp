@@ -1,7 +1,10 @@
 //! 销售变更真实审批运行投影与当前经办人允许动作。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::{sales_order as sales_order_permissions, sales_review as sales_review_permissions};
 use erp_sales::entity::sales_review::{SalesChangeOrder, SalesChangeOrderStatus};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -29,7 +32,7 @@ use crate::{Error, Result};
 /// 运行事实损坏、当前资格读取或仓储失败时拒绝。
 pub(super) async fn load_change_document_approval(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     change: &SalesChangeOrder,
     binding: Option<&ApprovalDefinitionBinding>,
     actor: &AuditActor,
@@ -55,27 +58,29 @@ pub(super) async fn load_change_document_approval(
 /// 当前提交动作沿静态 submit 权限与来源销售写范围独立解释。
 async fn change_actions(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     change: &SalesChangeOrder,
     cancellable: bool,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     let action = match change.stable.status() {
-        SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected => "submit",
-        SalesChangeOrderStatus::InApproval if cancellable => "cancel_approval",
+        SalesChangeOrderStatus::Draft | SalesChangeOrderStatus::Rejected => &sales_order_permissions::SUBMIT,
+        SalesChangeOrderStatus::InApproval if cancellable => &sales_order_permissions::CANCEL_APPROVAL,
         _ => return Ok(Vec::new()),
     };
-    if !has_document_permission(db, rbac, actor, "sales_change_order", "submit", executor).await? {
+    if !has_document_permission(db, rbac, actor, &sales_review_permissions::SALES_CHANGE_DRAFT, executor)
+        .await?
+    {
         return Ok(Vec::new());
     }
     match SalesAccess::new(db.clone(), rbac.clone())
-        .require_object(actor, action, change.sales_order_id.as_ref(), &[], executor)
+        .require_object(actor, action, change.sales_order_id.as_ref(), executor)
         .await
     {
         Ok(_) => {},
         Err(Error::Forbidden(_) | Error::NotFound(_)) => return Ok(Vec::new()),
         Err(error) => return Err(error),
     }
-    Ok(vec![if action == "submit" { "SUBMIT" } else { "CANCEL" }.into()])
+    Ok(vec![if action == &sales_order_permissions::SUBMIT { "SUBMIT" } else { "CANCEL" }.into()])
 }

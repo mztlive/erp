@@ -1,5 +1,7 @@
 //! 审批启动的共有回放与写入阶段。入口保留授权、领域提交、展示快照和恢复策略。
 
+use std::sync::Arc;
+
 mod replay;
 
 use async_trait::async_trait;
@@ -8,7 +10,7 @@ use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload, resolve_runtime_document_type,
 };
@@ -53,7 +55,7 @@ pub struct StartTaskContext<'a> {
 /// 缺少入口执行、人员复验、运行态写入或快照构造失败时立即停止。
 pub async fn persist_start_runtime(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     writes: &PlannedWrites,
     payload: &ApprovalSubjectSnapshotPayload,
     now: Instant,
@@ -84,7 +86,7 @@ trait StartRuntimeSteps: Sync {
 
 struct MongoStartRuntime<'a> {
     db: &'a Database,
-    identity: &'a SharedRbacService,
+    identity: &'a Arc<AuthorizationService>,
     writes: &'a PlannedWrites,
     first: &'a ApprovalNodeExecution,
     now: Instant,
@@ -131,14 +133,15 @@ async fn apply_runtime_steps(steps: &impl StartRuntimeSteps, executor: &mut dyn 
 /// # 错误
 /// 附件冻结或快照写入失败时立即返回，调用方不得继续创建任务。
 pub async fn persist_start_snapshot<A: WorkflowAuthorizationPort>(
-    identity_service: &SharedRbacService,
+    identity_service: &Arc<AuthorizationService>,
+    rbac: &SharedRbacService,
     db: &Database,
     snapshot: ApprovalSubjectSnapshot,
     auth: &A,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let snapshot = freeze_approval_materials(identity_service, db, snapshot, auth, executor).await?;
-    persist_approval_snapshot(identity_service, db, &snapshot, executor).await
+    persist_approval_snapshot(rbac, db, &snapshot, executor).await
 }
 
 /// 依计划顺序创建入口人工任务，并返回首个任务回执。

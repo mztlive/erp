@@ -1,7 +1,6 @@
 //! 原商品列表聚合及同一 Executor 的 Mongo 执行。
 use erp_catalog::entity::catalog::Product;
 use erp_catalog::repository::{CatalogExt, ProductFilter, ProductRow};
-use futures_util::TryStreamExt;
 use mongodb::bson::Document;
 use persistence_core::{Executor, PageResult, Result};
 use serde::Deserialize;
@@ -49,7 +48,7 @@ impl CatalogSupplyRepository<'_> {
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<Vec<String>> {
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
 
         let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
@@ -65,7 +64,7 @@ impl CatalogSupplyRepository<'_> {
         )
         .await?;
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
@@ -89,7 +88,7 @@ impl CatalogSupplyRepository<'_> {
         executor: &mut dyn Executor,
     ) -> erp_catalog::Result<PageResult<ProductRow>> {
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
 
         let mut pipeline = Vec::new();
@@ -99,7 +98,7 @@ impl CatalogSupplyRepository<'_> {
         pipeline.extend(product_list_pipeline(filter));
         let facet = self.aggregate_products(pipeline, executor).await?;
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
     }
@@ -130,13 +129,12 @@ impl CatalogSupplyRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<ProductFacet> {
         let collection = self.db.collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
-        let query = collection.aggregate(pipeline).with_type::<ProductFacet>();
-        let rows = match executor.session() {
-            Some(session) => {
-                query.session(&mut *session).await?.stream(session).try_collect::<Vec<_>>().await?
-            },
-            None => query.await?.try_collect::<Vec<_>>().await?,
-        };
+        let rows = persistence_core::aggregate::rows(
+            &collection.clone_with_type::<ProductFacet>(),
+            pipeline,
+            executor,
+        )
+        .await?;
         Ok(rows.into_iter().next().unwrap_or_default())
     }
 }

@@ -228,7 +228,7 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
         scope: &super::scope::CatalogReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
 
         #[derive(serde::Deserialize)]
         struct ProductIdRow {
@@ -242,7 +242,7 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
             executor,
         )
         .await?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
 

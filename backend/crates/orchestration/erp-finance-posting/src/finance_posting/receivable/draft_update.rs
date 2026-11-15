@@ -6,6 +6,8 @@ use erp_audit::execution::run_audited;
 use erp_finance::dto::receivable::UpdateCustomerReceiptRequest;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
+use erp_identity::AccessTarget;
+use erp_permissions::receivable;
 use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
@@ -13,6 +15,7 @@ use persistence_core::Executor;
 use validator::Validate;
 
 use super::ReceivableProcess;
+use super::customer_receipt::receipt_command_result;
 use crate::{Error, FinancePostingPorts, Result};
 
 impl ReceivableProcess {
@@ -43,11 +46,20 @@ impl ReceivableProcess {
         run_audited(&self.db, audit, move |db, executor| {
             Box::pin(async move {
                 ensure_receipt_edit_authorized(db, &rbac, &actor, &receipt_id, executor).await?;
-                persist_receipt_draft(db, &receipt_id, req, executor).await
+                persist_receipt_draft(db, &receipt_id, req, executor).await?;
+                receipt_command_result(
+                    db,
+                    &rbac.authorization,
+                    &actor,
+                    &receipt_id,
+                    &receivable::CUSTOMER_RECEIPT_SUBMIT,
+                    AccessTarget::record(&receipt_id)?,
+                    executor,
+                )
+                .await
             })
         })
-        .await?;
-        Ok(self.read.customer_receipt_detail(id).await?)
+        .await
     }
 }
 
@@ -66,13 +78,13 @@ impl ReceivableProcess {
 /// # 错误
 /// 账号不可用、缺少提交权限、无权读取完整资金来源，或授权读取失败时返回错误。
 pub(super) async fn ensure_receipt_edit_authorized(
-    db: &Database,
+    _db: &Database,
     rbac: &FinancePostingPorts,
     actor: &AuditActor,
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    super::receipt_access::require_receipt_owner(db, &rbac.identity, actor, id, executor).await?;
+    super::receipt_access::require_receipt_owner(&rbac.authorization, actor, id, executor).await?;
     if !rbac.runtime.source_readable(actor, DocumentType::CustomerReceipt, id, executor).await? {
         return Err(Error::Forbidden("无权读取该回款的完整资金来源".into()));
     }

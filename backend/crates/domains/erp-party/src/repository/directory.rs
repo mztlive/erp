@@ -2,7 +2,7 @@
 use application_core::directory::{DirectoryItem, DirectoryQuery};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::{Executor, Result, insert_literal_regex_filter};
+use persistence_core::{Executor, Result, aggregate, insert_literal_regex_filter};
 
 use crate::repository::PartyExt;
 
@@ -18,22 +18,8 @@ pub(crate) async fn snapshot(
     query: &DirectoryQuery,
     executor: &mut dyn Executor,
 ) -> Result<Vec<DirectoryItem>> {
-    let collection = db.collection::<Document>(<Database as PartyExt>::PARTIES);
-    let pipeline = pipeline(query);
-    let mut items = Vec::new();
-    if let Some(session) = executor.session() {
-        let mut cursor =
-            collection.aggregate(pipeline).with_type::<DirectoryItem>().session(&mut *session).await?;
-        while cursor.advance(session).await? {
-            items.push(cursor.deserialize_current()?);
-        }
-    } else {
-        let mut cursor = collection.aggregate(pipeline).with_type::<DirectoryItem>().await?;
-        while cursor.advance().await? {
-            items.push(cursor.deserialize_current()?);
-        }
-    }
-    Ok(items)
+    let collection = db.collection::<DirectoryItem>(<Database as PartyExt>::PARTIES);
+    aggregate::rows(&collection, pipeline(query), executor).await
 }
 
 /// 在关联修订前筛选我方企业及回显 ID；停用主体保留供历史回显。

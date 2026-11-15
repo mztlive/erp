@@ -1,12 +1,14 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_settlement;
+use erp_supply::service::supplier_settlement::SettlementAction;
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::{SupplierSettlementProcess, SupplierSettlementStatementView, VoidSettlementRequest};
-use crate::{Error, Result};
+use crate::Result;
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// 作废尚未提交复核的结算草稿。
@@ -28,9 +30,34 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req: VoidSettlementRequest,
         actor: &AuditActor,
     ) -> Result<SupplierSettlementStatementView> {
-        self.domain().access().require_statement(actor, "update", id, &mut NoTransaction).await?;
-        let (mut statement, replayed) =
-            self.domain().prepare_void(id, &req, actor, &mut NoTransaction).await?;
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.void_statement_apply(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在入口事务内完成授权、准备、重放与持久化。
+    async fn void_statement_apply(
+        &self,
+        id: &str,
+        req: VoidSettlementRequest,
+        actor: &AuditActor,
+
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierSettlementStatementView> {
+        self.authorization
+            .require(actor, &supplier_settlement::STATEMENT_VOID, AccessTarget::Operation, executor)
+            .await?;
+        self.domain()
+            .access()
+            .require_statement(actor, &supplier_settlement::STATEMENT_REFRESH, id, executor)
+            .await?;
+        let (mut statement, replayed) = self.domain().prepare_void(id, &req, actor, executor).await?;
         if replayed {
             return Ok(statement.into());
         }
@@ -39,24 +66,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             "supplier_settlement_statement",
             id.to_string(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let access = self.data_scope.clone();
-        let actor = actor.clone();
-        let statement = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .require_action(&actor, SettlementAction::Void, &statement.base.id, executor)
-                        .await?;
-                    SupplierSettlementService::new(db.clone())
-                        .persist_statement(&mut statement, executor)
-                        .await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<_, Error>(statement)
-                })
-            })
-            .await?;
+        self.data_scope.require_action(actor, SettlementAction::Void, &statement.base.id, executor).await?;
+        self.domain().persist_statement(&mut statement, executor).await?;
+        persist_log(&self.db, &audit, executor).await?;
         Ok(statement.into())
     }
 }

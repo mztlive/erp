@@ -1,7 +1,11 @@
 //! 客户退款撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
+use application_core::AuditActor;
 use bpm::model::{IdempotencyKey, SubjectRef};
+use erp_core::AccountKind;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::returns;
 use erp_returns::entity::returns::{CustomerRefund, PaymentReversal, ReceiptReversal, SupplierRefund};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
@@ -132,10 +136,20 @@ pub(super) async fn persist_customer_refund_cancel(
         input;
     let db = db.clone();
     let runtime = rbac.runtime.clone();
+    let authorization = rbac.identity.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+                authorization
+                    .require(
+                        &actor,
+                        &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
                         db: &db,
@@ -245,10 +259,20 @@ pub(super) async fn persist_supplier_refund_cancel(
         input;
     let db = db.clone();
     let runtime = rbac.runtime.clone();
+    let authorization = rbac.identity.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+                authorization
+                    .require(
+                        &actor,
+                        &returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CANCEL_APPROVAL,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
                         db: &db,
@@ -365,10 +389,20 @@ pub(super) async fn persist_receipt_reversal_cancel(
     } = input;
     let db = db.clone();
     let runtime = rbac.runtime.clone();
+    let authorization = rbac.identity.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+                authorization
+                    .require(
+                        &actor,
+                        &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CANCEL_APPROVAL,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
                         db: &db,
@@ -485,10 +519,20 @@ pub(super) async fn persist_payment_reversal_cancel(
     } = input;
     let db = db.clone();
     let runtime = rbac.runtime.clone();
+    let authorization = rbac.identity.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+                authorization
+                    .require(
+                        &actor,
+                        &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CANCEL_APPROVAL,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 super::cancel_write::persist(
                     super::cancel_write::MongoCancelWrite {
                         db: &db,

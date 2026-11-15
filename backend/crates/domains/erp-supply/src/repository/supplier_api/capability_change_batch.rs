@@ -5,53 +5,11 @@
 //! primitive：已更新实体逐个 CAS 写回（保持乐观锁），新增实体一次有序批量插入；
 //! 空输入不访问数据库。版本决策、采购确认覆盖与事务仍归 Service。
 
-use persistence_core::{Executor, Result};
-use serde::Serialize;
+use persistence_core::{Executor, Result, mongo_ops};
 
 use super::{SUPPLIER_API_CAPABILITIES, SupplierApiRepository};
 use crate::entity::supplier_api::SupplierApiCapability;
 use crate::repository::owned::SupplierApiCapabilityRepository;
-
-/// 会话感知的有序批量插入（确定性写入）。
-///
-/// 与通用 `insert_many` 的区别是显式声明 `ordered(true)`：
-/// 首个失败后停止剩余写入，写入顺序与调用方传入顺序一致，不依赖驱动默认值。
-/// 唯一冲突透出后由调用方事务整体回滚，本函数不做部分提交。
-///
-/// # 参数
-/// * `collection` - 目标集合
-/// * `documents` - 待插入文档；为空时直接返回，不访问数据库
-/// * `executor` - 数据访问执行器，必须位于调用方事务中
-///
-/// # 返回
-/// 写入成功时返回 `Ok(())`。
-///
-/// # 错误
-/// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
-///
-/// # 约束
-/// 不开事务、不提交事务；有序写入显式声明，不依赖驱动默认。
-async fn insert_many_ordered<T>(
-    collection: &mongodb::Collection<T>,
-    documents: &[T],
-    executor: &mut dyn Executor,
-) -> Result<()>
-where
-    T: Serialize + Send + Sync,
-{
-    if documents.is_empty() {
-        return Ok(());
-    }
-    match executor.session() {
-        Some(session) => {
-            collection.insert_many(documents).ordered(true).session(session).await?;
-        },
-        None => {
-            collection.insert_many(documents).ordered(true).await?;
-        },
-    }
-    Ok(())
-}
 
 impl<'a> SupplierApiRepository<'a> {
     /// 批量持久化已验证的能力变更（INT-R32）。
@@ -90,7 +48,7 @@ impl<'a> SupplierApiRepository<'a> {
         for capability in updates.iter_mut() {
             capabilities.update(capability, executor).await?;
         }
-        insert_many_ordered(
+        mongo_ops::insert_many(
             &self.db.collection::<SupplierApiCapability>(SUPPLIER_API_CAPABILITIES),
             creates,
             executor,

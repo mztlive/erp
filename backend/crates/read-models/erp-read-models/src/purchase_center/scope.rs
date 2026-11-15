@@ -96,6 +96,7 @@ impl PurchaseOrderReadService {
                     let (page, facts) = load_purchase_order_list_page(&db, &filter, &scope, executor).await?;
                     let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
                     context.scope_version = list_scope_version(&context.scope_version, &versions)?;
+                    scope.validate(executor).await?;
                     Ok(PurchaseSnapshot {
                         page,
                         facts,
@@ -139,7 +140,9 @@ impl PurchaseOrderReadService {
                     let (context, scope, filter) =
                         list_query(&db, &access, &params, &actor, executor).await?;
                     let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
-                    list_scope_version(&context.scope_version, &versions)
+                    let version = list_scope_version(&context.scope_version, &versions)?;
+                    scope.validate(executor).await?;
+                    Ok(version)
                 })
             })
             .await

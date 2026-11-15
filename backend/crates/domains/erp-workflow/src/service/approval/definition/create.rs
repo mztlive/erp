@@ -5,7 +5,8 @@ use bpm::graph::{
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use bpm::model::ApprovalProcessDefinition;
 use entity_core::BaseModel;
-use erp_identity::SharedRbacService;
+use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_permissions::approval_process;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -15,8 +16,8 @@ use super::super::policy::{ProcessRequiredApprovalPolicy, require_process_requir
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity,
-    create_draft_identity, ensure_definition_admin_permission, map_model_error, now, parse_idempotency_key,
-    participant, replay_prepared_definition_receipt, write_definition_audit, write_receipt,
+    create_draft_identity, map_model_error, now, parse_idempotency_key, participant,
+    replay_prepared_definition_receipt, require_definition_access, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_with_copies;
 use super::replace::{next_transition_ids, validate_assignees};
@@ -50,16 +51,6 @@ impl ApprovalDefinitionService {
         request.idempotency_key = key.as_str().to_string();
         let identity =
             create_draft_identity(key, request.document_type, &name, request.draft_source, actor.id())?;
-        self.ensure_definition_admin(actor, &policy).await?;
-        if let Some(view) = self
-            .replay_prepared_if_receipt(
-                &identity,
-                DefinitionResultExpectation::ProcessKind(policy.process_kind),
-            )
-            .await?
-        {
-            return Ok(view);
-        }
         self.commit_create_draft(&policy, &name, request, actor, identity).await
     }
 
@@ -75,6 +66,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
 
         let identity_service = self.identity.clone();
@@ -87,6 +79,7 @@ impl ApprovalDefinitionService {
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 create_draft_tx(
+                    &authorization,
                     &identity_service,
                     &db,
                     CreateDraftTxInput {
@@ -105,6 +98,7 @@ impl ApprovalDefinitionService {
         self.recover_definition_command(
             outcome.await,
             policy,
+            &approval_process::CREATE_DEFINITION_DRAFT,
             actor,
             identity,
             DefinitionResultExpectation::ProcessKind(policy.process_kind),
@@ -164,13 +158,21 @@ struct CreateDraftTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn create_draft_tx(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     input: CreateDraftTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
-    let CreateDraftTxInput { policy, name, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(db, identity_service, actor, policy, executor).await?;
+    let CreateDraftTxInput { policy, request, actor, identity, audit, .. } = input;
+    require_definition_access(
+        authorization,
+        actor,
+        &approval_process::CREATE_DEFINITION_DRAFT,
+        policy,
+        executor,
+    )
+    .await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -182,8 +184,7 @@ async fn create_draft_tx(
         return Ok(view);
     }
     ensure_no_active_draft(db.bpm_workflow().find_active_draft(policy.process_kind, executor).await?)?;
-    let graph =
-        build_new_draft(identity_service, db, policy, name, request.draft_source, actor, executor).await?;
+    let graph = build_new_draft(authorization, identity_service, db, &input, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     persist_new_draft(db, &graph, executor).await?;
@@ -207,19 +208,17 @@ async fn create_draft_tx(
 
 /// 构造空草稿或从当前发布复制。
 async fn build_new_draft(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
-    policy: &ProcessRequiredApprovalPolicy,
-    name: &str,
-    draft_source: DraftSource,
-    actor: &AuditActor,
+    input: &CreateDraftTxInput<'_>,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let version = next_definition_version(db, policy.process_kind, session).await?;
-    match draft_source {
-        DraftSource::Empty => empty_draft(policy, name, version, actor),
+    let version = next_definition_version(db, input.policy.process_kind, session).await?;
+    match input.request.draft_source {
+        DraftSource::Empty => empty_draft(input.policy, input.name, version, input.actor),
         DraftSource::CurrentPublished => {
-            copy_published_draft(identity_service, db, policy, name, version, actor, session).await
+            copy_published_draft(authorization, identity_service, db, input, version, session).await
         },
     }
 }
@@ -249,10 +248,8 @@ fn empty_draft(
 /// # 参数
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `db` - MongoDB 数据库
-/// * `policy` - 当前单据类型必须审批政策
-/// * `name` - 已由 BPM 规范化的草稿名称
+/// * `input` - 当前单据政策、已规范化名称及认证操作人
 /// * `version` - 新草稿业务版本
-/// * `actor` - 已认证定义管理员
 /// * `session` - 调用方事务执行器
 ///
 /// # 返回
@@ -264,14 +261,14 @@ fn empty_draft(
 /// # 关键业务约束
 /// Service 只生成新 ID 与查询账号，节点复制、用途清理、入口和连线规则全部由 BPM 提供。
 async fn copy_published_draft(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
-    policy: &ProcessRequiredApprovalPolicy,
-    name: &str,
+    input: &CreateDraftTxInput<'_>,
     version: u32,
-    actor: &AuditActor,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
+    let CreateDraftTxInput { policy, name, actor, .. } = *input;
     let source = require_current_published(
         db.bpm_workflow().load_published_definition_graph(policy.process_kind, session).await?,
     )?;
@@ -281,7 +278,7 @@ async fn copy_published_draft(
     let identities = next_copied_node_identities(source.nodes.len());
     let nodes = copy_nodes_for_definition(&source.nodes, definition_id.clone(), &identities, at)
         .map_err(map_model_error)?;
-    validate_assignees(db, identity_service, &assignee_ids(&nodes), session).await?;
+    validate_assignees(authorization, db, identity_service, &assignee_ids(&nodes), session).await?;
     let transition_ids = next_transition_ids(nodes.len());
     DefinitionGraph::new_populated_draft(NewPopulatedDraftParams {
         definition_id,
@@ -400,5 +397,51 @@ mod tests {
             Err(Error::Coded(ErrorCode::ApprovalDraftSourceNotAvailable))
         ));
         assert_eq!(require_current_published(Some("def-pub")).unwrap(), "def-pub");
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::test_support::unavailable_service;
+    use super::*;
+    use crate::entity::document_registry::DocumentType;
+
+    #[tokio::test]
+    async fn create_rejects_before_receipt_replay_and_persistence() {
+        let (service, actor) = unavailable_service().await;
+        let policy = require_process_required(DocumentType::SalesOrder).unwrap();
+        let request = CreateDefinitionDraftRequest {
+            document_type: DocumentType::SalesOrder,
+            name: "审批流程".into(),
+            draft_source: DraftSource::Empty,
+            idempotency_key: "definition-create".into(),
+        };
+        let identity = create_draft_identity(
+            parse_idempotency_key(&request.idempotency_key).unwrap(),
+            request.document_type,
+            &request.name,
+            request.draft_source,
+            actor.id(),
+        )
+        .unwrap();
+        let error = create_draft_tx(
+            &service.authorization,
+            &service.identity,
+            &service.db,
+            CreateDraftTxInput {
+                policy: &policy,
+                name: &request.name,
+                request: &request,
+                actor: &actor,
+                identity: &identity,
+                audit: service.audit.as_ref(),
+            },
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

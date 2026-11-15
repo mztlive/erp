@@ -3,14 +3,13 @@
 mod dispatch;
 mod intent;
 mod persistence;
+mod read;
 
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_supply::api_order::{
-    ApiOrderExecution, ApiOrderExt, ApiOrderStage, CancellationActionState, CancellationScope,
-};
+use erp_supply::api_order::{ApiOrderExecution, ApiOrderStage, CancellationActionState, CancellationScope};
 use erp_supply::dto::supplier_fulfillment::{SubmitActionResultView, SubmitAfterSalesActionRequest};
 use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::ports::connector::common::Lookup;
@@ -18,10 +17,11 @@ use erp_supply::ports::connector::order::{OrderKey, OrderLine, OrderSnapshot};
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_fulfillment::FulfillmentOrderAccess;
-use persistence_core::NoTransaction;
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::{SupplierApiOrderProcess, missing_capability};
+use crate::supplier_after_sales::action_result::{ActionResult, MongoActionResultRead, read_result};
 use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
@@ -39,10 +39,19 @@ impl SupplierApiOrderProcess {
         actor: &AuditActor,
         access: &FulfillmentOrderAccess,
     ) -> Result<Option<SubmitActionResultView>> {
-        access.require_order(actor, "cancel", id, &mut NoTransaction).await?;
-        let Some(mut execution) =
-            self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?
-        else {
+        let db = self.db.clone();
+        let port = read::MongoCancellationRead { db: db.clone(), access: access.clone() };
+        let (read_id, read_actor) = (id.to_owned(), actor.clone());
+        let execution = db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { read::authorized_execution(&port, &read_actor, &read_id, executor).await },
+                )
+            })
+            .await?;
+        let Some(mut execution) = execution else {
             return Ok(None);
         };
         request.validate()?;
@@ -57,7 +66,7 @@ impl SupplierApiOrderProcess {
             self.cancellation_connector(&execution).await?;
             self.persist_cancel_intent(execution, &canonical, actor, access).await?;
         }
-        self.cancellation_view(id).await.map(Some)
+        self.cancellation_view(id, actor, access).await.map(Some)
     }
 
     /// 调度一组原取消动作，每次至多发送一个尚未发送的叶子。
@@ -180,25 +189,23 @@ impl SupplierApiOrderProcess {
         Ok(())
     }
 
-    async fn cancellation_view(&self, id: &str) -> Result<SubmitActionResultView> {
-        let execution = self.load(id).await?;
-        let action_id = execution
-            .cancellation_action_id
-            .as_ref()
-            .ok_or_else(|| Error::NotFound("原取消动作不存在".into()))?;
-        let action = self
-            .db
-            .supplier_order_actions()
-            .find_by_id(action_id, &mut NoTransaction)
-            .await?
-            .filter(|action| action.supplier_fulfillment_order_id.as_ref() == id)
-            .ok_or_else(|| Error::NotFound("原取消动作不属于当前订单".into()))?;
-        let order = self
-            .db
-            .supplier_fulfillment_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("原供应商履约订单不存在".into()))?;
-        Ok(SubmitActionResultView { action: action.into(), lines: Vec::new(), order: order.into() })
+    /// 首次登记与幂等回放都以当前取消资格在新快照中读取完整结果。
+    async fn cancellation_view(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        access: &FulfillmentOrderAccess,
+    ) -> Result<SubmitActionResultView> {
+        let port = MongoActionResultRead { db: self.db.clone(), access: access.clone() };
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    read_result(&port, &actor, &id, &ActionResult::Cancellation, executor).await
+                })
+            })
+            .await
     }
 }

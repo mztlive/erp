@@ -35,17 +35,14 @@ pub(super) async fn create_from_sourcing_apply(
     input: CreateFromSourcingApplyInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
-    if let Some(result) = replay_sourcing(
-        db,
-        input.receipt_identity,
-        input.request_fingerprint,
-        input.actor,
-        input.sales_order_id.as_ref(),
-        &input.req.work_item_id,
-        executor,
-    )
-    .await?
-    {
+    let replay = super::SourcingTransactionInput {
+        req: input.req,
+        sales_order_id: input.sales_order_id,
+        receipt_identity: input.receipt_identity,
+        request_fingerprint: input.request_fingerprint,
+        actor: input.actor,
+    };
+    if let Some(result) = replay_sourcing(db, input.rbac, replay, executor).await? {
         return Ok(result);
     }
     let (task, order, plan, sequences) = prepare_plan(db, &input, executor).await?;

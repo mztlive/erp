@@ -5,6 +5,7 @@ use erp_catalog::CatalogExt;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SkuId, SupplierAccountId, WorkItemId};
 use erp_identity::PortalActor;
+use erp_permissions::{supplier, supplier_offering, supplier_portal};
 use erp_supply::SupplierOfferingExt;
 use erp_supply::dto::supplier_offering::SupplierOfferingTermsWrite;
 use erp_supply::portal::{
@@ -242,7 +243,7 @@ impl SupplierPortalProcess {
         self.internal_command(
             actor,
             &current.supplier_id,
-            action,
+            (action, supplier::DETAIL, supplier_portal::ADMIN_REVIEW),
             &key,
             &payload,
             move |this, actor, executor| {
@@ -265,7 +266,10 @@ impl SupplierPortalProcess {
         let subject = offering_subject(&app)?;
         self.validate_task(id, &subject, input, actor, executor).await?;
         if let Some((offering_id, _, _)) = app.snapshot.target() {
-            self.services.offering_access.require_offering(actor, "update", offering_id, executor).await?;
+            self.services
+                .offering_access
+                .require_offering(actor, &supplier_offering::REVISE, offering_id, executor)
+                .await?;
         }
         let result = match input.decision {
             PortalDecision::Return => None,
@@ -294,14 +298,12 @@ impl SupplierPortalProcess {
         )
         .await?;
         let (owner, org) = self.confirmed_offering_owner(app, input, actor, executor).await?;
-        self.services
-            .offering_access
-            .ensure_writable(
-                actor,
-                if app.snapshot.target().is_some() { "update" } else { "create" },
-                executor,
-            )
-            .await?;
+        let permission = if app.snapshot.target().is_some() {
+            supplier_offering::REVISE
+        } else {
+            supplier_offering::CREATE
+        };
+        self.services.offering_access.ensure_writable(actor, &permission, executor).await?;
         Ok(service
             .apply_application(
                 ConfirmedOfferingInput {
@@ -327,7 +329,7 @@ impl SupplierPortalProcess {
     ) -> Result<(String, String)> {
         let access = &self.services.offering_access;
         if let Some((id, _, _)) = app.snapshot.target() {
-            let existing = access.require_offering(actor, "update", id, executor).await?;
+            let existing = access.require_offering(actor, &supplier_offering::REVISE, id, executor).await?;
             return Ok((existing.maintainer_user_id, existing.business_org_unit_id));
         }
         let owner = input

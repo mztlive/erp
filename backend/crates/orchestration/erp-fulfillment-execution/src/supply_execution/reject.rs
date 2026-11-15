@@ -1,10 +1,12 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::dto::supplier_fulfillment::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use erp_supply::repository::SupplierFulfillmentExt;
 use erp_supply::repository::prelude::*;
-use persistence_core::{NoTransaction, Transactional};
+use erp_supply::service::supplier_fulfillment::reject::persist_reject;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
@@ -35,46 +37,43 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierOrderStatusHistoryView> {
         req.validate()?;
-        let mut order = self.require_scoped_order(id, actor, "reject", &mut NoTransaction).await?;
-        self.ensure_legacy_order(id, &mut NoTransaction).await?;
-        let connection_id = order.connection_id.clone();
+        let process = self.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.reject(&id, &req, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn reject(
+        &self,
+        id: &str,
+        req: &RecordSupplierRejectRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierOrderStatusHistoryView> {
+        let mut order =
+            self.require_scoped_order(id, actor, &supplier_fulfillment::ORDER_REJECT, executor).await?;
+        self.ensure_legacy_order(id, executor).await?;
         if let Some(existing) = self
             .db
             .supplier_order_status_histories()
-            .find_by_connection_and_event(&connection_id, &req.external_event_id, &mut NoTransaction)
+            .find_by_connection_and_event(&order.connection_id, &req.external_event_id, executor)
             .await?
         {
-            tracing::info!(account = %actor.id(), order_id = %id, "拒单回调幂等命中");
             return Ok(existing.into());
         }
-        let (history, action) = self.domain().prepare_reject(id, &mut order, &req).await?;
+        let (history, mut action) = self.domain().prepare_reject(id, &mut order, req).await?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.reject",
             "supplier_fulfillment_order",
             id.to_string(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let mut order_for_tx = order.clone();
-        let history_for_tx = history.clone();
-        let mut action_for_tx = action.clone();
-        let audit_for_tx = audit.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    erp_supply::service::supplier_fulfillment::reject::persist_reject(
-                        &db,
-                        &mut order_for_tx,
-                        &history_for_tx,
-                        &mut action_for_tx,
-                        executor,
-                    )
-                    .await?;
-                    persist_log(&db, &audit_for_tx, executor).await?;
-                    Ok::<(), crate::Error>(())
-                })
-            })
-            .await?;
+        persist_reject(&self.db, &mut order, &history, &mut action, executor).await?;
+        persist_log(&self.db, &audit, executor).await?;
         Ok(history.into())
     }
 }

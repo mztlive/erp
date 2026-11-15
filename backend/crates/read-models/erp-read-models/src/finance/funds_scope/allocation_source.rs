@@ -83,13 +83,14 @@ impl FundsAccess {
             .find_by_id(&account_id, ex)
             .await?
             .ok_or_else(|| Error::NotFound("分配来源不存在".into()))?;
-        self.require_sales_sources(
-            actor,
-            "receivable_account:detail",
-            &[account.sales_order_id.to_string()],
-            ex,
-        )
-        .await?;
+        self.rbac
+            .require(
+                actor,
+                &erp_permissions::receivable::ACCOUNT_DETAIL,
+                erp_identity::AccessTarget::record(&account_id)?,
+                ex,
+            )
+            .await?;
         let revision = self
             .db
             .sales_order_revisions()

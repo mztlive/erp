@@ -4,9 +4,11 @@
 //! 解决命令。
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_identity::AccessTarget;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::ReconciliationDifference;
 use erp_integration::service::reconciliation_difference::prepare_difference;
+use erp_permissions::integration_ops;
 use validator::Validate;
 
 use super::IntegrationResolutionProcess;
@@ -58,8 +60,18 @@ impl IntegrationResolutionProcess {
             "reconciliation_difference",
             difference.base.id.clone(),
         )?;
+        let authorization = self.authorization.clone();
+        let current_actor = actor.clone();
         self.run_audited(move |db, executor| {
             Box::pin(async move {
+                authorization
+                    .require(
+                        &current_actor,
+                        &integration_ops::DIFFERENCE_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 persist_created(db, CreatedFact::Difference(&difference), &work_item, &audit, executor)
                     .await?;
                 Ok(())

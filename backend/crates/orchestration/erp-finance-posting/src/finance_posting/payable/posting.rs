@@ -175,18 +175,10 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // 非零大小保证执行器地址能够区分不同实例。
-    struct TestExecutor {
-        _identity: u8,
-    }
+    use persistence_core::ReadExecutor;
 
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use super::*;
 
     struct RecordedPosting {
         calls: Vec<(&'static str, usize)>,
@@ -221,8 +213,8 @@ mod tests {
 
     #[tokio::test]
     async fn posting_keeps_original_order_and_the_same_executor() {
-        let mut executor = TestExecutor { _identity: 1 };
-        let expected_executor = &mut executor as *mut TestExecutor as usize;
+        let mut executor = ReadExecutor::default();
+        let expected_executor = &mut executor as *mut ReadExecutor as usize;
         let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None };
         execute_posting(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
@@ -241,7 +233,7 @@ mod tests {
         let sequence = ["settle", "tasks", "payment", "audit"];
         for (index, fail_at) in sequence.iter().enumerate() {
             let mut steps = RecordedPosting { calls: Vec::new(), fail_at: Some(fail_at) };
-            let error = execute_posting(&mut steps, &mut TestExecutor { _identity: 1 }).await.unwrap_err();
+            let error = execute_posting(&mut steps, &mut ReadExecutor::default()).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == *fail_at));
             assert_eq!(steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(), sequence[..=index]);
         }

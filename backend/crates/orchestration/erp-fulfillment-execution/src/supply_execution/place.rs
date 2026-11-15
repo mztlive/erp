@@ -1,25 +1,23 @@
 use application_core::AuditActor;
-use erp_audit::AuditActorLogs;
-use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::{InboxMessageId, WorkItemId};
 use erp_integration::entity::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
 };
-use erp_integration::repository::IntegrationOpsExt;
 use erp_supply::dto::supplier_fulfillment::{PlaceFulfillmentOrderRequest, SupplierFulfillmentOrderView};
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::ports::supplier_gateway::DispatchOutcome;
-use erp_supply::repository::SupplierFulfillmentExt;
-use erp_supply::repository::prelude::*;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
 use crate::Result;
+
+mod intent;
+use intent::PlaceIntent;
 
 impl SupplierFulfillmentProcess {
     /// 供应商下单（幂等键：`fulfillment_order_no`，§6.19）。
@@ -48,49 +46,29 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierFulfillmentOrderView> {
         req.validate()?;
-        if let Some(existing) = self
-            .db
-            .supplier_fulfillment_orders()
-            .find_by_fulfillment_order_no(&req.fulfillment_order_no, &mut NoTransaction)
-            .await?
-        {
-            self.ensure_legacy_order(&existing.base.id, &mut NoTransaction).await?;
-            tracing::info!(account = %actor.id(), order_no = %req.fulfillment_order_no, "下单幂等命中，返回原订单");
-            return Ok(existing.into());
-        }
-        let (connection, offerings) = self.domain().ensure_placeable(&req).await?;
-        let follow_up =
-            super::follow_up::resolve_follow_up(&self.db, &req.supplier_id, &mut NoTransaction).await?;
-        self.domain().access().ensure_writable(actor, "submit", &mut NoTransaction).await?;
-        let (mut order, items, mut action) =
-            self.domain().build_place_facts(&req, &offerings, follow_up.user_id, follow_up.org_unit_id)?;
-        let mut message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;
-        let audit = actor.clone().resource_log(
-            "supplier_fulfillment.submit",
-            "supplier_fulfillment_order",
-            order.base.id.clone(),
-        )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let order_for_tx = order.clone();
-        let items_for_tx = items.clone();
-        let action_for_tx = action.clone();
-        let message_for_tx = message.clone();
-        let audit_for_tx = audit.clone();
-        super::execution::after_intent(client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    persist_place_facts(&db, &order_for_tx, &items_for_tx, &action_for_tx, executor).await?;
-                    db.inbox_messages().create(&message_for_tx, executor).await?;
-                    persist_log(&db, &audit_for_tx, executor).await?;
-                    Ok::<(), crate::Error>(())
-                })
-            }), || async {
-        tracing::info!(account = %actor.id(), order_id = %order.base.id, "下单事务已提交，开始事务外供应商派发");
-        self.settle_dispatch(&mut order, &mut action, &mut message, &connection, actor)
-            .await
-        }).await?;
-        Ok(order.into())
+        let process = self.clone();
+        let actor_for_tx = actor.clone();
+        let intent = self.db.client().with_transaction(move |executor| {
+            Box::pin(async move { process.prepare_place_intent(&req, &actor_for_tx, executor).await })
+        });
+        super::execution::after_intent(intent, |intent| async move {
+            match intent {
+                PlaceIntent::Existing(order) => Ok((*order).into()),
+                PlaceIntent::Prepared(mut dispatch) => {
+                    tracing::info!(account = %actor.id(), order_id = %dispatch.order.base.id, "下单事务已提交，开始事务外供应商派发");
+                    self.settle_dispatch(
+                        &mut dispatch.order,
+                        &mut dispatch.action,
+                        &mut dispatch.message,
+                        &dispatch.connection,
+                        actor,
+                    )
+                    .await?;
+                    Ok(dispatch.order.into())
+                },
+            }
+        })
+        .await
     }
 
     /// 事务外派发供应商动作并承接结果（P3 §7）。
@@ -321,4 +299,4 @@ fn outcome_label(outcome: &DispatchOutcome) -> &'static str {
     }
 }
 
-use erp_supply::service::supplier_fulfillment::place::{DispatchMessageResult, persist_place_facts};
+use erp_supply::service::supplier_fulfillment::place::DispatchMessageResult;

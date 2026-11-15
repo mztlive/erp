@@ -11,7 +11,8 @@ use erp_contract::{
     UploadContractView, plan_upload_archive,
 };
 use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
-use persistence_core::{Executor, NoTransaction};
+use erp_permissions::{contract, customer as customer_permissions};
+use persistence_core::Executor;
 
 use super::ContractImportProcess;
 use super::audit::{ArchiveImport, context};
@@ -26,7 +27,7 @@ impl ContractImportProcess {
     /// # 错误
     /// 并发、输入、主数据、权限或事务失败。
     pub async fn confirm(&self, id: &str, command: ConfirmImport, actor: &AuditActor) -> Result<ImportView> {
-        let task = recognition::owned(&self.db, actor.id(), id, &mut NoTransaction).await?;
+        let task = self.task(id, actor).await?;
         task.check_confirmation(&command)?;
         run_audited_event(
             &self.db,
@@ -56,6 +57,7 @@ impl ContractImportProcess {
         command: &ConfirmImport,
         executor: &mut dyn Executor,
     ) -> Result<(ImportView, bool)> {
+        self.services.contract_access.require_import(actor, executor).await?;
         let current = recognition::owned(&self.db, actor.id(), &task.base.id, executor).await?;
         if !current.check_confirmation(command)? {
             return Ok((current.into(), false));
@@ -70,7 +72,7 @@ impl ContractImportProcess {
         self.services
             .customer_access
             .clone()
-            .require_with(actor.clone(), "detail", &proof.customer_id, executor)
+            .require_with(actor.clone(), &customer_permissions::DETAIL, &proof.customer_id, executor)
             .await?;
         let request = archive_request(fields, &proof);
         let mut planned = plan_upload_archive(
@@ -119,7 +121,7 @@ impl ContractImportProcess {
             self.services
                 .contract_access
                 .clone()
-                .require_with(actor.clone(), "update", &target.contract_id, executor)
+                .require_with(actor.clone(), &contract::TERMINATE, &target.contract_id, executor)
                 .await?;
             planned.contract = self.revision_parent(task, planned, executor).await?;
             let number = self

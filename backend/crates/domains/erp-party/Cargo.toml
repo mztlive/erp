@@ -12,6 +12,8 @@ base64 = { workspace = true }
 entity-core = { workspace = true }
 entity-macros = { workspace = true }
 erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 hmac = { workspace = true }
 id-generator = { workspace = true }
 mongodb = { workspace = true }
@@ -24,3 +26,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 tracing = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }
+persistence-core = { workspace = true, features = ["test-support"] }

@@ -12,6 +12,7 @@ use erp_catalog::{Error as CatalogError, Result as CatalogResult};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SkuId, WorkItemId};
 use erp_identity::PortalActor;
+use erp_permissions::{supplier, supplier_offering, supplier_portal};
 use erp_supply::dto::supplier_offering::SupplierOfferingTermsWrite;
 use erp_supply::portal::{
     ApplicationStatus, ConfirmedOfferingInput, FrozenOfferingSubmission, OfferingApplication,
@@ -287,7 +288,7 @@ impl SupplierPortalProcess {
         self.internal_command(
             actor,
             &current.supplier_id,
-            action,
+            (action, supplier::DETAIL, supplier_portal::ADMIN_REVIEW),
             &key,
             &payload,
             move |this, actor, executor| {
@@ -472,8 +473,9 @@ impl SupplierPortalProcess {
                 .iter()
                 .find(|r| r.row_id == row.row_id && r.offering_id == existing.base.id)
                 .ok_or_else(|| Error::ConflictError("已存在供给，请明确核对其版本并转条款修订".into()))?;
-            let existing =
-                access.require_offering(context.actor, "update", &existing.base.id, executor).await?;
+            let existing = access
+                .require_offering(context.actor, &supplier_offering::REVISE, &existing.base.id, executor)
+                .await?;
             return Ok((
                 OfferingApplicationSnapshot::TermsChange {
                     offering_id: existing.base.id,
@@ -485,7 +487,7 @@ impl SupplierPortalProcess {
                 existing.business_org_unit_id,
             ));
         }
-        access.ensure_writable(context.actor, "create", executor).await?;
+        access.ensure_writable(context.actor, &supplier_offering::CREATE, executor).await?;
         Ok((
             OfferingApplicationSnapshot::ExistingQuote {
                 sku_id: sku_id.to_string(),

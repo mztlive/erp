@@ -36,7 +36,7 @@ pub(super) const HEADERS: [&str; 15] = [
 ];
 impl BusinessTransfers {
     pub(super) async fn quote_context(&self, input: &Value, actor: &AuditActor) -> Result<Value> {
-        let detail = InquiryReadService::new(self.db.clone(), self.rbac.clone())
+        let detail = InquiryReadService::new(self.db.clone(), self.authorization.clone())
             .procurement_detail(actor, required(input, "inquiry_id")?, required(input, "task_id")?)
             .await?;
         let detail = serde_json::to_value(detail).map_err(json_error)?;

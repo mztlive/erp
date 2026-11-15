@@ -2,6 +2,8 @@
 
 mod preparation;
 
+use std::sync::{Arc, OnceLock};
+
 use application_core::AuditActor;
 use erp_audit::execution::recover_command;
 use erp_procurement::dto::purchase_order::{
@@ -14,7 +16,7 @@ use erp_procurement::entity::purchase_order::{
 use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
 use erp_workflow::service::approval::execution::command_recovery_delay;
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use preparation::PreparedPurchaseSubmit;
 use validator::Validate;
 
@@ -96,9 +98,6 @@ impl PurchaseOrderProcess {
             Some(id),
             &req.idempotency_key,
         )?;
-        if let Some(result) = self.replay_purchase_submit(&identity, &fingerprint, id, actor).await? {
-            return Ok(result);
-        }
         let command = PurchaseSubmitCommand {
             purchase_order_id: id,
             request: &req,
@@ -106,43 +105,79 @@ impl PurchaseOrderProcess {
             identity: &identity,
             fingerprint: &fingerprint,
         };
-        let prepared = self.prepare_purchase_submit(&command).await?;
-        self.persist_prepared_submit(&command, prepared).await
+        self.submit_command(&command).await
     }
 
-    /// 提交既有采购启动写段；仅在结果可能已提交时进入有界回读恢复。
-    async fn persist_prepared_submit(
-        &self,
-        command: &PurchaseSubmitCommand<'_>,
-        prepared: PreparedPurchaseSubmit,
-    ) -> Result<SubmitPurchaseOrderResult> {
-        let PreparedPurchaseSubmit { input, output, purchase_order_id, subject_version } = prepared;
-        let db = self.db.clone();
-        let first_task = self
+    /// 首次授权、重放和准备写入共享原命令事务；只在未知提交结果时恢复。
+    async fn submit_command(&self, command: &PurchaseSubmitCommand<'_>) -> Result<SubmitPurchaseOrderResult> {
+        let service = self.clone();
+        let id = command.purchase_order_id.to_string();
+        let req = command.request.clone();
+        let actor = command.actor.clone();
+        let identity = command.identity.clone();
+        let fingerprint = command.fingerprint.to_string();
+        let frozen_subject = Arc::new(OnceLock::new());
+        let transaction_subject = frozen_subject.clone();
+        let result: Result<SubmitPurchaseOrderResult> = self
             .db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { persist_purchase_order_start(&db, input, executor).await })
+                Box::pin(async move {
+                    let command = PurchaseSubmitCommand {
+                        purchase_order_id: &id,
+                        request: &req,
+                        actor: &actor,
+                        identity: &identity,
+                        fingerprint: &fingerprint,
+                    };
+                    service.submit_in(&command, &transaction_subject, executor).await
+                })
             })
             .await;
-        let first_task = match first_task {
-            Ok(task) => task,
+        match result {
             Err(error) if error.command_may_have_committed() => {
-                return self
-                    .recover_purchase_submit_start(RecoverPurchaseSubmitStartInput {
-                        resubmission_reason: command.request.resubmission_reason.as_deref(),
-                        purchase_order_id: command.purchase_order_id,
-                        subject_version,
-                        idempotency_key: &command.request.idempotency_key,
-                        actor: command.actor,
-                        identity: command.identity,
-                        fingerprint: command.fingerprint,
-                        original_error: error,
-                    })
-                    .await;
+                let Some(subject_version) = frozen_subject.get().copied() else {
+                    return Err(error);
+                };
+                self.recover_purchase_submit_start(RecoverPurchaseSubmitStartInput {
+                    resubmission_reason: command.request.resubmission_reason.as_deref(),
+                    purchase_order_id: command.purchase_order_id,
+                    subject_version,
+                    idempotency_key: &command.request.idempotency_key,
+                    actor: command.actor,
+                    identity: command.identity,
+                    fingerprint: command.fingerprint,
+                    original_error: error,
+                })
+                .await
             },
-            Err(error) => return Err(error),
-        };
+            result => result,
+        }
+    }
+
+    /// 当前资格和回执在同一快照取证，再冻结提交并写入原事务。
+    async fn submit_in(
+        &self,
+        command: &PurchaseSubmitCommand<'_>,
+        frozen_subject: &OnceLock<u32>,
+        executor: &mut dyn Executor,
+    ) -> Result<SubmitPurchaseOrderResult> {
+        self.command_access(command.actor, "submit").current(command.purchase_order_id, executor).await?;
+        if let Some(result) = self
+            .replay_purchase_submit_in(
+                command.identity,
+                command.fingerprint,
+                command.purchase_order_id,
+                executor,
+            )
+            .await?
+        {
+            return Ok(result);
+        }
+        let PreparedPurchaseSubmit { input, output, purchase_order_id, subject_version } =
+            self.prepare_purchase_submit(command, executor).await?;
+        let _ = frozen_subject.set(subject_version);
+        let first_task = persist_purchase_order_start(&self.db, input, executor).await?;
         let (work_item_id, task_version) = first_task.unwrap_or((String::new(), 0));
         Ok(SubmitPurchaseOrderResult {
             purchase_order_id,
@@ -157,18 +192,42 @@ impl PurchaseOrderProcess {
         })
     }
 
-    /// 重放已提交的采购冻结命令，并拒绝同一键混用不同对象版本。
+    /// 仅在恢复时新建只读快照；普通命令重放复用入口写事务。
     async fn replay_purchase_submit(
         &self,
         identity: &PurchaseCommandReceiptIdentity,
         expected_fingerprint: &str,
         purchase_order_id: &str,
-        _actor: &AuditActor,
+        actor: &AuditActor,
+    ) -> Result<Option<SubmitPurchaseOrderResult>> {
+        let service = self.clone();
+        let identity = identity.clone();
+        let fingerprint = expected_fingerprint.to_string();
+        let id = purchase_order_id.to_string();
+        let access = self.command_access(actor, "submit");
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    access.current(&id, executor).await?;
+                    service.replay_purchase_submit_in(&identity, &fingerprint, &id, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 重放已提交的采购冻结命令，并拒绝同一键混用不同对象版本。
+    async fn replay_purchase_submit_in(
+        &self,
+        identity: &PurchaseCommandReceiptIdentity,
+        expected_fingerprint: &str,
+        purchase_order_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<Option<SubmitPurchaseOrderResult>> {
         let Some(record) = self
             .db
             .purchase_command_receipts::<PurchaseSubmitReceipt>()
-            .find_by_id_including_deleted(identity.receipt_id(), &mut NoTransaction)
+            .find_by_id_including_deleted(identity.receipt_id(), executor)
             .await?
         else {
             return Ok(None);
@@ -177,13 +236,13 @@ impl PurchaseOrderProcess {
         let order = self
             .db
             .purchase_orders()
-            .find_by_id(purchase_order_id, &mut NoTransaction)
+            .find_by_id(purchase_order_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("采购提交幂等收据引用的采购单不存在".to_string()))?;
         let submission = self
             .db
             .purchase_order_submissions()
-            .find_by_id(&receipt.submission_id, &mut NoTransaction)
+            .find_by_id(&receipt.submission_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("采购提交幂等回执引用的不可变提交不存在".to_string()))?;
         if submission.purchase_order_id.as_ref() != purchase_order_id
@@ -263,15 +322,12 @@ impl PurchaseOrderProcess {
         let actor_id = input.actor.id().to_string();
         let subject_version = input.subject_version;
         let resubmission_reason = input.resubmission_reason.map(str::to_string);
+        let access = self.command_access(input.actor, "submit");
         self.db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let order = db
-                        .purchase_orders()
-                        .find_by_id(&purchase_order_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+                    let order = access.current(&purchase_order_id, executor).await?;
                     let organization_id = purchase_order_responsible_org_id(&order)?;
                     let _ = purchase_order_object_readable(&organization_id, &actor_id)?;
                     let binding = find_approval_binding(&db, &purchase_order_id, executor)

@@ -5,7 +5,7 @@ use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStat
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_workflow::BpmExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::CurrentWorkRepository;
 use crate::Result;
@@ -22,17 +22,17 @@ impl CurrentWorkRepository<'_> {
         &self,
         tasks: Vec<WorkItem>,
         node_names: &mut HashMap<String, String>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>> {
         let execution_ids =
             tasks.iter().filter_map(|task| task.approval_node_execution_id.clone()).collect::<Vec<_>>();
-        let executions =
-            self.db.bpm_workflow().list_executions_by_ids(&execution_ids, &mut NoTransaction).await?;
+        let executions = self.db.bpm_workflow().list_executions_by_ids(&execution_ids, executor).await?;
         let instance_ids =
             executions.iter().map(|execution| execution.process_instance_id.clone()).collect::<Vec<_>>();
         let instances = self
             .db
             .bpm_workflow()
-            .list_instances_by_ids(&instance_ids, &mut NoTransaction)
+            .list_instances_by_ids(&instance_ids, executor)
             .await?
             .into_iter()
             .map(|instance| (instance.base.id.clone(), instance))

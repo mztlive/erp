@@ -4,16 +4,18 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::{BackgroundJobId, FileAssetId};
+use erp_identity::AccessTarget;
 use erp_import::repository::prelude::*;
 use erp_import::{
     CreateLegacyImportBatchRequest, ImportRowSpec, LegacyImportBatch, LegacyImportBatchData,
     LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportBatchView, LegacyImportExt, LegacyImportRow,
     LegacyImportRowId, build_import_rows,
 };
+use erp_permissions::legacy_import;
 use erp_support::repository::prelude::*;
 use erp_support::{BackgroundJob, BulkJobExt, FileAssetExt};
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ImportApplyProcess;
@@ -30,9 +32,12 @@ impl ImportApplyProcess {
     ///
     /// # 错误
     /// 按批次号查询后台任务失败时返回仓储错误。
-    pub(super) async fn batch_view_of(&self, batch: LegacyImportBatch) -> Result<LegacyImportBatchView> {
-        let background_job =
-            self.db.background_jobs().find_by_request_id(&batch.batch_no, &mut NoTransaction).await?;
+    pub(super) async fn batch_view_of(
+        &self,
+        batch: LegacyImportBatch,
+        executor: &mut dyn Executor,
+    ) -> Result<LegacyImportBatchView> {
+        let background_job = self.db.background_jobs().find_by_request_id(&batch.batch_no, executor).await?;
         let mut view: LegacyImportBatchView = batch.into();
         view.background_job_id = background_job.map(|job| job.base.id);
         Ok(view)
@@ -61,13 +66,33 @@ impl ImportApplyProcess {
         actor: &AuditActor,
     ) -> Result<LegacyImportBatchView> {
         req.validate()?;
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create_batch_stage(req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 创建与幂等回包均使用同一授权及业务事务。
+    async fn create_batch_stage(
+        &self,
+        req: CreateLegacyImportBatchRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<LegacyImportBatchView> {
+        self.authorization
+            .require(actor, &legacy_import::BATCH_CREATE, AccessTarget::Operation, executor)
+            .await?;
         if let Some(existing) =
-            self.db.legacy_import_batches().find_by_batch_no(&req.batch_no, &mut NoTransaction).await?
+            self.db.legacy_import_batches().find_by_batch_no(&req.batch_no, executor).await?
         {
             tracing::info!(batch_no = %req.batch_no, "批次已存在，按幂等返回既有批次");
-            return self.batch_view_of(existing).await;
+            return self.batch_view_of(existing, executor).await;
         }
-        self.ensure_file_assets_exist(&req).await?;
+        self.ensure_file_assets_exist(&req, executor).await?;
 
         let id = LegacyImportBatchId::new(next_id());
         let rows = self.build_rows(&req, &id)?;
@@ -85,21 +110,9 @@ impl ImportApplyProcess {
             id.to_string(),
         )?;
 
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let batch_for_tx = batch.clone();
-        let rows_for_tx = rows.clone();
-        let job_for_tx = background_job.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    db.legacy_import().create_batch_with_rows(&batch_for_tx, &rows_for_tx, executor).await?;
-                    db.background_jobs().create(&job_for_tx, executor).await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<(), Error>(())
-                })
-            })
-            .await?;
+        self.db.legacy_import().create_batch_with_rows(&batch, &rows, executor).await?;
+        self.db.background_jobs().create(&background_job, executor).await?;
+        persist_log(&self.db, &audit, executor).await?;
 
         let mut view: LegacyImportBatchView = batch.into();
         view.background_job_id = Some(background_job.base.id);
@@ -116,7 +129,11 @@ impl ImportApplyProcess {
     ///
     /// # 错误
     /// * `NotFound` - 资产引用不存在
-    async fn ensure_file_assets_exist(&self, req: &CreateLegacyImportBatchRequest) -> Result<()> {
+    async fn ensure_file_assets_exist(
+        &self,
+        req: &CreateLegacyImportBatchRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let labeled: [(&str, Option<&FileAssetId>); 3] = [
             ("成功白名单包", req.successful_sanitized_file_asset_id.as_ref()),
             ("成功 manifest", req.success_manifest_file_asset_id.as_ref()),
@@ -126,7 +143,7 @@ impl ImportApplyProcess {
         if ids.is_empty() {
             return Ok(());
         }
-        let missing = self.db.file_assets().missing_file_asset_ids(&ids, &mut NoTransaction).await?;
+        let missing = self.db.file_assets().missing_file_asset_ids(&ids, executor).await?;
         if missing.is_empty() {
             return Ok(());
         }
@@ -226,8 +243,27 @@ fn first_missing_asset_label(
 #[cfg(test)]
 mod tests {
     use erp_core::ids::FileAssetId;
+    use persistence_core::ReadExecutor;
 
     use super::first_missing_asset_label;
+
+    /// 创建和幂等读取必须先通过写事务授权，不能先探测批次。
+    #[tokio::test]
+    async fn create_batch_rejects_unproven_transaction_before_database_reads() {
+        let (service, actor) = super::super::testing::fixture().await;
+        let request = serde_json::from_value(serde_json::json!({
+            "batch_no": "batch", "source_system_id": "source", "source_object_set": "CUSTOMER",
+            "baseline_date": "2026-01-01", "import_rule_version": "v1", "rows": []
+        }))
+        .unwrap();
+        let error = service
+            .create_batch_stage(request, &actor, &mut ReadExecutor::default())
+            .await
+            .expect_err("非事务不能创建批次");
+        assert!(
+            matches!(error, crate::Error::ValidationError(reason) if reason == "写入授权必须使用快照事务")
+        );
+    }
 
     fn asset(id: &str) -> FileAssetId {
         FileAssetId::new(id.to_string())

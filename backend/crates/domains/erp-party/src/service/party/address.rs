@@ -9,9 +9,11 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -32,11 +34,13 @@ use crate::repository::prelude::*;
 type PartyAddressFilter = <mongodb::Database as PartyExt>::PartyAddressFilter;
 
 /// 地址服务。
+#[derive(Clone)]
 pub struct PartyAddressService {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
     audit: Arc<dyn PartyAuditPort>,
     supplier_roles: Arc<dyn SupplierRolePort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl PartyAddressService {
@@ -58,8 +62,9 @@ impl PartyAddressService {
         sensitive_data: Arc<SensitiveDataCodec>,
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, sensitive_data, audit, supplier_roles }
+        Self { db, sensitive_data, audit, supplier_roles, authorization }
     }
 
     /// 分页查询地址列表（投影查询，敏感字段不进投影）。
@@ -75,9 +80,34 @@ impl PartyAddressService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn party_address_list(
         &self,
+        actor: &AuditActor,
         party_id: &str,
         params: &PartyAddressListParams,
     ) -> Result<PageView<PartyAddressView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.party_address_list_snapshot(&actor, &party_id, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_address_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        party_id: &str,
+        params: &PartyAddressListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<PartyAddressView>> {
+        self.authorization.require(actor, &party::ADDRESS_LIST, AccessTarget::Operation, executor).await?;
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let paging = normalize_paging(
@@ -97,7 +127,7 @@ impl PartyAddressService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
-        let page = self.db.party_addresses().search_party_addresses(&filter, &mut NoTransaction).await?;
+        let page = self.db.party_addresses().search_party_addresses(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -163,6 +193,8 @@ impl PartyAddressService {
             address.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -170,6 +202,9 @@ impl PartyAddressService {
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::ADDRESS_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     if address_for_tx.is_default {
                         clear_default_marks!(db, party_addresses, address_for_tx.party_id, None, executor);
                     }
@@ -203,12 +238,7 @@ impl PartyAddressService {
         actor: &AuditActor,
     ) -> Result<PartyAddressView> {
         req.validate()?;
-        let mut address = self
-            .db
-            .party_addresses()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
+        let mut address = self.load_address(id).await?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id).await?;
         super::map_version_conflict(address.ensure_version(req.version))?;
         address.update(
@@ -226,6 +256,8 @@ impl PartyAddressService {
             address.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -233,6 +265,9 @@ impl PartyAddressService {
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::ADDRESS_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     if address_for_tx.is_default {
                         clear_default_marks!(
                             db,
@@ -250,5 +285,13 @@ impl PartyAddressService {
             .await?;
 
         Ok(updated.into())
+    }
+    /// 读取仍存在的本域地址事实。
+    async fn load_address(&self, id: &str) -> Result<PartyAddress> {
+        self.db
+            .party_addresses()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("地址不存在".to_string()))
     }
 }

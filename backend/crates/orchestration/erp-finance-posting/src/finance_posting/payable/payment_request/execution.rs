@@ -118,7 +118,7 @@ pub(crate) async fn authorize_payment_result(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if payment.payment_request_id.as_deref() != Some(request_id) {
+    if payment.payment_request_id.as_deref() != Some(request_id) || payment.created_by != actor.id() {
         return Err(Error::Forbidden("付款命令结果不属于当前操作人或申请".into()));
     }
     let task = db
@@ -129,19 +129,7 @@ pub(crate) async fn authorize_payment_result(
     if !matches_payment_result_task(&task, request_id) {
         return Err(Error::Forbidden("原付款任务责任资格已变化".into()));
     }
-    require_task(
-        db,
-        rbac,
-        actor,
-        &task,
-        TaskPurpose::PaymentResult {
-            id: payment.base.id.to_string(),
-            version: payment.base.version.to_string(),
-            owner: payment.created_by.clone(),
-        },
-        executor,
-    )
-    .await?;
+    require_task(db, rbac, actor, &task, TaskPurpose::Payment, executor).await?;
     let version = task
         .subject_version
         .parse::<u32>()
@@ -440,7 +428,7 @@ async fn require_current_task_owner(
         .ok_or_else(|| Error::Forbidden("原付款申请任务的当前出纳账号已失效".into()))?;
     // 仅作为当前任务责任人的资格事实；冲正审计仍使用真实冲正操作人。
     let actor = AuditActor::new(owner.base.id, owner.secret.account().to_string(), owner.kind);
-    rbac.fresh_tasks()?.ensure_domain_decision_access(&actor, task, executor).await?;
+    rbac.tasks.ensure_domain_decision_access(&actor, task, executor).await?;
     Ok(())
 }
 

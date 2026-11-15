@@ -1,7 +1,8 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, PermissionSet};
+use erp_identity::PermissionSet;
+use erp_permissions::{internal, supplier_api};
 use erp_supply::catalog_adoption::{
     CatalogAdoptionExt, CatalogAdoptionPreview, MAX_CONFIRM_ROWS, MAX_PREVIEW_ROWS, PreviewAdoptionRequest,
 };
@@ -9,7 +10,7 @@ use erp_supply::dto::supplier_catalog::CatalogItemView;
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use serde::Serialize;
 
 use super::SupplierCatalogAdoptionProcess;
@@ -73,11 +74,25 @@ impl SupplierCatalogAdoptionProcess {
         request: PreviewAdoptionRequest,
         actor: &AuditActor,
     ) -> Result<AdoptionPreviewView> {
-        self.ensure_adoption_permissions(actor).await?;
+        let (connection, actor) = (connection.to_owned(), actor.clone());
+        self.with_snapshot(move |process, executor| {
+            Box::pin(async move { process.preview_in_snapshot(&connection, request, &actor, executor).await })
+        })
+        .await
+    }
+
+    /// 在同一快照中授权、冻结来源并保存预览。
+    async fn preview_in_snapshot(
+        &self,
+        connection: &str,
+        request: PreviewAdoptionRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<AdoptionPreviewView> {
         request.validate()?;
-        let source = self.batch_access(connection, actor, &mut NoTransaction).await?;
+        let source = self.batch_access(connection, actor, executor).await?;
         self.ensure_source(&source)?;
-        let items = self.selected_items(connection, request).await?;
+        let items = self.selected_items(connection, request, executor).await?;
         for item in &items {
             source.ensure_offering_source(&item.supplier_id)?;
         }
@@ -93,7 +108,7 @@ impl SupplierCatalogAdoptionProcess {
             expires_at: Instant::from_unix_secs(Instant::now().unix_secs() + 3600),
             items,
         };
-        self.db.catalog_adoption_previews().create(&preview, &mut NoTransaction).await?;
+        self.db.catalog_adoption_previews().create(&preview, executor).await?;
         let rows = preview.items.into_iter().map(AdoptionPreviewRow::from).collect();
         Ok(AdoptionPreviewView {
             preview_id: preview.base.id,
@@ -108,11 +123,12 @@ impl SupplierCatalogAdoptionProcess {
         &self,
         connection: &str,
         request: PreviewAdoptionRequest,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierCatalogItem>> {
         if let Some(ids) = request.item_ids {
             let mut items = Vec::with_capacity(ids.len());
             for id in ids {
-                items.push(self.load_item(connection, &id, &mut NoTransaction).await?);
+                items.push(self.load_item(connection, &id, executor).await?);
             }
             return Ok(items);
         }
@@ -120,8 +136,7 @@ impl SupplierCatalogAdoptionProcess {
         let mut items = Vec::new();
         for page in 1..=5 {
             let (rows, total) =
-                supplier_catalog::filtered_page(&self.db, connection, &filter, page, 100, &mut NoTransaction)
-                    .await?;
+                supplier_catalog::filtered_page(&self.db, connection, &filter, page, 100, executor).await?;
             if total > u64::try_from(MAX_PREVIEW_ROWS).expect("500 可表示") {
                 return Err(Error::ValidationError(
                     "当前筛选超过 500 个规格，请缩小筛选范围后分批选品".into(),
@@ -153,15 +168,13 @@ impl SupplierCatalogAdoptionProcess {
     }
 
     /// 一次读取选品功能资格；各项可以来自不同的启用角色。
-    pub(super) async fn ensure_adoption_permissions(&self, actor: &AuditActor) -> Result<()> {
-        let required = [
-            Permission::parse("supplier_api_connection:catalog_sync")?,
-            Permission::parse("supplier_offering_cost:detail")?,
-        ];
-        let qualified =
-            AuthorizationService::new(self.db.clone(), self.rbac.clone(), AuthorizationRegistry::default())
-                .permissions(actor, &required, &mut NoTransaction)
-                .await?;
+    pub(super) async fn ensure_adoption_permissions(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let required = [supplier_api::ADOPTIONS_PREVIEW, internal::SUPPLIER_OFFERING_COST_DETAIL];
+        let qualified = self.authorization.permissions(actor, &required, executor).await?;
         if !qualified.is_some_and(|value| value.permissions().covers(&PermissionSet::new(required))) {
             return Err(Error::Forbidden("当前账号无权执行选品操作".into()));
         }

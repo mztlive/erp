@@ -4,7 +4,6 @@ use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PurchaseOrderId;
 use erp_core::money::Amount;
-use erp_finance::dto::payable::payment_request::PurchasePaymentRequestQuery;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
@@ -146,17 +145,7 @@ impl BusinessFinanceFiles {
         account_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<FulfillmentRequestView>> {
-        let candidates = self
-            .db
-            .purchase_payment_requests()
-            .scope_candidates(
-                &PurchasePaymentRequestQuery {
-                    payable_account_id: Some(account_id.into()),
-                    ..Default::default()
-                },
-                executor,
-            )
-            .await?;
+        let candidates = self.db.purchase_payment_requests().linked_for_account(account_id, executor).await?;
         if candidates.len() > 10_000 {
             return Err(Error::ValidationError("本采购单付款申请过多，请联系管理员核对".into()));
         }

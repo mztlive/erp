@@ -1,10 +1,12 @@
 //! 单账户范围拒绝在名称、余额和资金证据投影之前完成。
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_finance::entity::supplier_deposit::SupplierDepositAccount;
 use erp_finance::repository::supplier_deposit_query::account_page;
 use erp_finance::service::supplier_deposit::SupplierDepositService;
-use erp_identity::{AccessSubject, Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
+use erp_permissions::supplier_deposit;
 use erp_read_models::finance::supplier_deposits::{
     DepositAccountDetail, DepositAccountRow, account_detail, account_row,
 };
@@ -12,7 +14,6 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::super::access::{account_access, audit, identity_access};
-use super::super::repository::authorization::authorization;
 use super::{DepositAccountList, DepositAccountQuery, OpenDepositAccount, SupplierDepositManagementProcess};
 use crate::{Error, Result};
 
@@ -31,7 +32,7 @@ impl SupplierDepositManagementProcess {
         actor: &AuditActor,
     ) -> Result<DepositAccountList<DepositAccountRow>> {
         let db = self.db.clone();
-        let rbac = self.rbac.clone();
+        let authorization = self.authorization.clone();
         let actor = actor.clone();
         let size = u64::from(query.page_size.unwrap_or(20).clamp(1, 100));
         let skip = query
@@ -44,7 +45,9 @@ impl SupplierDepositManagementProcess {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { list_accounts(&db, &rbac, query, &actor, skip, size, executor).await })
+                Box::pin(async move {
+                    list_accounts(&db, &authorization, query, &actor, skip, size, executor).await
+                })
             })
             .await
     }
@@ -59,14 +62,15 @@ impl SupplierDepositManagementProcess {
     /// 越范围、缺归属或数据库失败时拒绝。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<DepositAccountDetail> {
         let db = self.db.clone();
-        let rbac = self.rbac.clone();
+        let authorization = self.authorization.clone();
         let id = id.to_string();
         let actor = actor.clone();
         db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let account = account_access(&db, &rbac, &id, &actor, "detail", executor).await?;
+                    let account =
+                        account_access(&db, &authorization, &id, &actor, "detail", executor).await?;
                     Ok(account_detail(&db, account, executor).await?)
                 })
             })
@@ -87,13 +91,14 @@ impl SupplierDepositManagementProcess {
         actor: &AuditActor,
     ) -> Result<SupplierDepositAccount> {
         let db = self.db.clone();
-        let rbac = self.rbac.clone();
+        let authorization = self.authorization.clone();
         let actor = actor.clone();
         db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    identity_access(&db, &rbac, &command.identity, &actor, "create", executor).await?;
+                    identity_access(&db, &authorization, &command.identity, &actor, "create", executor)
+                        .await?;
                     let account = SupplierDepositService::new(db.clone())
                         .open_account(&command.operation_key, command.identity, executor)
                         .await?;
@@ -107,19 +112,14 @@ impl SupplierDepositManagementProcess {
 
 async fn list_accounts(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     query: DepositAccountQuery,
     actor: &AuditActor,
     skip: u64,
     size: u64,
     executor: &mut dyn Executor,
 ) -> Result<DepositAccountList<DepositAccountRow>> {
-    let (authorization, mapping) = authorization(db, rbac, None);
-    let access = authorization
-        .query(actor, &Permission::parse("supplier_deposit:list")?, AccessSubject::Direct, executor)
-        .await?;
-    let compiled = access.compile(mapping.as_ref(), executor).await?;
-    authorization.validate(&compiled, executor).await?;
+    let compiled = authorization.query(actor, &supplier_deposit::LIST, executor).await?;
     let mut candidates = account_page(
         db,
         query.supplier_id.as_deref(),

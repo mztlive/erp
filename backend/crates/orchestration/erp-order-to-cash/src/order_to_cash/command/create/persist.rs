@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_approval_runtime::approver_directory::resolve_approvers;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_identity::service::business_ownership::ensure_creation_org as ensure_order_creation_org;
+use erp_permissions::sales_selection as selection_permissions;
 use erp_sales::entity::sales_order::inquiry_source::InquirySalesSourceRequest;
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::entity::sales_order::{SalesOrder, SalesOrderWorkingCopyLine};
@@ -36,7 +37,7 @@ use crate::{Error, Result};
 pub(super) struct CreationWriteContext {
     services: Arc<SalesServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     actor: AuditActor,
     access: SalesCommandAccess,
     bind_command: BindPublishedDefinitionCommand,
@@ -61,13 +62,13 @@ impl SalesOrderCommandProcess {
         inquiry_source: Option<InquirySalesSourceRequest>,
     ) -> Result<CreationWriteContext> {
         let bind_command = sales_create_bind_command(plan.order(), actor)?;
-        let rbac = self.rbac.clone();
+        let authorization = self.authorization.clone();
 
         let sellable_refs = SalesOrderService::sellable_working_copy_refs(plan.working_copy_lines())?;
         Ok(CreationWriteContext {
             services: self.services.clone(),
             db: self.db.clone(),
-            rbac,
+            authorization,
             actor: actor.clone(),
             access: access.clone(),
             bind_command,
@@ -99,7 +100,7 @@ pub(super) async fn persist_creation(
     }
     reserve_inquiry_creation(
         &context.db,
-        &context.rbac,
+        &context.authorization,
         context.inquiry_source.as_ref(),
         plan.order(),
         &context.inquiry_lines,
@@ -162,9 +163,15 @@ async fn persist_created_submission(
         executor,
     )
     .await?;
-    let prepared =
-        prepare_bound_submission(&context.db, &context.rbac, &submit, &binding, &context.actor, executor)
-            .await?;
+    let prepared = prepare_bound_submission(
+        &context.db,
+        &context.authorization,
+        &submit,
+        &binding,
+        &context.actor,
+        executor,
+    )
+    .await?;
     ensure_creation_org(&context.db, &submit.creation.order, executor).await?;
     persist_submission_records(&context.db, &submit, executor).await?;
     persist_created_runtime(context, &submit, prepared, executor).await?;
@@ -195,7 +202,7 @@ async fn persist_creation_binding(
 /// 绑定成功后才读取冻结定义并构造首次提交的审批计划。
 async fn prepare_bound_submission(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     submit: &CreationSubmit,
     binding: &ApprovalDefinitionBinding,
     actor: &AuditActor,
@@ -257,7 +264,7 @@ async fn persist_created_runtime(
             &writes,
             SalesOrderRuntimeWriteInput {
                 resubmission_reason: None,
-                identity: &context.rbac,
+                identity: &context.authorization,
                 approvals: context.services.approvals.as_ref(),
                 document_type: approval.ports.document_type,
                 snapshot_payload: &approval.snapshot,
@@ -282,7 +289,14 @@ async fn ensure_creation_ready(
     context.access.creation(order, executor).await?;
     if let Some(source) = &order.selection_source {
         let access = context.services.selections.clone();
-        let proposal = access.require_proposal(&context.actor, "get", &source.proposal_id, executor).await?;
+        let proposal = access
+            .require_proposal(
+                &context.actor,
+                &selection_permissions::PROPOSAL_DETAIL,
+                &source.proposal_id,
+                executor,
+            )
+            .await?;
         SalesSelectionSource::from_proposal(&proposal, &order.customer_id, order.business_type)?;
     }
     SalesOrderService::new(context.db.clone())

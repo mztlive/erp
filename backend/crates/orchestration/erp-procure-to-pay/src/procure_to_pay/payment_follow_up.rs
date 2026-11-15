@@ -1,9 +1,11 @@
 //! 采购付款跟进安排：精确任务、负责人、版本及回执在同一事务核验。
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
 use erp_read_models::purchase_center::payment_arrangement::arrangement_facts;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item_command::{WorkItemCommandReceipt, WorkItemCommandResult};
@@ -39,8 +41,6 @@ impl PurchaseOrderProcess {
         req: SchedulePaymentFollowUp,
         actor: &AuditActor,
     ) -> Result<()> {
-        let entry = Permission::parse("purchase_payment_request:submit")?;
-        let access = self.ports.access(self.db.clone());
         let rbac = self.require_rbac()?.clone();
         let command = CommandReceipt::from_resource_parts(
             "payment-follow-up-",
@@ -57,10 +57,7 @@ impl PurchaseOrderProcess {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access.require_source(&actor, &entry, std::slice::from_ref(&id), executor).await?;
-                    schedule(&db, &rbac, &id, &req, &actor, &command, executor).await
-                })
+                Box::pin(async move { schedule(&db, &rbac, &id, &req, &actor, &command, executor).await })
             })
             .await
     }
@@ -68,7 +65,7 @@ impl PurchaseOrderProcess {
 /// 写入任务、审计与独立命令结果；不启动新事务。
 async fn schedule(
     db: &Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     id: &str,
     req: &SchedulePaymentFollowUp,
     actor: &AuditActor,

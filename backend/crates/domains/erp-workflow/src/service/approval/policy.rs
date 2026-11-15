@@ -3,6 +3,7 @@
 //! 政策由代码注册，禁止默认政策、Noop 动作或复制 `process_kind.rs` 映射。
 
 use bpm::ProcessKind;
+use erp_permissions::{Permission, approval_admin};
 
 use super::process_kind::process_kind_of;
 pub use crate::entity::approval_integration::ApprovalDomainAction;
@@ -190,9 +191,9 @@ pub struct ProcessRequiredApprovalPolicy {
     /// 对应 BPM 流程种类。
     pub process_kind: ProcessKind,
     /// 类型级定义管理权限。
-    pub definition_admin_permission: String,
+    pub definition_admin_permission: Permission,
     /// 类型级运行管理权限。
-    pub runtime_admin_permission: String,
+    pub runtime_admin_permission: Permission,
     /// 审批人资格策略。
     pub approver_eligibility_policy: ApproverEligibilityPolicy,
     /// 岗位分离策略。
@@ -578,9 +579,17 @@ fn no_approval(document_type: DocumentType) -> DocumentApprovalPolicy {
 /// 解析类型级管理权限。
 ///
 /// # 错误
-/// 当前实现只拼接单据类型与动作，不会失败。
-fn type_permission(document_type: DocumentType, action: &str) -> Result<String> {
-    Ok(format!("{}:{action}", document_type.as_str()))
+/// 类型或管理动作未登记时返回校验错误。
+fn type_permission(document_type: DocumentType, action: &str) -> Result<Permission> {
+    let (_, definition, runtime) = approval_admin::TYPES
+        .iter()
+        .find(|(kind, _, _)| *kind == document_type.as_str())
+        .ok_or_else(|| Error::ValidationError("无审批类型不能配置审批管理资格".into()))?;
+    match action {
+        "approval_definition_admin" => Ok(definition.clone()),
+        "approval_runtime_admin" => Ok(runtime.clone()),
+        _ => Err(Error::ValidationError("未知审批管理动作".into())),
+    }
 }
 
 /// 返回该必须审批类型的稳定责任角色。
@@ -874,11 +883,11 @@ mod tests {
         assert_eq!(policy.document_type, document_type);
         assert_eq!(policy.process_kind, process_kind_of(document_type));
         assert_eq!(
-            policy.definition_admin_permission,
+            policy.definition_admin_permission.to_string(),
             format!("{}:approval_definition_admin", document_type.as_str())
         );
         assert_eq!(
-            policy.runtime_admin_permission,
+            policy.runtime_admin_permission.to_string(),
             format!("{}:approval_runtime_admin", document_type.as_str())
         );
         assert_eq!(

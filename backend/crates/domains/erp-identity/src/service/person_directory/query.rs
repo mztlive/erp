@@ -1,8 +1,10 @@
-//! 人员目录读取：授权、资格和组织在调用方事务内一次完成。
+//! 人员目录查询、分页和交付复验均使用同一次统一授权与原事务。
 
 use std::collections::BTreeSet;
 
 use application_core::{AuditActor, PageView};
+use erp_core::common::time::Instant;
+use erp_permissions::{Permission, access_control};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -10,91 +12,75 @@ use crate::dto::PersonDirectoryPage;
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
-use crate::entity::person_directory::{
-    DirectoryListRequest, PersonDirectoryCategory, candidate_in_directory, directory_org_ids,
-};
+use crate::entity::person_directory::{DirectoryListRequest, PersonDirectoryCategory};
 use crate::repository::OrganizationRepository;
 use crate::repository::fingerprint::BsonFingerprint;
-use crate::repository::person_directory_query::{
-    DIRECTORY_LIMIT, DirectoryRead, DirectoryResult, directory_page,
-};
-use crate::service::access_control::resolve::{DataScopeFacts, DataScopeService};
-use crate::service::iam::SharedRbacService;
-use crate::{Error, Permission, Result};
+use crate::repository::person_directory_query::{DirectoryRead, DirectoryResult, directory_page};
+use crate::{AuthorizationService, CompiledAccess, Error, Result};
 
-/// 查询一页人员目录。
-///
+struct DirectoryDisplay {
+    organizations: OrganizationState,
+    policy_version: u64,
+    scope_version: String,
+    as_of: Instant,
+    no_scope: bool,
+}
+
+/// 使用中央查询条件在数据库分页前过滤人员目录。
 /// # 参数
-/// * `db` - 身份数据库
-/// * `rbac` - RBAC 服务
-/// * `actor` - 已认证操作人
-/// * `category` - 路由固定的查询类别
-/// * `request` - 已规范化的目录条件
-/// * `executor` - 调用方事务执行器
-///
+/// db、authorization 为共享设施；actor、category、request 为当前身份和目录筛选；executor 为原快照。
 /// # 返回
-/// 返回目录页。无范围时为空页并标记 `no_scope`。
-///
+/// 满足完整授权及业务筛选的目录页、总数与范围版本。
 /// # 错误
-/// 无动作权限、版本变化、非法组织或读取失败时返回错误。
+/// 无权限、非法筛选、超限、版本变化或读取失败时拒绝。
 pub async fn list_page(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     category: PersonDirectoryCategory,
     request: &DirectoryListRequest,
     executor: &mut dyn Executor,
 ) -> Result<PersonDirectoryPage> {
-    let mut authorized = authorize(db, rbac, actor, category, executor).await?;
-    let org_filter = expand_org_filter(
-        &authorized.facts.organizations,
-        &request.org_unit_ids,
-        request.include_descendants,
-    )?;
-    load_scope_memberships(db, &mut authorized, org_filter.as_ref(), None, executor).await?;
-    let ids = scope_ids(&authorized, org_filter.as_ref(), None)?;
+    let (access, mut display) = authorize(db, authorization, actor, category, executor).await?;
+    let org_filter =
+        expand_org_filter(&display.organizations, &request.org_unit_ids, request.include_descendants)?;
+    let orgs = org_filter.as_ref().map(|ids| ids.iter().cloned().collect::<Vec<_>>());
     let result = directory_page(
         db,
         &DirectoryRead {
             category,
-            authorized_ids: ids.as_deref(),
+            org_unit_ids: orgs.as_deref(),
             selected_ids: None,
             search: request.search.as_deref(),
             page: request.page,
             page_size: request.page_size,
         },
+        &access,
         executor,
     )
     .await?;
-    let display = display_version(db, &mut authorized, &result, executor).await?;
-    // v2 字段顺序：展示版本、可选搜索词、可选无序组织集合。
+    let content = display_version(db, &mut display, &result, executor).await?;
     let mut version = Fingerprint::new("person-directory-query-v2");
-    version.text(&display);
+    version.text(&content);
     version.optional(request.search.as_deref(), Fingerprint::text);
     version.optional(org_filter.as_ref(), |hash, ids| hash.unordered(ids, |hash, id| hash.text(id)));
     let version = version.finish();
     ensure_current_version(&request.scope_version, &version)?;
-    page_from_result(result, request.page, request.page_size, &authorized, version)
+    let page = page_from_result(result, request.page, request.page_size, &display, version)?;
+    authorization.validate(&access, executor).await?;
+    Ok(page)
 }
 
-/// 回显已选人员。不存在或无权读取的 ID 不返回名称。
-///
+/// 已选账号只收窄同一目录查询，不以请求 ID 代替中央授权条件。
 /// # 参数
-/// * `db` - 身份数据库
-/// * `rbac` - RBAC 服务
-/// * `actor` - 已认证操作人
-/// * `category` - 路由固定的查询类别
-/// * `ids` - 已去重的已选账号 ID
-/// * `executor` - 调用方事务执行器
-///
+/// db、authorization 为共享设施；actor、category、ids 为当前身份和已选完整集合；executor 为原快照。
 /// # 返回
-/// 返回当前仍可读的人员及授权元信息。
-///
+/// 当前仍可读且满足目录资格的人员及授权元信息。
 /// # 错误
-/// 无动作权限或读取失败时返回错误。
+/// 身份、动作无权、输入超限、依赖到期或读取失败时拒绝。
 pub async fn selected_page(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     category: PersonDirectoryCategory,
     ids: &[String],
@@ -104,79 +90,65 @@ pub async fn selected_page(
         return Err(Error::ValidationError("已选人员须为 1 到 100 项".into()));
     }
     let page_size = u32::try_from(ids.len()).map_err(|_| Error::ValidationError("已选人员过多".into()))?;
-    let mut authorized = authorize(db, rbac, actor, category, executor).await?;
-    load_scope_memberships(db, &mut authorized, None, Some(ids), executor).await?;
-    let allowed = scope_ids(&authorized, None, Some(ids))?;
+    let (access, mut display) = authorize(db, authorization, actor, category, executor).await?;
     let result = directory_page(
         db,
         &DirectoryRead {
             category,
-            authorized_ids: allowed.as_deref(),
+            org_unit_ids: None,
             selected_ids: Some(ids),
             search: None,
             page: 1,
             page_size,
         },
+        &access,
         executor,
     )
     .await?;
-    let version = display_version(db, &mut authorized, &result, executor).await?;
-    page_from_result(result, 1, page_size, &authorized, version)
+    let version = display_version(db, &mut display, &result, executor).await?;
+    let page = page_from_result(result, 1, page_size, &display, version)?;
+    authorization.validate(&access, executor).await?;
+    Ok(page)
 }
 
-struct AuthorizedDirectory {
-    facts: DataScopeFacts,
-    actor_id: String,
-}
-
-/// 在调用方事务内按目录类别的 `list` 动作解析数据范围。
+/// 范围和功能资格只解析一次，展示所需组织树仍使用同一快照读取。
 async fn authorize(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &AuthorizationService,
     actor: &AuditActor,
     category: PersonDirectoryCategory,
     executor: &mut dyn Executor,
-) -> Result<AuthorizedDirectory> {
-    let resolved = DataScopeService::new(db.clone(), rbac.clone())
-        .resolve(actor, &Permission::parse(format!("{}:{}", category.resource(), "list"))?, executor)
-        .await?;
-    Ok(AuthorizedDirectory { facts: resolved.facts, actor_id: actor.id().to_string() })
-}
-
-/// 仅在明确组织或 selected 身份内装载当前关系，数据库阶段限制规模。
-async fn load_scope_memberships(
-    db: &Database,
-    authorized: &mut AuthorizedDirectory,
-    org_filter: Option<&BTreeSet<String>>,
-    selected: Option<&[String]>,
-    executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<(CompiledAccess, DirectoryDisplay)> {
+    let access = authorization.query(actor, &permission(category), executor).await?;
     let repository = OrganizationRepository::new(db);
-    let orgs = directory_org_ids(&authorized.facts.scope, org_filter).into_iter().collect::<Vec<_>>();
-    let rows = if let Some(ids) = selected {
-        repository.directory_memberships(Some(ids), None, authorized.facts.as_of, executor).await?
-    } else {
-        repository.directory_memberships(None, Some(&orgs), authorized.facts.as_of, executor).await?
+    let organizations = OrganizationState {
+        version: repository.revision(executor).await?.map_or(0, |row| row.revision),
+        units: repository.units(executor).await?,
+        ..Default::default()
     };
-    let mut seen = authorized
-        .facts
-        .organizations
-        .memberships
-        .iter()
-        .map(|row| row.base.id.clone())
-        .collect::<BTreeSet<_>>();
-    for row in rows {
-        if seen.insert(row.base.id.clone()) {
-            authorized.facts.organizations.memberships.push(row);
-        }
-    }
-    Ok(())
+    let display = DirectoryDisplay {
+        organizations,
+        policy_version: access.policy_version(),
+        scope_version: access.version(),
+        as_of: access.as_of(),
+        no_scope: !access.has_role_scope(),
+    };
+    Ok((access, display))
 }
 
-/// 只为已受限的内容版本索引读取组织标签；有效期跨界亦改变目录版本。
+/// 路由固定类别直接引用公共权限常量。
+fn permission(category: PersonDirectoryCategory) -> Permission {
+    match category {
+        PersonDirectoryCategory::Sales => access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
+        PersonDirectoryCategory::Procurement => access_control::PERSON_DIRECTORY_LIST_PROCUREMENT_PEOPLE,
+        PersonDirectoryCategory::Business => access_control::PERSON_DIRECTORY_LIST_BUSINESS_PEOPLE,
+    }
+}
+
+/// 仅为已授权内容版本索引读取标签，不扩大中央查询成员集合。
 async fn display_version(
     db: &Database,
-    authorized: &mut AuthorizedDirectory,
+    display: &mut DirectoryDisplay,
     result: &DirectoryResult,
     executor: &mut dyn Executor,
 ) -> Result<String> {
@@ -189,13 +161,12 @@ async fn display_version(
                 .map_err(|_| Error::Internal("人员目录版本索引缺少身份".into()))
         })
         .collect::<Result<Vec<_>>>()?;
-    authorized.facts.organizations.memberships = OrganizationRepository::new(db)
-        .directory_memberships(Some(&ids), None, authorized.facts.as_of, executor)
+    display.organizations.memberships = OrganizationRepository::new(db)
+        .directory_memberships(Some(&ids), None, display.as_of, executor)
         .await?;
-    // v2 字段顺序：内容版本、无序关系（账号、组织、关系 ID、关系版本）。
     let mut version = Fingerprint::new("person-directory-display-v2");
-    version.text(&content_version(&authorized.facts.scope_version, result));
-    version.unordered(&authorized.facts.organizations.memberships, |hash, row| {
+    version.text(&content_version(&display.scope_version, result));
+    version.unordered(&display.organizations.memberships, |hash, row| {
         hash.text(&row.user_id);
         hash.text(&row.org_unit_id);
         hash.text(&row.base.id);
@@ -204,55 +175,15 @@ async fn display_version(
     Ok(version.finish())
 }
 
-/// 将组织状态转为有界的人员范围索引；公司无个人上限时不展开全部账号。
-fn scope_ids(
-    authorized: &AuthorizedDirectory,
-    org_filter: Option<&BTreeSet<String>>,
-    selected: Option<&[String]>,
-) -> Result<Option<Vec<String>>> {
-    let scope = &authorized.facts.scope;
-    if selected.is_none()
-        && org_filter.is_none()
-        && scope.role_clauses.iter().any(|clause| clause.company)
-        && scope.user_limit.as_ref().is_none_or(|limit| limit.company)
-    {
-        return Ok(None);
-    }
-    let candidates =
-        selected.map(|ids| ids.iter().map(String::as_str).collect::<BTreeSet<_>>()).unwrap_or_else(|| {
-            let mut ids = authorized
-                .facts
-                .organizations
-                .memberships
-                .iter()
-                .map(|m| m.user_id.as_str())
-                .collect::<BTreeSet<_>>();
-            ids.insert(authorized.actor_id.as_str());
-            ids
-        });
-    let mut ids = Vec::new();
-    for id in candidates {
-        let org = authorized.facts.organizations.own_org(id, authorized.facts.as_of)?;
-        if candidate_in_directory(scope, &authorized.actor_id, id, org, org_filter) {
-            ids.push(id.to_owned());
-        }
-        if ids.len() > DIRECTORY_LIMIT {
-            return Err(Error::ValidationError("人员范围超过上限，请收窄组织条件".into()));
-        }
-    }
-    Ok(Some(ids))
-}
-
 /// 内容索引包含账号显示信息和资格版本，不用人数代替目录版本。
 fn content_version(scope: &str, result: &DirectoryResult) -> String {
-    // v2 字段顺序：范围版本、无序人员版本文档；文档内部保留 BSON 字段顺序。
     let mut hash = Fingerprint::new("person-directory-content-v2");
     hash.text(scope);
     hash.unordered(&result.versions, Fingerprint::document);
     hash.finish()
 }
 
-/// 展开用户指定的目录组织条件。
+/// 展开请求中的业务筛选；查询授权由原 CompiledAccess 负责。
 fn expand_org_filter(
     state: &OrganizationState,
     org_unit_ids: &[String],
@@ -282,7 +213,7 @@ fn org_label(state: &OrganizationState, primary_org: Option<&str>) -> Option<Str
         .map(|unit| unit.name.clone())
 }
 
-/// 调用方带回的目录版本与当前快照不一致时拒绝，未带版本则不比较。
+/// 客户端持有旧版本时整体拒绝，不把不同目录快照拼接。
 fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<()> {
     if requested.as_ref().is_some_and(|version| version != current) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
@@ -290,28 +221,28 @@ fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<(
     Ok(())
 }
 
-/// 填充本页人员组织标签并返回独立目录快照。
+/// 目录成员已在数据库过滤，只在此补充同快照的展示标签。
 fn page_from_result(
     result: DirectoryResult,
     page: u64,
     page_size: u32,
-    authorized: &AuthorizedDirectory,
+    display: &DirectoryDisplay,
     version: String,
 ) -> Result<PersonDirectoryPage> {
     let total = result.totals.first().map_or(0, |row| row.count);
     let mut items = result.items;
     for item in &mut items {
-        let org = authorized.facts.organizations.own_org(&item.id, authorized.facts.as_of)?;
-        item.org_label = org_label(&authorized.facts.organizations, org);
+        let org = display.organizations.own_org(&item.id, display.as_of)?;
+        item.org_label = org_label(&display.organizations, org);
         item.primary_org_unit_id = org.filter(|_| item.org_label.is_some()).map(ToOwned::to_owned);
     }
     Ok(PersonDirectoryPage::from_page(
         PageView { items, total, page, page_size },
         version,
-        authorized.facts.policy_version,
-        authorized.facts.organizations.version,
-        authorized.facts.as_of.as_utc().to_rfc3339(),
-        (!authorized.facts.scope.has_role_scope()).then_some("no_scope"),
+        display.policy_version,
+        display.organizations.version,
+        display.as_of.as_utc().to_rfc3339(),
+        display.no_scope.then_some("no_scope"),
     ))
 }
 
@@ -322,10 +253,25 @@ mod tests {
 
     use super::*;
     use crate::dto::PersonDirectoryItem;
-    use crate::entity::access_control::{ResolvedScope, ScopeClause};
     use crate::entity::account_core::AccountStatus;
     use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
     use crate::repository::person_directory_query::version_fixture;
+
+    #[test]
+    fn empty_directory_keeps_scope_absence_separate_from_empty_membership() {
+        let mut display = DirectoryDisplay {
+            organizations: OrganizationState::default(),
+            policy_version: 1,
+            scope_version: "scope".into(),
+            as_of: Instant::from_unix_secs(1),
+            no_scope: false,
+        };
+        let empty = page_from_result(DirectoryResult::default(), 1, 20, &display, "scope".into()).unwrap();
+        assert_eq!(empty.empty_reason, None);
+        display.no_scope = true;
+        let denied = page_from_result(DirectoryResult::default(), 1, 20, &display, "scope".into()).unwrap();
+        assert_eq!(denied.empty_reason, Some("no_scope"));
+    }
 
     #[test]
     fn directory_returns_effective_primary_org_and_clears_expired_membership() {
@@ -352,24 +298,16 @@ mod tests {
         for (at, enabled, expected) in [(5, true, Some("org")), (10, true, None), (5, false, None)] {
             let mut unit = unit.clone();
             unit.enabled = enabled;
-            let authorized = AuthorizedDirectory {
-                facts: DataScopeFacts {
-                    resource: "person".into(),
-                    action: "list".into(),
-                    scope: ResolvedScope {
-                        role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
-                        user_limit: None,
-                    },
-                    organizations: OrganizationState {
-                        units: vec![unit.clone()],
-                        memberships: vec![membership.clone()],
-                        ..Default::default()
-                    },
-                    policy_version: 1,
-                    scope_version: "scope".into(),
-                    as_of: Instant::from_unix_secs(at),
+            let authorized = DirectoryDisplay {
+                organizations: OrganizationState {
+                    units: vec![unit.clone()],
+                    memberships: vec![membership.clone()],
+                    ..Default::default()
                 },
-                actor_id: "admin".into(),
+                policy_version: 1,
+                scope_version: "scope".into(),
+                as_of: Instant::from_unix_secs(at),
+                no_scope: false,
             };
             let result = DirectoryResult {
                 items: vec![PersonDirectoryItem {
@@ -414,32 +352,5 @@ mod tests {
         assert_ne!(version, content_version("other-scope", &result));
         result.versions.pop();
         assert_ne!(version, content_version("scope", &result));
-    }
-
-    #[test]
-    fn selected_resolution_is_limited_to_requested_ids_and_user_ceiling() {
-        let mut authorized = AuthorizedDirectory {
-            facts: DataScopeFacts {
-                resource: "person".into(),
-                action: "list".into(),
-                scope: ResolvedScope {
-                    role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
-                    user_limit: None,
-                },
-                organizations: OrganizationState::default(),
-                policy_version: 1,
-                scope_version: "scope".into(),
-                as_of: Instant::from_unix_secs(1),
-            },
-            actor_id: "a".into(),
-        };
-        assert_eq!(scope_ids(&authorized, None, None).unwrap(), None);
-        let selected = vec!["b".into()];
-        assert_eq!(scope_ids(&authorized, None, Some(&selected)).unwrap(), Some(selected.clone()));
-        authorized.facts.scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
-        assert_eq!(scope_ids(&authorized, None, Some(&selected)).unwrap(), Some(vec![]));
-        assert_eq!(scope_ids(&authorized, None, None).unwrap(), Some(vec!["a".into()]));
-        authorized.facts.scope.role_clauses.clear();
-        assert_eq!(scope_ids(&authorized, None, None).unwrap(), Some(vec![]));
     }
 }

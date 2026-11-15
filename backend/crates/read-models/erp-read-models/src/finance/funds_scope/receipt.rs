@@ -10,6 +10,7 @@ use erp_finance::entity::receivable::{AllocationAction, ReceiptAllocation};
 use erp_finance::repository::keyword::FinanceSearchTarget;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{CustomerReceiptFilter, ReceivableExt};
+use erp_permissions::receivable as receivable_permissions;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -315,7 +316,8 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
-        let (_, authorization) = self.resolve(actor, "customer_receipt", "list", executor).await?;
+        let (_, authorization) =
+            self.resolve(actor, &receivable_permissions::CUSTOMER_RECEIPT_LIST, executor).await?;
         let condition = self.receipt_condition(query, executor).await?;
         let filter = self.receipt_filter(query).await?;
         let snapshot =
@@ -335,6 +337,7 @@ impl FundsAccess {
         let items = self
             .receipt_page(snapshot.items, &snapshot.versions, &whole_ids, &authorization, executor)
             .await?;
+        authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
@@ -363,8 +366,9 @@ impl FundsAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (_, authorization) =
-                        this.resolve(&actor, "customer_receipt", "list", executor).await?;
+                    let (_, authorization) = this
+                        .resolve(&actor, &receivable_permissions::CUSTOMER_RECEIPT_LIST, executor)
+                        .await?;
                     let condition = this.receipt_condition(&query, executor).await?;
                     let filter = this.receipt_filter(&query).await?;
                     let versions = receipt_repository::versions(
@@ -381,6 +385,7 @@ impl FundsAccess {
                             "回款查询超过上限，请收窄组织或负责人条件".into(),
                         ));
                     }
+                    authorization.deliver(executor).await?;
                     Ok(flow::version(&authorization.context.scope_version, &versions))
                 })
             })
@@ -608,19 +613,18 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedCustomerReceiptRow>> {
-        let (_access, authorization) = self.resolve(actor, "customer_receipt", "detail", executor).await?;
-        let filter = CustomerReceiptFilter {
-            receipt_ids: Some(vec![id.to_string()]),
-            page_size: 1,
-            ..Default::default()
-        };
-        let page = self.db.customer_receipts().search_customer_receipts(&filter, executor).await?;
-        let row = page.items.into_iter().next().ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
+        let (_access, authorization) =
+            self.resolve(actor, &receivable_permissions::CUSTOMER_RECEIPT_DETAIL, executor).await?;
+        self.require_visible_root(&authorization, id, executor).await?;
+        let row = self.customer_receipt_row(id, executor).await?;
         let links = self.receipt_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.sales_fact_map(&order_ids, executor).await?;
-        let authorized = self.authorized_sales_targets(&authorization, &order_ids, executor).await?;
-        let allowed = authorized.into_iter().collect::<BTreeSet<_>>();
+        let allowed = self
+            .authorized_sales_targets(&authorization, &order_ids, executor)
+            .await?
+            .into_iter()
+            .collect::<BTreeSet<_>>();
         let row_links = links.get(&row.id).map(Vec::as_slice).unwrap_or_default();
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
             return Err(Error::NotFound("客户回款单不存在".into()));
@@ -649,6 +653,7 @@ impl FundsAccess {
         .await?;
         self.finish_receipt_names(std::slice::from_mut(&mut data), executor).await?;
         let parts = receipt_detail_parts(&row, &matched, &facts);
+        authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),
@@ -657,6 +662,21 @@ impl FundsAccess {
             scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
             ownership_basis: "linked_sales_owner_and_receipt_operator",
         })
+    }
+
+    /// 按真实根身份读取原回款列表投影，供已完成授权的详情使用。
+    async fn customer_receipt_row(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerReceiptRow> {
+        let filter = CustomerReceiptFilter {
+            receipt_ids: Some(vec![id.to_string()]),
+            page_size: 1,
+            ..Default::default()
+        };
+        let page = self.db.customer_receipts().search_customer_receipts(&filter, executor).await?;
+        page.items.into_iter().next().ok_or_else(|| Error::NotFound("客户回款单不存在".into()))
     }
 }
 

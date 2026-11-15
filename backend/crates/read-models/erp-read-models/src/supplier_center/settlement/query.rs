@@ -2,6 +2,8 @@
 use std::collections::BTreeMap;
 
 use application_core::AuditActor;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_settlement;
 use erp_supply::SettlementAccess;
 use erp_supply::dto::supplier_settlement as dto;
 use erp_supply::entity::supplier_settlement::{
@@ -19,7 +21,7 @@ use erp_supply::service::supplier_settlement::shared::zero_amount;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use erp_workflow::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use view_dto::SupplierSettlementStatementDetailView;
 
 use super::display_dto::SettlementStatementDisplayDetail;
@@ -45,25 +47,52 @@ impl SupplierSettlementReadService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SettlementStatementDisplayDetail> {
-        let snapshot = self
-            .db
+        let (db, authorization, id, actor) =
+            (self.db.clone(), self.identity.clone(), id.to_string(), actor.clone());
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { Self::new(db, authorization).detail(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn authorized_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierSettlementStatementDetailSnapshot> {
+        self.identity
+            .require(actor, &supplier_settlement::STATEMENT_DETAIL, AccessTarget::record(id)?, executor)
+            .await?;
+        self.db
             .supplier_settlement()
-            .statement_detail_snapshot(id, &mut NoTransaction)
+            .statement_detail_snapshot(id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("供应商结算单不存在".to_string()))?;
+            .ok_or_else(|| Error::NotFound("供应商结算单不存在".into()))
+    }
+
+    async fn detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementStatementDisplayDetail> {
+        let snapshot = self.authorized_snapshot(id, actor, executor).await?;
         let stats = settlement_detail_stats(&snapshot);
         let statement = snapshot.statement;
         let items = snapshot.items;
         let differences = snapshot.differences;
         let access = SettlementAccess::new(self.db.clone(), self.identity.clone())
-            .actions(actor, id, &mut NoTransaction)
+            .actions(actor, id, executor)
             .await?;
         let (mut allowed_actions, mut action_blockers, processing_state) =
             settlement_object_actions(&statement, &differences, &access);
         let cost_delta = statement.accepted_cost_delta(&items, &differences)?;
         let cost_adjustment_ready = cost_delta.is_zero();
         let (review_work_item, review_action_blockers, review_domain_actions) =
-            self.settlement_review_work_item_view(&statement, actor).await?;
+            self.settlement_review_work_item_view(&statement, actor, executor).await?;
         allowed_actions.extend(
             review_domain_actions.into_iter().filter(|action| action != "CONFIRM" || cost_adjustment_ready),
         );
@@ -95,7 +124,7 @@ impl SupplierSettlementReadService {
             allowed_actions,
             action_blockers,
         };
-        self.detail_display_view(detail).await
+        self.detail_display_view(detail, executor).await
     }
 
     /// 为详情返回当前 actor 的 W27 领域动作，不把领域动作塞进通用责任注册表。
@@ -103,6 +132,7 @@ impl SupplierSettlementReadService {
         &self,
         statement: &SupplierSettlementStatement,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(
         Option<view_dto::SettlementReviewWorkItemView>,
         Vec<dto::SettlementReviewActionBlockerView>,
@@ -114,7 +144,7 @@ impl SupplierSettlementReadService {
         let mut items = self
             .db
             .work_items()
-            .list_active_by_object("supplier_settlement_statement", &statement.base.id, &mut NoTransaction)
+            .list_active_by_object("supplier_settlement_statement", &statement.base.id, executor)
             .await?
             .into_iter()
             .filter(|item| item.work_item_type == WorkItemType::SupplierSettlementReview)
@@ -136,7 +166,8 @@ impl SupplierSettlementReadService {
                 "复核任务与当前结算主题不一致，已禁止决定",
             ));
         }
-        let (domain_actions, action_blockers) = self.review_actions(statement, actor, &item).await?;
+        let (domain_actions, action_blockers) =
+            self.review_actions(statement, actor, &item, executor).await?;
         Ok((
             Some(view_dto::SettlementReviewWorkItemView {
                 work_item_id: item.base.id,
@@ -162,13 +193,14 @@ impl SupplierSettlementReadService {
         statement: &SupplierSettlementStatement,
         actor: &AuditActor,
         item: &WorkItem,
+        executor: &mut dyn Executor,
     ) -> Result<(Vec<String>, Vec<dto::SettlementReviewActionBlockerView>)> {
-        let authorized =
-            match require_reviewer(&self.db, &self.identity, actor, item, &mut NoTransaction).await {
-                Ok(()) => true,
-                Err(Error::Forbidden(_) | Error::NotFound(_)) => false,
-                Err(error) => return Err(error),
-            };
+        let result = require_reviewer(&self.db, &self.identity, actor, item, executor).await;
+        let authorized = match result {
+            Ok(()) => true,
+            Err(Error::Forbidden(_) | Error::NotFound(_)) => false,
+            Err(error) => return Err(error),
+        };
         let separation_satisfied = !statement.is_prepared_by(actor.id());
         let (domain_actions, action_blockers) = if authorized {
             settlement_review_access(true, true, separation_satisfied)
@@ -183,29 +215,6 @@ impl SupplierSettlementReadService {
             )
         };
         Ok((domain_actions, action_blockers))
-    }
-}
-
-impl SupplierSettlementReadService {
-    /// 结算列表在分页前解析供应商名称，保留本域日期/状态与统计口径。
-    ///
-    /// # 参数
-    /// * `params` - 结算列表查询参数。
-    ///
-    /// # 返回
-    /// 返回结算列表视图。空关键词不按名称收窄。
-    ///
-    /// # 错误
-    /// 参数校验失败时返回 `ValidationError`。供应商名称或结算列表读取失败时返回对应错误。
-    pub async fn supplier_settlement_statement_list(
-        &self,
-        params: &dto::SupplierSettlementStatementListParams,
-    ) -> Result<dto::SupplierSettlementStatementListView> {
-        validator::Validate::validate(params)?;
-        let suppliers = crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref()).await?;
-        Ok(erp_supply::service::supplier_settlement::SupplierSettlementService::new(self.db.clone())
-            .supplier_settlement_statement_list(params, suppliers)
-            .await?)
     }
 }
 
@@ -261,4 +270,30 @@ fn blocked_review(
 ) -> (Option<view_dto::SettlementReviewWorkItemView>, Vec<dto::SettlementReviewActionBlockerView>, Vec<String>)
 {
     (None, vec![review_blocker("REVIEW_DECISION", code, message)], Vec::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 详情入口资格失败时，主表及关联名称都不得先行读取。
+    #[tokio::test]
+    async fn detail_stops_before_statement_or_display_reads_when_authorization_fails() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("settlement_detail_authorization");
+        let service = SupplierSettlementReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "操作人".into(), AccountKind::Admin);
+        let error = service
+            .detail("statement", &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("入口授权失败不能读取结算及名称");
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
 }

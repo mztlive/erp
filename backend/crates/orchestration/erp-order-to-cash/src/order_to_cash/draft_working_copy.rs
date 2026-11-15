@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::SalesOrderId;
+use erp_permissions::sales_order as sales_order_permissions;
 use erp_sales::dto::sales_order::SalesOrderDraftRequest;
 use erp_sales::entity::sales_order::{
     SalesOrder, SalesOrderLine, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, WorkingPurpose,
@@ -11,7 +12,7 @@ use erp_sales::entity::sales_order::{
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{ReadExecutor, Transactional};
 
 use super::SalesOrderCommandProcess;
 use crate::{Error, Result};
@@ -51,7 +52,11 @@ impl SalesOrderCommandProcess {
         if let Some(working_copy) = self
             .db
             .sales_order_working_copies()
-            .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
+            .find_active_by_order_and_purpose(
+                &order_id,
+                WorkingPurpose::FirstSubmission,
+                &mut ReadExecutor::default(),
+            )
             .await?
         {
             if !working_copy.matches_version(req_version) {
@@ -112,7 +117,7 @@ impl SalesOrderCommandProcess {
         let sellable_refs = erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
             &working_copy_lines,
         )?;
-        let access = self.command_access(actor, "update");
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let related_order = order.clone();
         let persisted = client
             .with_transaction(move |executor| {

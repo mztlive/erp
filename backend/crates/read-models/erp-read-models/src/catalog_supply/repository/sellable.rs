@@ -7,7 +7,6 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::money::Amount;
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use erp_supply::repository::SupplierOfferingExt;
-use futures_util::TryStreamExt;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, PageResult, Result};
 use serde::{Deserialize, Serialize};
@@ -132,13 +131,12 @@ impl CatalogSupplyRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<SellableSkuFacet> {
         let collection = self.db.collection::<Sku>(SKUS);
-        let query = collection.aggregate(pipeline).with_type::<SellableSkuFacet>();
-        let rows = match executor.session() {
-            Some(session) => {
-                query.session(&mut *session).await?.stream(session).try_collect::<Vec<_>>().await?
-            },
-            None => query.await?.try_collect::<Vec<_>>().await?,
-        };
+        let rows = persistence_core::aggregate::rows(
+            &collection.clone_with_type::<SellableSkuFacet>(),
+            pipeline,
+            executor,
+        )
+        .await?;
         Ok(rows.into_iter().next().unwrap_or_default())
     }
 }

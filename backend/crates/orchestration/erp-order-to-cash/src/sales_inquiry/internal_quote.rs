@@ -6,6 +6,7 @@ use erp_core::ids::{
     BusinessDocumentId, DocumentAttachmentId, FileAssetId, SkuId, SupplierAccountId, SupplierOfferingId,
 };
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_permissions::supplier;
 use erp_procurement::entity::purchase_order::PurchaseInquiryAddress;
 use erp_sales::entity::sales_inquiry::{InquiryRequirementLine, SalesInquiry};
 use erp_supplier_catalog::supply_governance::offering::MongoOfferingQualification;
@@ -249,7 +250,10 @@ impl SalesInquiryProcess {
     ) -> Result<()> {
         inquiry.ensure_processing(expected_version)?;
         let line = inquiry.responsibility_line(task.responsibility_scope_ids(), &input.line_id)?;
-        self.services.suppliers.require_with(actor, "detail", input.supplier_id.as_ref(), executor).await?;
+        self.services
+            .suppliers
+            .require_with(actor, &supplier::DETAIL, input.supplier_id.as_ref(), executor)
+            .await?;
         let quote = ResolvedInquiryQuote::new(input, line)?;
         self.append_resolved_quote(actor, inquiry, quote, executor).await
     }
@@ -289,7 +293,7 @@ impl SalesInquiryProcess {
         inquiry.responsibility_fee(actor.id(), task.responsibility_scope_ids(), &req.basis.fee_id)?;
         self.services
             .suppliers
-            .require_with(actor, "detail", req.basis.payee_supplier_id.as_ref(), executor)
+            .require_with(actor, &supplier::DETAIL, req.basis.payee_supplier_id.as_ref(), executor)
             .await?;
         let service = InquirySupplyService::new(self.db.clone());
         let round = next_round(inquiry)?;
@@ -335,7 +339,7 @@ impl SalesInquiryProcess {
             .filter(|id| !links.iter().any(|link| link.file_asset_id.as_ref() == id.as_str()))
             .map(String::as_str)
             .collect::<Vec<_>>();
-        require_owned(&self.db, &self.rbac, actor, &new_files, executor).await?;
+        require_owned(&self.authorization, actor, &new_files, executor).await?;
         for id in ids {
             let linked = links.iter().any(|link| link.file_asset_id.as_ref() == id);
             let asset = self

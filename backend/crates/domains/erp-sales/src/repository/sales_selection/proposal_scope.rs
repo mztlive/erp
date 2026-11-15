@@ -38,11 +38,11 @@ pub(super) async fn search(
     authorized_scope: &SelectionReadScope,
     executor: &mut dyn Executor,
 ) -> Result<PageResult<SalesSelectionProposal>> {
-    authorized_scope.validate(executor).await?;
+    authorized_scope.ensure_current(PROPOSALS, executor)?;
     let collection = db.collection::<ProposalPage>(PROPOSALS);
     let mut pages =
         aggregate::rows(&collection, pipeline(filter, authorized_scope.stages()), executor).await?;
-    authorized_scope.validate(executor).await?;
+    authorized_scope.ensure_current(PROPOSALS, executor)?;
     let page = pages.pop().unwrap_or_default();
     Ok(PageResult { items: page.items, total: page.total.first().map_or(0, |row| row.count) })
 }

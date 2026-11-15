@@ -94,7 +94,7 @@ mod tests {
         assert!(item.complete_payment_arrangement(now).is_err());
     }
     #[test]
-    fn arrangement_requires_exact_purchase_identity_and_execution_permissions() {
+    fn arrangement_requires_exact_purchase_identity() {
         let item = task();
         let mut invalid = item.clone();
         invalid.work_item_type = WorkItemType::SupplierPaymentExecution;
@@ -108,14 +108,5 @@ mod tests {
             )
             .is_err()
         );
-        assert_eq!(
-            item.work_item_type.required_execution_permissions("purchase_order"),
-            Some(&[
-                "purchase_order:detail",
-                "purchase_payment_request:create",
-                "purchase_payment_request:submit"
-            ] as &[&str])
-        );
-        assert!(item.work_item_type.required_execution_permissions("sales_order").is_none());
     }
 }

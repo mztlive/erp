@@ -425,12 +425,8 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
     ) -> Result<Vec<String>> {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "purchase_no", Some(keyword));
-        let collection = self.collection();
-        let mut query = collection.distinct("id", filter);
-        if let Some(session) = executor.session() {
-            query = query.session(session);
-        }
-        Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+        let ids = mongo_ops::distinct(&self.collection(), "id", filter, executor).await?;
+        Ok(ids.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
     }
 
     async fn has_unsettled_business_org(&self, org: &str, executor: &mut dyn Executor) -> Result<bool> {

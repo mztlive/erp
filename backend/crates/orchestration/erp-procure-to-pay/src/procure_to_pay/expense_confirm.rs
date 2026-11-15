@@ -10,6 +10,7 @@ use erp_core::ids::{CostEntryId, FileAssetId, PurchaseOrderId, PurchaseOrderRevi
 use erp_file_assets::PendingFileAssets;
 use erp_finance::entity::cost::PurchaseExpenseCostFact;
 use erp_finance::service::cost::{PreparedCostEntry, persist_cost_entry};
+use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::{
     CONFIRM_EXPENSE_ACTION, ConfirmExpenseOccurrenceRequest, ConfirmExpenseOccurrenceResult,
 };
@@ -50,7 +51,7 @@ impl PurchaseOrderProcess {
     /// * `expense_line_id` - 稳定费用行身份
     /// * `req` - 发生日期与凭证引用
     /// * `assets` - 本次已写入对象存储的凭证文件
-    /// * `actor` - 已通过 `purchase_order:confirm_expense` 鉴权的操作人
+    /// * `actor` - 已认证操作人；确认资格与采购更新范围由原事务统一校验
     ///
     /// # 返回
     /// 返回费用行身份与实际成本事实主键。
@@ -101,7 +102,12 @@ async fn apply_confirm(
 ) -> Result<ConfirmExpenseOccurrenceResult> {
     let mut order = ports
         .access(db.clone())
-        .require_object(&command.actor, "update", &command.purchase_order_id, &[], executor)
+        .require_entry(
+            &command.actor,
+            &internal::PURCHASE_EXPENSE_CONFIRM_SOURCE,
+            &command.purchase_order_id,
+            executor,
+        )
         .await?;
     let (revision_id, lines) = current_lines(db, &order, executor).await?;
     let line = find_expense_line(&lines, &command.expense_line_id)?;

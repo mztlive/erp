@@ -47,7 +47,7 @@ impl PurchaseOrderProcess {
                 Box::pin(async move {
                     let mut order = ports
                         .access(db.clone())
-                        .require_object(&actor, "update", &purchase_order_id, &[], executor)
+                        .require_object(&actor, "update", &purchase_order_id, executor)
                         .await?;
                     let line = SalesOrderLineId::new(req.sales_order_line_id.trim());
                     order

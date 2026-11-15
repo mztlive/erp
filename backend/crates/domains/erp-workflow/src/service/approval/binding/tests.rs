@@ -143,6 +143,8 @@ fn upgrade_registry_identity_allows_one_sided_empty_document_number() {
         document_no: "ADJ-1".to_string(),
         responsible_org_id: "org-1".to_string(),
         creator_id: "creator-1".to_string(),
+        source_resource: "stock_adjustment".into(),
+        source_id: "adjustment-1".into(),
     };
     assert!(ensure_registered_upgrade_subject(&document, &facts).is_ok());
 

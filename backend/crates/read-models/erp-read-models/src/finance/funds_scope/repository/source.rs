@@ -1,7 +1,6 @@
 //! 复用已解析的领域来源条件，保留来源存在与来源授权的区别。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::bson::{Bson, Document, doc};
 
 use super::super::{FundsAuthorization, FundsLinkedCondition};
@@ -17,7 +16,7 @@ impl FundsAuthorization {
     pub(super) fn sales_stages(&self) -> Vec<Document> {
         self.sales
             .as_ref()
-            .map_or_else(|| vec![doc! { "$match": { "$expr": false } }], SalesReadScope::stages)
+            .map_or_else(|| vec![doc! { "$match": { "$expr": false } }], |scope| scope.stages().to_vec())
     }
 }
 

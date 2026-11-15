@@ -22,7 +22,7 @@ use erp_workflow::service::approval::execution::{
 use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use super::change_start::load_bound_definition_graph;
 use crate::procure_to_pay::PurchaseOrderPorts;
@@ -64,23 +64,21 @@ pub(super) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     subject: &bpm::SubjectRef,
     subject_version: u32,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
     let instance = db
         .bpm_workflow()
-        .find_non_terminal_by_subject(subject, subject_version, &mut NoTransaction)
+        .find_non_terminal_by_subject(subject, subject_version, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
     let current = db
         .bpm_workflow()
-        .find_current_execution(&ApprovalProcessInstanceId::new(instance.base.id.clone()), &mut NoTransaction)
+        .find_current_execution(&ApprovalProcessInstanceId::new(instance.base.id.clone()), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db
         .work_items()
-        .open_approval_tasks_for_execution(
-            &ApprovalNodeExecutionId::new(current.base.id.clone()),
-            &mut NoTransaction,
-        )
+        .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
         .await?;
     let plan = plan_cancel(CancelPlanInput {
         instance: &instance,
@@ -89,7 +87,7 @@ pub(super) async fn load_cancel_runtime(
     })
     .map_err(map_cancel_plan_error)?;
     Ok(LoadedCancelRuntime {
-        graph: load_bound_definition_graph(db, binding).await?,
+        graph: load_bound_definition_graph(db, binding, executor).await?,
         instance,
         current,
         plan,
@@ -230,6 +228,7 @@ pub(super) struct PurchaseChangeCancelPersistInput {
 pub(super) async fn persist_purchase_change_cancel(
     db: &Database,
     input: PurchaseChangeCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let PurchaseChangeCancelPersistInput {
         ports,
@@ -242,32 +241,17 @@ pub(super) async fn persist_purchase_change_cancel(
         audit,
         actor,
     } = input;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                ports
-                    .access(db.clone())
-                    .require_object(
-                        &actor,
-                        "cancel_approval",
-                        change_order.purchase_order_id.as_ref(),
-                        &[],
-                        executor,
-                    )
-                    .await?;
-                if let PreparedExecution::Apply(writes) = prepared {
-                    persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, executor)
-                        .await?;
-                    ports.approval.persist_cancel_copies(&db, &writes, executor).await?;
-                }
-                db.purchase_change_orders().update(&mut change_order, executor).await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    ports
+        .access(db.clone())
+        .require_object(&actor, "cancel_approval", change_order.purchase_order_id.as_ref(), executor)
+        .await?;
+    if let PreparedExecution::Apply(writes) = prepared {
+        persist_cancel_runtime(db, &writes, &open_tasks, &actor_id, &reason, now, executor).await?;
+        ports.approval.persist_cancel_copies(db, &writes, executor).await?;
+    }
+    db.purchase_change_orders().update(&mut change_order, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }
 
 /// 将取消计划写入实例、执行、收据与任务。

@@ -104,10 +104,7 @@ pub(crate) async fn record_invoice_execution(
         return Err(Error::Forbidden("当前账号不是开放开票任务的当前责任人".to_string()));
     }
     require_task(db, rbac, actor, &task, TaskPurpose::Invoice, executor).await?;
-    rbac.fresh_tasks()?.ensure_domain_decision_access(actor, &task, executor).await?;
-    rbac.funds
-        .require_sales_sources(actor, "invoice:post", &[account.sales_order_id.to_string()], executor)
-        .await?;
+    rbac.tasks.ensure_domain_decision_access(actor, &task, executor).await?;
     if &account.counterparty_party_id != party_id {
         return Err(Error::BusinessLogicError("发票往来主体与当前任务的应收子账不一致".to_string()));
     }

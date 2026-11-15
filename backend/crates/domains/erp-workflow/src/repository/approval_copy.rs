@@ -4,13 +4,14 @@ use std::collections::BTreeMap;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::CompiledAccess;
-use erp_identity::entity::authorization::QueryOutput;
-use futures_util::TryStreamExt;
+use erp_identity::entity::authorization::{QueryModel, QueryOutput};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::change_feed::ChangeSource;
-use persistence_core::{Error, Executor, Repository, Result, insert_literal_regex_filter, mongo_ops};
+use persistence_core::{
+    Error, Executor, Repository, Result, aggregate, insert_literal_regex_filter, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::approval_copy::{ApprovalCopyConfig, ApprovalCopyReceipt};
@@ -121,6 +122,26 @@ impl<'a> CopyRepository<'a> {
     pub async fn receipt(&self, id: &str, ex: &mut dyn Executor) -> Result<Option<ApprovalCopyReceipt>> {
         Repository::new(self.db, RECEIPTS).find_by_id(id, ex).await
     }
+    /// 以完整抄送授权条件读取精确收件记录。
+    /// # 参数
+    /// id 为真实收件身份，access 为原查询凭证，ex 为原读取执行器。
+    /// # 返回
+    /// 当前账号可读的未删除、已送达记录；未命中时为空。
+    /// # 错误
+    /// 模型或执行阶段不匹配、数据库或解码失败时拒绝。
+    pub async fn authorized_receipt(
+        &self,
+        id: &str,
+        access: &CompiledAccess,
+        ex: &mut dyn Executor,
+    ) -> Result<Option<ApprovalCopyReceipt>> {
+        ensure_copy_model(access.model())?;
+        access.ensure_current(ex).map_err(|_| Error::UnsupportedDeployment("抄送授权阶段已失效"))?;
+        let mut pipeline = access.stages().to_vec();
+        pipeline.extend([doc! { "$match": { "id": id } }, doc! { "$limit": 1 }]);
+        let mut rows = aggregate::rows(&self.db.collection(RECEIPTS), pipeline, ex).await?;
+        Ok(rows.pop())
+    }
     /// 首次阅读原子写入；重复阅读保留原时间。
     /// # 参数
     /// 原事务已由 identity 完整授权的 ID 集合、服务端时间和原执行器。
@@ -181,32 +202,12 @@ impl<'a> CopyRepository<'a> {
         query: &CopyListQuery,
         ex: &mut dyn Executor,
     ) -> Result<CopyPage> {
-        let model = access.model();
-        if model.resource != "approval_copy"
-            || model.collection != RECEIPTS
-            || model.key.as_str() != "approval_copy_receipts"
-            || model.output != QueryOutput::Object
-        {
-            return Err(Error::UnsupportedDeployment("抄送授权模型不匹配"));
-        }
+        ensure_copy_model(access.model())?;
         let collection = self.db.collection::<Document>(RECEIPTS);
         let mut pipeline = access.stages().to_vec();
         pipeline.extend(list_pipeline(query));
-        let mut rows = match ex.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<Facet>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                collection.aggregate(pipeline).with_type::<Facet>().await?.try_collect::<Vec<_>>().await?
-            },
-        };
+        access.ensure_current(ex).map_err(|_| Error::UnsupportedDeployment("抄送授权阶段已失效"))?;
+        let mut rows = aggregate::rows(&collection.clone_with_type::<Facet>(), pipeline, ex).await?;
         let facet =
             rows.pop().unwrap_or(Facet { items: vec![], total: vec![], unread: vec![], types: vec![] });
         Ok(CopyPage {
@@ -217,6 +218,19 @@ impl<'a> CopyRepository<'a> {
         })
     }
 }
+/// 仓储只接受抄送完整记录模型，防止份额或其他集合凭证被复用。
+fn ensure_copy_model(model: &QueryModel) -> Result<()> {
+    if model.resource != "approval_copy"
+        || model.collection != RECEIPTS
+        || model.key.as_str() != "approval_copy_receipts"
+        || model.output != QueryOutput::Object
+        || model.id_field != "id"
+    {
+        return Err(Error::UnsupportedDeployment("抄送授权模型不匹配"));
+    }
+    Ok(())
+}
+
 fn list_pipeline(query: &CopyListQuery) -> Vec<Document> {
     let mut filter = Document::new();
     if let Some(read) = query.read {
@@ -290,4 +304,38 @@ impl ApprovalCopyExt for Database {
 /// 不执行 I/O。
 pub fn changes<T>(topic: T) -> ChangeSource<T> {
     ChangeSource::personal(RECEIPTS, topic, "recipient_user_id")
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_identity::entity::authorization::QueryModelKey;
+
+    use super::*;
+    use crate::repository::approval_copy::authorization::CopyMapping;
+
+    #[test]
+    fn exact_receipt_requires_the_complete_owned_copy_model() {
+        let mapping = CopyMapping::shared().unwrap();
+        let model = mapping.model().clone();
+        ensure_copy_model(&model).unwrap();
+
+        let mut wrong_collection = model.clone();
+        wrong_collection.collection = "approval_process_instances".into();
+        let mut wrong_resource = model.clone();
+        wrong_resource.resource = "approval_instance".into();
+        let mut wrong_id = model.clone();
+        wrong_id.id_field = "instance_id".into();
+        let mut wrong_key = model.clone();
+        wrong_key.key = QueryModelKey::parse("other_copies").unwrap();
+        for other in [wrong_collection, wrong_resource, wrong_id, wrong_key] {
+            assert!(matches!(ensure_copy_model(&other), Err(Error::UnsupportedDeployment(_))));
+        }
+        for output in [
+            QueryOutput::Share { fields: ["id".into()].into() },
+            QueryOutput::Existence { fields: ["id".into()].into() },
+        ] {
+            let restricted = QueryModel { output, ..model.clone() };
+            assert!(matches!(ensure_copy_model(&restricted), Err(Error::UnsupportedDeployment(_))));
+        }
+    }
 }

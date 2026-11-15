@@ -1,7 +1,10 @@
 //! 询价转销售加入现有建单事务，来源数量与销售草稿共同提交。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_sales::dto::sales_order::inquiry_basis::InquirySalesBasis;
 use erp_sales::dto::sales_order::{CreateSalesOrderRequest, SalesOrderEditableDraftRequest};
 use erp_sales::entity::sales_inquiry::SalesInquiry;
@@ -10,7 +13,7 @@ use erp_sales::entity::sales_order::{BusinessType, SalesOrder, SalesOrderWorking
 use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 
 use super::SalesOrderCommandProcess;
 use crate::sales_inquiry::access::SalesInquiryAccess;
@@ -30,8 +33,29 @@ impl SalesOrderCommandProcess {
         round: u32,
         actor: &AuditActor,
     ) -> Result<InquirySalesBasis> {
-        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
-            .require_sales(actor, "convert_sales", inquiry_id, &mut NoTransaction)
+        let process = self.clone();
+        let actor = actor.clone();
+        let inquiry_id = inquiry_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process.inquiry_sales_basis_read(&inquiry_id, round, &actor, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一快照中检查转销售资格并生成开单依据。
+    async fn inquiry_sales_basis_read(
+        &self,
+        inquiry_id: &str,
+        round: u32,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InquirySalesBasis> {
+        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.authorization.clone())
+            .require_sales(actor, &sales_inquiry_permissions::CONVERSION_SALES_BASIS, inquiry_id, executor)
             .await?;
         Ok(InquirySalesBasis::from_inquiry(&inquiry, round, Instant::now())?)
     }
@@ -57,8 +81,13 @@ impl SalesOrderCommandProcess {
                 "询价来源只适用于实物与服务销售，不能同时使用选品方案来源".into(),
             ));
         }
-        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
-            .require_sales(actor, "convert_sales", &source.inquiry_id, executor)
+        let inquiry = SalesInquiryAccess::new(self.db.clone(), self.authorization.clone())
+            .require_sales(
+                actor,
+                &sales_inquiry_permissions::CONVERSION_SALES_BASIS,
+                &source.inquiry_id,
+                executor,
+            )
             .await?;
         if request.customer_id.as_ref().is_some_and(|id| id.as_ref() != inquiry.customer_id) {
             return Err(Error::ValidationError("销售客户必须与询价客户一致".into()));
@@ -69,14 +98,14 @@ impl SalesOrderCommandProcess {
 
 /// 在现有建单执行器内重验询价、占用数量并保存稳定销售来源。
 /// # 参数
-/// `db`、`rbac` 为组合根依赖；`request` 为明确来源；`order` 与 `lines` 为服务端销售事实。
+/// `db`、`authorization` 为组合根依赖；`request` 为明确来源；`order` 与 `lines` 为服务端销售事实。
 /// # 返回
 /// 数量台账与销售来源已写入同一事务。
 /// # 错误
 /// 权限、已接受结果、客户、版本或剩余数量不匹配时整单拒绝。
 pub(super) async fn reserve_inquiry_creation(
     db: &Database,
-    rbac: &SharedRbacService,
+    authorization: &Arc<AuthorizationService>,
     request: Option<&InquirySalesSourceRequest>,
     order: &SalesOrder,
     lines: &[SalesOrderWorkingCopyLine],
@@ -86,8 +115,13 @@ pub(super) async fn reserve_inquiry_creation(
     let Some(request) = request else {
         return Ok(());
     };
-    let mut inquiry = SalesInquiryAccess::new(db.clone(), rbac.clone())
-        .require_sales(actor, "convert_sales", &request.inquiry_id, executor)
+    let mut inquiry = SalesInquiryAccess::new(db.clone(), authorization.clone())
+        .require_sales(
+            actor,
+            &sales_inquiry_permissions::CONVERSION_SALES_BASIS,
+            &request.inquiry_id,
+            executor,
+        )
         .await?;
     if order.customer_id.as_ref() != inquiry.customer_id {
         return Err(Error::ValidationError("销售客户必须与询价客户一致".into()));

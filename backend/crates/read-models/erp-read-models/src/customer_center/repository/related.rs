@@ -6,7 +6,6 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_contract::{ContractExt, ContractStatus};
 use erp_sales::entity::sales_order::{CloseStatus, CommercialStatus};
 use erp_sales::repository::SalesOrderExt;
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Error, Executor, Result};
@@ -91,36 +90,28 @@ impl<'a> CustomerCenterRepository<'a> {
         &self,
         customer_id: &str,
         recent_limit: u32,
-        contract_scope: &[Document],
-        sales_scope: &[Document],
+        contract_scope: Option<&[Document]>,
+        sales_scope: Option<&[Document]>,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerCenterRelatedRow>> {
         let recent_limit = i64::from(recent_limit);
         if recent_limit == 0 {
             return Err(Error::EntityMetadataOutOfRange("customer_center_recent_limit"));
         }
-        let pipeline = related_pipeline(customer_id, recent_limit, contract_scope, sales_scope);
+        let denied = [doc! { "$match": { "$expr": false } }];
+        let pipeline = related_pipeline(
+            customer_id,
+            recent_limit,
+            contract_scope.unwrap_or(&denied),
+            sales_scope.unwrap_or(&denied),
+        );
         let collection = self.collection();
-        let rows = match executor.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<CustomerCenterRelatedRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<CustomerCenterRelatedRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
+        let rows = persistence_core::aggregate::rows(
+            &collection.clone_with_type::<CustomerCenterRelatedRow>(),
+            pipeline,
+            executor,
+        )
+        .await?;
         Ok(rows.into_iter().next())
     }
 }

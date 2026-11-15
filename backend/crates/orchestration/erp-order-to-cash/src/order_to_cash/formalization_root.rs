@@ -4,10 +4,9 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use erp_identity::SharedRbacService;
-use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use super::{FormalizedSubmissionWrite, SalesOrderCommandProcess};
 use crate::Result;
@@ -17,7 +16,7 @@ use crate::services::SalesServices;
 pub struct SalesOrderFormalizationProcess {
     services: Arc<SalesServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 impl SalesOrderFormalizationProcess {
     /// 使用组合根数据库与授权源创建销售形式化流程。
@@ -25,60 +24,15 @@ impl SalesOrderFormalizationProcess {
     /// # 参数
     /// * `db` - 组合根数据库。
     /// * `services` - 应用已装配的领域服务、任务责任与审批合同。
-    /// * `rbac` - 授权源。
+    /// * `authorization` - 授权源。
     ///
     /// # 返回
     /// 返回尚未发起形式化的流程。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
-        Self { db, rbac, services }
-    }
-
-    /// 最终通过并形式化已批准提交。
-    ///
-    /// 只包装既有 `repository formalize_submission`：先把销售单推进到
-    /// `EFFECTIVE` / `APPROVED`，再写入正式修订。
-    /// 不得 `$set` 绕过领域不变式，也不得按卡券运营节点写专用副作用分支。
-    ///
-    /// # 参数
-    /// * `id` - 销售单主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回形式化后的销售单详情。
-    ///
-    /// # 错误
-    /// 非审批中、缺少提交或仓储失败时返回错误。
-    #[tracing::instrument(
-        name = "sales_order.formalize_approved_submission",
-        skip_all,
-        fields(layer = "service", domain = "sales_order", operation = "formalize_approved_submission")
-    )]
-    pub async fn formalize_approved_submission(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<SalesOrderDetailView> {
-        let service =
-            SalesOrderCommandProcess::new(self.db.clone(), self.rbac.clone(), self.services.clone());
-        if let Some(write) = service.prepare_approved_submission(id, actor, &mut NoTransaction).await? {
-            let audit = actor.clone().resource_log(
-                "sales_order.formalize",
-                "sales_order",
-                write.order_id().to_string(),
-            )?;
-            let db = self.db.clone();
-            self.db
-                .client()
-                .clone()
-                .with_transaction(move |executor| {
-                    Box::pin(async move { persist_formalized_submission(&db, write, &audit, executor).await })
-                })
-                .await?;
-        }
-        service.read_model().sales_order_detail(id, None).await.map_err(crate::Error::from)
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>, services: Arc<SalesServices>) -> Self {
+        Self { db, authorization, services }
     }
 
     /// 在审批运行时持有的事务内形式化最终通过的销售单。
@@ -100,7 +54,7 @@ impl SalesOrderFormalizationProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let service =
-            SalesOrderCommandProcess::new(self.db.clone(), self.rbac.clone(), self.services.clone());
+            SalesOrderCommandProcess::new(self.db.clone(), self.authorization.clone(), self.services.clone());
         if let Some(write) = service.prepare_approved_submission(id, actor, executor).await? {
             let audit = actor.clone().resource_log(
                 "sales_order.formalize",

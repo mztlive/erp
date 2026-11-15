@@ -9,7 +9,7 @@ use erp_customer::{
     AssignmentAction, AssignmentRole, CustomerAssignmentRequest, CustomerExt, SaveCustomerProfileRequest,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::NoTransaction;
+use persistence_core::ReadExecutor;
 
 use super::ensure_dictionary::{EnsureOutcome, step_label};
 use super::plan::DemoStep;
@@ -51,13 +51,15 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let account = self
             .db
             .customer_accounts()
-            .find_by_id_including_deleted(&view.customer_id, &mut NoTransaction)
+            .find_by_id_including_deleted(&view.customer_id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("演示客户创建后未能读回".to_string()))?;
         let created = account.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
-        lifecycle::restore_party(&self.db, actor, account.party_id.as_ref()).await?;
+        lifecycle::restore_party(&self.db, self.authorization.clone(), actor, account.party_id.as_ref())
+            .await?;
         if !created {
-            lifecycle::restore_customer(&self.db, actor, &view.customer_id).await?;
+            lifecycle::restore_customer(&self.db, self.authorization.clone(), actor, &view.customer_id)
+                .await?;
         }
         record::save(&self.db, &customer_record(step, &view.customer_id, &view.party_id)).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
@@ -74,14 +76,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let account = self
             .db
             .customer_accounts()
-            .find_by_id_including_deleted(customer_id, &mut NoTransaction)
+            .find_by_id_including_deleted(customer_id, &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("演示客户命令缺少客户".to_string()))?;
         let party_id = account.party_id.to_string();
         let live = account.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
-        lifecycle::restore_party(&self.db, actor, &party_id).await?;
+        lifecycle::restore_party(&self.db, self.authorization.clone(), actor, &party_id).await?;
         if !live {
-            lifecycle::restore_customer(&self.db, actor, customer_id).await?;
+            lifecycle::restore_customer(&self.db, self.authorization.clone(), actor, customer_id).await?;
         }
         self.align_customer_owner(actor, customer_id, notices).await?;
         record::save(&self.db, &customer_record(step, customer_id, &party_id)).await?;
@@ -90,8 +92,11 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
 
     /// 按稳定幂等键定位此前创建的客户。
     async fn customer_command(&self, key: &str) -> Result<Option<String>> {
-        let command =
-            self.db.customer_profile_commands().find_by_idempotency_key(key, &mut NoTransaction).await?;
+        let command = self
+            .db
+            .customer_profile_commands()
+            .find_by_idempotency_key(key, &mut ReadExecutor::default())
+            .await?;
         Ok(command.map(|command| command.customer_id))
     }
 
@@ -109,7 +114,12 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let owners = self
             .db
             .customer_assignments()
-            .current_owners(Some(&[customer_id.to_string()]), None, BusinessDate::today(), &mut NoTransaction)
+            .current_owners(
+                Some(&[customer_id.to_string()]),
+                None,
+                BusinessDate::today(),
+                &mut ReadExecutor::default(),
+            )
             .await?;
         if owners.iter().any(|row| row.user_id == owner.id()) {
             return Ok(());

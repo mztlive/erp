@@ -1,6 +1,6 @@
 //! 电子交付本域查询及事实持久化。
 
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::FulfillmentService;
@@ -31,9 +31,10 @@ impl FulfillmentService {
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "electronic_delivery_list")
     )]
-    pub async fn electronic_delivery_list(
+    pub(super) async fn load_electronic_deliveries(
         &self,
         params: &ElectronicDeliveryListParams,
+        executor: &mut dyn Executor,
     ) -> Result<crate::dto::PageView<ElectronicDeliveryView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -46,7 +47,7 @@ impl FulfillmentService {
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
         super::map_search_page(
-            self.db.electronic_deliveries().search_electronic_deliveries(&filter, &mut NoTransaction),
+            self.db.electronic_deliveries().search_electronic_deliveries(&filter, executor),
             |row| ElectronicDeliveryView {
                 id: row.id,
                 fulfillment_no: row.fulfillment_no,
@@ -79,14 +80,21 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 电子交付记录不存在
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 调用方必须已完成所属业务授权，并传入原读取阶段执行器。
     #[tracing::instrument(
         name = "fulfillment.electronic_delivery_detail",
         skip_all,
         fields(layer = "service", domain = "fulfillment", operation = "electronic_delivery_detail")
     )]
-    pub async fn electronic_delivery_detail(&self, id: &str) -> Result<ElectronicDeliveryView> {
+    pub async fn load_electronic_delivery_view(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ElectronicDeliveryView> {
         let record = super::find_header_or_not_found(
-            self.db.electronic_deliveries().find_by_id(id, &mut NoTransaction),
+            self.db.electronic_deliveries().find_by_id(id, executor),
             "电子交付记录不存在",
         )
         .await?;

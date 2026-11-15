@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, TaskIntent};
@@ -12,7 +13,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::ApprovalNotificationOutboxId;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_inventory::entity::inventory::stock_adjustment::StockAdjustmentBalanceVersions;
 use erp_inventory::{
     ExpectedStockBalanceVersion, InventoryExt, StockAdjustment, StockAdjustmentLine, StockAdjustmentState,
@@ -33,7 +34,7 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt};
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use super::adapter::require_frozen_binding;
 use super::approval_prepare::{
@@ -60,7 +61,7 @@ use crate::{Error, Result};
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
 pub struct StockAdjustmentStartPersistInput {
     /// 与原库存和工作流能力同源的身份服务。
-    pub identity: SharedRbacService,
+    pub identity: Arc<AuthorizationService>,
     /// 本次重新提交说明。
     pub resubmission_reason: Option<String>,
     /// 授权服务；事务内重验提交人与节点候选人权限。
@@ -101,6 +102,7 @@ pub struct StockAdjustmentStartPersistInput {
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 调整单、快照与启动计划
+/// * `executor` - 已完成草稿授权和审批规划的原提交事务。
 ///
 /// # 返回
 /// 返回提交后的调整单视图。
@@ -110,44 +112,35 @@ pub struct StockAdjustmentStartPersistInput {
 ///
 /// # 关键业务约束
 /// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
-pub async fn persist_stock_adjustment_start(
+pub(super) async fn persist_stock_adjustment_start(
     db: &Database,
-    input: StockAdjustmentStartPersistInput,
+    mut input: StockAdjustmentStartPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<StockAdjustmentView> {
     let audit =
         input.actor.clone().resource_log("stock_adjustment.submit", "stock_adjustment", input.id.clone())?;
-    let db = db.clone();
-    let client = db.client().clone();
-    let updated = client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                validate_stock_adjustment_start(&db, &input, executor).await?;
-                let mut input = input;
-                persist_start_document(&db, &mut input, executor).await?;
-                persist_runtime_writes(
-                    &db,
-                    &input.identity,
-                    &input.writes,
-                    &input.snapshot_payload,
-                    StartRuntimeContext {
-                        resubmission_reason: input.resubmission_reason.as_deref(),
-                        workflow: input.workflow.as_ref(),
-                        owner_role: input.owner_role,
-                        organization_id: &input.organization_id,
-                        adjustment: &input.adjustment,
-                        lines: &input.lines,
-                        submitted_by: input.actor.id(),
-                        now: input.now,
-                    },
-                    executor,
-                )
-                .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<StockAdjustment, Error>(input.adjustment)
-            })
-        })
-        .await?;
-    Ok(updated.into())
+    validate_stock_adjustment_start(db, &input, executor).await?;
+    persist_start_document(db, &mut input, executor).await?;
+    persist_runtime_writes(
+        db,
+        &input.identity,
+        &input.writes,
+        &input.snapshot_payload,
+        StartRuntimeContext {
+            resubmission_reason: input.resubmission_reason.as_deref(),
+            workflow: input.workflow.as_ref(),
+            owner_role: input.owner_role,
+            organization_id: &input.organization_id,
+            adjustment: &input.adjustment,
+            lines: &input.lines,
+            submitted_by: input.actor.id(),
+            now: input.now,
+        },
+        executor,
+    )
+    .await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(input.adjustment.into())
 }
 
 /// 在原启动事务内按既有顺序重验单据、提交资格、绑定、候选人、明细和余额。
@@ -441,7 +434,7 @@ struct StartRuntimeContext<'a> {
 /// 使用已写入的业务事实冻结审批展示，并沿原事务写入运行事实与入口任务。
 async fn persist_runtime_writes(
     db: &Database,
-    identity: &SharedRbacService,
+    identity: &Arc<AuthorizationService>,
     writes: &PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
     context: StartRuntimeContext<'_>,

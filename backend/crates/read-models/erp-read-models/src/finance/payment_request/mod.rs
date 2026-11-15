@@ -1,5 +1,6 @@
 //! 采购付款申请的完整来源授权、提交材料与任务专用读取。
 
+use erp_identity::AuthorizationService;
 mod access;
 mod actions;
 mod approval;
@@ -23,7 +24,6 @@ use std::sync::Arc;
 pub use candidate_list::{PaymentCandidateQuery, PaymentCandidateSort};
 pub use dto::*;
 use erp_finance::ports::funds_scope::FailClosedFundsDataScopePort;
-use erp_identity::SharedRbacService;
 pub use materials::PaymentRequestMaterialReference;
 use mongodb::Database;
 pub use review_dto::*;
@@ -35,7 +35,7 @@ use crate::finance::funds_scope::FundsAccess;
 #[derive(Clone)]
 pub struct PurchasePaymentRequestReadService {
     db: Database,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 
 impl PurchasePaymentRequestReadService {
@@ -47,7 +47,7 @@ impl PurchasePaymentRequestReadService {
     /// 返回不缓存资格的读取服务。
     /// # 错误
     /// 不执行 I/O，不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
+    pub fn new(db: Database, rbac: Arc<AuthorizationService>) -> Self {
         Self { db, rbac }
     }
 

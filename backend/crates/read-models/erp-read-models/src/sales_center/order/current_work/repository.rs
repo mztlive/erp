@@ -11,7 +11,7 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use crate::Result;
 
@@ -34,9 +34,13 @@ impl CurrentWorkRepository<'_> {
     /// 返回按创建时间、任务 ID 稳定排序的开放任务。
     /// # 错误
     /// 任一来源或任务查询失败时返回错误。
-    pub(super) async fn tasks(&self, order: &SalesOrder) -> Result<CurrentWorkTasks> {
+    pub(super) async fn tasks(
+        &self,
+        order: &SalesOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<CurrentWorkTasks> {
         let mut approval_nodes = HashMap::new();
-        let objects = self.objects(order).await?;
+        let objects = self.objects(order, executor).await?;
         // 复用 business_object_type + business_object_id 索引；每个分支均限定来源。
         let tasks = self
             .db
@@ -44,11 +48,11 @@ impl CurrentWorkRepository<'_> {
             .find_many_sorted(
                 doc! { "status": "OPEN", "$or": objects },
                 doc! { "created_at": 1, "id": 1 },
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         Ok(CurrentWorkTasks {
-            tasks: self.current_approvals(tasks, &mut approval_nodes).await?,
+            tasks: self.current_approvals(tasks, &mut approval_nodes, executor).await?,
             approval_nodes,
         })
     }
@@ -60,7 +64,7 @@ impl CurrentWorkRepository<'_> {
     /// 返回绑定本单及其关联身份的查询分支；空来源保持空匹配。
     /// # 错误
     /// 关联仓储读取失败时返回错误。
-    async fn objects(&self, order: &SalesOrder) -> Result<Vec<Document>> {
+    async fn objects(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<Vec<Document>> {
         let sale = &order.base.id;
         let mut objects = vec![doc! {
             "business_object_type": { "$in": ["sales_order", "voucher_sales_order"] },
@@ -70,25 +74,18 @@ impl CurrentWorkRepository<'_> {
             return Ok(objects);
         }
         let purchases =
-            self.db.purchase_orders().find_many(doc! { "sales_order_id": sale }, &mut NoTransaction).await?;
+            self.db.purchase_orders().find_many(doc! { "sales_order_id": sale }, executor).await?;
         let purchase_ids = purchases.into_iter().map(|row| row.base.id).collect::<Vec<_>>();
         objects.push(object_filter("purchase_order", purchase_ids.clone()));
-        let deliveries =
-            self.db.deliveries().find_many(doc! { "sales_order_id": sale }, &mut NoTransaction).await?;
+        let deliveries = self.db.deliveries().find_many(doc! { "sales_order_id": sale }, executor).await?;
         objects.push(object_filter("delivery", deliveries.into_iter().map(|row| row.base.id).collect()));
-        self.fulfillment_objects(&purchase_ids, &mut objects).await?;
-        let accounts = self
-            .db
-            .receivable_accounts()
-            .find_many(doc! { "sales_order_id": sale }, &mut NoTransaction)
-            .await?;
+        self.fulfillment_objects(&purchase_ids, &mut objects, executor).await?;
+        let accounts =
+            self.db.receivable_accounts().find_many(doc! { "sales_order_id": sale }, executor).await?;
         objects
             .push(object_filter("receivable_account", accounts.into_iter().map(|row| row.base.id).collect()));
-        let requests = self
-            .db
-            .sales_invoice_requests()
-            .find_many(doc! { "sales_order_id": sale }, &mut NoTransaction)
-            .await?;
+        let requests =
+            self.db.sales_invoice_requests().find_many(doc! { "sales_order_id": sale }, executor).await?;
         objects.push(object_filter(
             "sales_invoice_request",
             requests.into_iter().map(|row| row.base.id).collect(),
@@ -97,21 +94,25 @@ impl CurrentWorkRepository<'_> {
     }
 
     /// 加载本单采购对应的入库、电子交付和服务交付身份，不输出其业务内容。
-    async fn fulfillment_objects(&self, purchases: &[String], objects: &mut Vec<Document>) -> Result<()> {
+    async fn fulfillment_objects(
+        &self,
+        purchases: &[String],
+        objects: &mut Vec<Document>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         if purchases.is_empty() {
             return Ok(());
         }
         let filter = doc! { "purchase_order_id": { "$in": purchases } };
-        let receipts = self.db.purchase_receipts().find_many(filter.clone(), &mut NoTransaction).await?;
+        let receipts = self.db.purchase_receipts().find_many(filter.clone(), executor).await?;
         objects
             .push(object_filter("purchase_receipt", receipts.into_iter().map(|row| row.base.id).collect()));
-        let electronic =
-            self.db.electronic_deliveries().find_many(filter.clone(), &mut NoTransaction).await?;
+        let electronic = self.db.electronic_deliveries().find_many(filter.clone(), executor).await?;
         objects.push(object_filter(
             "electronic_delivery",
             electronic.into_iter().map(|row| row.base.id).collect(),
         ));
-        let services = self.db.service_fulfillments().find_many(filter, &mut NoTransaction).await?;
+        let services = self.db.service_fulfillments().find_many(filter, executor).await?;
         objects.push(object_filter(
             "service_fulfillment",
             services.into_iter().map(|row| row.base.id).collect(),

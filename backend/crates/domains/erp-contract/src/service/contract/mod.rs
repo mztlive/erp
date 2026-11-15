@@ -15,10 +15,12 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::ids::{CustomerAccountId, FileAssetId};
 use erp_identity::AccountDirectoryService;
+use erp_permissions::contract;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use crate::authorization::CompiledScope;
 pub use crate::authorization::ContractAccess;
 use crate::dto::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractRevisionView, ContractView,
@@ -34,6 +36,7 @@ use crate::repository::prelude::*;
 
 mod archive;
 mod company;
+mod detail;
 mod fingerprint;
 mod query;
 mod sales_access;
@@ -217,7 +220,6 @@ impl ContractService {
     ///
     /// # 参数
     /// * `id` - 合同 ID
-    /// * `executor` - 原授权读取事务
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
@@ -228,7 +230,7 @@ impl ContractService {
     /// * `ConflictError` - 查询过程中范围变化
     ///
     /// # 关键业务约束
-    /// 详情必须独立重验当前权限；历史参与只补充读取。
+    /// 详情经固定授权条件读取，完整补齐后检查原凭证；历史参与只补充读取。
     pub async fn contract_detail(&self, id: &str, actor: &AuditActor) -> Result<ContractDetailView> {
         let service = self.clone();
         let actor = actor.clone();
@@ -237,12 +239,7 @@ impl ContractService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service.data_scope.require_with(actor.clone(), "detail", &id, executor).await?;
-                    let view = service.load_contract_detail(&id, executor).await?;
-                    service.data_scope.require_with(actor.clone(), "detail", &id, executor).await?;
-                    Ok(view)
-                })
+                Box::pin(async move { detail::read(&service, &id, &actor, executor).await })
             })
             .await
     }
@@ -251,6 +248,8 @@ impl ContractService {
     ///
     /// # 参数
     /// * `id` - 合同 ID
+    /// * `scope` - 当前读取阶段的完整合同详情查询凭证
+    /// * `executor` - 原授权读取事务
     ///
     /// # 返回
     /// 返回详情视图。
@@ -263,12 +262,13 @@ impl ContractService {
     async fn load_contract_detail(
         &self,
         id: &str,
+        scope: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> Result<ContractDetailView> {
         let contract = self
             .db
             .contracts()
-            .find_by_id(id, executor)
+            .find_authorized(id, scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("合同不存在或无权查看".to_string()))?;
         let revisions =
@@ -559,7 +559,7 @@ async fn execute_authorized_transaction(
                         access.require_create(&actor, &customer_id, executor).await?;
                     },
                     TxAuthorization::Use(contract_id) => {
-                        access.require_with(actor, "update", &contract_id, executor).await?;
+                        access.require_with(actor, &contract::TERMINATE, &contract_id, executor).await?;
                     },
                 }
                 action(&db, executor).await?;

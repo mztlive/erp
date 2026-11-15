@@ -55,11 +55,12 @@ impl PurchaseOrderReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (order, _) = access.resolve_detail(&actor, &id, executor).await?;
+                    let (order, _, scope) = access.resolve_detail(&actor, &id, executor).await?;
                     if order.base.version != expected_version {
                         return Err(Error::ConflictError("采购版本已变化，请刷新后查看资金进度".into()));
                     }
                     let Some(revision_id) = order.stable.current_revision_id.as_deref() else {
+                        scope.validate(executor).await?;
                         return Ok(vec![]);
                     };
                     let revision = db
@@ -69,6 +70,7 @@ impl PurchaseOrderReadService {
                         .filter(|revision| revision.purchase_order_id.as_ref() == order.base.id)
                         .ok_or_else(|| Error::NotFound("采购当前版本缺失".into()))?;
                     let executions = for_purchase(&db, &order.base.id, Some(revision_id), executor).await?;
+                    scope.validate(executor).await?;
                     let context = DepositPurchaseContext {
                         order: &order,
                         revision: &revision,

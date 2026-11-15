@@ -52,7 +52,7 @@ impl ContractRepositoryScopeExt for persistence_core::Repository<'_, Contract> {
         scope: &ContractReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<Contract>> {
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         let result: persistence_core::Result<_> = async {
             let mut stages = scope.stages();
             stages.push(doc! {"$match":{"id":id}});
@@ -64,7 +64,7 @@ impl ContractRepositoryScopeExt for persistence_core::Repository<'_, Contract> {
         }
         .await;
         let result = result?;
-        scope.validate(executor).await?;
+        scope.ensure_current(executor)?;
         Ok(result)
     }
 }
@@ -90,7 +90,7 @@ impl ContractDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<ContractVersion>> {
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         let result: persistence_core::Result<_> = async {
             persistence_core::aggregate::find(
@@ -109,7 +109,7 @@ impl ContractDomainRepository<'_> {
         .await;
         let result = result?;
         if let Some(scope) = &filter.access {
-            scope.validate(executor).await?;
+            scope.ensure_current(executor)?;
         }
         Ok(result)
     }

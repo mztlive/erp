@@ -1,4 +1,5 @@
 //! 采购列表、对象中心、创建依据与责任规则的跨域只读组合。
+use erp_identity::AuthorizationService;
 pub mod access;
 mod approval;
 pub(crate) mod approval_materials;
@@ -6,7 +7,7 @@ mod approval_query;
 pub(crate) mod approval_supplier;
 mod change;
 pub mod change_bounds;
-pub(crate) mod creation_authorization;
+pub mod creation_authorization;
 mod creation_basis;
 pub use creation_authorization::require_creation_task;
 mod delivery_options;
@@ -27,7 +28,6 @@ pub(crate) mod source_sales;
 use std::sync::Arc;
 
 pub use change::query::PurchaseChangeListView;
-use erp_identity::SharedRbacService;
 use erp_procurement::PurchaseDataScopePort;
 pub use scope::{PurchaseListParams, PurchaseListView};
 pub use source_sales::PurchaseSalesMaterialReference;
@@ -37,7 +37,7 @@ pub use source_sales::PurchaseSalesMaterialReference;
 pub struct PurchaseOrderReadService {
     db: mongodb::Database,
     data_scope: Arc<dyn PurchaseDataScopePort>,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
 }
 impl PurchaseOrderReadService {
     /// 装配采购读取所需的数据库、身份设施和对象范围。
@@ -54,7 +54,7 @@ impl PurchaseOrderReadService {
     /// 构造不执行 I/O。
     pub fn new(
         db: mongodb::Database,
-        rbac: SharedRbacService,
+        rbac: Arc<AuthorizationService>,
         data_scope: Arc<dyn PurchaseDataScopePort>,
     ) -> Self {
         Self { db, rbac, data_scope }

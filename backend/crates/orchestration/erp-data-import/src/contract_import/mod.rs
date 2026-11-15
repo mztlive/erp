@@ -5,6 +5,7 @@ mod customer;
 mod matching;
 mod pipeline;
 mod progress;
+mod read;
 mod source;
 #[cfg(test)]
 mod tests;
@@ -13,10 +14,10 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_contract::entity::recognition::{ContractImport, ImportFailure, ImportStatus, ImportView};
 use erp_contract::repository::recognition::{self, ContractImportExt};
-use erp_contract::{ContractAccess, ContractService, PageView};
+use erp_contract::{ContractAccess, ContractService};
 use erp_customer::CustomerAccess;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 pub use pipeline::RecognitionProviders;
 use progress::TaskProgress;
 use sha2::{Digest, Sha256};
@@ -43,6 +44,7 @@ pub struct ContractImportProcess {
 /// 已领取的识别工作；内容不可由 HTTP 调用者构造或改写。
 pub struct ImportAttempt {
     task: ContractImport,
+    actor: AuditActor,
 }
 
 impl ContractImportProcess {
@@ -57,40 +59,6 @@ impl ContractImportProcess {
         Self { db, services, providers }
     }
 
-    /// 查询本人任务。
-    /// # 参数
-    /// * `id` / `actor` - 任务及认证人。
-    /// # 返回
-    /// 不含全文和存储键的视图。
-    /// # 错误
-    /// 不存在、越权或数据库读取失败。
-    pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<ImportView> {
-        Ok(recognition::owned(&self.db, actor.id(), id, &mut NoTransaction).await?.into())
-    }
-
-    /// 分页查询本人历史，包含失败与已成功任务。
-    /// # 参数
-    /// * `page` / `revision_contract_id` / `actor` - 页码、可选追加目标及认证人。
-    /// # 返回
-    /// 每页 20 项。
-    /// # 错误
-    /// 数据库读取失败。
-    pub async fn list(
-        &self,
-        page: u64,
-        revision_contract_id: Option<&str>,
-        actor: &AuditActor,
-    ) -> Result<PageView<ImportView>> {
-        let result =
-            recognition::list(&self.db, actor.id(), page, revision_contract_id, &mut NoTransaction).await?;
-        Ok(PageView {
-            items: result.items.into_iter().map(Into::into).collect(),
-            total: result.total,
-            page: result.page,
-            page_size: result.page_size,
-        })
-    }
-
     /// 领取本人任务；后台执行器必须独立持有本调用至识别结果保存。
     /// # 参数
     /// * `id` / `actor` - 任务与认证人。
@@ -99,13 +67,32 @@ impl ContractImportProcess {
     /// # 错误
     /// 无权、源文件不可用、版本竞争或数据库失败。
     pub async fn claim(&self, id: &str, actor: &AuditActor) -> Result<(ImportView, Option<ImportAttempt>)> {
-        let mut task = recognition::owned(&self.db, actor.id(), id, &mut NoTransaction).await?;
+        let process = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.claim_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 功能资格、本人任务及版本更新使用同一个领取事务。
+    async fn claim_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(ImportView, Option<ImportAttempt>)> {
+        self.services.contract_access.require_import(actor, executor).await?;
+        let mut task = recognition::owned(&self.db, actor.id(), id, executor).await?;
         if !task.begin(now())? {
             return Ok((task.into(), None));
         }
-        self.require_source(&task, &mut NoTransaction).await?;
-        self.db.contract_imports().update(&mut task, &mut NoTransaction).await?;
-        Ok((task.clone().into(), Some(ImportAttempt { task })))
+        self.require_source(&task, executor).await?;
+        self.db.contract_imports().update(&mut task, executor).await?;
+        Ok((task.clone().into(), Some(ImportAttempt { task, actor: actor.clone() })))
     }
 
     /// 完成已领取任务；调用方必须在独立后台任务中等待收尾。
@@ -118,30 +105,42 @@ impl ContractImportProcess {
     pub async fn execute(
         &self,
         attempt: ImportAttempt,
-        _actor: &AuditActor,
+        actor: &AuditActor,
         pdf: &[u8],
     ) -> Result<ImportView> {
         let mut task = attempt.task;
+        self.detail(&task.base.id, actor).await?;
+        if task.owner_id != actor.id() {
+            return Err(Error::Forbidden("合同识别任务不属于当前账号".into()));
+        }
         if task.source.sha256 != hex::encode(Sha256::digest(pdf)) {
             return self
-                .fail(task, ImportFailure::new("SOURCE_CHANGED", "原文件内容已变化，请重新上传"))
+                .fail(task, actor, ImportFailure::new("SOURCE_CHANGED", "原文件内容已变化，请重新上传"))
                 .await;
         }
         let attempt = self
             .providers
-            .run(pdf, task.source.page_count, &mut TaskProgress { db: &self.db, task: &mut task })
+            .run(
+                pdf,
+                task.source.page_count,
+                &mut TaskProgress {
+                    db: &self.db,
+                    access: &self.services.contract_access,
+                    actor,
+                    task: &mut task,
+                },
+            )
             .await?;
         task.ocr = attempt.ocr;
         task.extraction = attempt.extraction;
         if let Some(failure) = attempt.failure {
-            return self.fail(task, failure).await;
+            return self.fail(task, actor, failure).await;
         }
         let ocr = task.ocr.take().ok_or_else(|| Error::Internal("识别结果缺少 OCR".into()))?;
         let extraction =
             task.extraction.take().ok_or_else(|| Error::Internal("识别结果缺少提取信息".into()))?;
         task.finish_recognition(ocr, extraction)?;
-        self.db.contract_imports().update(&mut task, &mut NoTransaction).await?;
-        Ok(task.into())
+        Ok(save_task(&self.db, &self.services.contract_access, actor, task).await?.into())
     }
 
     /// 登记读取原文件失败，任务可在原记录重试。
@@ -152,16 +151,49 @@ impl ContractImportProcess {
     /// # 错误
     /// 版本竞争或持久化失败。
     pub async fn source_failed(&self, attempt: ImportAttempt) -> Result<ImportView> {
-        self.fail(attempt.task, ImportFailure::new("SOURCE_UNAVAILABLE", "合同文件读取失败，请稍后重试"))
-            .await
+        self.fail(
+            attempt.task,
+            &attempt.actor,
+            ImportFailure::new("SOURCE_UNAVAILABLE", "合同文件读取失败，请稍后重试"),
+        )
+        .await
     }
 
-    async fn fail(&self, mut task: ContractImport, failure: ImportFailure) -> Result<ImportView> {
+    async fn fail(
+        &self,
+        mut task: ContractImport,
+        actor: &AuditActor,
+        failure: ImportFailure,
+    ) -> Result<ImportView> {
         task.status = ImportStatus::Failed;
         task.failure = Some(failure);
-        self.db.contract_imports().update(&mut task, &mut NoTransaction).await?;
-        Ok(task.into())
+        Ok(save_task(&self.db, &self.services.contract_access, actor, task).await?.into())
     }
+}
+
+/// 事务外识别的进度或结果只在重新授权后提交，外部服务不进入事务。
+async fn save_task(
+    db: &Database,
+    access: &ContractAccess,
+    actor: &AuditActor,
+    mut task: ContractImport,
+) -> Result<ContractImport> {
+    let db = db.clone();
+    let access = access.clone();
+    let actor = actor.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                access.require_import(&actor, executor).await?;
+                if task.owner_id != actor.id() {
+                    return Err(Error::Forbidden("合同识别任务不属于当前账号".into()));
+                }
+                db.contract_imports().update(&mut task, executor).await?;
+                Ok(task)
+            })
+        })
+        .await
 }
 
 fn now() -> u64 {

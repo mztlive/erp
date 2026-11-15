@@ -1,14 +1,15 @@
 //! 供应商履约订单跟进人交接：目标资格、可选转交开放 W26 任务。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, CommandFingerprint};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_identity::repository::prelude::*;
 use erp_identity::service::organization_access::ensure_org_enabled as ensure_identity_org_enabled;
-use erp_identity::{
-    AccessControlExt, AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService,
-};
+use erp_identity::{AccessControlExt, AuthorizationService};
+use erp_permissions::supplier_fulfillment;
 use erp_supply::command_receipt::SupplyCommandResult;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::dto::{
@@ -19,7 +20,7 @@ use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_
 use erp_workflow::repository::prelude::*;
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemType};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
@@ -55,7 +56,7 @@ impl SupplierFulfillmentProcess {
         {
             reject_company_org(org)?;
         }
-        let identity = (self.identity)();
+        let identity = self.identity.clone();
         let rbac = identity.rbac;
         let service = self.domain_with_scope(identity.data_scope);
         let audit_id = format!(
@@ -64,13 +65,6 @@ impl SupplierFulfillmentProcess {
                 .digest_hex()
         );
         let fingerprint = handover_fingerprint(actor.id(), id, &req, &key)?;
-        if let Some(existing) =
-            replay(&self.db, &service, &audit_id, &fingerprint, id, actor, &req.idempotency_key).await?
-        {
-            return Ok(existing);
-        }
-        ensure_target_qualified(&self.db, &rbac, req.target_user_id.trim(), &mut NoTransaction).await?;
-        ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
         let db = self.db.clone();
         let write = HandoverWrite {
             service,
@@ -103,43 +97,56 @@ impl SupplierFulfillmentProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<FulfillmentHandoverCandidateView>> {
-        let identity = (self.identity)();
+        let identity = self.identity.clone();
         let rbac = identity.rbac;
-        let order = self
-            .domain_with_scope(identity.data_scope)
-            .access()
-            .require_order(actor, "handover", id, &mut NoTransaction)
-            .await?;
-        let accounts =
-            self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
-        let mut candidates = Vec::new();
-        for account in accounts {
-            if account.base.id == order.follow_up_user_id {
-                continue;
-            }
-            if !account_can_follow(&self.db, &rbac, &account.base.id, &mut NoTransaction).await? {
-                continue;
-            }
-            candidates.push(FulfillmentHandoverCandidateView {
-                user_id: account.base.id.clone(),
-                display_name: account.name.clone(),
-                account: account.secret.account().to_string(),
-            });
-        }
-        candidates.sort_by(|left, right| {
-            left.display_name
-                .cmp(&right.display_name)
-                .then_with(|| left.account.cmp(&right.account))
-                .then_with(|| left.user_id.cmp(&right.user_id))
-        });
-        Ok(candidates)
+        let service = self.domain_with_scope(identity.data_scope);
+        let db = self.db.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let order = service
+                        .access()
+                        .require_order(&actor, &supplier_fulfillment::ORDER_HANDOVER, &id, executor)
+                        .await?;
+                    let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
+                    let mut candidates = Vec::new();
+                    for account in accounts {
+                        if account.base.id == order.follow_up_user_id {
+                            continue;
+                        }
+                        if !account_can_follow(&db, &rbac, &account.base.id, executor).await? {
+                            continue;
+                        }
+                        candidates.push(FulfillmentHandoverCandidateView {
+                            user_id: account.base.id.clone(),
+                            display_name: account.name.clone(),
+                            account: account.secret.account().to_string(),
+                        });
+                    }
+                    candidates.sort_by(|left, right| {
+                        left.display_name
+                            .cmp(&right.display_name)
+                            .then_with(|| left.account.cmp(&right.account))
+                            .then_with(|| left.user_id.cmp(&right.user_id))
+                    });
+                    service
+                        .access()
+                        .require_order(&actor, &supplier_fulfillment::ORDER_HANDOVER, &id, executor)
+                        .await?;
+                    Ok(candidates)
+                })
+            })
+            .await
     }
 }
 
 /// 在根事务前冻结的交接身份和领域能力；不重建授权来源。
 struct HandoverWrite {
     service: SupplierFulfillmentService,
-    rbac: SharedRbacService,
+    rbac: Arc<AuthorizationService>,
     actor: AuditActor,
     request: HandoverFulfillmentOrderRequest,
     id: String,
@@ -169,7 +176,7 @@ impl HandoverWrite {
 async fn persist_handover(
     db: &mongodb::Database,
     service: &SupplierFulfillmentService,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     id: &str,
     req: &HandoverFulfillmentOrderRequest,
     actor: &AuditActor,
@@ -177,6 +184,19 @@ async fn persist_handover(
     fingerprint: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<HandoverFulfillmentOrderView> {
+    service.access().require_order(actor, &supplier_fulfillment::ORDER_HANDOVER, id, executor).await?;
+    if let Some(existing) = replay(
+        db,
+        service,
+        HandoverReceipt { audit_id, fingerprint, key: &req.idempotency_key },
+        id,
+        actor,
+        executor,
+    )
+    .await?
+    {
+        return Ok(existing);
+    }
     ensure_target_qualified(db, rbac, req.target_user_id.trim(), executor).await?;
     ensure_org_enabled(db, req.target_org_unit_id.as_deref(), executor).await?;
     let mut view = service.apply_fulfillment_handover(id, req, actor, executor).await?;
@@ -247,16 +267,23 @@ async fn open_w26(
         .collect())
 }
 
+/// 原交接命令的不可变回执身份及请求指纹。
+struct HandoverReceipt<'a> {
+    audit_id: &'a str,
+    fingerprint: &'a str,
+    key: &'a str,
+}
+
 async fn replay(
     db: &mongodb::Database,
     service: &SupplierFulfillmentService,
-    audit_id: &str,
-    expected_fingerprint: &str,
+    receipt: HandoverReceipt<'_>,
     order_id: &str,
     actor: &AuditActor,
-    key: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Option<HandoverFulfillmentOrderView>> {
-    let Some(stored) = db.supply_command_receipts().find_command(audit_id, &mut NoTransaction).await? else {
+    let HandoverReceipt { audit_id, fingerprint, key } = receipt;
+    let Some(stored) = db.supply_command_receipts().find_command(audit_id, executor).await? else {
         return Ok(None);
     };
     stored.verify_identity(
@@ -266,11 +293,14 @@ async fn replay(
         order_id,
         &stable_digest(key.trim()),
     )?;
-    stored.verify(expected_fingerprint, Some(order_id), "同一幂等键已用于不同的供应商订单交接")?;
+    stored.verify(fingerprint, Some(order_id), "同一幂等键已用于不同的供应商订单交接")?;
     if !matches!(stored.result, SupplyCommandResult::FulfillmentHandover) {
         return Err(Error::Internal("供应商订单交接回执类型非法".to_string()));
     }
-    let order = service.access().require_order(actor, "handover", order_id, &mut NoTransaction).await?;
+    let order = service
+        .access()
+        .require_order(actor, &supplier_fulfillment::ORDER_HANDOVER, order_id, executor)
+        .await?;
     Ok(Some(HandoverFulfillmentOrderView {
         order_id: order.base.id,
         follow_up_user_id: order.follow_up_user_id,
@@ -282,7 +312,7 @@ async fn replay(
 
 async fn ensure_target_qualified(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    rbac: &Arc<AuthorizationService>,
     target: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
@@ -304,17 +334,15 @@ async fn ensure_org_enabled(
 }
 
 async fn account_can_follow(
-    db: &mongodb::Database,
-    rbac: &SharedRbacService,
+    _db: &mongodb::Database,
+    rbac: &Arc<AuthorizationService>,
     user_id: &str,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<bool> {
-    let permission = Permission::parse("supplier_fulfillment_order:handover").map_err(Error::from)?;
+    let permission = supplier_fulfillment::ORDER_HANDOVER;
     let actor =
         application_core::AuditActor::new(user_id.into(), user_id.into(), erp_core::AccountKind::Admin);
-    Ok(AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default())
-        .has_permission(&actor, &permission, executor)
-        .await?)
+    Ok(rbac.has_permission(&actor, &permission, executor).await?)
 }
 
 fn handover_fingerprint(

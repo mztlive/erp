@@ -62,7 +62,7 @@ impl ProcurementOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_offering", executor)?;
         }
 
         #[derive(Deserialize)]
@@ -78,7 +78,7 @@ impl ProcurementOfferingRepositoryExt for SupplierOfferingRepository<'_> {
         )
         .await?;
         if let Some(scope) = &filter.scope {
-            scope.validate(executor).await?;
+            scope.ensure_model("supplier_offering", executor)?;
         }
         Ok(rows.into_iter().map(|row| row.id).collect())
     }

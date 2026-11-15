@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use erp_supply::ports::supplier_reference_registry::{SupplierReferenceRegistry, SupplierReferenceTarget};
 use mongodb::Database;
@@ -11,6 +11,7 @@ use crate::wiring::CatalogServices;
 use crate::{Error, Result};
 
 mod authorization;
+pub use authorization::preview_facts_port;
 mod batch;
 mod batch_draft;
 mod batch_execution;
@@ -27,6 +28,7 @@ mod matching;
 mod preview;
 mod product;
 mod request;
+mod snapshot;
 
 pub use batch_request::{
     BatchItemEdit, BatchSubmissionView, BatchVersionRequest, BatchView, CreateBatchRequest, SaveBatchRequest,
@@ -43,7 +45,7 @@ use crate::source_media::SourceMediaPreparer;
 pub struct SupplierCatalogAdoptionProcess {
     services: Arc<CatalogServices>,
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     media_preparer: Option<Arc<SourceMediaPreparer>>,
     registry: Option<Arc<dyn SupplierReferenceRegistry>>,
 }
@@ -51,13 +53,17 @@ pub struct SupplierCatalogAdoptionProcess {
 impl SupplierCatalogAdoptionProcess {
     /// 绑定现有数据库和权威 RBAC，不隐式授予公司范围。
     /// # 参数
-    /// `db` 为应用数据库，`rbac` 为已有共享权限实例，`services` 为同一政策下的已装配领域服务。
+    /// `db` 为应用数据库，`authorization` 为已有共享权限实例，`services` 为同一政策下的已装配领域服务。
     /// # 返回
     /// 尚未装配远程素材准备器的流程。
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<CatalogServices>) -> Self {
-        Self { db, rbac, services, media_preparer: None, registry: None }
+    pub fn new(
+        db: Database,
+        authorization: Arc<AuthorizationService>,
+        services: Arc<CatalogServices>,
+    ) -> Self {
+        Self { db, authorization, services, media_preparer: None, registry: None }
     }
 
     /// 注入供应商适配器注册表，选品不要求开启自动下单。

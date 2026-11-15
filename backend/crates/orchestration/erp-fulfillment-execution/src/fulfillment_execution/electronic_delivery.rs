@@ -7,6 +7,8 @@ use erp_fulfillment::dto::{CreateElectronicDeliveryRequest, ElectronicDeliveryVi
 use erp_fulfillment::entity::fulfillment::ElectronicDelivery;
 use erp_fulfillment::service::FulfillmentService;
 use erp_fulfillment::service::electronic_delivery_crypto::electronic_delivery_draft_from_request;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::fulfillment;
 use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::repository::prelude::*;
@@ -21,7 +23,6 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::FulfillmentProcess;
-use super::task::FulfillmentIdentityFactory;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
@@ -191,7 +192,7 @@ async fn register_created_electronic_delivery_document(
 async fn persist_created_electronic_delivery(
     db: &Database,
     workflow: Arc<dyn FulfillmentWorkflow>,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     record: ElectronicDelivery,
     actor: AuditActor,
 ) -> Result<()> {
@@ -207,6 +208,14 @@ async fn persist_created_electronic_delivery(
     client
         .with_transaction(move |executor| {
             Box::pin(async move {
+                task_identity
+                    .require(
+                        &actor,
+                        &fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CREATE,
+                        AccessTarget::Operation,
+                        executor,
+                    )
+                    .await?;
                 register_created_electronic_delivery_document(
                     &db,
                     workflow.as_ref(),

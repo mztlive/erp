@@ -128,15 +128,10 @@ pub(super) async fn persist(mut port: MongoCancelWrite<'_>, executor: &mut dyn E
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::ReadExecutor as SessionMarker;
+
     use super::*;
     use crate::Error;
-    struct SessionMarker(u64);
-    impl Executor for SessionMarker {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.0 += 1;
-            None
-        }
-    }
     struct RecordingPort {
         executor: usize,
         apply: bool,
@@ -173,7 +168,7 @@ mod tests {
         }
     }
     async fn invoke(apply: bool, fail: Option<usize>) -> (Result<()>, Vec<&'static str>) {
-        let mut executor = SessionMarker(93);
+        let mut executor = SessionMarker::default();
         let mut port = RecordingPort {
             executor: &mut executor as *mut SessionMarker as usize,
             apply,
@@ -181,7 +176,7 @@ mod tests {
             calls: Vec::new(),
         };
         let result = execute(&mut port, &mut executor).await;
-        assert_eq!(executor.0, 93);
+
         (result, port.calls)
     }
     #[tokio::test]

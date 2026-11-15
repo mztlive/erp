@@ -1,8 +1,11 @@
 //! 拥有带审计外层事务的来源系统流程。
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::run_audited;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::source_registry;
 use erp_support::{
     CreateSourceSystemRequest, SourceRegistryExt, SourceSystem, SourceSystemId, SourceSystemView,
 };
@@ -30,6 +33,7 @@ pub fn process_name() -> &'static str {
 ///
 /// # 参数
 /// * `db` - 来源系统所在数据库。
+/// * `authorization` - 进程共享的统一授权服务。
 /// * `req` - 来源系统创建请求。
 /// * `actor` - 已认证的审计操作人。
 ///
@@ -40,6 +44,7 @@ pub fn process_name() -> &'static str {
 /// 请求校验失败、来源系统构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_source_system(
     db: Database,
+    authorization: Arc<AuthorizationService>,
     req: CreateSourceSystemRequest,
     actor: AuditActor,
 ) -> Result<SourceSystemView> {
@@ -51,6 +56,9 @@ pub async fn create_source_system(
     let system_for_tx = system.clone();
     run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {
+            authorization
+                .require(&actor, &source_registry::SOURCE_SYSTEM_CREATE, AccessTarget::Operation, executor)
+                .await?;
             db.source_systems().create(&system_for_tx, executor).await?;
             Ok(())
         })

@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
 use erp_audit::{AuditAction, BusinessEventContent};
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
-use erp_identity::Permission;
 use erp_identity::service::organization_access::ensure_org_enabled;
+use erp_permissions::supplier;
 use erp_supplier::entity::handover_receipt::{
     CAPABILITY_HANDOVER_ACTION, SUPPLIER_HANDOVER_ACTION, SupplierHandoverReceipt, SupplierHandoverResult,
 };
@@ -16,7 +16,7 @@ use erp_supplier::{
     HandoverSupplierRequest, HandoverSupplierView, SupplierExt, capability_handover_fingerprint,
     supplier_handover_fingerprint,
 };
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::{SupplierProfileAuthorization, SupplierProfileProcess};
@@ -74,12 +74,6 @@ impl SupplierProfileProcess {
             [fingerprint],
         )?;
         let rbac = self.authorization.clone();
-        if let Some(view) = replay_supplier(&self.db, &rbac, &command, id, actor, &mut NoTransaction).await? {
-            return Ok(view);
-        }
-        ensure_target_qualified(&self.db, &self.authorization, req.target_user_id.trim(), &mut NoTransaction)
-            .await?;
-        ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), &mut NoTransaction).await?;
         let context = handover_context(actor, &command, SUPPLIER_ACTION)?;
         let operation = SupplierHandoverCommand {
             db: self.db.clone(),
@@ -127,21 +121,6 @@ impl SupplierProfileProcess {
             [supplier_id.to_string(), fingerprint],
         )?;
         let rbac = self.authorization.clone();
-        if let Some(view) = replay_capability(
-            &self.db,
-            &rbac,
-            &command,
-            supplier_id,
-            capability_id,
-            actor,
-            &mut NoTransaction,
-        )
-        .await?
-        {
-            return Ok(view);
-        }
-        ensure_target_qualified(&self.db, &self.authorization, req.target_user_id.trim(), &mut NoTransaction)
-            .await?;
         let context = handover_context(actor, &command, CAPABILITY_ACTION)?;
         let operation = SupplierHandoverCommand {
             db: self.db.clone(),
@@ -177,14 +156,24 @@ impl SupplierProfileProcess {
         id: &str,
         actor: &AuditActor,
     ) -> Result<Vec<HandoverCandidateView>> {
-        self.authorization.access.clone().require(actor, "update", id).await?;
-        let current = self
-            .db
-            .supplier()
-            .account(&SupplierAccountId::new(id), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        list_candidates(&self.db, &self.authorization, &current.maintainer_user_id, &mut NoTransaction).await
+        let db = self.db.clone();
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorization.access.require_with(&actor, &supplier::HANDOVER, &id, executor).await?;
+                    let current = db
+                        .supplier()
+                        .account(&SupplierAccountId::new(&id), executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("供应商不存在".into()))?;
+                    list_candidates(&db, &authorization, &current.maintainer_user_id, executor).await
+                })
+            })
+            .await
     }
 }
 
@@ -198,7 +187,7 @@ async fn apply_supplier_handover(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(HandoverSupplierView, BusinessEventContent)> {
-    rbac.access.clone().require_with(actor, "update", id, executor).await?;
+    rbac.access.clone().require_with(actor, &supplier::HANDOVER, id, executor).await?;
     ensure_target_qualified(db, rbac, target, executor).await?;
     ensure_org_enabled(db, req.target_org_unit_id.as_deref(), executor).await?;
     let mut account = db
@@ -218,6 +207,7 @@ async fn apply_supplier_handover(
     let old_owner = account.maintainer_user_id.clone();
     let old_org = account.business_org_unit_id.clone();
     account.handover(target.to_string(), next_org, actor.id())?;
+    rbac.access.require_owner_change(actor, &account, executor).await?;
     db.supplier_accounts().update(&mut account, executor).await?;
     let content = handover_content(HandoverEventFacts {
         target_id: account.base.id.clone(),
@@ -247,7 +237,7 @@ async fn apply_capability_handover(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(HandoverSupplierCapabilityView, BusinessEventContent)> {
-    rbac.access.clone().require_with(actor, "update", supplier_id, executor).await?;
+    rbac.access.clone().require_with(actor, &supplier::HANDOVER, supplier_id, executor).await?;
     ensure_target_qualified(db, rbac, target, executor).await?;
     let mut capability = db
         .supplier_capabilities()
@@ -424,7 +414,7 @@ async fn replay_supplier(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
-    rbac.access.clone().require_with(actor, "update", id, executor).await?;
+    rbac.access.clone().require_with(actor, &supplier::HANDOVER, id, executor).await?;
     let account = db
         .supplier()
         .account(&SupplierAccountId::new(id), executor)
@@ -455,7 +445,7 @@ async fn replay_capability(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
-    rbac.access.clone().require_with(actor, "update", supplier_id, executor).await?;
+    rbac.access.clone().require_with(actor, &supplier::HANDOVER, supplier_id, executor).await?;
     let capability = db
         .supplier_capabilities()
         .find_by_id(capability_id, executor)
@@ -478,7 +468,7 @@ async fn ensure_target_qualified(
     target: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if target_qualified(db, &rbac.rbac, target, &Permission::parse("supplier:update")?, executor).await? {
+    if target_qualified(db, &rbac.rbac, target, &supplier::HANDOVER, executor).await? {
         return Ok(());
     }
     Err(Error::Forbidden("目标账号不存在、已失效或不具备供应商维护资格".into()))
@@ -490,7 +480,7 @@ async fn list_candidates(
     current: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<HandoverCandidateView>> {
-    Ok(qualified_candidates(db, &rbac.rbac, current, &Permission::parse("supplier:update")?, executor)
+    Ok(qualified_candidates(db, &rbac.rbac, current, &supplier::HANDOVER, executor)
         .await?
         .into_iter()
         .map(|account| HandoverCandidateView {

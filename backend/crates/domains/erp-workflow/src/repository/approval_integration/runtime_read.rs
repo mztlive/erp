@@ -4,10 +4,11 @@ use std::collections::BTreeMap;
 
 use bpm::ProcessKind;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use futures_util::TryStreamExt;
+use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::QueryOutput;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::{Collection, Database};
-use persistence_core::{Executor, Result};
+use persistence_core::{Executor, Result, aggregate};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
@@ -23,16 +24,16 @@ use crate::entity::approval_integration::{ApprovalSubjectSnapshot, document_type
 const INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
 const SNAPSHOTS: &str = <Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
 
-/// Service 已证明的单一流程种类读取范围。
+/// 本次业务检索支持的单一流程种类。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApprovalRuntimeReadTypeScope {
-    /// 已证明可进入当前视图的流程种类。
+    /// 已接入审批运行时且符合本次类型筛选的流程种类。
     pub process_kind: ProcessKind,
 }
 
-/// Service 已证明的运行实例读取范围。
+/// 业务检索的运行实例范围；完整授权由中央查询凭证约束。
 ///
-/// Repository 只接收发起人事实或已证明的流程种类；完整业务来源授权由 Service 执行。
+/// Repository 接收业务流程种类和中央查询凭证；完整业务来源授权在数据库分页前执行。
 /// 管理视图不得使用发起人读取旁路。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApprovalRuntimeReadScope {
@@ -43,9 +44,9 @@ pub enum ApprovalRuntimeReadScope {
         /// 必须与实例 `started_by` 过滤完全一致的当前账号。
         submitted_by: String,
     },
-    /// Managed/Blocked 管理读取；业务来源在 Service 中逐项授权。
+    /// Managed/Blocked 管理读取；真实来源条件由中央查询凭证提供。
     Managed {
-        /// 已证明类型级运行管理资格的流程种类。
+        /// 本次检索支持的流程种类；具体管理资格由中央查询条件证明。
         type_scopes: Vec<ApprovalRuntimeReadTypeScope>,
     },
 }
@@ -107,6 +108,60 @@ struct ApprovalRuntimeReadScanFacet {
 }
 
 impl<'a> ApprovalRuntimeReadRepository<'a> {
+    /// 在中央授权过滤后执行原实例查询的检索、计数和分页。
+    /// # 参数
+    /// filter、scope为原业务筛选，access为当前实例查询凭证，executor为原快照。
+    /// # 返回
+    /// 完整来源授权后的页面与完整计数。
+    /// # 错误
+    /// 模型错配、凭证过期或数据库失败时拒绝。
+    pub async fn search_authorized(
+        &self,
+        filter: &ApprovalInstanceListFilter,
+        scope: &ApprovalRuntimeReadScope,
+        access: &CompiledAccess,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<ApprovalRuntimeReadPage> {
+        let pipeline = authorized_pipeline(access, runtime_read_pipeline(filter, scope), executor)?;
+        if runtime_read_scope_empty(filter, scope) {
+            return Ok(ApprovalRuntimeReadPage::default());
+        }
+        let rows = aggregate_runtime_read::<ApprovalRuntimeReadFacet>(
+            &self.db.collection::<Document>(INSTANCES),
+            pipeline,
+            executor,
+        )
+        .await?;
+        Ok(runtime_read_page(rows.into_iter().next())?)
+    }
+
+    /// 在中央授权条件后读取本人发起实例的有界候选批次。
+    /// # 参数
+    /// filter、scope为原业务筛选，access为当前实例凭证，executor为原读取事务。
+    /// # 返回
+    /// 原稳定游标语义的候选与末行。
+    /// # 错误
+    /// 凭证错配、跨阶段或数据库错误拒绝。
+    pub async fn scan_authorized(
+        &self,
+        filter: &ApprovalInstanceListFilter,
+        scope: &ApprovalRuntimeReadScope,
+        access: &CompiledAccess,
+        executor: &mut dyn Executor,
+    ) -> crate::Result<(Vec<ApprovalRuntimeReadRow>, Option<ApprovalInstanceSummary>)> {
+        let pipeline = authorized_pipeline(access, runtime_scan_pipeline(filter, scope), executor)?;
+        if runtime_read_scope_empty(filter, scope) {
+            return Ok((Vec::new(), None));
+        }
+        let rows = aggregate_runtime_read::<ApprovalRuntimeReadScanFacet>(
+            &self.db.collection::<Document>(INSTANCES),
+            pipeline,
+            executor,
+        )
+        .await?;
+        let Some(facet) = rows.into_iter().next() else { return Ok((Vec::new(), None)) };
+        Ok((facet.items, facet.last.into_iter().next()))
+    }
     /// 创建审批运行联合只读仓储。
     ///
     /// # 参数
@@ -120,73 +175,24 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
+}
 
-    /// 在 MongoDB 内完成快照授权范围、精确三元组、检索、计数与分页。
-    ///
-    /// # 参数
-    /// * `filter` - 视图、状态、字面量检索、游标与页大小
-    /// * `scope` - Service 已证明的流程种类和可选提交人
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回当前稳定页与不含游标的完整授权总数。
-    ///
-    /// # 错误
-    /// MongoDB 聚合、反序列化或计数越界时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 空类型和无发起人的 Started 范围必须在访问数据库前返回空页；
-    /// Repository 不得解释 RBAC，且不得在分页后过滤授权事实。
-    pub async fn search(
-        &self,
-        filter: &ApprovalInstanceListFilter,
-        scope: &ApprovalRuntimeReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<ApprovalRuntimeReadPage> {
-        if runtime_read_scope_empty(filter, scope) {
-            return Ok(ApprovalRuntimeReadPage::default());
-        }
-        let rows = aggregate_runtime_read::<ApprovalRuntimeReadFacet>(
-            &self.db.collection::<Document>(INSTANCES),
-            runtime_read_pipeline(filter, scope),
-            executor,
-        )
-        .await?;
-        runtime_read_page(rows.into_iter().next())
+/// 仓储只消费同一根实例的完整对象凭证，授权条件位于所有业务分页前。
+fn authorized_pipeline(
+    access: &CompiledAccess,
+    business: Vec<Document>,
+    executor: &mut dyn Executor,
+) -> crate::Result<Vec<Document>> {
+    let model = access.model();
+    if model.resource != "approval_instance"
+        || model.collection != INSTANCES
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(crate::Error::ValidationError("审批实例授权模型不匹配".into()));
     }
-
-    /// 读取有界候选批次，不重复计算完整候选总数。
-    ///
-    /// # 参数
-    /// * `filter` - 当前候选游标、批大小及完整检索条件
-    /// * `scope` - Service 已证明的类型范围
-    /// * `executor` - 与最终来源授权相同的事务执行器
-    ///
-    /// # 返回
-    /// 返回匹配行及最后一个原始候选；整批无快照或无检索匹配时仍可继续扫描。
-    ///
-    /// # 错误
-    /// MongoDB 查询或有界投影反序列化失败时返回错误。
-    pub async fn scan(
-        &self,
-        filter: &ApprovalInstanceListFilter,
-        scope: &ApprovalRuntimeReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<(Vec<ApprovalRuntimeReadRow>, Option<ApprovalInstanceSummary>)> {
-        if runtime_read_scope_empty(filter, scope) {
-            return Ok((Vec::new(), None));
-        }
-        let rows = aggregate_runtime_read::<ApprovalRuntimeReadScanFacet>(
-            &self.db.collection::<Document>(INSTANCES),
-            runtime_scan_pipeline(filter, scope),
-            executor,
-        )
-        .await?;
-        let Some(facet) = rows.into_iter().next() else {
-            return Ok((Vec::new(), None));
-        };
-        Ok((facet.items, facet.last.into_iter().next()))
-    }
+    access.ensure_current(executor)?;
+    Ok(access.stages().iter().cloned().chain(business).collect())
 }
 
 /// 用调用方执行器执行联合读取，返回指定的有界聚合投影。
@@ -195,17 +201,7 @@ async fn aggregate_runtime_read<T: DeserializeOwned + Send + Sync>(
     pipeline: Vec<Document>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<T>> {
-    match executor.session() {
-        Some(session) => Ok(collection
-            .aggregate(pipeline)
-            .with_type::<T>()
-            .session(&mut *session)
-            .await?
-            .stream(session)
-            .try_collect::<Vec<_>>()
-            .await?),
-        None => Ok(collection.aggregate(pipeline).with_type::<T>().await?.try_collect::<Vec<_>>().await?),
-    }
+    aggregate::rows(&collection.clone_with_type::<T>(), pipeline, executor).await
 }
 
 /// 从联合分页分支恢复完整总数与当前页。

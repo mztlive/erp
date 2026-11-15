@@ -283,19 +283,11 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
 
 #[cfg(test)]
 mod tests {
+    // 非零大小保证执行器地址能够区分不同实例。
+    use persistence_core::ReadExecutor;
+
     use super::*;
     use crate::Error;
-
-    // 非零大小保证执行器地址能够区分不同实例。
-    struct TestExecutor {
-        _identity: u8,
-    }
-
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
 
     struct RecordedPosting {
         calls: Vec<(&'static str, usize)>,
@@ -341,8 +333,8 @@ mod tests {
     #[tokio::test]
     async fn invoice_post_and_commit_keep_original_order_and_the_same_executor() {
         for command_receipt in [false, true] {
-            let mut executor = TestExecutor { _identity: 1 };
-            let expected_executor = &mut executor as *mut TestExecutor as usize;
+            let mut executor = ReadExecutor::default();
+            let expected_executor = &mut executor as *mut ReadExecutor as usize;
             let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None, command_receipt };
             execute_posting(&mut steps, &mut executor).await.unwrap();
             let mut expected = vec!["execution", "finance", "audit", "tasks", "sales"];
@@ -364,8 +356,7 @@ mod tests {
             for (index, fail_at) in sequence[..count].iter().enumerate() {
                 let mut steps =
                     RecordedPosting { calls: Vec::new(), fail_at: Some(fail_at), command_receipt };
-                let error =
-                    execute_posting(&mut steps, &mut TestExecutor { _identity: 1 }).await.unwrap_err();
+                let error = execute_posting(&mut steps, &mut ReadExecutor::default()).await.unwrap_err();
                 assert!(matches!(error, Error::ConflictError(message) if message == *fail_at));
                 assert_eq!(steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(), sequence[..=index]);
             }

@@ -9,7 +9,6 @@ use erp_identity::{AccessMapping, Error as IdentityError, Result as IdentityResu
 use erp_supply::repository::SupplierSettlementExt;
 use mongodb::Database;
 use mongodb::bson::{Bson, doc};
-use persistence_core::Executor;
 
 /// 结算单当前准备人与业务组织的固定字段映射。
 pub(in crate::finance::funds_scope) struct SettlementMapping {
@@ -43,20 +42,17 @@ impl AccessMapping for SettlementMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
-        Ok(MappingFacts::default())
-    }
-    fn records(&self, _: &AccessContext, _: &MappingFacts) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! { "deleted_at": 0 }))
     }
     fn predicate(
         &self,
         fact: &AccessFact,
         context: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(match fact {
             AccessFact::Owned => doc! { "prepared_by": context.actor.id() },
@@ -70,7 +66,7 @@ impl AccessMapping for SettlementMapping {
         &self,
         _: &RelationKey,
         _: &AccessContext,
-        _: &MappingFacts,
+        _: Option<&MappingFacts>,
     ) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("结算来源不存在下级授权关系".into()))
     }
@@ -82,7 +78,6 @@ mod tests {
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_identity::Permission;
-    use persistence_core::NoTransaction;
 
     use super::*;
 
@@ -106,40 +101,17 @@ mod tests {
                 doc! { "business_org_unit_id": { "$in": ["org"] } },
             ),
         ] {
-            let QueryFragment::Match(actual) =
-                mapping.predicate(&fact, &context(), &MappingFacts::default()).unwrap()
-            else {
+            let QueryFragment::Match(actual) = mapping.predicate(&fact, &context(), None).unwrap() else {
                 panic!("结算单责任事实应使用字段条件");
             };
             assert_eq!(actual, expected);
         }
-        assert_eq!(mapping.key(&context(), &MappingFacts::default()).unwrap(), Bson::String("$id".into()));
+        assert_eq!(mapping.key(&context(), None).unwrap(), Bson::String("$id".into()));
         assert!(
             mapping
-                .predicate(
-                    &AccessFact::WarehouseIn(["warehouse".into()].into()),
-                    &context(),
-                    &MappingFacts::default()
-                )
+                .predicate(&AccessFact::WarehouseIn(["warehouse".into()].into()), &context(), None)
                 .is_err()
         );
-        assert!(
-            mapping
-                .relation(&RelationKey::parse("other").unwrap(), &context(), &MappingFacts::default())
-                .is_err()
-        );
-    }
-
-    #[tokio::test]
-    async fn preparation_requires_the_original_transaction_when_revision_is_unavailable() {
-        let mapping = SettlementMapping::new().unwrap();
-        let facts = mapping.prepare(&context(), &mut NoTransaction).await.unwrap();
-        assert_eq!(facts, MappingFacts::default());
-        assert!(facts.validate(true, Instant::now()).is_ok());
-        assert!(facts.validate(false, Instant::now()).is_err());
-        let QueryFragment::Match(records) = mapping.records(&context(), &facts).unwrap() else {
-            panic!("结算单有效记录应使用字段条件");
-        };
-        assert_eq!(records, doc! { "deleted_at": 0 });
+        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context(), None).is_err());
     }
 }

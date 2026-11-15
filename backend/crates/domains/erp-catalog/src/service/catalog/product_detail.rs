@@ -6,7 +6,8 @@
 
 use application_core::AuditActor;
 use erp_core::ids::{ProductId, SkuId};
-use persistence_core::NoTransaction;
+use erp_permissions::catalog as catalog_permissions;
+use persistence_core::{Executor, Transactional};
 
 use super::CatalogService;
 use crate::dto::{
@@ -34,16 +35,27 @@ impl CatalogService {
         product_id: &str,
         actor: &AuditActor,
     ) -> Result<PageView<ProductRevisionView>> {
-        self.require_visible_product(actor, product_id).await?;
-        let params = ProductRevisionListParams {
-            product_id: Some(ProductId::new(product_id.to_string())),
-            status: None,
-            page: Some(1),
-            page_size: Some(100),
-            sort_by: Some("revision_no".to_string()),
-            sort_dir: Some("desc".to_string()),
-        };
-        self.product_revision_list(&params).await
+        let service = self.clone();
+        let actor = actor.clone();
+        let product_id = product_id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.require_visible_product(&actor, &product_id, executor).await?;
+                    let params = ProductRevisionListParams {
+                        product_id: Some(ProductId::new(product_id.to_string())),
+                        status: None,
+                        page: Some(1),
+                        page_size: Some(100),
+                        sort_by: Some("revision_no".to_string()),
+                        sort_dir: Some("desc".to_string()),
+                    };
+                    service.product_revision_rows(&params, executor).await
+                })
+            })
+            .await
     }
 
     /// 读取指定商品的全部 SKU。
@@ -62,19 +74,30 @@ impl CatalogService {
         product_id: &str,
         actor: &AuditActor,
     ) -> Result<PageView<SkuView>> {
-        self.require_visible_product(actor, product_id).await?;
-        let params = SkuListParams {
-            q: None,
-            sku_no: None,
-            product_id: Some(ProductId::new(product_id.to_string())),
-            status: None,
-            listing_status: None,
-            page: Some(1),
-            page_size: Some(100),
-            sort_by: None,
-            sort_dir: None,
-        };
-        self.sku_list(&params).await
+        let service = self.clone();
+        let actor = actor.clone();
+        let product_id = product_id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.require_visible_product(&actor, &product_id, executor).await?;
+                    let params = SkuListParams {
+                        q: None,
+                        sku_no: None,
+                        product_id: Some(ProductId::new(product_id.to_string())),
+                        status: None,
+                        listing_status: None,
+                        page: Some(1),
+                        page_size: Some(100),
+                        sort_by: None,
+                        sort_dir: None,
+                    };
+                    service.sku_rows(&params, executor).await
+                })
+            })
+            .await
     }
 
     /// 读取指定商品下的 SKU 修订。
@@ -95,15 +118,34 @@ impl CatalogService {
         sku_id: Option<&str>,
         actor: &AuditActor,
     ) -> Result<PageView<SkuRevisionView>> {
-        self.require_visible_product(actor, product_id).await?;
-        if let Some(sku_id) = sku_id {
-            return self.product_sku_revisions(product_id, sku_id).await;
-        }
-        self.merged_product_sku_revisions(product_id).await
+        let service = self.clone();
+        let actor = actor.clone();
+        let product_id = product_id.to_owned();
+        let sku_id = sku_id.map(str::to_owned);
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.require_visible_product(&actor, &product_id, executor).await?;
+                    if let Some(sku_id) = sku_id {
+                        return service.product_sku_revisions(&product_id, &sku_id, executor).await;
+                    }
+                    service.merged_product_sku_revisions(&product_id, executor).await
+                })
+            })
+            .await
     }
 
-    async fn require_visible_product(&self, actor: &AuditActor, product_id: &str) -> Result<()> {
-        self.access().require_product(actor, "detail", product_id, &mut NoTransaction).await?;
+    async fn require_visible_product(
+        &self,
+        actor: &AuditActor,
+        product_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.access()
+            .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, product_id, executor)
+            .await?;
         Ok(())
     }
 
@@ -111,29 +153,31 @@ impl CatalogService {
         &self,
         product_id: &str,
         sku_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<PageView<SkuRevisionView>> {
         // IDOR：SKU 归属不符时与商品不存在同码，避免枚举他品 SKU。
         let sku = self
             .db
             .skus()
-            .find_by_id(sku_id, &mut NoTransaction)
+            .find_by_id(sku_id, executor)
             .await?
             .filter(|sku| sku.product_id.as_ref() == product_id)
             .ok_or_else(|| Error::NotFound("商品不存在".to_string()))?;
-        self.sku_revision_list(&sku_revision_params(sku.base.id)).await
+        self.sku_revision_rows(&sku_revision_params(sku.base.id), executor).await
     }
 
-    async fn merged_product_sku_revisions(&self, product_id: &str) -> Result<PageView<SkuRevisionView>> {
-        let skus = self
-            .db
-            .catalog()
-            .skus_for_product(&ProductId::new(product_id.to_string()), &mut NoTransaction)
-            .await?;
+    async fn merged_product_sku_revisions(
+        &self,
+        product_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<SkuRevisionView>> {
+        let skus =
+            self.db.catalog().skus_for_product(&ProductId::new(product_id.to_string()), executor).await?;
         if skus.is_empty() {
             return Ok(PageView { items: Vec::new(), total: 0, page: 1, page_size: 100 });
         }
         let sku_ids = skus.iter().map(|sku| SkuId::new(sku.base.id.clone())).collect::<Vec<_>>();
-        let mut revisions = self.db.sku_revisions().find_by_sku_ids(&sku_ids, &mut NoTransaction).await?;
+        let mut revisions = self.db.sku_revisions().find_by_sku_ids(&sku_ids, executor).await?;
         let total = revisions.len() as i64;
         revisions.sort_by(|left, right| {
             right

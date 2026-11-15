@@ -282,13 +282,13 @@ where
     if access.collection() != base.name() {
         return Err(Error::ValidationError("库存授权模型与查询集合不匹配".into()));
     }
-    access.validate(executor).await?;
+    access.ensure_current(executor)?;
     let prefix = access.stages().to_vec();
     let collection = base.clone_with_type::<Row>();
     let items = aggregate::find(&collection, filter.clone(), options, prefix.clone(), executor).await?;
     let total = aggregate::count(base, filter, prefix, executor).await?;
     let total = i64::try_from(total).map_err(|_| Error::Internal("库存结果数量超限".into()))?;
-    access.validate(executor).await?;
+    access.ensure_current(executor)?;
     Ok(PageResult { items, total })
 }
 

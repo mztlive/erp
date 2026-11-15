@@ -4,7 +4,8 @@ use std::slice;
 
 use application_core::{AuditActor, PageView};
 use erp_core::common::time::{BusinessDate, Instant};
-use persistence_core::NoTransaction;
+use erp_permissions::customer as customer_permissions;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CustomerService;
@@ -12,10 +13,11 @@ use super::scope::{
     CustomerListView, CustomerSnapshot, ensure_page, ensure_scope_version, ensure_stable_snapshot,
 };
 use crate::dto::customer::{CustomerDetailView, CustomerListParams, CustomerOwnerView, CustomerView};
-use crate::entity::customer::CustomerAssignment;
+use crate::entity::customer::{CustomerAccount, CustomerAssignment};
 use crate::error::Result;
 use crate::repository::CustomerExt;
 use crate::repository::prelude::*;
+use crate::repository::scope::authorized_customer;
 
 impl CustomerService {
     /// 分页查询客户角色列表。
@@ -72,11 +74,37 @@ impl CustomerService {
     /// # 关键业务约束
     /// 详情必须独立重验当前权限；历史参与只补充读取。
     pub async fn customer_detail(&self, id: &str, actor: &AuditActor) -> Result<CustomerDetailView> {
-        let access = self.access.clone();
-        let expected = access.require(actor, "detail", id).await?;
-        let view = self.load_customer_detail(id).await?;
-        let current = access.require(actor, "detail", id).await?;
-        ensure_stable_snapshot(&expected.scope_version, &current.scope_version)?;
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.detail_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 同一读取阶段完成完整授权过滤、详情水合和交付检查。
+    async fn detail_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerDetailView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(crate::Error::ValidationError("客户详情必须使用快照事务".into()));
+        }
+        let context =
+            self.access.query_context(actor, &customer_permissions::DETAIL, executor).await.map_err(
+                |error| match error {
+                    crate::Error::Forbidden(_) => super::access::deny_object(&customer_permissions::DETAIL),
+                    error => error,
+                },
+            )?;
+        let account = authorized_customer(&self.db, id, &context, executor).await?;
+        let view = self.detail_view(account, super::access::business_date(context.as_of)?, executor).await?;
+        self.access.validate(&context, executor).await?;
         Ok(view)
     }
 
@@ -86,6 +114,7 @@ impl CustomerService {
     ///
     /// # 参数
     /// * `id` - 客户角色 ID
+    /// * `executor` - 原业务事务或读取阶段执行器。
     ///
     /// # 返回
     /// 返回客户详情视图。
@@ -95,17 +124,39 @@ impl CustomerService {
     ///
     /// # 关键业务约束
     /// 本方法不解释权限，避免仓储按登录人推断范围。
-    pub async fn load_customer_detail(&self, id: &str) -> Result<CustomerDetailView> {
-        let account = self.load_customer(id).await?;
-        let identity =
-            self.party.identities_by_ids(std::slice::from_ref(&account.party_id)).await?.into_iter().next();
+    pub async fn load_customer_detail(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerDetailView> {
+        let account = self
+            .db
+            .customer_accounts()
+            .find_customer(id, executor)
+            .await?
+            .ok_or_else(|| crate::Error::NotFound("客户不存在".into()))?;
+        self.detail_view(account, BusinessDate::today(), executor).await
+    }
+
+    /// 在原执行器补充主体、有效负责人及姓名，不开启新读取阶段。
+    async fn detail_view(
+        &self,
+        account: CustomerAccount,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerDetailView> {
+        let identity = self
+            .party
+            .identities_by_ids(slice::from_ref(&account.party_id), executor)
+            .await?
+            .into_iter()
+            .next();
         let party_no = identity.as_ref().map(|fact| fact.party_no.clone());
         let legal_name = identity.as_ref().and_then(|fact| fact.legal_name.clone());
-        let executor = &mut NoTransaction;
         let assignments = self
             .db
             .customer_assignments()
-            .list_active_for_customers(slice::from_ref(&account.base.id), BusinessDate::today(), executor)
+            .list_active_for_customers(slice::from_ref(&account.base.id), as_of, executor)
             .await?;
         let owner_ids = CustomerAssignment::owner_ids(&assignments);
         let names = self.accounts.names(&owner_ids, executor).await?;
@@ -163,8 +214,54 @@ fn list_view(page: PageView<CustomerView>, scope_version: String, as_of: Instant
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot};
+    use super::CustomerService;
+    use crate::CustomerAccess;
     use crate::error::Error;
+    use crate::ports::{FailClosedAuditPort, FailClosedPartyFactPort};
+
+    /// 数据库句柄不发起连接，授权失败必须先于任何仓储或事实端口读取。
+    async fn service() -> CustomerService {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("customer_detail_authorization");
+        CustomerService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedPartyFactPort),
+            CustomerAccess::new(db, unavailable_authorization()),
+        )
+    }
+
+    #[tokio::test]
+    async fn detail_rejects_non_snapshot_before_querying_any_customer() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error = service()
+            .await
+            .detail_stage("customer", &actor, &mut ReadExecutor::default())
+            .await
+            .expect_err("非快照详情读取必须拒绝");
+        assert!(matches!(error, Error::ValidationError(message) if message == "客户详情必须使用快照事务"));
+    }
+
+    #[tokio::test]
+    async fn detail_propagates_missing_authorization_binding_before_business_reads() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error = service()
+            .await
+            .detail_stage("customer", &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("缺少固定授权绑定必须拒绝");
+        assert!(matches!(error, Error::ValidationError(message) if message == "缺少查询 Mapping 绑定"));
+    }
 
     #[test]
     fn later_page_and_version_drift_are_data_scope_changed() {

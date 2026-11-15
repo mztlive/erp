@@ -44,7 +44,8 @@ impl InventoryAdjustmentProcess {
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustmentView> {
         let _ = executor
-            .session()
+            .boundary()
+            .filter(|boundary| boundary.is_snapshot())
             .ok_or_else(|| Error::Internal("库存调整审批过账缺少运行时事务会话".to_string()))?;
         post_stock_adjustment_write(&self.db, context, actor, executor).await.map(Into::into)
     }

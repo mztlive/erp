@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::supplier_fulfillment;
+use erp_supply::FulfillmentOrderAccess;
 use erp_supply::dto::supplier_fulfillment::SupplierOrderInvestigationAction;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::repository::SupplierFulfillmentExt;
@@ -30,6 +32,7 @@ pub(super) struct InvestigationCommit {
     prepared: PreparedInvestigation,
     actor: AuditActor,
     workflow: Arc<dyn FulfillmentWorkflow>,
+    access: FulfillmentOrderAccess,
 }
 
 impl InvestigationCommit {
@@ -47,6 +50,7 @@ impl InvestigationCommit {
     /// 不返回错误。
     pub(super) fn new(
         workflow: Arc<dyn FulfillmentWorkflow>,
+        access: FulfillmentOrderAccess,
         context: &InvestigationCommandContext,
         identity: &InvestigationIdentity,
         prepared: PreparedInvestigation,
@@ -58,6 +62,7 @@ impl InvestigationCommit {
             prepared,
             actor: actor.clone(),
             workflow,
+            access,
         }
     }
 
@@ -75,6 +80,10 @@ impl InvestigationCommit {
         db: &Database,
         executor: &mut dyn Executor,
     ) -> Result<InvestigationCommitResult> {
+        if self.context.task.is_none() {
+            let permission = supplier_fulfillment::ORDER_INVESTIGATION;
+            self.access.require_order(&self.actor, &permission, &self.context.order_id, executor).await?;
+        }
         let (mut order, mut target_action) = load_investigation_facts(db, &self.context, executor).await?;
         let investigated_order_version = order.base.version;
         if self.context.task.is_none() {

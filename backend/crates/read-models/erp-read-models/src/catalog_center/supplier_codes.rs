@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 use erp_catalog::SellableSkuView;
 use erp_core::ids::SupplierAccountId;
 use erp_supplier::repository::{SupplierAccountRepositoryExt, SupplierExt};
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::CatalogCenterReadService;
 use crate::Result;
@@ -15,19 +15,24 @@ impl CatalogCenterReadService {
     ///
     /// # 参数
     /// * `row_ids` - 每行当前有效供给的供应商身份
+    /// * `executor` - 商品池资格和分页读取使用的原快照执行器。
     ///
     /// # 返回
     /// 返回未删除供应商的编号映射，不读取完整供应商资料。
     ///
     /// # 错误
     /// 编号仓储读取失败时拒绝整页，避免展示不完整的编号结论。
-    pub(super) async fn supplier_numbers(&self, row_ids: &[Vec<String>]) -> Result<HashMap<String, String>> {
+    pub(super) async fn supplier_numbers(
+        &self,
+        row_ids: &[Vec<String>],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
         let ids = row_ids.iter().flatten().cloned().collect::<BTreeSet<_>>();
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
         let ids = ids.into_iter().map(SupplierAccountId::from).collect::<Vec<_>>();
-        Ok(self.db.supplier_accounts().supplier_numbers_by_ids(&ids, &mut NoTransaction).await?)
+        Ok(self.db.supplier_accounts().supplier_numbers_by_ids(&ids, executor).await?)
     }
 }
 

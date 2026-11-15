@@ -10,9 +10,11 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::field_update::FieldUpdate;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -34,11 +36,13 @@ use crate::repository::prelude::*;
 type PartyBankAccountFilter = <mongodb::Database as PartyExt>::PartyBankAccountFilter;
 
 /// 银行账户服务。
+#[derive(Clone)]
 pub struct PartyBankAccountService {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
     audit: Arc<dyn PartyAuditPort>,
     supplier_roles: Arc<dyn SupplierRolePort>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl PartyBankAccountService {
@@ -60,8 +64,9 @@ impl PartyBankAccountService {
         sensitive_data: Arc<SensitiveDataCodec>,
         audit: Arc<dyn PartyAuditPort>,
         supplier_roles: Arc<dyn SupplierRolePort>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, sensitive_data, audit, supplier_roles }
+        Self { db, sensitive_data, audit, supplier_roles, authorization }
     }
 
     /// 分页查询银行账户列表（投影查询，敏感字段不进投影）。
@@ -77,9 +82,36 @@ impl PartyBankAccountService {
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn party_bank_account_list(
         &self,
+        actor: &AuditActor,
         party_id: &str,
         params: &PartyBankAccountListParams,
     ) -> Result<PageView<PartyBankAccountView>> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        let params = params.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.party_bank_account_list_snapshot(&actor, &party_id, &params, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一授权快照读取业务数据；执行器由公开入口提供。
+    async fn party_bank_account_list_snapshot(
+        &self,
+        actor: &AuditActor,
+        party_id: &str,
+        params: &PartyBankAccountListParams,
+        executor: &mut dyn Executor,
+    ) -> Result<PageView<PartyBankAccountView>> {
+        self.authorization
+            .require(actor, &party::BANK_ACCOUNT_LIST, AccessTarget::Operation, executor)
+            .await?;
         params.validate()?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
         let paging = normalize_paging(
@@ -98,8 +130,7 @@ impl PartyBankAccountService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
-        let page =
-            self.db.party_bank_accounts().search_party_bank_accounts(&filter, &mut NoTransaction).await?;
+        let page = self.db.party_bank_accounts().search_party_bank_accounts(&filter, executor).await?;
         let items = page
             .items
             .into_iter()
@@ -176,12 +207,17 @@ impl PartyBankAccountService {
             account.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::BANK_ACCOUNT_CREATE, AccessTarget::Operation, executor)
+                        .await?;
                     if account.is_default {
                         clear_default_marks!(db, party_bank_accounts, account.party_id, None, executor);
                     }
@@ -215,12 +251,7 @@ impl PartyBankAccountService {
         actor: &AuditActor,
     ) -> Result<PartyBankAccountView> {
         req.validate()?;
-        let mut account = self
-            .db
-            .party_bank_accounts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
+        let mut account = self.load_bank_account(id).await?;
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &account.party_id).await?;
         super::map_version_conflict(account.ensure_version(req.version))?;
         account.update(
@@ -238,6 +269,8 @@ impl PartyBankAccountService {
             account.base.id.clone(),
         )?;
 
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -245,6 +278,9 @@ impl PartyBankAccountService {
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &party::BANK_ACCOUNT_UPDATE, AccessTarget::Operation, executor)
+                        .await?;
                     if account_for_tx.is_default {
                         clear_default_marks!(
                             db,
@@ -262,5 +298,13 @@ impl PartyBankAccountService {
             .await?;
 
         Ok(updated.into())
+    }
+    /// 读取仍存在的本域银行账户事实。
+    async fn load_bank_account(&self, id: &str) -> Result<PartyBankAccount> {
+        self.db
+            .party_bank_accounts()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))
     }
 }

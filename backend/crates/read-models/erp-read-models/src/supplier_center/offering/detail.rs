@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_core::ids::SupplierOfferingId;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::supplier_offering as supplier_offering_permissions;
 use persistence_core::Transactional;
 
 use super::{SupplierOfferingReadService, SupplierOfferingView, page_view, repository_page};
@@ -31,7 +32,9 @@ impl SupplierOfferingReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let offering = access.require_offering(&actor, "list", &id, executor).await?;
+                    let offering = access
+                        .require_offering(&actor, &supplier_offering_permissions::LIST, &id, executor)
+                        .await?;
                     let query = SupplierOfferingListQuery {
                         offering_ids: Some(vec![SupplierOfferingId::new(offering.base.id)]),
                         page_size: 1,

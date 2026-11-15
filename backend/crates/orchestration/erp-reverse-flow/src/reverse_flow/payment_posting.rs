@@ -12,12 +12,10 @@ use erp_finance::ports::payment_restoration::PaymentRequestRestorationPort;
 use erp_finance::service::payable::payment_reversal::{
     PaymentReversalFact, PaymentReversalWrite, load_posted_payment_for_reversal, prepare_payment_reversal,
 };
-use erp_read_models::returns_center::ReturnsReadService;
-use erp_read_models::returns_center::dto::PaymentReversalView;
 use erp_returns::entity::returns::PaymentReversal;
 use erp_returns::service::ReturnsService;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use super::adapter::execute_payment_reversal_domain_action;
 use crate::{Error, Result};
@@ -41,53 +39,6 @@ impl PaymentReversalProcess {
     /// 不返回错误。
     pub fn new(db: Database, restoration: Arc<dyn PaymentRequestRestorationPort<Error = Error>>) -> Self {
         Self { db, restoration }
-    }
-
-    /// 最终通过过账（§8.3-3 事务不变量，应付侧镜像）。
-    ///
-    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
-    /// 按原付款核销分配反向写入 `REVERSE` 分配并原子冲减应付子账已核销进度；
-    /// 原付款迁移为已冲正；冲正单迁移为已过账。任一校验失败整体回滚。
-    ///
-    /// # 参数
-    /// * `id` - 冲正单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后冲正单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 冲正单或原付款不存在
-    /// * `ConflictError` - 非审批中
-    /// * `BusinessLogicError` - 累计冲正超原付款、重复过账或超额冲减
-    pub async fn post_payment_reversal(&self, id: &str, actor: &AuditActor) -> Result<PaymentReversalView> {
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let restoration = self.restoration.clone();
-        let actor_id = actor.id().to_string();
-        let reversal_id = id.to_string();
-        let detail_id = reversal_id.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    apply_payment_reversal_final_post(
-                        &db,
-                        restoration.as_ref(),
-                        &reversal_id,
-                        &actor_id,
-                        &actor_owned,
-                        executor,
-                    )
-                    .await
-                })
-            })
-            .await?;
-
-        ReturnsReadService::new(self.db.clone())
-            .payment_reversal_detail(&detail_id)
-            .await
-            .map_err(crate::Error::from)
     }
 
     /// 在审批最终通过持有的唯一事务内执行付款冲正。
@@ -268,18 +219,10 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
 mod tests {
     use std::sync::Mutex;
 
+    use persistence_core::ReadExecutor as TestExecutor;
+
     use super::*;
     use crate::Error;
-
-    struct TestExecutor {
-        visits: usize,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
     struct RecordingPort {
         identity: usize,
         fail_at: Option<usize>,
@@ -348,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn payment_tasks_stay_between_all_settlements_and_reverse_allocations() {
-        let mut executor = TestExecutor { visits: 0 };
+        let mut executor = TestExecutor::default();
         let port = RecordingPort {
             identity: (&mut executor as *mut TestExecutor) as usize,
             fail_at: None,
@@ -356,13 +299,12 @@ mod tests {
         };
         execute_final_post(&port, &mut executor).await.unwrap();
         assert_eq!(*port.calls.lock().unwrap(), STEPS);
-        assert_eq!(executor.visits, STEPS.len());
     }
 
     #[tokio::test]
     async fn payment_reversal_stops_at_each_failure_without_later_writes() {
         for index in 0..STEPS.len() {
-            let mut executor = TestExecutor { visits: 0 };
+            let mut executor = TestExecutor::default();
             let port = RecordingPort {
                 identity: (&mut executor as *mut TestExecutor) as usize,
                 fail_at: Some(index),
@@ -371,7 +313,6 @@ mod tests {
             let error = execute_final_post(&port, &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(message) if message==format!("failure {index}")));
             assert_eq!(*port.calls.lock().unwrap(), STEPS[..=index]);
-            assert_eq!(executor.visits, index + 1);
         }
     }
 }

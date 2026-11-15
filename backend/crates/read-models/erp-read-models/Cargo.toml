@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+erp-permissions = { workspace = true }
 erp-sales = { workspace = true }
 erp-procurement = { workspace = true }
 erp-fulfillment = { workspace = true }
@@ -43,4 +44,6 @@ tracing = { workspace = true }
 validator = { workspace = true }
 
 [dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }
+persistence-core = { workspace = true, features = ["test-support"] }
 test-support = { workspace = true }

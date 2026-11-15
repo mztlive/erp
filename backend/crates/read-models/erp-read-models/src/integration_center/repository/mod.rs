@@ -2,3 +2,5 @@
 
 mod object_labels;
 pub(crate) use object_labels::object_labels;
+mod detail;
+pub(super) use detail::{difference, error_task};

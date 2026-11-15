@@ -2,10 +2,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::money::line_amounts;
+use erp_permissions::supplier_settlement;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::{
@@ -30,17 +32,46 @@ impl SupplierSettlementService {
     ///
     /// # 参数
     /// * `query` - 供应商与结算期间查询条件
+    /// * `actor` - 当前认证账号，按共享服务检查来源证据读取资格。
     ///
     /// # 返回
-    /// 返回最新不可变来源证据批次的概要视图。
+    /// 功能资格和来源证据共用同一快照；提交成功后返回概要视图。
     ///
     /// # 错误
     /// 日期或期间非法、仓储查询失败或当前范围没有来源证据时返回错误。
     pub async fn latest_source_evidence(
         &self,
         query: &SupplierSettlementSourceEvidenceQuery,
+        actor: &AuditActor,
+    ) -> Result<SupplierSettlementSourceEvidenceView> {
+        let service = Self::new(self.db.clone()).with_data_scope(self.access());
+        let query = query.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.source_evidence_view(&query, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原读取快照检查功能资格，并使用原执行器读取最新完整来源证据。
+    /// # 参数
+    /// query 为供应商与期间，actor 为认证账号，executor 为公开入口的原事务执行器。
+    /// # 返回
+    /// 功能资格检查通过后的最新完整来源证据概要。
+    /// # 错误
+    /// 授权、参数校验、来源缺失或业务读取失败时返回对应错误。
+    pub(super) async fn source_evidence_view(
+        &self,
+        query: &SupplierSettlementSourceEvidenceQuery,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementSourceEvidenceView> {
         query.validate()?;
+        self.access()
+            .require_operation(actor, &supplier_settlement::SOURCE_EVIDENCE_LATEST, executor)
+            .await?;
         let period = SettlementPeriod::new(
             super::draft::parse_settlement_business_date(&query.period_start, "结算期间开始")?,
             super::draft::parse_settlement_business_date(&query.period_end, "结算期间结束")?,
@@ -49,7 +80,7 @@ impl SupplierSettlementService {
         .map_err(|error| Error::ValidationError(error.to_string()))?;
         self.db
             .supplier_settlement_source_evidence()
-            .latest_for_scope(&query.supplier_id, period.start(), period.end(), &mut NoTransaction)
+            .latest_for_scope(&query.supplier_id, period.start(), period.end(), executor)
             .await?
             .map(Into::into)
             .ok_or_else(|| {

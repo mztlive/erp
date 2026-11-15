@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_returns::entity::returns::{CustomerRefund, CustomerRefundStatus};
+use erp_returns::repository::returns::CustomerRefundRow;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 
@@ -47,6 +48,29 @@ pub struct CustomerRefundListFacts {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+impl From<CustomerRefundRow> for CustomerRefundListFacts {
+    /// 从仓储实际投影构造列表事实，保留金额、来源及版本。
+    fn from(row: CustomerRefundRow) -> Self {
+        Self {
+            id: row.id,
+            refund_no: row.refund_no,
+            status: row.status,
+            sales_return_case_id: row.sales_return_case_id,
+            customer_id: row.customer_id,
+            original_receipt_id: row.original_receipt_id,
+            original_receivable_entry_id: row.original_receivable_entry_id,
+            reason_code: row.reason_code,
+            reason_text: row.reason_text,
+            amount: row.amount,
+            handled_by: row.handled_by,
+            reviewed_by: row.reviewed_by,
+            occurred_at: row.occurred_at,
+            version: row.version,
+            created_at: row.created_at,
+        }
+    }
 }
 
 impl CustomerRefundListFacts {

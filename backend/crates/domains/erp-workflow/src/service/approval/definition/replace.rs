@@ -6,7 +6,8 @@ use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition};
 use erp_core::AccountKind;
-use erp_identity::{AccountSummary, SharedRbacService};
+use erp_identity::{AccountSummary, AuthorizationService, SharedRbacService};
+use erp_permissions::approval_process;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -19,9 +20,9 @@ use super::super::policy::ProcessRequiredApprovalPolicy;
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity, applied_definition,
-    definition_not_found, ensure_definition_admin_permission, ensure_lock, map_bpm_error, map_model_error,
-    node_summary, now, parse_idempotency_key, policy_for_definition, replace_nodes_identity,
-    replay_prepared_definition_receipt, write_definition_audit, write_receipt,
+    definition_not_found, ensure_lock, map_bpm_error, map_model_error, node_summary, now,
+    parse_idempotency_key, policy_for_definition, replace_nodes_identity, replay_prepared_definition_receipt,
+    require_definition_access, write_definition_audit, write_receipt,
 };
 use super::mapping::detail_with_copies;
 use crate::entity::approval_copy::ApprovalCopyRule;
@@ -68,17 +69,7 @@ impl ApprovalDefinitionService {
         )?;
         let graph = self.require_graph(&request.definition_id).await?;
         let policy = policy_for_definition(&graph.definition)?;
-        self.ensure_definition_admin(actor, &policy).await?;
-        if let Some(view) = self
-            .replay_prepared_if_receipt(
-                &identity,
-                DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
-            )
-            .await?
-        {
-            return Ok(view);
-        }
-        ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
+        // 草稿状态和锁只在事务内完成授权、收据回放后检查。
         self.commit_replace_nodes(graph, policy, request, actor, identity).await
     }
 
@@ -94,6 +85,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
+        let authorization = self.authorization.clone();
         let db = self.db.clone();
 
         let identity_service = self.identity.clone();
@@ -108,6 +100,7 @@ impl ApprovalDefinitionService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     replace_nodes_tx(
+                        &authorization,
                         &identity_service,
                         &db,
                         graph,
@@ -124,7 +117,15 @@ impl ApprovalDefinitionService {
                 })
             })
             .await;
-        self.recover_definition_command(outcome, &policy, actor, identity, expectation).await
+        self.recover_definition_command(
+            outcome,
+            &policy,
+            &approval_process::REPLACE_DEFINITION_NODES,
+            actor,
+            identity,
+            expectation,
+        )
+        .await
     }
 }
 
@@ -178,6 +179,7 @@ struct ReplaceNodesTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn replace_nodes_tx(
+    authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
     graph: DefinitionGraph,
@@ -185,7 +187,14 @@ async fn replace_nodes_tx(
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
     let ReplaceNodesTxInput { policy, request, actor, identity, audit } = input;
-    ensure_definition_admin_permission(db, identity_service, actor, &policy, executor).await?;
+    require_definition_access(
+        authorization,
+        actor,
+        &approval_process::REPLACE_DEFINITION_NODES,
+        &policy,
+        executor,
+    )
+    .await?;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -199,7 +208,8 @@ async fn replace_nodes_tx(
     let reloaded =
         reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
-    let prepared = prepare_replacement(db, identity_service, &reloaded, &request.nodes, executor).await?;
+    let prepared =
+        prepare_replacement(authorization, db, identity_service, &reloaded, &request.nodes, executor).await?;
     let repository = db.approval_copies();
     let rules = match request.copy_rules {
         Some(rules) => rules,
@@ -290,6 +300,7 @@ pub(super) async fn reload_draft_for_cas(
 /// # 关键业务约束
 /// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
 async fn prepare_replacement(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     graph: &DefinitionGraph,
@@ -298,7 +309,8 @@ async fn prepare_replacement(
 ) -> Result<DefinitionGraph> {
     let drafts = node_replacement_drafts(requests)?;
     let planned = graph.plan_replacement_nodes(&drafts, now()?).map_err(map_model_error)?;
-    let snapshots = validate_assignees(db, identity_service, &assignee_ids(&planned), session).await?;
+    let snapshots =
+        validate_assignees(authorization, db, identity_service, &assignee_ids(&planned), session).await?;
     let nodes = apply_snapshots(planned, &snapshots)?;
     rebuild_draft_graph(&graph.definition, nodes)
 }
@@ -414,6 +426,7 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
 /// # 错误
 /// 账号失效返回校验错误，权限不足返回业务错误；基础设施失败原样传播。
 pub(super) async fn validate_assignees(
+    authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     user_ids: &[String],
@@ -422,15 +435,16 @@ pub(super) async fn validate_assignees(
     let mut accounts = HashMap::new();
     for user_id in user_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
-        let account = match approver_qualification(db, identity_service, &actor, executor).await? {
-            ApprovalQualification::Inactive => {
-                return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
-            },
-            ApprovalQualification::MissingPermissions => {
-                return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
-            },
-            ApprovalQualification::Eligible(account) => account,
-        };
+        let account =
+            match approver_qualification(authorization, db, identity_service, &actor, executor).await? {
+                ApprovalQualification::Inactive => {
+                    return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
+                },
+                ApprovalQualification::MissingPermissions => {
+                    return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
+                },
+                ApprovalQualification::Eligible(account) => account,
+            };
         accounts.insert(user_id.clone(), account);
     }
     Ok(accounts)
@@ -577,6 +591,56 @@ mod tests {
     use super::super::test_support::draft_definition;
     use super::*;
     use crate::entity::approval_copy::CopyTrigger;
+
+    #[tokio::test]
+    async fn stale_and_published_snapshots_are_authorized_before_receipt_or_lock_checks() {
+        use persistence_core::testing::SnapshotExecutor;
+
+        use super::super::test_support::unavailable_service;
+
+        let (service, actor) = unavailable_service().await;
+        let draft = draft_definition(ProcessKind::StockAdjustment, "n1");
+        let mut published = draft.clone();
+        published
+            .publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap())
+            .unwrap();
+        for definition in [draft, published] {
+            let request = ReplaceDefinitionNodesRequest {
+                definition_id: definition.base.id.clone(),
+                expected_definition_lock_version: 99,
+                nodes: Vec::new(),
+                copy_rules: None,
+                idempotency_key: "replace-retry".into(),
+            };
+            let identity = replace_nodes_identity(
+                parse_idempotency_key(&request.idempotency_key).unwrap(),
+                &request.definition_id,
+                request.expected_definition_lock_version,
+                &request.nodes,
+                None,
+                actor.id(),
+            )
+            .unwrap();
+            let policy = policy_for_definition(&definition).unwrap();
+            let error = replace_nodes_tx(
+                &service.authorization,
+                &service.identity,
+                &service.db,
+                DefinitionGraph { definition, nodes: Vec::new(), transitions: Vec::new() },
+                ReplaceNodesTxInput {
+                    policy,
+                    request,
+                    actor: &actor,
+                    identity: &identity,
+                    audit: service.audit.as_ref(),
+                },
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
 
     #[test]
     fn snapshots_refresh_all_assignees_and_reject_missing_or_invalid_names() {

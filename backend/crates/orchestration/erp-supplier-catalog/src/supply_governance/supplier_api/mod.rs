@@ -1,7 +1,7 @@
 //! 供应连接命令、外部引用解析、审计与后台任务事务。
 use std::sync::Arc;
 
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
 use erp_supply::service::supplier_api::SupplierApiService;
@@ -23,7 +23,7 @@ pub struct SupplierApiGovernanceProcess {
     db: Database,
     services: Arc<CatalogServices>,
     reference_registry: Arc<dyn SupplierReferenceRegistry>,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     gateway: Option<Arc<dyn SupplierApiGateway>>,
 }
 impl SupplierApiGovernanceProcess {
@@ -31,7 +31,7 @@ impl SupplierApiGovernanceProcess {
     ///
     /// # 参数
     /// * `db` - 应用数据库。
-    /// * `rbac` - 应用共享的权威授权源。
+    /// * `authorization` - 应用共享的权威授权源。
     /// * `services` - 已装配的商品和供给对象授权。
     ///
     /// # 返回
@@ -39,14 +39,18 @@ impl SupplierApiGovernanceProcess {
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<CatalogServices>) -> Self {
+    pub fn new(
+        db: Database,
+        authorization: Arc<AuthorizationService>,
+        services: Arc<CatalogServices>,
+    ) -> Self {
         Self {
             db,
             services,
             reference_registry: Arc::new(
                 erp_supply::ports::supplier_reference_registry::UnavailableSupplierReferenceRegistry,
             ),
-            rbac,
+            authorization,
             gateway: None,
         }
     }

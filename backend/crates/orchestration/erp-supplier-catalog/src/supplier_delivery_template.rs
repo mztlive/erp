@@ -1,9 +1,12 @@
 //! 供应商配送模板维护与供给指定：供应商存在性、供给写访问与审计同事务提交。
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_logs, run_audited};
 use erp_core::ids::{SupplierAccountId, SupplierDeliveryTemplateId};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{internal, supplier_offering};
 use erp_supplier::SupplierExt;
 use erp_supply::dto::delivery_template::{
     AssignDeliveryTemplateRequest, AssignDeliveryTemplateResult, DeleteDeliveryTemplateRequest,
@@ -12,7 +15,7 @@ use erp_supply::dto::delivery_template::{
 use erp_supply::service::delivery_template::DeliveryTemplateService;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{NoTransaction, ReadExecutor};
 
 use crate::{Error, Result};
 
@@ -22,7 +25,9 @@ const TEMPLATE_RESOURCE: &str = "supplier_delivery_template";
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `authorization` - 进程共享的统一授权服务。
 /// * `supplier_id` - 供应商
+/// * `actor` - 当前认证操作人。
 ///
 /// # 返回
 /// 按名称排序的模板视图。
@@ -31,8 +36,18 @@ const TEMPLATE_RESOURCE: &str = "supplier_delivery_template";
 /// 查询失败时返回错误。
 pub async fn supplier_delivery_templates(
     db: Database,
+    authorization: Arc<AuthorizationService>,
     supplier_id: String,
+    actor: AuditActor,
 ) -> Result<Vec<DeliveryTemplateView>> {
+    authorization
+        .require(
+            &actor,
+            &internal::DELIVERY_TEMPLATE_READ,
+            AccessTarget::Operation,
+            &mut ReadExecutor::default(),
+        )
+        .await?;
     let templates = DeliveryTemplateService::new(db)
         .supplier_templates(&SupplierAccountId::new(supplier_id), &mut NoTransaction)
         .await?;
@@ -43,6 +58,7 @@ pub async fn supplier_delivery_templates(
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `authorization` - 进程共享的统一授权服务。
 /// * `supplier_id` - 供应商
 /// * `req` - 模板内容
 /// * `actor` - 操作人
@@ -54,6 +70,7 @@ pub async fn supplier_delivery_templates(
 /// 供应商不存在、内容不合法、名称重复或写入失败时返回错误。
 pub async fn create_delivery_template(
     db: Database,
+    authorization: Arc<AuthorizationService>,
     supplier_id: String,
     req: SaveDeliveryTemplateRequest,
     actor: AuditActor,
@@ -72,6 +89,9 @@ pub async fn create_delivery_template(
     let supplier = SupplierAccountId::new(supplier_id.trim());
     let template = run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {
+            authorization
+                .require(&actor, &internal::DELIVERY_TEMPLATE_WRITE, AccessTarget::Operation, executor)
+                .await?;
             let service = DeliveryTemplateService::new(db.clone());
             Ok(service.create(id, supplier, content, actor.id(), executor).await?)
         })
@@ -84,6 +104,7 @@ pub async fn create_delivery_template(
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `authorization` - 进程共享的统一授权服务。
 /// * `id` - 模板主键
 /// * `req` - 模板内容与期望版本
 /// * `actor` - 操作人
@@ -95,6 +116,7 @@ pub async fn create_delivery_template(
 /// 缺少期望版本、版本冲突、内容不合法、名称重复或写入失败时返回错误。
 pub async fn update_delivery_template(
     db: Database,
+    authorization: Arc<AuthorizationService>,
     id: String,
     req: SaveDeliveryTemplateRequest,
     actor: AuditActor,
@@ -110,6 +132,9 @@ pub async fn update_delivery_template(
     )?;
     let template = run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {
+            authorization
+                .require(&actor, &internal::DELIVERY_TEMPLATE_WRITE, AccessTarget::Operation, executor)
+                .await?;
             let service = DeliveryTemplateService::new(db.clone());
             Ok(service.update(&id, expected_version, content, actor.id(), executor).await?)
         })
@@ -122,6 +147,7 @@ pub async fn update_delivery_template(
 ///
 /// # 参数
 /// * `db` - 数据库
+/// * `authorization` - 进程共享的统一授权服务。
 /// * `id` - 模板主键
 /// * `req` - 期望版本
 /// * `actor` - 操作人
@@ -133,6 +159,7 @@ pub async fn update_delivery_template(
 /// 版本冲突、仍被供给使用或写入失败时返回错误。
 pub async fn delete_delivery_template(
     db: Database,
+    authorization: Arc<AuthorizationService>,
     id: String,
     req: DeleteDeliveryTemplateRequest,
     actor: AuditActor,
@@ -141,6 +168,9 @@ pub async fn delete_delivery_template(
         actor.clone().resource_log("supplier_delivery_template.delete", TEMPLATE_RESOURCE, id.clone())?;
     run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {
+            authorization
+                .require(&actor, &internal::DELIVERY_TEMPLATE_WRITE, AccessTarget::Operation, executor)
+                .await?;
             DeliveryTemplateService::new(db.clone()).delete(&id, req.expected_version, executor).await?;
             Ok(())
         })
@@ -152,7 +182,7 @@ pub async fn delete_delivery_template(
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `rbac` - 权限快照
+/// * `access` - 共享供给对象授权访问器
 /// * `req` - 供给与目标模板
 /// * `actor` - 操作人
 ///
@@ -184,7 +214,8 @@ pub async fn assign_offering_delivery_template(
         Box::pin(async move {
             let mut offerings = Vec::with_capacity(offering_ids.len());
             for id in &offering_ids {
-                offerings.push(access.require_offering(&actor, "update", id, executor).await?);
+                offerings
+                    .push(access.require_offering(&actor, &supplier_offering::REVISE, id, executor).await?);
             }
             let updated = DeliveryTemplateService::new(db.clone())
                 .assign(offerings, template_id.as_deref(), actor.id(), executor)

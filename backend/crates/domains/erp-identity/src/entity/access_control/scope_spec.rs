@@ -1,6 +1,8 @@
 //! 按权限保存的内部范围定义。配置、解析和导入导出共用这一份。
 mod catalog;
 
+use erp_permissions::MODULES;
+
 use crate::entity::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
 use crate::{Error, Permission, Result};
 
@@ -229,6 +231,16 @@ pub(crate) fn actions(resource: &str) -> Vec<&'static Permission> {
     actions
 }
 
+/// 人员范围界面只展示公共目录动作，内部固定入口不参与配置候选。
+pub(crate) fn display_actions(resource: &str) -> Vec<&'static Permission> {
+    actions(resource)
+        .into_iter()
+        .filter(|permission| {
+            MODULES.iter().flat_map(|module| module.entries).any(|(_, entry)| entry.permission == *permission)
+        })
+        .collect()
+}
+
 pub(crate) fn resources() -> Vec<&'static str> {
     let _ = specs();
     let mut resources = Vec::new();
@@ -324,37 +336,7 @@ pub(crate) fn validate_catalog() -> Result<()> {
             return Err(Error::ValidationError(format!("{} 范围定义重复", spec.permission)));
         }
         seen.push(key);
-        if spec.supported_dimensions.is_empty() || spec.scope_types.is_empty() {
-            return Err(Error::ValidationError(format!("{} 缺少范围维度或类型", spec.permission)));
-        }
-        if spec.required_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension)) {
-            return Err(Error::ValidationError(format!("{} 的必需维度超出支持维度", spec.permission)));
-        }
-        if spec.default_self && !matches!(&spec.source, ScopeSource::Current) {
-            return Err(Error::ValidationError(format!("{} 不能声明本人基础", spec.permission)));
-        }
-        if spec.default_self && spec.required_dimensions != [ScopeDimension::InternalOrg] {
-            return Err(Error::ValidationError(format!("{} 的本人基础只能使用内部组织", spec.permission)));
-        }
-        if spec.allows_history && !matches!(spec.permission.action(), "list" | "detail") {
-            return Err(Error::ValidationError(format!("{} 的历史读取只适用于读取", spec.permission)));
-        }
-        if spec.allows_history && spec.required_dimensions != [ScopeDimension::InternalOrg] {
-            return Err(Error::ValidationError(format!("{} 的历史读取只能使用内部组织", spec.permission)));
-        }
-        let source = runtime_source(spec)?;
-        if let ScopeSource::Permission(_) = &spec.source
-            && source
-                .supported_dimensions
-                .iter()
-                .any(|dimension| !spec.supported_dimensions.contains(dimension))
-        {
-            return Err(Error::ValidationError(format!(
-                "{} 不支持来源 {} 的范围维度",
-                spec.permission, source.permission
-            )));
-        }
-        validate_scope_types(spec)?;
+        validate_scope(spec)?;
     }
     for entry in catalog::FIXED_ACTIONS.iter() {
         if find(&entry.permission).is_some() {
@@ -365,6 +347,43 @@ pub(crate) fn validate_catalog() -> Result<()> {
         }
     }
     validate_sources_acyclic(raw_specs())
+}
+
+/// 校验单项范围定义的维度、读取补充与来源合同。
+fn validate_scope(spec: &ScopeSpec) -> Result<()> {
+    if spec.supported_dimensions.is_empty() || spec.scope_types.is_empty() {
+        return Err(Error::ValidationError(format!("{} 缺少范围维度或类型", spec.permission)));
+    }
+    if spec.required_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension)) {
+        return Err(Error::ValidationError(format!("{} 的必需维度超出支持维度", spec.permission)));
+    }
+    if spec.default_self && !matches!(&spec.source, ScopeSource::Current) {
+        return Err(Error::ValidationError(format!("{} 不能声明本人基础", spec.permission)));
+    }
+    if spec.default_self && spec.required_dimensions != [ScopeDimension::InternalOrg] {
+        return Err(Error::ValidationError(format!("{} 的本人基础只能使用内部组织", spec.permission)));
+    }
+    if spec.allows_history
+        && !matches!(
+            spec.permission.action(),
+            "list" | "detail" | "financial_expense_source" | "profit_loss_read" | "extra_cost_read"
+        )
+    {
+        return Err(Error::ValidationError(format!("{} 的历史读取只适用于读取", spec.permission)));
+    }
+    if spec.allows_history && spec.required_dimensions != [ScopeDimension::InternalOrg] {
+        return Err(Error::ValidationError(format!("{} 的历史读取只能使用内部组织", spec.permission)));
+    }
+    let source = runtime_source(spec)?;
+    if let ScopeSource::Permission(_) = &spec.source
+        && source.supported_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension))
+    {
+        return Err(Error::ValidationError(format!(
+            "{} 不支持来源 {} 的范围维度",
+            spec.permission, source.permission
+        )));
+    }
+    validate_scope_types(spec)
 }
 
 /// 同资源的范围类型保持一致，逐动作维度仍独立校验。

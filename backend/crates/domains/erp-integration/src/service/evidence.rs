@@ -446,7 +446,7 @@ mod tests {
 mod authority_sequence_tests {
     use std::sync::Mutex;
 
-    use persistence_core::Executor;
+    use persistence_core::{Executor, ReadExecutor as TestExecutor};
 
     use super::verify_evidence_refs;
     use crate::Error;
@@ -455,15 +455,6 @@ mod authority_sequence_tests {
     use crate::ports::evidence::{
         EvidenceFuture, EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact, VerifiedEvidence,
     };
-
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
     #[derive(Default)]
     struct RecordingAuthority {
         calls: Mutex<Vec<(String, usize)>>,
@@ -547,7 +538,7 @@ mod authority_sequence_tests {
     #[tokio::test]
     async fn evidence_verification_keeps_request_order_and_executor() {
         let authority = RecordingAuthority::default();
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let id = &mut executor as *mut TestExecutor as usize;
         let verified =
             verify_evidence_refs(&authority, &subject(), &refs(), "actor", &mut executor).await.unwrap();
@@ -563,7 +554,7 @@ mod authority_sequence_tests {
     #[tokio::test]
     async fn evidence_verification_preserves_first_error_and_stops() {
         let authority = RecordingAuthority { fail: Some("second"), ..Default::default() };
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let result = verify_evidence_refs(&authority, &subject(), &refs(), "actor", &mut executor).await;
         assert!(matches!(result,Err(Error::BusinessLogicError(message)) if message=="second"));
         assert_eq!(
@@ -574,7 +565,7 @@ mod authority_sequence_tests {
     #[tokio::test]
     async fn empty_evidence_is_rejected_before_authority_reads() {
         let authority = RecordingAuthority::default();
-        let mut executor = TestExecutor { _identity: 1 };
+        let mut executor = TestExecutor::default();
         let result = verify_evidence_refs(&authority, &subject(), &[], "actor", &mut executor).await;
         assert!(matches!(result,Err(Error::ValidationError(message)) if message=="必须提供受控证据引用"));
         assert!(authority.calls.lock().unwrap().is_empty());

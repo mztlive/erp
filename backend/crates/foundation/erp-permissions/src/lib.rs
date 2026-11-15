@@ -7,6 +7,7 @@ pub use permission::{ParsePermissionError, Permission};
 
 pub mod access_control;
 pub mod admin;
+pub mod approval_admin;
 pub mod approval_instance;
 pub mod approval_process;
 pub mod bulk_job;
@@ -22,6 +23,7 @@ pub mod financial_files;
 pub mod fulfillment;
 pub mod groups;
 pub mod integration_ops;
+pub mod internal;
 pub mod inventory;
 pub mod legacy_import;
 pub mod organization;

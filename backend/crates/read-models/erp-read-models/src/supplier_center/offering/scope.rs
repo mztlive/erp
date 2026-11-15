@@ -8,6 +8,7 @@ use application_core::{AuditActor, OwnershipPage};
 use erp_core::ids::SupplierOfferingId;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::supplier_offering as supplier_offering_permissions;
 use erp_supply::repository::supplier_offering::SupplierOfferingFilter;
 use erp_supply::repository::supplier_offering::procurement::ProcurementOfferingRepositoryExt;
 use erp_supply::{OfferingAccess, SupplierOfferingExt};
@@ -89,8 +90,8 @@ async fn build_snapshot(
     actor: AuditActor,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<OfferingSnapshot> {
-    let mut context = access.resolve(&actor, "list", executor).await?;
-    context.validate(executor).await?;
+    let mut context = access.resolve(&actor, &supplier_offering_permissions::LIST, executor).await?;
+    context.ensure_current(executor)?;
     let mut query = super::prepare_list_query(&params)?;
     query.scope = Some(context.clone());
     let filter = apply_procurement_filter(&db, &query, procurement.as_ref(), &params, executor).await?;

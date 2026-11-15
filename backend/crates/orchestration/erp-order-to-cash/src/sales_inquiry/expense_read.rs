@@ -1,8 +1,11 @@
 //! 询价任务完成后，费用采购按现有销售来源资格取得最小办理上下文。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::money::{Amount, Rate};
-use erp_identity::{Permission, SharedRbacService};
+use erp_identity::AuthorizationService;
+use erp_permissions::{internal as internal_permissions, sales_inquiry as sales_inquiry_permissions};
 use erp_read_models::purchase_center::expense_source::ExpenseSourceReadService;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::Result as SalesResult;
@@ -45,19 +48,19 @@ pub struct InquiryExpenseCandidates {
 #[derive(Clone)]
 pub struct InquiryExpenseReadService {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl InquiryExpenseReadService {
     /// 绑定现有采购来源与当前权限服务。
     /// # 参数
-    /// `db` 为业务库，`rbac` 为当前权限源。
+    /// `db` 为业务库，`authorization` 为当前权限源。
     /// # 返回
     /// 不缓存任务或销售范围的读取器。
     /// # 错误
     /// 不执行 I/O，不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     /// 获取当前销售明确分摊的费用、余额与必要付款依据。
@@ -86,13 +89,17 @@ impl InquiryExpenseReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<InquiryExpenseCandidates> {
-        let access = SalesInquiryAccess::new(self.db.clone(), self.rbac.clone());
-        access.ensure_procurement_permission(actor, "convert_expenses", executor).await?;
-        let sources = ExpenseSourceReadService::new(self.db.clone(), self.rbac.clone());
+        let access = SalesInquiryAccess::new(self.db.clone(), self.authorization.clone());
+        access
+            .ensure_procurement_permission(
+                actor,
+                &sales_inquiry_permissions::COMMANDS_PROCUREMENT_CONVERT_EXPENSES,
+                executor,
+            )
+            .await?;
+        let sources = ExpenseSourceReadService::new(self.db.clone(), self.authorization.clone());
         let order = sources.require_order(sales_id, actor, executor).await?;
         let view = self.procurement_candidate_view(sales_id, order.customer_id.as_ref(), executor).await?;
-        sources.require_order(sales_id, actor, executor).await?;
-        access.ensure_procurement_permission(actor, "convert_expenses", executor).await?;
         Ok(view)
     }
 
@@ -161,12 +168,17 @@ impl InquiryExpenseReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FinancialInquiryExpenseCandidates> {
-        let access = SalesAccess::new(self.db.clone(), self.rbac.clone());
-        let permissions = [Permission::parse("cost_entry:create")?];
-        let order = access.require_object(actor, "detail", sales_id, &permissions, executor).await?;
+        let access = SalesAccess::new(self.db.clone(), self.authorization.clone());
+        let order = access
+            .require_object(
+                actor,
+                &internal_permissions::SALES_ORDER_FINANCIAL_EXPENSE_SOURCE,
+                sales_id,
+                executor,
+            )
+            .await?;
         order.ensure_extra_cost_source()?;
         let view = self.financial_candidate_items(sales_id, order.customer_id.as_ref(), executor).await?;
-        access.require_object(actor, "detail", sales_id, &permissions, executor).await?;
         Ok(view)
     }
 

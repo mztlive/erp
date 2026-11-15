@@ -1,5 +1,9 @@
 //! 单据详情共用的审批运行事实；调用方负责完整业务对象读取授权。
 
+use std::sync::Arc;
+
+use erp_identity::AuthorizationService;
+use erp_permissions::Permission as AccessPermission;
 mod definition;
 mod dto;
 mod presentation;
@@ -10,7 +14,6 @@ mod query;
 
 use application_core::AuditActor;
 pub use dto::{DocumentApprovalHistoryItemView, DocumentApprovalInstanceView};
-use erp_identity::{AuthorizationRegistry, AuthorizationService, Permission, SharedRbacService};
 use erp_workflow::service::approval::execution::RuntimeHistoryPage;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -34,24 +37,20 @@ pub(crate) struct DocumentRuntime {
 /// * `db` - 应用数据库
 /// * `rbac` - 当前 RBAC 快照服务
 /// * `actor` - 已认证操作人
-/// * `resource` - 权限资源
-/// * `action` - 权限动作
+/// * `permission` - 固定功能权限常量
 /// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 账号具备该静态动作权限时返回 `true`。
 ///
 /// # 错误
-/// `resource` 与 `action` 拼不出合法 `resource:action`，或身份域授权读取失败时返回对应错误。
+/// 身份域授权读取失败时返回对应错误。
 pub(crate) async fn has_document_permission(
-    db: &Database,
-    rbac: &SharedRbacService,
+    _db: &Database,
+    rbac: &Arc<AuthorizationService>,
     actor: &AuditActor,
-    resource: &str,
-    action: &str,
+    permission: &AccessPermission,
     executor: &mut dyn Executor,
 ) -> crate::Result<bool> {
-    let permission = Permission::parse(format!("{resource}:{action}"))?;
-    let service = AuthorizationService::new(db.clone(), rbac.clone(), AuthorizationRegistry::default());
-    Ok(service.has_permission(actor, &permission, executor).await?)
+    Ok(rbac.has_permission(actor, permission, executor).await?)
 }

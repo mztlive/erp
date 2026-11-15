@@ -21,7 +21,7 @@ mod tasks;
 mod template;
 
 use access::SalesInquiryAccess;
-use erp_identity::SharedRbacService;
+use erp_identity::AuthorizationService;
 use mongodb::Database;
 
 /// 协调询价、当前责任任务、审计与强类型命令回执。
@@ -29,23 +29,23 @@ use mongodb::Database;
 pub struct SalesInquiryProcess {
     services: Arc<SalesServices>,
     pub(crate) db: Database,
-    pub(crate) rbac: SharedRbacService,
+    pub(crate) authorization: Arc<AuthorizationService>,
 }
 
 impl SalesInquiryProcess {
     /// 绑定业务库与授权源，命令每次在写事务中重验。
     ///
     /// # 参数
-    /// `db` 为业务库，`rbac` 为当前授权源，`services` 为同一政策下装配的领域消费合同。
+    /// `db` 为业务库，`authorization` 为当前授权源，`services` 为同一政策下装配的领域消费合同。
     /// # 返回
     /// 未执行 I/O 的询价流程。
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, rbac: SharedRbacService, services: Arc<SalesServices>) -> Self {
-        Self { db, rbac, services }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>, services: Arc<SalesServices>) -> Self {
+        Self { db, authorization, services }
     }
 
     fn access(&self) -> SalesInquiryAccess {
-        SalesInquiryAccess::new(self.db.clone(), self.rbac.clone())
+        SalesInquiryAccess::new(self.db.clone(), self.authorization.clone())
     }
 }

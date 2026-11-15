@@ -135,9 +135,8 @@ mod tests {
     use entity_core::BaseModel;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::PartyId;
-    use mongodb::ClientSession;
     use mongodb::bson::{Document, doc};
-    use persistence_core::{Error, Executor, Result};
+    use persistence_core::{Error, Executor, NoTransaction, Result};
 
     use super::{active_fact_window_filter, default_first_sort, party_default_marks_filter, sort_doc};
 
@@ -235,22 +234,10 @@ mod tests {
         impl_clear_other_default_marks!();
     }
 
-    #[derive(Default)]
-    struct RecordingExecutor {
-        calls: usize,
-    }
-
-    impl Executor for RecordingExecutor {
-        fn session(&mut self) -> Option<&mut ClientSession> {
-            self.calls += 1;
-            None
-        }
-    }
-
     #[tokio::test]
     async fn default_marks_excludes_matching_record_and_preserves_metadata() {
         let repository = DefaultMarksRepository::new(&["first", "keep", "last"]);
-        let mut executor = RecordingExecutor::default();
+        let mut executor = NoTransaction;
 
         repository
             .clear_other_default_marks(&PartyId::new("party-1"), Some("keep"), &mut executor)
@@ -264,26 +251,24 @@ mod tests {
         assert!(saved.iter().all(|row| !row.is_default));
         assert_eq!(*repository.attempted_ids.borrow(), ["first", "last"]);
         assert_eq!(*repository.filters.borrow(), [doc! { "party_id": "party-1", "is_default": true }]);
-        assert_eq!(executor.calls, 3);
     }
 
     #[tokio::test]
     async fn default_marks_without_exclusion_updates_all_records_in_order() {
         let repository = DefaultMarksRepository::new(&["first", "last"]);
-        let mut executor = RecordingExecutor::default();
+        let mut executor = NoTransaction;
 
         repository.clear_other_default_marks(&PartyId::new("party-1"), None, &mut executor).await.unwrap();
 
         assert_eq!(*repository.attempted_ids.borrow(), ["first", "last"]);
         assert_eq!(repository.saved.borrow().len(), 2);
         assert!(repository.saved.borrow().iter().all(|row| !row.is_default));
-        assert_eq!(executor.calls, 3);
     }
 
     #[tokio::test]
     async fn default_marks_empty_records_performs_no_updates() {
         let repository = DefaultMarksRepository::new(&[]);
-        let mut executor = RecordingExecutor::default();
+        let mut executor = NoTransaction;
 
         repository
             .clear_other_default_marks(&PartyId::new("party-1"), Some("keep"), &mut executor)
@@ -292,14 +277,13 @@ mod tests {
 
         assert!(repository.attempted_ids.borrow().is_empty());
         assert!(repository.saved.borrow().is_empty());
-        assert_eq!(executor.calls, 1);
     }
 
     #[tokio::test]
     async fn default_marks_update_failure_stops_later_records() {
         let mut repository = DefaultMarksRepository::new(&["first", "conflict", "last"]);
         repository.fail_update_id = Some("conflict");
-        let mut executor = RecordingExecutor::default();
+        let mut executor = NoTransaction;
 
         let result =
             repository.clear_other_default_marks(&PartyId::new("party-1"), None, &mut executor).await;
@@ -310,14 +294,13 @@ mod tests {
         assert_eq!(saved.len(), 1);
         assert_eq!(saved[0].base.id, "first");
         assert!(!saved[0].is_default);
-        assert_eq!(executor.calls, 3);
     }
 
     #[tokio::test]
     async fn default_marks_read_failure_performs_no_updates() {
         let mut repository = DefaultMarksRepository::new(&["first"]);
         repository.fail_read = true;
-        let mut executor = RecordingExecutor::default();
+        let mut executor = NoTransaction;
 
         let result =
             repository.clear_other_default_marks(&PartyId::new("party-1"), None, &mut executor).await;
@@ -330,6 +313,5 @@ mod tests {
         }
         assert!(repository.attempted_ids.borrow().is_empty());
         assert!(repository.saved.borrow().is_empty());
-        assert_eq!(executor.calls, 1);
     }
 }

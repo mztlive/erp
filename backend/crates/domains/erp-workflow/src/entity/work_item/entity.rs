@@ -3,8 +3,9 @@
 mod approval;
 mod import_confirmation;
 mod payment_arrangement;
-mod permissions;
 mod procurement_access;
+#[cfg(test)]
+mod responsibility_tests;
 mod rework;
 mod status;
 mod supplier_portal;

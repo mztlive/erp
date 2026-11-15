@@ -2,7 +2,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use mongodb::bson::Bson;
+use erp_core::common::time::Instant;
+use mongodb::bson::{Bson, Document};
 
 use crate::entity::authorization::{
     AccessContext, AccessFact, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
@@ -15,6 +16,8 @@ type MappingCache = Vec<(Arc<dyn AccessMapping>, Arc<dyn AccessMapping>)>;
 pub(crate) struct FrozenMapping {
     inner: Arc<dyn AccessMapping>,
     model: QueryModel,
+    stages: Vec<Document>,
+    stage_bytes: Vec<Vec<u8>>,
     originals: BTreeMap<RelationKey, Arc<dyn AccessMapping>>,
     relations: BTreeMap<RelationKey, Arc<dyn AccessMapping>>,
 }
@@ -33,6 +36,9 @@ impl FrozenMapping {
         }
         let model = inner.model().clone();
         model.validate()?;
+        let stages = inner.stages();
+        validate_stages(&stages)?;
+        let stage_bytes = encode_stages(&stages)?;
         let originals = inner.relations();
         let mut relations = BTreeMap::new();
         for (key, mapping) in &originals {
@@ -42,13 +48,13 @@ impl FrozenMapping {
             relations.insert(key.clone(), Self::freeze(mapping.clone(), cache, depth + 1)?);
         }
         let frozen: Arc<dyn AccessMapping> =
-            Arc::new(Self { inner: inner.clone(), model, originals, relations });
+            Arc::new(Self { inner: inner.clone(), model, stages, stage_bytes, originals, relations });
         cache.push((inner, frozen.clone()));
         Ok(frozen)
     }
 
     fn ensure_model(&self) -> Result<()> {
-        if self.inner.model() != &self.model {
+        if self.inner.model() != &self.model || encode_stages(&self.inner.stages())? != self.stage_bytes {
             return Err(Error::ValidationError("Mapping 描述在构造后改变".into()));
         }
         Ok(())
@@ -62,6 +68,14 @@ impl AccessMapping for FrozenMapping {
 
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         self.relations.clone()
+    }
+
+    fn stages(&self) -> Vec<Document> {
+        self.stages.clone()
+    }
+
+    fn valid_until(&self, context: &AccessContext) -> Option<Instant> {
+        self.inner.valid_until(context)
     }
 
     fn preparation(&self) -> Option<&dyn MappingPreparation> {
@@ -107,17 +121,67 @@ impl AccessMapping for FrozenMapping {
     }
 }
 
+fn encode_stages(stages: &[Document]) -> Result<Vec<Vec<u8>>> {
+    stages
+        .iter()
+        .map(|stage| stage.to_vec().map_err(|_| Error::ValidationError("Mapping 固定阶段无法编码".into())))
+        .collect()
+}
+
+/// 固定准备只物化完整关系，不能提前过滤、展开或分页根记录。
+fn validate_stages(stages: &[Document]) -> Result<()> {
+    for stage in stages {
+        if stage.len() != 1
+            || !stage.keys().all(|key| matches!(key.as_str(), "$lookup" | "$set" | "$addFields"))
+        {
+            return Err(Error::ValidationError("Mapping 固定准备不得改变根记录集合".into()));
+        }
+        reject_writes(&Bson::Document(stage.clone()))?;
+    }
+    Ok(())
+}
+
+fn reject_writes(value: &Bson) -> Result<()> {
+    match value {
+        Bson::Document(document) => {
+            for (key, value) in document {
+                if matches!(key.as_str(), "$out" | "$merge") {
+                    return Err(Error::ValidationError("Mapping 固定准备必须只读".into()));
+                }
+                reject_writes(value)?;
+            }
+        },
+        Bson::Array(values) => {
+            for value in values {
+                reject_writes(value)?;
+            }
+        },
+        _ => {},
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_rule(rule: &AccessRule, mapping: &dyn AccessMapping, depth: usize) -> Result<()> {
     if depth > 16 {
         return Err(Error::ValidationError("授权来源嵌套超限".into()));
     }
     match rule {
         AccessRule::Fact(fact) if !mapping.model().facts.contains(&fact.kind()) => {
-            return Err(Error::ValidationError("Mapping 缺少固定规则所需事实".into()));
+            return Err(Error::ValidationError(format!(
+                "Mapping {}（{}）缺少固定事实 {:?}",
+                mapping.model().key.as_str(),
+                mapping.model().resource,
+                fact.kind()
+            )));
         },
         AccessRule::Required { facts, rule } => {
             if !facts.is_subset(&mapping.model().facts) {
-                return Err(Error::ValidationError("Mapping 缺少必需事实维度".into()));
+                return Err(Error::ValidationError(format!(
+                    "Mapping {}（{}）缺少必需事实 {:?}",
+                    mapping.model().key.as_str(),
+                    mapping.model().resource,
+                    facts.difference(&mapping.model().facts).collect::<Vec<_>>()
+                )));
             }
             validate_rule(rule, mapping, depth + 1)?;
         },

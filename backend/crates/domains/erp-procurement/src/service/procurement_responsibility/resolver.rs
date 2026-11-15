@@ -272,7 +272,6 @@ mod tests {
 
     use erp_core::AccountKind;
     use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, ProductId, SkuId};
-    use mongodb::ClientSession;
 
     use super::*;
     use crate::entity::facts::{
@@ -417,26 +416,16 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
-    struct RecordingExecutor {
-        visits: usize,
-    }
-    impl Executor for RecordingExecutor {
-        fn session(&mut self) -> Option<&mut ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
+    use persistence_core::ReadExecutor;
 
     #[tokio::test]
     async fn candidate_resolution_preserves_order_and_executor_across_real_ports() {
         let fixture = Fixture::new();
-        let mut executor = RecordingExecutor::default();
-        let address = &mut executor as *mut RecordingExecutor as usize;
+        let mut executor = ReadExecutor::default();
+        let address = &mut executor as *mut ReadExecutor as usize;
         let candidates = fixture.run(&mut executor).await.unwrap();
         assert_eq!(*fixture.events.lock().unwrap(), vec!["catalog", "rules", "owners"]);
         assert_eq!(*fixture.executors.lock().unwrap(), vec![address; 3]);
-        assert_eq!(executor.visits, 3);
         assert_eq!(
             candidates.iter().map(|line| line.line_key.as_str()).collect::<Vec<_>>(),
             ["line-2", "line-1"]
@@ -455,7 +444,7 @@ mod tests {
         ] {
             let mut fixture = Fixture::new();
             fixture.failure = Some(failure);
-            let error = fixture.run(&mut RecordingExecutor::default()).await.unwrap_err();
+            let error = fixture.run(&mut ReadExecutor::default()).await.unwrap_err();
             if failure == "catalog" {
                 assert!(
                     matches!(error, Error::Internal(message) if message == persistence_core::Error::OptimisticLockingError.to_string())
@@ -473,7 +462,7 @@ mod tests {
     async fn missing_catalog_fails_before_rules_or_owner_reads() {
         let mut fixture = Fixture::new();
         fixture.catalog.revisions.clear();
-        let error = fixture.run(&mut RecordingExecutor::default()).await.unwrap_err();
+        let error = fixture.run(&mut ReadExecutor::default()).await.unwrap_err();
         assert!(
             matches!(error, Error::Logic(error) if error.to_string().contains("商品当前修订不存在或已删除：revision-1"))
         );
@@ -489,7 +478,7 @@ mod tests {
             &fixture,
             &[line.clone(), line],
             ResolutionPurpose::Procurement,
-            &mut RecordingExecutor::default(),
+            &mut ReadExecutor::default(),
         )
         .await
         .unwrap_err();
@@ -503,7 +492,7 @@ mod tests {
     async fn missing_owner_stays_a_validation_error() {
         let mut fixture = Fixture::new();
         fixture.owners.clear();
-        let error = fixture.run(&mut RecordingExecutor::default()).await.unwrap_err();
+        let error = fixture.run(&mut ReadExecutor::default()).await.unwrap_err();
         assert!(
             matches!(error, Error::ValidationError(message) if message == "采购负责人账号不存在或已删除：owner-1")
         );
@@ -518,7 +507,7 @@ mod tests {
             fixture.owners[0].can_login = can_login;
             fixture.owners[0].kind = kind;
             fixture.owners[0].display_name = "超级管理员".into();
-            let error = fixture.run(&mut RecordingExecutor::default()).await.unwrap_err();
+            let error = fixture.run(&mut ReadExecutor::default()).await.unwrap_err();
             assert!(
                 matches!(error, Error::ValidationError(message) if message == "采购负责人 owner-1 必须为可登录后台账号")
             );
@@ -533,7 +522,7 @@ mod tests {
         fixture.rules[0].owner_user_ids.push("owner-2".into());
         fixture.last_owners.insert("rule-1".into(), "owner-1".into());
         for _ in 0..2 {
-            let candidates = fixture.run(&mut RecordingExecutor::default()).await.unwrap();
+            let candidates = fixture.run(&mut ReadExecutor::default()).await.unwrap();
             assert!(candidates.iter().all(|row| row.owner_user_id == "owner-2"));
             assert_eq!(fixture.last_owners.get("rule-1").map(String::as_str), Some("owner-1"));
         }
@@ -553,13 +542,13 @@ mod tests {
             &fixture,
             &inputs,
             ResolutionPurpose::Inquiry,
-            &mut RecordingExecutor::default(),
+            &mut ReadExecutor::default(),
         )
         .await
         .unwrap();
         assert!(chosen.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Inquiry
             && row.owner_user_id == "owner-1"));
-        let ordinary = fixture.run(&mut RecordingExecutor::default()).await.unwrap();
+        let ordinary = fixture.run(&mut ReadExecutor::default()).await.unwrap();
         assert!(
             ordinary.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Sku
                 && row.owner_user_id == "owner-2")
@@ -570,7 +559,7 @@ mod tests {
             &fixture,
             &inputs,
             ResolutionPurpose::Inquiry,
-            &mut RecordingExecutor::default(),
+            &mut ReadExecutor::default(),
         )
         .await
         .unwrap();

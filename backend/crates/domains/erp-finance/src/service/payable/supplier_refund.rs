@@ -259,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn refund_from_merged_payment_only_reverses_selected_purchase() {
-        let mut e = TestExecutor { visits: 0 };
+        let mut e = ReadExecutor::default();
         let mut port = port(&mut e);
         port.split_accounts = true;
         let mut request = input();
@@ -273,7 +273,7 @@ mod tests {
     }
     #[tokio::test]
     async fn target_refund_cannot_borrow_other_purchase_balance() {
-        let mut e = TestExecutor { visits: 0 };
+        let mut e = ReadExecutor::default();
         let mut port = port(&mut e);
         port.split_accounts = true;
         let mut request = input();
@@ -376,15 +376,7 @@ mod tests {
             .collect();
         OffsetFacts { entries, accounts: HashMap::from([("account".into(), account)]) }
     }
-    struct TestExecutor {
-        visits: usize,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            self.visits += 1;
-            None
-        }
-    }
+    use persistence_core::ReadExecutor;
     #[derive(Default)]
     struct Recorded {
         calls: Vec<&'static str>,
@@ -405,7 +397,6 @@ mod tests {
     impl RecordingPort {
         fn io(&self, name: &'static str, e: &mut dyn Executor) -> Result<()> {
             assert_eq!(e as *mut dyn Executor as *mut () as usize, self.identity);
-            e.session();
             let mut state = self.recorded.lock().unwrap();
             let index = state.io;
             state.io += 1;
@@ -471,9 +462,9 @@ mod tests {
             occurred_at: Instant::from_unix_secs(10),
         }
     }
-    fn port(executor: &mut TestExecutor) -> RecordingPort {
+    fn port(executor: &mut ReadExecutor) -> RecordingPort {
         RecordingPort {
-            identity: (executor as *mut TestExecutor) as usize,
+            identity: (executor as *mut ReadExecutor) as usize,
             fail: None,
             supplier: "supplier",
             revert: true,
@@ -484,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn refund_reverses_settlement_without_reducing_purchase_liability_twice() {
-        let mut e = TestExecutor { visits: 0 };
+        let mut e = ReadExecutor::default();
         let port = port(&mut e);
         let payment = payment();
         persist_refund(&port, &input(), &payment, "actor", &mut e).await.unwrap();
@@ -505,13 +496,12 @@ mod tests {
                 && row.reverses_allocation_id.is_some())
         );
         assert_eq!(payment.status, SupplierPaymentStatus::Posted);
-        assert_eq!(e.visits, state.io);
     }
 
     #[tokio::test]
     async fn supplier_refund_finance_stops_at_each_io_failure() {
         for fail in 0..6 {
-            let mut e = TestExecutor { visits: 0 };
+            let mut e = ReadExecutor::default();
             let mut port = port(&mut e);
             port.fail = Some(fail);
             let error = persist_refund(&port, &input(), &payment(), "actor", &mut e).await.unwrap_err();
@@ -523,7 +513,7 @@ mod tests {
     #[tokio::test]
     async fn supplier_and_conditional_settlement_guards_precede_ids_and_offsets() {
         for foreign in [true, false] {
-            let mut e = TestExecutor { visits: 0 };
+            let mut e = ReadExecutor::default();
             let mut port = port(&mut e);
             port.supplier = if foreign { "other" } else { "supplier" };
             port.revert = false;

@@ -1,12 +1,13 @@
 //! 回执恢复只读取原成功结果，禁止重建命令或重放未知提交。
 
 use application_core::{AuditActor, CommandIdentity};
+use erp_permissions::sales_inquiry as sales_inquiry_permissions;
 use erp_sales::entity::sales_inquiry::{InquiryCommandReceipt, InquiryCommandResult};
-use erp_sales::service::sales_inquiry::SalesInquiryService;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::SalesInquiryProcess;
 use super::dto::InquiryMutationView;
+use super::execution::ReplaySource;
 use crate::{Error, Result};
 
 impl SalesInquiryProcess {
@@ -34,41 +35,51 @@ impl SalesInquiryProcess {
             "sales-inquiry-command:",
             [actor.id(), action, "sales_inquiry", key].into_iter().map(str::to_string),
         )?;
-        let Some(receipt) = SalesInquiryService::new(self.db.clone())
-            .receipt(identity.current_id(), &mut NoTransaction)
-            .await?
-        else {
-            return Ok(None);
-        };
-        let view = recovery_result(&receipt, actor, action, id)?;
         let this = self.clone();
         let actor = actor.clone();
         let action = action.to_string();
-        let inquiry_id = view.inquiry_id.clone();
+        let id = id.to_string();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    if is_procurement_action(&action) {
-                        this.access().ensure_procurement_permission(&actor, "recover", executor).await?;
-                    } else {
-                        this.access().require_sales(&actor, "recover", &inquiry_id, executor).await?;
-                    }
-                    Ok::<(), Error>(())
+                    recover(&this, &actor, &id, &action, identity.current_id(), executor).await
                 })
             })
-            .await?;
-        Ok(Some(view))
+            .await
     }
 }
 
+/// 回执读取、当前入口授权及冻结结果交付均留在原恢复快照。
+pub(super) async fn recover(
+    source: &impl ReplaySource,
+    actor: &AuditActor,
+    id: &str,
+    action: &str,
+    command_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<InquiryMutationView>> {
+    let Some(receipt) = source.receipt(command_id, executor).await? else { return Ok(None) };
+    let view = recovery_result(&receipt, actor, action, id)?;
+    if is_procurement_action(action) {
+        source.procurement(actor, &sales_inquiry_permissions::RECOVERY_PROCUREMENT_RECOVER, executor).await?;
+    } else {
+        source
+            .sales(actor, &sales_inquiry_permissions::RECOVERY_SALES_RECOVER, &view.inquiry_id, executor)
+            .await?;
+    }
+    Ok(Some(view))
+}
+
+/// 验证冻结回执与恢复请求一致，创建请求允许从回执取得真实对象身份。
 fn recovery_result(
     receipt: &InquiryCommandReceipt,
     actor: &AuditActor,
     action: &str,
     id: &str,
 ) -> Result<InquiryMutationView> {
+    receipt.validate()?;
     if receipt.base.is_deleted() || receipt.actor_id != actor.id() || receipt.action != action {
         return Err(Error::ConflictError("询价命令回执身份不一致".into()));
     }

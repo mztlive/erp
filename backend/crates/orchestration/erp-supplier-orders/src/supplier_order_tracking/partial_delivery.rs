@@ -1,6 +1,6 @@
 //! 按来源包裹数量拆分原直发草稿，并复用既有真实发货过账。
-
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
@@ -12,8 +12,9 @@ use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment::service::document_number::next_delivery_no;
 use erp_fulfillment_execution::fulfillment_execution::post_observed_supplier_delivery;
 use erp_fulfillment_execution::fulfillment_execution::task::{
-    FulfillmentIdentityFactory, FulfillmentTaskObject, complete_fulfillment_task, ensure_fulfillment_task,
+    FulfillmentTaskObject, complete_fulfillment_task, ensure_fulfillment_task,
 };
+use erp_identity::AuthorizationService;
 use erp_supply::entity::supplier_fulfillment::FulfillmentStatus;
 use erp_supply::order_tracking::{OrderObservation, OrderTracking, PendingShipment, TrackingSourceLine};
 use mongodb::Database;
@@ -32,7 +33,7 @@ use crate::{Error, Result};
 /// 任何数量、来源、草稿或正式发货门槛失败时回滚本次应用。
 pub(super) async fn apply_quantity_deliveries(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     tracking: &mut OrderTracking,
     observation: &OrderObservation,
     executor: &mut dyn Executor,
@@ -64,7 +65,7 @@ trait QuantityDeliveryApplication: Sync {
 
 struct MongoQuantityDeliveryApplication<'a> {
     db: &'a Database,
-    task_identity: &'a FulfillmentIdentityFactory,
+    task_identity: &'a Arc<AuthorizationService>,
     source_time: Option<Instant>,
 }
 
@@ -206,7 +207,7 @@ fn split_lines(
 
 async fn persist_remainder(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     draft: &mut Delivery,
     original: &[DeliveryLine],
     remaining: LineRemainder,

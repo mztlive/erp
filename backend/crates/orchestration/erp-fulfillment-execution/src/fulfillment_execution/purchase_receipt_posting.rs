@@ -1,6 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
@@ -16,6 +17,7 @@ use erp_fulfillment::entity::facts::ReceiptFulfillmentProgress;
 use erp_fulfillment::entity::fulfillment::{PurchaseReceipt, PurchaseReceiptLine};
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_fulfillment::service::FulfillmentService;
+use erp_identity::AuthorizationService;
 use erp_inventory::repository::prelude::*;
 use erp_inventory::service::fulfillment::{
     ReceiptReservationFact, ReceiptStockFact, establish_receipt_reservation, post_receipt_stock,
@@ -35,7 +37,6 @@ use validator::Validate;
 
 use super::FulfillmentProcess;
 use super::purchase_context::{ensure_po_fulfillable, load_po_current_revision};
-use super::task::FulfillmentIdentityFactory;
 use crate::{Error, Result};
 impl FulfillmentProcess {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
@@ -90,7 +91,7 @@ impl FulfillmentProcess {
 /// 按原查询顺序准备入库事实，并在根事务内执行过账。
 async fn post_receipt(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     receipt_id: &PurchaseReceiptId,
     req: PostPurchaseReceiptRequest,
     actor: &AuditActor,
@@ -257,7 +258,7 @@ async fn execute_posting(
 }
 struct MongoReceiptPosting<'a> {
     db: &'a Database,
-    task_identity: &'a FulfillmentIdentityFactory,
+    task_identity: &'a Arc<AuthorizationService>,
     receipt: &'a mut PurchaseReceipt,
     po: &'a mut PurchaseOrder,
     lines: &'a [PurchaseReceiptLine],
@@ -516,7 +517,7 @@ async fn establish_reservations(
 /// 无返回值；查询或写入失败时返回错误。
 async fn create_warehouse_ship_drafts(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     session: &mut dyn Executor,
     receipt_lines: &[PurchaseReceiptLine],
 ) -> Result<()> {
@@ -571,7 +572,7 @@ async fn create_warehouse_ship_drafts(
 /// 将本次采购入库预占合并到同销售单同仓库的仓发草稿。
 async fn ensure_receipt_stock_delivery(
     db: &Database,
-    task_identity: &FulfillmentIdentityFactory,
+    task_identity: &Arc<AuthorizationService>,
     sales_order_id: &SalesOrderId,
     warehouse_id: &WarehouseId,
     reservations: &[&StockReservation],
@@ -740,14 +741,7 @@ mod posting_contract_tests {
         ));
     }
 
-    struct TestExecutor {
-        _identity: u8,
-    }
-    impl Executor for TestExecutor {
-        fn session(&mut self) -> Option<&mut mongodb::ClientSession> {
-            None
-        }
-    }
+    use persistence_core::ReadExecutor as TestExecutor;
     struct RecordingSteps {
         calls: Vec<ReceiptPostingStep>,
         executor: usize,
@@ -776,7 +770,7 @@ mod posting_contract_tests {
     ];
     #[tokio::test]
     async fn receipt_posting_preserves_inventory_receipt_task_purchase_drafts_audit_order() {
-        let mut ex = TestExecutor { _identity: 1 };
+        let mut ex = TestExecutor::default();
         let mut steps =
             RecordingSteps { calls: vec![], executor: &mut ex as *mut TestExecutor as usize, fail_at: None };
         execute_posting(&mut steps, 3, &mut ex).await.unwrap();
@@ -785,7 +779,7 @@ mod posting_contract_tests {
     #[tokio::test]
     async fn receipt_posting_failure_stops_later_domains_and_retains_original_error() {
         for (index, step) in ORDER.iter().enumerate() {
-            let mut ex = TestExecutor { _identity: 1 };
+            let mut ex = TestExecutor::default();
             let mut steps = RecordingSteps {
                 calls: vec![],
                 executor: &mut ex as *mut TestExecutor as usize,

@@ -14,7 +14,6 @@ use erp_fulfillment::entity::fulfillment::DeliveryTrackingEntry;
 use erp_identity::CompiledAccess;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemPriority;
-use futures_util::TryStreamExt;
 use mongodb::Database;
 use persistence_core::{Executor, Result};
 use pipeline::fulfillment_queue_pipeline;
@@ -280,26 +279,12 @@ impl<'a> FulfillmentQueueRepository<'a> {
     ) -> Result<FulfillmentQueueRepositoryPage> {
         let pipeline = fulfillment_queue_pipeline(filter)?;
         let collection = self.collection();
-        let rows = match executor.session() {
-            Some(session) => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<FulfillmentQueueFacetRow>()
-                    .session(&mut *session)
-                    .await?
-                    .stream(session)
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-            None => {
-                collection
-                    .aggregate(pipeline)
-                    .with_type::<FulfillmentQueueFacetRow>()
-                    .await?
-                    .try_collect::<Vec<_>>()
-                    .await?
-            },
-        };
+        let rows = persistence_core::aggregate::rows(
+            &collection.clone_with_type::<FulfillmentQueueFacetRow>(),
+            pipeline,
+            executor,
+        )
+        .await?;
         let facet = rows.into_iter().next().unwrap_or_default();
         Ok(FulfillmentQueueRepositoryPage {
             items: facet.items,
