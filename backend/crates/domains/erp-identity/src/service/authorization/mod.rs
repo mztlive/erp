@@ -10,6 +10,8 @@ mod operations;
 mod organization;
 mod policy_bundles;
 pub(crate) use organization::OrganizationScope;
+#[cfg(feature = "test-support")]
+pub(crate) mod fixture;
 mod require;
 mod resolve;
 pub(crate) mod rules;

@@ -194,14 +194,14 @@ impl CompiledAccess {
         self.whole.as_deref().ok_or_else(|| Error::ValidationError("此查询没有完整根读取计划".into()))
     }
 
-    /// 身份域展示是否存在正向角色范围。
+    /// 返回统一取证是否存在正向角色范围，供消费者保持 no_scope 展示合同。
     /// # 参数
     /// 无。
     /// # 返回
     /// 本次范围取证存在正向角色条款时为 true。
     /// # 错误
     /// 无；个人限制和查询结果为空不能替代本标记。
-    pub(crate) fn has_role_scope(&self) -> bool {
+    pub fn has_role_scope(&self) -> bool {
         self.proof.has_role_scope
     }
 

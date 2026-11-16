@@ -47,7 +47,7 @@ impl Deref for AuthorizedDataScope {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl AuthorizedDataScope {
     /// 为行为测试构造授权夹具，生产依赖不得启用 test-support。
     /// # 参数

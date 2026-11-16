@@ -199,3 +199,23 @@ Facts 返回的根对象和各层来源对象按资源与身份视为无序集�
 ```bash
 env -u ERP_TEST_MONGO_URI cargo test -p erp-identity --lib --locked
 ```
+
+消费方的库单测可在 dev-dependency 启用 `test-support`，通过
+`testing::authorization(actor, permissions, scope, facts, mappings)` 提供显式测试账号、
+具体权限、角色范围和当前用例需要的 Facts/Mapping。该工厂使用固定授权规则和真实
+`require/query/validate`；查询经生产编译器产生凭证，保留服务、执行器、阶段和期限约束。
+未声明的账号、权限或绑定保持拒绝；映射仍校验模型、能力、完整来源和输出粒度。
+这是不连接数据库的局部测试装配，不能用来验证生产 Builder 的完整业务绑定。
+
+`testing::compiled_access` 保留 FSY-7 的恒拒绝仓储守卫夹具，只用于模型与执行边界测试。
+需要正常授权或合法查询行为时使用前述工厂，并注入消费者实际待测的映射或窄替身。
+生产装配继续通过 `AuthorizationService::builder(...).build()` 完整校验。
+
+`CompiledAccess::has_role_scope()` 只读返回统一取证的正向角色范围摘要，可用于列表的
+`no_scope` 展示。个人限制或空查询结果不能替代该摘要，它也不能代替仓储过滤与交付复验。
+
+测试支持自身的库单测执行：
+
+```bash
+env -u ERP_TEST_MONGO_URI cargo test -p erp-identity --lib --locked --features test-support
+```

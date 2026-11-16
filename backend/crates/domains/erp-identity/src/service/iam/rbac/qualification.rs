@@ -1,5 +1,7 @@
 //! 同一账号、策略和启用角色快照下的批量功能资格。
 use application_core::AuditActor;
+#[cfg(any(test, feature = "test-support"))]
+use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use super::{RbacService, RolePermissionSnapshot};
@@ -137,9 +139,13 @@ impl RbacService {
 impl QualifiedPermissions {
     /// 用一次快照构造资格，供规则测试复用同角色证明。
     pub(crate) fn test_grants(grants: &[(&str, &[Permission])]) -> Self {
-        use std::collections::{HashMap, HashSet};
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        Self::test_grants_for(&actor, grants)
+    }
 
-        use erp_core::AccountKind;
+    /// 为显式测试账号保留同一份身份、角色和权限证据。
+    pub(crate) fn test_grants_for(actor: &AuditActor, grants: &[(&str, &[Permission])]) -> Self {
+        use std::collections::{HashMap, HashSet};
 
         let mut role_ids = Vec::new();
         let mut map = HashMap::new();
@@ -156,8 +162,7 @@ impl QualifiedPermissions {
             roles.push(role);
         }
         let snapshot = RolePermissionSnapshot { role_ids, grants: map, policy_revision: 1 };
-        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
-        qualified(snapshot, &roles, &actor, 1, AccountSummary::new("user", AccountKind::Admin, true))
+        qualified(snapshot, &roles, actor, 1, AccountSummary::new(actor.id(), actor.kind(), true))
     }
 }
 
