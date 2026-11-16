@@ -133,7 +133,7 @@ impl RbacService {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl QualifiedPermissions {
     /// 用一次快照构造资格，供规则测试复用同角色证明。
     pub(crate) fn test_grants(grants: &[(&str, &[Permission])]) -> Self {
