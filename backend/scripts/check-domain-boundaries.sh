@@ -7,5 +7,6 @@
 set -euo pipefail
 
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONDONTWRITEBYTECODE=1
 python3 "${BACKEND_DIR}/scripts/domain_boundaries.py" --backend "${BACKEND_DIR}" "$@"
 python3 "${BACKEND_DIR}/scripts/audit_boundaries.py" --backend "${BACKEND_DIR}"

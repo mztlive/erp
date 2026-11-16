@@ -435,10 +435,9 @@ def scan_service_mongo(path: str, source: str) -> list[str]:
 
 def scan_facade(path: str, source: str) -> list[str]:
     """Flag leftover re-export façades onto the old three-layer crates."""
+    if "entities" not in source and "database" not in source and "services" not in source:
+        return []
     errors: list[str] = []
-    for used in extract_use_paths(source):
-        if re.match(r"^pub ", source) is None:
-            break
     pub_uses = re.findall(
         r"pub\s+use\s+((?:entities|database|services)::[^;]+);", strip_comments(source)
     )

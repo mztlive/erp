@@ -66,11 +66,25 @@ def literal_value(literal: str) -> str | None:
     )
 
 
-def dependencies(source: str, path: str) -> Counter[Dependency]:
-    """Find direct reads, physical writes and retired receipt adapters."""
+def _prepare_source(
+    source: str,
+    prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
+) -> tuple[str, list[tuple[int, str]], list[tuple[int, int]]]:
+    """Return `(masked_code, literals, test_ranges)` for `source`, reusing precomputed data when given."""
+    if prepared is not None:
+        return prepared
     code, literals = _code_and_literals(source)
     ranges, _ = find_test_ranges(code)
-    code = mask_ranges(code, ranges)
+    return mask_ranges(code, ranges), literals, ranges
+
+
+def dependencies(
+    source: str,
+    path: str,
+    prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
+) -> Counter[Dependency]:
+    """Find direct reads, physical writes and retired receipt adapters."""
+    code, literals, ranges = _prepare_source(source, prepared)
     findings: Counter[Dependency] = Counter()
     functions = list(FUNCTION.finditer(code))
     for accessor in ACCESSOR.finditer(code):
@@ -87,7 +101,11 @@ def dependencies(source: str, path: str) -> Counter[Dependency]:
         if re.search(r"\b(?:AUDIT_LOGS|AUDIT_EVENTS|AUDIT_ATTEMPTS|AuditLogRepository|AuditAttemptRepository)\b", code):
             findings[Dependency(path, "module", "raw_audit_repository")] += 1
         for position, value in literals:
-            if literal_value(value) in {"audit_logs", "audit_events", "audit_attempts"} and not any(start <= position < end for start, end in ranges):
+            if (
+                "audit_" in value or "\\" in value
+            ) and literal_value(value) in {"audit_logs", "audit_events", "audit_attempts"} and not any(
+                start <= position < end for start, end in ranges
+            ):
                 findings[Dependency(path, "module", "raw_audit_collection")] += 1
     return findings
 
@@ -156,11 +174,13 @@ def check(actual: Counter[Dependency], registered: dict[Dependency, dict]) -> li
     return errors
 
 
-def execution_entries(source: str, path: str) -> dict[tuple[str, str], dict]:
+def execution_entries(
+    source: str,
+    path: str,
+    prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
+) -> dict[tuple[str, str], dict]:
     """Scan actual function bodies, including repeated names in distinct impls."""
-    code, _ = _code_and_literals(source)
-    ranges, _ = find_test_ranges(code)
-    code = mask_ranges(code, ranges)
+    code, _, _ = _prepare_source(source, prepared)
     actual: dict[tuple[str, str], Counter] = {}
     locations: Counter = Counter()
     for function in FN_NAME.finditer(code):
@@ -188,7 +208,11 @@ def execution_entries(source: str, path: str) -> dict[tuple[str, str], dict]:
     }
 
 
-def check_execution_entries(backend: Path, sources: dict[str, str]) -> list[str]:
+def check_execution_entries(
+    backend: Path,
+    sources: dict[str, str],
+    prepared_map: dict[str, tuple[str, list[tuple[int, str]], list[tuple[int, int]]]] | None = None,
+) -> list[str]:
     """Fail closed on missing, changed or stale explicit boundary policies."""
     document = json.loads((backend / "scripts/audit-entrypoints.json").read_text(encoding="utf-8"))
     if document.get("schema_version") != 1:
@@ -207,7 +231,7 @@ def check_execution_entries(backend: Path, sources: dict[str, str]) -> list[str]
         registered[key] = row
     actual = {}
     for path, source in sources.items():
-        actual.update(execution_entries(source, path))
+        actual.update(execution_entries(source, path, prepared_map[path] if prepared_map else None))
     errors = []
     for key, observed in actual.items():
         row = registered.get(key)
@@ -310,9 +334,27 @@ def main() -> int:
         return 1
     try:
         registered = load_registry(args.backend / "scripts/audit-boundaries.json")
-        sources = production_sources(args.backend)
-        errors = check(scan(sources), registered)
-        errors.extend(check_execution_entries(args.backend, sources))
+        raw_sources: dict[str, str] = {}
+        prepared_map: dict[str, tuple[str, list[tuple[int, str]], list[tuple[int, int]]]] = {}
+        test_files: set[str] = set()
+        for root in (args.backend / "apps", args.backend / "crates"):
+            for path in sorted(root.rglob("*.rs")):
+                relative = path.relative_to(args.backend).as_posix()
+                if "src" not in Path(relative).parts or "archive" in Path(relative).parts or is_excluded_path(relative):
+                    continue
+                source = path.read_text(encoding="utf-8")
+                code, literals = _code_and_literals(source)
+                ranges, submods = find_test_ranges(code)
+                for name in submods:
+                    test_files.update(submodule_paths(relative, name))
+                raw_sources[relative] = source
+                prepared_map[relative] = (mask_ranges(code, ranges), literals, ranges)
+        sources = {path: source for path, source in raw_sources.items() if path not in test_files}
+        findings: Counter[Dependency] = Counter()
+        for path, source in sources.items():
+            findings.update(dependencies(source, path, prepared_map[path]))
+        errors = check(findings, registered)
+        errors.extend(check_execution_entries(args.backend, sources, prepared_map))
     except (ValueError, OSError, KeyError) as error:
         errors = [str(error)]
     if errors:

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONDONTWRITEBYTECODE=1
 FAILED=0
 if [[ "${1:-}" == "--self-test-only" && "$#" -eq 1 ]]; then
     exec python3 "${BACKEND_DIR}/scripts/bpm_workspace.py" --backend "${BACKEND_DIR}" --self-test-only

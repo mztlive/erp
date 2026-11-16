@@ -15,8 +15,8 @@ GENERATED_FILES=(
     "${REPO_DIR}/erp-client/lib/audit-actions.generated.ts"
 )
 
-echo "重新构建 web-api 以生成权限定义…"
-cargo build -p erp-server --manifest-path "${BACKEND_DIR}/Cargo.toml"
+echo "触发 erp-server build.rs 以生成权限定义…"
+cargo check -p erp-server --lib --manifest-path "${BACKEND_DIR}/Cargo.toml"
 
 failed=0
 for file in "${GENERATED_FILES[@]}"; do

@@ -29,6 +29,7 @@ MAX_FILE_LINES = 1200
 MAX_FN_LINES = 50
 FN_NAME = re.compile(r"\bfn\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)")
 MOD_NAME = re.compile(r"mod\s+([A-Za-z_][A-Za-z0-9_]*)")
+PUB_RE = re.compile(r"pub\b")
 MACRO_IMPL_PREFIXES = ("crates/platform/entity-macros/",)
 CFG_TEST = re.compile(
     r"#\s*!?\s*\[\s*cfg\s*\(\s*(?:test\s*\)|all\s*\((?:[^()]|\([^()]*\))*\btest\b)",
@@ -73,10 +74,10 @@ def skip_balanced(code: str, index: int, opener: str, closer: str) -> int:
 
 def skip_vis(code: str, index: int) -> int:
     """Skip `pub`, `pub(crate)`, `pub(super)` and `pub(in path)`."""
-    match = re.match(r"pub\b", code[index:])
+    match = PUB_RE.match(code, index)
     if not match:
         return index
-    index = skip_ws(code, index + match.end())
+    index = skip_ws(code, match.end())
     if index < len(code) and code[index] == "(":
         return skip_ws(code, skip_balanced(code, index, "(", ")"))
     return index
@@ -155,10 +156,10 @@ def consume_item(code: str, index: int) -> tuple[int, str | None]:
     """Skip one item after its attributes. Semicolon `mod name;` yields the name."""
     index = skip_vis(code, skip_ws(code, index))
     index = skip_ws(code, index)
-    mod = MOD_NAME.match(code[index:])
+    mod = MOD_NAME.match(code, index)
     if mod:
         name = mod.group(1)
-        pos, is_block = find_block_or_semi(code, index + mod.end())
+        pos, is_block = find_block_or_semi(code, mod.end())
         if is_block:
             return block_end(code, pos), None
         return pos + 1, name
