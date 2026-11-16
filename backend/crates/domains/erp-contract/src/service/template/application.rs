@@ -1,18 +1,15 @@
 //! 申请人隔离、幂等领号和同事务流水分配。
 
 use application_core::AuditActor;
-use entity_core::BaseModel;
-use erp_core::common::time::BusinessDate;
 use erp_identity::AccessTarget;
 use erp_permissions::contract;
 use persistence_core::{Executor, Transactional};
 
 use super::ContractTemplateService;
 use crate::dto::template::{ApplicationView, ApplyTemplateRequest};
-use crate::entity::template::{ContractApplication, ContractCounter, text};
+use crate::entity::template::text;
 use crate::error::{Error, Result};
-use crate::repository::ContractExt;
-use crate::repository::templates::{ContractTemplateExt, application_by_command};
+use crate::repository::templates::application_by_command;
 
 /// 已授权文件读取事实，只供组合层使用，不返回 HTTP。
 pub struct TemplateDownloadSource {
@@ -49,16 +46,7 @@ impl ContractTemplateService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service
-                        .authorization
-                        .require(
-                            &transaction_actor,
-                            &contract::TEMPLATES_APPLY,
-                            AccessTarget::Operation,
-                            executor,
-                        )
-                        .await?;
-                    service.apply_step(transaction_request, &transaction_actor, executor).await
+                    service.writer().apply(transaction_request, &transaction_actor, executor).await
                 })
             })
             .await;
@@ -117,72 +105,6 @@ impl ContractTemplateService {
         };
         existing.require_same(&request.template_id, &request.purpose)?;
         Ok(Some(existing.into()))
-    }
-
-    async fn apply_step(
-        &self,
-        request: ApplyTemplateRequest,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<ApplicationView> {
-        if let Some(existing) =
-            application_by_command(&self.db, actor.id(), &request.command_id, executor).await?
-        {
-            existing.require_same(&request.template_id, &request.purpose)?;
-            return Ok(existing.into());
-        }
-        let template = self.template(&request.template_id, executor).await?;
-        if !template.enabled {
-            return Err(Error::BusinessLogicError("模板已停用，请选择其他模板".into()));
-        }
-        self.active_company(&template.company_id, executor).await?;
-        let counter = ContractCounter::initial(template.group, BusinessDate::today().ymd().0)?;
-        let contract_no = self.allocate(counter, executor).await?;
-        let application = ContractApplication {
-            base: BaseModel::new(id_generator::next_id()),
-            command_id: request.command_id,
-            applicant_id: actor.id().into(),
-            template_id: template.base.id,
-            template_name: template.name,
-            company_name: template.company_name,
-            purpose: request.purpose,
-            contract_no,
-        };
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract_application.apply",
-            "contract_application",
-            application.base.id.clone(),
-        )?;
-        self.db.contract_applications().create(&application, executor).await?;
-        self.audit.persist(&audit, executor).await?;
-        Ok(application.into())
-    }
-
-    /// 已签档案占号时有界跳过；失败整事务回滚，不消耗流水。
-    async fn allocate(&self, initial: ContractCounter, executor: &mut dyn Executor) -> Result<String> {
-        let existing = self.db.contract_counters().find_by_id(&initial.base.id, executor).await?;
-        let is_new = existing.is_none();
-        let mut counter = existing.unwrap_or(initial);
-        for _ in 0..100 {
-            let number = counter.allocate()?;
-            if self
-                .db
-                .contracts()
-                .find_one_by_field_including_deleted("contract_no", &number, executor)
-                .await?
-                .is_some()
-            {
-                continue;
-            }
-            if is_new {
-                self.db.contract_counters().create(&counter, executor).await?;
-            } else {
-                self.db.contract_counters().update(&mut counter, executor).await?;
-            }
-            return Ok(number);
-        }
-        Err(Error::ConflictError("已有合同占用后续号码，请联系管理员校准已用流水".into()))
     }
 
     /// 每次下载都按申请人重新授权，停用模板不影响历史申请。

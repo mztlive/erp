@@ -1241,8 +1241,8 @@
       "reason": "合同共享销售命令在原事务执行固定共享授权后核对版本及账号，构造 contract.share 审计上下文；名单、审计与命令回包共用原 Executor，不读取审计恢复业务。"
     },
     {
-      "path": "crates/domains/erp-contract/src/service/template/application.rs",
-      "function": "apply_step",
+      "path": "crates/domains/erp-contract/src/service/template/write.rs",
+      "function": "persist_application",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
@@ -1254,7 +1254,7 @@
         "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 apply_step 通过 .resource_log、audit.persist 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "公开模板事务入口实际调用的命令步骤；固定资格先于业务读取和写入，成功审计使用原 Executor，保留原动作与资源身份，不增加事务、业务重试或重复成功事件。"
     },
     {
       "path": "crates/domains/erp-contract/src/service/template/application.rs",
@@ -1289,7 +1289,7 @@
       "reason": "敏感内容读取或文件预览以 .resource_log、audit.persist 记录授权读取动作；复用现行单次 NoTransaction 留痕，审计失败按原读取合同返回错误。该边界不套用普通正式业务写事务，不保存解密明文或文件正文。"
     },
     {
-      "path": "crates/domains/erp-contract/src/service/template/counter.rs",
+      "path": "crates/domains/erp-contract/src/service/template/write.rs",
       "function": "configure_counter",
       "policy": "Audited",
       "stage": "Transaction",
@@ -1302,10 +1302,10 @@
         "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 configure_counter 在自身事务或已声明 run_audited 边界通过 .resource_log、audit.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "公开模板事务入口实际调用的命令步骤；固定资格先于业务读取和写入，成功审计使用原 Executor，保留原动作与资源身份，不增加事务、业务重试或重复成功事件。"
     },
     {
-      "path": "crates/domains/erp-contract/src/service/template/mod.rs",
+      "path": "crates/domains/erp-contract/src/service/template/write.rs",
       "function": "create",
       "policy": "Audited",
       "stage": "Transaction",
@@ -1318,10 +1318,10 @@
         "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create 在自身事务或已声明 run_audited 边界通过 .resource_log、audit.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "公开模板事务入口实际调用的命令步骤；固定资格先于业务读取和写入，成功审计使用原 Executor，保留原动作与资源身份，不增加事务、业务重试或重复成功事件。"
     },
     {
-      "path": "crates/domains/erp-contract/src/service/template/mod.rs",
+      "path": "crates/domains/erp-contract/src/service/template/write.rs",
       "function": "set_status",
       "policy": "Audited",
       "stage": "Transaction",
@@ -1334,7 +1334,7 @@
         "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 set_status 在自身事务或已声明 run_audited 边界通过 .resource_log、audit.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "公开模板事务入口实际调用的命令步骤；固定资格先于业务读取和写入，成功审计使用原 Executor，保留原动作与资源身份，不增加事务、业务重试或重复成功事件。"
     },
     {
       "path": "crates/domains/erp-customer/src/service/customer/assignment.rs",

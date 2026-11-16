@@ -11,7 +11,7 @@ use persistence_core::{Executor, Transactional};
 use tokio::sync::Semaphore;
 
 use crate::dto::template::{CreateTemplateRequest, TemplateStatusRequest, TemplateView};
-use crate::entity::template::{CompanyNumbering, ContractTemplate, text};
+use crate::entity::template::{ContractTemplate, text};
 use crate::entity::template_docx;
 use crate::error::{Error, Result};
 use crate::ports::{ContractAuditPort, SigningCompanyPort};
@@ -20,7 +20,10 @@ use crate::repository::templates::ContractTemplateExt;
 mod application;
 mod counter;
 mod query;
+mod store;
+mod write;
 pub use application::TemplateDownloadSource;
+use write::TemplateWriter;
 
 static DOCX_WORKERS: Semaphore = Semaphore::const_new(2);
 
@@ -105,48 +108,12 @@ impl ContractTemplateService {
     pub async fn create(&self, template: ContractTemplate, actor: &AuditActor) -> Result<TemplateView> {
         let actor = actor.clone();
         let service = self.clone();
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract_template.create",
-            "contract_template",
-            template.base.id.clone(),
-        )?;
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service
-                        .authorization
-                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    service.active_company(&template.company_id, executor).await?;
-                    service.bind_group(&template, executor).await?;
-                    service.db.contract_templates().create(&template, executor).await?;
-                    service.audit.persist(&audit, executor).await?;
-                    Ok(template.into())
-                })
+                Box::pin(async move { service.writer().create(template, &actor, executor).await })
             })
             .await
-    }
-
-    async fn bind_group(&self, template: &ContractTemplate, executor: &mut dyn Executor) -> Result<()> {
-        let repository = self.db.contract_company_numbering();
-        if let Some(existing) = repository.find_by_id(&template.company_id, executor).await? {
-            if existing.group != template.group {
-                return Err(Error::ConflictError("该公司已绑定其他合同编号组，请沿用原编号组".into()));
-            }
-        } else {
-            repository
-                .create(
-                    &CompanyNumbering {
-                        base: BaseModel::new(template.company_id.clone()),
-                        group: template.group,
-                    },
-                    executor,
-                )
-                .await?;
-        }
-        Ok(())
     }
 
     /// 启停模板；文件与主体禁止覆盖，历史申请仍可下载。
@@ -166,30 +133,11 @@ impl ContractTemplateService {
     ) -> Result<TemplateView> {
         let actor = actor.clone();
         let service = self.clone();
-        let id = id.to_string();
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract_template.status",
-            "contract_template",
-            id.clone(),
-        )?;
+        let id = id.to_owned();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service
-                        .authorization
-                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    let mut template = service.template(&id, executor).await?;
-                    if template.base.version != request.version {
-                        return Err(Error::ConflictError("模板已变化，请刷新后重试".into()));
-                    }
-                    template.enabled = request.enabled;
-                    service.db.contract_templates().update(&mut template, executor).await?;
-                    service.audit.persist(&audit, executor).await?;
-                    Ok(template.into())
-                })
+                Box::pin(async move { service.writer().set_status(&id, request, &actor, executor).await })
             })
             .await
     }
@@ -213,6 +161,15 @@ impl ContractTemplateService {
         .map_err(|_| Error::Internal("Word 模板处理失败".into()))?
     }
 
+    fn writer(&self) -> TemplateWriter<'_, Self> {
+        TemplateWriter {
+            authorization: self.authorization.as_ref(),
+            store: self,
+            companies: self.companies.as_ref(),
+            audit: self.audit.as_ref(),
+        }
+    }
+
     async fn template(&self, id: &str, executor: &mut dyn Executor) -> Result<ContractTemplate> {
         self.db
             .contract_templates()
@@ -222,9 +179,17 @@ impl ContractTemplateService {
     }
 
     async fn active_company(&self, id: &str, executor: &mut dyn Executor) -> Result<String> {
-        match self.companies.company(id, executor).await? {
-            Some(company) if company.active => Ok(company.name),
-            _ => Err(Error::ValidationError("请选择启用的公司主体".into())),
-        }
+        active_company(self.companies.as_ref(), id, executor).await
+    }
+}
+
+async fn active_company(
+    companies: &dyn SigningCompanyPort,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<String> {
+    match companies.company(id, executor).await? {
+        Some(company) if company.active => Ok(company.name),
+        _ => Err(Error::ValidationError("请选择启用的公司主体".into())),
     }
 }

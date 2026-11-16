@@ -9,7 +9,7 @@ use persistence_core::Transactional;
 use super::ContractTemplateService;
 use crate::dto::template::{ConfigureCounterRequest, CounterView};
 use crate::entity::template::{ContractCounter, NumberGroup};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::repository::templates::ContractTemplateExt;
 
 impl ContractTemplateService {
@@ -68,38 +68,11 @@ impl ContractTemplateService {
         actor: &AuditActor,
     ) -> Result<CounterView> {
         let actor = actor.clone();
-        let initial = ContractCounter::initial(request.group, request.year)?;
         let service = self.clone();
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract_number_counter.configure",
-            "contract_number_counter",
-            initial.base.id.clone(),
-        )?;
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service
-                        .authorization
-                        .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    let existing =
-                        service.db.contract_counters().find_by_id(&initial.base.id, executor).await?;
-                    if existing.as_ref().map(|c| c.base.version) != request.version {
-                        return Err(Error::ConflictError("流水已变化，请刷新后重试".into()));
-                    }
-                    let is_new = existing.is_none();
-                    let mut counter = existing.unwrap_or(initial);
-                    counter.advance_to(request.last_sequence)?;
-                    if is_new {
-                        service.db.contract_counters().create(&counter, executor).await?;
-                    } else {
-                        service.db.contract_counters().update(&mut counter, executor).await?;
-                    }
-                    service.audit.persist(&audit, executor).await?;
-                    Ok(counter.into())
-                })
+                Box::pin(async move { service.writer().configure_counter(request, &actor, executor).await })
             })
             .await
     }
