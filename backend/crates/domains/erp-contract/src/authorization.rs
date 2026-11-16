@@ -115,7 +115,7 @@ impl ContractAccess {
     /// # 参数
     /// actor 为当前账号，customer_id 为完整来源，executor 为原执行器。
     /// # 返回
-    /// 真实客户当前归属满足合同创建范围时成功。
+    /// 拟写入合同归属与真实客户当前来源分别满足固定规则时成功。
     /// # 错误
     /// 来源缺失、无权或版本变化时拒绝。
     pub async fn require_create(
@@ -157,6 +157,17 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
+    /// 返回身份域已取证的正向角色范围摘要，不从业务结果推断权限。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 当前凭证存在正向角色范围时为 true。
+    /// # 错误
+    /// 无；仓储消费及交付仍须分别检查当前边界和 validate。
+    pub fn has_role_scope(&self) -> bool {
+        self.compiled.has_role_scope()
+    }
+
     /// 读取本次授权账号。
     /// # 参数
     /// 无。
@@ -265,6 +276,163 @@ fn ensure_permission(permission: &Permission) -> Result<()> {
         return Err(Error::ValidationError("权限资源与对象访问器不符".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) mod query_tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::entity::authorization::{
+        AccessContext, AccessFact, FactKind, MappingFacts, QueryModelKey, RelationKey,
+    };
+    use erp_identity::ports::{MappingPreparation, QueryFragment, RelationMapping};
+    use erp_identity::testing::{AuthorizationFixture, expire_access};
+    use erp_identity::{AccessMapping, Result as IdentityResult};
+    use mongodb::bson::{Bson, doc};
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    pub(crate) struct Mapping {
+        model: QueryModel,
+        revision: AtomicU64,
+    }
+
+    impl AccessMapping for Mapping {
+        fn model(&self) -> &QueryModel {
+            &self.model
+        }
+        fn preparation(&self) -> Option<&dyn MappingPreparation> {
+            Some(self)
+        }
+        fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+            Ok("$id".into())
+        }
+        fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+            Ok(QueryFragment::Match(doc! { "deleted_at": 0 }))
+        }
+        fn predicate(
+            &self,
+            fact: &AccessFact,
+            context: &AccessContext,
+            _: Option<&MappingFacts>,
+        ) -> IdentityResult<QueryFragment> {
+            Ok(QueryFragment::Match(match fact {
+                AccessFact::Owned => doc! { "sales_owner_user_id": context.actor.id() },
+                AccessFact::Collaborating => doc! { "shared_sales_user_ids": context.actor.id() },
+                AccessFact::HistoryParticipant => doc! { "history": context.actor.id() },
+                AccessFact::OrganizationIn(ids) => {
+                    doc! { "owner_org": { "$in": ids.iter().cloned().collect::<Vec<_>>() } }
+                },
+                _ => return Err(IdentityError::ValidationError("测试不支持该事实".into())),
+            }))
+        }
+        fn relation(
+            &self,
+            _: &RelationKey,
+            _: &AccessContext,
+            _: Option<&MappingFacts>,
+        ) -> IdentityResult<RelationMapping> {
+            Err(IdentityError::ValidationError("测试模型没有来源关系".into()))
+        }
+    }
+
+    #[async_trait]
+    impl MappingPreparation for Mapping {
+        async fn prepare(&self, _: &AccessContext, _: &mut dyn Executor) -> IdentityResult<MappingFacts> {
+            let revision = self.revision.load(Ordering::SeqCst);
+            Ok(MappingFacts {
+                data: serde_json::json!({ "revision": revision }),
+                version: Some(revision.to_string()),
+                valid_until: None,
+            })
+        }
+    }
+
+    pub(crate) fn fixture(resolved: ResolvedScope) -> (Arc<AuthorizationService>, Arc<Mapping>) {
+        let mapping = Arc::new(Mapping {
+            model: QueryModel {
+                key: QueryModelKey::parse("contract_responsibility").unwrap(),
+                resource: "contract".into(),
+                collection: <Database as ContractExt>::CONTRACTS.into(),
+                id_field: "id".into(),
+                output: QueryOutput::Object,
+                facts: [
+                    FactKind::Owner,
+                    FactKind::Organization,
+                    FactKind::Collaborators,
+                    FactKind::HistoryParticipants,
+                ]
+                .into(),
+            },
+            revision: AtomicU64::new(1),
+        });
+        let service = AuthorizationFixture::new(&[("reader", &[contract::LIST, contract::DETAIL])])
+            .scope(resolved)
+            .mapping(contract::LIST, mapping.clone())
+            .build();
+        (service, mapping)
+    }
+
+    pub(crate) fn actor() -> AuditActor {
+        AuditActor::new("user".into(), "login".into(), AccountKind::Admin)
+    }
+
+    fn own_scope() -> ResolvedScope {
+        ResolvedScope {
+            role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+            user_limit: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn real_contract_query_proofs_reject_cross_stage_cross_transaction_and_expired_consumption() {
+        let (service, _) = fixture(own_scope());
+        let mut executor = SnapshotExecutor::default();
+        let access =
+            scope(service.query(&actor(), &contract::LIST, &mut executor).await.unwrap(), service.clone());
+        assert!(access.has_role_scope());
+        assert!(!access.stages().is_empty());
+        access.ensure_current(&mut executor).unwrap();
+        access.validate(&mut executor).await.unwrap();
+        let copied = access.clone();
+        executor.next_read();
+        assert!(matches!(copied.ensure_current(&mut executor), Err(IdentityError::ValidationError(_))));
+        assert!(matches!(access.validate(&mut executor).await, Err(IdentityError::ValidationError(_))));
+
+        let access =
+            scope(service.query(&actor(), &contract::LIST, &mut executor).await.unwrap(), service.clone());
+        executor.restart();
+        assert!(matches!(access.ensure_current(&mut executor), Err(IdentityError::ValidationError(_))));
+        let mut access =
+            scope(service.query(&actor(), &contract::LIST, &mut executor).await.unwrap(), service);
+        expire_access(Arc::get_mut(&mut access.compiled).unwrap());
+        assert!(
+            matches!(access.ensure_current(&mut executor), Err(IdentityError::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
+        );
+        assert!(
+            matches!(access.validate(&mut executor).await, Err(IdentityError::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
+        );
+    }
+
+    #[tokio::test]
+    async fn actual_dynamic_dependency_change_rejects_nontransactional_delivery() {
+        let (service, mapping) = fixture(own_scope());
+        let mut executor = ReadExecutor::default();
+        let access =
+            scope(service.query(&actor(), &contract::LIST, &mut executor).await.unwrap(), service.clone());
+        access.validate(&mut executor).await.unwrap();
+        assert!(matches!(access.ensure_current(&mut executor), Err(IdentityError::ValidationError(_))));
+        let access = scope(service.query(&actor(), &contract::LIST, &mut executor).await.unwrap(), service);
+        mapping.revision.fetch_add(1, Ordering::SeqCst);
+        assert!(
+            matches!(access.validate(&mut executor).await, Err(IdentityError::ConflictError(message)) if message.contains("业务授权事实已变化"))
+        );
+    }
 }
 
 #[cfg(test)]

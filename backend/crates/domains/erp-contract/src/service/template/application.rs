@@ -12,7 +12,7 @@ use crate::dto::template::{ApplicationView, ApplyTemplateRequest};
 use crate::entity::template::{ContractApplication, ContractCounter, text};
 use crate::error::{Error, Result};
 use crate::repository::ContractExt;
-use crate::repository::templates::{ContractTemplateExt, application_by_command, owned_application};
+use crate::repository::templates::{ContractTemplateExt, application_by_command};
 
 /// 已授权文件读取事实，只供组合层使用，不返回 HTTP。
 pub struct TemplateDownloadSource {
@@ -201,26 +201,15 @@ impl ContractTemplateService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service
-                        .authorization
-                        .require(&actor, &contract::TEMPLATES_DOWNLOAD, AccessTarget::Operation, executor)
-                        .await?;
-
-                    let application = owned_application(&service.db, &id, actor.id(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("合同申请不存在或无权下载".into()))?;
-                    let template = service.template(&application.template_id, executor).await?;
+                    let source = super::query::read_download(&service, &id, &actor, executor).await?;
                     let audit = service.audit.resource_log(
                         actor.clone(),
                         "contract_application.download",
                         "contract_application",
-                        application.base.id,
+                        id,
                     )?;
                     service.audit.persist(&audit, executor).await?;
-                    Ok(TemplateDownloadSource {
-                        object_key: template.object_key(),
-                        contract_no: application.contract_no,
-                    })
+                    Ok(source)
                 })
             })
             .await

@@ -246,6 +246,7 @@ fn fingerprint_version(
 /// 不把内部授权证明或全量人员集合返回给客户端。
 pub(super) fn to_list_view(snapshot: ContractSnapshot) -> ContractListView {
     let mut view = snapshot.view;
+    view.empty_reason = (!snapshot.context.has_role_scope() && view.page.total == 0).then_some("no_scope");
     view.policy_version = snapshot.context.policy_version();
     view.organization_version = snapshot.context.organization_version();
     view.as_of = snapshot.context.as_of().as_utc().to_rfc3339();
@@ -385,8 +386,54 @@ async fn requested_contract_owners(
 
 #[cfg(test)]
 mod tests {
+    use erp_identity::access_control::{ResolvedScope, ScopeClause};
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+    use crate::authorization::{query_tests, scope};
+    use crate::dto::contract::ContractMetrics;
     use crate::repository::list_search::ContractCustomer;
+
+    #[tokio::test]
+    async fn no_scope_uses_identity_evidence_and_does_not_mislabel_filtered_empty_or_history_results() {
+        for (positive, total, limit, expected) in [
+            (false, 0, None, Some("no_scope")),
+            (true, 0, None, None),
+            (true, 0, Some(ScopeClause::default()), None),
+            (false, 1, None, None),
+        ] {
+            let (authorization, _) = query_tests::fixture(ResolvedScope {
+                role_clauses: if positive {
+                    vec![ScopeClause { self_owned: true, ..Default::default() }]
+                } else {
+                    vec![]
+                },
+                user_limit: limit,
+            });
+            let mut executor = SnapshotExecutor::default();
+            let compiled =
+                authorization.query(&query_tests::actor(), &contract::LIST, &mut executor).await.unwrap();
+            let context = scope(compiled, authorization);
+            context.validate(&mut executor).await.unwrap();
+            let view = to_list_view(ContractSnapshot {
+                context,
+                view: ContractListView {
+                    ownership_basis: "contract_sales_owner",
+                    scope_version: String::new(),
+                    policy_version: 0,
+                    organization_version: 0,
+                    as_of: String::new(),
+                    empty_reason: None,
+                    scope_summary: "test",
+                    page: PageView { items: vec![], total, page: 1, page_size: 20 },
+                    metrics: ContractMetrics::default(),
+                },
+            });
+            assert_eq!(view.empty_reason, expected);
+            assert!(!view.scope_version.is_empty());
+            assert_eq!(view.policy_version, 1);
+        }
+    }
 
     #[test]
     fn list_version_tracks_customer_search_facts_and_contract_versions() {

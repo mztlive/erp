@@ -1,4 +1,4 @@
-//! 仅测试支持 feature 提供的拒绝式设施；不得用于应用装配。
+//! 仅 test-support 提供的内存授权设施；不得用于应用装配。
 use std::sync::Arc;
 
 use crate::AuthorizationService;

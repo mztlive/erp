@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_permissions::{internal, supplier, work_item};
+use erp_permissions::{contract, internal, supplier, work_item};
 use persistence_core::Executor;
 
 use super::{AuthorizationService, rules};
@@ -210,6 +210,9 @@ impl AuthorizationService {
         resolution: &mut Resolution,
         executor: &mut dyn Executor,
     ) -> Result<AccessRule> {
+        if context.permission == contract::CREATE {
+            return self.contract_creation_condition(context, qualified, resolution, executor).await;
+        }
         if super::materials::supports(&context.permission) {
             return self.material_condition(context, qualified, resolution, executor).await;
         }

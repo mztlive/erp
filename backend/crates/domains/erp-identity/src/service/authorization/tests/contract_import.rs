@@ -7,8 +7,66 @@ use persistence_core::testing::SnapshotExecutor;
 use persistence_core::{Executor, NoTransaction, ReadExecutor};
 
 use super::fixtures::{Facts, Identity, actor, candidate, complete, object, service};
-use crate::entity::authorization::FactValue;
+use crate::entity::access_control::ScopeClause;
+use crate::entity::authorization::{FactValue, RelatedObjects, RelationKey};
 use crate::{AccessTarget, Error};
+
+#[tokio::test]
+async fn contract_creation_uses_distinct_qualified_roles_for_target_and_current_customer_scope() {
+    let identity = Arc::new(Identity::default());
+    identity.state.lock().unwrap().grants =
+        vec![("creator".into(), vec![contract::CREATE]), ("reader".into(), vec![customer::DETAIL])];
+    for (role, permission, org) in
+        [("creator", customer::LIST, "actor-org"), ("reader", customer::DETAIL, "customer-org")]
+    {
+        identity.role_scopes.lock().unwrap().insert(
+            (role.into(), permission),
+            ScopeClause { org_unit_ids: [org.into()].into(), ..Default::default() },
+        );
+    }
+    let mut source = object("customer", "customer", "other");
+    source.owner_id = FactValue::Missing;
+    source.owner_ids = FactValue::Known(["other".into(), "another".into()].into());
+    source.org_unit_id = FactValue::Missing;
+    source.org_unit_ids = FactValue::Known(["customer-org".into()].into());
+    let mut target = candidate("contract", "user");
+    target.org_unit_id = FactValue::Known(Some("actor-org".into()));
+    target.relations.insert(
+        RelationKey::parse("customer").unwrap(),
+        RelatedObjects { expected_ids: ["customer".into()].into(), objects: vec![] },
+    );
+    let mut builder = complete();
+    builder.facilities = identity.clone();
+    builder.facts.insert("customer".into(), Arc::new(Facts::new(vec![source])));
+    let service = builder.build().unwrap();
+    service
+        .require(
+            &actor(),
+            &contract::CREATE,
+            AccessTarget::Candidate(target.clone()),
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap();
+    identity
+        .role_scopes
+        .lock()
+        .unwrap()
+        .get_mut(&("reader".into(), customer::DETAIL))
+        .unwrap()
+        .org_unit_ids = ["actor-org".into()].into();
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &contract::CREATE,
+                AccessTarget::Candidate(target),
+                &mut SnapshotExecutor::default()
+            )
+            .await,
+        Err(Error::Forbidden(_))
+    ));
+}
 
 #[tokio::test]
 async fn import_tasks_require_current_contract_creation_qualification_without_business_fact_reads() {

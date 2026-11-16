@@ -175,6 +175,7 @@ pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
 /// 命令派生入口保留与根修改资格相互独立的附加功能资格。
 fn independent_command(permission: &Permission) -> Option<Permission> {
     [
+        (contract::CREATE, customer::DETAIL),
         (internal::CONTRACT_SALES_ACCESS, customer::ASSIGNMENT_APPLY),
         (internal::CATALOG_ADOPTION, internal::SUPPLIER_OFFERING_COST_DETAIL),
         (internal::SUPPLIER_OFFERING_AVAILABILITY_UPDATE, supplier_offering::UPDATE_AVAILABILITY),

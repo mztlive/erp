@@ -3,6 +3,7 @@ mod approval_cancel;
 mod approval_query;
 mod approvals;
 mod builder;
+mod contract_creation;
 mod definitions;
 mod facilities;
 #[cfg(any(test, feature = "test-support"))]

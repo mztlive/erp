@@ -73,5 +73,6 @@ pub(crate) fn contract_access(
     authorization: Arc<AuthorizationService>,
     customer_facts: Arc<dyn AccessFactsPort>,
 ) -> ContractAccess {
-    ContractAccess::new(db, authorization, creation_facts(customer_facts))
+    let creation = creation_facts(db.clone(), customer_facts);
+    ContractAccess::new(db, authorization, creation)
 }
