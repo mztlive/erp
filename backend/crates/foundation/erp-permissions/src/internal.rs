@@ -1,5 +1,5 @@
 //! 内部对象资格；不作为可分配的菜单功能展示。
-use crate::Permission;
+use crate::{Permission, resources};
 
 /// 按持久化任务种类核验完整办理资格；沿用工作项详情与业务动作资格。
 pub const WORK_ITEM_EXECUTE: Permission = Permission::new("work_item", "execute");
@@ -13,6 +13,9 @@ pub const WORK_ITEM_EXECUTION_QUALIFICATION: Permission =
 
 /// 合同识别任务的功能入口；归档时另行检查真实合同创建候选。
 pub const CONTRACT_IMPORT: Permission = Permission::new("contract_import", "operate");
+
+/// 合同候选准备的完整功能资格；最终写入仍须检查真实 Candidate。
+pub const CONTRACT_CREATE_PREPARE: Permission = Permission::new(resources::CONTRACT, "create_prepare");
 
 /// 合同销售共享沿用合同修改范围，并独立核对客户负责人分配资格。
 pub const CONTRACT_SALES_ACCESS: Permission = Permission::new("contract", "sales_access_update");

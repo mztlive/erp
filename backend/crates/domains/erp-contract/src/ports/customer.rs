@@ -11,13 +11,13 @@ use crate::error::{Error, Result};
 /// 合同创建所需的真实客户来源资格；在组合层完成跨域查询。
 #[async_trait]
 pub trait ContractCreationPort: Send + Sync {
-    /// 在原事务内核对指定客户，按操作人构造合同候选归属。
+    /// 完整创建资格通过后，在原事务按操作人构造合同候选归属。
     /// # 参数
     /// actor 为真实操作人，customer_id 为完整客户来源，executor 为原执行器。
     /// # 返回
     /// 与拟写入合同一致的独立负责销售及主属组织，携带精确客户来源引用。
     /// # 错误
-    /// 来源不存在、无权限、版本变化或事实读取失败时拒绝。
+    /// 引用非法或组织事实读取失败时拒绝；实际客户存在性与权限由 identity 正式取证。
     async fn candidate(
         &self,
         actor: &AuditActor,

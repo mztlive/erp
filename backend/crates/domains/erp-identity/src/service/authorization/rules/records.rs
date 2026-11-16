@@ -13,6 +13,9 @@ use crate::entity::authorization::{AccessFact, AccessRule, FactKind};
 use crate::{Permission, QualifiedPermissions};
 
 pub(crate) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
+    if permission == &internal::CONTRACT_CREATE_PREPARE {
+        return Some(super::same_role_permissions(&contract::CREATE));
+    }
     if [internal::WORK_ITEM_RECIPIENT, internal::WORK_ITEM_EXECUTION_QUALIFICATION].contains(permission) {
         return Some(vec![]);
     }
@@ -127,6 +130,9 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
 });
 
 pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
+    if permission == &internal::CONTRACT_CREATE_PREPARE {
+        return independent(&contract::CREATE);
+    }
     if let Some(required) = independent_command(permission) {
         return vec![required];
     }

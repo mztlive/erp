@@ -15,6 +15,7 @@ pub(super) const PERMISSIONS: &[Permission] = &[
     internal::INVOICE_REQUEST_AMOUNTS_READ,
     internal::WORK_ITEM_EXECUTION_QUALIFICATION,
     internal::CONTRACT_IMPORT,
+    internal::CONTRACT_CREATE_PREPARE,
     internal::CATALOG_ADOPTION,
     internal::DATA_TRANSFER_PRODUCT_POOL,
     internal::DATA_TRANSFER_SUPPLIER_QUOTES,

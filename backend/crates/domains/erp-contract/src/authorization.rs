@@ -124,7 +124,9 @@ impl ContractAccess {
         customer_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.require_import(actor, executor).await?;
+        self.authorization
+            .require(actor, &internal::CONTRACT_CREATE_PREPARE, AccessTarget::Operation, executor)
+            .await?;
         let candidate = self.creation.candidate(actor, customer_id, executor).await?;
         Ok(self
             .authorization
@@ -437,17 +439,189 @@ pub(crate) mod query_tests {
 
 #[cfg(test)]
 mod permission_tests {
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
     use erp_core::AccountKind;
-    use erp_identity::entity::authorization::ObjectFacts;
-    use erp_identity::testing::unavailable_authorization;
-    use erp_permissions::sales_order;
-    use persistence_core::NoTransaction;
+    use erp_identity::entity::authorization::{
+        AccessContext, FactValue, ObjectFacts, RelatedObjects, RelationKey,
+    };
+    use erp_identity::testing::{AuthorizationFixture, unavailable_authorization};
+    use erp_identity::{AccessFactsPort, ResourceTargets};
+    use erp_permissions::{customer, sales_order};
     use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
 
     use super::*;
+    use crate::repository::authorization::creation_facts;
+
+    struct Sources {
+        rows: Vec<ObjectFacts>,
+        fail: bool,
+        calls: Mutex<Vec<usize>>,
+    }
+    #[async_trait]
+    impl AccessFactsPort for Sources {
+        async fn load(
+            &self,
+            _: &AccessContext,
+            ids: &ResourceTargets,
+            executor: &mut dyn Executor,
+        ) -> erp_identity::Result<Vec<ObjectFacts>> {
+            assert_eq!(ids.ids(), &["customer".to_owned()].into());
+            self.calls.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
+            if self.fail {
+                return Err(IdentityError::Internal("customer unavailable".into()));
+            }
+            Ok(self.rows.clone())
+        }
+    }
+
+    struct ObservedCreation {
+        inner: Option<Arc<dyn ContractCreationPort>>,
+        calls: Mutex<Vec<usize>>,
+    }
+    #[async_trait]
+    impl ContractCreationPort for ObservedCreation {
+        async fn candidate(
+            &self,
+            actor: &AuditActor,
+            id: &str,
+            executor: &mut dyn Executor,
+        ) -> Result<ObjectFacts> {
+            self.calls.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
+            if let Some(inner) = &self.inner {
+                return inner.candidate(actor, id, executor).await;
+            }
+            Ok(ObjectFacts {
+                resource: "contract".into(),
+                owner_id: FactValue::Known(Some(actor.id().into())),
+                org_unit_id: FactValue::Known(None),
+                relations: [(
+                    RelationKey::parse("customer")?,
+                    RelatedObjects { expected_ids: [id.into()].into(), objects: vec![] },
+                )]
+                .into(),
+                ..Default::default()
+            })
+        }
+    }
+
+    fn source() -> ObjectFacts {
+        ObjectFacts {
+            resource: "customer".into(),
+            id: "customer".into(),
+            version: "1".into(),
+            owner_ids: FactValue::Known(["actor".into()].into()),
+            org_unit_ids: FactValue::Known(Default::default()),
+            ..Default::default()
+        }
+    }
+
+    async fn database() -> Database {
+        mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("creation_qualification_unit")
+    }
+
+    #[tokio::test]
+    async fn incomplete_creation_qualification_stops_the_real_factory_before_customer_and_organization_reads()
+    {
+        let db = database().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for grants in
+            [vec![], vec![contract::CREATE], vec![customer::DETAIL], vec![internal::CONTRACT_CREATE_PREPARE]]
+        {
+            for (rows, fail) in [(vec![source()], false), (vec![], false), (vec![], true)] {
+                let sources = Arc::new(Sources { rows, fail, calls: Mutex::new(vec![]) });
+                let authorization = AuthorizationFixture::new(&[("role", &grants)])
+                    .facts("customer", sources.clone())
+                    .build();
+                let creation = Arc::new(ObservedCreation {
+                    inner: Some(creation_facts(db.clone())),
+                    calls: Mutex::new(vec![]),
+                });
+                let access = ContractAccess::new(db.clone(), authorization, creation.clone());
+                assert!(matches!(
+                    access.require_create(&actor, "customer", &mut SnapshotExecutor::default()).await,
+                    Err(Error::Forbidden(_))
+                ));
+                assert!(creation.calls.lock().unwrap().is_empty());
+                assert!(sources.calls.lock().unwrap().is_empty());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn creation_preparation_rejects_non_snapshot_and_import_remains_create_only() {
+        let db = database().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let sources = Arc::new(Sources { rows: vec![source()], fail: false, calls: Mutex::new(vec![]) });
+        let creation = Arc::new(ObservedCreation { inner: None, calls: Mutex::new(vec![]) });
+        let service = AuthorizationFixture::new(&[("creator", &[contract::CREATE])])
+            .facts("customer", sources.clone())
+            .build();
+        let access = ContractAccess::new(db, service, creation.clone());
+        access.require_import(&actor, &mut SnapshotExecutor::default()).await.unwrap();
+        assert!(matches!(
+            access.require_create(&actor, "customer", &mut SnapshotExecutor::default()).await,
+            Err(Error::Forbidden(_))
+        ));
+        for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+            assert!(matches!(
+                access.require_create(&actor, "customer", executor).await,
+                Err(Error::ValidationError(_))
+            ));
+        }
+        assert!(creation.calls.lock().unwrap().is_empty());
+        assert!(sources.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn qualified_creation_uses_one_formal_source_read_and_preserves_source_failures() {
+        let db = database().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for (rows, fail, expected) in [
+            (vec![source()], false, "allowed"),
+            (vec![], false, "forbidden"),
+            (vec![source(), source()], false, "validation"),
+            (vec![ObjectFacts { resource: "supplier".into(), ..source() }], false, "validation"),
+            (vec![ObjectFacts { id: "wrong".into(), ..source() }], false, "validation"),
+            (
+                vec![ObjectFacts { valid_until: Some(Instant::from_unix_secs(1)), ..source() }],
+                false,
+                "conflict",
+            ),
+            (vec![], true, "internal"),
+        ] {
+            let sources = Arc::new(Sources { rows, fail, calls: Mutex::new(vec![]) });
+            let authorization = AuthorizationFixture::new(&[
+                ("creator", &[contract::CREATE]),
+                ("reader", &[customer::DETAIL]),
+            ])
+            .facts("customer", sources.clone())
+            .build();
+            let creation = Arc::new(ObservedCreation { inner: None, calls: Mutex::new(vec![]) });
+            let access = ContractAccess::new(db.clone(), authorization, creation.clone());
+            let mut executor = SnapshotExecutor::default();
+            let pointer = &mut executor as *mut SnapshotExecutor as usize;
+            let result = access.require_create(&actor, "customer", &mut executor).await;
+            match expected {
+                "allowed" => result.unwrap(),
+                "forbidden" => assert!(matches!(result, Err(Error::Forbidden(_)))),
+                "validation" => assert!(matches!(result, Err(Error::ValidationError(_)))),
+                "conflict" => assert!(matches!(result, Err(Error::ConflictError(_)))),
+                "internal" => assert!(
+                    matches!(result, Err(Error::Internal(message)) if message == "customer unavailable")
+                ),
+                _ => unreachable!(),
+            }
+            assert_eq!(*creation.calls.lock().unwrap(), [pointer]);
+            assert_eq!(*sources.calls.lock().unwrap(), [pointer]);
+        }
+    }
 
     #[test]
     fn accessor_accepts_its_constant_and_rejects_foreign_resource() {

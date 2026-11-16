@@ -12,6 +12,49 @@ use crate::entity::authorization::{FactValue, RelatedObjects, RelationKey};
 use crate::{AccessTarget, Error};
 
 #[tokio::test]
+async fn creation_preparation_reuses_complete_independent_qualification_without_broadening_import() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::default());
+    let service = service(identity.clone(), facts.clone());
+    let mut executor = SnapshotExecutor::default();
+    for grants in
+        [vec![], vec![contract::CREATE], vec![customer::DETAIL], vec![internal::CONTRACT_CREATE_PREPARE]]
+    {
+        identity.state.lock().unwrap().grants = vec![("role".into(), grants)];
+        assert!(matches!(
+            service
+                .require(&actor(), &internal::CONTRACT_CREATE_PREPARE, AccessTarget::Operation, &mut executor)
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+    identity.state.lock().unwrap().grants =
+        vec![("creator".into(), vec![contract::CREATE]), ("reader".into(), vec![customer::DETAIL])];
+    service
+        .require(&actor(), &internal::CONTRACT_CREATE_PREPARE, AccessTarget::Operation, &mut executor)
+        .await
+        .unwrap();
+    for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+        assert!(matches!(
+            service
+                .require(&actor(), &internal::CONTRACT_CREATE_PREPARE, AccessTarget::Operation, executor)
+                .await,
+            Err(Error::ValidationError(_))
+        ));
+    }
+    identity.state.lock().unwrap().grants = vec![("creator".into(), vec![contract::CREATE])];
+    service
+        .require(&actor(), &internal::CONTRACT_IMPORT, AccessTarget::Operation, &mut executor)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.require(&actor(), &contract::CREATE, AccessTarget::Operation, &mut executor).await,
+        Err(Error::ValidationError(_))
+    ));
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn contract_creation_uses_distinct_qualified_roles_for_target_and_current_customer_scope() {
     let identity = Arc::new(Identity::default());
     identity.state.lock().unwrap().grants =

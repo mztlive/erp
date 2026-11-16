@@ -61,18 +61,14 @@ pub(super) fn bindings(db: Database) -> Result<MasterBindings> {
     })
 }
 
-/// 将共享服务及同一客户事实实例注入合同访问器。
+/// 将共享服务及实际负责销售的组织读取器注入合同访问器。
 /// # 参数
-/// db 为数据库，authorization 为共享服务，customer_facts 为相同客户事实实例。
+/// db 为数据库，authorization 已含真实客户 Facts 的共享服务。
 /// # 返回
 /// 不自行构造授权政策的合同访问器。
 /// # 错误
 /// 构造不执行 I/O。
-pub(crate) fn contract_access(
-    db: Database,
-    authorization: Arc<AuthorizationService>,
-    customer_facts: Arc<dyn AccessFactsPort>,
-) -> ContractAccess {
-    let creation = creation_facts(db.clone(), customer_facts);
+pub(crate) fn contract_access(db: Database, authorization: Arc<AuthorizationService>) -> ContractAccess {
+    let creation = creation_facts(db.clone());
     ContractAccess::new(db, authorization, creation)
 }
