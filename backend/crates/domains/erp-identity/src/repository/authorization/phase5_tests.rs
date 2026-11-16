@@ -19,6 +19,7 @@ use crate::entity::authorization::{
     AccessContext, AccessFact, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
 };
 use crate::ports::{AccessMapping, MappingPreparation, QueryFragment, RelationMapping};
+use crate::service::authorization::fixed;
 use crate::service::authorization::rules::sources::{Output, scoped_condition};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
@@ -282,18 +283,38 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
 
 #[tokio::test]
 async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
-    let mut executor = ReadExecutor::default();
-    let deadline = Instant::from_unix_secs(Instant::now().unix_secs() + 2);
-    let root = Arc::new(DecoratedMapping {
-        deadline: Some(deadline),
-        ..DecoratedMapping::new(mapping(&sales_order::DETAIL))
-    });
-    assert!(root.preparation().is_none());
-    let plan = plan(sales_order::DETAIL, AccessRule::Allow, None, root, &mut executor).await;
-    assert_eq!(plan.proof.valid_until, Some(deadline));
-    assert!(plan.dependencies.is_empty());
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ConflictError(_))));
+    let deadline = Instant::from_unix_secs(4_102_444_800);
+    let before = Instant::from_unix_secs(deadline.unix_secs() - 1);
+    AccessProof::with_test_time(before, async {
+        let mut executor = ReadExecutor::default();
+        let root = Arc::new(DecoratedMapping {
+            deadline: Some(deadline),
+            ..DecoratedMapping::new(mapping(&sales_order::DETAIL))
+        });
+        assert!(root.preparation().is_none());
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        let service = fixed::authorization(
+            &[sales_order::DETAIL],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(sales_order::DETAIL, root)],
+        )
+        .unwrap();
+        let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
+        assert_eq!(plan.proof.valid_until, Some(deadline));
+        assert!(plan.dependencies.is_empty());
+        service.validate(&plan, &mut executor).await.unwrap();
+        let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
+        AccessProof::set_test_time(deadline);
+        assert!(matches!(
+            service.validate(&plan, &mut executor).await,
+            Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权关系已到期"
+        ));
+    })
+    .await;
 }
 
 #[tokio::test]

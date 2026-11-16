@@ -11,6 +11,48 @@ use super::{BusinessTransfers, TransferHandler, TransferKind};
 use crate::{Error, Result};
 
 impl BusinessTransfers {
+    /// 私有读取先检查当前功能和真实业务目标，不把历史版本当作当前任务事实。
+    /// # 参数
+    /// kind、input 为保存的分类和业务引用，actor、executor 为当前身份及读取快照。
+    /// # 返回
+    /// 当前功能及可由轻量引用证明的业务目标均获授权时成功。
+    /// # 错误
+    /// 当前身份、功能、任务关系或业务目标资格失效时拒绝。
+    pub(super) async fn read_access(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.access_with(kind, input, actor, executor).await?;
+        match kind {
+            TransferKind::InquiryPreview => {
+                self.services.inquiry.require_import(actor, required(input, "inquiry_id")?, executor).await?;
+            },
+            TransferKind::InquiryCreationPreview => {
+                self.services
+                    .inquiry
+                    .creation_header(actor, required(input, "customer_id")?, executor)
+                    .await?;
+            },
+            TransferKind::SupplierQuotePreview | TransferKind::SupplierQuoteArchive => {
+                SalesInquiryAccess::new(self.db.clone(), self.authorization.clone())
+                    .require_task(
+                        actor,
+                        &sales_inquiry_permissions::INTERNAL_FEE_BASES,
+                        required(input, "inquiry_id")?,
+                        required(input, "task_id")?,
+                        None,
+                        executor,
+                    )
+                    .await?;
+            },
+            _ => {},
+        }
+        Ok(())
+    }
+
     /// 在文件归档后的登记事务中执行当前功能及实际目标检查。
     /// # 参数
     /// kind、input 为本次任务类型与业务参数，actor、executor 为当前身份及原事务。
@@ -134,6 +176,15 @@ mod tests {
 
     #[async_trait]
     impl TransferHandler for Handler {
+        async fn authorize_read(
+            &self,
+            _: TransferKind,
+            _: &Value,
+            _: &AuditActor,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            unreachable!("登记复验不读取私有文件")
+        }
         async fn authorize_submission(
             &self,
             kind: TransferKind,

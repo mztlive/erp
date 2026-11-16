@@ -1,4 +1,13 @@
+use std::slice;
+
+use erp_audit::AuditLog;
 use erp_permissions::{Permission, internal};
+use erp_procurement::entity::purchase_order::PurchaseChangeSubmissionLine;
+use erp_procurement::service::purchase_order::PurchaseOrderService;
+use erp_procurement::service::purchase_order::change::new_change;
+use erp_read_models::purchase_center::repository::supplier_names::current_legal_names_by_account_ids;
+use erp_sales::entity::sales_order::SalesOrder;
+use mongodb::Database;
 pub(in crate::procure_to_pay) mod recovery;
 
 use application_core::AuditActor;
@@ -102,12 +111,7 @@ impl PurchaseOrderProcess {
                         .load_changeable_order(order, req.expected_lock_version, executor)
                         .await?;
                     service.domain().ensure_no_in_progress_change(&id, executor).await?;
-                    let change = erp_procurement::service::purchase_order::change::new_change(
-                        &order,
-                        &base_revision,
-                        &req.reason,
-                        actor.id(),
-                    )?;
+                    let change = new_change(&order, &base_revision, &req.reason, actor.id())?;
                     service.persist_started_change(&order, &change, &actor, executor).await?;
                     Ok(StartPurchaseChangeResult {
                         change_id: change.base.id.clone(),
@@ -330,7 +334,7 @@ impl PurchaseOrderProcess {
             .with_scope_owner_user_id(Some(order.current_owner_user_id()?.to_string())),
         };
         let document = new_registered_document(&change.base.id, DocumentType::PurchaseChangeOrder, "")
-            .map_err(crate::Error::from)?;
+            .map_err(Error::from)?;
         let audit = actor.clone().resource_log(
             "purchase_change_order.create",
             "purchase_change_order",
@@ -456,12 +460,8 @@ impl PurchaseOrderProcess {
         executor: &mut dyn Executor,
     ) -> Result<String> {
         let names =
-            erp_read_models::purchase_center::repository::supplier_names::current_legal_names_by_account_ids(
-                &self.db,
-                std::slice::from_ref(&order.supplier_id),
-                executor,
-            )
-            .await?;
+            current_legal_names_by_account_ids(&self.db, slice::from_ref(&order.supplier_id), executor)
+                .await?;
         Ok(names
             .get(&order.supplier_id.to_string())
             .cloned()
@@ -504,8 +504,7 @@ impl PurchaseOrderProcess {
         executor: &mut dyn Executor,
     ) -> Result<PurchaseChangeApprovalContext> {
         let subject = purchase_change_order_subject_ref(dispatch.id)?;
-        let binding =
-            find_approval_binding(&self.db, dispatch.id, executor).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, dispatch.id, executor).await.map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
         let snapshot = build_purchase_change_snapshot(
@@ -624,9 +623,7 @@ impl PurchaseOrderProcess {
                         .as_deref()
                         .ok_or_else(|| Error::Internal("采购变更回执缺少业务对象".into()))?;
                     let change =
-                        erp_procurement::service::purchase_order::PurchaseOrderService::new(db.clone())
-                            .load_change(change_id, executor)
-                            .await?;
+                        PurchaseOrderService::new(db.clone()).load_change(change_id, executor).await?;
                     access
                         .require_entry(
                             &actor,
@@ -655,7 +652,7 @@ impl PurchaseOrderProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let adapter = purchase_change_order_adapter()?;
-        let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, id, executor).await.map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = purchase_change_order_subject_ref(id)?;
         let runtime =
@@ -718,7 +715,7 @@ struct ChangeStartDispatch<'a> {
     /// 已进入审批中的变更单。
     change: PurchaseChangeOrder,
     /// 来源销售单。
-    sales_order: erp_sales::entity::sales_order::SalesOrder,
+    sales_order: SalesOrder,
     /// 冻结提交。
     prepared: FrozenChangeSubmission,
     /// 采购变更审批适配器。
@@ -732,7 +729,7 @@ pub(super) struct FrozenChangeSubmission {
     /// 已提交的不可变头。
     pub(super) submission: PurchaseChangeSubmission,
     /// 提交明细。
-    pub(super) lines: Vec<erp_procurement::entity::purchase_order::PurchaseChangeSubmissionLine>,
+    pub(super) lines: Vec<PurchaseChangeSubmissionLine>,
     /// 目标内容指纹。
     pub(super) content_hash: String,
     /// 启动幂等键。
@@ -746,18 +743,23 @@ pub(super) struct FrozenChangeSubmission {
 /// 无发布定义、人员重验失败或写入失败时返回错误，调用方必须回滚。
 #[allow(clippy::too_many_arguments)]
 async fn persist_created_change_order(
-    db: &mongodb::Database,
+    db: &Database,
     ports: &PurchaseOrderPorts,
     change_order: PurchaseChangeOrder,
     mut document: BusinessDocument,
     bind_command: BindPublishedDefinitionCommand,
-    audit: erp_audit::AuditLog,
+    audit: AuditLog,
     actor: AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     ports
         .access(db.clone())
-        .require_object(&actor, "update", change_order.purchase_order_id.as_ref(), executor)
+        .require_object(
+            &actor,
+            &internal::PURCHASE_CHANGE_CREATE_SOURCE,
+            change_order.purchase_order_id.as_ref(),
+            executor,
+        )
         .await?;
     persist_bound_change_document(db, ports, &mut document, &bind_command, &actor, executor).await?;
     db.purchase_change_orders().create(&change_order, executor).await?;
@@ -770,7 +772,7 @@ async fn persist_created_change_order(
 /// # 错误
 /// 无发布定义或绑定失败时返回错误。
 async fn persist_bound_change_document(
-    db: &mongodb::Database,
+    db: &Database,
     ports: &PurchaseOrderPorts,
     document: &mut BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,

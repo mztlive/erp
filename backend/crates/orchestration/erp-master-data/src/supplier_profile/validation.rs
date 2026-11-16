@@ -13,18 +13,23 @@ use erp_supplier::{
 use erp_support::{FileAssetExt, PendingAttachmentBatch, SensitivityClass};
 use persistence_core::{Executor, Transactional};
 
+use super::commands::SupplierCommandTarget;
 use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 use crate::{Error, Result};
 
 impl SupplierProfileProcess {
     /// 仅对可能已提交的失败执行重新授权的只读查证。
-    #[allow(clippy::too_many_arguments)]
+    /// # 参数
+    /// transaction 为原事务结果，key、fingerprint 为原请求身份，target 为原写命令目标，actor 为当前操作人。
+    /// # 返回
+    /// 已知结果直接返回；可疑提交仅在原命令重新授权后回读稳定结果。
+    /// # 错误
+    /// 不可恢复错误保持原语义；恢复时授权、请求核对或数据库读取失败时拒绝。
     pub(super) async fn resolve_transaction_result_with_assets(
         &self,
         transaction: Result<SupplierProfileWithAssetsResult>,
         key: &str,
-        operation: &str,
-        supplier_id: Option<&str>,
+        target: &SupplierCommandTarget,
         fingerprint: &str,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
@@ -34,24 +39,14 @@ impl SupplierProfileProcess {
                 let this = self.clone();
                 let actor = actor.clone();
                 let key = key.to_owned();
-                let operation = operation.to_owned();
-                let id = supplier_id.map(str::to_owned);
+                let target = target.clone();
                 let fingerprint = fingerprint.to_owned();
                 let recovered = self
                     .db
                     .client()
                     .with_transaction(move |executor| {
                         Box::pin(async move {
-                            this.command_qualified(&actor, executor).await?;
-                            this.replay_command(
-                                &key,
-                                &operation,
-                                id.as_deref(),
-                                &fingerprint,
-                                &actor,
-                                executor,
-                            )
-                            .await
+                            this.replay_command(&key, &target, &fingerprint, &actor, executor).await
                         })
                     })
                     .await

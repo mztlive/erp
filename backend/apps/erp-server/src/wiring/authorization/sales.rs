@@ -3,8 +3,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{AccessContext, ObjectFacts, RelatedObjects, RelationKey};
-use erp_identity::{AccessFactsPort, Error, ResourceTargets, Result};
-use erp_permissions::internal;
+use erp_identity::{AccessFactsPort, AccessMapping, Error, ResourceTargets, Result};
+use erp_permissions::{internal, sales_order};
+use erp_read_models::customer_quality::QualitySalesMapping;
+use erp_read_models::sales_center::access::{SalesFacts, SalesMapping};
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -61,22 +63,17 @@ impl AccessFactsPort for SalesObjects {
 pub(super) fn bindings(
     db: Database,
     customers: Arc<dyn AccessFactsPort>,
-    customer_mapping: Arc<dyn erp_identity::AccessMapping>,
-) -> Result<(super::FactsBindings, super::MappingBindings, Arc<dyn erp_identity::AccessMapping>)> {
-    let sales: Arc<dyn erp_identity::AccessMapping> = Arc::new(
-        erp_read_models::sales_center::access::SalesMapping::new(db.clone(), "sales_order", "sales_orders")?,
-    );
+    customer_mapping: Arc<dyn AccessMapping>,
+) -> Result<(super::FactsBindings, super::MappingBindings, Arc<dyn AccessMapping>)> {
+    let sales: Arc<dyn AccessMapping> =
+        Arc::new(SalesMapping::new(db.clone(), "sales_order", "sales_orders")?);
     let facts: super::FactsBindings = vec![(
         "sales_order".into(),
-        Arc::new(SalesObjects {
-            db: db.clone(),
-            sales: Arc::new(erp_read_models::sales_center::access::SalesFacts(db)),
-            customers,
-        }),
+        Arc::new(SalesObjects { db: db.clone(), sales: Arc::new(SalesFacts(db)), customers }),
     )];
     let mut mappings: super::MappingBindings = [
-        erp_permissions::sales_order::LIST,
-        erp_permissions::sales_order::DETAIL,
+        sales_order::LIST,
+        sales_order::DETAIL,
         internal::PURCHASE_EXPENSE_SOURCE,
         internal::SALES_ORDER_PROFIT_LOSS_READ,
         internal::SALES_ORDER_EXTRA_COST_READ,
@@ -88,10 +85,7 @@ pub(super) fn bindings(
     mappings.push((internal::CUSTOMER_QUALITY_CUSTOMERS, customer_mapping.clone()));
     mappings.push((
         internal::CUSTOMER_QUALITY_CURRENT,
-        Arc::new(erp_read_models::customer_quality::QualitySalesMapping::new(
-            sales.clone(),
-            customer_mapping,
-        )?),
+        Arc::new(QualitySalesMapping::new(sales.clone(), customer_mapping)?),
     ));
     Ok((facts, mappings, sales))
 }

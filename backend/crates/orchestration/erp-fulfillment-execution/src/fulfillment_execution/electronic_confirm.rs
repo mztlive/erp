@@ -106,6 +106,15 @@ async fn confirm(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<ElectronicDelivery> {
+    super::task::require_fulfillment_entry(
+        db,
+        task_identity,
+        "electronic_delivery",
+        id.as_ref(),
+        actor,
+        executor,
+    )
+    .await?;
     let domain = FulfillmentService::new(db.clone());
     let mut record = domain.prepare_electronic_confirmation(id, executor).await?;
     if record.base.version != confirmation.request.version {
@@ -162,7 +171,7 @@ async fn finish(
         db,
         task_identity,
         super::task::FulfillmentTaskObject::ElectronicDelivery(record),
-        actor.id(),
+        actor,
         executor,
     )
     .await?;

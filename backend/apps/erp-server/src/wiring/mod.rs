@@ -45,6 +45,7 @@ use erp_party::{
     PartyAddressService, PartyBankAccountService, PartyContactService, PartyService, PartyTaxProfileService,
     SensitiveDataCodec,
 };
+pub use erp_procurement::PurchaseDataScope;
 pub use funds_data_scope::{MongoFundsDataScope, funds_access_with_rbac};
 pub use import::{MongoImportBulkJobs, legacy_import_service};
 pub use integration_data_scope::scoped_integration_ops_service;
@@ -52,7 +53,7 @@ pub use inventory::{authorize_inventory, inventory_adjustment_process, inventory
 use mongodb::Database;
 pub use organization::organization_service;
 pub use party::{MongoPartyAudit, MongoSupplierRole};
-pub use purchase_data_scope::{MongoPurchaseDataScope, purchase_access};
+pub use purchase::purchase_access;
 pub use selection_data_scope::selection_access;
 pub use supplier::{MongoSupplierFileAssets, MongoSupplierPartyFacts, MongoSupplierSensitiveTokens};
 pub use supplier_data_scope::{

@@ -15,6 +15,7 @@ use crate::{Error, Result};
 
 impl SalesSelectionService {
     /// 调整已授权册的当前批次客户售价。
+    /// 调用方须在同一执行器核验册维护资格；actor 只用于领域留痕和幂等作用域。
     ///
     /// # 参数
     /// `id` 为册，`req` 为版本、批次与改价方式，`actor` 为操作人，`executor` 为调用方事务。

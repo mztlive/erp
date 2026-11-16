@@ -16,26 +16,6 @@ use super::SalesInquiryProcess;
 use crate::{Error, Result};
 
 impl SalesInquiryProcess {
-    pub(super) async fn ensure_reassignment_target(
-        &self,
-        inquiry_id: &str,
-        task_id: &str,
-        owner: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if self
-            .active_tasks(inquiry_id, executor)
-            .await?
-            .iter()
-            .any(|task| task.base.id != task_id && task.owner_user_id.as_deref() == Some(owner))
-        {
-            return Err(Error::BusinessLogicError(
-                "目标采购已负责本询价其他任务，请保持一人一组责任行".into(),
-            ));
-        }
-        self.access().assignment_owner(owner, executor).await?;
-        Ok(())
-    }
     pub(super) async fn active_tasks(&self, id: &str, executor: &mut dyn Executor) -> Result<Vec<WorkItem>> {
         let mut items = self
             .db

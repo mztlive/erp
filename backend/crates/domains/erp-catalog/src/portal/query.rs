@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
+use async_trait::async_trait;
 use erp_permissions::catalog as catalog_permissions;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Pagination, QueryFilter, insert_literal_regex_filter};
@@ -10,9 +11,11 @@ use serde::{Deserialize, Serialize};
 
 use super::CatalogPortalService;
 use super::category_mapping::{CategoryHierarchyNode, hierarchy_path};
+use crate::authorization::CompiledScope;
 use crate::repository::CatalogExt;
 use crate::{
-    EnableStatus, Error, Product, ProductBrand, ProductCategory, ProductKind, Result, Sku, UnitOfMeasure,
+    CatalogAccess, EnableStatus, Error, Product, ProductBrand, ProductCategory, ProductKind, Result, Sku,
+    UnitOfMeasure,
 };
 
 /// Read-only dictionary namespaces offered to a supplier.
@@ -266,49 +269,19 @@ impl CatalogPortalService {
 
     /// 仅在商品对象授权通过后返回内部重复提示。
     /// # 参数
-    /// `q` 为商品、型号、SKU规格或条码的字面搜索，`actor` 为当前内部审核人。
+    /// `q` 为商品、型号、SKU规格或条码的字面搜索，`actor` 为当前内部审核人，
+    /// `executor` 为覆盖授权和全部候选读取的同一快照事务执行器。
     /// # 返回
-    /// 可维护商品及精确SKU版本；供应商不得调用本入口。
+    /// 可读取商品及精确SKU版本；供应商不得调用本入口。
     /// # 错误
-    /// 缺权限、搜索非法或数据库错误。
+    /// 非快照执行器、缺少商品读取资格、搜索非法或数据库错误。
     pub async fn duplicate_candidates(
         &self,
         q: &str,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Vec<DuplicateCandidate>> {
-        ensure_query(Some(q))?;
-        if q.trim().is_empty() {
-            return Err(Error::ValidationError("重复匹配搜索不能为空".into()));
-        }
-        self.catalog
-            .access()
-            .ensure_writable(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, executor)
-            .await?;
-        let mut result = Vec::new();
-        for product_id in self.duplicate_product_ids(q, executor).await? {
-            let product = match self
-                .catalog
-                .access()
-                .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &product_id, executor)
-                .await
-            {
-                Ok(product) => product,
-                Err(Error::NotFound(_)) => continue,
-                Err(error) => return Err(error),
-            };
-            if !product.is_active() {
-                continue;
-            }
-            let revision = self
-                .db
-                .catalog()
-                .current_product_revision(&product, executor)
-                .await?
-                .ok_or_else(|| Error::ConflictError("候选商品当前资料缺失".into()))?;
-            result.push(self.duplicate_candidate(product, revision.base.id, revision.name, executor).await?);
-        }
-        Ok(result)
+        read_duplicates(self, &self.catalog.access(), q, actor, executor).await
     }
 
     async fn duplicate_product_ids(&self, q: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
@@ -422,9 +395,268 @@ impl CatalogPortalService {
     }
 }
 
+#[async_trait]
+trait DuplicateReader: Sync {
+    async fn product_ids(&self, q: &str, executor: &mut dyn Executor) -> Result<Vec<String>>;
+
+    async fn candidate(
+        &self,
+        product_id: &str,
+        scope: &CompiledScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<DuplicateCandidate>>;
+}
+
+#[async_trait]
+impl DuplicateReader for CatalogPortalService {
+    async fn product_ids(&self, q: &str, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        self.duplicate_product_ids(q, executor).await
+    }
+
+    async fn candidate(
+        &self,
+        product_id: &str,
+        scope: &CompiledScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<DuplicateCandidate>> {
+        let Some(product) = self.db.catalog().authorized_product(product_id, scope, executor).await? else {
+            return Ok(None);
+        };
+        if !product.is_active() {
+            return Ok(None);
+        }
+        let revision = self
+            .db
+            .catalog()
+            .current_product_revision(&product, executor)
+            .await?
+            .ok_or_else(|| Error::ConflictError("候选商品当前资料缺失".into()))?;
+        Ok(Some(self.duplicate_candidate(product, revision.base.id, revision.name, executor).await?))
+    }
+}
+
+/// 在同一快照中完成读取资格、候选读取及交付前复验。
+async fn read_duplicates(
+    reader: &dyn DuplicateReader,
+    access: &CatalogAccess,
+    q: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Vec<DuplicateCandidate>> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("商品查重读取必须使用快照事务".into()));
+    }
+    ensure_query(Some(q))?;
+    if q.trim().is_empty() {
+        return Err(Error::ValidationError("重复匹配搜索不能为空".into()));
+    }
+    let scope = access.resolve(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, executor).await?;
+    let mut result = Vec::new();
+    for product_id in reader.product_ids(q, executor).await? {
+        if let Some(candidate) = reader.candidate(&product_id, &scope, executor).await? {
+            result.push(candidate);
+        }
+    }
+    scope.validate(executor).await?;
+    Ok(result)
+}
+
 fn ensure_query(q: Option<&str>) -> Result<()> {
     if q.is_some_and(|text| text.chars().count() > 128) {
         return Err(Error::ValidationError("搜索文本过长".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use erp_core::AccountKind;
+    use erp_identity::AuthorizationService;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
+    use erp_permissions::Permission;
+    use mongodb::Client;
+    use mongodb::error::Error as MongoError;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
+
+    use super::*;
+    use crate::CatalogService;
+    use crate::authorization::bindings;
+    use crate::ports::{EmptyFileAssetFacts, FailClosedAuditPort};
+
+    #[derive(Default)]
+    struct Reader {
+        ids: Vec<String>,
+        hidden: HashSet<String>,
+        failure: Option<&'static str>,
+        calls: Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl DuplicateReader for Reader {
+        async fn product_ids(&self, _: &str, _: &mut dyn Executor) -> Result<Vec<String>> {
+            self.calls.lock().unwrap().push("ids".into());
+            Ok(self.ids.clone())
+        }
+
+        async fn candidate(
+            &self,
+            product_id: &str,
+            scope: &CompiledScope,
+            executor: &mut dyn Executor,
+        ) -> Result<Option<DuplicateCandidate>> {
+            scope.ensure_current(executor)?;
+            self.calls.lock().unwrap().push(product_id.into());
+            match self.failure {
+                Some("database") => {
+                    return Err(Error::RepositoryError(persistence_core::Error::DatabaseError(
+                        MongoError::custom("candidate database unavailable"),
+                    )));
+                },
+                Some("authorization") => {
+                    return Err(Error::Internal("candidate facility unavailable".into()));
+                },
+                Some("forbidden") => return Err(Error::Forbidden("facility denied".into())),
+                Some("stage") => executor.next_read(),
+                _ => {},
+            }
+            Ok((!self.hidden.contains(product_id)).then(|| DuplicateCandidate {
+                product_id: product_id.into(),
+                version: 1,
+                revision_id: format!("revision-{product_id}"),
+                name: format!("商品-{product_id}"),
+                product_kind: ProductKind::Physical,
+                skus: Vec::new(),
+            }))
+        }
+    }
+
+    async fn database() -> mongodb::Database {
+        Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("catalog_duplicate_authorization_unit")
+    }
+
+    fn actor() -> AuditActor {
+        AuditActor::new("reviewer".into(), "reviewer".into(), AccountKind::Admin)
+    }
+
+    async fn access(permissions: &[Permission]) -> CatalogAccess {
+        let db = database().await;
+        let authorization = fixed_authorization(
+            permissions,
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                user_limit: None,
+            },
+            Vec::new(),
+            vec![(catalog_permissions::PRODUCT_PRODUCT_DETAIL, bindings(db.clone()).unwrap().1)],
+        )
+        .unwrap();
+        CatalogAccess::new(db, authorization)
+    }
+
+    async fn portal(authorization: Arc<AuthorizationService>) -> CatalogPortalService {
+        let db = database().await;
+        let catalog = CatalogService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(EmptyFileAssetFacts),
+            CatalogAccess::new(db.clone(), authorization),
+        );
+        CatalogPortalService::new(db, catalog)
+    }
+
+    #[tokio::test]
+    async fn duplicate_entry_requires_snapshot_before_search_validation_or_identity() {
+        let service = portal(unavailable_authorization()).await;
+        for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+            let result = service.duplicate_candidates("", &actor(), executor).await;
+            assert!(matches!(result, Err(Error::ValidationError(message))
+                if message == "商品查重读取必须使用快照事务"));
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_candidates_require_detail_qualification_and_accept_read_only_reviewer() {
+        let reader = Reader::default();
+        for permissions in [vec![], vec![catalog_permissions::PRODUCT_PRODUCT_UPDATE]] {
+            let access = access(&permissions).await;
+            let result =
+                read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default()).await;
+            assert!(matches!(result, Err(Error::Forbidden(_))));
+        }
+        assert!(reader.calls.lock().unwrap().is_empty());
+        let access = access(&[catalog_permissions::PRODUCT_PRODUCT_DETAIL]).await;
+        let result = read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default())
+            .await
+            .unwrap();
+        assert!(result.is_empty());
+        assert_eq!(*reader.calls.lock().unwrap(), ["ids"]);
+    }
+
+    #[tokio::test]
+    async fn filtered_product_is_skipped_and_remaining_candidates_are_returned() {
+        let reader = Reader {
+            ids: vec!["first".into(), "outside-scope".into(), "last".into()],
+            hidden: ["outside-scope".into()].into(),
+            ..Default::default()
+        };
+        let access = access(&[catalog_permissions::PRODUCT_PRODUCT_DETAIL]).await;
+        let result = read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            result.iter().map(|candidate| candidate.product_id.as_str()).collect::<Vec<_>>(),
+            ["first", "last"]
+        );
+        assert_eq!(*reader.calls.lock().unwrap(), ["ids", "first", "outside-scope", "last"]);
+    }
+
+    #[tokio::test]
+    async fn identity_failure_stops_before_candidate_search() {
+        let reader = Reader::default();
+        let access = CatalogAccess::new(database().await, unavailable_authorization());
+        let result =
+            read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+        assert!(reader.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn candidate_database_and_facility_failures_are_not_filtered() {
+        let access = access(&[catalog_permissions::PRODUCT_PRODUCT_DETAIL]).await;
+        for failure in ["database", "authorization", "forbidden"] {
+            let reader = Reader {
+                ids: vec!["first".into(), "last".into()],
+                failure: Some(failure),
+                ..Default::default()
+            };
+            let result =
+                read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default()).await;
+            match failure {
+                "database" => assert!(matches!(result, Err(Error::RepositoryError(_)))),
+                "authorization" => assert!(
+                    matches!(result, Err(Error::Internal(message)) if message == "candidate facility unavailable")
+                ),
+                _ => {
+                    assert!(matches!(result, Err(Error::Forbidden(message)) if message == "facility denied"))
+                },
+            }
+            assert_eq!(*reader.calls.lock().unwrap(), ["ids", "first"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn candidate_result_is_rejected_when_reading_stage_changes() {
+        let reader = Reader { ids: vec!["first".into()], failure: Some("stage"), ..Default::default() };
+        let access = access(&[catalog_permissions::PRODUCT_PRODUCT_DETAIL]).await;
+        let result =
+            read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::ValidationError(_))));
+    }
 }

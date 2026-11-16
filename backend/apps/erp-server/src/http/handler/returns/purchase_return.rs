@@ -14,7 +14,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{MongoPurchaseDataScope, local_reverse_flow_ports, reverse_flow_ports};
+use crate::wiring::{PurchaseDataScope, local_reverse_flow_ports, reverse_flow_ports};
 
 /// 查询采购退货单列表。
 ///
@@ -37,9 +37,9 @@ pub async fn purchase_return_order_list(
     Query(params): Query<PurchaseReturnOrderListParams>,
 ) -> Result<PurchaseReturnListView> {
     let page = ReturnsReadService::new(state.application().db())
-        .with_purchase_scope(MongoPurchaseDataScope::shared(
+        .with_purchase_scope(PurchaseDataScope::shared(
             state.application().db(),
-            state.application().rbac(),
+            state.application().authorization().into(),
         ))
         .purchase_return_order_list(&params, &actor)
         .await?;
@@ -68,9 +68,9 @@ pub async fn purchase_return_order_detail(
     Path(id): Path<String>,
 ) -> Result<PurchaseReturnOrderView> {
     let view = ReturnsReadService::new(state.application().db())
-        .with_purchase_scope(MongoPurchaseDataScope::shared(
+        .with_purchase_scope(PurchaseDataScope::shared(
             state.application().db(),
-            state.application().rbac(),
+            state.application().authorization().into(),
         ))
         .purchase_return_order_detail(&id, &actor)
         .await?;

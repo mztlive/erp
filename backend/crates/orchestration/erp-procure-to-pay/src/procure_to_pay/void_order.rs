@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_core::common::time::Instant;
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::dto::purchase_order::{VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult};
 use erp_procurement::entity::purchase_order::{
     PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseOrder,
@@ -126,7 +127,7 @@ async fn execute_void_draft_transaction(
 ) -> Result<VoidPurchaseOrderResult> {
     let DraftVoidServices { service, ports } = context;
     let db = service.db.clone();
-    let object_scope = service.command_access(actor, "delete");
+    let object_scope = service.command_access(actor, &purchase_order_permissions::VOID);
     let transaction_order_id = purchase_order_id.to_string();
     let transaction_actor = actor.clone();
     let transaction_receipt_id = receipt_id.clone();
@@ -408,7 +409,7 @@ async fn recover_void_draft(
         Ok(result) => Ok(result),
         Err(error) => {
             let db = service.db.clone();
-            let access = service.command_access(actor, "delete");
+            let access = service.command_access(actor, &purchase_order_permissions::VOID);
             let id = purchase_order_id.to_string();
             let identity = receipt_id.clone();
             let fingerprint = fingerprint.to_string();

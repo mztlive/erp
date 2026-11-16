@@ -34,6 +34,20 @@ impl SelectionAccess {
         Self { db, authorization }
     }
 
+    /// 取得同一进程共享授权服务，供选品用例构造使用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回共享授权服务引用，不包含请求身份或授权结果。
+    ///
+    /// # 错误
+    /// 不执行 I/O，不返回错误。
+    pub fn authorization(&self) -> Arc<AuthorizationService> {
+        self.authorization.clone()
+    }
+
     /// 在调用方事务内证明资源动作并映射选品责任条件。
     ///
     /// # 参数

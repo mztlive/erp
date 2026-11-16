@@ -3,9 +3,13 @@
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_core::ids::{InvoiceId, ReceivableAccountId};
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::{InvoiceId, PayableAccountId, ReceivableAccountId, SalesOrderId};
+use erp_core::money::Amount;
+use erp_finance::entity::payable::{AllocationAction as PayableAllocationAction, PurchaseInvoiceAllocation};
 use erp_finance::entity::receivable::{
-    AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind,
+    AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, RedInvoiceAllocationPlan,
+    SalesInvoiceAllocation,
 };
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
@@ -14,6 +18,7 @@ use erp_finance::service::receivable::ReceivableService;
 use erp_finance::service::receivable::red_invoice_plan::{
     purchase_red_invoice_allocation_plan, purchase_red_invoice_for_account, sales_red_invoice_allocation_plan,
 };
+use erp_finance::service::receivable::red_invoice_posting::persist_red_invoice;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::receivable;
 use erp_procure_to_pay::procure_to_pay::return_finance::sync_return_accounts;
@@ -104,7 +109,7 @@ struct RedInvoiceCommand {
     /// 红票号码。
     red_no: String,
     /// 本次红冲含税金额。
-    requested_amount: Option<erp_core::money::Amount>,
+    requested_amount: Option<Amount>,
     requested_account: Option<String>,
     receipt: CommandReceipt,
     /// 红冲业务原因。
@@ -183,10 +188,10 @@ fn red_number(req: &CommitRedInvoiceRequest, digest: &str) -> String {
 /// # 错误
 /// 原票缺失、资格不符、号码冲突或写入失败时返回错误。
 async fn apply_red_invoice(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &FinancePostingPorts,
     command: &RedInvoiceCommand,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<String> {
     rbac.authorization
         .require(&command.actor, &receivable::INVOICE_RED_ISSUE, AccessTarget::Operation, executor)
@@ -224,15 +229,9 @@ async fn apply_red_invoice(
         build_red_invoice(&original, &command.red_no, red_gross, red_net, red_tax, &command.actor_id)?;
     let mut original_mut = original;
     register_created_invoice_document(db, rbac, &red_mut, &command.actor, executor).await?;
-    let sales_ids = erp_finance::service::receivable::red_invoice_posting::persist_red_invoice(
-        db,
-        &red_mut,
-        &mut original_mut,
-        &allocation_plan,
-        &command.actor_id,
-        executor,
-    )
-    .await?;
+    let sales_ids =
+        persist_red_invoice(db, &red_mut, &mut original_mut, &allocation_plan, &command.actor_id, executor)
+            .await?;
     let invoices = RedPostingInvoices { red: &red_mut, original: &original_mut };
     complete_red_posting(db, rbac, command, invoices, &allocation_plan, &sales_ids, executor).await?;
     Ok(red_mut.base.id.clone())
@@ -252,12 +251,12 @@ async fn apply_red_invoice(
 /// # 错误
 /// 分配缺失或超额红冲时返回错误。
 async fn load_red_invoice_plan(
-    db: &mongodb::Database,
+    db: &Database,
     original: &Invoice,
-    requested_amount: Option<erp_core::money::Amount>,
+    requested_amount: Option<Amount>,
     requested_account: Option<&str>,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<erp_finance::entity::receivable::RedInvoiceAllocationPlan> {
+    executor: &mut dyn Executor,
+) -> Result<RedInvoiceAllocationPlan> {
     match original.invoice_direction {
         InvoiceDirection::Sales => {
             if requested_account.is_some() {
@@ -298,9 +297,7 @@ async fn load_red_invoice_plan(
 ///
 /// # 返回
 /// 返回 `Apply` 行的目标子账 ID。
-fn apply_account_ids(
-    blue: &[erp_finance::entity::receivable::SalesInvoiceAllocation],
-) -> Vec<ReceivableAccountId> {
+fn apply_account_ids(blue: &[SalesInvoiceAllocation]) -> Vec<ReceivableAccountId> {
     blue.iter()
         .filter(|line| line.allocation_action == AllocationAction::Apply)
         .map(|line| line.receivable_account_id.clone())
@@ -314,11 +311,9 @@ fn apply_account_ids(
 ///
 /// # 返回
 /// 返回 `Apply` 行的目标子账 ID。
-fn purchase_apply_account_ids(
-    blue: &[erp_finance::entity::payable::PurchaseInvoiceAllocation],
-) -> Vec<erp_core::ids::PayableAccountId> {
+fn purchase_apply_account_ids(blue: &[PurchaseInvoiceAllocation]) -> Vec<PayableAccountId> {
     blue.iter()
-        .filter(|line| line.allocation_action == erp_finance::entity::payable::AllocationAction::Apply)
+        .filter(|line| line.allocation_action == PayableAllocationAction::Apply)
         .map(|line| line.payable_account_id.clone())
         .collect()
 }
@@ -340,13 +335,13 @@ fn purchase_apply_account_ids(
 /// # 错误
 /// 号码重复提交时返回冲突错误。
 async fn find_red_idempotent(
-    db: &mongodb::Database,
+    db: &Database,
     original: &Invoice,
     red_no: &str,
-    red_gross: erp_core::money::Amount,
-    red_net: erp_core::money::Amount,
-    red_tax: erp_core::money::Amount,
-    executor: &mut dyn persistence_core::Executor,
+    red_gross: Amount,
+    red_net: Amount,
+    red_tax: Amount,
+    executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     let Some(existing) = db
         .invoices()
@@ -384,9 +379,9 @@ async fn find_red_idempotent(
 fn build_red_invoice(
     original: &Invoice,
     red_no: &str,
-    red_gross: erp_core::money::Amount,
-    red_net: erp_core::money::Amount,
-    red_tax: erp_core::money::Amount,
+    red_gross: Amount,
+    red_net: Amount,
+    red_tax: Amount,
     actor_id: &str,
 ) -> Result<Invoice> {
     let mut red_mut = Invoice::new(
@@ -397,7 +392,7 @@ fn build_red_invoice(
             party_id: original.party_id.clone(),
             invoice_code: original.invoice_code.clone(),
             invoice_no: red_no.to_string(),
-            invoice_date: erp_core::common::time::BusinessDate::today(),
+            invoice_date: BusinessDate::today(),
             gross_amount: red_gross,
             net_amount: red_net,
             tax_amount: red_tax,
@@ -428,10 +423,10 @@ fn build_red_invoice(
 /// # 错误
 /// 任一任务同步或进度刷新失败时返回错误并停止后续分片。
 async fn apply_red_invoice_fanout(
-    db: &mongodb::Database,
+    db: &Database,
     account_ids: &[String],
     actor_id: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let mut sorted = account_ids.to_vec();
     sorted.sort();
@@ -468,10 +463,10 @@ async fn apply_red_invoice_fanout(
 /// # 错误
 /// 任一销售单刷新失败时返回错误并停止后续分片。
 async fn refresh_progress_shards(
-    db: &mongodb::Database,
+    db: &Database,
     order_ids: &[String],
     actor_id: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     for chunk in order_ids.chunks(super::invoice_posting::FANOUT_CHUNK) {
         for order_id in chunk {
@@ -479,7 +474,7 @@ async fn refresh_progress_shards(
                 db,
                 &SalesMoneyProgressReader::new(db.clone()),
                 executor,
-                &erp_core::ids::SalesOrderId::new(order_id.clone()),
+                &SalesOrderId::new(order_id.clone()),
                 actor_id.to_string(),
                 None,
             )
@@ -496,13 +491,13 @@ struct RedPostingInvoices<'a> {
 }
 
 async fn complete_red_posting(
-    db: &mongodb::Database,
+    db: &Database,
     rbac: &FinancePostingPorts,
     command: &RedInvoiceCommand,
     invoices: RedPostingInvoices<'_>,
-    allocation_plan: &erp_finance::entity::receivable::RedInvoiceAllocationPlan,
+    allocation_plan: &RedInvoiceAllocationPlan,
     sales_ids: &[String],
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let RedPostingInvoices { red: red_mut, original: original_mut } = invoices;
     let audit = command.actor.clone().resource_log_with_message(

@@ -35,22 +35,6 @@ impl ImportJobAccess {
         Self { service, db, domain, permission }
     }
 
-    /// 在原执行器核验任务归属、入口资格和业务类型。
-    /// # 参数
-    /// id 为真实任务，actor 为操作人，executor 为原执行器。
-    /// # 返回
-    /// 共享授权与任务类型均符合时成功。
-    /// # 错误
-    /// 缺失、其他类型或无权任务拒绝。
-    pub(crate) async fn require(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.load(id, actor, executor).await.map(|_| ())
-    }
-
     /// 在原授权快照读取任务，调用方在该快照内读取关联数据。
     /// # 参数
     /// id、actor 为真实任务与当前账号；executor 沿用调用方读取事务。

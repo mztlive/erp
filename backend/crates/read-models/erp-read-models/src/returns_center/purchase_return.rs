@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 use application_core::AuditActor;
 use erp_core::ids::PurchaseReturnOrderId;
 use erp_identity::AccessTarget;
-use erp_permissions::internal;
+use erp_permissions::{internal, purchase_order as purchase_order_permissions};
 use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
@@ -274,27 +274,33 @@ impl ReturnsReadService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let order = db
-                        .purchase_return_orders()
-                        .find_by_id(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("采购退货单不存在或无权查看".to_string()))?;
-                    let (context, scope) = access.resolve(&actor, "detail", executor).await?;
-                    let source = db
-                        .purchase_orders()
-                        .find_authorized(order.purchase_order_id.as_ref(), &scope, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("采购退货单不存在或无权查看".to_string()))?;
-                    let view = purchase_return_order_view(&db, order.base.id.clone(), executor).await?;
-                    let version =
-                        format!("{}:{}:{}", context.scope_version, source.base.id, source.base.version);
-                    scope.validate(executor).await?;
-                    Ok((view, version))
-                })
+                Box::pin(async move { purchase_return_detail(&db, &access, &id, &actor, executor).await })
             })
             .await
     }
+}
+
+/// 同一快照内先证明实际采购来源，再装载采购退货业务字段和明细。
+async fn purchase_return_detail(
+    db: &Database,
+    access: &PurchaseAccess,
+    id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<(PurchaseReturnOrderView, String)> {
+    let (context, scope) = access.resolve(actor, &purchase_order_permissions::DETAIL, executor).await?;
+    let (identity, source_id) = authorized_returns::identity(db, id, &scope, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购退货单不存在或无权查看".into()))?;
+    let source = db
+        .purchase_orders()
+        .find_authorized(&source_id, &scope, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购退货单不存在或无权查看".into()))?;
+    let view = purchase_return_order_view(db, identity, executor).await?;
+    let version = format!("{}:{}:{}", context.scope_version, source.base.id, source.base.version);
+    scope.validate(executor).await?;
+    Ok((view, version))
 }
 
 /// 在当前快照解析采购授权来源及相同的列表筛选。
@@ -316,7 +322,7 @@ async fn list_query(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseReturnOrderFilter)> {
-    let (context, scope) = access.resolve(actor, "list", executor).await?;
+    let (context, scope) = access.resolve(actor, &purchase_order_permissions::LIST, executor).await?;
     let query = params.normalized()?;
     let filter = PurchaseReturnOrderFilter {
         purchase_return_no: query.purchase_return_no,
@@ -452,18 +458,54 @@ async fn purchase_return_order_with_lines(
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::sync::Arc;
 
     use entity_core::BaseModel;
     use erp_core::AccountKind;
     use erp_core::common::stable::StableBase;
     use erp_core::ids::{PurchaseOrderRevisionLineId, WarehouseId};
     use erp_core::money::Quantity;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
+    use erp_procurement::PurchaseDataScope;
+    use erp_procurement::authorization::PurchaseMapping;
     use erp_returns::entity::returns::{PurchaseReturnStatus, ReturnMode};
     use persistence_core::ReadExecutor;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+
+    /// 详情实际读取路径必须先检查固定 DETAIL 资格，列表资格不能触发业务读取。
+    #[tokio::test]
+    async fn purchase_return_detail_denies_missing_detail_permission_before_loading_facts() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("purchase_return_detail_authorization");
+        let authorization = fixed_authorization(
+            &[purchase_order_permissions::LIST],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(
+                purchase_order_permissions::DETAIL,
+                Arc::new(PurchaseMapping::new("purchase_order").unwrap()),
+            )],
+        )
+        .unwrap();
+        let access = PurchaseAccess::new(db.clone(), PurchaseDataScope::shared(db.clone(), authorization));
+        let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
+        let error = purchase_return_detail(&db, &access, "return", &actor, &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Forbidden(_)));
+        let access = ReturnsReadService::new(db.clone(), unavailable_authorization()).purchase_access();
+        let error = purchase_return_detail(&db, &access, "return", &actor, &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(reason) if reason == "采购范围端口未接线"));
+    }
 
     /// 原命令回包先核对快照和原创建来源资格，不得先读取退货单或明细。
     #[tokio::test]

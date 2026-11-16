@@ -11,7 +11,6 @@ use erp_permissions::integration_ops;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::repository::IntegrationOpsExt;
 use crate::{Error, Result};
 
 /// 固定登记的集成授权设施；查询凭证绑定本实例。
@@ -20,6 +19,7 @@ pub struct IntegrationAccess {
     db: Database,
     pub(super) service: Arc<AuthorizationService>,
 }
+
 impl IntegrationAccess {
     /// 绑定共享身份设施和本域固定目录。
     /// # 参数
@@ -82,33 +82,22 @@ impl IntegrationAccess {
         };
         Ok(self.service.require(actor, permission, target, executor).await?)
     }
-    /// 检查真实差异记录的当前处理人和精确版本。
+    /// 检查无正式任务差异的当前处理人及决定资格。
     /// # 参数
     /// actor、id 为真实账号和差异ID，executor 为决定写事务。
     /// # 返回
-    /// 实际任务版本、指派及固定资格均通过时成功。
+    /// 差异存在、当前责任及固定资格均通过时成功；业务决定版本由命令执行阶段检查。
     /// # 错误
-    /// 差异缺失、版本或指派不符时拒绝。
+    /// 差异缺失、无决定资格或当前处理人不符时拒绝。
     pub async fn require_decide(
         &self,
         actor: &AuditActor,
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let row = self
-            .db
-            .reconciliation_differences()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("差异记录不存在".into()))?;
         Ok(self
             .service
-            .require(
-                actor,
-                &integration_ops::DIFFERENCE_DECISION,
-                AccessTarget::Task { id: row.base.id, version: row.base.version.to_string() },
-                executor,
-            )
+            .require(actor, &integration_ops::DIFFERENCE_DECISION, AccessTarget::record(id)?, executor)
             .await?)
     }
 
@@ -161,5 +150,32 @@ impl IntegrationAccess {
         Ok(OrganizationDirectoryService::new(self.db.clone())
             .expand_org_units(org_unit_ids, include_descendants, executor)
             .await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn difference_decision_requires_identity_before_business_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let access =
+            IntegrationAccess::new(client.database("difference_authorization"), unavailable_authorization());
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        assert!(matches!(
+            access.require_decide(&actor, "difference", &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+        assert!(matches!(
+            access.require_decide(&actor, "difference", &mut ReadExecutor::default()).await,
+            Err(Error::ValidationError(_))
+        ));
     }
 }

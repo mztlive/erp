@@ -11,8 +11,8 @@ use erp_party::repository::prelude::*;
 use erp_party::{PartyBankAccount, PartyExt};
 use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
-use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
+use erp_support::{FileAsset, FileAssetExt};
 use persistence_core::Executor;
 
 use super::dto::{
@@ -132,7 +132,7 @@ impl PayableReadService {
             }
         }
         let assets = self.db.file_assets().find_by_ids(&asset_ids, executor).await?;
-        let assets_by_id: HashMap<&str, &erp_support::FileAsset> =
+        let assets_by_id: HashMap<&str, &FileAsset> =
             assets.iter().map(|asset| (asset.base.id.as_str(), asset)).collect();
         let mut views = HashMap::with_capacity(payments.len());
         for payment in payments {

@@ -16,7 +16,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::Permission;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 pub(super) use replace_identity::replace_nodes_identity;
 use sha2::{Digest, Sha256};
 
@@ -82,32 +82,62 @@ pub(super) enum DefinitionResultExpectation {
 }
 
 impl ApprovalDefinitionService {
-    /// 读取定义图，缺失时失败关闭。
+    /// 在原快照中完成真实类型授权后读取定义图。
     ///
     /// # 参数
     /// * `definition_id` - 定义主键
+    /// * `actor` - 当前认证操作人
+    /// * `permission` - 当前定义命令固定入口
+    /// * `executor` - 原快照事务执行器
     ///
     /// # 返回
-    /// 返回已加载的定义图。
+    /// 返回同一事务内已授权的定义图。
     ///
     /// # 错误
-    /// 定义不存在时返回未找到；仓储读取失败时返回对应错误。
-    pub(super) async fn require_graph(&self, definition_id: &str) -> Result<DefinitionGraph> {
+    /// 入口或真实类型资格不足、定义不存在或仓储读取失败时拒绝。
+    pub(super) async fn require_graph(
+        &self,
+        definition_id: &str,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<DefinitionGraph> {
+        self.require_existing_definition_access(definition_id, actor, permission, executor).await?;
         self.db
             .bpm_workflow()
-            .load_definition_graph(
-                &ApprovalProcessDefinitionId::new(definition_id.to_string()),
-                &mut NoTransaction,
-            )
+            .load_definition_graph(&ApprovalProcessDefinitionId::new(definition_id.to_string()), executor)
             .await?
             .ok_or_else(definition_not_found)
+    }
+
+    /// 入口资格仅允许读取真实类型事实；完整 Candidate 授权先于任何图读取。
+    async fn require_existing_definition_access(
+        &self,
+        definition_id: &str,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("审批定义授权必须使用快照事务".into()));
+        }
+        if !self.authorization.has_permission(actor, permission, executor).await? {
+            return Err(Error::Forbidden("账号缺少审批定义动作资格".into()));
+        }
+        let process_kind = self
+            .db
+            .bpm_workflow()
+            .definition_process_kind(&ApprovalProcessDefinitionId::new(definition_id), executor)
+            .await?
+            .ok_or_else(definition_not_found)?;
+        let policy = require_process_required(document_type_of(process_kind))?;
+        require_definition_access(&self.authorization, actor, permission, &policy, executor).await
     }
 
     /// 收据竞争、瞬态事务或提交结果未知后，在新会话有限回读胜者。
     ///
     /// # 参数
     /// * `outcome` - 失败会话的原始结果
-    /// * `policy` - 必须审批政策
     /// * `permission` - 原命令固定入口权限
     /// * `actor` - 已认证操作人
     /// * `identity` - 当前命令身份
@@ -121,14 +151,11 @@ impl ApprovalDefinitionService {
     pub(super) async fn recover_definition_command(
         &self,
         outcome: Result<DefinitionDetailView>,
-        policy: &ProcessRequiredApprovalPolicy,
         permission: &Permission,
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
         expectation: DefinitionResultExpectation,
     ) -> Result<DefinitionDetailView> {
-        let authorization = self.authorization.clone();
-        let permission = permission.clone();
         let Err(error) = outcome else {
             return outcome;
         };
@@ -136,25 +163,7 @@ impl ApprovalDefinitionService {
             return Err(error);
         }
         for attempt in 0..DEFINITION_COMMAND_RECOVERY_ATTEMPTS {
-            let authorization = authorization.clone();
-            let db = self.db.clone();
-
-            let permission = permission.clone();
-            let actor = actor.clone();
-            let policy = policy.clone();
-            let identity = identity.clone();
-            let expectation = expectation.clone();
-            let recovered = self
-                .db
-                .client()
-                .with_transaction(move |executor| {
-                    Box::pin(async move {
-                        require_definition_access(&authorization, &actor, &permission, &policy, executor)
-                            .await?;
-                        replay_prepared_definition_receipt(&db, &identity, &expectation, executor).await
-                    })
-                })
-                .await;
+            let recovered = self.recover_definition_attempt(permission, actor, &identity, &expectation).await;
             match recovered {
                 Ok(Some(view)) => return Ok(view),
                 Ok(None) => {},
@@ -166,6 +175,49 @@ impl ApprovalDefinitionService {
             }
         }
         Err(error)
+    }
+
+    /// 在独立回读快照中重建真实授权目标，不复用失败事务的业务事实。
+    async fn recover_definition_attempt(
+        &self,
+        permission: &Permission,
+        actor: &AuditActor,
+        identity: &PreparedDefinitionIdentity,
+        expectation: &DefinitionResultExpectation,
+    ) -> Result<Option<DefinitionDetailView>> {
+        let service = self.clone();
+        let permission = permission.clone();
+        let actor = actor.clone();
+        let identity = identity.clone();
+        let expectation = expectation.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.require_recovery_access(&permission, &actor, &expectation, executor).await?;
+                    replay_prepared_definition_receipt(&service.db, &identity, &expectation, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 创建命令按固定类型复验；已有定义命令按真实 ID 重新读取最小类型事实。
+    async fn require_recovery_access(
+        &self,
+        permission: &Permission,
+        actor: &AuditActor,
+        expectation: &DefinitionResultExpectation,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        match expectation {
+            DefinitionResultExpectation::ProcessKind(kind) => {
+                let policy = require_process_required(document_type_of(*kind))?;
+                require_definition_access(&self.authorization, actor, permission, &policy, executor).await
+            },
+            DefinitionResultExpectation::DefinitionId(id) => {
+                self.require_existing_definition_access(id, actor, permission, executor).await
+            },
+        }
     }
 }
 
@@ -850,12 +902,57 @@ pub(super) fn definition_not_found() -> Error {
 #[cfg(test)]
 mod tests {
     use bpm::ProcessKind;
+    use erp_identity::entity::access_control::ResolvedScope;
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::approval_process;
     use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
     use serde_json::json;
 
     use super::super::replace::{next_transition_ids, prepare_definition_nodes};
-    use super::super::test_support::two_node_publish_graph;
+    use super::super::test_support::{two_node_publish_graph, unavailable_service};
     use super::*;
+
+    #[tokio::test]
+    async fn definition_facts_require_snapshot_and_current_command_entry() {
+        let (mut service, actor) = unavailable_service().await;
+        service.authorization = fixed_authorization(
+            &[],
+            ResolvedScope { role_clauses: vec![], user_limit: None },
+            vec![],
+            vec![],
+        )
+        .unwrap();
+        for permission in [
+            approval_process::REPLACE_DEFINITION_NODES,
+            approval_process::PUBLISH_DEFINITION,
+            approval_process::RETIRE_DEFINITION,
+        ] {
+            let error = service
+                .require_graph("definition-never-read", &actor, &permission, &mut NoTransaction)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(error, Error::ValidationError(message) if message == "审批定义授权必须使用快照事务")
+            );
+            let error = service
+                .require_graph("definition-never-read", &actor, &permission, &mut SnapshotExecutor::default())
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Forbidden(message) if message == "账号缺少审批定义动作资格"));
+            let error = service
+                .require_recovery_access(
+                    &permission,
+                    &actor,
+                    &DefinitionResultExpectation::DefinitionId("definition-never-read".into()),
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Forbidden(message) if message == "账号缺少审批定义动作资格"));
+        }
+    }
 
     fn duplicate_key_error(index: Option<&str>) -> persistence_core::Error {
         let message = index.map_or_else(

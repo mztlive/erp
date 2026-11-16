@@ -32,16 +32,19 @@ impl ProductImportProcess {
     ///
     /// # 参数
     /// * `req` - 文件名、总字节数与幂等请求身份
+    /// * `actor` - 已认证操作人，按当前商品创建功能资格检查。
     ///
     /// # 返回
     /// 返回分片上传标识、对象键与分片口径；分片地址由调用方按需获取。
     ///
     /// # 错误
-    /// 文件名不是 `.xlsx`、大小越限或对象存储失败时返回错误。
+    /// 当前账号无商品创建资格、文件名不是 `.xlsx`、大小越限或对象存储失败时返回错误。
     pub async fn init_direct_upload(
         &self,
         req: ProductImportDirectUploadInitRequest,
+        actor: &AuditActor,
     ) -> Result<ProductImportDirectUploadInitView> {
+        self.authorize_submission(actor).await?;
         req.validate()?;
         validate_xlsx_file_name(&req.file_name)?;
         validate_byte_size(req.byte_size)?;
@@ -68,19 +71,22 @@ impl ProductImportProcess {
     /// * `upload_id` - 分片上传标识
     /// * `part_number` - 分片序号（1 起）
     /// * `request_id` - 幂等请求身份（须与对象键绑定）
+    /// * `actor` - 已认证操作人，按当前商品创建功能资格检查。
     ///
     /// # 返回
     /// 返回预签名 PUT 地址。
     ///
     /// # 错误
-    /// 对象键与请求身份不一致、分片序号非法或签名失败时返回错误。
+    /// 当前账号无商品创建资格、对象键与请求身份不一致、分片序号非法或签名失败时返回错误。
     pub async fn direct_upload_part_url(
         &self,
         object_key: &str,
         upload_id: &str,
         part_number: i32,
         request_id: &str,
+        actor: &AuditActor,
     ) -> Result<String> {
+        self.authorize_submission(actor).await?;
         require_bound_object_key(object_key, request_id)?;
         if !(1..=10_000).contains(&part_number) {
             return Err(Error::ValidationError("分片序号必须在 1-10000 之间".to_string()));
@@ -107,7 +113,7 @@ impl ProductImportProcess {
     /// 返回新建或幂等回放的导入任务。
     ///
     /// # 错误
-    /// 对象键与请求身份不一致、对象缺失或损坏、解析失败时返回错误；
+    /// 当前账号无商品创建资格、对象键与请求身份不一致、对象缺失或损坏、解析失败时返回错误；
     /// 结果未知以外失败会尽力删除已合并对象，避免残留孤儿文件。
     pub async fn submit_direct_upload(
         &self,
@@ -115,6 +121,7 @@ impl ProductImportProcess {
         req: ProductImportDirectUploadCompleteRequest,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
+        self.authorize_submission(actor).await?;
         req.validate()?;
         validate_xlsx_file_name(&req.file_name)?;
         validate_byte_size(req.byte_size)?;
@@ -146,18 +153,21 @@ impl ProductImportProcess {
     /// * `object_key` - 初始化接口返回的相对对象键
     /// * `upload_id` - 分片上传标识
     /// * `request_id` - 幂等请求身份（须与对象键绑定）
+    /// * `actor` - 已认证操作人，按当前商品创建功能资格检查。
     ///
     /// # 返回
     /// 分片上传已取消；上传已不存在也视为成功。
     ///
     /// # 错误
-    /// 对象键与请求身份不一致或取消失败时返回错误。
+    /// 当前账号无商品创建资格、对象键与请求身份不一致或取消失败时返回错误。
     pub async fn abort_direct_upload(
         &self,
         object_key: &str,
         upload_id: &str,
         request_id: &str,
+        actor: &AuditActor,
     ) -> Result<()> {
+        self.authorize_submission(actor).await?;
         require_bound_object_key(object_key, request_id)?;
         match self.storage.abort_multipart_upload(object_key, upload_id).await {
             Ok(()) => Ok(()),

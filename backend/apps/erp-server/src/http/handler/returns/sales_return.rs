@@ -1,11 +1,12 @@
 //! 销售退货与拒收处理 HTTP 协议适配。
 
-use application_core::AuditActor;
+use std::sync::Arc;
+
+use application_core::{AuditActor, PageView};
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_read_models::returns_center::ReturnsReadService;
-use erp_read_models::returns_center::dto::{PageView, SalesReturnCaseListParams, SalesReturnCaseView};
-use erp_returns::dto::CreateSalesReturnCaseRequest;
+use erp_returns::dto::{CreateSalesReturnCaseRequest, SalesReturnCaseListParams, SalesReturnCaseView};
+use erp_returns::service::sales_return_query::SalesReturnQueryService;
 use erp_reverse_flow::reverse_flow::ReturnsProcess;
 
 use crate::http::errors::Result;
@@ -27,9 +28,13 @@ use crate::wiring::local_reverse_flow_ports;
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn sales_return_case_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesReturnCaseListParams>,
 ) -> Result<PageView<SalesReturnCaseView>> {
-    let page = ReturnsReadService::new(state.application().db()).sales_return_case_list(&params).await?;
+    let page =
+        SalesReturnQueryService::new(state.application().db(), Arc::new(state.application().authorization()))
+            .sales_return_case_list(&actor, &params)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -47,9 +52,13 @@ pub async fn sales_return_case_list(
 /// 业务处理或数据读取失败时返回对应错误。
 pub async fn sales_return_case_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesReturnCaseView> {
-    let view = ReturnsReadService::new(state.application().db()).sales_return_case_detail(&id).await?;
+    let view =
+        SalesReturnQueryService::new(state.application().db(), Arc::new(state.application().authorization()))
+            .sales_return_case_detail(&id, &actor)
+            .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

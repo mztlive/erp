@@ -3,11 +3,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_contract::repository::authorization;
-use erp_contract::{ContractParticipantPort, Error as ContractError, Result as ContractResult};
+use erp_contract::{ContractParticipantPort, Result as ContractResult};
 use erp_identity::{AccessFactsPort, AccessMapping, Result};
-use erp_workflow::repository::document_registry::participant_access;
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::{DocumentRegistryExt, Error as WorkflowError};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -34,18 +33,5 @@ impl ContractParticipantPort for ContractParticipants {
         executor: &mut dyn Executor,
     ) -> ContractResult<Vec<String>> {
         Ok(self.0.document_participants().document_ids_in(user, ids, executor).await?)
-    }
-
-    async fn revision(&self, user: &str, executor: &mut dyn Executor) -> ContractResult<i64> {
-        participant_access::revision(&self.0, user, executor).await.map_err(participant_error)
-    }
-}
-
-/// 保留工作流仓储和内部失败分类，不把取证失败当空参与集合。
-fn participant_error(error: WorkflowError) -> ContractError {
-    match error {
-        WorkflowError::RepositoryError(error) => ContractError::from(error),
-        WorkflowError::Internal(message) => ContractError::Internal(message),
-        error => ContractError::Internal(error.to_string()),
     }
 }

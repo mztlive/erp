@@ -11,40 +11,33 @@ use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_support::PendingAttachmentBatch;
 use erp_workflow::service::work_item::expected_task_version;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::invoice::register_created_invoice_document;
 use super::invoice_posting::{InvoicePostingAllocations, InvoicePostingInput, post_invoice_apply};
 use super::{InvoiceWithAssetsResult, ReceivableProcess, invoice_attachments};
+use crate::finance_posting::task_access::TaskPurpose;
+use crate::finance_posting::task_entry::require_entry;
 use crate::{Error, FinancePostingPorts, Result};
 
 impl ReceivableProcess {
     /// 上传附件并按剩余批准金额完成一次开票。
     /// # 参数
-    /// 任务及申请版本、附件命令、待持久化文件与当前账号。
+    /// req 为任务、申请版本及附件命令，pending 为待登记附件批次，actor 为当前认证操作人。
     /// # 返回
     /// 已登记记录及本批上传是否消费；相同命令重放返回原结果。
     /// # 错误
-    /// 附件缺失、权限、版本、额度或事务失败时拒绝；未知提交保留文件。
+    /// 附件缺失或请求非法时返回 `InvalidInput` 或 `ValidationError`；权限、任务、版本、额度或事务错误按原分类传播。
+    /// 提交结果无法查证或附件已提交后读取失败时返回 `OutcomeUnknown`，调用方须保留附件。
     pub async fn complete_invoice_with_assets(
         &self,
-        mut req: CompleteInvoiceRequest,
+        req: CompleteInvoiceRequest,
         pending: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<InvoiceWithAssetsResult> {
         req.validate()?;
         let receipt = evidence_receipt(&req, actor.id(), pending.as_ref())?;
-        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&receipt, &mut NoTransaction)
-            .await?
-        {
-            return Ok(InvoiceWithAssetsResult {
-                view: self.authorized_invoice_result(&id, actor).await?,
-                assets_committed: false,
-            });
-        }
-        invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let expected = expected_task_version(&req.expected_task_version)?;
         let has_pending = !pending.is_empty();
         let command = EvidenceCommand {
@@ -91,6 +84,15 @@ impl EvidenceCommand {
     }
 
     async fn execute(self, executor: &mut dyn Executor) -> Result<(String, bool)> {
+        require_entry(
+            &self.db,
+            &self.rbac,
+            &self.actor,
+            &self.req.work_item_id,
+            TaskPurpose::Invoice,
+            executor,
+        )
+        .await?;
         let db = &self.db;
         if let Some(id) = FinanceCommandReceiptService::new(db.clone())
             .committed_resource_id(&self.receipt, executor)
@@ -98,6 +100,13 @@ impl EvidenceCommand {
         {
             return Ok((id, false));
         }
+        self.execute_fresh(executor).await
+    }
+
+    /// 首次提交才解析上传并写入发票，沿用入口的授权执行器。
+    async fn execute_fresh(mut self, executor: &mut dyn Executor) -> Result<(String, bool)> {
+        let db = &self.db;
+        invoice_attachments::resolve(&mut self.req.attachment_asset_ids, self.pending.as_ref())?;
         let request = self.request(executor).await?;
         let mut invoice = Invoice::from_evidence(
             InvoiceId::new(id_generator::next_id()),

@@ -476,7 +476,7 @@ impl CatalogService {
     /// 返回商品 ID 与已绑定维护人的实体。
     ///
     /// # 错误
-    /// 维护人缺少主属组织或写范围不允许时拒绝。
+    /// 维护人缺少主属组织、创建候选无权或执行器不是原快照事务时拒绝。
     async fn new_voucher_product(
         &self,
         voucher_no: String,
@@ -484,9 +484,34 @@ impl CatalogService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(ProductId, Product)> {
+        let maintainer = self.bind_create_maintainer(None, actor, executor).await?;
+        self.new_voucher_product_candidate(voucher_no, status, maintainer, actor, executor).await
+    }
+
+    /// 用已解析责任关系构造卡券商品，并在原事务检查创建候选。
+    ///
+    /// # 参数
+    /// * `voucher_no` - 卡券编号，同时作为商品编号。
+    /// * `status` - 启停状态。
+    /// * `maintainer` - 服务端在原事务查询到的维护人及其主属组织。
+    /// * `actor` - 已认证创建人。
+    /// * `executor` - 后续商品写入使用的原快照事务执行器。
+    ///
+    /// # 返回
+    /// 返回通过实体校验及完整创建授权的商品 ID 和实体。
+    ///
+    /// # 错误
+    /// 实体字段非法、候选无权或执行器不是原快照事务时拒绝。
+    async fn new_voucher_product_candidate(
+        &self,
+        voucher_no: String,
+        status: EnableStatus,
+        maintainer: (String, String),
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(ProductId, Product)> {
         let product_id = ProductId::new(next_id());
-        let (maintainer_user_id, business_org_unit_id) =
-            self.bind_create_maintainer(None, actor, executor).await?;
+        let (maintainer_user_id, business_org_unit_id) = maintainer;
         let product = Product::new(
             product_id.clone(),
             ProductData {
@@ -498,6 +523,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+        self.access().require_create(actor, &product, executor).await?;
         Ok((product_id, product))
     }
 
@@ -819,10 +845,117 @@ fn new_voucher_profile(
 
 #[cfg(test)]
 mod authorization_tests {
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::Permission;
+    use persistence_core::NoTransaction;
     use persistence_core::testing::SnapshotExecutor;
     use serde_json::json;
 
+    use super::super::CatalogAccess;
     use super::super::testing::{actor, denied, service};
+    use super::*;
+
+    async fn candidate_service(permissions: &[Permission], limit: ScopeClause) -> CatalogService {
+        let mut service = service().await;
+        let authorization = fixed_authorization(
+            permissions,
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: Some(limit),
+            },
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        service.data_scope = CatalogAccess::new(service.db.clone(), authorization);
+        service
+    }
+
+    #[tokio::test]
+    async fn voucher_product_candidate_uses_validated_maintenance_facts() {
+        let service = candidate_service(
+            &[catalog::PRODUCT_PRODUCT_CREATE],
+            ScopeClause { org_unit_ids: ["org".into()].into(), ..Default::default() },
+        )
+        .await;
+        let actor = actor();
+        let mut executor = SnapshotExecutor::default();
+        let (id, product) = service
+            .new_voucher_product_candidate(
+                " V-1 ".into(),
+                EnableStatus::Active,
+                (" actor ".into(), " org ".into()),
+                &actor,
+                &mut executor,
+            )
+            .await
+            .unwrap();
+        assert_eq!(product.base.id, id.to_string());
+        assert_eq!(product.product_no, "V-1");
+        assert_eq!(product.product_kind, ProductKind::Voucher);
+        assert_eq!(product.maintainer_user_id, "actor");
+        assert_eq!(product.business_org_unit_id, "org");
+
+        let self_service = candidate_service(
+            &[catalog::PRODUCT_PRODUCT_CREATE],
+            ScopeClause { self_owned: true, ..Default::default() },
+        )
+        .await;
+        for (service, maintainer) in [(&self_service, ("other", "org")), (&service, ("actor", "outside"))] {
+            assert!(matches!(
+                service
+                    .new_voucher_product_candidate(
+                        "V-2".into(),
+                        EnableStatus::Active,
+                        (maintainer.0.into(), maintainer.1.into()),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+                Err(Error::Forbidden(_))
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn voucher_product_candidate_rejects_missing_create_permission_and_non_snapshot() {
+        let actor = actor();
+        let denied_service = candidate_service(
+            &[catalog::PRODUCT_VOUCHER_CATEGORY_CREATE],
+            ScopeClause { company: true, ..Default::default() },
+        )
+        .await;
+        assert!(matches!(
+            denied_service
+                .new_voucher_product_candidate(
+                    "V-1".into(),
+                    EnableStatus::Active,
+                    ("actor".into(), "org".into()),
+                    &actor,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+        let service = candidate_service(
+            &[catalog::PRODUCT_PRODUCT_CREATE],
+            ScopeClause { company: true, ..Default::default() },
+        )
+        .await;
+        assert!(matches!(
+            service
+                .new_voucher_product_candidate(
+                    "V-1".into(),
+                    EnableStatus::Active,
+                    ("actor".into(), "org".into()),
+                    &actor,
+                    &mut NoTransaction,
+                )
+                .await,
+            Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
+        ));
+    }
 
     #[tokio::test]
     async fn writes_authorize_before_existing_records_versions_or_related_facts() {

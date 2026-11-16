@@ -82,7 +82,7 @@ impl PreviewSource for ProcurementResponsibilityProcess {
     }
 }
 
-/// 正常整批与失败后的逐行诊断均执行此真实编排，不另开读取阶段。
+/// 正常整批与逐行诊断共用原快照；嵌套统一资格检查允许推进读取阶段。
 async fn preview(
     source: &impl PreviewSource,
     actor: &AuditActor,
@@ -93,11 +93,9 @@ async fn preview(
         return Err(Error::ValidationError("采购责任预览必须使用同一快照事务".into()));
     }
     source.authorize(actor, &admin::PROCUREMENT_RESPONSIBILITY_RESOLVE, executor).await?;
-    let boundary =
-        executor.boundary().ok_or_else(|| Error::ValidationError("采购责任预览缺少快照边界".into()))?;
     let view = preview_lines(source, request, executor).await?;
-    if !boundary.is_current(executor) {
-        return Err(Error::ValidationError("采购责任预览跨越读取阶段".into()));
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("采购责任预览已离开原快照事务".into()));
     }
     Ok(view)
 }
@@ -181,12 +179,13 @@ mod tests {
     struct Fixture {
         denied: bool,
         failed_line: Option<&'static str>,
+        revoke_snapshot: bool,
         calls: Mutex<Vec<(String, usize)>>,
     }
 
     impl Fixture {
         fn new() -> Self {
-            Self { denied: false, failed_line: None, calls: Mutex::default() }
+            Self { denied: false, failed_line: None, revoke_snapshot: false, calls: Mutex::default() }
         }
 
         fn record(&self, event: String, executor: &mut dyn Executor) {
@@ -220,6 +219,10 @@ mod tests {
             assert_eq!(purpose, ResolutionPurpose::Inquiry);
             let keys = inputs.iter().map(|input| input.line_key.as_str()).collect::<Vec<_>>();
             self.record(format!("batch:{}", keys.join(",")), executor);
+            executor.next_read();
+            if self.revoke_snapshot {
+                let _ = executor.session();
+            }
             if self.failed_line.is_some_and(|failed| keys.contains(&failed)) {
                 return Err(Error::BusinessLogicError("商品未配置责任规则".into()));
             }
@@ -305,6 +308,17 @@ mod tests {
                 ("batch:first".into(), expected),
                 ("batch:second".into(), expected),
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn preview_rejects_snapshot_revocation_during_owner_qualification() {
+        let mut source = Fixture::new();
+        source.revoke_snapshot = true;
+        let error =
+            preview(&source, &actor(), request(), &mut SnapshotExecutor::default()).await.unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "采购责任预览已离开原快照事务")
         );
     }
 

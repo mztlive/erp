@@ -15,6 +15,7 @@ use erp_fulfillment::entity::fulfillment::{
     Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType,
 };
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_fulfillment::service::document_number::next_delivery_no;
 use erp_fulfillment_execution::fulfillment_execution::task::{
     FulfillmentTaskObject, ensure_fulfillment_task,
 };
@@ -52,6 +53,7 @@ use super::procurement_task_sync::{
 use super::{PurchaseOrderPorts, PurchaseOrderProcess};
 use crate::{Error, Result};
 
+mod access;
 mod apply;
 pub(super) mod sequence;
 mod stock_posting;
@@ -306,11 +308,12 @@ async fn ensure_stock_delivery_for_warehouse(
         .await?;
         return Ok(());
     }
+    // 本步骤仅由已通过原事务供给任务授权的选源写入调用；计数器按永不回收合同独立提交。
     let delivery_id = DeliveryId::new(next_id());
     let delivery = Delivery::new(
         delivery_id.clone(),
         DeliveryData {
-            delivery_no: erp_fulfillment::service::document_number::next_delivery_no(db).await?,
+            delivery_no: next_delivery_no(db).await?,
             delivery_type: DeliveryType::WarehouseShip,
             sales_order_id: sales_order_id.clone(),
             purchase_order_id: None,

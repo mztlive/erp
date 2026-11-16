@@ -23,7 +23,8 @@
 
 术语与统一分工见[总索引](../../README.md#代码中常见名称的含义)。
 
-- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
+- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。身份授权依赖仅允许指向 `erp-identity`；其余业务领域及组合层禁止直接依赖。
+- 销售退货列表、详情必须使用 `service::sales_return_query::SalesReturnQueryService`；已完成命令授权的结果装配使用 `ReturnsService::load_sales_return_case_view`，并传入原 Executor。
 - 逆向跨域流程由 erp-reverse-flow::reverse_flow 持有事务，沿用同一 Executor 写入关联领域。
 - 当前 ports 模块为空；外域读取事实由组合层传入，不得据此添加直接领域依赖。
 - 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
@@ -33,6 +34,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/mod.rs](src/service/mod.rs) | ReturnsService 与各类逆向入口 |
+| [src/service/sales_return_query.rs](src/service/sales_return_query.rs) | 销售退货单域列表、详情及原 Executor 结果装配 |
 | [src/service/command_receipt.rs](src/service/command_receipt.rs) | 独立退款/冲正命令回执查证与同 Executor 写入 |
 | [src/entity/returns/mod.rs](src/entity/returns/mod.rs) | 退货、退款及冲正规则 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 当前端口边界说明 |

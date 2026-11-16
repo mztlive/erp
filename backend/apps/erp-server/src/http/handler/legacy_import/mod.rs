@@ -26,16 +26,26 @@ use crate::http::state::HttpState;
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前已认证账号。
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+///
+/// # 错误
+/// 功能资格、参数或批次及来源名称读取失败时返回对应错误。
 pub async fn legacy_import_batch_list(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<LegacyImportBatchListParams>,
 ) -> Result<PageView<LegacyImportBatchListItem>> {
-    let mut page = state.application().legacy_import_service().batch_list(&params).await?;
-    import_center::batch_names(&state.application().db(), &mut page.items).await?;
+    let page = import_center::batch_list(
+        &state.application().db(),
+        &state.application().legacy_import_service(),
+        &params,
+        &actor,
+    )
+    .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -63,16 +73,26 @@ pub async fn legacy_import_batch_create(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前已认证账号。
 /// * `id` - 导入批次 ID
 ///
 /// # 返回
 /// 返回批次的响应视图。
+///
+/// # 错误
+/// 功能资格、批次不存在或批次及来源名称读取失败时返回对应错误。
 pub async fn legacy_import_batch_detail(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<LegacyImportBatchView> {
-    let mut view = state.application().legacy_import_service().batch_detail(&id).await?;
-    import_center::batch_name(&state.application().db(), &mut view).await?;
+    let view = import_center::batch_detail(
+        &state.application().db(),
+        &state.application().legacy_import_service(),
+        &id,
+        &actor,
+    )
+    .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

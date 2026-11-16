@@ -1,7 +1,12 @@
 //! 按权限固定的授权规则。对象判断和查询转换共用这里产生的数据条件。
+use std::slice;
+
 use erp_permissions::{
-    catalog, internal, payable, receivable, sales_inquiry, supplier, supplier_fulfillment, supplier_offering,
+    catalog, fulfillment, internal, receivable, sales_inquiry, supplier, supplier_fulfillment,
+    supplier_offering,
 };
+
+use crate::QualifiedPermissions;
 pub(crate) mod quality;
 pub(super) mod queries;
 pub(super) mod records;
@@ -464,13 +469,13 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required
 }
 
-pub(super) fn qualified(permission: &Permission, qualified: &crate::QualifiedPermissions) -> bool {
+pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
     if transfers::supports(permission) {
         return transfers::qualified(permission, qualified);
     }
     let required = same_role_permissions(permission);
     (required.is_empty() || qualified.same_role(&required))
-        && records::independent(permission).iter().all(|p| qualified.same_role(std::slice::from_ref(p)))
+        && records::independent(permission).iter().all(|p| qualified.same_role(slice::from_ref(p)))
         && records::qualified(permission, qualified)
 }
 
@@ -487,39 +492,38 @@ pub(super) fn task_permissions(permission: &Permission) -> Vec<Permission> {
 }
 
 fn task_execution_permissions(permission: &Permission) -> Vec<Permission> {
-    use erp_permissions::{fulfillment as f, sales_order as s, supplier_fulfillment as sf};
     match permission.resource() {
         "delivery" => vec![
-            f::DELIVERY_DELIVERY_LIST,
-            f::DELIVERY_DELIVERY_DETAIL,
-            f::DELIVERY_DELIVERY_UPDATE,
-            f::DELIVERY_DELIVERY_POST,
+            fulfillment::DELIVERY_DELIVERY_LIST,
+            fulfillment::DELIVERY_DELIVERY_DETAIL,
+            fulfillment::DELIVERY_DELIVERY_UPDATE,
+            fulfillment::DELIVERY_DELIVERY_POST,
         ],
         "purchase_receipt" => vec![
-            f::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
-            f::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
-            f::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
-            f::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
+            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
+            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
+            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
+            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
         ],
         "electronic_delivery" => vec![
-            f::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
-            f::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
+            fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
+            fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
         ],
         "service_fulfillment" => vec![
-            f::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
-            f::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
+            fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
+            fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
         ],
         "customer_acceptance" => vec![
-            f::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
-            f::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
-            f::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
-            f::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
-            s::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
+            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
+            fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
+            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
+            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
+            sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
         ],
-        "supplier_fulfillment_order" if permission == &sf::ORDER_INVESTIGATION => vec![
-            sf::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
-            sf::ORDER_INVESTIGATION,
-            sf::ORDER_TASK_COMPLETION,
+        "supplier_fulfillment_order" if permission == &supplier_fulfillment::ORDER_INVESTIGATION => vec![
+            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
+            supplier_fulfillment::ORDER_INVESTIGATION,
+            supplier_fulfillment::ORDER_TASK_COMPLETION,
         ],
         _ => vec![],
     }
@@ -530,13 +534,12 @@ pub(super) fn task_supported(permission: &Permission) -> bool {
         .is_ok_and(|kind| kind == ActionKind::Task && records::condition(permission).is_none())
         || permission == &work_item::DETAIL
         || permission == &internal::WORK_ITEM_EXECUTE
-        || permission == &erp_permissions::supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK
+        || permission == &supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK
         || permission == &supplier_fulfillment::ORDER_INVESTIGATION
         || permission == &purchase_order::CREATE
         || permission == &purchase_payment_request::SUBMIT
         || permission == &purchase_payment_request::CREDIT_LIST
         || permission == &receivable::INVOICE_POST
-        || permission == &payable::PAYMENT_RECIPIENT_REVEAL
         || matches!(
             permission.resource(),
             "delivery"

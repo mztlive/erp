@@ -10,7 +10,8 @@ use erp_identity::entity::authorization::{
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
-    AccessFactsPort, AccessMapping, AccessTarget, AuthorizationService, CompiledAccess, ResourceTargets,
+    AccessFactsPort, AccessMapping, AccessTarget, AuthorizationService, CompiledAccess,
+    Error as IdentityError, ResourceTargets, Result as IdentityResult,
 };
 use erp_permissions::Permission;
 use mongodb::Database;
@@ -241,9 +242,15 @@ impl WarehouseQuery {
         !self.has_rows
     }
 
-    /// 核验当前事务、读取阶段及有效期，不读取数据库。
-    pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
-        self.compiled.ensure_current(executor)
+    /// 核验固定仓库模型、当前事务、读取阶段及有效期。
+    /// # 参数
+    /// executor 为产生本凭证的原读取执行器。
+    /// # 返回
+    /// 模型和当前读取边界均匹配时成功，不读取数据库。
+    /// # 错误
+    /// 资源、集合、行身份、输出粒度错配或凭证失效时拒绝。
+    pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> IdentityResult<()> {
+        ensure_warehouse_query(&self.compiled, executor)
     }
 
     /// 在实际业务读取前后复验凭证。
@@ -258,10 +265,42 @@ impl WarehouseQuery {
     }
 }
 
+/// 所有仓库查询执行入口共用固定模型与当前边界核验。
+/// # 参数
+/// access 为统一授权服务编译的查询，executor 为原读取执行器。
+/// # 返回
+/// 可用于完整仓库身份读取时成功，不执行 I/O。
+/// # 错误
+/// 模型错配、跨事务、跨阶段或到期时拒绝。
+pub(crate) fn ensure_warehouse_query(
+    access: &CompiledAccess,
+    executor: &mut dyn Executor,
+) -> IdentityResult<()> {
+    warehouse_model(access.model())?;
+    access.ensure_current(executor)
+}
+
+/// 仓库身份读取不得消费其他资源、集合、行身份或受限输出。
+fn warehouse_model(model: &QueryModel) -> IdentityResult<()> {
+    if model.resource != "warehouse"
+        || model.collection != <Database as WarehouseExt>::WAREHOUSES
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(IdentityError::ValidationError("仓库查询授权模型不匹配".into()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::warehouse;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
 
     use super::*;
 
@@ -278,11 +317,74 @@ mod tests {
     fn context() -> AccessContext {
         AccessContext {
             actor: AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin),
-            permission: Permission::parse("warehouse:list").unwrap(),
+            permission: warehouse::LIST,
             resource: "warehouse".into(),
             model: None,
             as_of: Instant::from_unix_secs(1),
         }
+    }
+
+    async fn compiled(model: QueryModel, executor: &mut dyn Executor) -> WarehouseQuery {
+        let authorization = fixed_authorization(
+            &[warehouse::LIST],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(warehouse::LIST, Arc::new(WarehouseMapping(model)))],
+        )
+        .unwrap();
+        let compiled = authorization.query(&context().actor, &warehouse::LIST, executor).await.unwrap();
+        WarehouseQuery { has_rows: true, authorization, compiled: Arc::new(compiled) }
+    }
+
+    #[test]
+    fn warehouse_model_requires_fixed_resource_collection_identity_and_object_output() {
+        let model = mapping().0;
+        warehouse_model(&model).unwrap();
+        for invalid in [
+            QueryModel { resource: "supplier".into(), ..model.clone() },
+            QueryModel { collection: "other_warehouses".into(), ..model.clone() },
+            QueryModel { id_field: "warehouse_id".into(), ..model.clone() },
+            QueryModel { output: QueryOutput::Share { fields: ["id".into()].into() }, ..model.clone() },
+            QueryModel { output: QueryOutput::Existence { fields: ["id".into()].into() }, ..model.clone() },
+        ] {
+            assert!(matches!(warehouse_model(&invalid), Err(IdentityError::ValidationError(_))));
+        }
+    }
+
+    #[tokio::test]
+    async fn warehouse_read_entry_points_reject_wrong_models_and_stale_boundaries() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("warehouse_query_guard");
+        let mut executor = ReadExecutor::default();
+        let correct = compiled(mapping().0, &mut executor).await;
+        correct.ensure_current(&mut executor).unwrap();
+        let wrong =
+            compiled(QueryModel { collection: "other_warehouses".into(), ..mapping().0 }, &mut executor)
+                .await;
+        assert!(matches!(wrong.ensure_current(&mut executor), Err(IdentityError::ValidationError(_))));
+        assert!(matches!(
+            authorized_rows_exist(&db, &wrong.compiled, &mut executor).await,
+            Err(IdentityError::ValidationError(_))
+        ));
+        assert!(matches!(
+            authorized_ids_in(&db, &wrong.compiled, &["warehouse".into()], &mut executor).await,
+            Err(IdentityError::ValidationError(_))
+        ));
+        executor.next_read();
+        assert!(matches!(correct.ensure_current(&mut executor), Err(IdentityError::ValidationError(_))));
+        assert!(matches!(
+            authorized_rows_exist(&db, &correct.compiled, &mut executor).await,
+            Err(IdentityError::ValidationError(_))
+        ));
+        assert!(matches!(
+            authorized_ids_in(&db, &correct.compiled, &[], &mut executor).await,
+            Err(IdentityError::ValidationError(_))
+        ));
     }
     #[test]
     fn warehouse_fact_uses_real_identity_and_rejects_unsupported_dimensions() {

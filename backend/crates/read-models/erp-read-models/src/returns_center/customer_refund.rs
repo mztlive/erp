@@ -4,6 +4,7 @@ use erp_identity::AccessTarget;
 use erp_permissions::returns;
 use erp_returns::repository::ReturnsExt;
 use erp_returns::repository::prelude::*;
+use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::repository::prelude::*;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -153,7 +154,7 @@ impl ReturnsReadService {
             customer_refund_view_from_facts(CustomerRefundListFacts::from_refund(&refund), binding.as_ref());
         view.approval = super::approval::load_runtime(
             &self.db,
-            erp_workflow::entity::document_registry::DocumentType::CustomerRefund,
+            DocumentType::CustomerRefund,
             &id,
             view.approval,
             executor,

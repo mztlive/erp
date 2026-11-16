@@ -37,7 +37,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::{MongoPurchaseDataScope, purchase_ports};
+use crate::wiring::{PurchaseDataScope, purchase_ports};
 
 /// 构造已注入采购范围 Port 的只读服务。
 ///
@@ -56,7 +56,7 @@ fn purchase_reads(state: &HttpState) -> PurchaseOrderReadService {
     PurchaseOrderReadService::new(
         state.application().db(),
         state.application().rbac(),
-        MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
+        PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
     )
 }
 

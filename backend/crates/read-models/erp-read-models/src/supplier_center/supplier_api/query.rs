@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, SupplierAccountId, SupplierApiConnectionId};
-use erp_identity::{AccessTarget, PermissionSet};
+use erp_identity::{AccessTarget, CompiledAccess, PermissionSet};
 use erp_party::PartyExt;
 use erp_permissions::supplier_api;
 use erp_supplier::SupplierExt;
@@ -27,11 +27,12 @@ use erp_supply::service::supplier_api::context::{
 };
 use erp_support::BulkJobExt;
 use erp_support::repository::prelude::*;
-use persistence_core::{Executor, ReadExecutor, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::SupplierApiReadService;
 use super::context::GovernanceContext;
-use crate::Result;
+use crate::supplier_center::keyword_supplier_ids;
+use crate::{Error, Result};
 
 impl SupplierApiReadService {
     /// 按查询参数与服务端连接事实返回分页投影。
@@ -78,8 +79,7 @@ impl SupplierApiReadService {
             .require(actor, &supplier_api::CONNECTION_LIST, AccessTarget::Operation, executor)
             .await?;
         validator::Validate::validate(params)?;
-        let suppliers =
-            crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref(), executor).await?;
+        let suppliers = keyword_supplier_ids(&self.db, params.q.as_deref(), executor).await?;
         let page = self.domain().connection_list(params, suppliers, executor).await?;
         let supplier_names = self.supplier_names_for_connections(&page.items, executor).await?;
         Ok(self.connection_list_view(page, &supplier_names))
@@ -159,7 +159,7 @@ impl SupplierApiReadService {
     /// * `actor` - 已认证操作人，用于动作和引用元数据权限。
     ///
     /// # 返回
-    /// 返回连接详情投影。
+    /// 返回同一快照内的连接详情投影。
     ///
     /// # 错误
     /// 连接不存在时返回 `NotFound`。查询或 RBAC 判定失败时返回对应错误。
@@ -168,24 +168,66 @@ impl SupplierApiReadService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<SupplierApiConnectionDetailView> {
-        let executor = &mut ReadExecutor::default();
-        let access = self.authorization.query(actor, &supplier_api::CONNECTION_DETAIL, executor).await?;
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.connection_detail_snapshot(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 展示资格在最终查询前读取；根与全部补齐结果在交付前共同校验。
+    /// # 参数
+    /// id、actor 为连接和当前账号，executor 为公开入口的原快照执行器。
+    /// # 返回
+    /// 返回同一快照的连接详情、动作及安全引用投影。
+    /// # 错误
+    /// 非快照执行器、资格或查询失败时拒绝；结果失效时不交付详情。
+    pub(super) async fn connection_detail_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierApiConnectionDetailView> {
+        let (access, permissions) = self.connection_detail_access(actor, executor).await?;
         let connection = authorized_connection(&self.db, id, &access, executor).await?;
         let context = self.governance_context(&connection, executor).await?;
-        let view = self.detail_view(connection, context, actor, executor).await?;
+        let view = self.detail_view(connection, context, &permissions, executor).await?;
         self.authorization.validate(&access, executor).await?;
         Ok(view)
+    }
+
+    /// 先取得展示资格，再签发覆盖根及补齐读取的最终凭证。
+    /// # 参数
+    /// actor 为当前账号，executor 必须属于活动快照事务。
+    /// # 返回
+    /// 返回最终查询凭证与同快照内独立检查的展示权限。
+    /// # 错误
+    /// 执行边界、展示资格取证或详情查询资格失败时拒绝。
+    pub(super) async fn connection_detail_access(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(CompiledAccess, PermissionSet)> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("供应连接详情读取必须使用快照事务".into()));
+        }
+        let permissions = self.connection_permissions(actor, executor).await?;
+        let access = self.authorization.query(actor, &supplier_api::CONNECTION_DETAIL, executor).await?;
+        Ok((access, permissions))
     }
 
     async fn detail_view(
         &self,
         connection: SupplierApiConnection,
         context: GovernanceContext,
-        actor: &AuditActor,
+        permissions: &PermissionSet,
         executor: &mut dyn Executor,
     ) -> Result<SupplierApiConnectionDetailView> {
-        let permissions = self.connection_permissions(actor, executor).await?;
-        let reference_visible = permissions.covers_one(&erp_permissions::supplier_api::REFERENCES_OPTIONS);
+        let reference_visible = permissions.covers_one(&supplier_api::REFERENCES_OPTIONS);
         let connector_description = self
             .reference_registry
             .as_ref()
@@ -196,7 +238,7 @@ impl SupplierApiReadService {
             .unwrap_or_default();
 
         let connection_view =
-            self.connection_view(&connection, &permissions, reference_visible, executor).await?;
+            self.connection_view(&connection, permissions, reference_visible, executor).await?;
         let (settlement_scan, settlement_evidence) =
             self.settlement_context(&connection.base.id, executor).await?;
         let deployment_ready = self.reference_registry.as_ref().is_some_and(|registry| {

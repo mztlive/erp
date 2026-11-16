@@ -3,7 +3,7 @@
 use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, ScopeVersion};
 use erp_identity::AccountDirectoryService;
 use erp_permissions::supplier;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
@@ -68,80 +68,70 @@ impl SupplierService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self.list_snapshot(&query, actor).await?;
-        ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
-        let current = self.list_version_snapshot(&query, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let expected_version = params.scope_version.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.list_stage(&query, &actor, expected_version.as_deref(), executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在一个快照中读取分页并复核客户端及交付版本。
+    async fn list_stage(
+        &self,
+        query: &SupplierListQuery,
+        actor: &AuditActor,
+        expected_version: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierListView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("供应商列表必须使用快照事务".into()));
+        }
+        let snapshot = self.run_list_snapshot(query, actor, true, executor).await?;
+        ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
+        let current = self.run_list_snapshot(query, actor, false, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
     }
 
-    /// 授权、总数、候选与业务身份版本全部在同一个事务读取。
-    async fn list_snapshot(&self, query: &SupplierListQuery, actor: &AuditActor) -> Result<SupplierSnapshot> {
-        self.run_list_snapshot(query, actor, true).await
-    }
-
-    /// 轻量版本复核快照（erp-supplier-004）。
-    ///
-    /// 与 [`Self::list_snapshot`] 共用授权、过滤与版本指纹逻辑，
-    /// 跳过列表束装配、候选与行水合；调用方仅用 `context.scope_version`
-    /// 做稳定性比对，快照语义保持不变。
-    async fn list_version_snapshot(
-        &self,
-        query: &SupplierListQuery,
-        actor: &AuditActor,
-    ) -> Result<SupplierSnapshot> {
-        self.run_list_snapshot(query, actor, false).await
-    }
-
-    /// 执行列表事务体（erp-supplier-004）。
-    ///
-    /// `hydrate` 为假时跳过列表束、水合与候选装配，仅重算版本指纹供复核使用。
+    /// 在原快照中复用授权、筛选和版本指纹；`hydrate` 控制分页水合。
     async fn run_list_snapshot(
         &self,
         query: &SupplierListQuery,
         actor: &AuditActor,
         hydrate: bool,
+        executor: &mut dyn Executor,
     ) -> Result<SupplierSnapshot> {
-        let db = self.db.clone();
-        let access = self.access();
-        let party = self.party.clone();
-        let accounts = self.accounts.clone();
-        let query = query.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut context = access.resolve(&actor, &supplier::LIST, executor).await?;
-                    context.ensure_current(executor)?;
-                    let input = build_list_input(&query, &context, party.as_ref(), executor).await?;
-                    fingerprint_scope(&db, &mut context, &input, executor).await?;
-                    if !hydrate {
-                        context.validate(executor).await?;
-                        return Ok(SupplierSnapshot {
-                            items: Vec::new(),
-                            total: 0,
-                            page: input.page,
-                            page_size: input.page_size,
-
-                            context,
-                        });
-                    }
-                    let bundle = db.supplier().load_supplier_list_bundle(&input, executor).await?;
-                    hydrate_snapshot(HydrateArgs {
-                        bundle,
-                        party: party.as_ref(),
-                        accounts: &accounts,
-                        context,
-                        page: input.page,
-                        page_size: input.page_size,
-                        executor,
-                    })
-                    .await
-                })
-            })
-            .await
+        let mut context = self.data_scope.resolve(actor, &supplier::LIST, executor).await?;
+        context.ensure_current(executor)?;
+        let input = build_list_input(query, &context, self.party.as_ref(), executor).await?;
+        fingerprint_scope(&self.db, &mut context, &input, executor).await?;
+        if !hydrate {
+            context.validate(executor).await?;
+            return Ok(SupplierSnapshot {
+                items: Vec::new(),
+                total: 0,
+                page: input.page,
+                page_size: input.page_size,
+                context,
+            });
+        }
+        let bundle = self.db.supplier().load_supplier_list_bundle(&input, executor).await?;
+        hydrate_snapshot(HydrateArgs {
+            bundle,
+            party: self.party.as_ref(),
+            accounts: &self.accounts,
+            context,
+            page: input.page,
+            page_size: input.page_size,
+            executor,
+        })
+        .await
     }
 }
 
@@ -193,11 +183,11 @@ pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Resu
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 同一查询内两次快照的范围版本必须一致。
+/// 同一快照内两次读取的范围版本必须一致。
 ///
 /// # 参数
-/// * `first` - 第一次快照版本
-/// * `second` - 第二次快照版本
+/// * `first` - 分页读取版本
+/// * `second` - 交付复核版本
 ///
 /// # 返回
 /// 两次版本相同时返回 `Ok(())`。
@@ -351,6 +341,45 @@ fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn list_rejects_non_snapshot_and_missing_binding_before_business_reads() {
+        use std::sync::Arc;
+
+        use erp_core::AccountKind;
+        use erp_identity::testing::unbound_authorization;
+        use mongodb::Client;
+        use persistence_core::ReadExecutor;
+        use persistence_core::testing::SnapshotExecutor;
+
+        use crate::SupplierAccess;
+        use crate::ports::EmptyPartyFacts;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("supplier_list_snapshot");
+        let service = SupplierService::new(
+            db.clone(),
+            Arc::new(EmptyPartyFacts),
+            SupplierAccess::new(db, unbound_authorization()),
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let query = serde_json::from_value::<SupplierListParams>(serde_json::json!({}))
+            .unwrap()
+            .normalized()
+            .unwrap();
+        let result = service.list_stage(&query, &actor, None, &mut ReadExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(message)) if message == "供应商列表必须使用快照事务"
+        ));
+        let result = service.list_stage(&query, &actor, None, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(message)) if message == "缺少查询 Mapping 绑定"
+        ));
+    }
 
     #[test]
     fn later_pages_without_scope_version_are_rejected() {

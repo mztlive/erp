@@ -55,7 +55,7 @@ impl SalesSelectionProcess {
                     )
                     .await?;
                     let customer = customer_fact(&db, &req.customer_id, executor).await?;
-                    SalesSelectionService::new(db)
+                    SalesSelectionService::new(db, access.authorization())
                         .copy(&source, &req, customer, actor.id(), &fingerprint, executor)
                         .await
                         .map_err(Error::from)

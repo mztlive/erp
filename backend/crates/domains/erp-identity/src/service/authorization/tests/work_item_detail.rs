@@ -96,6 +96,66 @@ async fn detail_order_scope_matches_require_without_adding_order_menu_qualificat
 }
 
 #[tokio::test]
+async fn company_task_scope_keeps_restricted_purchase_history_and_personal_limit() {
+    for (company_source, owner, history, allowed) in [
+        (false, "other", true, true),
+        (false, "other", false, false),
+        (true, "other", true, false),
+        (true, "user", false, true),
+    ] {
+        let identity = Arc::new(Identity::default());
+        grant(&identity, &[("task-reader", &[work_item::DETAIL])]);
+        identity.scopes.lock().unwrap().extend([
+            (
+                (work_item::DETAIL, work_item::DETAIL),
+                ResolvedScope {
+                    role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                    user_limit: None,
+                },
+            ),
+            (
+                (work_item::DETAIL, purchase_order::DETAIL),
+                ResolvedScope {
+                    role_clauses: vec![ScopeClause {
+                        company: company_source,
+                        self_owned: !company_source,
+                        ..Default::default()
+                    }],
+                    user_limit: company_source
+                        .then(|| ScopeClause { self_owned: true, ..Default::default() }),
+                },
+            ),
+        ]);
+        let mut task = order_task("purchase_order", owner, history);
+        task.owner_id = FactValue::Known(Some("other-task-owner".into()));
+        let service = service(identity, Arc::new(Facts::new(vec![task])));
+        let mut executor = SnapshotExecutor::default();
+        let access = service.query(&actor(), &work_item::DETAIL, &mut executor).await.unwrap();
+        let result = rows(
+            &access,
+            vec![doc! {"id":"task","owner":"other-task-owner","deleted_at":0,"detail_purchase":["order"]}],
+            [(
+                "purchase_order_rows".into(),
+                vec![doc! {
+                    "id":"order","owner":owner,"history":if history {"user"} else {""},"deleted_at":0
+                }],
+            )]
+            .into(),
+        );
+        assert_eq!(result, if allowed { vec!["task"] } else { vec![] });
+        service.validate(&access, &mut executor).await.unwrap();
+        let required = service
+            .require(&actor(), &work_item::DETAIL, AccessTarget::record("task").unwrap(), &mut executor)
+            .await;
+        if allowed {
+            required.unwrap();
+        } else {
+            assert!(matches!(required, Err(Error::Forbidden(_))), "{required:?}");
+        }
+    }
+}
+
+#[tokio::test]
 async fn missing_order_source_rejects_detail_without_filtering_the_original_list() {
     let identity = Arc::new(Identity::default());
     grant(&identity, &[("reader", &[work_item::LIST, work_item::DETAIL])]);

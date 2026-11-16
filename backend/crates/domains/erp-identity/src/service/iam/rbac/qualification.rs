@@ -133,13 +133,26 @@ impl RbacService {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl QualifiedPermissions {
     /// 用一次快照构造资格，供规则测试复用同角色证明。
+    #[cfg(test)]
     pub(crate) fn test_grants(grants: &[(&str, &[Permission])]) -> Self {
-        use std::collections::{HashMap, HashSet};
-
         use erp_core::AccountKind;
+
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        Self::test_grants_for(&actor, grants)
+    }
+
+    /// 用固定启用角色为指定测试账号构造资格。
+    /// # 参数
+    /// actor 为待核验账号；grants 为固定启用角色及其具体权限。
+    /// # 返回
+    /// 与生产共用资格构造和版本计算的内存取证结果。
+    /// # 错误
+    /// 无。固定角色编号或名称无效时触发测试断言。
+    pub(crate) fn test_grants_for(actor: &AuditActor, grants: &[(&str, &[Permission])]) -> Self {
+        use std::collections::{HashMap, HashSet};
 
         let mut role_ids = Vec::new();
         let mut map = HashMap::new();
@@ -156,8 +169,7 @@ impl QualifiedPermissions {
             roles.push(role);
         }
         let snapshot = RolePermissionSnapshot { role_ids, grants: map, policy_revision: 1 };
-        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
-        qualified(snapshot, &roles, &actor, 1, AccountSummary::new("user", AccountKind::Admin, true))
+        qualified(snapshot, &roles, actor, 1, AccountSummary::new(actor.id(), actor.kind(), true))
     }
 }
 

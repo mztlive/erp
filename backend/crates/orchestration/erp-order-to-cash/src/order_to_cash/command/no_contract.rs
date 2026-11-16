@@ -40,9 +40,16 @@ impl SalesOrderCommandProcess {
         executor: &mut dyn Executor,
     ) -> Result<(SalesOrder, SalesOrderDraftRequest)> {
         let (contract_id, customer_id, mut editable) = input;
+        let access = if contract_id != order.contract_id
+            || customer_id.as_ref().is_some_and(|id| id != &order.customer_id)
+        {
+            access.clone().selecting_customer()
+        } else {
+            access.clone()
+        };
         editable.retain_settlement(&order.settlement_party_id, contract_id.is_some());
         let (customer_id, settlement_party_id, draft) =
-            self.resolve_sales_command_draft(access, &contract_id, &customer_id, editable, executor).await?;
+            self.resolve_sales_command_draft(&access, &contract_id, &customer_id, editable, executor).await?;
         if require_editable {
             order
                 .ensure_first_submission_working_copy_editable()

@@ -56,7 +56,6 @@ pub use repository::{
     SupplierQualificationFilter, SupplierQualificationHealthFilter, SupplierQualificationRepository,
     SupplierReadScope, SupplierRepository,
 };
-pub use service::supplier::eligibility::ensure_capability_qualified;
 pub use service::supplier::{
     SupplierAccess, SupplierListView, SupplierService, capability_handover_fingerprint, command_view,
     supplier_handover_fingerprint,

@@ -258,16 +258,16 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_identity::Permission;
+    use erp_permissions::{Permission, sales_selection};
 
     use super::*;
 
-    fn context(resource: &str) -> AccessContext {
+    fn context(permission: &Permission) -> AccessContext {
         AccessContext {
             actor: AuditActor::new("sales-a".into(), "销售甲".into(), AccountKind::Admin),
-            permission: Permission::parse(format!("{resource}:list")).unwrap(),
-            resource: resource.into(),
-            model: Some(QueryModelKey::parse(resource).unwrap()),
+            permission: permission.clone(),
+            resource: permission.resource().into(),
+            model: Some(QueryModelKey::parse(permission.resource()).unwrap()),
             as_of: Instant::from_unix_secs(10),
         }
     }
@@ -283,15 +283,17 @@ mod tests {
     #[test]
     fn customer_relation_preserves_the_actual_reference_and_registered_source() {
         let customer = customer_mapping();
-        for resource in ["sales_selection_booklet", "sales_selection_proposal"] {
+        for permission in [sales_selection::BOOKLET_LIST, sales_selection::PROPOSAL_LIST] {
+            let resource = permission.resource();
             let mapping = SelectionMapping::with_customer(resource, customer.clone()).unwrap();
-            let relation =
-                mapping.relation(&RelationKey::parse("customer").unwrap(), &context(resource), None).unwrap();
+            let relation = mapping
+                .relation(&RelationKey::parse("customer").unwrap(), &context(&permission), None)
+                .unwrap();
             assert_eq!(relation.expected_ids, Bson::Array(vec!["$customer_id".into()]));
             assert!(Arc::ptr_eq(&relation.mapping, &customer));
             assert!(
                 mapping
-                    .relation(&RelationKey::parse("unregistered").unwrap(), &context(resource), None,)
+                    .relation(&RelationKey::parse("unregistered").unwrap(), &context(&permission), None,)
                     .is_err()
             );
         }
@@ -304,7 +306,7 @@ mod tests {
             mapping
                 .relation(
                     &RelationKey::parse("customer").unwrap(),
-                    &context("sales_selection_booklet"),
+                    &context(&sales_selection::BOOKLET_LIST),
                     None,
                 )
                 .is_err()
@@ -316,7 +318,7 @@ mod tests {
     fn booklet_maps_current_owner_and_organization_fields() {
         let mapping = SelectionMapping::new("sales_selection_booklet").unwrap();
         let facts = None;
-        let context = context("sales_selection_booklet");
+        let context = context(&sales_selection::BOOKLET_LIST);
         let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
         else {
             panic!("册责任必须使用本行字段");
@@ -334,7 +336,7 @@ mod tests {
     fn proposal_responsibility_uses_live_parent_instead_of_snapshot_fields() {
         let mapping = SelectionMapping::new("sales_selection_proposal").unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } =
-            mapping.predicate(&AccessFact::Owned, &context("sales_selection_proposal"), None).unwrap()
+            mapping.predicate(&AccessFact::Owned, &context(&sales_selection::PROPOSAL_LIST), None).unwrap()
         else {
             panic!("方案责任必须关联实际父册");
         };
@@ -353,7 +355,7 @@ mod tests {
             mapping
                 .predicate(
                     &AccessFact::WarehouseIn(["warehouse".into()].into()),
-                    &context("sales_selection_booklet"),
+                    &context(&sales_selection::BOOKLET_LIST),
                     None
                 )
                 .is_err()

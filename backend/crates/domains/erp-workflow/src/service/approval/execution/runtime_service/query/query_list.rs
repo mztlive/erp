@@ -348,8 +348,41 @@ fn process_required_document_types() -> Result<Vec<DocumentType>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_AUTHORIZED_INSTANCES, ensure_runtime_result_limit};
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::{MAX_AUTHORIZED_INSTANCES, ensure_runtime_result_limit, *};
     use crate::error::Error;
+    use crate::ports::FailClosedWorkflowAuthorizationPort;
+    use crate::service::approval::definition::test_support::unavailable_service;
+
+    #[tokio::test]
+    async fn instance_lists_authorize_in_their_snapshot_before_business_reads() {
+        let (definition, actor) = unavailable_service().await;
+        let runtime = ApprovalRuntimeService::new(
+            definition.db,
+            definition.identity,
+            definition.authorization,
+            FailClosedWorkflowAuthorizationPort,
+        );
+        for view in [
+            RuntimeInstanceListView::Mine,
+            RuntimeInstanceListView::Started,
+            RuntimeInstanceListView::Managed,
+            RuntimeInstanceListView::Blocked,
+        ] {
+            let query = RuntimeInstanceListQuery::prepare(view, None, None, None, None, None).unwrap();
+            let result = match view {
+                RuntimeInstanceListView::Mine => {
+                    runtime.list_mine_stage(&actor, &query, &mut SnapshotExecutor::default()).await
+                },
+                _ => runtime.list_scoped_instances(&actor, &query, &mut SnapshotExecutor::default()).await,
+            };
+            assert!(
+                matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"),
+                "{view:?}"
+            );
+        }
+    }
 
     #[test]
     fn runtime_authorized_limit_preserves_existing_failure() {

@@ -5,14 +5,11 @@
 
 use mongodb::Database;
 
-use crate::repository::SalesReviewExt;
-
 mod command_source;
 mod create;
 mod draft;
 mod effective;
 mod formalization;
-mod query;
 mod rejection;
 pub use rejection::reject_change;
 mod state;
@@ -27,9 +24,6 @@ pub use state::{
 };
 pub use submission::{SalesChangeSubmissionWrite, latest_change_submission_no};
 pub use void::VoidChangeWrite;
-
-/// 销售变更单列表筛选条件类型。
-type SalesChangeOrderFilter = <mongodb::Database as SalesReviewExt>::SalesChangeOrderFilter;
 
 /// 销售变更服务只持有自身仓储，不持有审批、审计、采购或财务能力。
 pub struct SalesReviewService {

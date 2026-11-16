@@ -3,9 +3,7 @@
 use application_core::AuditActor;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_audit::{AuditActorLogs, AuditLog};
-use erp_core::AccountKind;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
-use erp_permissions::supplier_settlement;
 use erp_supply::SettlementAccess;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{RefreshReceipt, SupplyCommandResult};
@@ -165,31 +163,23 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let fingerprint = refresh_fingerprint(&req);
-                    let audit_id = command_audit_id(
-                        actor.id(),
-                        "supplier_settlement.refresh",
-                        &id,
-                        &req.idempotency_key,
-                    );
-                    process
-                        .data_scope
-                        .require_statement(&actor, &supplier_settlement::STATEMENT_REFRESH, &id, executor)
-                        .await?;
-                    process
-                        .replay_refresh(
-                            &audit_id,
-                            &fingerprint,
-                            &id,
-                            (actor.id(), &req.idempotency_key),
-                            executor,
-                        )
-                        .await
-                })
+                Box::pin(async move { process.recover_refresh(&id, &req, &actor, executor).await })
             })
             .await;
         recover_command(error, recovered)
+    }
+
+    /// 恢复与首次刷新复用真实操作人、命令资格及原执行器。
+    async fn recover_refresh(
+        &self,
+        id: &str,
+        req: &RefreshSettlementStatementRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SettlementDraftCommandResult>> {
+        let fingerprint = refresh_fingerprint(req);
+        let audit_id = command_audit_id(actor.id(), "supplier_settlement.refresh", id, &req.idempotency_key);
+        self.replay_refresh(&audit_id, &fingerprint, id, (actor, &req.idempotency_key), executor).await
     }
 
     /// 在入口事务内完成授权、准备、重放与持久化。
@@ -207,14 +197,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let fingerprint = refresh_fingerprint(&req);
         let audit_id = command_audit_id(actor.id(), "supplier_settlement.refresh", id, &req.idempotency_key);
         if let Some(result) =
-            self.replay_refresh(&audit_id, &fingerprint, id, (actor.id(), &replay_key), executor).await?
+            self.replay_refresh(&audit_id, &fingerprint, id, (actor, &replay_key), executor).await?
         {
             return Ok(result);
         }
-        self.domain()
-            .access()
-            .require_statement(actor, &supplier_settlement::STATEMENT_REFRESH, id, executor)
-            .await?;
         let prepared = self.domain().prepare_refresh(id, &req, actor, executor).await?;
         let statement = prepared.statement;
         let Some(snapshot) = prepared.snapshot else {
@@ -319,37 +305,31 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         Ok(())
     }
 
+    /// 首次执行与重放均先证明真实账号的刷新资格，再读取同一执行器中的回执。
     async fn replay_refresh(
         &self,
         audit_id: &str,
         expected_fingerprint: &str,
         statement_id: &str,
-        identity: (&str, &str),
-
+        identity: (&AuditActor, &str),
         executor: &mut dyn Executor,
     ) -> Result<Option<SettlementDraftCommandResult>> {
+        let (actor, key) = identity;
+        self.data_scope.require_action(actor, SettlementAction::Refresh, statement_id, executor).await?;
         let Some(stored) = self.db.supply_command_receipts().find_command(audit_id, executor).await? else {
             return Ok(None);
         };
         stored.verify_identity(
             audit_id,
-            identity.0,
+            actor.id(),
             "supplier_settlement.refresh",
             statement_id,
-            &stable_digest(identity.1.trim()),
+            &stable_digest(key.trim()),
         )?;
         stored.verify(expected_fingerprint, Some(statement_id), "幂等键已用于不同的刷新结算试算命令")?;
         let SupplyCommandResult::Refresh(receipt) = stored.result else {
             return Err(Error::Internal("结算刷新回执类型非法".to_string()));
         };
-        self.data_scope
-            .require_statement(
-                &AuditActor::new(identity.0.into(), identity.0.into(), AccountKind::Admin),
-                &supplier_settlement::STATEMENT_REFRESH,
-                statement_id,
-                executor,
-            )
-            .await?;
         let statement = self.domain().load_statement(statement_id, executor).await?;
         ensure_refresh_replay(&statement, &receipt)?;
         Ok(Some(refresh_result(statement, receipt, "REPLAYED", "结算试算刷新结果已恢复")))
@@ -542,7 +522,40 @@ fn validate_refresh_identity(id: &str, req: &RefreshSettlementStatementRequest) 
 
 #[cfg(test)]
 mod replay_tests {
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
+
     use super::*;
+
+    #[tokio::test]
+    async fn refresh_first_attempt_and_recovery_require_command_access_before_receipt_reads() {
+        let process = super::super::tests::unwired_process().await;
+        let actor = AuditActor::new("preparer".into(), "preparer-login".into(), AccountKind::Supplier);
+        let request = RefreshSettlementStatementRequest {
+            action: SettlementDraftAction::Refresh,
+            statement_id: "statement-1".into(),
+            expected_lock_version: 1,
+            expected_source_snapshot_hash: "a".repeat(64),
+            request_id: "request-1".into(),
+            idempotency_key: "refresh-key".into(),
+        };
+        let attempt =
+            process.refresh_statement_apply("statement-1", request.clone(), &actor, &mut NoTransaction).await;
+        assert!(matches!(attempt, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+        let recovery = process.recover_refresh("statement-1", &request, &actor, &mut NoTransaction).await;
+        assert!(matches!(recovery, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+        let replay = process
+            .replay_refresh(
+                "audit",
+                "fingerprint",
+                "statement-1",
+                (&actor, "refresh-key"),
+                &mut NoTransaction,
+            )
+            .await;
+        assert!(matches!(replay, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+    }
+
     #[test]
     fn refresh_receipt_rejects_both_older_and_newer_versions_and_replaced_hash() {
         let mut statement = super::super::tests::sample_statement();

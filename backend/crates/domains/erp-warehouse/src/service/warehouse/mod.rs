@@ -12,6 +12,7 @@
 //! `AttachmentFingerprintPort` 计算；跨域只经本 crate 端口，禁止 Service 依赖 Service。
 
 mod commands;
+mod reads;
 
 use std::future::Future;
 use std::sync::Arc;
@@ -187,30 +188,24 @@ impl WarehouseService {
     /// 列出仓库收发责任配置可选的具体账号。
     ///
     /// # 参数
-    /// 无。
+    /// actor 为检查仓库配置资格的当前账号。
     ///
     /// # 返回
     /// 返回可登录管理账号及其入库、仓发权限资格。
     ///
     /// # 错误
-    /// 账号或权限数据读取失败时返回错误。
+    /// 当前账号缺少仓库配置资格时返回 `Forbidden`；授权、身份端口及事务错误按原分类传播。
     pub async fn warehouse_fulfillment_handler_options(
         &self,
         actor: &AuditActor,
     ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
-        let authorization = self.authorization.clone();
+        let service = self.clone();
         let actor = actor.clone();
-        let identity = self.identity.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &warehouse::UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    Ok(handler_option_views(identity.admin_handler_identities(executor).await?))
-                })
+                Box::pin(async move { service.handler_options_snapshot(&actor, executor).await })
             })
             .await
     }
@@ -251,11 +246,7 @@ impl WarehouseService {
         params: &WarehouseRevisionListParams,
         executor: &mut dyn Executor,
     ) -> Result<PageView<WarehouseRevisionView>> {
-        params.validate()?;
-        let filter = params.normalized()?.into_filter();
-        self.authorization
-            .require(actor, &warehouse::REVISION_LIST, AccessTarget::Operation, executor)
-            .await?;
+        let filter = self.revision_filter(actor, params, executor).await?;
         map_search_page(
             self.db.warehouse_revisions().search_warehouse_revisions(&filter, executor),
             WarehouseRevisionView::from_row,
@@ -301,11 +292,7 @@ impl WarehouseService {
         params: &WarehouseSkuPolicyListParams,
         executor: &mut dyn Executor,
     ) -> Result<PageView<WarehouseSkuPolicyView>> {
-        params.validate()?;
-        let filter = params.normalized()?.into_filter();
-        self.authorization
-            .require(actor, &warehouse::SKU_POLICY_LIST, AccessTarget::Operation, executor)
-            .await?;
+        let filter = self.sku_policy_filter(actor, params, executor).await?;
         map_search_page(
             self.db.warehouse_sku_policies().search_warehouse_sku_policies(&filter, executor),
             WarehouseSkuPolicyView::from_row,

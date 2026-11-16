@@ -5,10 +5,10 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::PartyId;
-use erp_customer::{CustomerSensitiveFieldView, CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};
+use erp_customer::{CustomerSensitiveRevealView, RevealCustomerSensitiveRequest};
 use erp_identity::AccessTarget;
 use erp_party::repository::prelude::*;
-use erp_party::{PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyOwned, SensitiveFieldKind};
+use erp_party::{PartyExt, PartyOwned, SensitiveFieldKind};
 use erp_permissions::{Permission, customer, party, payable};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -71,78 +71,6 @@ impl CustomerProfileProcess {
         Ok(CustomerSensitiveRevealView { value })
     }
 
-    /// 为每条当前敏感事实签发一分钟有效的字段级令牌。
-    ///
-    /// # 参数
-    /// * `customer_id` - 令牌绑定的客户主键。
-    /// * `contacts` - 当前联系人事实。
-    /// * `addresses` - 当前地址事实。
-    /// * `bank_accounts` - 当前银行账户事实。
-    ///
-    /// # 返回
-    /// 按联系人、地址、银行账户的顺序返回令牌视图；手机号和账号使用末四位掩码，地址固定掩码。
-    ///
-    /// # 错误
-    /// 系统时间无法转换为秒，或令牌签发失败时返回错误。
-    pub(super) fn sensitive_fields(
-        &self,
-        customer_id: &str,
-        contacts: &[PartyContact],
-        addresses: &[PartyAddress],
-        bank_accounts: &[PartyBankAccount],
-    ) -> Result<Vec<CustomerSensitiveFieldView>> {
-        let expires_at = unix_now()? + 60;
-        let mut fields = Vec::with_capacity(contacts.len() + addresses.len() + bank_accounts.len());
-        for contact in contacts {
-            fields.push(self.sensitive_field(
-                SensitiveFieldKind::ContactMobile,
-                &contact.base.id,
-                customer_id,
-                masked_last4(&contact.mobile_last4),
-                expires_at,
-            )?);
-        }
-        for address in addresses {
-            fields.push(self.sensitive_field(
-                SensitiveFieldKind::Address,
-                &address.base.id,
-                customer_id,
-                "********".to_string(),
-                expires_at,
-            )?);
-        }
-        for account in bank_accounts {
-            fields.push(self.sensitive_field(
-                SensitiveFieldKind::BankAccountNumber,
-                &account.base.id,
-                customer_id,
-                masked_last4(&account.account_number_last4),
-                expires_at,
-            )?);
-        }
-        Ok(fields)
-    }
-
-    /// 签发一个受客户与事实行约束的敏感字段令牌。
-    fn sensitive_field(
-        &self,
-        kind: SensitiveFieldKind,
-        record_id: &str,
-        customer_id: &str,
-        masked_value: String,
-        expires_at: u64,
-    ) -> Result<CustomerSensitiveFieldView> {
-        let reveal_token =
-            self.sensitive_data.issue_reveal_token(kind, record_id, customer_id, expires_at)?;
-        Ok(CustomerSensitiveFieldView {
-            kind: super::views::customer_sensitive_kind(kind),
-            record_id: record_id.to_string(),
-            masked_value,
-            reveal_token,
-            expires_at,
-        })
-    }
-
     /// 读取令牌指定事实的密文并校验其 Party 归属。
     async fn sensitive_ciphertext(
         &self,
@@ -191,11 +119,6 @@ fn unix_now() -> Result<u64> {
     u64::try_from(Instant::now().unix_secs()).map_err(|_| Error::Internal("系统时间非法".to_string()))
 }
 
-/// 生成不可逆末四位掩码。
-fn masked_last4(last4: &str) -> String {
-    if last4.is_empty() { "****".to_string() } else { format!("****{last4}") }
-}
-
 /// 每类字段保留独立的详情与揭示资格。
 pub(super) fn field_permissions(kind: SensitiveFieldKind) -> [Permission; 2] {
     match kind {
@@ -216,6 +139,7 @@ mod tests {
     use erp_identity::testing::unavailable_authorization;
     use erp_party::SensitiveDataCodec;
     use mongodb::Client;
+    use persistence_core::NoTransaction;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
@@ -245,5 +169,33 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn bank_reveal_rejects_non_snapshot_before_identity_or_business_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("bank_reveal_guard");
+        let authorization = unavailable_authorization();
+        let codec = Arc::new(SensitiveDataCodec::from_secret(b"customer-bank-reveal-guard"));
+        let token = codec
+            .issue_reveal_token(
+                SensitiveFieldKind::BankAccountNumber,
+                "bank-account",
+                "customer",
+                unix_now().unwrap() + 60,
+            )
+            .unwrap();
+        let access = CustomerAccess::new(db.clone(), authorization.clone());
+        let process = CustomerProfileProcess::new(db, codec, access, authorization);
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result = process
+            .reveal_snapshot(
+                &RevealCustomerSensitiveRequest { reveal_token: token },
+                &actor,
+                &mut NoTransaction,
+            )
+            .await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
+        );
     }
 }

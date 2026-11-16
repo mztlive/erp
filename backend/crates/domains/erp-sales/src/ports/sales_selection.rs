@@ -123,6 +123,7 @@ pub trait SelectionCatalogPort: Send + Sync {
     /// # 参数
     /// * `refs` - `(sku_id, sku_revision_id)`
     /// * `as_of` - 资格业务日期
+    /// * `executor` - 发布用例持有的原事务执行器
     ///
     /// # 返回
     /// 返回仍合格的引用。
@@ -133,6 +134,7 @@ pub trait SelectionCatalogPort: Send + Sync {
         &self,
         refs: &[(String, String)],
         as_of: BusinessDate,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<(String, String)>>;
 }
 

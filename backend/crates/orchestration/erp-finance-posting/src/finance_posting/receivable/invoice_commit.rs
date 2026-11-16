@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
-use erp_core::ids::{FileAssetId, InvoiceId, WorkItemId};
+use erp_core::ids::{InvoiceId, WorkItemId};
 use erp_finance::dto::receivable::CreateInvoiceRequest;
 use erp_finance::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
 use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
@@ -16,17 +16,19 @@ use mongodb::Database;
 use persistence_core::Executor;
 use validator::Validate;
 
+use super::dto::CommitInvoiceRequest;
 use super::invoice::register_created_invoice_document;
 use super::invoice_posting::{InvoicePostingAllocations, InvoicePostingInput, post_invoice_apply};
+use crate::finance_posting::task_access::TaskPurpose;
+use crate::finance_posting::task_entry::require_entry;
 use crate::{Error, FinancePostingPorts, Result};
 
-/// 本次已规范化的发票事务输入，不保存 S3 字节。
+/// 本次发票原始命令；授权及回执检查后才解析上传，不保存 S3 字节。
 pub(super) struct InvoiceCommitTransaction {
     pub db: Database,
     pub rbac: FinancePostingPorts,
-    pub prepared: PreparedInvoiceCommit,
+    pub req: CommitInvoiceRequest,
     pub pending: Arc<dyn PendingAttachmentBatch>,
-    pub attachment_ids: Vec<FileAssetId>,
     pub actor: AuditActor,
     pub receipt: CommandReceipt,
     pub work_item_id: WorkItemId,
@@ -42,14 +44,21 @@ impl InvoiceCommitTransaction {
     /// 返回原发票 ID 与本事务是否首次执行；重放不会消费新上传对象。
     /// # 错误
     /// 回执、授权、版本、发票、金额、任务或附件失败时停止并返回原错误。
-    pub async fn execute(self, executor: &mut dyn Executor) -> Result<(String, bool)> {
+    pub async fn execute(mut self, executor: &mut dyn Executor) -> Result<(String, bool)> {
+        require_entry(&self.db, &self.rbac, &self.actor, &self.work_item_id, TaskPurpose::Invoice, executor)
+            .await?;
         if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
             .committed_resource_id(&self.receipt, executor)
             .await?
         {
             return Ok((id, false));
         }
-        let (mut invoice, lines) = self.load_invoice(executor).await?;
+        if let Some(invoice) = self.req.invoice.as_mut() {
+            self.req.attachment_asset_ids.append(&mut invoice.attachment_asset_ids);
+        }
+        super::invoice_attachments::resolve(&mut self.req.attachment_asset_ids, self.pending.as_ref())?;
+        let prepared = self.req.prepare()?;
+        let (mut invoice, lines) = self.load_invoice(&prepared, executor).await?;
         self.ensure_draft(&invoice, executor).await?;
         post_invoice_apply(
             &self.db,
@@ -70,7 +79,7 @@ impl InvoiceCommitTransaction {
             &self.db,
             &self.rbac.authorization,
             &invoice.base.id,
-            &self.attachment_ids,
+            &self.req.attachment_asset_ids,
             self.pending.as_ref(),
             &self.actor,
             executor,
@@ -82,9 +91,10 @@ impl InvoiceCommitTransaction {
     /// 新建路径登记无审批单据；已有草稿路径重验版本及销项方向。
     async fn load_invoice(
         &self,
+        prepared: &PreparedInvoiceCommit,
         executor: &mut dyn Executor,
     ) -> Result<(Invoice, Vec<SalesInvoiceAllocationLine>)> {
-        match &self.prepared {
+        match prepared {
             PreparedInvoiceCommit::New { invoice, allocations } => {
                 invoice.validate()?;
                 let invoice = new_invoice(invoice, self.actor.id())?;

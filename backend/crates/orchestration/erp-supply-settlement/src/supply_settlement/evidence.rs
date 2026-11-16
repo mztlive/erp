@@ -8,8 +8,8 @@ use erp_identity::AccessTarget;
 use erp_permissions::supplier_settlement;
 use erp_supply::dto::supplier_settlement::*;
 use erp_supply::entity::supplier_settlement::SupplierSettlementDifferenceEvidence;
-use erp_supply::service::supplier_settlement::SupplierSettlementService;
 use erp_supply::service::supplier_settlement::evidence::{evidence_command_hash, evidence_result};
+use erp_supply::service::supplier_settlement::{SettlementAction, SupplierSettlementService};
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -32,7 +32,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// 返回已登记的补证结果；同一请求重放返回原结果。
     ///
     /// # 错误
-    /// 请求校验失败、路径与载荷 ID 不一致、差异不可补证或事务写入失败时返回对应错误。
+    /// 请求校验失败、路径与载荷 ID 不一致、缺少差异操作或结算单补证资格、差异不可补证或事务写入失败时返回对应错误。
     /// 写入失败后若原请求已落库，则返回该结果而不是原错误。
     pub async fn append_difference_evidence(
         &self,
@@ -61,28 +61,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    process
-                        .authorization
-                        .require(
-                            &actor,
-                            &supplier_settlement::DIFFERENCE_DECIDE,
-                            AccessTarget::Operation,
-                            executor,
-                        )
-                        .await?;
-                    Ok::<_, Error>(
-                        process
-                            .domain()
-                            .replay_difference_evidence(
-                                &req.request_id,
-                                &req,
-                                &evidence_command_hash(&req),
-                                executor,
-                            )
-                            .await?,
-                    )
-                })
+                Box::pin(async move { process.recover_evidence(&req, &actor, executor).await })
             })
             .await?;
         match recovered {
@@ -98,9 +77,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SettlementDifferenceEvidenceResult> {
-        self.authorization
-            .require(actor, &supplier_settlement::DIFFERENCE_DECIDE, AccessTarget::Operation, executor)
-            .await?;
+        self.require_evidence_access(req, actor, executor).await?;
         let command_hash = evidence_command_hash(req);
         if let Some(result) =
             self.domain().replay_difference_evidence(&req.request_id, req, &command_hash, executor).await?
@@ -126,6 +103,36 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         };
         input.persist(executor).await?;
         Ok(evidence_result(evidence, "RECORDED", "差异补证已登记，不会直接改变正式差异结论"))
+    }
+
+    /// 恢复读取前，在恢复事务内重验差异操作和结算单补证资格。
+    async fn recover_evidence(
+        &self,
+        req: &SettlementDifferenceEvidenceRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SettlementDifferenceEvidenceResult>> {
+        self.require_evidence_access(req, actor, executor).await?;
+        Ok(self
+            .domain()
+            .replay_difference_evidence(&req.request_id, req, &evidence_command_hash(req), executor)
+            .await?)
+    }
+
+    /// 补证和重放均沿原执行器核验差异操作及实际结算单的补证范围。
+    async fn require_evidence_access(
+        &self,
+        req: &SettlementDifferenceEvidenceRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.authorization
+            .require(actor, &supplier_settlement::DIFFERENCE_DECIDE, AccessTarget::Operation, executor)
+            .await?;
+        Ok(self
+            .data_scope
+            .require_action(actor, SettlementAction::AppendEvidence, &req.statement_id, executor)
+            .await?)
     }
 }
 

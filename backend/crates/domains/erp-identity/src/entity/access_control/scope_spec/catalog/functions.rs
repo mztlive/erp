@@ -49,6 +49,7 @@ pub(super) const PERMISSIONS: &[Permission] = &[
     internal::SALES_CHANGE_APPLIED_RESULT_READ,
     internal::DELIVERY_TEMPLATE_WRITE,
     internal::SUPPLIER_IMPORT_SUBMIT,
+    internal::PRODUCT_IMPORT_SUBMIT,
     access_control::PERMISSION_LIST,
     access_control::PERMISSION_CREATE,
     access_control::PERMISSION_UPDATE,

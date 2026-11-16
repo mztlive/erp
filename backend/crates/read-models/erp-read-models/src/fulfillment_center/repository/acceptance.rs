@@ -7,6 +7,7 @@ use erp_sales::repository::sales_order::scope::SalesReadScope;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Pagination, QueryFilter, aggregate};
+use serde::Deserialize;
 use validator::Validate;
 
 use crate::{Error, Result};
@@ -38,6 +39,44 @@ pub(crate) async fn acceptance_list(
         page: filter.page,
         page_size: filter.page_size,
     })
+}
+
+/// 只返回已通过实际销售来源完整授权的验收身份。
+/// # 参数
+/// db 为验收事实数据库；id 为精确验收身份；scope 为原 DETAIL 凭证；executor 为原事务。
+/// # 返回
+/// 来源存在且授权命中时返回验收身份，否则返回 None；不装载验收业务字段。
+/// # 错误
+/// 凭证失效、模型不符或数据库读取失败时拒绝。
+pub(crate) async fn acceptance_identity(
+    db: &Database,
+    id: &str,
+    scope: &SalesReadScope,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    scope.ensure_current(executor)?;
+    let identities = aggregate::rows(
+        &db.collection::<AcceptanceIdentity>(Database::CUSTOMER_ACCEPTANCES),
+        acceptance_identity_pipeline(id, scope),
+        executor,
+    )
+    .await?;
+    scope.ensure_current(executor)?;
+    Ok(identities.into_iter().next().map(|identity| identity.id))
+}
+
+/// 只在来源对象授权命中后交付验收身份，不携带验收业务字段。
+#[derive(Deserialize)]
+struct AcceptanceIdentity {
+    id: String,
+}
+
+/// 绑定精确验收身份及真实来源，完整授权先于身份投影。
+fn acceptance_identity_pipeline(id: &str, scope: &SalesReadScope) -> Vec<Document> {
+    let mut pipeline = vec![doc! { "$match": { "id": id, "deleted_at": 0_i64 } }];
+    pipeline.extend(scope.related_stages("sales_order_id"));
+    pipeline.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": 1 } }]);
+    pipeline
 }
 
 fn acceptance_filter(params: &CustomerAcceptanceListParams) -> Result<CustomerAcceptanceFilter> {
@@ -94,11 +133,56 @@ fn acceptance_view(row: CustomerAcceptanceRow) -> CustomerAcceptanceView {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
     use erp_core::ids::SalesOrderId;
     use erp_fulfillment::entity::fulfillment::CustomerAcceptanceState;
-    use mongodb::bson::deserialize_from_document;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::sales_order as sales_order_permissions;
+    use mongodb::bson::{Bson, deserialize_from_document};
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::sales_center::access::SalesAccess;
+    use crate::sales_center::repository::authorization::SalesMapping;
+
+    /// 成功编译的详情凭证只连接当前验收的真实销售来源，授权后仅投影身份。
+    #[tokio::test]
+    async fn acceptance_identity_applies_complete_detail_authorization_before_projection() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("acceptance_query");
+        let authorization = fixed_authorization(
+            &[sales_order_permissions::DETAIL],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(
+                sales_order_permissions::DETAIL,
+                Arc::new(SalesMapping::new(db.clone(), "sales_order", "acceptance_sales").unwrap()),
+            )],
+        )
+        .unwrap();
+        let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);
+        let (_, scope) = SalesAccess::new(db, authorization)
+            .resolve(&actor, &sales_order_permissions::DETAIL, &mut SnapshotExecutor::default())
+            .await
+            .unwrap();
+        let pipeline = acceptance_identity_pipeline("acceptance", &scope);
+        assert_eq!(pipeline[0], doc! { "$match": { "id": "acceptance", "deleted_at": 0_i64 } });
+        assert_eq!(&pipeline[1..pipeline.len() - 2], scope.related_stages("sales_order_id").as_slice());
+        assert_eq!(pipeline.last(), Some(&doc! { "$project": { "_id": 0, "id": 1 } }));
+        let lookup = pipeline[1].get_document("$lookup").unwrap();
+        assert_eq!(lookup.get_document("let").unwrap(), &doc! { "sales_source_id": "$sales_order_id" });
+        let source = lookup.get_array("pipeline").unwrap();
+        let authorization: Vec<_> = scope.stages().into_iter().map(Bson::Document).collect();
+        assert_eq!(&source[1..1 + authorization.len()], authorization.as_slice());
+    }
 
     fn params() -> CustomerAcceptanceListParams {
         CustomerAcceptanceListParams {

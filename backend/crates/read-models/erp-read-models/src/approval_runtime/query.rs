@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
+use erp_workflow::entity::approval_integration::subject_ref_for;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
@@ -42,8 +43,7 @@ pub(crate) async fn load_document_runtime(
     binding: Option<&ApprovalDefinitionBinding>,
     executor: &mut dyn Executor,
 ) -> Result<Option<DocumentRuntime>> {
-    let subject = erp_workflow::entity::approval_integration::subject_ref_for(kind, id)
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let subject = subject_ref_for(kind, id).map_err(|error| Error::ValidationError(error.to_string()))?;
     let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, executor).await? else {
         return Ok(None);
     };
@@ -87,8 +87,7 @@ fn ensure_instance_binding(
     binding: Option<&ApprovalDefinitionBinding>,
     reference: Option<(&str, u32)>,
 ) -> Result<()> {
-    let subject = erp_workflow::entity::approval_integration::subject_ref_for(kind, id)
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let subject = subject_ref_for(kind, id).map_err(|error| Error::ValidationError(error.to_string()))?;
     if instance.subject != subject
         || instance.process_kind != process_kind_of(kind)
         || reference
@@ -248,6 +247,8 @@ fn optional_text(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::model::types::{ApprovalBlockerCode, ApprovalExecutionAssignmentSource};
     use bpm::model::{
@@ -410,7 +411,7 @@ mod tests {
     fn runtime_read_fails_closed_for_mismatched_execution_and_tasks() {
         let (instance, current, task) = running();
         ensure_current_execution(&instance, Some(&current)).unwrap();
-        ensure_runtime_tasks(&instance, Some(&current), std::slice::from_ref(&task)).unwrap();
+        ensure_runtime_tasks(&instance, Some(&current), slice::from_ref(&task)).unwrap();
         assert!(ensure_current_execution(&instance, None).is_err());
         let mut other_execution = current.clone();
         other_execution.base.id = "other".into();
@@ -441,7 +442,7 @@ mod tests {
             ensure_current_execution(&instance, None).unwrap();
             ensure_runtime_tasks(&instance, None, &[]).unwrap();
             assert!(ensure_current_execution(&instance, Some(&current)).is_err());
-            assert!(ensure_runtime_tasks(&instance, None, std::slice::from_ref(&task)).is_err());
+            assert!(ensure_runtime_tasks(&instance, None, slice::from_ref(&task)).is_err());
             assert!(!runtime_cancellable(&instance, None, 0));
         }
     }

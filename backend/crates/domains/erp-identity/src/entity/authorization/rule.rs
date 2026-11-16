@@ -80,11 +80,16 @@ impl AccessRule {
 
     /// 保留历史参与与个人上限的位置，不把上限当作正向授权。
     pub(crate) fn scope(scope: &ResolvedScope, allow_history: bool) -> Self {
-        let mut grants: Vec<_> = scope.role_clauses.iter().map(Self::clause).collect();
-        if allow_history {
-            grants.push(Self::Fact(AccessFact::HistoryParticipant));
-        }
-        let granted = Self::any(grants);
+        let granted = if scope.user_limit.is_none() && scope.role_clauses.iter().any(|clause| clause.company)
+        {
+            Self::Allow
+        } else {
+            let mut grants: Vec<_> = scope.role_clauses.iter().map(Self::clause).collect();
+            if allow_history {
+                grants.push(Self::Fact(AccessFact::HistoryParticipant));
+            }
+            Self::any(grants)
+        };
         match &scope.user_limit {
             Some(limit) => Self::all(vec![granted, Self::clause(limit)]),
             None => granted,
@@ -160,7 +165,9 @@ impl AccessFact {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{FactValue, ObjectFacts};
     use super::*;
+    use crate::Error;
 
     fn object() -> ScopedObject<'static> {
         ScopedObject {
@@ -227,6 +234,28 @@ mod tests {
         scope.user_limit = None;
         assert!(AccessRule::scope(&scope, true).allows_scope(&object()));
         assert!(!AccessRule::scope(&scope, false).allows_scope(&object()));
+    }
+
+    #[test]
+    fn company_scope_skips_history_only_without_a_user_limit() {
+        let mut scope = ResolvedScope {
+            role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+            user_limit: None,
+        };
+        let grants = BTreeSet::new();
+        let current = ObjectFacts::default();
+        assert!(AccessRule::scope(&scope, true).allows_object("user", &current, &grants).unwrap());
+        scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
+        let mut current = current;
+        current.owner_id = FactValue::Known(Some("other".into()));
+        assert!(matches!(
+            AccessRule::scope(&scope, true).allows_object("user", &current, &grants),
+            Err(Error::ValidationError(_))
+        ));
+        current.history_participants = FactValue::Known(["user".into()].into());
+        assert!(!AccessRule::scope(&scope, true).allows_object("user", &current, &grants).unwrap());
+        current.owner_id = FactValue::Known(Some("user".into()));
+        assert!(AccessRule::scope(&scope, true).allows_object("user", &current, &grants).unwrap());
     }
 
     #[test]

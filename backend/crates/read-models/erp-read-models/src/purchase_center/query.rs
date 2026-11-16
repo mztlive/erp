@@ -11,11 +11,13 @@ use application_core::AuditActor;
 use erp_finance::entity::payable::PayableAccountStatus;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_permissions::purchase_order;
 use erp_procurement::dto::purchase_order::{PageView, PurchaseOrderListParams};
 use erp_procurement::entity::purchase_order::{
     ProgressStatus, PurchaseOrderRevision, PurchaseOrderSubmission,
 };
 use erp_procurement::repository::purchase_order::PurchaseOrderRow;
+use erp_procurement::service::purchase_order::access::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -112,6 +114,26 @@ impl PurchaseOrderReadService {
                 Box::pin(async move { service.detail_snapshot(&id, &actor, executor).await })
             })
             .await
+    }
+
+    /// 在发送用例的原事务内读取采购邮件依据。
+    ///
+    /// # 参数
+    /// `id` 为采购单身份，`actor` 为当前操作人，`executor` 为发送用例的原事务执行器。
+    /// # 返回
+    /// 发送资格和真实采购对象均已授权的当前采购视图。
+    /// # 错误
+    /// 发送资格或对象范围拒绝、采购单缺失及关联事实读取失败时返回错误。
+    pub async fn purchase_order_email_source(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseOrderCenterView> {
+        PurchaseAccess::new(self.db.clone(), self.data_scope.clone())
+            .require_object(actor, &purchase_order::CORRESPONDENCE_SEND_PURCHASE_EMAIL, id, executor)
+            .await?;
+        self.detail_view(id, executor).await
     }
 
     /// 在原快照完成详情授权、关联资料读取与结果交付检查。

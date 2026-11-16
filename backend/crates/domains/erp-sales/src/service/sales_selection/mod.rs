@@ -13,15 +13,18 @@ mod publish;
 mod query;
 mod session;
 
+use std::sync::Arc;
+
 pub use access::SelectionAccess;
 use application_core::AuditActor;
 use erp_core::ids::SalesSelectionBookletId;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::Permission;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::Result;
 use crate::entity::sales_selection::IdempotencyOperation;
-use crate::{Error, Result};
 
 /// 幂等写入上下文对象。
 #[derive(Debug)]
@@ -46,7 +49,7 @@ pub struct IdempotencyStoreInput<'a, T> {
 #[derive(Clone)]
 pub struct SalesSelectionService {
     db: Database,
-    authorization: Option<(SelectionAccess, AuditActor)>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl SalesSelectionService {
@@ -54,38 +57,109 @@ impl SalesSelectionService {
     ///
     /// # 参数
     /// * `db` - 数据库
+    /// * `authorization` - 已完整装配的进程共享授权服务。
     ///
     /// # 返回
     /// 返回服务。
     ///
     /// # 错误
     /// 无。
-    pub fn new(db: Database) -> Self {
-        Self { db, authorization: None }
-    }
-    /// 绑定内部管理命令的统一授权能力。
-    /// # 参数
-    /// access 为组合根装配的授权器，actor 为当前操作身份。
-    /// # 返回
-    /// 在实际写事务内重验对象资格的服务。
-    /// # 错误
-    /// 构造不执行 I/O。
-    pub fn with_authorization(mut self, access: SelectionAccess, actor: AuditActor) -> Self {
-        self.authorization = Some((access, actor));
-        self
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     async fn authorize_booklet(
         &self,
+        actor: &AuditActor,
         id: &str,
         permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let (access, actor) = self
-            .authorization
-            .as_ref()
-            .ok_or_else(|| Error::Internal("选品管理命令未装配统一授权".into()))?;
-        access.require_booklet(actor, permission, id, executor).await?;
+        self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::entity::authorization::{FactValue, ObjectFacts, RelatedObjects, RelationKey};
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::{customer, sales_selection};
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::Error;
+
+    fn object(resource: &str, id: &str) -> ObjectFacts {
+        ObjectFacts {
+            resource: resource.into(),
+            id: id.into(),
+            version: "1".into(),
+            owner_id: FactValue::Known(Some("owner".into())),
+            org_unit_id: FactValue::Known(Some("org".into())),
+            collaborators: FactValue::Known(BTreeSet::new()),
+            history_participants: FactValue::Known(BTreeSet::new()),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn shared_selection_service_uses_each_commands_actor() {
+        let mut book = object("sales_selection_booklet", "book");
+        book.relations.insert(
+            RelationKey::parse("customer").unwrap(),
+            RelatedObjects {
+                expected_ids: ["customer".into()].into(),
+                objects: vec![object("customer", "customer")],
+            },
+        );
+        let authorization = fixed_authorization(
+            &[sales_selection::BOOKLET_PUBLISH, sales_selection::ADMIN_IMAGE, customer::DETAIL],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![book],
+            vec![],
+        )
+        .unwrap();
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("selection_actor");
+        let service = SalesSelectionService::new(db, authorization);
+        let owner = AuditActor::new("owner".into(), "owner".into(), AccountKind::Admin);
+        let outsider = AuditActor::new("outsider".into(), "outsider".into(), AccountKind::Admin);
+        service
+            .authorize_booklet(
+                &owner,
+                "book",
+                &sales_selection::BOOKLET_PUBLISH,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap();
+        let error = service
+            .clone()
+            .authorize_booklet(
+                &outsider,
+                "book",
+                &sales_selection::BOOKLET_PUBLISH,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Forbidden(message) if message == "操作包含不可访问的对象或目标归属"));
+        service
+            .authorize_booklet(
+                &owner,
+                "book",
+                &sales_selection::BOOKLET_PUBLISH,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap();
     }
 }

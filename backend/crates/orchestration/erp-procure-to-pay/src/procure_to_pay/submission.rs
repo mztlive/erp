@@ -1,5 +1,7 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
+use erp_permissions::purchase_order as purchase_order_permissions;
+
 mod preparation;
 
 use std::sync::{Arc, OnceLock};
@@ -162,7 +164,9 @@ impl PurchaseOrderProcess {
         frozen_subject: &OnceLock<u32>,
         executor: &mut dyn Executor,
     ) -> Result<SubmitPurchaseOrderResult> {
-        self.command_access(command.actor, "submit").current(command.purchase_order_id, executor).await?;
+        self.command_access(command.actor, &purchase_order_permissions::SUBMIT)
+            .current(command.purchase_order_id, executor)
+            .await?;
         if let Some(result) = self
             .replay_purchase_submit_in(
                 command.identity,
@@ -204,7 +208,7 @@ impl PurchaseOrderProcess {
         let identity = identity.clone();
         let fingerprint = expected_fingerprint.to_string();
         let id = purchase_order_id.to_string();
-        let access = self.command_access(actor, "submit");
+        let access = self.command_access(actor, &purchase_order_permissions::SUBMIT);
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -322,7 +326,7 @@ impl PurchaseOrderProcess {
         let actor_id = input.actor.id().to_string();
         let subject_version = input.subject_version;
         let resubmission_reason = input.resubmission_reason.map(str::to_string);
-        let access = self.command_access(input.actor, "submit");
+        let access = self.command_access(input.actor, &purchase_order_permissions::SUBMIT);
         self.db
             .client()
             .with_transaction(move |executor| {

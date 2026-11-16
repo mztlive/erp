@@ -274,6 +274,15 @@ impl BusinessTransfers {
 }
 #[async_trait]
 impl TransferHandler for BusinessTransfers {
+    async fn authorize_read(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.read_access(kind, input, actor, executor).await
+    }
     async fn authorize_submission(
         &self,
         kind: TransferKind,

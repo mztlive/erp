@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_read_models::catalog_center::delivery_coverage::sku_delivery_inputs;
+use erp_read_models::catalog_center::delivery_coverage::delivery_coverage_refresh_records;
 use erp_supply::entity::supplier_offering::{SkuDeliveryCoverageMemo, SkuDeliveryCoverageState};
 use erp_supply::repository::SupplierOfferingExt;
 use mongodb::Database;
@@ -90,17 +90,26 @@ impl DeliveryCoverageRefreshProcess {
     /// 分批重算待重算 SKU；同一批内相同政策组合只计算一次。
     async fn recompute(&self, now: i64) -> Result<usize> {
         let store = self.db.sku_delivery_coverages();
+        let mut executor = NoTransaction;
         let mut memo = SkuDeliveryCoverageMemo::default();
         let mut saved = 0;
         for _ in 0..MAX_BATCHES_PER_RUN {
-            let batch = store.dirty_batch(RECOMPUTE_BATCH, &mut NoTransaction).await?;
+            let batch = store.dirty_batch(RECOMPUTE_BATCH, &mut executor).await?;
             let tokens =
                 batch.iter().map(|dirty| (dirty.id.clone(), dirty.dirty_token)).collect::<HashMap<_, _>>();
             let sku_ids = batch.into_iter().map(|dirty| dirty.id).collect::<Vec<_>>();
-            for input in sku_delivery_inputs(&self.db, &sku_ids, BusinessDate::today()).await? {
-                let token = tokens[&input.sku_id];
-                let coverage = memo.coverage(&input);
-                if store.save(&input.into_record(coverage, now), token, &mut NoTransaction).await? {
+            let records = delivery_coverage_refresh_records(
+                &self.db,
+                &sku_ids,
+                BusinessDate::today(),
+                now,
+                &mut memo,
+                &mut executor,
+            )
+            .await?;
+            for record in records {
+                let token = tokens[&record.sku_id];
+                if store.save(&record, token, &mut executor).await? {
                     saved += 1;
                 }
             }

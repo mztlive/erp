@@ -29,7 +29,7 @@ use erp_workflow::service::approval::execution::prepare_start;
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::adapter::{
@@ -44,8 +44,8 @@ use super::customer_receipt_command::{
 };
 use super::start_approval::{
     CustomerReceiptStartPersistInput, DocumentStartInput, build_document_start_input,
-    load_bound_definition_graph, load_bound_definition_graph_with_executor, load_start_receipt,
-    load_start_receipt_with_executor, persist_customer_receipt_start_apply,
+    load_bound_definition_graph_with_executor, load_start_receipt_with_executor,
+    persist_customer_receipt_start_apply,
 };
 use crate::{Error, FinancePostingPorts, Result};
 
@@ -714,16 +714,18 @@ pub(super) async fn prepare_dispatch_start(
     idempotency_key: &str,
     resubmission_reason: Option<&str>,
     now: Instant,
+    executor: &mut dyn Executor,
 ) -> Result<erp_workflow::service::approval::execution::PreparedExecution> {
-    let graph = load_bound_definition_graph(db, binding).await?;
-    let existing_receipt = load_start_receipt(db, subject, subject_version, idempotency_key).await?;
+    let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
+    let existing_receipt =
+        load_start_receipt_with_executor(db, subject, subject_version, idempotency_key, executor).await?;
     let graph = resolve_start_approvers(
         db,
         &rbac.authorization,
         graph,
         actor_id,
         existing_receipt.as_ref(),
-        &mut NoTransaction,
+        executor,
     )
     .await?;
     let start_input = build_document_start_input(DocumentStartInput {

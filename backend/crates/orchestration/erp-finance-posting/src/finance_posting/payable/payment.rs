@@ -31,6 +31,8 @@ use super::{
     PayableProcess, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_request,
 };
 use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};
+use crate::finance_posting::task_access::TaskPurpose;
+use crate::finance_posting::task_entry::require_entry;
 use crate::{Error, FinancePostingPorts, Result};
 
 mod receipt;
@@ -208,23 +210,11 @@ impl PayableProcess {
             work_item_id: req.work_item_id.clone(),
             actor: actor.clone(),
         };
-        if let Some(payment_id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command_receipt, &mut NoTransaction)
-            .await?
-        {
-            return Ok(read_payment_result(
-                self.authorized_payment_detail(&payment_id, &authority),
-                false,
-                None,
-            )
-            .await);
-        }
         let has_pending_assets = !pending_assets.is_empty();
-        let prepared = PreparedSupplierPayment::prepare(req, pending_assets.as_ref(), actor.id())?;
-        let transaction = SupplierPaymentTransaction {
+        let transaction = SupplierPaymentCommand {
             db: self.db.clone(),
             rbac: self.authorization_rbac.clone(),
-            prepared,
+            req,
             pending_assets,
             actor: actor.clone(),
             command_receipt: command_receipt.clone(),
@@ -381,6 +371,55 @@ impl PreparedSupplierPayment {
     }
 }
 
+/// 原始命令在授权及回执检查后才解析本次上传。
+struct SupplierPaymentCommand {
+    db: Database,
+    rbac: FinancePostingPorts,
+    req: CommitSupplierPaymentRequest,
+    pending_assets: Arc<dyn PendingAttachmentBatch>,
+    actor: AuditActor,
+    command_receipt: CommandReceipt,
+}
+
+impl SupplierPaymentCommand {
+    /// 先重验当前指定任务资格；重放不解析或消费本次上传。
+    async fn execute(self, executor: &mut dyn Executor) -> Result<(SupplierPayment, bool)> {
+        require_entry(
+            &self.db,
+            &self.rbac,
+            &self.actor,
+            &self.req.work_item_id,
+            TaskPurpose::Payment,
+            executor,
+        )
+        .await?;
+        let receipts = FinanceCommandReceiptService::new(self.db.clone());
+        if let Some(id) = receipts.committed_resource_id(&self.command_receipt, executor).await? {
+            let payment = self
+                .db
+                .supplier_payments()
+                .find_by_id(&id, executor)
+                .await?
+                .ok_or_else(|| Error::Internal("付款命令回执引用不存在".into()))?;
+            return Ok((payment, false));
+        }
+        SupplierPaymentTransaction {
+            prepared: PreparedSupplierPayment::prepare(
+                self.req,
+                self.pending_assets.as_ref(),
+                self.actor.id(),
+            )?,
+            db: self.db,
+            rbac: self.rbac,
+            pending_assets: self.pending_assets,
+            actor: self.actor,
+            command_receipt: self.command_receipt,
+        }
+        .execute(executor)
+        .await
+    }
+}
+
 /// 所有权事务内付款命令、授权读取与附件登记的固定装配。
 struct SupplierPaymentTransaction {
     db: Database,
@@ -395,15 +434,6 @@ impl SupplierPaymentTransaction {
     /// 在同一 Executor 按原首错顺序完成注册、资产、账户占用、任务和过账。
     async fn execute(mut self, executor: &mut dyn Executor) -> Result<(SupplierPayment, bool)> {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
-        if let Some(id) = receipts.committed_resource_id(&self.command_receipt, executor).await? {
-            let payment = self
-                .db
-                .supplier_payments()
-                .find_by_id(&id, executor)
-                .await?
-                .ok_or_else(|| Error::Internal("付款命令回执引用不存在".to_string()))?;
-            return Ok((payment, false));
-        }
         let context = BusinessEventContext::new(self.actor.clone(), PAYMENT_COMMIT)?
             .with_command_id(Some(self.command_receipt.id().to_string()))?;
         let request = payment_request::load(&self.db, &self.prepared.payment_request_id, executor).await?;

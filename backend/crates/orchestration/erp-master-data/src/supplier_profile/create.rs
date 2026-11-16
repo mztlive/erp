@@ -32,6 +32,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use super::commands::SupplierCommandTarget;
 use super::validation::resolve_supplier_file_references;
 use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 use crate::{Error, Result, command_insert_error};
@@ -80,6 +81,7 @@ impl SupplierProfileProcess {
         }
         let request_fingerprint = req.fingerprint()?;
         let key = req.idempotency_key.clone();
+        let target = SupplierCommandTarget::Create(required_maintainer(&req)?);
         let this = self.clone();
         let actor_owned = actor.clone();
         let fingerprint = request_fingerprint.clone();
@@ -92,15 +94,8 @@ impl SupplierProfileProcess {
                 })
             })
             .await;
-        self.resolve_transaction_result_with_assets(
-            transaction,
-            &key,
-            "create",
-            None,
-            &request_fingerprint,
-            actor,
-        )
-        .await
+        self.resolve_transaction_result_with_assets(transaction, &key, &target, &request_fingerprint, actor)
+            .await
     }
 
     /// 候选、幂等回放、引用检查和全部创建共用一个事务。
@@ -113,9 +108,9 @@ impl SupplierProfileProcess {
         executor: &mut dyn Executor,
     ) -> Result<SupplierProfileWithAssetsResult> {
         let maintainer = required_maintainer(&req)?;
-        self.authorization.access.require_create(actor, &maintainer, executor).await?;
+        let target = SupplierCommandTarget::Create(maintainer);
         if let Some(view) =
-            self.replay_command(&req.idempotency_key, "create", None, fingerprint, actor, executor).await?
+            self.replay_command(&req.idempotency_key, &target, fingerprint, actor, executor).await?
         {
             return Ok(SupplierProfileWithAssetsResult { view, assets_committed: false });
         }

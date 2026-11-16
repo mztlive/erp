@@ -11,10 +11,12 @@ use erp_sales::entity::sales_order::{
 };
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
+use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::draft_working_copy::DraftStableLines;
 use persistence_core::{ReadExecutor, Transactional};
 
 use super::SalesOrderCommandProcess;
+use crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter;
 use crate::{Error, Result};
 impl SalesOrderCommandProcess {
     /// 查找有效首次提交工作副本；草稿且没有有效副本时新开一份并落库。
@@ -48,7 +50,10 @@ impl SalesOrderCommandProcess {
             .ensure_first_submission_working_copy_editable()
             .map_err(|error| Error::ConflictError(error.to_string()))?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let stable = self.sales().collect_stable_lines_for_draft(&order_id, &draft.lines).await?;
+        let stable = self
+            .sales()
+            .collect_stable_lines_for_draft(&order_id, &draft.lines, &mut ReadExecutor::default())
+            .await?;
         if let Some(working_copy) = self
             .db
             .sales_order_working_copies()
@@ -66,7 +71,7 @@ impl SalesOrderCommandProcess {
         }
 
         let (working_copy, working_copy_lines) =
-            erp_sales::service::sales_order::SalesOrderService::build_reopened_first_submission_working_copy(
+            SalesOrderService::build_reopened_first_submission_working_copy(
                 order,
                 &stable.all,
                 draft,
@@ -114,9 +119,7 @@ impl SalesOrderCommandProcess {
         let audit = actor.clone().resource_log("sales_order.save_draft", "sales_order", order_id.clone())?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let sellable_refs = erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
-            &working_copy_lines,
-        )?;
+        let sellable_refs = SalesOrderService::sellable_working_copy_refs(&working_copy_lines)?;
         let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let related_order = order.clone();
         let persisted = client
@@ -132,16 +135,14 @@ impl SalesOrderCommandProcess {
                         executor,
                     )
                     .await?;
-                    erp_sales::service::sales_order::SalesOrderService::new(db.clone())
+                    SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs,
-                            &crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter::new(
-                                access.services.catalog.clone(),
-                            ),
+                            &CatalogQualificationAdapter::new(access.services.catalog.clone()),
                             executor,
                         )
                         .await?;
-                    erp_sales::service::sales_order::SalesOrderService::new(db.clone())
+                    SalesOrderService::new(db.clone())
                         .create_working_copy(
                             &created_stable_lines,
                             &working_copy,
@@ -150,7 +151,7 @@ impl SalesOrderCommandProcess {
                         )
                         .await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<SalesOrderWorkingCopy, crate::Error>(working_copy)
+                    Ok::<SalesOrderWorkingCopy, Error>(working_copy)
                 })
             })
             .await?;

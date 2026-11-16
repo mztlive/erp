@@ -12,6 +12,7 @@ use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runti
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_identity::AuthorizationService;
+use erp_permissions::internal;
 use erp_procurement::dto::purchase_order::PurchaseChangeSubmitResult;
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseCommandReceipt,
@@ -316,7 +317,12 @@ async fn apply_change_start(
     input
         .ports
         .access(db.clone())
-        .require_object(&input.actor, "submit", input.change_order.purchase_order_id.as_ref(), executor)
+        .require_object(
+            &input.actor,
+            &internal::PURCHASE_CHANGE_SUBMIT_SOURCE,
+            input.change_order.purchase_order_id.as_ref(),
+            executor,
+        )
         .await?;
     if let Some(result) =
         replay_change_command(db, &input.command_identity, &input.request_fingerprint, executor).await?

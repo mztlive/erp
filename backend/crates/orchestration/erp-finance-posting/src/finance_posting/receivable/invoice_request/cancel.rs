@@ -16,10 +16,11 @@ use erp_workflow::service::approval::execution::{
     PlannedWrites, PreparedExecution, claim_and_persist_document_cancel_runtime, prepare_cancel,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 
 use super::super::{ReceivableProcess, cancel_approval};
 use super::authorization::{MongoAccess, RequestAction, authorize};
+use super::command::ReplayEvidence;
 use super::*;
 use crate::FinancePostingPorts;
 
@@ -41,9 +42,6 @@ impl ReceivableProcess {
         actor: &AuditActor,
     ) -> Result<InvoiceRequestView> {
         let command = cancel_receipt(id, &req, actor)?;
-        if let Some(view) = self.replay_invoice_request_command(&command, actor).await? {
-            return Ok(view);
-        }
         let operation = InvoiceCancellation {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
@@ -52,26 +50,22 @@ impl ReceivableProcess {
             actor: actor.clone(),
             command,
         };
-        let read = operation.clone();
-        let authorized = self
-            .db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move { read.authorized_request(executor).await })
-            })
-            .await?;
-        let Some(prepared) =
-            self.prepare_invoice_request_cancel(&authorized, &operation.request, actor).await?
-        else {
-            return super::command::committed_result(
-                self.authorized_invoice_request_result(id, actor, RequestAction::Cancel).await,
-            );
-        };
         let recover = operation.command.clone();
         let client = operation.db.client().clone();
-        let result =
-            client.with_transaction(move |executor| Box::pin(operation.persist(prepared, executor))).await;
-        self.finish_invoice_request_command(result, &recover, actor).await
+        let evidence = ReplayEvidence::default();
+        let observed = evidence.clone();
+        let result = client
+            .with_transaction(move |executor| {
+                Box::pin(async move { operation.execute(&observed, executor).await })
+            })
+            .await;
+        match evidence.finish(result) {
+            Ok(view) => Ok(view),
+            Err(error) if error.command_may_have_committed() => {
+                self.finish_invoice_request_command(Err(error), &recover, actor).await
+            },
+            Err(error) => Err(error),
+        }
     }
 
     /// 校验版本、审批绑定与运行时，实际撤回事务重验操作和完整来源资格。
@@ -80,10 +74,11 @@ impl ReceivableProcess {
         request: &SalesInvoiceRequest,
         req: &CancelInvoiceRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<Option<PreparedInvoiceRequestCancel>> {
         let id = request.base.id.as_str();
         ensure_expected_version(request.base.version, req.expected_version)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+        let binding = find_approval_binding(&self.db, id, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("申请缺少审批流程".into()))?;
         let subject = subject_ref_for(DocumentType::SalesInvoiceRequest, id)?;
@@ -92,6 +87,7 @@ impl ReceivableProcess {
             &binding,
             &subject,
             request.approval_subject_version,
+            executor,
         )
         .await?;
         let now = Instant::now();
@@ -125,6 +121,27 @@ struct InvoiceCancellation {
 }
 
 impl InvoiceCancellation {
+    /// 授权、精确重放、取消准备和结果读取共用原事务。
+    async fn execute(
+        self,
+        evidence: &ReplayEvidence,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoiceRequestView> {
+        let access = MongoAccess { db: &self.db, rbac: &self.rbac };
+        if let Some(view) = access.replay(&self.actor, &self.command, executor).await? {
+            evidence.observe(&Some(()));
+            return Ok(view);
+        }
+        let request = self.authorized_request(executor).await?;
+        let process = ReceivableProcess::new(self.db.clone(), self.rbac.clone());
+        if let Some(prepared) =
+            process.prepare_invoice_request_cancel(&request, &self.request, &self.actor, executor).await?
+        {
+            self.persist(prepared, executor).await?;
+        }
+        access.result(&self.actor, &self.id, RequestAction::Cancel, executor).await
+    }
+
     async fn authorized_request(&self, executor: &mut dyn Executor) -> Result<SalesInvoiceRequest> {
         let access = MongoAccess { db: &self.db, rbac: &self.rbac };
         authorize(&access, &self.actor, &self.id, RequestAction::Cancel, executor).await?;
@@ -132,15 +149,12 @@ impl InvoiceCancellation {
     }
 
     async fn persist(
-        self,
+        &self,
         prepared: PreparedInvoiceRequestCancel,
         executor: &mut dyn Executor,
     ) -> Result<String> {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         let access = MongoAccess { db: &self.db, rbac: &self.rbac };
-        if access.replay(&self.actor, &self.command, executor).await?.is_some() {
-            return Err(super::command::replay_requires_readback());
-        }
         authorize(&access, &self.actor, &self.id, RequestAction::Cancel, executor).await?;
         claim_and_persist_document_cancel_runtime(
             &self.db,
@@ -156,7 +170,7 @@ impl InvoiceCancellation {
         let event_id =
             cancel_and_record(&self.db, &self.id, &self.actor, Some(&self.command), executor).await?;
         receipts.save_resource(&self.command, self.id.clone(), event_id, executor).await?;
-        Ok(self.id)
+        Ok(self.id.clone())
     }
 }
 

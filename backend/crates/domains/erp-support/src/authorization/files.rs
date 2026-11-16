@@ -20,9 +20,9 @@ use crate::{FileAssetExt, Result};
 /// # 参数
 /// authorization 为共享服务，actor 为真实发起人，ids 为完整文件集合，executor 为原事务执行器。
 /// # 返回
-/// 全部文件均可转授时成功；空集合仍核验账号有效性。
+/// 在快照事务内全部文件均可转授时成功；空集合仍核验账号有效性。
 /// # 错误
-/// 账号失效、任一文件缺失或无权、身份或事实读取失败时返回错误。
+/// 非快照事务、账号失效、任一文件缺失或无权、身份或事实读取失败时返回错误。
 pub async fn require_transfer(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -36,9 +36,9 @@ pub async fn require_transfer(
 /// # 参数
 /// authorization 为共享服务，actor、ids 为真实账号和完整文件集合，executor 为原业务事务。
 /// # 返回
-/// 所有文件均为本人上传时成功。
+/// 在快照事务内所有文件均为本人上传时成功；空集合仍核验账号有效性。
 /// # 错误
-/// 账号失效、缺失文件、非本人文件或基础设施失败时拒绝。
+/// 非快照事务、账号失效、缺失文件、非本人文件或基础设施失败时拒绝。
 pub async fn require_owned(
     authorization: &AuthorizationService,
     actor: &AuditActor,
@@ -56,6 +56,9 @@ async fn require_files(
     permission: &Permission,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(IdentityError::ValidationError("写入授权必须使用快照事务".into()).into());
+    }
     if ids.is_empty() {
         authorization
             .permissions(actor, &[], executor)
@@ -113,8 +116,12 @@ impl AccessFactsPort for FileFacts {
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::entity::access_control::ResolvedScope;
+    use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
+    use erp_permissions::file_asset;
     use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::{require_owned, require_transfer};
     use crate::Error;
@@ -123,13 +130,15 @@ mod tests {
     async fn file_association_checks_require_a_snapshot_before_identity_or_file_reads() {
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
-        let transfer = require_transfer(&authorization, &actor, &["asset"], &mut NoTransaction).await;
-        let owned = require_owned(&authorization, &actor, &["asset"], &mut NoTransaction).await;
-        for result in [transfer, owned] {
-            assert!(matches!(
-                result,
-                Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
-            ));
+        for ids in [&[][..], &["asset"][..]] {
+            let transfer = require_transfer(&authorization, &actor, ids, &mut NoTransaction).await;
+            let owned = require_owned(&authorization, &actor, ids, &mut NoTransaction).await;
+            for result in [transfer, owned] {
+                assert!(matches!(
+                    result,
+                    Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
+                ));
+            }
         }
     }
 
@@ -137,13 +146,43 @@ mod tests {
     async fn an_empty_file_set_still_requires_an_active_identity() {
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
-        let transfer = require_transfer(&authorization, &actor, &[], &mut NoTransaction).await;
-        let owned = require_owned(&authorization, &actor, &[], &mut NoTransaction).await;
+        let transfer = require_transfer(&authorization, &actor, &[], &mut SnapshotExecutor::default()).await;
+        let owned = require_owned(&authorization, &actor, &[], &mut SnapshotExecutor::default()).await;
         for result in [transfer, owned] {
             assert!(matches!(
                 result,
                 Err(Error::Internal(message)) if message == "测试授权设施不可用"
             ));
+        }
+    }
+
+    #[tokio::test]
+    async fn active_identity_requires_a_snapshot_for_empty_and_owned_file_sets() {
+        let authorization = fixed_authorization(
+            &[file_asset::TRANSFER, file_asset::OWNED_TRANSFER],
+            ResolvedScope { role_clauses: Vec::new(), user_limit: None },
+            vec![ObjectFacts {
+                resource: "file_asset".into(),
+                id: "asset".into(),
+                version: "1".into(),
+                owner_id: FactValue::Known(Some("user".into())),
+                ..Default::default()
+            }],
+            Vec::new(),
+        )
+        .unwrap();
+        let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
+        for ids in [&[][..], &["asset"][..]] {
+            let transfer = require_transfer(&authorization, &actor, ids, &mut NoTransaction).await;
+            let owned = require_owned(&authorization, &actor, ids, &mut NoTransaction).await;
+            for result in [transfer, owned] {
+                assert!(matches!(
+                    result,
+                    Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
+                ));
+            }
+            require_transfer(&authorization, &actor, ids, &mut SnapshotExecutor::default()).await.unwrap();
+            require_owned(&authorization, &actor, ids, &mut SnapshotExecutor::default()).await.unwrap();
         }
     }
 }

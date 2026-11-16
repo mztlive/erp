@@ -80,6 +80,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemMutationOutcome> {
+        self.authorization.require(actor, &work_item::MANAGE, id, executor).await?;
         let mut item = self
             .db
             .work_items()
@@ -87,7 +88,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         ensure_rework_owner(&item, actor.id())?;
-        self.authorization.require(actor, &work_item::MANAGE, &item.base.id, executor).await?;
         if let Some(committed) =
             self.db.work_item_command_receipts().find_command(receipt.id(), executor).await?
         {
@@ -150,7 +150,9 @@ fn verify_abandon_replay(
 #[cfg(test)]
 mod tests {
     use bpm::ApprovalProcessInstanceId;
+    use erp_core::AccountKind;
     use erp_core::ids::WorkItemId;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     use crate::entity::work_item::{
@@ -158,6 +160,44 @@ mod tests {
     };
     use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
     use crate::service::work_item::access::task_facts_current;
+    use crate::service::work_item::testing::unavailable_service;
+
+    #[tokio::test]
+    async fn abandon_rework_stops_before_task_reads_when_authorization_fails() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("submitter".into(), "submitter".into(), AccountKind::Admin);
+        let receipt = CommandReceipt::from_resource_parts(
+            "work-item-command-",
+            actor.id(),
+            "work_item.abandon_rework",
+            "work_item",
+            "unread-task",
+            "key",
+            ["7".to_owned(), "不再办理".to_owned()],
+        )
+        .unwrap();
+        let audit = PreparedWorkflowAudit::resource_with_id(
+            "audit".into(),
+            actor.clone(),
+            receipt.action(),
+            "work_item",
+            "unread-task".into(),
+            None,
+        )
+        .unwrap();
+        let result = service
+            .apply_abandon_rework(
+                "unread-task",
+                7,
+                "不再办理",
+                &receipt,
+                &audit,
+                &actor,
+                &mut SnapshotExecutor::default(),
+            )
+            .await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
 
     #[test]
     fn abandoned_v1_replays_after_v2_only_with_exact_history_and_matching_command() {

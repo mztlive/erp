@@ -97,7 +97,6 @@ impl ApprovalDefinitionService {
         });
         self.recover_definition_command(
             outcome.await,
-            policy,
             &approval_process::CREATE_DEFINITION_DRAFT,
             actor,
             identity,

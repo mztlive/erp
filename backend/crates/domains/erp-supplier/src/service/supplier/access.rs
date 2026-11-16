@@ -8,7 +8,7 @@ use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::{AccessTarget, AuthorizationService, OrganizationDirectoryService};
 use erp_permissions::{Permission, supplier};
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use crate::authorization::CompiledScope;
 use crate::entity::supplier::SupplierAccount;
@@ -66,37 +66,6 @@ impl SupplierAccess {
             compiled,
             authorization: self.authorization.clone(),
         })
-    }
-
-    /// 在独立事务中重验对象资格。
-    ///
-    /// # 参数
-    /// * `actor` - 已认证操作人
-    /// * `permission` - 内置供应商权限
-    /// * `supplier_id` - 目标供应商
-    ///
-    /// # 返回
-    /// 完整对象授权通过时成功。
-    ///
-    /// # 错误
-    /// 读取动作对不可见对象返回 NotFound；写动作返回 Forbidden。
-    pub async fn require(
-        &self,
-        actor: &AuditActor,
-        permission: &Permission,
-        supplier_id: &str,
-    ) -> Result<()> {
-        let this = self.clone();
-        let actor = actor.clone();
-        let permission = permission.clone();
-        let supplier_id = supplier_id.to_string();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { this.require_with(&actor, &permission, &supplier_id, executor).await })
-            })
-            .await
     }
 
     /// 在调用方事务内重验对象资格。
@@ -210,9 +179,96 @@ fn ensure_permission(permission: &Permission) -> Result<()> {
 
 #[cfg(test)]
 mod permission_tests {
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
     use erp_permissions::sales_order;
+    use mongodb::Client;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::authorization::bindings;
+
+    async fn access(granted: bool) -> SupplierAccess {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("supplier_read_authorization");
+        let permissions = if granted { vec![supplier::LIST, supplier::DETAIL] } else { vec![] };
+        let mapping = bindings(db.clone()).unwrap().1;
+        let authorization = fixed_authorization(
+            &permissions,
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                user_limit: None,
+            },
+            [("visible-supplier", "user"), ("outside-supplier", "other")]
+                .into_iter()
+                .map(|(id, owner)| ObjectFacts {
+                    resource: "supplier".into(),
+                    id: id.into(),
+                    version: "v1".into(),
+                    owner_id: FactValue::Known(Some(owner.into())),
+                    org_unit_id: FactValue::Known(None),
+                    ..Default::default()
+                })
+                .collect(),
+            vec![(supplier::LIST, mapping)],
+        )
+        .unwrap();
+        SupplierAccess::new(db, authorization)
+    }
+
+    fn actor() -> AuditActor {
+        AuditActor::new("user".into(), "login".into(), AccountKind::Admin)
+    }
+
+    #[tokio::test]
+    async fn reads_allow_real_owner_with_production_mapping_and_original_snapshot() {
+        let access = access(true).await;
+        let mut executor = SnapshotExecutor::default();
+        let scope = access.resolve(&actor(), &supplier::LIST, &mut executor).await.unwrap();
+        assert!(!scope.stages().is_empty());
+        scope.ensure_current(&mut executor).unwrap();
+        scope.validate(&mut executor).await.unwrap();
+        access.require_with(&actor(), &supplier::DETAIL, "visible-supplier", &mut executor).await.unwrap();
+        let outside = access
+            .require_with(&actor(), &supplier::DETAIL, "outside-supplier", &mut executor)
+            .await
+            .unwrap_err();
+        assert!(matches!(outside, Error::Forbidden(_)));
+        let absent = access
+            .require_with(&actor(), &supplier::DETAIL, "absent-supplier", &mut executor)
+            .await
+            .unwrap_err();
+        assert!(matches!(absent, Error::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn reads_reject_missing_permissions_before_object_loading() {
+        let access = access(false).await;
+        let mut executor = SnapshotExecutor::default();
+        assert!(matches!(
+            access.resolve(&actor(), &supplier::LIST, &mut executor).await,
+            Err(Error::Forbidden(_))
+        ));
+        assert!(matches!(
+            access.require_with(&actor(), &supplier::DETAIL, "unread-supplier", &mut executor).await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn reads_reject_no_transaction_despite_valid_permissions() {
+        let access = access(true).await;
+        assert!(
+            matches!(access.resolve(&actor(), &supplier::LIST, &mut NoTransaction).await, Err(Error::ValidationError(message)) if message == "授权要求可核验的事务或读取阶段")
+        );
+        assert!(
+            matches!(access.require_with(&actor(), &supplier::DETAIL, "visible-supplier", &mut NoTransaction).await, Err(Error::ValidationError(message)) if message == "授权要求可核验的事务或读取阶段")
+        );
+    }
 
     #[test]
     fn accessor_accepts_its_constant_and_rejects_foreign_resource() {

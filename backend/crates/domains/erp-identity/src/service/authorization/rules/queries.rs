@@ -67,6 +67,7 @@ pub(crate) const PERMISSIONS: &[Permission] = &[
     catalog::PRODUCT_PRODUCT_LIST,
     catalog::PRODUCT_PRODUCT_DETAIL,
     offering::LIST,
+    offering::DETAIL,
     fulfillment::ORDER_LIST,
     fulfillment::ORDER_DETAIL,
     fulfillment::ORDER_SUBMIT,

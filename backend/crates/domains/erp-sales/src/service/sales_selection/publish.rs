@@ -2,11 +2,17 @@
 //!
 //! 发布复核当前修订与资格，失效整批拒绝，不静默换价换图剔除。
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionSessionId};
 use erp_permissions::sales_selection;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
+
+use crate::entity::sales_selection::{SalesSelectionPoolMember, SubmitMode};
 
 mod replay;
 
@@ -15,12 +21,22 @@ use crate::dto::sales_selection::{
     PublishSalesSelectionRequest, SalesSelectionBookletView, SalesSelectionCommandRequest,
 };
 use crate::entity::sales_selection::{
-    IdempotencyOperation, LinkTokenCrypto, SalesSelectionSession, ensure_publishable_display,
-    normalize_idempotency_key, request_hash,
+    IdempotencyOperation, LinkTokenCrypto, SalesSelectionBooklet, SalesSelectionDisplayItem,
+    SalesSelectionSession, ensure_publishable_display, normalize_idempotency_key, request_hash,
 };
 use crate::ports::sales_selection::SelectionCatalogPort;
 use crate::repository::SalesSelectionExt;
+use crate::repository::sales_selection::SalesSelectionDomainRepository;
 use crate::{Error, Result};
+
+struct PublishCommand {
+    booklet_id: String,
+    request: PublishSalesSelectionRequest,
+    actor: AuditActor,
+    key: String,
+    hash: String,
+    crypto: LinkTokenCrypto,
+}
 
 impl SalesSelectionService {
     /// 发布选品册并建立空会话。
@@ -28,7 +44,7 @@ impl SalesSelectionService {
     /// # 参数
     /// * `booklet_id` - 选品册身份
     /// * `req` - 发布请求
-    /// * `actor_id` - 发布人
+    /// * `actor` - 已认证发布人
     /// * `catalog` - 供给复核端口
     /// * `crypto` - 链接令牌编解码器
     ///
@@ -41,45 +57,71 @@ impl SalesSelectionService {
         &self,
         booklet_id: &str,
         req: PublishSalesSelectionRequest,
-        actor_id: &str,
-        catalog: &dyn SelectionCatalogPort,
+        actor: &AuditActor,
+        catalog: Arc<dyn SelectionCatalogPort>,
         crypto: &LinkTokenCrypto,
     ) -> Result<SalesSelectionBookletView> {
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash = request_hash(&serde_json::to_string(&(booklet_id, &req)).unwrap_or_default());
-        let mut executor = NoTransaction;
-        if let Some(replay) = self.publish_replay(booklet_id, actor_id, &key, &hash).await? {
+        let command = PublishCommand {
+            booklet_id: booklet_id.to_owned(),
+            request: req,
+            actor: actor.clone(),
+            key,
+            hash,
+            crypto: crypto.clone(),
+        };
+        let service = self.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.apply_publish(&command, catalog.as_ref(), executor).await })
+            })
+            .await
+    }
+
+    /// 发布回放、准备与正式写入必须使用入口持有的同一事务执行器。
+    async fn apply_publish(
+        &self,
+        command: &PublishCommand,
+        catalog: &dyn SelectionCatalogPort,
+        executor: &mut dyn Executor,
+    ) -> Result<SalesSelectionBookletView> {
+        let PublishCommand { booklet_id, request: req, actor, key, hash, crypto } = command;
+        if let Some(replay) = self.publish_replay(booklet_id, actor, key, hash, executor).await? {
             return Ok(replay);
         }
-        let mut booklet = self.load_booklet(booklet_id, &mut executor).await?;
+        let mut booklet = self.load_booklet(booklet_id, executor).await?;
         booklet
             .ensure_version(req.expected_version)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
-        let batch_id =
-            req.batch_id.ok_or_else(|| Error::ValidationError("请重新预览并确认准备批次".into()))?;
-        self.ensure_batch_current(&booklet, &batch_id)?;
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let items = domain.list_effective_items(&booklet.base.id, &batch_id, &mut executor).await?;
+        let batch_id = req
+            .batch_id
+            .as_deref()
+            .ok_or_else(|| Error::ValidationError("请重新预览并确认准备批次".into()))?;
+        self.ensure_batch_current(&booklet, batch_id)?;
+        let domain = SalesSelectionDomainRepository::new(&self.db);
+        let items = domain.list_effective_items(&booklet.base.id, batch_id, executor).await?;
         let tier_ids: Vec<String> = booklet.tiers.iter().map(|tier| tier.tier_id.clone()).collect();
         let publishable = ensure_publishable_display(booklet.form.is_package(), &tier_ids, &items)?;
-        self.review_publishable(&booklet, &batch_id, &publishable, catalog, &mut executor).await?;
+        self.review_publishable(&booklet, batch_id, &publishable, catalog, executor).await?;
         let (_token, token_hash, cipher) =
             crypto.issue().map_err(|error| Error::Internal(error.to_string()))?;
-        booklet.publish(token_hash, cipher, Instant::now(), actor_id)?;
+        booklet.publish(token_hash, cipher, Instant::now(), actor.id())?;
         let sessions = self.publish_sessions(&booklet, crypto)?;
-        self.commit_publish_tx(booklet, sessions, items, actor_id, key, hash).await
+        self.commit_publish(booklet, sessions, items, command, executor).await
     }
 
     fn publish_sessions(
         &self,
-        book: &crate::entity::sales_selection::SalesSelectionBooklet,
+        book: &SalesSelectionBooklet,
         crypto: &LinkTokenCrypto,
     ) -> Result<Vec<SalesSelectionSession>> {
         if book.access_password_hash.is_none() {
             return Err(Error::ValidationError("请先设置选品访问密码".into()));
         }
         let book_id = SalesSelectionBookletId::new(book.base.id.clone());
-        if book.submit_mode != crate::entity::sales_selection::SubmitMode::PickupVoucher {
+        if book.submit_mode != SubmitMode::PickupVoucher {
             return Ok(vec![SalesSelectionSession::new(SalesSelectionSessionId::new(next_id()), book_id)]);
         }
         (0..book.voucher_count.unwrap_or(0))
@@ -98,67 +140,48 @@ impl SalesSelectionService {
             .collect()
     }
 
-    /// 事务内提交发布写入。
-    ///
-    /// 复核已在事务外完成；事务内只做册更新、会话创建与幂等落库，
-    /// 乐观锁保证并发下整批回滚。
+    /// 使用发布入口的执行器更新选品册、会话与幂等记录。
     ///
     /// # 参数
     /// * `booklet` - 已发布态的选品册
-    /// * `session` - 新建空会话
+    /// * `sessions` - 新建空会话
     /// * `items` - 有效陈列（仅用于视图）
-    /// * `actor_id` - 发布人（幂等作用域）
-    /// * `key` - 幂等键
-    /// * `hash` - 请求哈希
+    /// * `command` - 已认证发布人、幂等键与请求哈希
+    /// * `executor` - 发布入口持有的事务执行器
     ///
     /// # 返回
     /// 返回已发布详情。
     ///
     /// # 错误
     /// 版本冲突或写入失败时回滚。
-    async fn commit_publish_tx(
+    async fn commit_publish(
         &self,
-        booklet: crate::entity::sales_selection::SalesSelectionBooklet,
+        mut booklet: SalesSelectionBooklet,
         sessions: Vec<SalesSelectionSession>,
-        items: Vec<crate::entity::sales_selection::SalesSelectionDisplayItem>,
-        actor_id: &str,
-        key: String,
-        hash: String,
+        items: Vec<SalesSelectionDisplayItem>,
+        command: &PublishCommand,
+        executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
-        let db = self.db.clone();
-        let service = self.clone();
-        let client = db.client().clone();
-        let scope = actor_id.to_string();
         let token_version = booklet.link_token_version;
         let booklet_id = SalesSelectionBookletId::new(booklet.base.id.clone());
-        let mut booklet_tx = booklet;
-        let sessions_tx = sessions;
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let executor: &mut dyn Executor = executor;
-                    service
-                        .authorize_booklet(&booklet_tx.base.id, &sales_selection::BOOKLET_PUBLISH, executor)
-                        .await?;
-                    db.sales_selection_booklets().update(&mut booklet_tx, executor).await?;
-                    for session in &sessions_tx {
-                        db.sales_selection_sessions().create(session, executor).await?;
-                    }
-                    let view = Self::booklet_view(&booklet_tx, &items, None, None);
-                    let record = Self::idempotency_record(IdempotencyStoreInput {
-                        operation: IdempotencyOperation::Publish,
-                        scope_id: &scope,
-                        key: &key,
-                        hash: &hash,
-                        result: &view,
-                        token_version: Some(token_version),
-                        booklet_id: Some(booklet_id),
-                    })?;
-                    db.sales_selection_idempotency().create(&record, executor).await?;
-                    Ok::<_, Error>(view)
-                })
-            })
-            .await
+        self.authorize_booklet(&command.actor, &booklet.base.id, &sales_selection::BOOKLET_PUBLISH, executor)
+            .await?;
+        self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
+        for session in &sessions {
+            self.db.sales_selection_sessions().create(session, executor).await?;
+        }
+        let view = Self::booklet_view(&booklet, &items, None, None);
+        let record = Self::idempotency_record(IdempotencyStoreInput {
+            operation: IdempotencyOperation::Publish,
+            scope_id: command.actor.id(),
+            key: &command.key,
+            hash: &command.hash,
+            result: &view,
+            token_version: Some(token_version),
+            booklet_id: Some(booklet_id),
+        })?;
+        self.db.sales_selection_idempotency().create(&record, executor).await?;
+        Ok(view)
     }
 
     /// 校验发布批次未漂移。
@@ -172,11 +195,7 @@ impl SalesSelectionService {
     ///
     /// # 错误
     /// 批次不一致时拒绝重新预览。
-    fn ensure_batch_current(
-        &self,
-        booklet: &crate::entity::sales_selection::SalesSelectionBooklet,
-        batch_id: &str,
-    ) -> Result<()> {
+    fn ensure_batch_current(&self, booklet: &SalesSelectionBooklet, batch_id: &str) -> Result<()> {
         if booklet.current_batch_id.as_deref() == Some(batch_id) {
             return Ok(());
         }
@@ -199,19 +218,19 @@ impl SalesSelectionService {
     /// 任一成员失效或修订变化整批拒绝并列明。
     async fn review_publishable(
         &self,
-        booklet: &crate::entity::sales_selection::SalesSelectionBooklet,
+        booklet: &SalesSelectionBooklet,
         batch_id: &str,
-        publishable: &[&crate::entity::sales_selection::SalesSelectionDisplayItem],
+        publishable: &[&SalesSelectionDisplayItem],
         catalog: &dyn SelectionCatalogPort,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let refs: Vec<(String, String)> = publishable
             .iter()
             .flat_map(|item| item.sellable_refs())
-            .collect::<std::collections::BTreeSet<_>>()
+            .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        let qualified = catalog.qualified_refs(&refs, BusinessDate::today()).await?;
+        let qualified = catalog.qualified_refs(&refs, BusinessDate::today(), executor).await?;
         ensure_refs_qualified(&refs, &qualified)?;
         self.ensure_revisions_unchanged(booklet, batch_id, publishable, executor).await
     }
@@ -231,12 +250,12 @@ impl SalesSelectionService {
     /// 任一修订变化整批拒绝。
     async fn ensure_revisions_unchanged(
         &self,
-        booklet: &crate::entity::sales_selection::SalesSelectionBooklet,
+        booklet: &SalesSelectionBooklet,
         batch_id: &str,
-        publishable: &[&crate::entity::sales_selection::SalesSelectionDisplayItem],
+        publishable: &[&SalesSelectionDisplayItem],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
+        let domain = SalesSelectionDomainRepository::new(&self.db);
         let members = domain.list_pool_members(&booklet.base.id, batch_id, executor).await?;
         ensure_revision_match(&members, publishable)
     }
@@ -247,7 +266,7 @@ impl SalesSelectionService {
     /// * `booklet_id` - 选品册身份
     /// * `display_id` - 陈列项身份
     /// * `expected_version` - 册版本
-    /// * `actor_id` - 操作人
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回更新后的详情。
@@ -259,23 +278,16 @@ impl SalesSelectionService {
         booklet_id: &str,
         display_id: &str,
         expected_version: u64,
-        actor_id: &str,
+        actor: &AuditActor,
     ) -> Result<SalesSelectionBookletView> {
         let service = self.clone();
-        let (booklet_id, display_id, actor_id) =
-            (booklet_id.to_string(), display_id.to_string(), actor_id.to_string());
+        let (booklet_id, display_id, actor) = (booklet_id.to_string(), display_id.to_string(), actor.clone());
         self.db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     service
-                        .delete_display_item_in(
-                            &booklet_id,
-                            &display_id,
-                            expected_version,
-                            &actor_id,
-                            executor,
-                        )
+                        .delete_display_item_in(&booklet_id, &display_id, expected_version, &actor, executor)
                         .await
                 })
             })
@@ -288,10 +300,10 @@ impl SalesSelectionService {
         booklet_id: &str,
         display_id: &str,
         expected_version: u64,
-        actor_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
-        self.authorize_booklet(booklet_id, &sales_selection::BOOKLET_DELETE_ITEM, executor).await?;
+        self.authorize_booklet(actor, booklet_id, &sales_selection::BOOKLET_DELETE_ITEM, executor).await?;
         let mut booklet = self.load_booklet(booklet_id, executor).await?;
         booklet
             .ensure_version(expected_version)
@@ -308,7 +320,7 @@ impl SalesSelectionService {
             .ok_or_else(|| Error::NotFound("陈列项不存在".into()))?;
         ensure_item_of_batch(&item, &booklet.base.id, &batch)?;
         item.remove()?;
-        booklet.record_display_edit(actor_id)?;
+        booklet.record_display_edit(actor.id())?;
         self.db.sales_selection_display_items().update(&mut item, executor).await?;
         self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
         self.detail_view(&booklet, Some(batch), executor).await
@@ -319,9 +331,8 @@ impl SalesSelectionService {
     /// # 参数
     /// * `booklet_id` - 选品册身份
     /// * `req` - 版本与幂等
-    /// * `actor_id` - 操作人
+    /// * `actor` - 已认证操作人
     /// * `crypto` - 令牌编解码器
-    /// * `executor` - 已完成精确册授权的原快照执行器。
     ///
     /// # 返回
     /// 返回详情，原令牌立即失效。
@@ -332,17 +343,11 @@ impl SalesSelectionService {
         &self,
         booklet_id: &str,
         req: SalesSelectionCommandRequest,
-        actor_id: &str,
+        actor: &AuditActor,
         crypto: &LinkTokenCrypto,
     ) -> Result<SalesSelectionBookletView> {
-        self.lifecycle_command(
-            booklet_id,
-            req,
-            actor_id,
-            IdempotencyOperation::RotateLink,
-            Some(crypto.clone()),
-        )
-        .await
+        self.lifecycle_command(booklet_id, req, actor, IdempotencyOperation::RotateLink, Some(crypto.clone()))
+            .await
     }
 
     /// 复制当前链接令牌。
@@ -377,7 +382,7 @@ impl SalesSelectionService {
     /// # 参数
     /// * `booklet_id` - 选品册身份
     /// * `req` - 版本与幂等
-    /// * `actor_id` - 操作人
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回已关闭详情。
@@ -388,9 +393,9 @@ impl SalesSelectionService {
         &self,
         booklet_id: &str,
         req: SalesSelectionCommandRequest,
-        actor_id: &str,
+        actor: &AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        self.lifecycle_command(booklet_id, req, actor_id, IdempotencyOperation::Close, None).await
+        self.lifecycle_command(booklet_id, req, actor, IdempotencyOperation::Close, None).await
     }
 
     /// 撤销已提交选品册的链接访问。
@@ -398,7 +403,7 @@ impl SalesSelectionService {
     /// # 参数
     /// * `booklet_id` - 选品册身份
     /// * `req` - 版本与幂等
-    /// * `actor_id` - 操作人
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回详情，不改变已提交状态。
@@ -409,9 +414,9 @@ impl SalesSelectionService {
         &self,
         booklet_id: &str,
         req: SalesSelectionCommandRequest,
-        actor_id: &str,
+        actor: &AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        self.lifecycle_command(booklet_id, req, actor_id, IdempotencyOperation::RevokeAccess, None).await
+        self.lifecycle_command(booklet_id, req, actor, IdempotencyOperation::RevokeAccess, None).await
     }
 
     /// 作废发布前选品册。
@@ -419,7 +424,7 @@ impl SalesSelectionService {
     /// # 参数
     /// * `booklet_id` - 选品册身份
     /// * `req` - 版本与幂等
-    /// * `actor_id` - 操作人
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回已作废详情。
@@ -430,9 +435,9 @@ impl SalesSelectionService {
         &self,
         booklet_id: &str,
         req: SalesSelectionCommandRequest,
-        actor_id: &str,
+        actor: &AuditActor,
     ) -> Result<SalesSelectionBookletView> {
-        self.lifecycle_command(booklet_id, req, actor_id, IdempotencyOperation::Void, None).await
+        self.lifecycle_command(booklet_id, req, actor, IdempotencyOperation::Void, None).await
     }
 }
 
@@ -468,10 +473,10 @@ fn ensure_refs_qualified(refs: &[(String, String)], qualified: &[(String, String
 /// # 错误
 /// 任一修订变化整批拒绝。
 fn ensure_revision_match(
-    members: &[crate::entity::sales_selection::SalesSelectionPoolMember],
-    publishable: &[&crate::entity::sales_selection::SalesSelectionDisplayItem],
+    members: &[SalesSelectionPoolMember],
+    publishable: &[&SalesSelectionDisplayItem],
 ) -> Result<()> {
-    let revisions: std::collections::BTreeMap<&str, &str> = members
+    let revisions: BTreeMap<&str, &str> = members
         .iter()
         .map(|member| (member.sku.sku_id.as_ref(), member.sku.sku_revision_id.as_ref()))
         .collect();
@@ -501,11 +506,7 @@ fn ensure_revision_match(
 ///
 /// # 错误
 /// 跨册或跨批次时拒绝。
-fn ensure_item_of_batch(
-    item: &crate::entity::sales_selection::SalesSelectionDisplayItem,
-    booklet_id: &str,
-    batch_id: &str,
-) -> Result<()> {
+fn ensure_item_of_batch(item: &SalesSelectionDisplayItem, booklet_id: &str, batch_id: &str) -> Result<()> {
     if item.booklet_id.as_ref() == booklet_id && item.batch_id == batch_id {
         return Ok(());
     }
@@ -516,7 +517,13 @@ fn ensure_item_of_batch(
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::ids::{
+        ProductId, SalesSelectionBookletId, SalesSelectionDisplayItemId, SkuId, SkuRevisionId,
+    };
+    use erp_core::money::Amount;
+
     use super::{ensure_item_of_batch, ensure_refs_qualified};
+    use crate::entity::sales_selection::{SalesSelectionDisplayItem, SkuSnapshot};
 
     #[test]
     fn refs_must_fully_cover() {
@@ -530,14 +537,14 @@ mod tests {
 
     #[test]
     fn item_batch_mismatch_rejected() {
-        let item = crate::entity::sales_selection::SalesSelectionDisplayItem::single_sku(
-            erp_core::ids::SalesSelectionDisplayItemId::new("d1"),
-            erp_core::ids::SalesSelectionBookletId::new("b1"),
+        let item = SalesSelectionDisplayItem::single_sku(
+            SalesSelectionDisplayItemId::new("d1"),
+            SalesSelectionBookletId::new("b1"),
             "batch-1".into(),
-            crate::entity::sales_selection::SkuSnapshot {
-                sku_id: erp_core::ids::SkuId::new("a"),
-                sku_revision_id: erp_core::ids::SkuRevisionId::new("rev-a"),
-                product_id: erp_core::ids::ProductId::new("p-a"),
+            SkuSnapshot {
+                sku_id: SkuId::new("a"),
+                sku_revision_id: SkuRevisionId::new("rev-a"),
+                product_id: ProductId::new("p-a"),
                 product_kind: "PHYSICAL".into(),
                 category_id: None,
                 name: "a".into(),
@@ -545,7 +552,7 @@ mod tests {
                 unit: "件".into(),
                 image: None,
                 reference_prices: None,
-                sales_visible_price_gross: erp_core::money::Amount::from_str("10.00").unwrap(),
+                sales_visible_price_gross: Amount::from_str("10.00").unwrap(),
             },
         )
         .unwrap();

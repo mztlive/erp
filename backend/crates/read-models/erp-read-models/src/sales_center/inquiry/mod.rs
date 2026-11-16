@@ -7,7 +7,6 @@ use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::BusinessDocumentId;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{internal, sales_inquiry as sales_inquiry_permissions};
-use erp_read_models::catalog_supply::CatalogSupplyRepository;
 use erp_sales::dto::sales_inquiry::{InquiryProcurementView, InquirySalesView};
 use erp_sales::entity::sales_inquiry::{InquiryStatus, SalesInquiry};
 use erp_sales::repository::sales_inquiry::{InquiryListFilter, InquiryReadScope};
@@ -20,8 +19,12 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
-use super::access::SalesInquiryAccess;
-use super::authorization;
+use crate::catalog_supply::CatalogSupplyRepository;
+
+mod access;
+mod authorization;
+mod template;
+use self::access::SalesInquiryAccess;
 use crate::{Error, Result};
 
 /// 分页只接受业务筛选，不接受调用方注入授权范围。
@@ -194,7 +197,7 @@ impl InquiryReadService {
     /// # 返回
     /// 无缓存读取器。
     /// # 错误
-    /// 不执行 I/O，不返回错误。
+    /// 无。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { access: SalesInquiryAccess::new(db.clone(), authorization.clone()), db, authorization }
     }
@@ -479,7 +482,8 @@ impl InquiryReadService {
 
     /// 当前费用任务只能读取本责任费用依据上实际登记的附件。
     /// # 参数
-    /// `actor`、`id` 和 `params` 限定当前任务与反馈；其余为依据及文件稳定身份。
+    /// `actor` 为当前认证操作人，`id` 为询价主键，`params` 限定当前任务与反馈，
+    /// `basis_id` 为费用依据主键，`asset_id` 为该依据登记的文件资产主键。
     /// # 返回
     /// 本任务可见费用依据和精确附件关系均存在时通过。
     /// # 错误

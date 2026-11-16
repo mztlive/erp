@@ -5,10 +5,10 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_contract::ContractParticipantPort;
 use erp_contract::authorization::{ContractAccess, ContractModels, scope};
 use erp_contract::ports::ContractCreationPort;
 use erp_contract::repository::ContractExt;
+use erp_contract::{ContractParticipantPort, Error as ContractError};
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
@@ -22,7 +22,8 @@ use erp_identity::{
     DataAccess, Error as IdentityError, OrganizationDirectoryService, Permission, ResourceTargets,
     Result as IdentityResult, SharedRbacService,
 };
-use erp_workflow::DocumentRegistryExt;
+use erp_workflow::repository::document_registry::participant_access;
+use erp_workflow::{DocumentRegistryExt, Error as WorkflowError};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
@@ -52,7 +53,6 @@ impl ContractModelsBuilder {
         Ok(ContractMapping {
             responsibility: ContractResponsibility::Read,
             db: self.db.clone(),
-            participants: MongoContractParticipants::shared(self.db.clone()),
             model: QueryModel {
                 key: QueryModelKey::parse("contract_read_responsibility")?,
                 resource: "contract".into(),
@@ -207,15 +207,19 @@ impl ContractResponsibility {
     /// 只有读取模型依赖历史参与修订，写入不读取无关参与事实。
     async fn revision(
         self,
-        participants: &dyn ContractParticipantPort,
+        db: &Database,
         context: &AccessContext,
         executor: &mut dyn Executor,
     ) -> IdentityResult<Option<i64>> {
         match self {
-            Self::Read => participants
-                .revision(context.actor.id(), executor)
+            Self::Read => participant_access::revision(db, context.actor.id(), executor)
                 .await
                 .map(Some)
+                .map_err(|error| match error {
+                    WorkflowError::RepositoryError(error) => ContractError::from(error),
+                    WorkflowError::Internal(message) => ContractError::Internal(message),
+                    error => ContractError::Internal(error.to_string()),
+                })
                 .map_err(|error| IdentityError::Internal(error.to_string())),
             Self::Write => Ok(None),
         }
@@ -256,7 +260,6 @@ fn history_predicate(user: &str) -> QueryFragment {
 struct ContractMapping {
     responsibility: ContractResponsibility,
     db: Database,
-    participants: Arc<dyn ContractParticipantPort>,
     model: QueryModel,
 }
 #[async_trait]
@@ -273,8 +276,7 @@ impl AccessMapping for ContractMapping {
         executor: &mut dyn Executor,
     ) -> erp_identity::Result<MappingFacts> {
         let state = OrganizationRepository::new(&self.db).state(executor).await?;
-        let participation =
-            self.responsibility.revision(self.participants.as_ref(), context, executor).await?;
+        let participation = self.responsibility.revision(&self.db, context, executor).await?;
         let valid_until = state
             .memberships
             .iter()
@@ -582,15 +584,10 @@ mod tests {
         let facts = ContractResponsibility::Write;
         let port = FailClosedContractParticipantPort;
         let targets = ["contract-a".into()];
-        assert_eq!(facts.revision(&port, &context(), &mut NoTransaction).await.unwrap(), None);
         assert_eq!(
             facts.history(&port, &context(), &targets, &mut NoTransaction).await.unwrap(),
             Vec::<String>::new()
         );
-        assert!(matches!(
-            ContractResponsibility::Read.revision(&port, &context(), &mut NoTransaction).await,
-            Err(IdentityError::Internal(message)) if message.contains("合同参与端口未接线")
-        ));
     }
 
     struct Participants {
@@ -609,19 +606,13 @@ mod tests {
             self.targets.lock().unwrap().push(ids.to_vec());
             Ok(ids.to_vec())
         }
-
-        async fn revision(&self, user: &str, _: &mut dyn Executor) -> erp_contract::Result<i64> {
-            assert_eq!(user, "sales-a");
-            Ok(20_001)
-        }
     }
 
     #[tokio::test]
-    async fn reads_use_a_point_revision_and_only_the_requested_contract_targets() {
+    async fn reads_load_only_the_requested_contract_targets() {
         let port = Participants { targets: Mutex::new(Vec::new()) };
         let targets = ["contract-a".to_owned()];
         let facts = ContractResponsibility::Read;
-        assert_eq!(facts.revision(&port, &context(), &mut NoTransaction).await.unwrap(), Some(20_001));
         assert!(port.targets.lock().unwrap().is_empty());
         assert_eq!(facts.history(&port, &context(), &targets, &mut NoTransaction).await.unwrap(), targets);
         assert_eq!(*port.targets.lock().unwrap(), vec![targets.to_vec()]);

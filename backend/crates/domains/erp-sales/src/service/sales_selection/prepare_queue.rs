@@ -1,6 +1,7 @@
 //! 持久化准备队列：先占用册版本，再后台执行；过期、重启和迟到结果均有持久化边界。
 use std::sync::Arc;
 
+use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SalesSelectionBookletId, SalesSelectionPrepareTaskId};
 use erp_permissions::sales_selection;
@@ -33,7 +34,7 @@ impl SalesSelectionService {
     ///
     /// # 参数
     /// * `req` - 完整准备命令。
-    /// * `actor_id` - 当前用户。
+    /// * `actor` - 当前已认证操作人。
     /// * `_catalog` - 本方法不读取；后台任务另行取得商品池。
     /// * `_images` - 本方法不读取；后台任务另行取得图片。
     /// * `_generator` - 本方法不使用；后台计算另行选择套餐图生成器。
@@ -46,21 +47,26 @@ impl SalesSelectionService {
     pub async fn start_prepare(
         &self,
         req: PrepareSalesSelectionRequest,
-        actor_id: &str,
+        actor: &AuditActor,
         _catalog: &dyn SelectionCatalogPort,
         _images: &dyn SelectionImagePort,
         _generator: &dyn PackageImageGenerator,
     ) -> Result<SalesSelectionBookletView> {
         let service = self.clone();
-        let actor = actor_id.to_string();
+        let actor = actor.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     service
-                        .authorize_booklet(&req.booklet_id, &sales_selection::BOOKLET_PREPARE, executor)
+                        .authorize_booklet(
+                            &actor,
+                            &req.booklet_id,
+                            &sales_selection::BOOKLET_PREPARE,
+                            executor,
+                        )
                         .await?;
-                    service.enqueue_prepare(req, &actor, executor).await
+                    service.enqueue_prepare(req, actor.id(), executor).await
                 })
             })
             .await
@@ -266,7 +272,7 @@ impl SalesSelectionService {
 
     /// 迟到、重复或过期结果均不能替换有效结果。
     async fn commit_task(&self, run: &SalesSelectionPrepareTask, prepared: Prepared) -> Result<()> {
-        let service = Self::new(self.db.clone());
+        let service = self.clone();
         let run = run.clone();
         self.db
             .client()
@@ -301,7 +307,7 @@ impl SalesSelectionService {
 
     /// 失败恢复与任务结束共同提交。
     async fn fail_task(&self, run: &SalesSelectionPrepareTask, reason: &str) -> Result<()> {
-        let service = Self::new(self.db.clone());
+        let service = self.clone();
         let (run, reason) = (run.clone(), reason.to_string());
         self.db
             .client()

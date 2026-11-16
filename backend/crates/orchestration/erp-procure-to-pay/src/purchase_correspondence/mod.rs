@@ -11,8 +11,6 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::purchase_order;
 use erp_procurement::PurchaseDataScopePort;
 use erp_procurement::entity::purchase_email::{PurchaseEmail, PurchaseEmailStatus, SendPurchaseEmail};
-use erp_procurement::entity::purchase_order::PurchaseOrder;
-use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::purchase_email::{purchase_emails, recent};
 use erp_read_models::purchase_center::PurchaseOrderReadService;
 use erp_read_models::purchase_center::dto::PurchaseOrderCenterView;
@@ -31,18 +29,26 @@ pub struct PurchaseEmailResult {
     pub message_id: Option<String>,
 }
 
-/// 已渲染采购版本、原请求与确定性发件占用，供首次写入及只读查证共用。
+/// 尚未读取业务内容的原请求与确定性命令身份，供首次写入及只读查证共用。
 struct EmailIntent {
     actor: AuditActor,
     request: SendPurchaseEmail,
-    rendered_version: u64,
-    rendered_revision_id: Option<String>,
+    purchase_order_id: String,
+    key: String,
+    fingerprint: String,
+    recipient: String,
+}
+
+/// 原事务读取、校验和渲染后的发件内容；提交完成后才可调用外部服务。
+struct PreparedEmail {
     record: PurchaseEmail,
+    filename: String,
+    purchase_no: String,
 }
 
 /// 只有首次确定提交的发件占用可以调用外部传输。
 enum EmailReservation {
-    Created(Box<PurchaseEmail>),
+    Created(Box<PreparedEmail>),
     Replayed(PurchaseEmailResult),
 }
 
@@ -82,28 +88,24 @@ pub async fn send(
     let config =
         config.ok_or_else(|| Error::ValidationError("尚未配置采购邮件服务，请联系系统管理员".into()))?;
     let recipient = req.recipient()?;
-    let order = read_order(&db, authorization.clone(), scope, id, actor).await?;
     let key = digest(&(actor.id(), id, &req.idempotency_key))?;
     let fingerprint = digest(&(id, req.expected_version, &recipient))?;
-    let paper = paper::render(&order);
     let command = Arc::new(EmailIntent {
         actor: actor.clone(),
         request: req,
-        rendered_version: order.version,
-        rendered_revision_id: order
-            .current_revision_id
-            .clone()
-            .filter(|_| order.content_source == "REVISION"),
-        record: prepare_record(&order, actor, key, fingerprint, recipient, paper.html),
+        purchase_order_id: id.to_owned(),
+        key,
+        fingerprint,
+        recipient,
     });
-    let mut record = match reserve_email(&db, authorization, command).await? {
-        EmailReservation::Created(record) => *record,
+    let mut email = match reserve_email(&db, authorization, scope, command).await? {
+        EmailReservation::Created(email) => *email,
         EmailReservation::Replayed(result) => return Ok(result),
     };
-    let result = transport::deliver(config, &record, &paper.filename, &order.purchase_no).await;
-    record.status = result.status;
-    record.provider_message_id = result.message_id.clone();
-    purchase_emails(&db).update(&mut record, &mut NoTransaction).await?;
+    let result = transport::deliver(config, &email.record, &email.filename, &email.purchase_no).await;
+    email.record.status = result.status;
+    email.record.provider_message_id = result.message_id.clone();
+    purchase_emails(&db).update(&mut email.record, &mut NoTransaction).await?;
     Ok(result)
 }
 
@@ -111,18 +113,18 @@ pub async fn send(
 async fn reserve_email(
     db: &Database,
     authorization: Arc<AuthorizationService>,
+    scope: Arc<dyn PurchaseDataScopePort>,
     command: Arc<EmailIntent>,
 ) -> Result<EmailReservation> {
     let transaction_db = db.clone();
-    let transaction_authorization = authorization.clone();
+    let source = PurchaseOrderReadService::new(db.clone(), authorization.clone(), scope);
     let transaction_command = command.clone();
     let result = db
         .client()
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                create_intent(&transaction_db, &transaction_authorization, &transaction_command, executor)
-                    .await
-            })
+            Box::pin(
+                async move { create_intent(&transaction_db, &source, &transaction_command, executor).await },
+            )
         })
         .await;
     match result {
@@ -136,29 +138,25 @@ async fn reserve_email(
 /// 授权、真实采购版本核验与唯一占用使用同一执行器。
 async fn create_intent(
     db: &Database,
-    authorization: &AuthorizationService,
+    source: &PurchaseOrderReadService,
     command: &EmailIntent,
     executor: &mut dyn Executor,
 ) -> Result<EmailReservation> {
-    require_email(authorization, command, executor).await?;
+    let order =
+        source.purchase_order_email_source(&command.purchase_order_id, &command.actor, executor).await?;
     let repo = purchase_emails(db);
-    if let Some(existing) = repo.find_by_id(&command.record.base.id, executor).await? {
+    if let Some(existing) = repo.find_by_id(&command.key, executor).await? {
         return Ok(EmailReservation::Replayed(replay_intent(command, &existing)?));
     }
-    let current = db
-        .purchase_orders()
-        .find_by_id(&command.record.purchase_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("采购单不存在".into()))?;
-    ensure_rendered_current(command, &current)?;
-    repo.create(&command.record, executor).await.map_err(|error| match error {
+    let email = prepare_email(command, &order)?;
+    repo.create(&email.record, executor).await.map_err(|error| match error {
         error @ persistence_core::Error::DuplicateKey(_) => Error::ReceiptDuplicate(error),
         other => other.into(),
     })?;
-    Ok(EmailReservation::Created(Box::new(command.record.clone())))
+    Ok(EmailReservation::Created(Box::new(email)))
 }
 
-/// 固定发件入口一次检查发送资格、独立详情资格和实际采购对象。
+/// 固定发件入口只检查发送资格和实际采购对象。
 async fn require_email(
     authorization: &AuthorizationService,
     command: &EmailIntent,
@@ -168,26 +166,26 @@ async fn require_email(
         .require(
             &command.actor,
             &purchase_order::CORRESPONDENCE_SEND_PURCHASE_EMAIL,
-            AccessTarget::record(&command.record.purchase_order_id)?,
+            AccessTarget::record(&command.purchase_order_id)?,
             executor,
         )
         .await?;
     Ok(())
 }
 
-/// 已渲染正文只能占用仍为同一版本及生效修订的采购单。
-fn ensure_rendered_current(command: &EmailIntent, current: &PurchaseOrder) -> Result<()> {
-    if current.base.version != command.rendered_version
-        || current.stable.current_revision_id != command.rendered_revision_id
-    {
-        return Err(Error::ConflictError("采购单已变化，请刷新后重新确认".into()));
-    }
+/// 只渲染原发送事务内读取的已生效采购版本。
+fn prepare_email(command: &EmailIntent, order: &PurchaseOrderCenterView) -> Result<PreparedEmail> {
     command.request.validate_source(
-        current.stable.status,
-        current.base.version,
-        command.rendered_revision_id.is_some(),
+        order.status,
+        order.version,
+        order.content_source == "REVISION" && order.current_revision_id.is_some(),
     )?;
-    Ok(())
+    let paper = paper::render(order);
+    Ok(PreparedEmail {
+        record: prepare_record(order, command, paper.html),
+        filename: paper.filename,
+        purchase_no: order.purchase_no.clone(),
+    })
 }
 
 /// 并发占用或提交未知后只授权并读取原键，不写记录、不再次发送。
@@ -202,7 +200,7 @@ async fn recover_intent(
             Box::pin(async move {
                 require_email(&authorization, &command, executor).await?;
                 purchase_emails(&transaction_db)
-                    .find_by_id(&command.record.base.id, executor)
+                    .find_by_id(&command.key, executor)
                     .await?
                     .map(|record| replay_intent(&command, &record).map(EmailReservation::Replayed))
                     .transpose()
@@ -213,31 +211,24 @@ async fn recover_intent(
 
 /// 只接受同一操作人、采购单和确定性主键的原发送结果。
 fn replay_intent(command: &EmailIntent, record: &PurchaseEmail) -> Result<PurchaseEmailResult> {
-    if record.base.id != command.record.base.id
-        || record.actor_id != command.record.actor_id
-        || record.purchase_order_id != command.record.purchase_order_id
+    if record.base.id != command.key
+        || record.actor_id != command.actor.id()
+        || record.purchase_order_id != command.purchase_order_id
     {
         return Err(Error::ConflictError("发件记录与原命令不匹配".into()));
     }
-    replay(record, &command.record.fingerprint)
+    replay(record, &command.fingerprint)
 }
 
 /// 保存当前已渲染生效修订的审计内容。
-fn prepare_record(
-    order: &PurchaseOrderCenterView,
-    actor: &AuditActor,
-    key: String,
-    fingerprint: String,
-    recipient: String,
-    html: String,
-) -> PurchaseEmail {
+fn prepare_record(order: &PurchaseOrderCenterView, command: &EmailIntent, html: String) -> PurchaseEmail {
     PurchaseEmail {
-        base: BaseModel::new(key),
+        base: BaseModel::new(command.key.clone()),
         purchase_order_id: order.id.clone(),
         revision_id: order.current_revision_id.clone().unwrap_or_default(),
-        actor_id: actor.id().into(),
-        fingerprint,
-        recipient,
+        actor_id: command.actor.id().into(),
+        fingerprint: command.fingerprint.clone(),
+        recipient: command.recipient.clone(),
         html,
         status: PurchaseEmailStatus::Sending,
         provider_message_id: None,
@@ -309,11 +300,216 @@ pub async fn history(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_core::common::time::Instant;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_permissions::Permission;
+    use erp_procurement::dto::purchase_order::TotalsView;
+    use erp_procurement::entity::purchase_order::{
+        FulfillmentResponsibility, ProgressStatus, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
+    };
+    use erp_procurement::{Error as ProcurementError, PurchaseResolvedScope, Result as ProcurementResult};
+    use erp_read_models::purchase_center::dto::{DocumentApprovalHistoryPageView, DocumentApprovalView};
+    use mongodb::Client;
+    use persistence_core::ExecutionBoundary;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+
+    fn command() -> EmailIntent {
+        EmailIntent {
+            actor: AuditActor::new("actor-1".into(), "buyer".into(), AccountKind::Admin),
+            request: SendPurchaseEmail {
+                expected_version: 1,
+                recipient: "a@example.com".into(),
+                idempotency_key: "key".into(),
+            },
+            purchase_order_id: "purchase-1".into(),
+            key: "email-1".into(),
+            fingerprint: "same".into(),
+            recipient: "a@example.com".into(),
+        }
+    }
+
+    fn order() -> PurchaseOrderCenterView {
+        PurchaseOrderCenterView {
+            id: "purchase-1".into(),
+            purchase_no: "PO-1".into(),
+            status: PurchaseOrderStatus::Effective,
+            review_status: PurchaseReviewStatus::Approved,
+            version: 1,
+            sales_order_id: "sales-1".into(),
+            sales_order_no: "SO-1".into(),
+            supplier_id: "supplier-1".into(),
+            supplier_name: "供应商".into(),
+            purchase_type: PurchaseType::Physical,
+            payment_term_code: "NET-30".into(),
+            fulfillment_responsibility: FulfillmentResponsibility::SupplierDirect,
+            owner_user_id: "actor-1".into(),
+            owner_name: "采购负责人".into(),
+            target_warehouse_id: None,
+            target_warehouse_name: None,
+            payment_progress: ProgressStatus::None,
+            invoice_progress: ProgressStatus::None,
+            fulfillment_progress: ProgressStatus::None,
+            current_submission_id: None,
+            current_revision_id: Some("rev-1".into()),
+            revision_no: Some(1),
+            content_source: "REVISION".into(),
+            lines: Vec::new(),
+            source_sales_order: None,
+            source_update: None,
+            delivery: None,
+            totals: TotalsView { gross: "113.00".into(), net: "100.00".into(), tax: "13.00".into() },
+            allocations: Vec::new(),
+            api_executions: Vec::new(),
+            fulfillment_quantities: Vec::new(),
+            api_execution_funds: None,
+            changes: Vec::new(),
+            payable_summary: None,
+            approval: DocumentApprovalView {
+                requirement: "NO_APPROVAL".into(),
+                definition: None,
+                instance: None,
+                recent_history: Vec::new(),
+                history_page: DocumentApprovalHistoryPageView::default(),
+                allowed_actions: Vec::new(),
+            },
+            created_at: 1,
+        }
+    }
+
+    #[test]
+    fn confirmed_source_is_rendered_into_the_deterministic_reservation() {
+        let command = command();
+        let email = prepare_email(&command, &order()).unwrap();
+        assert_eq!(email.record.base.id, command.key);
+        assert_eq!(email.record.purchase_order_id, command.purchase_order_id);
+        assert_eq!(email.record.revision_id, "rev-1");
+        assert_eq!(email.record.actor_id, "actor-1");
+        assert_eq!(email.record.fingerprint, command.fingerprint);
+        assert_eq!(email.record.recipient, command.recipient);
+        assert_eq!(email.record.status, PurchaseEmailStatus::Sending);
+        assert!(email.record.html.contains("供应商"));
+        assert!(email.record.html.contains("113.00"));
+        assert_eq!(email.filename, "采购单-PO-1.html");
+        assert_eq!(email.purchase_no, "PO-1");
+    }
+
+    #[test]
+    fn stale_or_incomplete_current_content_cannot_create_a_reservation() {
+        let command = command();
+        let mut stale = order();
+        stale.version = 2;
+        let error = prepare_email(&command, &stale).err().unwrap();
+        assert_eq!(error.to_string(), "采购单已变化，请刷新后重新确认");
+        assert!(matches!(error, Error::Logic(_)));
+        for incomplete in ["SUBMISSION", "DRAFT"] {
+            let mut current = order();
+            current.content_source = incomplete.into();
+            let error = prepare_email(&command, &current).err().unwrap();
+            assert_eq!(error.to_string(), "采购单审批生效后才能发送给供应商");
+        }
+        let mut missing = order();
+        missing.current_revision_id = None;
+        let error = prepare_email(&command, &missing).err().unwrap();
+        assert_eq!(error.to_string(), "采购单审批生效后才能发送给供应商");
+        assert!(matches!(error, Error::Logic(_)));
+    }
+
+    struct DeniedSource {
+        boundary: ExecutionBoundary,
+        entries: Mutex<Vec<Permission>>,
+        unavailable: bool,
+    }
+
+    #[async_trait]
+    impl PurchaseDataScopePort for DeniedSource {
+        async fn require_record_entry(
+            &self,
+            actor: &AuditActor,
+            entry: &Permission,
+            id: &str,
+            executor: &mut dyn Executor,
+        ) -> ProcurementResult<()> {
+            assert_eq!(actor.id(), "actor-1");
+            assert_eq!(id, "purchase-1");
+            assert!(self.boundary.is_current(executor));
+            self.entries.lock().unwrap().push(entry.clone());
+            if self.unavailable {
+                Err(ProcurementError::Internal("发送授权设施不可用".into()))
+            } else {
+                Err(ProcurementError::Forbidden("采购对象越界".into()))
+            }
+        }
+
+        async fn resolve(
+            &self,
+            _: &AuditActor,
+            _: &Permission,
+            _: &mut dyn Executor,
+        ) -> ProcurementResult<PurchaseResolvedScope> {
+            panic!("发送不得编译详情范围查询")
+        }
+        async fn expand_org_units(
+            &self,
+            _: &[String],
+            _: bool,
+            _: &mut dyn Executor,
+        ) -> ProcurementResult<BTreeSet<String>> {
+            panic!("发送不得自行展开组织")
+        }
+        async fn org_member_ids(
+            &self,
+            _: &BTreeSet<String>,
+            _: Instant,
+            _: &mut dyn Executor,
+        ) -> ProcurementResult<Vec<String>> {
+            panic!("发送不得自行读取成员")
+        }
+        async fn own_org(
+            &self,
+            _: &str,
+            _: Instant,
+            _: &mut dyn Executor,
+        ) -> ProcurementResult<Option<String>> {
+            panic!("发送不得自行读取主属组织")
+        }
+    }
+
+    #[tokio::test]
+    async fn send_authorization_uses_the_original_executor_and_stops_before_business_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("purchase_email_authorization_unit");
+        for unavailable in [false, true] {
+            let mut executor = SnapshotExecutor::default();
+            let scope = Arc::new(DeniedSource {
+                boundary: executor.boundary().unwrap(),
+                entries: Mutex::default(),
+                unavailable,
+            });
+            let source =
+                PurchaseOrderReadService::new(db.clone(), unavailable_authorization(), scope.clone());
+            let error = create_intent(&db, &source, &command(), &mut executor).await.err().unwrap();
+            if unavailable {
+                assert!(matches!(error, Error::Internal(message) if message == "发送授权设施不可用"));
+            } else {
+                assert!(matches!(error, Error::NotFound(message) if message == "采购单不存在或无权操作"));
+            }
+            assert_eq!(*scope.entries.lock().unwrap(), [purchase_order::CORRESPONDENCE_SEND_PURCHASE_EMAIL]);
+        }
+    }
+
     #[test]
     fn retries_return_the_recorded_result_and_reject_payload_changes() {
         let mut row = PurchaseEmail {
-            base: BaseModel::fake(),
+            base: BaseModel { id: "email-1".into(), ..BaseModel::fake() },
             purchase_order_id: "purchase-1".into(),
             revision_id: "rev-1".into(),
             actor_id: "actor-1".into(),
@@ -334,17 +530,7 @@ mod tests {
             assert!(replay(&row, "changed").is_err());
         }
         assert_ne!(digest(&("a", "bc")).unwrap(), digest(&("ab", "c")).unwrap());
-        let command = EmailIntent {
-            actor: AuditActor::new("actor-1".into(), "buyer".into(), erp_core::AccountKind::Admin),
-            request: SendPurchaseEmail {
-                expected_version: 1,
-                recipient: row.recipient.clone(),
-                idempotency_key: "key".into(),
-            },
-            rendered_version: 1,
-            rendered_revision_id: Some(row.revision_id.clone()),
-            record: row.clone(),
-        };
+        let command = command();
         assert_eq!(replay_intent(&command, &row).unwrap().status, PurchaseEmailStatus::Unknown);
         let mut foreign_actor = row.clone();
         foreign_actor.actor_id.push_str("-other");

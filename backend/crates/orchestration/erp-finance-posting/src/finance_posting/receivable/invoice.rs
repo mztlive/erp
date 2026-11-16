@@ -128,45 +128,32 @@ impl ReceivableProcess {
 
     /// 原子开票时登记附件；重放结果指明本次新上传对象是否已消费。
     /// # 参数
-    /// 请求、待登记文件批次与认证账号。
+    /// req 为发票身份、分配及幂等命令，pending 为待登记附件批次，actor 为当前认证操作人。
     /// # 返回
     /// 发票结果及附件是否已提交。
     /// # 错误
-    /// 文件、授权、版本或事务失败时拒绝。
+    /// 请求或附件非法时返回 `InvalidInput` 或 `ValidationError`；授权、对象、版本、额度或事务错误按原分类传播。
+    /// 提交结果无法查证或附件已提交后读取失败时返回 `OutcomeUnknown`，调用方须保留附件。
     pub async fn commit_invoice_with_assets(
         &self,
-        mut req: CommitInvoiceRequest,
+        req: CommitInvoiceRequest,
         pending: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<InvoiceWithAssetsResult> {
         req.validate()?;
         let command_receipt = super::invoice_attachments::receipt(&req, actor.id(), pending.as_ref())?;
-        if let Some(invoice_id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command_receipt, &mut NoTransaction)
-            .await?
-        {
-            return Ok(InvoiceWithAssetsResult {
-                view: self.authorized_invoice_result(&invoice_id, actor).await?,
-                assets_committed: false,
-            });
-        }
-        if let Some(invoice) = req.invoice.as_mut() {
-            req.attachment_asset_ids.append(&mut invoice.attachment_asset_ids);
-        }
-        super::invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let has_pending = !pending.is_empty();
         let transaction = InvoiceCommitTransaction {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
-            prepared: req.prepare()?,
             pending,
-            attachment_ids: req.attachment_asset_ids.clone(),
             actor: actor.clone(),
             receipt: command_receipt.clone(),
             work_item_id: req.work_item_id.clone(),
             expected_task_version: erp_workflow::service::work_item::expected_task_version(
                 &req.expected_task_version,
             )?,
+            req,
         };
         let result = self
             .db

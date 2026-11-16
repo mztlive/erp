@@ -138,7 +138,7 @@ mod tests {
     use entity_core::BaseModel;
     use erp_core::AccountKind;
     use erp_core::ids::CustomerAccountId;
-    use erp_identity::Permission;
+    use erp_permissions::{Permission, customer, sales_selection};
 
     use super::*;
 
@@ -154,10 +154,10 @@ mod tests {
         }
     }
 
-    fn context(action: &str) -> AccessContext {
+    fn context(permission: Permission) -> AccessContext {
         AccessContext {
             actor: AuditActor::new("a".into(), "a".into(), AccountKind::Admin),
-            permission: Permission::parse(format!("customer:{action}")).unwrap(),
+            permission,
             resource: "customer".into(),
             model: None,
             as_of: Instant::from_unix_secs(86400),
@@ -173,10 +173,10 @@ mod tests {
             assignment("future", "1970-01-03", None),
         ];
         let references = rows.iter().collect::<Vec<_>>();
-        let (owners, history) = responsibility(&references, &context("detail")).unwrap();
+        let (owners, history) = responsibility(&references, &context(customer::DETAIL)).unwrap();
         assert_eq!(owners, ["current-a".into(), "current-b".into()].into());
         assert_eq!(history, rows.iter().map(|row| row.user_id.clone()).collect());
-        let (proposed, _) = responsibility(&references, &context("create")).unwrap();
+        let (proposed, _) = responsibility(&references, &context(customer::CREATE)).unwrap();
         assert_eq!(proposed, history);
     }
 
@@ -186,7 +186,8 @@ mod tests {
         deleted.base.deleted_at = 1;
         let mut collaborator = assignment("collaborator", "1970-01-01", None);
         collaborator.assignment_role = AssignmentRole::Collaborator;
-        let (owners, history) = responsibility(&[&deleted, &collaborator], &context("detail")).unwrap();
+        let (owners, history) =
+            responsibility(&[&deleted, &collaborator], &context(customer::DETAIL)).unwrap();
         assert!(owners.is_empty());
         assert!(history.is_empty());
     }
@@ -206,7 +207,7 @@ mod tests {
         let mut legacy = assignment("legacy-helper", "1970-01-01", None);
         legacy.assignment_role = AssignmentRole::Collaborator;
         let rows = [&owner, &legacy];
-        let (owners, history) = responsibility(&rows, &context("detail")).unwrap();
+        let (owners, history) = responsibility(&rows, &context(customer::DETAIL)).unwrap();
         let account = CustomerAccount::new(
             CustomerAccountId::new("customer"),
             CustomerAccountData {
@@ -224,14 +225,14 @@ mod tests {
             owners,
             ["org".into()].into(),
             history,
-            super::super::next_day(context("detail").as_of),
+            super::super::next_day(context(customer::DETAIL).as_of),
         );
         let known = facts.collaborators.get().expect("协作事实必须已知，不能以Missing绕过完整性");
         assert!(known.is_empty());
         let mapping = CustomerMapping::new();
         assert!(mapping.model().facts.contains(&FactKind::Collaborators));
         let QueryFragment::Match(filter) =
-            mapping.predicate(&AccessFact::Collaborating, &context("detail"), None).unwrap()
+            mapping.predicate(&AccessFact::Collaborating, &context(customer::DETAIL), None).unwrap()
         else {
             panic!("退役协作查询不得读取协作集合");
         };
@@ -262,8 +263,7 @@ mod tests {
     #[test]
     fn cross_domain_create_keeps_customer_current_owner_window() {
         let ended = assignment("past", "1970-01-01", Some("1970-01-02"));
-        let mut source = context("detail");
-        source.permission = Permission::parse("sales_selection_booklet:create").unwrap();
+        let source = context(sales_selection::BOOKLET_CREATE);
         let (owners, history) = responsibility(&[&ended], &source).unwrap();
         assert!(owners.is_empty());
         assert_eq!(history, ["past".into()].into());

@@ -14,9 +14,9 @@ use erp_core::region::RegionCode;
 use erp_identity::AuthorizationService;
 use erp_procurement::entity::facts::{AvailabilityStatus, OfferingRevisionFact};
 use erp_procurement::entity::purchase_order::CreationBasisFacts;
-use erp_supply::entity::supplier_offering::SkuDeliveryInput;
+use erp_supply::entity::supplier_offering::{SkuDeliveryCoverage, SkuDeliveryCoverageMemo, SkuDeliveryInput};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::require_sellable_read;
@@ -172,27 +172,49 @@ fn delivery_view(req: &DeliveryCoverageRequest, facts: &CreationBasisFacts) -> R
     Ok(DeliveryCoverageView { items })
 }
 
-/// 计算一批 SKU 配送覆盖所需的事实。
+/// 为后台重算生成一批 SKU 配送覆盖记录。
 ///
 /// # 参数
-/// * `db` - 数据库
-/// * `sku_ids` - 公司 SKU，不重复
-/// * `today` - 有效期判定日
+/// * `db` - 供给、商品与配送模板所在数据库。
+/// * `sku_ids` - 当前待重算批次的公司 SKU。
+/// * `today` - 有效期判定日。
+/// * `computed_at` - 记录的计算时间（Unix 秒）。
+/// * `memo` - 本轮重算的政策计算缓存。
+/// * `executor` - 待重算批次读取及保存使用的原执行器。
 ///
 /// # 返回
-/// 逐 SKU 返回有效且可供供给的去重政策、供应商、下次按日期变化日与是否受配送范围限制；
-/// 没有供给的 SKU 返回空政策。
+/// 返回可按原待重算标记序号保存的覆盖记录；不开放供给事实读取入口。
 ///
 /// # 错误
 /// 供给、模板或商品事实读取失败时返回错误。
-pub async fn sku_delivery_inputs(
+pub async fn delivery_coverage_refresh_records(
     db: &Database,
     sku_ids: &[String],
     today: BusinessDate,
+    computed_at: i64,
+    memo: &mut SkuDeliveryCoverageMemo,
+    executor: &mut dyn Executor,
+) -> Result<Vec<SkuDeliveryCoverage>> {
+    let inputs = sku_delivery_inputs(db, sku_ids, today, executor).await?;
+    Ok(inputs
+        .into_iter()
+        .map(|input| {
+            let coverage = memo.coverage(&input);
+            input.into_record(coverage, computed_at)
+        })
+        .collect())
+}
+
+/// 仅为当前后台投影批次读取有效供给与商品配送限制。
+async fn sku_delivery_inputs(
+    db: &Database,
+    sku_ids: &[String],
+    today: BusinessDate,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<SkuDeliveryInput>> {
     let ids = sku_ids.iter().map(|id| SkuId::new(id.as_str())).collect::<Vec<_>>();
-    let facts = load_creation_basis_facts(db, &ids, &mut NoTransaction).await?;
-    let restricted = restricted_skus(db, &ids).await?;
+    let facts = load_creation_basis_facts(db, &ids, executor).await?;
+    let restricted = restricted_skus(db, &ids, executor).await?;
     let mut supplies = effective_supply(&facts, today);
     Ok(sku_ids
         .iter()
@@ -216,10 +238,14 @@ pub async fn sku_delivery_inputs(
 }
 
 /// 读取 SKU 是否为实物商品；虚拟商品、线下服务与卡券不受配送范围限制。
-async fn restricted_skus(db: &Database, sku_ids: &[SkuId]) -> Result<HashMap<String, bool>> {
-    let skus = db.skus().find_by_ids(sku_ids, &mut NoTransaction).await?;
+async fn restricted_skus(
+    db: &Database,
+    sku_ids: &[SkuId],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, bool>> {
+    let skus = db.skus().find_by_ids(sku_ids, executor).await?;
     let product_ids = skus.iter().map(|sku| sku.product_id.clone()).collect::<Vec<_>>();
-    let products = db.products().find_by_ids(&product_ids, &mut NoTransaction).await?;
+    let products = db.products().find_by_ids(&product_ids, executor).await?;
     let kinds = products
         .into_iter()
         .map(|product| (product.base.id.clone(), product.product_kind))

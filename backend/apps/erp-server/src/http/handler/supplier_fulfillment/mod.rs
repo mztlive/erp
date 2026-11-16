@@ -43,7 +43,7 @@ pub async fn supplier_fulfillment_order_list(
 ) -> Result<SupplierFulfillmentOrderListView> {
     let page = state
         .application()
-        .supplier_fulfillment_process()
+        .supplier_fulfillment_list_read_service()
         .supplier_fulfillment_order_list(&params, &actor)
         .await?;
 

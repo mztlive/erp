@@ -5,8 +5,9 @@ use persistence_core::Executor;
 pub mod execution_progress;
 pub mod fulfillment_detail;
 mod fulfillment_display;
-
+pub mod fulfillment_list;
 pub use fulfillment_detail::SupplierFulfillmentDetailReadService;
+pub use fulfillment_list::SupplierFulfillmentListReadService;
 
 pub mod fulfillment_dto;
 pub mod offering;

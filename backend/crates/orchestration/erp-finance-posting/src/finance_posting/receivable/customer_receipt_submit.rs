@@ -2,6 +2,7 @@
 
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
+use erp_core::common::time::Instant;
 use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
@@ -14,7 +15,7 @@ use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_workflow::service::approval::execution::{PreparedExecution, command_recovery_delay};
 use erp_workflow::service::document_registry::find_approval_binding;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::ReceivableProcess;
 use super::adapter::{
@@ -65,9 +66,10 @@ impl ReceivableProcess {
     /// # 参数
     /// * `id` - 原回款主键。
     /// * `receipt` - 已装载的回款单。
-    /// * `idempotency_key` - 本次提交幂等键。
+    /// * `req` - 本次提交版本、分配与幂等键。
     /// * `actor` - 当前提交人。
     /// * `adapter` - 客户回款适配器，提供责任角色。
+    /// * `executor` - 原提交事务执行器。
     ///
     /// # 返回
     /// 返回尚未落库的启动持久化输入。
@@ -81,11 +83,12 @@ impl ReceivableProcess {
         req: &SubmitCustomerReceiptRequest,
         actor: &AuditActor,
         adapter: adapter::CustomerReceiptAdapter,
+        executor: &mut dyn Executor,
     ) -> Result<CustomerReceiptStartPersistInput> {
         let subject = customer_receipt_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, executor).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let now = erp_core::common::time::Instant::now();
+        let now = Instant::now();
         let snapshot_payload = build_customer_receipt_snapshot(&receipt, actor.id(), now)?;
         let organization_id = customer_receipt_responsible_org_id(&receipt)?;
         let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
@@ -100,6 +103,7 @@ impl ReceivableProcess {
             &req.idempotency_key,
             req.resubmission_reason.as_deref(),
             now,
+            executor,
         )
         .await?;
         Ok(CustomerReceiptStartPersistInput {
@@ -147,6 +151,25 @@ impl ReceivableProcess {
                 })
             })
             .await
+    }
+
+    /// 既有事务先校验原提交资格，再查证完整命令和授权结果。
+    /// # 参数
+    /// id 为原回款主键，command 为完整命令回执，actor 为当前认证操作人，
+    /// executor 为原提交事务执行器。
+    /// # 返回
+    /// 命中时返回当前授权视图；未命中返回空值。
+    /// # 错误
+    /// 原提交资格失效、回执冲突或读取失败时拒绝。
+    pub(super) async fn replay_receipt_submit(
+        &self,
+        id: &str,
+        command: &CommandReceipt,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerReceiptView>> {
+        let port = MongoReceiptSubmitReplay { db: &self.db, rbac: &self.rbac, actor };
+        replay_authorized_submit(&port, id, command, executor).await
     }
 
     /// 提交结果未知时只用完整业务收据恢复，每次 fresh 快照都重验当前资格。
@@ -233,7 +256,7 @@ async fn recover_authorized_submit<P: ReceiptSubmitRecoveryPort>(
 /// # 参数
 /// * `db` - 数据库。
 /// * `rbac` - 授权源。
-/// * `input` - 事务外已冻结的启动输入。
+/// * `input` - 原事务内已冻结的启动输入。
 /// * `command` - 原提交命令回执。
 ///
 /// # 返回
@@ -246,33 +269,25 @@ pub(super) async fn persist_receipt_submit(
     rbac: &FinancePostingPorts,
     input: CustomerReceiptStartPersistInput,
     command: CommandReceipt,
+    executor: &mut dyn Executor,
 ) -> Result<CustomerReceiptView> {
-    let db = db.clone();
-    let rbac = rbac.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let current = authorized_receipt(&db, &rbac, &input.actor, &input.id, executor).await?;
-                let actor = input.actor.clone();
-                let receipt = if committed_submit(&db, &command, &input.id, executor).await? {
-                    current
-                } else {
-                    apply_receipt_submit(&db, &rbac, input, &command, current, executor).await?
-                };
-                receipt_command_result(
-                    &db,
-                    &rbac.authorization,
-                    &actor,
-                    &receipt.base.id,
-                    &receivable::CUSTOMER_RECEIPT_SUBMIT,
-                    AccessTarget::record(&receipt.base.id)?,
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+    let current = authorized_receipt(db, rbac, &input.actor, &input.id, executor).await?;
+    let actor = input.actor.clone();
+    let receipt = if committed_submit(db, &command, &input.id, executor).await? {
+        current
+    } else {
+        apply_receipt_submit(db, rbac, input, &command, current, executor).await?
+    };
+    receipt_command_result(
+        db,
+        &rbac.authorization,
+        &actor,
+        &receipt.base.id,
+        &receivable::CUSTOMER_RECEIPT_SUBMIT,
+        AccessTarget::record(&receipt.base.id)?,
+        executor,
+    )
+    .await
 }
 
 /// 首次提交保留原状态、版本、完整收据及审计写入顺序。
@@ -297,7 +312,15 @@ async fn apply_receipt_submit(
 }
 
 /// 资格和原登记人事实必须在当前执行器内重新取得，不能沿用缓存授权。
-async fn authorized_receipt(
+/// # 参数
+/// db 为业务数据库，rbac 为共享授权及审批设施，actor 为当前认证操作人，
+/// id 为原回款主键，executor 为原命令事务执行器。
+/// # 返回
+/// 返回已通过提交资格与完整来源校验的当前回款单。
+/// # 错误
+/// 回款不存在时返回 `NotFound`；当前账号、提交资格、来源或原登记人资格失效时拒绝。
+/// 授权及仓储读取错误按原分类传播。
+pub(super) async fn authorized_receipt(
     db: &Database,
     rbac: &FinancePostingPorts,
     actor: &AuditActor,
@@ -436,6 +459,7 @@ mod tests {
     use erp_finance::entity::command_receipt::FinanceCommandReceipt;
     use mongodb::error::Error as MongoError;
     use persistence_core::Error as PersistenceError;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
 
@@ -543,10 +567,10 @@ mod tests {
             (true, true, vec!["authorize"]),
             (false, true, vec!["authorize", "receipt"]),
         ] {
-            let mut executor = NoTransaction;
+            let mut executor = SnapshotExecutor::default();
             let original = submit_receipt("receipt", &request(), "creator").unwrap();
             let probe = SubmitReplay {
-                identity: &mut executor as *mut NoTransaction as usize,
+                identity: &mut executor as *mut SnapshotExecutor as usize,
                 denied,
                 receipt: Some(
                     FinanceCommandReceipt::resource(&original, "receipt".into(), "event".into()).unwrap(),

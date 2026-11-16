@@ -1,11 +1,8 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
-mod batch;
 use std::future::Future;
 use std::ops::Deref;
 
-use application_core::AuditActor;
-use batch::DataScopeBatch;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -15,11 +12,12 @@ use crate::entity::access_control::governance::root_scope;
 use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::access_control::scope_spec::{self, OrganizationLoad, ScopeSource};
 use crate::entity::authorization::AccessContext;
+use crate::entity::fingerprint::Fingerprint;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, Permission, QualifiedPermissions, Result, SharedRbacService};
+use crate::{AccessControlExt, Error, Permission, QualifiedPermissions, Result};
 
 /// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。
 pub(crate) struct AuthorizedDataScope {
@@ -65,11 +63,17 @@ impl AuthorizedDataScope {
 #[derive(Clone)]
 pub(crate) struct DataScopeService {
     db: Database,
-    rbac: SharedRbacService,
 }
 
 impl DataScopeService {
     /// 使用统一授权已取得的完整资格，只读取本次实际需要的范围设施。
+    /// # 参数
+    /// context 为目标动作上下文，source 为固定范围来源；required、qualified 为本次完整资格。
+    /// executor 沿用调用方读取阶段。
+    /// # 返回
+    /// 仅由本动作合格角色产生的范围与依赖版本。
+    /// # 错误
+    /// 来源无效、完整资格不足或范围读取失败时返回错误。
     pub(crate) async fn qualified(
         &self,
         context: &AccessContext,
@@ -89,19 +93,13 @@ impl DataScopeService {
         if roles.is_empty() {
             return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
         }
-        let state = self
-            .scope_organizations(
-                context.actor.id(),
-                scope_spec::organization_load(spec),
-                context.as_of,
-                executor,
-            )
-            .await?;
+        let load = scope_spec::organization_load(spec);
+        let state = self.scope_organizations(context.actor.id(), load, context.as_of, executor).await?;
         let target = (context.permission.resource(), context.permission.action());
         let origin = (source.resource(), source.action());
         let scope =
             self.resolved(context.actor.id(), &roles, origin, &state, context.as_of, executor).await?;
-        let scope_version = batch::scope_version(
+        let scope_version = scope_version(
             context.actor.id(),
             target,
             origin,
@@ -123,76 +121,18 @@ impl DataScopeService {
         })
     }
 
-    /// 在一次调用方事务中复用身份和组织事实，各动作分别解析真实范围。
-    ///
-    /// # 参数
-    /// `actor` 为当前身份，`permissions` 声明本批所有目标及额外动作，`executor` 为原执行器。
-    /// # 返回
-    /// 借用原执行器的解析批次；非事务执行器保持逐次重新取证。
-    /// # 错误
-    /// 构造不执行 I/O；各解析方法分别报告资格、版本及持久化错误。
-    ///
-    /// 批次只能用于同一读取阶段；释放批次后才允许原执行器执行业务写入。
-    /// 最终授权重验和下一读取阶段必须创建新的批次。
-    pub(crate) fn batch<'a>(
-        &'a self,
-        actor: &'a AuditActor,
-        permissions: &[Permission],
-        executor: &'a mut dyn Executor,
-    ) -> DataScopeBatch<'a> {
-        DataScopeBatch::new(self, actor, permissions, executor)
-    }
-    /// 绑定身份数据库及现有 RBAC 实例。
+    /// 绑定身份数据库；完整资格由统一授权服务传入。
     ///
     /// # 参数
     /// * `db` - 身份数据库。
-    /// * `rbac` - 现有 RBAC 服务。
     ///
     /// # 返回
     /// 返回资源动作范围解析器。
     ///
     /// # 错误
     /// 不返回错误。
-    pub(crate) fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
-    }
-
-    /// 在调用方事务内证明账号、角色、动作并解析范围。
-    ///
-    /// # 参数
-    /// * `actor` - 当前账号。
-    /// * `entry_permission` - 已解析的目标资源动作。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回该资源动作的授权范围。
-    ///
-    /// # 错误
-    /// 无动作权限返回 Forbidden；版本变化拒绝；缺少范围正常返回空授权结果。
-    pub(crate) async fn resolve(
-        &self,
-        actor: &AuditActor,
-        entry_permission: &Permission,
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let source_permission = scope_spec::runtime_source(scope_spec::require_scope(entry_permission)?)?;
-        self.resolve_boundary(actor, entry_permission, source_permission.permission(), &[], executor).await
-    }
-
-    /// 动作资格与数据边界在同一策略快照中独立取证。
-    async fn resolve_boundary(
-        &self,
-        actor: &AuditActor,
-        entry_permission: &Permission,
-        source_permission: &Permission,
-        permissions: &[Permission],
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let mut required = permissions.to_vec();
-        required.push(entry_permission.clone());
-        self.batch(actor, &required, executor)
-            .resolve_boundary(entry_permission, source_permission, permissions)
-            .await
+    pub(crate) fn new(db: Database) -> Self {
+        Self { db }
     }
 
     /// 管理及工作项需要全员事实，其他授权只装载组织树及操作人关系。
@@ -239,6 +179,39 @@ impl DataScopeService {
     }
 }
 
+/// 身份、目标和来源、账号与策略版本，以及经本动作证明的角色、组织和范围。
+/// # 参数
+/// user、target、source 绑定身份与动作；versions、roles、state、scope 为本次授权事实。
+/// # 返回
+/// v2 稳定编码摘要；保留跨页版本比较合同，旧摘要触发重新分页。
+/// # 错误
+/// 无。
+fn scope_version(
+    user: &str,
+    target: (&str, &str),
+    source: (&str, &str),
+    versions: (u64, u64),
+    roles: &[Role],
+    state: &OrganizationState,
+    scope: &ResolvedScope,
+) -> String {
+    // v2 字段顺序：账号、账号/策略/组织版本、目标、来源、无序角色、范围。
+    let mut hash = Fingerprint::new("shared-policy-v2");
+    hash.text(user);
+    hash.number(versions.0);
+    hash.number(versions.1);
+    hash.number(state.version);
+    for value in [target.0, target.1, source.0, source.1] {
+        hash.text(value);
+    }
+    hash.unordered(roles, |hash, role| {
+        hash.text(&role.base.id);
+        hash.number(role.base.version);
+    });
+    hash.scope(scope);
+    hash.finish()
+}
+
 /// 仅在账号与同角色完整动作已取证后应用公司或人员范围；旧人员配置不再限制公司范围。
 async fn resolve_configured_scope(
     spec: &scope_spec::ScopeSpec,
@@ -270,6 +243,7 @@ async fn resolve_scope(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
 
     use super::*;
     use crate::RoleId;
@@ -384,5 +358,84 @@ mod tests {
         root.base.deleted_at = 1;
         let scope = resolve_scope(&[root], async { Ok(PersonDataScope::denied()) }).await.unwrap();
         assert_eq!(scope, PersonDataScope::denied());
+    }
+
+    /// 共用公共事实仍须分别绑定每个来源和目标，所有授权版本变化均使游标失效。
+    #[test]
+    fn scope_versions_keep_each_source_and_all_authorization_versions() {
+        let role = Role::new(RoleId::parse("role-finance").unwrap(), RoleData::new("财务")).unwrap();
+        let mut roles = vec![role];
+        roles[0].base.version = 0;
+        let mut state = OrganizationState { version: 4, ..Default::default() };
+        let scope = ResolvedScope {
+            role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+            user_limit: None,
+        };
+        let target = ("invoice", "list");
+        let source = ("sales_order", "list");
+        let version = scope_version("finance", target, source, (2, 3), &roles, &state, &scope);
+        assert_eq!(version, "fd4cfc9427c3662ca4f5922dbf4bf64c");
+        assert_eq!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
+        for (user, changed_target, changed_source, versions) in [
+            ("other", target, source, (2, 3)),
+            ("finance", ("invoice", "detail"), source, (2, 3)),
+            ("finance", target, ("purchase_order", "list"), (2, 3)),
+            ("finance", target, source, (3, 3)),
+            ("finance", target, source, (2, 4)),
+        ] {
+            assert_ne!(
+                version,
+                scope_version(user, changed_target, changed_source, versions, &roles, &state, &scope)
+            );
+        }
+        roles[0].base.version += 1;
+        assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
+        roles[0].base.version -= 1;
+        state.version += 1;
+        assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
+        state.version -= 1;
+        let denied = ResolvedScope { role_clauses: vec![], user_limit: None };
+        assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &denied));
+    }
+
+    /// 角色和条款顺序不改变范围版本；个人上限与条款字段变化仍使其失效。
+    #[test]
+    fn scope_versions_ignore_role_order_but_bind_limits_and_dimensions() {
+        let roles = vec![
+            Role::new(RoleId::parse("first").unwrap(), RoleData::new("甲")).unwrap(),
+            Role::new(RoleId::parse("second").unwrap(), RoleData::new("乙")).unwrap(),
+        ];
+        let state = OrganizationState::default();
+        let scope = ResolvedScope {
+            role_clauses: vec![
+                ScopeClause { self_owned: true, ..Default::default() },
+                ScopeClause { collaborative: true, ..Default::default() },
+            ],
+            user_limit: None,
+        };
+        let hash = |roles: &[Role], scope: &ResolvedScope| {
+            scope_version("u", ("invoice", "list"), ("sales_order", "list"), (1, 2), roles, &state, scope)
+        };
+        let original = hash(&roles, &scope);
+        let mut reversed = scope.clone();
+        reversed.role_clauses.reverse();
+        assert_eq!(original, hash(&roles.into_iter().rev().collect::<Vec<_>>(), &reversed));
+        let roles = Vec::new();
+        let original = hash(&roles, &scope);
+        let clauses = [
+            ScopeClause::default(),
+            ScopeClause { company: true, ..Default::default() },
+            ScopeClause { self_owned: true, ..Default::default() },
+            ScopeClause { collaborative: true, ..Default::default() },
+            ScopeClause { org_unit_ids: ["org".into()].into(), ..Default::default() },
+            ScopeClause { settlement_party_ids: ["party".into()].into(), ..Default::default() },
+            ScopeClause { warehouse_ids: ["warehouse".into()].into(), ..Default::default() },
+        ];
+        let versions: BTreeSet<_> = clauses
+            .into_iter()
+            .map(|limit| hash(&roles, &ResolvedScope { user_limit: Some(limit), ..scope.clone() }))
+            .collect();
+        assert_eq!(versions.len(), 7);
+        assert!(!versions.contains(&original));
     }
 }

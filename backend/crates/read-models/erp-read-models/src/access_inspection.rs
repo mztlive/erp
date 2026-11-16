@@ -4,7 +4,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_identity::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
 use erp_identity::service::access_control::inspection::AccessInspectionService;
-use erp_identity::{AuthorizationService, Error as IdentityError, SharedRbacService};
+use erp_identity::{AuthorizationService, Error as IdentityError};
 use erp_permissions::{Permission as AccessPermission, sales_order as sales_order_permissions};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -16,7 +16,6 @@ use crate::{Error, Result};
 #[derive(Clone)]
 pub struct AccessInspectionReadService {
     db: Database,
-    rbac: SharedRbacService,
     authorization: Arc<AuthorizationService>,
 }
 
@@ -24,13 +23,13 @@ impl AccessInspectionReadService {
     /// 绑定现有领域服务。
     /// # 参数
     /// * `db` - 数据库。
-    /// * `rbac` - RBAC 服务。
+    /// * `authorization` - 应用注入的统一授权服务。
     /// # 返回
     /// 只读检查器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService, authorization: Arc<AuthorizationService>) -> Self {
-        Self { db, rbac, authorization }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     /// 在同一读取事务内检查配置及可选具体单据。
@@ -52,13 +51,9 @@ impl AccessInspectionReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let inspected = AccessInspectionService::new(
-                        this.db.clone(),
-                        this.rbac.clone(),
-                        this.authorization.clone(),
-                    )
-                    .inspect(&operator, &request, executor)
-                    .await?;
+                    let inspected = AccessInspectionService::new(this.db.clone(), this.authorization.clone())
+                        .inspect(&operator, &request, executor)
+                        .await?;
                     let mut view = inspected.view;
                     if let Some(target) = inspected.actor {
                         if let Some(id) = &request.object_id {

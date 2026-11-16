@@ -25,7 +25,6 @@ mod handover;
 mod identity;
 mod investigate;
 mod legacy;
-mod list;
 mod place;
 pub mod receipt;
 mod refund;

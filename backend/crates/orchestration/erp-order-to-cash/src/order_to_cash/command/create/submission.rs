@@ -14,6 +14,7 @@ use erp_sales::service::sales_order::mapper::{build_submission, build_submission
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use id_generator::next_id;
+use persistence_core::ReadExecutor;
 
 use super::CreationIdentity;
 use crate::order_to_cash::adapter::{
@@ -133,6 +134,7 @@ impl SalesOrderCommandProcess {
             self.ensure_procurement_responsibility_before_submit(
                 &creation.order,
                 &creation.working_copy_lines,
+                &mut ReadExecutor::default(),
             )
             .await?;
             let context = ApprovalCreationContext { ports, subject, organization_id };

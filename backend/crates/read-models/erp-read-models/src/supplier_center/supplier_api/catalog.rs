@@ -1,6 +1,7 @@
 //! 连接商品目录、真实后台任务与检查点的组合查询。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::CompiledAccess;
 use erp_permissions::internal;
 use erp_supply::dto::supplier_catalog::{CatalogFilter, CatalogItemView, CatalogSyncMode};
 use erp_supply::ports::connector::offer::IncrementalSupport;
@@ -8,7 +9,7 @@ use erp_supply::repository::supplier_api::authorized_connection;
 use erp_supply::repository::supplier_catalog::{self, SupplierCatalogExt};
 use erp_support::repository::prelude::*;
 use erp_support::{BulkJobExt, JobStatus};
-use persistence_core::{Executor, ReadExecutor};
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::SupplierApiReadService;
@@ -68,9 +69,9 @@ pub struct CatalogJobView {
 impl SupplierApiReadService {
     /// 读取限定连接的商品分页与最近二十次实际运行结果。
     /// # 参数
-    /// `id` 为授权连接，`query` 为分页；不接受供应商身份替换。
+    /// id 为授权连接，query 为分页与筛选，actor 为当前账号；不接受供应商身份替换。
     /// # 返回
-    /// 来源观察与真实同步计数。
+    /// 同一快照内的来源观察、成本展示资格与真实同步计数。
     /// # 错误
     /// 连接不存在、分页非法或数据库失败时拒绝。
     pub async fn catalog(&self, id: &str, query: CatalogQuery, actor: &AuditActor) -> Result<CatalogView> {
@@ -78,15 +79,35 @@ impl SupplierApiReadService {
             return Err(Error::ValidationError("商品分页参数无效".into()));
         }
         query.filter.validate()?;
-        let executor = &mut ReadExecutor::default();
-        let access = self.authorization.query(actor, &internal::CONNECTION_CATALOG_READ, executor).await?;
+        let service = self.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.catalog_snapshot(&id, &query, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一快照内完成展示资格、根查询及目录全部补齐后再校验交付。
+    /// # 参数
+    /// id、query 为已校验的连接和分页筛选，actor 为当前账号，executor 为原快照执行器。
+    /// # 返回
+    /// 返回原查询凭证覆盖的商品、任务及筛选项投影。
+    /// # 错误
+    /// 执行边界、资格、成本筛选或读取失败时拒绝；最终凭证失效时不交付。
+    pub(super) async fn catalog_snapshot(
+        &self,
+        id: &str,
+        query: &CatalogQuery,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CatalogView> {
+        let (access, can_read_cost) = self.catalog_access(actor, executor).await?;
         let connection = authorized_connection(&self.db, id, &access, executor).await?;
-        let can_read_cost = self
-            .authorization
-            .has_permission(actor, &internal::SUPPLIER_OFFERING_COST_DETAIL, executor)
-            .await?;
         query.filter.ensure_cost_access(can_read_cost)?;
-        let (items, total, product_total) = self.catalog_items(id, &query, can_read_cost, executor).await?;
+        let (items, total, product_total) = self.catalog_items(id, query, can_read_cost, executor).await?;
         let jobs = self.catalog_jobs(id, executor).await?;
         let filters = self.catalog_filters(id, executor).await?;
         let sync_mode = jobs.first().map_or(CatalogSyncMode::Full, |job| job.sync_mode);
@@ -113,6 +134,29 @@ impl SupplierApiReadService {
         };
         self.authorization.validate(&access, executor).await?;
         Ok(view)
+    }
+
+    /// 成本展示资格先于最终目录查询，后续读取不再开启授权阶段。
+    /// # 参数
+    /// actor 为当前账号，executor 必须属于活动快照事务。
+    /// # 返回
+    /// 返回最终目录查询凭证与本快照的成本展示资格。
+    /// # 错误
+    /// 执行边界、展示资格取证或目录查询资格失败时拒绝。
+    pub(super) async fn catalog_access(
+        &self,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(CompiledAccess, bool)> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("供应连接目录读取必须使用快照事务".into()));
+        }
+        let can_read_cost = self
+            .authorization
+            .has_permission(actor, &internal::SUPPLIER_OFFERING_COST_DETAIL, executor)
+            .await?;
+        let access = self.authorization.query(actor, &internal::CONNECTION_CATALOG_READ, executor).await?;
+        Ok((access, can_read_cost))
     }
 
     async fn catalog_items(

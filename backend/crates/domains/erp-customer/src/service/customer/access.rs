@@ -50,7 +50,31 @@ impl CustomerAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let candidate = self.ownership_candidate(id, &[actor.id().to_owned()].into(), executor).await?;
+        let (organization, valid_until) =
+            self.organization().own_org_with_validity(actor.id(), Instant::now(), executor).await?;
+        self.authorize_creation(actor, id, organization, valid_until, executor).await
+    }
+
+    /// 将真实创建人及其组织事实构造成创建候选，不接受请求提交的负责人或授权事实。
+    async fn authorize_creation(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        organization: Option<String>,
+        valid_until: Option<Instant>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let organization =
+            organization.ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
+        let candidate = ObjectFacts {
+            resource: "customer".into(),
+            id: id.into(),
+            owner_ids: FactValue::Known([actor.id().to_owned()].into()),
+            collaborators: FactValue::Known(Default::default()),
+            org_unit_ids: FactValue::Known([organization].into()),
+            valid_until,
+            ..Default::default()
+        };
         Ok(self
             .service
             .require(actor, &customer::CREATE, AccessTarget::Candidate(candidate), executor)
@@ -196,31 +220,6 @@ impl CustomerAccess {
             .collect();
         Ok((context, CustomerReadScope { owned_customer_ids: owned }))
     }
-    /// 在独立事务完成客户对象检查，不向事务外交付查询凭证。
-    /// # 参数
-    /// actor 为账号，permission 为公共权限常量，customer_id 为实际客户。
-    /// # 返回
-    /// 对象资格成立时成功；后续读取必须在自身读取阶段重新授权。
-    /// # 错误
-    /// 客户缺失或无权时拒绝。
-    pub async fn require(
-        &self,
-        actor: &AuditActor,
-        permission: &Permission,
-        customer_id: &str,
-    ) -> Result<()> {
-        let this = self.clone();
-        let actor = actor.clone();
-        let permission = permission.clone();
-        let id = customer_id.to_owned();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { this.require_with(actor, &permission, &id, executor).await })
-            })
-            .await
-    }
     /// 在原业务事务使用 identity 检查完整客户及全部负责人事实。
     /// # 参数
     /// actor、permission、customer_id 为真实入口和目标，executor 为原事务。
@@ -263,13 +262,13 @@ impl CustomerAccess {
             .require(actor, &internal::CUSTOMER_SELECT, AccessTarget::record(customer_id)?, executor)
             .await?)
     }
-    /// 检查创建按钮的功能资格。
+    /// 在独立事务检查以当前账号为首条负责人的客户创建候选。
     /// # 参数
     /// actor 为当前账号。
     /// # 返回
-    /// 当前创建功能资格。
+    /// 当前创建候选同时通过功能资格和归属范围时成功。
     /// # 错误
-    /// 身份或功能资格无效时拒绝。
+    /// 身份、负责人组织、创建范围或候选有效期不满足时拒绝。
     pub async fn ensure_create(&self, actor: &AuditActor) -> Result<()> {
         let this = self.clone();
         let actor = actor.clone();
@@ -281,24 +280,15 @@ impl CustomerAccess {
             })
             .await
     }
-    /// 创建前校验功能资格；持久化前必须在原写事务内检查真实创建候选。
+    /// 在原事务检查服务端创建候选；持久化前仍须带实际客户 ID 复验。
     /// # 参数
-    /// actor 为当前账号，executor 为原写事务。
+    /// actor 为固定首条负责人的当前账号，executor 为原写事务；此时尚未分配客户 ID。
     /// # 返回
-    /// 当前功能资格元信息。
+    /// 创建功能资格及真实负责人归属范围均通过时成功。
     /// # 错误
-    /// 账号或权限无效时拒绝。
+    /// 账号、负责人组织、创建范围、有效期或快照边界无效时拒绝。
     pub async fn require_create(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        let permission = &customer::CREATE;
-        if !self.service.has_permission(actor, permission, executor).await? {
-            return Err(Error::Forbidden("没有创建客户权限".into()));
-        }
-        let at = Instant::now();
-        self.organization()
-            .own_org(actor.id(), at, executor)
-            .await?
-            .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
-        Ok(())
+        self.require_candidate(actor, "", executor).await
     }
 }
 pub(crate) fn business_date(at: Instant) -> Result<BusinessDate> {
@@ -352,3 +342,130 @@ pub(super) fn ensure_limit(count: usize, message: &str) -> Result<()> {
 
 /// 授权与筛选集合的查询上限。
 pub(super) const QUERY_LIMIT: usize = 10_000;
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
+    use mongodb::Client;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    fn actor() -> AuditActor {
+        AuditActor::new("creator".into(), "creator-login".into(), AccountKind::Admin)
+    }
+
+    async fn access(permissions: &[Permission], scope: ResolvedScope) -> CustomerAccess {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("customer_creation_authorization");
+        CustomerAccess::new(db, fixed_authorization(permissions, scope, Vec::new(), Vec::new()).unwrap())
+    }
+
+    fn scope(clause: ScopeClause) -> ResolvedScope {
+        ResolvedScope { role_clauses: vec![clause], user_limit: None }
+    }
+
+    #[tokio::test]
+    async fn creation_candidate_uses_the_creator_for_self_and_actual_organization_scope() {
+        for clause in [
+            ScopeClause { self_owned: true, ..Default::default() },
+            ScopeClause { org_unit_ids: ["org-a".into()].into(), ..Default::default() },
+        ] {
+            let access = access(&[customer::CREATE], scope(clause)).await;
+            for id in ["", "new-customer"] {
+                access
+                    .authorize_creation(
+                        &actor(),
+                        id,
+                        Some("org-a".into()),
+                        None,
+                        &mut SnapshotExecutor::default(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn creation_candidate_requires_both_permission_and_positive_role_scope() {
+        for (permissions, resolved) in [
+            (Vec::new(), scope(ScopeClause { company: true, ..Default::default() })),
+            (vec![customer::CREATE], ResolvedScope { role_clauses: Vec::new(), user_limit: None }),
+        ] {
+            let access = access(&permissions, resolved).await;
+            let error = access
+                .authorize_creation(
+                    &actor(),
+                    "new-customer",
+                    Some("org-a".into()),
+                    None,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Forbidden(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn creation_candidate_rejects_uncovered_organization_and_user_limit() {
+        let organization = ScopeClause { org_unit_ids: ["org-a".into()].into(), ..Default::default() };
+        for resolved in [
+            scope(organization.clone()),
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: Some(organization),
+            },
+        ] {
+            let access = access(&[customer::CREATE], resolved).await;
+            let error = access
+                .authorize_creation(
+                    &actor(),
+                    "new-customer",
+                    Some("org-b".into()),
+                    None,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Forbidden(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn creation_candidate_requires_owner_organization_current_facts_and_snapshot() {
+        let access =
+            access(&[customer::CREATE], scope(ScopeClause { company: true, ..Default::default() })).await;
+        let missing = access
+            .authorize_creation(&actor(), "new-customer", None, None, &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(missing, Error::ValidationError(message) if message == "请先维护负责人的有效主属组织")
+        );
+        let expired = access
+            .authorize_creation(
+                &actor(),
+                "new-customer",
+                Some("org-a".into()),
+                Some(Instant::from_unix_secs(1)),
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(expired, Error::ConflictError(_)));
+        let outside_snapshot = access
+            .authorize_creation(&actor(), "new-customer", Some("org-a".into()), None, &mut NoTransaction)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(outside_snapshot, Error::ValidationError(message) if message == "写入授权必须使用快照事务")
+        );
+    }
+}

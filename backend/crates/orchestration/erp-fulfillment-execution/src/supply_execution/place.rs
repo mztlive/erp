@@ -1,6 +1,7 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_core::ids::{InboxMessageId, WorkItemId};
+use erp_core::ids::{InboxMessageId, SourceSystemId, WorkItemId};
+use erp_identity::repository::OrganizationRepository;
 use erp_integration::entity::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
@@ -9,12 +10,13 @@ use erp_supply::dto::supplier_fulfillment::{PlaceFulfillmentOrderRequest, Suppli
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_fulfillment::{SupplierFulfillmentOrder, SupplierOrderAction};
 use erp_supply::ports::supplier_gateway::DispatchOutcome;
+use erp_supply::service::supplier_fulfillment::SupplierFulfillmentService;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
-use crate::Result;
+use crate::{Error, Result};
 
 mod intent;
 use intent::PlaceIntent;
@@ -113,12 +115,7 @@ impl SupplierFulfillmentProcess {
             _ => false,
         };
         let applied =
-            erp_supply::service::supplier_fulfillment::SupplierFulfillmentService::apply_dispatch_outcome(
-                order,
-                action,
-                outcome,
-                can_auto_retry,
-            )?;
+            SupplierFulfillmentService::apply_dispatch_outcome(order, action, outcome, can_auto_retry)?;
         let task = match applied {
             DispatchMessageResult::Processed => {
                 message.update(InboxMessageUpdate {
@@ -128,13 +125,13 @@ impl SupplierFulfillmentProcess {
                 None
             },
             DispatchMessageResult::Failed(class) => {
-                let org = erp_identity::repository::OrganizationRepository::new(&self.db)
+                let org = OrganizationRepository::new(&self.db)
                     .state(&mut NoTransaction)
                     .await?
                     .own_org(actor.id(), Instant::now())?
                     .filter(|org| !org.eq_ignore_ascii_case("company"))
                     .map(str::to_string)
-                    .ok_or_else(|| crate::Error::ValidationError("处理人缺少有效内部组织".into()))?;
+                    .ok_or_else(|| Error::ValidationError("处理人缺少有效内部组织".into()))?;
                 self.build_error_task(message, order, super::failure::integration_class(class), actor, org)?
             },
         };
@@ -220,7 +217,7 @@ impl SupplierFulfillmentProcess {
                     }
                     .persist(executor)
                     .await?;
-                    Ok::<(SupplierFulfillmentOrder, SupplierOrderAction, InboxMessage), crate::Error>((
+                    Ok::<(SupplierFulfillmentOrder, SupplierOrderAction, InboxMessage), Error>((
                         order_for_tx,
                         action_for_tx,
                         message_for_tx,
@@ -279,8 +276,8 @@ pub(super) fn build_action_message(
 ///
 /// # 返回
 /// 返回来源系统 ID。
-fn supplier_source_system_id(connection: &SupplierApiConnection) -> erp_core::ids::SourceSystemId {
-    erp_core::ids::SourceSystemId::new(format!("supplier-api:{}", connection.base.id))
+fn supplier_source_system_id(connection: &SupplierApiConnection) -> SourceSystemId {
+    SourceSystemId::new(format!("supplier-api:{}", connection.base.id))
 }
 
 /// 返回派发结果的简短标签（结构化日志用）。

@@ -59,7 +59,7 @@ impl AuditedCommand for PasswordCommand {
         self.access
             .require_booklet(&self.actor, &sales_selection::BOOKLET_DELETE_ITEM, &self.id, executor)
             .await?;
-        let (result, fresh) = SalesSelectionService::new(self.db.clone())
+        let (result, fresh) = SalesSelectionService::new(self.db.clone(), self.access.authorization())
             .set_access_password(
                 &self.id,
                 self.req.clone(),

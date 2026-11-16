@@ -5,7 +5,7 @@ use erp_identity::Permission;
 use erp_supply::OfferingAccess;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::wiring::{MongoPurchaseDataScope, customer_access, funds_access_with_rbac};
+use crate::wiring::{PurchaseDataScope, customer_access, funds_access_with_rbac};
 mod error;
 use erp_read_models::customer_quality::CustomerQualityReadModel;
 use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
@@ -73,7 +73,7 @@ impl Reads {
                 PurchaseOrderReadService::new(
                     state.db(),
                     state.rbac(),
-                    MongoPurchaseDataScope::shared(state.db(), state.rbac()),
+                    PurchaseDataScope::shared(state.db(), state.authorization().into()),
                 )
                 .purchase_order_list(&input(query)?, actor)
                 .await?,
@@ -94,7 +94,7 @@ impl Reads {
             },
             SupplierOrders => output(
                 state
-                    .supplier_fulfillment_process()
+                    .supplier_fulfillment_list_read_service()
                     .supplier_fulfillment_order_list(&input(query)?, actor)
                     .await?,
             ),

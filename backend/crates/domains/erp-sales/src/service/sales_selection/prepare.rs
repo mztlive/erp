@@ -247,7 +247,7 @@ impl SalesSelectionService {
         if !booklet.form.is_package() {
             return Ok((single_items(booklet, batch_id, snapshots)?, members, Vec::new()));
         }
-        let (items, reports) = package_items(booklet, batch_id, snapshots, req, generator, &self.db).await?;
+        let (items, reports) = package_items(booklet, batch_id, snapshots, req, generator, self).await?;
         Ok((items, members, reports))
     }
 }
@@ -447,7 +447,7 @@ fn single_items(
 /// * `snapshots` - 快照
 /// * `req` - 准备请求
 /// * `generator` - 套餐图端口
-/// * `db` - 数据库（读取未重生成档位占用）
+/// * `service` - 共享选品服务，用于读取未重生成档位占用并写回进度。
 ///
 /// # 返回
 /// 返回套餐陈列与逐档报告。
@@ -460,10 +460,10 @@ async fn package_items(
     snapshots: &[SkuSnapshot],
     req: &PrepareSalesSelectionRequest,
     generator: std::sync::Arc<dyn PackageImageGenerator>,
-    db: &mongodb::Database,
+    service: &SalesSelectionService,
 ) -> Result<(Vec<SalesSelectionDisplayItem>, Vec<crate::entity::sales_selection::TierSearchReport>)> {
     let scoped = scoped_tiers(booklet, req);
-    let mut occupied = current_occupied(db, booklet, batch_id, req).await?;
+    let mut occupied = current_occupied(&service.db, booklet, batch_id, req).await?;
     let mut packages = Vec::new();
     let mut reports = Vec::new();
     for tier in scoped {
@@ -480,9 +480,7 @@ async fn package_items(
         occupied.extend(generated.iter().map(|package| package.combination_key()));
         packages.extend(generated);
         reports.append(&mut report);
-        SalesSelectionService::new(db.clone())
-            .prepare_progress(booklet, PrepareStage::Search, reports.len() as u32)
-            .await?;
+        service.prepare_progress(booklet, PrepareStage::Search, reports.len() as u32).await?;
     }
     let booklet_id = SalesSelectionBookletId::new(booklet.base.id.clone());
     let mut items = Vec::with_capacity(packages.len());

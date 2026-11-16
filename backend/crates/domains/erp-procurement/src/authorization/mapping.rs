@@ -1,6 +1,3 @@
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
@@ -12,7 +9,7 @@ use mongodb::bson::{Bson, doc};
 
 use crate::repository::PurchaseOrderExt;
 
-/// 采购当前责任字段与完整本单来源关系。
+/// 采购当前责任字段映射。
 pub struct PurchaseMapping {
     model: QueryModel,
 }
@@ -44,17 +41,6 @@ impl AccessMapping for PurchaseMapping {
         &self.model
     }
 
-    fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
-        if self.model.resource == "purchase_order" {
-            return BTreeMap::new();
-        }
-        [(
-            RelationKey::parse("self_purchase").expect("固定来源标识"),
-            Arc::new(Self::new("purchase_order").expect("固定采购模型")) as Arc<dyn AccessMapping>,
-        )]
-        .into()
-    }
-
     fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
         Ok("$id".into())
     }
@@ -84,33 +70,32 @@ impl AccessMapping for PurchaseMapping {
 
     fn relation(
         &self,
-        relation: &RelationKey,
+        _: &RelationKey,
         _: &AccessContext,
         _: Option<&MappingFacts>,
     ) -> Result<RelationMapping> {
-        if relation.as_str() != "self_purchase" {
-            return Err(Error::ValidationError("采购 Mapping 未登记该来源关系".into()));
-        }
-        Ok(RelationMapping {
-            expected_ids: Bson::Array(vec!["$id".into()]),
-            mapping: Arc::new(Self::new("purchase_order")?),
-        })
+        Err(Error::ValidationError("采购 Mapping 未登记该来源关系".into()))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_identity::Permission;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::{internal, purchase_order, purchase_payment_request};
+    use persistence_core::ReadExecutor;
 
     use super::*;
 
     fn context() -> AccessContext {
         AccessContext {
             actor: AuditActor::new("buyer".into(), "采购".into(), AccountKind::Admin),
-            permission: Permission::parse("purchase_order:list").unwrap(),
+            permission: purchase_order::LIST,
             resource: "purchase_order".into(),
             model: None,
             as_of: Instant::from_unix_secs(1),
@@ -140,13 +125,75 @@ mod tests {
     }
 
     #[test]
-    fn self_relation_keeps_the_complete_id_and_unknown_relationship_is_rejected() {
-        let mapping = PurchaseMapping::new("supplier_payment").unwrap();
-        let relation =
-            mapping.relation(&RelationKey::parse("self_purchase").unwrap(), &context(), None).unwrap();
-        assert_eq!(relation.expected_ids, Bson::Array(vec!["$id".into()]));
-        assert_eq!(relation.mapping.model().resource, "purchase_order");
-        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context(), None).is_err());
+    fn purchase_models_have_no_source_relationships() {
+        for resource in ["purchase_order", "supplier_payment"] {
+            let mapping = PurchaseMapping::new(resource).unwrap();
+            assert!(mapping.relations().is_empty());
+            for relation in ["self_purchase", "other"] {
+                assert!(matches!(
+                    mapping.relation(&RelationKey::parse(relation).unwrap(), &context(), None),
+                    Err(Error::ValidationError(message)) if message == "采购 Mapping 未登记该来源关系"
+                ));
+            }
+        }
         assert!(PurchaseMapping::new("bad.resource").is_err());
+    }
+
+    #[tokio::test]
+    async fn company_purchase_queries_compile_without_history_or_cross_collection_lookups() {
+        let entries = [
+            purchase_order::LIST,
+            purchase_order::DETAIL,
+            internal::PAYMENT_REQUEST_CANDIDATES,
+            internal::PURCHASE_PORTAL_IMPACT_READ,
+        ];
+        let authorization = fixed_authorization(
+            &[purchase_order::LIST, purchase_order::DETAIL, purchase_payment_request::CREATE],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            entries
+                .iter()
+                .cloned()
+                .map(|entry| {
+                    (
+                        entry,
+                        Arc::new(PurchaseMapping::new("purchase_order").unwrap()) as Arc<dyn AccessMapping>,
+                    )
+                })
+                .collect(),
+        )
+        .unwrap();
+        for entry in entries {
+            let compiled =
+                authorization.query(&context().actor, &entry, &mut ReadExecutor::default()).await.unwrap();
+            assert_eq!(
+                compiled.stages(),
+                &[doc! { "$match": { "$and": [
+                    { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }, { "$expr": true }
+                ] } }],
+                "{entry}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn company_purchase_query_still_requires_its_function_permission() {
+        let authorization = fixed_authorization(
+            &[purchase_order::DETAIL],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(purchase_order::LIST, Arc::new(PurchaseMapping::new("purchase_order").unwrap()))],
+        )
+        .unwrap();
+        assert!(matches!(
+            authorization.query(&context().actor, &purchase_order::LIST, &mut ReadExecutor::default()).await,
+            Err(Error::Forbidden(_))
+        ));
     }
 }

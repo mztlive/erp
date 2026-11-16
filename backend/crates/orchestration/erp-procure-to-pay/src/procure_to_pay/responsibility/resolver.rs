@@ -122,8 +122,24 @@ impl ProcurementResponsibilityProcess {
     /// # 错误
     /// 目录事实缺失、规则零/多命中、负责人不可登录或无采购建单权限时失败关闭。
     pub async fn resolve_strict(&self, inputs: &[ResolutionInput]) -> Result<AuthorizedResolutionPlan> {
-        let candidates = self.resolve_candidates(inputs, &mut NoTransaction).await?;
-        self.authorize_candidates(candidates, &mut NoTransaction).await
+        self.strict_plan(inputs, &mut NoTransaction).await
+    }
+
+    /// 使用调用方事务解析目录、规则与具体负责人的当前资格。
+    /// # 参数
+    /// * `inputs` - 已规范化的稳定销售行与SKU身份。
+    /// * `executor` - 原业务命令执行器。
+    /// # 返回
+    /// 返回同一快照取得的责任计划和授权策略版本。
+    /// # 错误
+    /// 目录、规则、人员或采购建单资格不满足时拒绝。
+    pub async fn strict_plan(
+        &self,
+        inputs: &[ResolutionInput],
+        executor: &mut dyn Executor,
+    ) -> Result<AuthorizedResolutionPlan> {
+        let candidates = self.resolve_candidates(inputs, executor).await?;
+        self.authorize_candidates(candidates, executor).await
     }
 
     /// 在销售形式化事务中重验既定计划，并为实际采购任务占用整单默认轮次。

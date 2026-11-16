@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderLineId};
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::SalesOrderService;
 use super::mapper::build_working_copy;
@@ -67,6 +67,7 @@ impl SalesOrderService {
     /// # 参数
     /// * `order_id` - 所属销售单
     /// * `draft_lines` - 本次保存的草稿行
+    /// * `executor` - 原命令事务执行器。
     ///
     /// # 返回
     /// 返回完整稳定明细与尚未落库的新建行。
@@ -80,8 +81,9 @@ impl SalesOrderService {
         &self,
         order_id: &SalesOrderId,
         draft_lines: &[SalesOrderDraftLineRequest],
+        executor: &mut dyn Executor,
     ) -> Result<DraftStableLines> {
-        let existing = self.db.sales_order_lines().list_lines_by_order(order_id, &mut NoTransaction).await?;
+        let existing = self.db.sales_order_lines().list_lines_by_order(order_id, executor).await?;
         DraftStableLines::from_draft(order_id, existing, draft_lines)
     }
 

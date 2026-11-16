@@ -8,7 +8,7 @@ use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProces
 use bpm::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId, Timestamp};
 use erp_core::common::time::Instant;
-use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
 use erp_permissions::approval_instance as approval_permissions;
 use id_generator::next_id;
 use mongodb::Database;
@@ -42,7 +42,6 @@ use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::copies::persist_copies;
 use crate::service::approval::{
     ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
-    require_approval_management_with_executor,
 };
 
 /// 已提交受阻取消的不可变终态事实；先证明原操作人，再允许比较请求摘要。
@@ -176,6 +175,8 @@ async fn replay_cancel_blocked(
     idempotency_key: &IdempotencyKey,
     executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandView>> {
+    ensure_cancel_blocked_authorized(authorization, actor, &command.approval_process_instance_id, executor)
+        .await?;
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&command.approval_process_instance_id), executor)
@@ -184,9 +185,7 @@ async fn replay_cancel_blocked(
     if instance.base.id != command.approval_process_instance_id {
         return Err(hidden_not_found());
     }
-    let Some(terminal_facts) =
-        replay_terminal_facts(authorization, db, actor, command, &instance, executor).await?
-    else {
+    let Some(terminal_facts) = replay_terminal_facts(db, actor, command, &instance, executor).await? else {
         return Ok(None);
     };
     let identity = cancel_blocked_identity(CancelBlockedIdentityParams {
@@ -223,7 +222,6 @@ async fn replay_cancel_blocked(
 
 /// 当前授权和原 actor 必须先于请求摘要比较；缺事实不能当作未执行。
 async fn replay_terminal_facts(
-    authorization: &AuthorizationService,
     db: &Database,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
@@ -233,8 +231,7 @@ async fn replay_terminal_facts(
     if instance.status != ApprovalProcessInstanceStatus::Cancelled {
         return Ok(None);
     }
-    let (document_type, snapshot) = load_exact_runtime_snapshot(db, instance, executor, true).await?;
-    ensure_cancel_blocked_authorized(authorization, actor, document_type, &snapshot, executor).await?;
+    load_exact_runtime_snapshot(db, instance, executor, true).await?;
     let facts =
         load_cancel_blocked_terminal_facts(db, instance, executor).await?.ok_or_else(hidden_not_found)?;
     if facts.actor_id != actor.id() {
@@ -417,11 +414,12 @@ async fn load_cancel_source(
     command: &ApprovalCancelBlockedCommand,
     executor: &mut dyn Executor,
 ) -> Result<CancelSource> {
+    ensure_cancel_blocked_authorized(authorization, actor, &command.approval_process_instance_id, executor)
+        .await?;
     let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
     let instance =
         db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
     let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, false).await?;
-    ensure_cancel_blocked_authorized(authorization, actor, document_type, &snapshot, executor).await?;
     ensure_cancel_blocked_instance_preconditions(&instance, command)?;
     let (current, historical_tasks) = load_cancel_execution(db, &instance, command, executor).await?;
     Ok(CancelSource { document_type, snapshot, instance, current, historical_tasks })
@@ -632,19 +630,13 @@ fn cancel_action_context(
 async fn ensure_cancel_blocked_authorized(
     authorization: &AuthorizationService,
     actor: &AuditActor,
-    document_type: DocumentType,
-    snapshot: &ApprovalSubjectSnapshot,
+    instance_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    require_approval_management_with_executor(
-        authorization,
-        actor,
-        &approval_permissions::CANCEL_BLOCKED,
-        document_type,
-        snapshot.approval_process_instance_id.as_ref(),
-        executor,
-    )
-    .await
+    authorization
+        .require(actor, &approval_permissions::CANCEL_BLOCKED, AccessTarget::record(instance_id)?, executor)
+        .await?;
+    Ok(())
 }
 
 /// 在调用方事务内校验受阻取消携带的可空历史任务版本。
@@ -664,4 +656,51 @@ async fn validate_cancel_task_version_with_executor(
         ));
     }
     ensure_expected_version("审批任务", expected, tasks[0].base.version)
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::service::approval::definition::test_support::unavailable_service;
+
+    #[tokio::test]
+    async fn blocked_cancel_and_replay_stop_before_instance_reads_when_authorization_fails() {
+        let (service, actor) = unavailable_service().await;
+        let command = ApprovalCancelBlockedCommand {
+            approval_process_instance_id: "unread-instance".into(),
+            expected_instance_version: 7,
+            expected_execution_version: 8,
+            expected_task_version: Some(9),
+            reason: "终止流程".into(),
+            idempotency_key: "cancel-key".into(),
+            actor_id: actor.id().into(),
+        };
+        let key = IdempotencyKey::parse(&command.idempotency_key).unwrap();
+        let results = [
+            load_cancel_source(
+                &service.authorization,
+                &service.db,
+                &actor,
+                &command,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .map(|_| ()),
+            replay_cancel_blocked(
+                &service.authorization,
+                &service.db,
+                &actor,
+                &command,
+                &key,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .map(|_| ()),
+        ];
+        for result in results {
+            assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+        }
+    }
 }

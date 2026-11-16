@@ -9,10 +9,13 @@
 mod builtin;
 pub mod company;
 pub mod identity;
+mod reads;
 
+use std::slice;
 use std::sync::Arc;
 
-use application_core::{AuditActor, normalized_text};
+use application_core::AuditActor;
+use erp_core::Result as CoreResult;
 use erp_core::common::revision::RevisionBase;
 use erp_core::field_update::FieldUpdate;
 use erp_identity::{AccessTarget, AuthorizationService};
@@ -24,6 +27,7 @@ use serde::Serialize;
 use validator::Validate;
 
 use self::identity::ensure_identity_available;
+use crate::entity::party::company::CompanyProfile;
 use crate::entity::party::{
     Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
     PartyUpdate,
@@ -120,16 +124,26 @@ impl PartyService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - party_no 或统一社会信用代码与既有主体重复
     pub async fn create_party(&self, req: CreatePartyRequest, actor: &AuditActor) -> Result<PartyView> {
-        self.create_party_record(req, None, actor, party::CREATE).await
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.create_party_record(req, None, &actor, &party::CREATE, executor).await
+                })
+            })
+            .await
     }
 
     /// 公司入口复用主体与首版名称事务。
     async fn create_party_record(
         &self,
         req: CreatePartyRequest,
-        company: Option<crate::entity::party::company::CompanyProfile>,
+        company: Option<CompanyProfile>,
         actor: &AuditActor,
-        permission: Permission,
+        permission: &Permission,
+        executor: &mut dyn Executor,
     ) -> Result<PartyView> {
         req.validate()?;
         let party_id = PartyId::new(next_id());
@@ -156,27 +170,7 @@ impl PartyService {
             },
         )?;
         party.stable.current_revision_id = Some(revision_id.to_string());
-        self.write_party_record(party, revision, actor, permission).await
-    }
-
-    /// 在单一事务内校验功能资格并持久化主体与首个修订。
-    async fn write_party_record(
-        &self,
-        party: Party,
-        revision: PartyRevision,
-        actor: &AuditActor,
-        permission: Permission,
-    ) -> Result<PartyView> {
-        let service = self.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(
-                    async move { service.create_stage(party, revision, &actor, &permission, executor).await },
-                )
-            })
-            .await
+        self.create_stage(party, revision, actor, permission, executor).await
     }
 
     /// 先取得入口资格，再在原快照校验唯一身份并写入全部记录。
@@ -240,9 +234,7 @@ impl PartyService {
         params: &PartyListParams,
         executor: &mut dyn Executor,
     ) -> Result<PageView<PartyView>> {
-        self.authorization.require(actor, &party::LIST, AccessTarget::Operation, executor).await?;
-        params.validate()?;
-        let query = params.normalized()?;
+        let query = self.list_query(actor, params, executor).await?;
         let matching_name_ids = match query.keyword.as_deref() {
             Some(keyword) => self.db.party().matching_current_party_ids_by_name(keyword, executor).await?,
             None => Vec::new(),
@@ -308,15 +300,15 @@ impl PartyService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<PartyDetailView> {
-        self.authorization.require(actor, &party::DETAIL, AccessTarget::Operation, executor).await?;
+        let id = self.detail_id(actor, id, executor).await?;
         let (party, revision) = self
             .db
             .party()
-            .find_with_current_revision(&PartyId::new(id), executor)
+            .find_with_current_revision(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
         let current_revision = revision.and_then(|revision| {
-            party.current_revision(std::slice::from_ref(&revision)).ok()?;
+            party.current_revision(slice::from_ref(&revision)).ok()?;
             Some(revision.into())
         });
         Ok(PartyDetailView { party: party.into(), current_revision })
@@ -346,7 +338,17 @@ impl PartyService {
         req: UpdatePartyRequest,
         actor: &AuditActor,
     ) -> Result<PartyView> {
-        self.update_party_record(id, req, None, actor, party::UPDATE).await
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.update_party_record(&id, req, None, &actor, &party::UPDATE, executor).await
+                })
+            })
+            .await
     }
 
     /// 在调用方事务内授权并软删除主体；成功审计由拥有根事务的流程写入。
@@ -382,22 +384,13 @@ impl PartyService {
         &self,
         id: &str,
         req: UpdatePartyRequest,
-        company: Option<crate::entity::party::company::CompanyProfile>,
+        company: Option<CompanyProfile>,
         actor: &AuditActor,
-        permission: Permission,
+        permission: &Permission,
+        executor: &mut dyn Executor,
     ) -> Result<PartyView> {
         req.validate()?;
-        let service = self.clone();
-        let actor = actor.clone();
-        let id = id.to_owned();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service.update_stage(&id, req, company.as_ref(), &actor, &permission, executor).await
-                })
-            })
-            .await
+        self.update_stage(id, req, company.as_ref(), actor, permission, executor).await
     }
 
     /// 在同一授权事务中读取原主体、版本和修订号，完成状态更新与审计。
@@ -405,7 +398,7 @@ impl PartyService {
         &self,
         id: &str,
         req: UpdatePartyRequest,
-        company: Option<&crate::entity::party::company::CompanyProfile>,
+        company: Option<&CompanyProfile>,
         actor: &AuditActor,
         permission: &Permission,
         executor: &mut dyn Executor,
@@ -442,7 +435,7 @@ impl PartyService {
         &self,
         id: &str,
         req: UpdatePartyRequest,
-        company: Option<&crate::entity::party::company::CompanyProfile>,
+        company: Option<&CompanyProfile>,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PendingPartyUpdate> {
@@ -541,24 +534,7 @@ impl PartyService {
         params: &PartyRevisionListParams,
         executor: &mut dyn Executor,
     ) -> Result<PageView<PartyRevisionView>> {
-        self.authorization.require(actor, &party::REVISION_LIST, AccessTarget::Operation, executor).await?;
-        params.validate()?;
-        let paging = crate::dto::party::normalize_paging(
-            &params.sort_by,
-            &params.sort_dir,
-            params.page,
-            params.page_size,
-            crate::dto::party::PARTY_REVISION_SORT_FIELDS,
-        )?;
-        let filter = PartyRevisionFilter {
-            party_id: Some(PartyId::new(party_id)),
-            legal_name: normalized_text(params.legal_name.as_deref()),
-            short_name: normalized_text(params.short_name.as_deref()),
-            page: paging.page,
-            page_size: paging.page_size,
-            sort_by: Some(paging.sort_by.to_string()),
-            sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
-        };
+        let filter = self.revision_filter(actor, party_id, params, executor).await?;
         let page = self.db.party_revisions().search_party_revisions(&filter, executor).await?;
         let items = page
             .items
@@ -732,7 +708,7 @@ pub(crate) async fn ensure_new_fact_guards(
 ///
 /// # 错误
 /// * `ConflictError` - 期望版本与当前版本不一致
-pub(crate) fn map_version_conflict(version_check: erp_core::Result<()>) -> Result<()> {
+pub(crate) fn map_version_conflict(version_check: CoreResult<()>) -> Result<()> {
     version_check.map_err(|error| Error::ConflictError(error.to_string()))
 }
 
@@ -767,15 +743,16 @@ pub(crate) use clear_default_marks;
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use erp_core::AccountKind;
+    use erp_core::{AccountKind, Error as CoreError};
     use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
 
     async fn service() -> PartyService {
-        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await
             .unwrap()
             .database("party_write_authorization");
@@ -890,9 +867,9 @@ mod tests {
     #[test]
     fn version_conflict_maps_to_stable_conflict_error() {
         assert!(map_version_conflict(Ok(())).is_ok());
-        let error = map_version_conflict(Err(erp_core::Error::from("数据已被其他请求修改，请刷新后重试")))
-            .unwrap_err();
-        assert!(matches!(error, crate::error::Error::ConflictError(_)));
+        let error =
+            map_version_conflict(Err(CoreError::from("数据已被其他请求修改，请刷新后重试"))).unwrap_err();
+        assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
     }
 }

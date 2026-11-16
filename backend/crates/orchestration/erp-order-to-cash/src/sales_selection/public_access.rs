@@ -46,7 +46,7 @@ impl SalesSelectionProcess {
         if let Some(grant) = &grant {
             self.admit_participant("read", &grant.session_id, 120).await?;
         }
-        Ok(SalesSelectionService::new(self.db.clone())
+        Ok(SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
             .public_page_by_token(token, grant.as_ref(), Instant::now(), &mut ReadExecutor::default())
             .await?)
     }
@@ -68,7 +68,7 @@ impl SalesSelectionProcess {
         ip: String,
     ) -> Result<PublicSelectionAccessView> {
         self.admit_public("unlock", &ip, Some(&token), 2000).await?;
-        let service = SalesSelectionService::new(self.db.clone());
+        let service = SalesSelectionService::new(self.db.clone(), self.services.authorization.clone());
         let scope = service
             .public_unlock_scope(&token, req.voucher_code.as_deref(), &mut ReadExecutor::default())
             .await?;
@@ -121,8 +121,10 @@ impl SalesSelectionProcess {
         let grant = self.decode_grant(&access)?;
         self.admit_participant("write", &grant.session_id, 30).await?;
         let db = self.db.clone();
+        let authorization = self.services.authorization.clone();
         retry_public_write(|| {
             let db = db.clone();
+            let authorization = authorization.clone();
             let token = token.clone();
             let grant = grant.clone();
             let req = req.clone();
@@ -131,7 +133,7 @@ impl SalesSelectionProcess {
                     .clone()
                     .with_transaction(move |executor| {
                         Box::pin(async move {
-                            SalesSelectionService::new(db)
+                            SalesSelectionService::new(db, authorization)
                                 .public_save(&token, &grant, req, Instant::now(), executor)
                                 .await
                                 .map_err(Error::from)
@@ -165,8 +167,10 @@ impl SalesSelectionProcess {
         let grant = self.decode_grant(&access)?;
         self.admit_participant("submit", &grant.session_id, 10).await?;
         let db = self.db.clone();
+        let authorization = self.services.authorization.clone();
         retry_public_write(|| {
             let db = db.clone();
+            let authorization = authorization.clone();
             let token = token.clone();
             let grant = grant.clone();
             let req = req.clone();
@@ -175,7 +179,7 @@ impl SalesSelectionProcess {
                     .clone()
                     .with_transaction(move |executor| {
                         Box::pin(async move {
-                            SalesSelectionService::new(db)
+                            SalesSelectionService::new(db, authorization)
                                 .public_submit(&token, &grant, req, Instant::now(), executor)
                                 .await
                                 .map_err(Error::from)
@@ -208,7 +212,7 @@ impl SalesSelectionProcess {
         self.admit_public("image", ip, Some(token), 6000).await?;
         let grant = self.decode_grant(access)?;
         self.admit_participant("image", &grant.session_id, 600).await?;
-        Ok(SalesSelectionService::new(self.db.clone())
+        Ok(SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
             .public_image_key(token, asset_id, &grant, Instant::now(), &mut ReadExecutor::default())
             .await?)
     }
@@ -261,8 +265,9 @@ impl SalesSelectionProcess {
                         .find_authorized_booklet(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
-                    let result =
-                        SalesSelectionService::new(db).vouchers(&book.base.id, &crypto, executor).await?;
+                    let result = SalesSelectionService::new(db, access.authorization())
+                        .vouchers(&book.base.id, &crypto, executor)
+                        .await?;
                     scope.validate(executor).await?;
                     Ok(result)
                 })
@@ -295,7 +300,7 @@ impl SalesSelectionProcess {
                         .find_authorized_booklet(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
-                    let result = SalesSelectionService::new(db)
+                    let result = SalesSelectionService::new(db, access.authorization())
                         .selection_details(&book.base.id, &crypto, executor)
                         .await?;
                     scope.validate(executor).await?;

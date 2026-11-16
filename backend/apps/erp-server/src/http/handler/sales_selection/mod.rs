@@ -14,8 +14,9 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 pub use copy::booklet_copy;
-use erp_order_to_cash::sales_selection::{
-    SalesSelectionProcess, SelectionBookletListView, SelectionProposalListView,
+use erp_order_to_cash::sales_selection::SalesSelectionProcess;
+use erp_read_models::sales_center::selection::{
+    SalesSelectionReadService, SelectionBookletListView, SelectionProposalListView,
 };
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
@@ -41,6 +42,22 @@ fn process(state: &HttpState) -> SalesSelectionProcess {
     )
 }
 
+/// 为只读入口复用当前选品范围与目录 Port。
+/// # 参数
+/// state 为当前 HTTP 应用状态。
+/// # 返回
+/// 只读选品册及方案查询服务。
+/// # 错误
+/// 构造不执行 I/O。
+fn read_service(state: &HttpState) -> SalesSelectionReadService {
+    let services = crate::wiring::sales::sales_services(state.application().db(), state.application().rbac());
+    SalesSelectionReadService::new(
+        state.application().db(),
+        services.selections.clone(),
+        services.catalog.clone(),
+    )
+}
+
 /// 查询选品册列表。
 ///
 /// # 参数
@@ -54,7 +71,7 @@ pub async fn booklet_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesSelectionBookletListParams>,
 ) -> Result<SelectionBookletListView> {
-    Ok(ApiResponse::ok_with_data(process(&state).booklet_list(params, actor).await?))
+    Ok(ApiResponse::ok_with_data(read_service(&state).booklet_list(params, actor).await?))
 }
 
 /// 查询选品册详情。
@@ -70,7 +87,7 @@ pub async fn booklet_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
-    let view = process(&state).booklet_detail(&id, &actor).await?;
+    let view = read_service(&state).booklet_detail(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -304,7 +321,7 @@ pub async fn proposal_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesSelectionProposalListParams>,
 ) -> Result<SelectionProposalListView> {
-    Ok(ApiResponse::ok_with_data(process(&state).proposal_list(params, actor).await?))
+    Ok(ApiResponse::ok_with_data(read_service(&state).proposal_list(params, actor).await?))
 }
 
 /// 查询销售方案详情。
@@ -320,7 +337,7 @@ pub async fn proposal_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionProposalView> {
-    let proposal = process(&state).proposal_detail(&id, &actor).await?;
+    let proposal = read_service(&state).proposal_detail(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(proposal))
 }
 

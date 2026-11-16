@@ -108,12 +108,30 @@ impl PartyService {
     /// 名称或别名校验失败时返回 `ValidationError`。编号已占用且内容不一致、已删除或不是同一公司时返回 `ConflictError`。
     /// 创建事务、唯一索引冲突或随后回读失败时返回对应错误。
     pub async fn create_company(&self, req: SaveCompanyRequest, actor: &AuditActor) -> Result<CompanyView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create_company_record(req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 使用入口事务完成公司编号回放、主体写入与最终回读。
+    async fn create_company_record(
+        &self,
+        req: SaveCompanyRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CompanyView> {
         let mut profile = req.profile()?;
         if let Some(existing) = self
-            .company_snapshot(
+            .company_lookup(
                 actor,
-                party::COMPANY_COMPANY_CREATE,
-                CompanyLookup::Number(req.party_no.clone()),
+                &party::COMPANY_COMPANY_CREATE,
+                &CompanyLookup::Number(req.party_no.clone()),
+                executor,
             )
             .await?
         {
@@ -136,9 +154,10 @@ impl PartyService {
             change_reason: "新建公司主体".into(),
             status: Some(req.status),
         };
-        let result =
-            self.create_party_record(command, Some(profile), actor, party::COMPANY_COMPANY_CREATE).await?;
-        self.company_result(actor, party::COMPANY_COMPANY_CREATE, &result.id).await
+        let result = self
+            .create_party_record(command, Some(profile), actor, &party::COMPANY_COMPANY_CREATE, executor)
+            .await?;
+        self.company_result(actor, &party::COMPANY_COMPANY_CREATE, &result.id, executor).await
     }
 
     /// 更新公司资料或启停状态，旧引用继续保留同一主体身份。
@@ -162,7 +181,26 @@ impl PartyService {
         req: SaveCompanyRequest,
         actor: &AuditActor,
     ) -> Result<CompanyView> {
-        let existing = self.company_result(actor, party::COMPANY_COMPANY_UPDATE, id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_company_record(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 使用入口事务完成公司版本回放、名称修订与最终回读。
+    async fn update_company_record(
+        &self,
+        id: &str,
+        req: SaveCompanyRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CompanyView> {
+        let existing = self.company_result(actor, &party::COMPANY_COMPANY_UPDATE, id, executor).await?;
         if req.party_no != existing.party_no {
             return Err(Error::ValidationError("公司编号不可修改".into()));
         }
@@ -187,8 +225,9 @@ impl PartyService {
             short_name: profile.short_name.clone(),
             change_reason: "维护公司主体".into(),
         };
-        self.update_party_record(id, command, Some(profile), actor, party::COMPANY_COMPANY_UPDATE).await?;
-        self.company_result(actor, party::COMPANY_COMPANY_UPDATE, id).await
+        self.update_party_record(id, command, Some(profile), actor, &party::COMPANY_COMPANY_UPDATE, executor)
+            .await?;
+        self.company_result(actor, &party::COMPANY_COMPANY_UPDATE, id, executor).await
     }
 }
 
@@ -197,31 +236,14 @@ impl PartyService {
     async fn company_result(
         &self,
         actor: &AuditActor,
-        permission: Permission,
+        permission: &Permission,
         id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<CompanyView> {
-        self.company_snapshot(actor, permission, CompanyLookup::Id(id.into()))
+        self.company_lookup(actor, permission, &CompanyLookup::Id(id.into()), executor)
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".into()))?
             .try_into()
-    }
-
-    /// 功能资格与幂等回读、最终回包的全部字段读取使用同一快照。
-    async fn company_snapshot(
-        &self,
-        actor: &AuditActor,
-        permission: Permission,
-        lookup: CompanyLookup,
-    ) -> Result<Option<Party>> {
-        let service = self.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { service.company_lookup(&actor, &permission, &lookup, executor).await })
-            })
-            .await
     }
 
     /// 在公开入口提供的原快照内检查资格，再读取完整公司。
@@ -273,6 +295,54 @@ mod tests {
             Arc::new(FailClosedSupplierRolePort),
             unavailable_authorization(),
         )
+    }
+
+    fn request() -> SaveCompanyRequest {
+        SaveCompanyRequest {
+            party_no: "company-number".into(),
+            version: Some(1),
+            legal_name: "公司全称".into(),
+            short_name: None,
+            aliases: Vec::new(),
+            unified_credit_code: None,
+            status: PartyStatus::Active,
+        }
+    }
+
+    #[tokio::test]
+    async fn company_commands_use_the_callers_snapshot_before_database_access() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let create = service
+            .create_company_record(request(), &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("创建应在调用方快照中执行授权");
+        let update = service
+            .update_company_record("company", request(), &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("更新应在调用方快照中执行授权");
+        for error in [create, update] {
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    #[tokio::test]
+    async fn company_commands_reject_non_snapshot_executors_without_starting_transactions() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let create = service
+            .create_company_record(request(), &actor, &mut ReadExecutor::default())
+            .await
+            .expect_err("创建不得在下层补开事务");
+        let update = service
+            .update_company_record("company", request(), &actor, &mut ReadExecutor::default())
+            .await
+            .expect_err("更新不得在下层补开事务");
+        for error in [create, update] {
+            assert!(
+                matches!(error, Error::ValidationError(message) if message == "公司回读必须使用快照事务")
+            );
+        }
     }
 
     #[tokio::test]

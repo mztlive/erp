@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_identity::AuthorizationService;
 use erp_read_models::work_item_links;
@@ -34,7 +33,7 @@ trait TaskCommandPort: Send + Sync {
         &self,
         identity: &Self::Identity,
         task: &WorkItem,
-        actor_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()>;
     async fn update(&self, task: &mut WorkItem, executor: &mut dyn Executor) -> Result<()>;
@@ -57,11 +56,10 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         &self,
         identity: &Arc<AuthorizationService>,
         task: &WorkItem,
-        actor_id: &str,
+        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let actor = AuditActor::new(actor_id.into(), actor_id.into(), AccountKind::Admin);
-        require_assignee(self.db, identity, &actor, task, TaskPurpose::Fulfillment, executor).await
+        require_assignee(self.db, identity, actor, task, TaskPurpose::Fulfillment, executor).await
     }
     async fn update(&self, task: &mut WorkItem, executor: &mut dyn Executor) -> Result<()> {
         if task.status == WorkItemStatus::Open {
@@ -79,12 +77,54 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         Ok(())
     }
 }
+/// 先按真实业务身份找到开放任务并核验办理权限，再允许入口读取单据。
+/// # 参数
+/// db 为业务数据库，authorization 为共享授权服务，object_type 与 object_id 为原业务对象身份，
+/// actor 为当前认证操作人，executor 为原命令事务执行器。
+/// # 返回
+/// 当前账号是开放任务的有效办理人时成功。
+/// # 错误
+/// 任务缺失、重复、当前办理资格失效或执行器不是快照事务时拒绝。
+/// 授权及仓储读取错误按原分类传播。
+pub(super) async fn require_entry(
+    db: &Database,
+    authorization: &Arc<AuthorizationService>,
+    object_type: &str,
+    object_id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    authorize_entry(
+        &MongoTaskCommand { db },
+        &|| authorization.clone(),
+        object_type,
+        object_id,
+        actor,
+        executor,
+    )
+    .await
+}
+
+/// 入口授权只读取任务事实，不依赖尚未获准读取的履约单据。
+async fn authorize_entry<P: TaskCommandPort>(
+    port: &P,
+    authorization: &(dyn Fn() -> P::Identity + Send + Sync),
+    object_type: &str,
+    object_id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let task = port.load_open(object_type, object_id, executor).await?;
+    let identity = authorization();
+    port.authorize(&identity, &task, actor, executor).await
+}
+
 /// 同一执行器先核验当前任务指定人，再同步活动或完成事实并写回。
 async fn execute<P: TaskCommandPort>(
     port: &P,
     authorization: &(dyn Fn() -> P::Identity + Send + Sync),
     object: FulfillmentTaskObject<'_>,
-    actor_id: &str,
+    actor: &AuditActor,
     kind: CommandKind,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -92,13 +132,13 @@ async fn execute<P: TaskCommandPort>(
         port.load_open(object.business_object_type(), object.business_object_id(), executor).await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
     let identity = authorization();
-    port.authorize(&identity, &task, actor_id, executor).await?;
+    port.authorize(&identity, &task, actor, executor).await?;
     match kind {
         CommandKind::Activity => {
             task.record_activity(Instant::now())?;
             task.subject_version = object.subject_version();
         },
-        CommandKind::Complete => task.complete_by_domain_command(actor_id, Instant::now())?,
+        CommandKind::Complete => task.complete_by_domain_command(actor.id(), Instant::now())?,
     }
     port.update(&mut task, executor).await?;
     Ok(())
@@ -109,8 +149,9 @@ async fn execute<P: TaskCommandPort>(
 ///
 /// # 参数
 /// * `db` - 业务数据库。
+/// * `authorization` - 共享授权服务；在当前执行器内重验任务办理资格。
 /// * `object` - 冻结责任身份的履约对象。
-/// * `actor_id` - 当前操作人。
+/// * `actor` - 已认证的真实操作人。
 /// * `executor` - 调用方事务执行器。
 ///
 /// # 返回
@@ -122,14 +163,14 @@ pub(super) async fn record(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
-    actor_id: &str,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     execute(
         &MongoTaskCommand { db },
         &|| authorization.clone(),
         object,
-        actor_id,
+        actor,
         CommandKind::Activity,
         executor,
     )
@@ -141,8 +182,9 @@ pub(super) async fn record(
 ///
 /// # 参数
 /// * `db` - 业务数据库。
+/// * `authorization` - 共享授权服务；在当前执行器内重验任务办理资格。
 /// * `object` - 冻结责任身份的履约对象。
-/// * `actor_id` - 当前操作人。
+/// * `actor` - 已认证的真实操作人。
 /// * `executor` - 调用方事务执行器。
 ///
 /// # 返回
@@ -154,14 +196,14 @@ pub(super) async fn complete(
     db: &Database,
     authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
-    actor_id: &str,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     execute(
         &MongoTaskCommand { db },
         &|| authorization.clone(),
         object,
-        actor_id,
+        actor,
         CommandKind::Complete,
         executor,
     )
@@ -172,11 +214,18 @@ pub(super) async fn complete(
 mod tests {
     use std::sync::Mutex;
 
+    use erp_core::AccountKind;
     use erp_workflow::entity::work_item::WorkItemStatus;
 
     use super::super::fixtures::{TestExecutor, delivery, task};
     use super::*;
     use crate::Error;
+
+    fn test_actor(id: &str) -> AuditActor {
+        AuditActor::new(id.into(), "真实供应商".into(), AccountKind::Supplier)
+            .with_request_id(Some("request-1".into()))
+            .unwrap()
+    }
 
     #[derive(Default)]
     struct Recorded {
@@ -229,12 +278,12 @@ mod tests {
             &self,
             identity: &usize,
             task: &WorkItem,
-            actor_id: &str,
+            actor: &AuditActor,
             executor: &mut dyn Executor,
         ) -> Result<()> {
             self.record("authorize", executor)?;
             assert_eq!(self.recorded.lock().unwrap().identities.last(), Some(identity));
-            assert_eq!(actor_id, "buyer-1");
+            assert_eq!(actor, &test_actor("buyer-1"));
             self.recorded.lock().unwrap().status_at_authorization = Some(task.status);
             Ok(())
         }
@@ -262,7 +311,7 @@ mod tests {
             &port,
             &|| port.fresh_identity(),
             FulfillmentTaskObject::Delivery(&delivery),
-            actor,
+            &test_actor(actor),
             kind,
             &mut executor,
         )
@@ -270,6 +319,35 @@ mod tests {
 
         (result, port.recorded.into_inner().unwrap())
     }
+    /// 入口授权透传真实账号种类及同一执行器，失败时不继续处理任务。
+    #[tokio::test]
+    async fn entry_authorization_preserves_real_actor_and_stops_on_failure() {
+        for fail_at in [None, Some(0), Some(2)] {
+            let mut executor = TestExecutor::default();
+            let port = RecordingPort {
+                executor: (&mut executor as *mut TestExecutor) as usize,
+                task: task(),
+                fail_at,
+                recorded: Mutex::default(),
+            };
+            let result = authorize_entry(
+                &port,
+                &|| port.fresh_identity(),
+                "delivery",
+                "delivery-1",
+                &test_actor("buyer-1"),
+                &mut executor,
+            )
+            .await;
+            assert_eq!(result.is_ok(), fail_at.is_none());
+            let recorded = port.recorded.into_inner().unwrap();
+            let expected: &[&str] =
+                if fail_at == Some(0) { &["load"] } else { &["load", "identity", "authorize"] };
+            assert_eq!(recorded.calls, expected);
+            assert!(recorded.written.is_none());
+        }
+    }
+
     /// 连续保存草稿时同步任务关联版本，保留开放状态、当前责任人与任务身份。
     #[tokio::test]
     async fn saving_draft_keeps_open_task_aligned_with_document_version() {
@@ -291,7 +369,7 @@ mod tests {
                 &port,
                 &|| port.fresh_identity(),
                 FulfillmentTaskObject::Delivery(&document),
-                "buyer-1",
+                &test_actor("buyer-1"),
                 CommandKind::Activity,
                 &mut executor,
             )
@@ -358,7 +436,7 @@ mod tests {
             };
             let document = delivery();
             assert!(matches!(
-                execute(&port, &|| port.fresh_identity(), FulfillmentTaskObject::Delivery(&document), "buyer-1", kind, &mut executor).await,
+                execute(&port, &|| port.fresh_identity(), FulfillmentTaskObject::Delivery(&document), &test_actor("buyer-1"), kind, &mut executor).await,
                 Err(Error::ConflictError(message)) if message == "task failure 2"
             ));
             assert!(port.recorded.lock().unwrap().written.is_none());
@@ -367,7 +445,7 @@ mod tests {
                 &port,
                 &|| port.fresh_identity(),
                 FulfillmentTaskObject::Delivery(&document),
-                "buyer-1",
+                &test_actor("buyer-1"),
                 kind,
                 &mut executor,
             )

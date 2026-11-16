@@ -4,7 +4,7 @@ use std::io::{Cursor, Write};
 use application_core::AuditActor;
 use chrono::{DateTime, FixedOffset};
 use erp_core::common::time::BUSINESS_TZ_OFFSET_SECS;
-use erp_order_to_cash::sales_inquiry::read::InquiryReadService;
+use erp_read_models::sales_center::inquiry::InquiryReadService;
 use rust_decimal::Decimal;
 use rust_xlsxwriter::{Format, Image, Workbook, Worksheet};
 use serde_json::{Value, json};

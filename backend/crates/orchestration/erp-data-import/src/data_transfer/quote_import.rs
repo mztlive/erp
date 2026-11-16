@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use erp_order_to_cash::sales_inquiry::read::InquiryReadService;
+use erp_read_models::sales_center::inquiry::InquiryReadService;
 use serde::Serialize;
 use serde_json::Value;
 use tokio::task::spawn_blocking;

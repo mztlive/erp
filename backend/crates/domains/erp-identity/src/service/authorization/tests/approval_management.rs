@@ -310,6 +310,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
     use crate::entity::authorization::{AccessContext, ResourceTargets};
     use crate::entity::organization::{OrgMembership, OrgValidity};
     use crate::entity::resource_access::ResourceKind;
+    use crate::repository::authorization::AccessProof;
     use crate::service::access_control::resolve::AuthorizedDataScope;
     use crate::{QualifiedPermissions, Result};
 
@@ -317,7 +318,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
         identity: Identity,
         deadline: Instant,
         purchase_reads: AtomicU64,
-        delay: bool,
+        expire_during_revalidation: bool,
     }
     #[async_trait]
     impl Facilities for ExpiringSources {
@@ -353,9 +354,9 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
             }
             if source == &purchase_order::DETAIL
                 && self.purchase_reads.fetch_add(1, Ordering::SeqCst) > 0
-                && self.delay
+                && self.expire_during_revalidation
             {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                AccessProof::set_test_time(self.deadline);
             }
             Ok(access)
         }
@@ -377,45 +378,54 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
             self.identity.grants(context, resource, ids, executor).await
         }
     }
-    for delay in [false, true] {
-        let identity = Identity::default();
-        identity.state.lock().unwrap().grants = vec![(
-            "manager".into(),
-            vec![
-                approval_instance::INSTANCE_LIST,
-                approval_admin::SALES_ORDER_RUNTIME,
-                approval_admin::PURCHASE_ORDER_RUNTIME,
-            ],
-        )];
-        let facilities = Arc::new(ExpiringSources {
-            identity,
-            delay,
-            deadline: Instant::from_unix_secs(Instant::now().unix_secs() + 2),
-            purchase_reads: AtomicU64::new(0),
-        });
-        let mut sales = instance();
-        sales.id = "a-sales".into();
-        let mut purchase = instance();
-        purchase.id = "b-purchase".into();
-        purchase.subject_type = FactValue::Known("purchase_order".into());
-        purchase.relations.values_mut().next().unwrap().objects[0].resource = "purchase_order".into();
-        let mut builder = complete();
-        builder.facilities = facilities;
-        builder.facts.insert("approval_instance".into(), Arc::new(Facts::new(vec![sales, purchase])));
-        let service = builder.build().unwrap();
-        let result = service
-            .require(
-                &actor(),
-                &internal::APPROVAL_MANAGEMENT_READ,
-                AccessTarget::Records(ResourceTargets::new(&["a-sales", "b-purchase"]).unwrap()),
-                &mut ReadExecutor::default(),
-            )
-            .await;
-        if delay {
-            assert!(matches!(result, Err(Error::ConflictError(_))));
-        } else {
-            result.unwrap();
-        }
+    let deadline = Instant::from_unix_secs(4_102_444_800);
+    let before = Instant::from_unix_secs(deadline.unix_secs() - 1);
+    for expire_during_revalidation in [false, true] {
+        AccessProof::with_test_time(before, async {
+            let identity = Identity::default();
+            identity.state.lock().unwrap().grants = vec![(
+                "manager".into(),
+                vec![
+                    approval_instance::INSTANCE_LIST,
+                    approval_admin::SALES_ORDER_RUNTIME,
+                    approval_admin::PURCHASE_ORDER_RUNTIME,
+                ],
+            )];
+            let facilities = Arc::new(ExpiringSources {
+                identity,
+                expire_during_revalidation,
+                deadline,
+                purchase_reads: AtomicU64::new(0),
+            });
+            let mut sales = instance();
+            sales.id = "a-sales".into();
+            let mut purchase = instance();
+            purchase.id = "b-purchase".into();
+            purchase.subject_type = FactValue::Known("purchase_order".into());
+            purchase.relations.values_mut().next().unwrap().objects[0].resource = "purchase_order".into();
+            let mut builder = complete();
+            builder.facilities = facilities.clone();
+            builder.facts.insert("approval_instance".into(), Arc::new(Facts::new(vec![sales, purchase])));
+            let service = builder.build().unwrap();
+            let result = service
+                .require(
+                    &actor(),
+                    &internal::APPROVAL_MANAGEMENT_READ,
+                    AccessTarget::Records(ResourceTargets::new(&["a-sales", "b-purchase"]).unwrap()),
+                    &mut ReadExecutor::default(),
+                )
+                .await;
+            assert_eq!(facilities.purchase_reads.load(Ordering::SeqCst), 2);
+            if expire_during_revalidation {
+                assert!(matches!(
+                    result,
+                    Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权关系已到期"
+                ));
+            } else {
+                result.unwrap();
+            }
+        })
+        .await;
     }
 }
 

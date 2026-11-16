@@ -90,6 +90,23 @@ impl ProfileDisplay {
 mod tests {
     use super::*;
     #[test]
+    fn bank_reveal_visibility_requires_current_detail_and_reveal_qualifications() {
+        let kind = SensitiveFieldKind::BankAccountNumber;
+        for permissions in [vec![], vec![party::BANK_ACCOUNT_DETAIL], vec![payable::PAYMENT_RECIPIENT_REVEAL]]
+        {
+            let display = ProfileDisplay(PermissionSet::new(permissions));
+            assert!(!display.reveal(kind));
+            assert!(!display.actions(true).contains(&"REVEAL_BANK_ACCOUNT".into()));
+        }
+        let display = ProfileDisplay(PermissionSet::new([
+            party::BANK_ACCOUNT_DETAIL,
+            payable::PAYMENT_RECIPIENT_REVEAL,
+        ]));
+        assert!(display.reveal(kind));
+        assert_eq!(display.actions(false), ["REVEAL_BANK_ACCOUNT"]);
+    }
+
+    #[test]
     fn reveal_needs_both_field_permissions_and_inactive_customer_keeps_only_valid_actions() {
         let view_only = ProfileDisplay(PermissionSet::new([party::CONTACT_DETAIL]));
         assert!(view_only.visible(&party::CONTACT_DETAIL));

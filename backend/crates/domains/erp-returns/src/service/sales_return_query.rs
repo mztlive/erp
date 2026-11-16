@@ -1,19 +1,42 @@
 //! SalesReturnCase 详情与分页视图装配。
-use application_core::AuditActor;
-use erp_identity::AccessTarget;
+use std::sync::Arc;
+
+use application_core::{AuditActor, PageView, SortDir};
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::returns;
-use erp_returns::repository::ReturnsExt;
-use erp_returns::repository::prelude::*;
+use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::ReturnsReadService;
-use super::dto::{PageView, SalesReturnCaseListParams, SalesReturnCaseView, SortDir};
+use super::ReturnsService;
+use crate::repository::ReturnsExt;
+use crate::repository::prelude::*;
+
+/// 保持现有功能授权政策的销售退货单域读取入口。
+#[derive(Clone)]
+pub struct SalesReturnQueryService {
+    db: Database,
+    authorization: Arc<AuthorizationService>,
+}
+impl SalesReturnQueryService {
+    /// 绑定退货本域数据库与授权服务。
+    /// # 参数
+    /// db 为本域数据库，authorization 为组合根共享授权服务。
+    /// # 返回
+    /// 不缓存授权结果的单域查询服务。
+    /// # 错误
+    /// 无。
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
+    }
+}
+
+use crate::dto::{SalesReturnCaseListParams, SalesReturnCaseView, SalesReturnLineView};
 use crate::{Error, Result};
 /// 销售退货处理单列表筛选条件类型（经 `ReturnsExt` 关联类型跨 crate 可达）。
-type SalesReturnCaseFilter = <mongodb::Database as ReturnsExt>::SalesReturnCaseFilter;
+type SalesReturnCaseFilter = <Database as ReturnsExt>::SalesReturnCaseFilter;
 
-impl ReturnsReadService {
+impl SalesReturnQueryService {
     // -----------------------------------------------------------------------
 
     /// 分页查询销售退货/拒收处理单列表。
@@ -68,7 +91,9 @@ impl ReturnsReadService {
         let page = self.db.sales_return_cases().search_sales_return_cases(&filter, executor).await?;
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
-            views.push(self.load_sales_return_case_view(&row.id, executor).await?);
+            views.push(
+                ReturnsService::new(self.db.clone()).load_sales_return_case_view(&row.id, executor).await?,
+            );
         }
         Ok(PageView { items: views, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -118,7 +143,7 @@ impl ReturnsReadService {
                 executor,
             )
             .await?;
-        self.load_sales_return_case_view(id, executor).await
+        ReturnsService::new(self.db.clone()).load_sales_return_case_view(id, executor).await
     }
 
     // -----------------------------------------------------------------------
@@ -126,7 +151,9 @@ impl ReturnsReadService {
     // -----------------------------------------------------------------------
     // 私有视图装配
     // -----------------------------------------------------------------------
+}
 
+impl ReturnsService {
     /// 调用方必须先完成所属命令授权，并传入原执行器。
     /// 装配销售退货/拒收处理单视图。
     ///
@@ -159,7 +186,7 @@ impl ReturnsReadService {
             .find_lines_by_cases(&[case.base.id.clone().into()], executor)
             .await?
             .into_iter()
-            .map(|line| super::dto::SalesReturnLineView {
+            .map(|line| SalesReturnLineView {
                 id: line.base.id.clone(),
                 sales_order_line_id: line.sales_order_line_id.to_string(),
                 requested_quantity: line.requested_quantity,
@@ -201,7 +228,7 @@ mod tests {
             .await
             .unwrap()
             .database("sales_return_snapshot_test");
-        let service = ReturnsReadService::new(db, unavailable_authorization());
+        let service = SalesReturnQueryService::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let list_error = service
             .sales_return_case_list_snapshot(

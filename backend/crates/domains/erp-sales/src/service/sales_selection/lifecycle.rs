@@ -1,4 +1,5 @@
 //! 链接生命周期命令：版本竞争与幂等结果共同提交。
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesSelectionBookletId;
 use erp_permissions::sales_selection;
@@ -31,12 +32,12 @@ impl SalesSelectionService {
         &self,
         id: &str,
         req: SalesSelectionCommandRequest,
-        actor: &str,
+        actor: &AuditActor,
         operation: IdempotencyOperation,
         crypto: Option<LinkTokenCrypto>,
     ) -> Result<SalesSelectionBookletView> {
         let service = self.clone();
-        let (id, actor) = (id.to_string(), actor.to_string());
+        let (id, actor) = (id.to_string(), actor.clone());
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -52,7 +53,7 @@ impl SalesSelectionService {
         &self,
         id: &str,
         req: SalesSelectionCommandRequest,
-        actor: &str,
+        actor: &AuditActor,
         operation: IdempotencyOperation,
         crypto: Option<LinkTokenCrypto>,
         tx: &mut dyn Executor,
@@ -64,11 +65,12 @@ impl SalesSelectionService {
             IdempotencyOperation::Void => &sales_selection::BOOKLET_VOID,
             _ => return Err(Error::Internal("非法选品生命周期命令".into())),
         };
-        self.authorize_booklet(id, permission, tx).await?;
+        self.authorize_booklet(actor, id, permission, tx).await?;
+        let actor_id = actor.id();
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash =
             request_hash(&serde_json::to_string(&(id, &req)).map_err(|e| Error::Internal(e.to_string()))?);
-        if let Some(view) = self.replay_idempotency(operation, actor, &key, &hash, tx).await? {
+        if let Some(view) = self.replay_idempotency(operation, actor_id, &key, &hash, tx).await? {
             return Ok(view);
         }
         let mut book = self.load_booklet(id, tx).await?;
@@ -81,11 +83,11 @@ impl SalesSelectionService {
                     .ok_or_else(|| Error::Internal("缺少链接密钥".into()))?
                     .issue()
                     .map_err(|e| Error::Internal(e.to_string()))?;
-                book.rotate_link(hash, cipher, actor)?;
+                book.rotate_link(hash, cipher, actor_id)?;
             },
-            IdempotencyOperation::Close => book.close(Instant::now(), actor)?,
-            IdempotencyOperation::RevokeAccess => book.revoke_access(actor)?,
-            IdempotencyOperation::Void => book.void(Instant::now(), actor)?,
+            IdempotencyOperation::Close => book.close(Instant::now(), actor_id)?,
+            IdempotencyOperation::RevokeAccess => book.revoke_access(actor_id)?,
+            IdempotencyOperation::Void => book.void(Instant::now(), actor_id)?,
             _ => return Err(Error::Internal("非法链接命令".into())),
         }
         self.db.sales_selection_booklets().update(&mut book, tx).await?;
@@ -93,7 +95,7 @@ impl SalesSelectionService {
         self.store_idempotency(
             IdempotencyStoreInput {
                 operation,
-                scope_id: actor,
+                scope_id: actor_id,
                 key: &key,
                 hash: &hash,
                 result: &view,

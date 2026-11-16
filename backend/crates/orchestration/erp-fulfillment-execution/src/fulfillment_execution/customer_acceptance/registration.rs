@@ -1,10 +1,6 @@
 //! 客户验收 NO_APPROVAL 单据登记；所有写入使用调用方 Executor。
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
-use erp_identity::{AccessTarget, AuthorizationService};
-use erp_permissions::{fulfillment, sales_order as sales_order_permissions};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
@@ -152,11 +148,11 @@ async fn persist_unbound_customer_acceptance_document(
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
 }
 
-/// 为已构造客户验收登记 `BusinessDocument` 并调用统一绑定端口。
+/// 为已授权、已分配编号的客户验收登记 `BusinessDocument` 并调用统一绑定端口。
 ///
 /// # 参数
 /// * `db` - 业务数据库。
-/// * `rbac` - 授权源。
+/// * `workflow` - 原事务的工作流绑定能力。
 /// * `acceptance` - 已构造的客户验收。
 /// * `actor` - 创建人。
 /// * `executor` - 调用方事务执行器。
@@ -165,25 +161,14 @@ async fn persist_unbound_customer_acceptance_document(
 /// 单据注册与空绑定证明写入成功时返回。
 ///
 /// # 错误
-/// 销售单不可见、绑定命令非法、端口返回绑定或注册写入失败时返回错误。
-pub async fn register_created_customer_acceptance_document(
+/// 绑定命令非法、端口返回绑定或注册写入失败时返回错误；创建资格须在取号前校验。
+pub(super) async fn register_created_customer_acceptance_document(
     db: &Database,
     workflow: &dyn FulfillmentWorkflow,
-    rbac: &Arc<AuthorizationService>,
     acceptance: &CustomerAcceptance,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    rbac.require(
-        actor,
-        &fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
-        AccessTarget::Operation,
-        executor,
-    )
-    .await?;
-    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
-        .require_object(actor, &sales_order_permissions::DETAIL, acceptance.sales_order_id.as_ref(), executor)
-        .await?;
     let bind_command = customer_acceptance_bind_command(acceptance, actor.id())?;
     let document = new_registered_document(
         &acceptance.base.id,

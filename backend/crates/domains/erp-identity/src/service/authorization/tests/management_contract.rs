@@ -1,22 +1,28 @@
 //! 管理操作通过真实公共入口执行完整固定资格和目标合同。
+use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
+use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_core::common::time::Instant;
 use erp_permissions::{
     access_control, admin, approval_admin, approval_process, catalog, internal, organization, sales_inquiry,
     supplier_offering,
 };
 use mongodb::Client;
 use persistence_core::testing::SnapshotExecutor;
-use persistence_core::{Executor, ReadExecutor};
+use persistence_core::{Executor, NoTransaction, ReadExecutor};
 
-use super::fixtures::{Facts, Identity, actor, service};
+use super::super::facilities::Facilities;
+use super::fixtures::{Facts, Identity, actor, complete, service};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
-use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts};
-use crate::entity::resource_access::{GrantTarget, SourceUpdate};
+use crate::entity::authorization::{AccessContext, AccessTarget, FactValue, ObjectFacts, ResourceTargets};
+use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceUpdate};
 use crate::ports::ResourceGrantFacts;
+use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::service::resource_access::ResourceGrantService;
-use crate::{Error, Permission, Result};
+use crate::{Error, Permission, QualifiedPermissions, Result};
 
 fn grants(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
@@ -234,6 +240,112 @@ async fn runtime_admin_can_read_a_definition_but_cannot_edit_or_choose_definitio
         )
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn definition_read_candidates_require_snapshot_before_reading_permissions() {
+    let identity = Arc::new(Identity::default());
+    grants(
+        &identity,
+        &[("reader", &[approval_process::DEFINITION_DETAIL, approval_admin::SALES_ORDER_DEFINITION])],
+    );
+    let service = service(identity.clone(), Arc::new(Facts::default()));
+    for permission in [approval_process::DEFINITION_DETAIL, internal::APPROVAL_DEFINITION_ASSIGNEES] {
+        let mut read = ReadExecutor::default();
+        let mut unbound = NoTransaction;
+        for executor in [&mut read as &mut dyn Executor, &mut unbound] {
+            let calls = identity.permissions_calls.load(Ordering::SeqCst);
+            assert!(matches!(
+                service.require(&actor(), &permission, candidate("sales_order"), executor).await,
+                Err(Error::ValidationError(message)) if message == "审批定义授权必须使用快照事务"
+            ));
+            assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), calls);
+        }
+        service
+            .require(&actor(), &permission, candidate("sales_order"), &mut SnapshotExecutor::default())
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn expired_definition_candidates_report_data_scope_changed() {
+    let identity = Arc::new(Identity::default());
+    grants(
+        &identity,
+        &[("reader", &[approval_process::DEFINITION_DETAIL, approval_admin::SALES_ORDER_DEFINITION])],
+    );
+    let service = service(identity, Arc::new(Facts::default()));
+    for permission in [approval_process::DEFINITION_DETAIL, internal::APPROVAL_DEFINITION_ASSIGNEES] {
+        let AccessTarget::Candidate(mut object) = candidate("sales_order") else { unreachable!() };
+        object.valid_until = Some(Instant::from_unix_secs(1));
+        assert!(matches!(
+            service
+                .require(
+                    &actor(),
+                    &permission,
+                    AccessTarget::Candidate(object),
+                    &mut SnapshotExecutor::default()
+                )
+                .await,
+            Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED")
+        ));
+    }
+}
+
+struct AdvancingDefinitionIdentity;
+
+#[async_trait]
+impl Facilities for AdvancingDefinitionIdentity {
+    async fn permissions(
+        &self,
+        _: &AuditActor,
+        permissions: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<Option<QualifiedPermissions>> {
+        executor.next_read();
+        Ok(Some(QualifiedPermissions::test_grants(&[("role", permissions)])))
+    }
+
+    async fn scope(
+        &self,
+        _: &AccessContext,
+        _: &Permission,
+        _: &[Permission],
+        _: &QualifiedPermissions,
+        _: &mut dyn Executor,
+    ) -> Result<AuthorizedDataScope> {
+        panic!("审批定义候选不得读取对象范围")
+    }
+
+    async fn grant_revision(&self, _: &AuditActor, _: ResourceKind, _: &mut dyn Executor) -> Result<u64> {
+        panic!("审批定义候选不得读取记录授权版本")
+    }
+
+    async fn grants(
+        &self,
+        _: &AccessContext,
+        _: ResourceKind,
+        _: &ResourceTargets,
+        _: &mut dyn Executor,
+    ) -> Result<BTreeSet<String>> {
+        panic!("审批定义候选不得读取记录授权")
+    }
+}
+
+#[tokio::test]
+async fn definition_permissions_crossing_read_stages_report_data_scope_changed() {
+    let mut builder = complete();
+    builder.facilities = Arc::new(AdvancingDefinitionIdentity);
+    let service = builder.build().unwrap();
+    for permission in [approval_process::DEFINITION_DETAIL, internal::APPROVAL_DEFINITION_ASSIGNEES] {
+        assert!(matches!(
+            service
+                .require(&actor(), &permission, candidate("sales_order"), &mut SnapshotExecutor::default())
+                .await,
+            Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED")
+        ));
+    }
 }
 
 #[tokio::test]

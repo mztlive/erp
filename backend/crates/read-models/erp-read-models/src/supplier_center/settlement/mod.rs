@@ -9,6 +9,7 @@ mod display_mapping;
 pub mod dto;
 mod statement_result;
 pub use statement_result::SettlementStatementResult;
+mod list;
 mod query;
 mod review_access;
 use mongodb::Database;

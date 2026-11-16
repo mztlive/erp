@@ -5,13 +5,15 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::ids::CustomerAccountId;
 use mongodb::Database;
-use persistence_core::Executor;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ContractService;
 use super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot, to_list_view};
-use crate::dto::contract::{ContractListParams, ContractListView, ContractRevisionView, ContractView};
-use crate::error::Result;
+use crate::dto::contract::{
+    ContractListParams, ContractListQuery, ContractListView, ContractRevisionView, ContractView,
+};
+use crate::error::{Error, Result};
 use crate::ports::CustomerFactsPort;
 use crate::repository::list_search::ContractCustomer;
 use crate::repository::prelude::*;
@@ -40,9 +42,33 @@ impl ContractService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self.list_snapshot(query.clone(), actor).await?;
-        ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
-        let current = self.list_scope_version(query, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let expected_version = params.scope_version.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.list_stage(query, &actor, expected_version.as_deref(), executor).await
+                })
+            })
+            .await
+    }
+
+    /// 列表、版本复核和交付检查使用同一快照执行器。
+    async fn list_stage(
+        &self,
+        query: ContractListQuery,
+        actor: &AuditActor,
+        expected_version: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<ContractListView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("合同列表必须使用快照事务".into()));
+        }
+        let snapshot = self.list_snapshot(query.clone(), actor, executor).await?;
+        ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
+        let current = self.list_scope_version(query, actor, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current)?;
         Ok(to_list_view(snapshot))
     }
@@ -211,5 +237,72 @@ mod tests {
         }
         assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());
         assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
+    }
+}
+
+#[cfg(test)]
+mod list_snapshot_tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::entity::authorization::ObjectFacts;
+    use erp_identity::testing::unbound_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::authorization::ContractAccess;
+    use crate::ports::{
+        ContractCreationPort, EmptyCustomers, FailClosedAuditPort, SigningCompanyFact, SigningCompanyPort,
+    };
+    use crate::{Error, Result};
+
+    struct UnreadFacts;
+
+    #[async_trait]
+    impl ContractCreationPort for UnreadFacts {
+        async fn candidate(&self, _: &AuditActor, _: &str, _: &mut dyn Executor) -> Result<ObjectFacts> {
+            panic!("列表授权拒绝后不得读取创建事实")
+        }
+    }
+
+    #[async_trait]
+    impl SigningCompanyPort for UnreadFacts {
+        async fn company(&self, _: &str, _: &mut dyn Executor) -> Result<Option<SigningCompanyFact>> {
+            panic!("列表授权拒绝后不得读取签约主体")
+        }
+    }
+
+    #[tokio::test]
+    async fn list_rejects_non_snapshot_and_missing_binding_before_business_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("contract_list_snapshot");
+        let access = ContractAccess::new(db.clone(), unbound_authorization(), Arc::new(UnreadFacts));
+        let service = ContractService::new(
+            db,
+            Arc::new(FailClosedAuditPort),
+            Arc::new(EmptyCustomers),
+            Arc::new(UnreadFacts),
+            access,
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let query = serde_json::from_value::<ContractListParams>(serde_json::json!({}))
+            .unwrap()
+            .normalized()
+            .unwrap();
+        let result = service.list_stage(query.clone(), &actor, None, &mut ReadExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(message)) if message == "合同列表必须使用快照事务"
+        ));
+        let result = service.list_stage(query, &actor, None, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(message)) if message == "缺少查询 Mapping 绑定"
+        ));
     }
 }

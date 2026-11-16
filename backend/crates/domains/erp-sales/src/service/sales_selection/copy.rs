@@ -18,6 +18,7 @@ use crate::{Error, Result};
 
 impl SalesSelectionService {
     /// 复制已授权原册，所有读写使用调用方同一事务。
+    /// 调用方须在同一执行器核验原册、新客户及创建候选；actor_id 只用于领域留痕。
     ///
     /// # 参数
     /// * `source` - 事务内完成对象授权的原册

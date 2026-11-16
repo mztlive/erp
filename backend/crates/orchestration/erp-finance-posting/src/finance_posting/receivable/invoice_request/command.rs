@@ -145,18 +145,30 @@ pub(super) fn replay_requires_readback() -> Error {
 
 /// 回调与事务包装层共享已提交证据，避免只读事务结束失败丢失原命令结果。
 #[derive(Clone, Default)]
-struct ReplayEvidence(Arc<AtomicBool>);
+pub(super) struct ReplayEvidence(Arc<AtomicBool>);
 
 impl ReplayEvidence {
     /// 只记录实际授权回放命中的回执，不把未命中或初始化失败视为已提交。
-    fn observe<T>(&self, view: &Option<T>) {
+    /// # 参数
+    /// `view` 为同一事务内授权回放的实际结果。
+    /// # 返回
+    /// 命中时保存已提交证据，不修改业务状态。
+    /// # 错误
+    /// 不返回错误。
+    pub(super) fn observe<T>(&self, view: &Option<T>) {
         if view.is_some() {
             self.0.store(true, Ordering::Release);
         }
     }
 
     /// 原业务命令已提交时，只读事务自身失败不能降级为业务未执行。
-    fn finish<T>(&self, result: Result<T>) -> Result<T> {
+    /// # 参数
+    /// `result` 为承载回放或首次写入的事务实际结果。
+    /// # 返回
+    /// 成功时返回原结果；已观察命令回执时保留已提交语义。
+    /// # 错误
+    /// 仅回放命中后将事务结束失败标为结果不可读，其他错误保持原分类。
+    pub(super) fn finish<T>(&self, result: Result<T>) -> Result<T> {
         if self.0.load(Ordering::Acquire) { committed_result(result) } else { result }
     }
 }

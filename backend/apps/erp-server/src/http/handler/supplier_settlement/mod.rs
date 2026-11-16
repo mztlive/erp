@@ -6,6 +6,8 @@
 
 pub mod reviewer_options;
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -53,7 +55,12 @@ pub async fn supplier_settlement_statement_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierSettlementStatementListParams>,
 ) -> Result<SettlementStatementDisplayList> {
-    let page = settlement_process(&state).statement_list(&params, &actor).await?;
+    let page = SupplierSettlementReadService::new(
+        state.application().db(),
+        Arc::new(state.application().authorization()),
+    )
+    .statement_list(&params, &actor)
+    .await?;
     let page = SupplierSettlementReadService::new(state.application().db(), state.application().rbac())
         .statement_list_view(page)
         .await?;

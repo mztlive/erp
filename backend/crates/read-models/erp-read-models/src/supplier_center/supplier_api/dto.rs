@@ -1,4 +1,5 @@
 //! 连接后台任务展示；任务状态归 support。
+use erp_support::JobStatus;
 use serde::Serialize;
 /// 后台任务查询视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -6,7 +7,7 @@ pub struct SupplierConnectionJobView {
     pub job_id: String,
     pub job_no: String,
     pub action: String,
-    pub status: erp_support::JobStatus,
+    pub status: JobStatus,
     pub total: u64,
     pub processed: u64,
     pub succeeded: u64,

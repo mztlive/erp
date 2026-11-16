@@ -4,9 +4,11 @@ use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_core::ids::{SupplierAccountId, SupplierFulfillmentItemId};
 use erp_core::money::line_amounts;
 use erp_permissions::supplier_settlement;
 use id_generator::next_id;
+use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
@@ -15,7 +17,10 @@ use super::{
     digest_parts,
 };
 use crate::dto::supplier_settlement::SupplierSettlementSourceEvidenceView;
-use crate::entity::supplier_fulfillment::AllocationAction;
+use crate::entity::supplier_fulfillment::{
+    AllocationAction, SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierRefundAllocation,
+    SupplierRefundFact,
+};
 use crate::entity::supplier_settlement::{
     SETTLEMENT_TIMEZONE, SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod,
     SettlementSourceFactType, SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
@@ -23,6 +28,7 @@ use crate::entity::supplier_settlement::{
 };
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
+use crate::repository::supplier_settlement::SupplierSettlementSourceScope;
 use crate::{Error, Result};
 
 impl SupplierSettlementService {
@@ -157,12 +163,12 @@ impl SupplierSettlementService {
 /// # 错误
 /// 版本回退、范围为空或仓储失败时返回错误。
 async fn load_source_scope(
-    db: &mongodb::Database,
+    db: &Database,
     req: &super::RecordSettlementSourceEvidenceRequest,
     period: SettlementPeriod,
-    input_item_ids: &[erp_core::ids::SupplierFulfillmentItemId],
+    input_item_ids: &[SupplierFulfillmentItemId],
     executor: &mut dyn Executor,
-) -> Result<crate::repository::supplier_settlement::SupplierSettlementSourceScope> {
+) -> Result<SupplierSettlementSourceScope> {
     if let Some(latest) = db
         .supplier_settlement_source_evidence()
         .latest_for_period(
@@ -210,9 +216,9 @@ async fn load_source_scope(
 /// # 错误
 /// 范围不完整、归属不一致或金额恒等失败时返回错误。
 fn assemble_source_lines(
-    supplier_id: &erp_core::ids::SupplierAccountId,
+    supplier_id: &SupplierAccountId,
     inputs: &[super::RecordSettlementSourceEvidenceLineRequest],
-    scope: crate::repository::supplier_settlement::SupplierSettlementSourceScope,
+    scope: SupplierSettlementSourceScope,
     period: SettlementPeriod,
 ) -> Result<Vec<SupplierSettlementSourceEvidenceLine>> {
     let order_map =
@@ -256,13 +262,10 @@ fn assemble_source_lines(
 /// 订单或明细缺失、明细不属于订单或订单不属于供应商时返回错误。
 fn check_source_line<'a>(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
-    order_map: &'a HashMap<String, crate::entity::supplier_fulfillment::SupplierFulfillmentOrder>,
-    item_map: &'a HashMap<String, crate::entity::supplier_fulfillment::SupplierFulfillmentItem>,
-    supplier_id: &erp_core::ids::SupplierAccountId,
-) -> Result<(
-    &'a crate::entity::supplier_fulfillment::SupplierFulfillmentOrder,
-    &'a crate::entity::supplier_fulfillment::SupplierFulfillmentItem,
-)> {
+    order_map: &'a HashMap<String, SupplierFulfillmentOrder>,
+    item_map: &'a HashMap<String, SupplierFulfillmentItem>,
+    supplier_id: &SupplierAccountId,
+) -> Result<(&'a SupplierFulfillmentOrder, &'a SupplierFulfillmentItem)> {
     let order = order_map
         .get(input.supplier_fulfillment_order_id.as_ref())
         .ok_or_else(|| Error::NotFound("供应商订单不存在".to_string()))?;
@@ -298,10 +301,10 @@ fn check_source_line<'a>(
 /// 订单状态、取消证据、退款关系、期间归属或金额恒等不一致时返回错误。
 fn build_source_line(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
-    order: &crate::entity::supplier_fulfillment::SupplierFulfillmentOrder,
-    item: &crate::entity::supplier_fulfillment::SupplierFulfillmentItem,
-    refund_allocations: &[crate::entity::supplier_fulfillment::SupplierRefundAllocation],
-    refund_fact_map: &HashMap<&str, &crate::entity::supplier_fulfillment::SupplierRefundFact>,
+    order: &SupplierFulfillmentOrder,
+    item: &SupplierFulfillmentItem,
+    refund_allocations: &[SupplierRefundAllocation],
+    refund_fact_map: &HashMap<&str, &SupplierRefundFact>,
     period: SettlementPeriod,
 ) -> Result<SupplierSettlementSourceEvidenceLine> {
     let completion_in_period =
@@ -397,8 +400,8 @@ fn build_source_line(
 /// 分配缺少退款头、净退款为负或金额三元组不一致时返回错误。
 fn refund_amounts(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
-    refund_allocations: &[crate::entity::supplier_fulfillment::SupplierRefundAllocation],
-    refund_fact_map: &HashMap<&str, &crate::entity::supplier_fulfillment::SupplierRefundFact>,
+    refund_allocations: &[SupplierRefundAllocation],
+    refund_fact_map: &HashMap<&str, &SupplierRefundFact>,
     period: SettlementPeriod,
     evidence_reference_ids: &mut Vec<String>,
 ) -> Result<SettlementAmountComponents> {
@@ -440,10 +443,10 @@ fn refund_amounts(
 struct CompleteSourceScope<'a> {
     inputs: &'a [super::RecordSettlementSourceEvidenceLineRequest],
     input_item_ids: &'a HashSet<String>,
-    order_map: &'a HashMap<String, crate::entity::supplier_fulfillment::SupplierFulfillmentOrder>,
-    item_map: &'a HashMap<String, crate::entity::supplier_fulfillment::SupplierFulfillmentItem>,
-    refund_allocations: &'a [crate::entity::supplier_fulfillment::SupplierRefundAllocation],
-    refund_fact_map: &'a HashMap<&'a str, &'a crate::entity::supplier_fulfillment::SupplierRefundFact>,
+    order_map: &'a HashMap<String, SupplierFulfillmentOrder>,
+    item_map: &'a HashMap<String, SupplierFulfillmentItem>,
+    refund_allocations: &'a [SupplierRefundAllocation],
+    refund_fact_map: &'a HashMap<&'a str, &'a SupplierRefundFact>,
     period: SettlementPeriod,
 }
 
@@ -609,6 +612,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::str::FromStr;
 
+    use chrono::DateTime;
     use erp_core::common::time::{BusinessDate, Instant};
     use erp_core::ids::{
         CostAllocationId, CostEntryId, InboxMessageId, PayableEntryId, SupplierAccountId,
@@ -620,9 +624,9 @@ mod tests {
     use super::{CompleteSourceScope, build_source_line, ensure_complete_source_scope, refund_amounts};
     use crate::dto::supplier_settlement::RecordSettlementSourceEvidenceLineRequest;
     use crate::entity::supplier_fulfillment::{
-        AllocationAction, FulfillmentStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData,
-        SupplierFulfillmentOrder, SupplierFulfillmentOrderData, SupplierRefundAllocation,
-        SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
+        AllocationAction, CancelStatus, FulfillmentStatus, SupplierFulfillmentItem,
+        SupplierFulfillmentItemData, SupplierFulfillmentOrder, SupplierFulfillmentOrderData,
+        SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
     };
     use crate::entity::supplier_settlement::{
         SETTLEMENT_TIMEZONE, SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod,
@@ -635,7 +639,7 @@ mod tests {
     const PERIOD_END: &str = "2026-07-31";
 
     fn instant(rfc3339: &str) -> Instant {
-        Instant::from_unix_secs(chrono::DateTime::parse_from_rfc3339(rfc3339).unwrap().timestamp())
+        Instant::from_unix_secs(DateTime::parse_from_rfc3339(rfc3339).unwrap().timestamp())
     }
 
     fn period() -> SettlementPeriod {
@@ -1154,10 +1158,8 @@ mod tests {
     #[test]
     fn build_source_line_accepts_cancel_evidence_for_canceled_order() {
         let mut order = completed_order("order-1", instant("2026-06-01T00:00:00+08:00"));
-        order
-            .advance_cancel(crate::entity::supplier_fulfillment::CancelStatus::CancelPending)
-            .expect("迁移失败");
-        order.advance_cancel(crate::entity::supplier_fulfillment::CancelStatus::Canceled).expect("迁移失败");
+        order.advance_cancel(CancelStatus::CancelPending).expect("迁移失败");
+        order.advance_cancel(CancelStatus::Canceled).expect("迁移失败");
         let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
         let mut input = line_request("item-1", "order-1");
         input.cancel_occurred_at = Some(instant("2026-07-20T10:00:00+08:00").unix_secs());

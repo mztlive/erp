@@ -1,19 +1,21 @@
 //! 新任务的轻量私有上下文与任务同事务保存，不读取上传文件即可识别类型。
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
 use erp_support::repository::bulk_job::BackgroundJobInput;
 use erp_support::{BackgroundJob, BulkJobExt, FileAssetExt};
-use persistence_core::ReadExecutor;
+use persistence_core::{Executor, ReadExecutor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::access::ReaderJob;
 use super::types::Envelope;
 use super::{DataTransferProcess, TransferContext, TransferKind};
 use crate::{Error, Result};
 
 pub(super) const CONTEXT_FORMAT: &str = "data_transfer_context_v1";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ContextInput {
     pub kind: TransferKind,
@@ -41,21 +43,48 @@ impl ContextInput {
 }
 
 impl DataTransferProcess {
-    pub(super) async fn context_input(&self, job: &BackgroundJob) -> Result<ContextInput> {
-        if let Some(bytes) = self
-            .db
-            .bulk_job()
-            .strict_job_input(
-                &BackgroundJobId::new(&job.base.id),
-                CONTEXT_FORMAT,
-                &mut ReadExecutor::default(),
-            )
-            .await?
-        {
-            return decode_context(&bytes);
+    /// 已有分类直接复用；历史本人任务仅在真实任务资格通过后解密源文件。
+    /// # 参数
+    /// reader 为已授权任务，actor 为当前读取身份。
+    /// # 返回
+    /// 任务的轻量业务上下文。
+    /// # 错误
+    /// 当前资格、文件、有效期或输入格式无效时拒绝。
+    pub(super) async fn reader_context(
+        &self,
+        reader: &ReaderJob,
+        actor: &AuditActor,
+    ) -> Result<ContextInput> {
+        if let Some(context) = &reader.context {
+            return Ok(context.clone());
         }
-        let source = self.source(job).await?;
-        Ok(ContextInput::new(&source, self.source_expiry(job).await?))
+        let job = &reader.job;
+        let id = job.input_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务输入缺失".into()))?;
+        let (source, asset): (Envelope, _) = self.reader_private(job, id.as_ref(), actor).await?;
+        let expires = asset.expires_at.ok_or_else(|| Error::NotFound("任务输入不存在或不可读取".into()))?;
+        let context = ContextInput::new(&source, expires);
+        self.qualify_context(job, &context, actor).await?;
+        Ok(context)
+    }
+
+    /// 仅读取选择固定业务资格所需的任务上下文，不回退到私有文件解密。
+    /// # 参数
+    /// id 为真实任务，executor 为已核验当前身份的读取快照。
+    /// # 返回
+    /// 已保存的分类及业务引用；历史任务无独立上下文时返回空。
+    /// # 错误
+    /// 数据库或上下文损坏时拒绝。
+    pub(super) async fn stored_context(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ContextInput>> {
+        self.db
+            .bulk_job()
+            .strict_job_input(&BackgroundJobId::new(id), CONTEXT_FORMAT, executor)
+            .await?
+            .map(|bytes| decode_context(&bytes))
+            .transpose()
     }
 
     pub(super) async fn source_expiry(&self, job: &BackgroundJob) -> Result<Instant> {

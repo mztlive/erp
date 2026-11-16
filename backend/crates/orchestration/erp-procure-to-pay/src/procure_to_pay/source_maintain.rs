@@ -1,4 +1,5 @@
 //! 登记维持原采购（第一期 §6.3“销售变更对采购的影响”第 5、11 条）。
+
 //!
 //! 采购核实无法调整（如供应商不接受减量或撤单）时，由采购负责人登记原因：记录以当前
 //! 销售版本作为后续判定基准并标记处理完成，关闭依据更新待办；不改写采购或应付。
@@ -8,6 +9,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::dto::purchase_order::MaintainPurchaseSourceRequest;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseSourceUpdate};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -25,7 +27,6 @@ use super::PurchaseOrderProcess;
 use crate::{Error, Result};
 
 /// 维持原采购的授权动作。
-const MAINTAIN_ACTION: &str = "maintain_source";
 
 impl PurchaseOrderProcess {
     /// 登记维持原采购并关闭依据更新待办。
@@ -50,7 +51,7 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         req.validate()?;
-        let access = self.command_access(actor, MAINTAIN_ACTION);
+        let access = self.command_access(actor, &purchase_order_permissions::MAINTAIN_SOURCE);
         let db = self.db.clone();
         let actor = actor.clone();
         let id = id.to_string();

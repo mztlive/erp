@@ -7,39 +7,19 @@
 //! 契约来源：erp-client `features/sales-orders`（W05 变更轨）。
 
 mod draft;
-use application_core::{page_or_default, page_size_or_default};
-pub use draft::{SalesChangeDraftView, SaveSalesChangeDraftRequest};
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
-use crate::Result;
-use crate::entity::sales_review::SalesChangeType;
-
-/// 销售变更单列表允许的排序字段白名单。
-pub(crate) const SALES_CHANGE_ORDER_SORT_FIELDS: &[&str] = &["created_at"];
-
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
 pub use application_core::PageView;
 /// 排序方向。
 pub use application_core::SortDir;
 /// 校验文本去除首尾空白后非空。
 use application_core::non_blank;
-/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `allowed_fields` - 白名单
-///
-/// # 返回
-/// 返回 `(排序字段, 方向)`；未提供时默认 `("created_at", Desc)`。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) use application_core::normalize_sort;
+pub use draft::{SalesChangeDraftView, SaveSalesChangeDraftRequest};
+use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 pub use crate::dto::PageParams;
+use crate::entity::sales_review::SalesChangeType;
 
 // ---------------------------------------------------------------------------
 // sales_change_order（销售变更单，W05 变更轨）
@@ -65,44 +45,6 @@ pub struct SalesChangeOrderListParams {
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
-}
-
-/// 归一化后的销售变更单列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SalesChangeOrderListQuery {
-    /// 原销售单筛选。
-    pub sales_order_id: Option<String>,
-    /// 变更状态筛选。
-    pub status: Option<crate::entity::sales_review::SalesChangeOrderStatus>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl SalesChangeOrderListParams {
-    /// 归一化销售变更单列表查询参数。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<SalesChangeOrderListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, SALES_CHANGE_ORDER_SORT_FIELDS)?;
-        Ok(SalesChangeOrderListQuery {
-            sales_order_id: self.sales_order_id.as_ref().map(ToString::to_string),
-            status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
-    }
 }
 
 /// 创建销售变更单请求。
@@ -187,7 +129,8 @@ pub struct CancelSalesChangeApprovalRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_sort;
+    use application_core::normalize_sort;
+
     use crate::entity::sales_review::SalesChangeType;
 
     #[test]

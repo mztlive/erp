@@ -73,9 +73,9 @@ impl IntegrationOpsService {
             .reconciliation_differences()
             .search_differences(&filter, &scope.read_scope, executor)
             .await?;
-        access.validate(&scope.read_scope, executor).await?;
         let total = page.total;
         let items = project_difference_rows(self, page.items, executor).await?;
+        access.validate(&scope.read_scope, executor).await?;
         Ok(difference_list_view(total, items, &filter, scope.meta))
     }
 

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use erp_catalog::entity::catalog::ProductKind;
 use erp_catalog::repository::SellableSkuRow;
 
-use super::read::InquiryTemplateProduct;
+use super::InquiryTemplateProduct;
 use crate::{Error, Result};
 
 impl InquiryTemplateProduct {

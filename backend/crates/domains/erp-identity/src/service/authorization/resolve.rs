@@ -23,6 +23,33 @@ pub(super) struct Resolution {
 }
 
 impl AuthorizationService {
+    /// 检查目标账号的完整功能资格，并按该资格解析本动作的固定范围来源。
+    /// # 参数
+    /// actor、permission 为待检查身份及动作；executor 为检查人的原读取事务。
+    /// # 返回
+    /// 范围动作返回本次合格角色的范围；其他动作返回 None，仍须取得对象或任务上下文。
+    /// # 错误
+    /// 账号失效、完整资格不足、未知动作及范围设施错误原样传播。
+    pub(crate) async fn inspection_scope(
+        &self,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<AuthorizedDataScope>> {
+        let qualified = self.qualify(actor, permission, executor).await?;
+        if scope_spec::kind(permission)? != ActionKind::Scope {
+            return Ok(None);
+        }
+        let context = AccessContext {
+            actor: actor.clone(),
+            permission: permission.clone(),
+            resource: permission.resource().into(),
+            model: None,
+            as_of: Instant::now(),
+        };
+        self.resolve_scope(&context, permission, &qualified, executor).await.map(Some)
+    }
+
     /// 身份先于业务事实读取；全部资格由一次账号及启用角色取证完成。
     pub(super) async fn qualify(
         &self,

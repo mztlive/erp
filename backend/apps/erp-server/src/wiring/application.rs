@@ -5,6 +5,7 @@ use config::{Config, SafeConfig};
 use erp_connector_dangaoshushu::DangaoshushuRuntime;
 use erp_contract::ContractTemplateService;
 use erp_contract_recognition::{AliyunContractOcr, OpenAiContractExtractor};
+use erp_customer::CustomerAccess;
 use erp_data_import::contract_import::{ContractImportProcess, ContractImportServices, RecognitionProviders};
 use erp_data_import::product_import::ProductImportServices;
 use erp_data_import::sales_inquiry_import::SalesInquiryImportProcess;
@@ -15,7 +16,9 @@ use erp_notification::NotificationService;
 use erp_order_to_cash::sales_inquiry::SalesInquiryProcess;
 use erp_party::SensitiveDataCodec;
 use erp_read_models::approval_subject::ApprovalUpgradeReadModel;
+use erp_read_models::customer_center::profile::CustomerProfileReadService;
 use erp_read_models::integration_center::IntegrationCenterReadService;
+use erp_read_models::supplier_center::SupplierFulfillmentListReadService;
 use erp_supplier_catalog::integration_resolution::IntegrationResolutionProcess;
 use erp_supplier_catalog::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_supplier_catalog::wiring::CatalogWorkItems;
@@ -611,6 +614,34 @@ impl Application {
             self.sensitive_data(),
             crate::wiring::customer_access(self.db(), self.rbac()),
         )
+    }
+
+    /// 装配客户、主体及账号名称的授权详情读模型。
+    /// # 参数
+    /// 无；复用应用共享数据库与敏感数据设施。
+    /// # 返回
+    /// 不缓存授权结果的客户资料读取入口。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn customer_profile_read_service(&self) -> CustomerProfileReadService {
+        let authorization = Arc::new(self.authorization());
+        CustomerProfileReadService::new(
+            self.db(),
+            self.sensitive_data(),
+            CustomerAccess::new(self.db(), authorization.clone()),
+            authorization,
+        )
+    }
+
+    /// 装配履约订单、账号姓名与当前 W26 处理人的授权列表。
+    /// # 参数
+    /// 无；复用已装配的供应链领域服务。
+    /// # 返回
+    /// 不缓存范围结果的履约列表读模型。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn supplier_fulfillment_list_read_service(&self) -> SupplierFulfillmentListReadService {
+        SupplierFulfillmentListReadService::new(self.db(), Arc::new(self.supplier_fulfillment_service()))
     }
 
     /// Supplier list/detail service with party facts and reveal tokens.

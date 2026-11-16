@@ -250,6 +250,7 @@ trait ServiceConfirmationPort: Send + Sync {
     type Record: Send + Sync;
     type Purchase: Send + Sync;
 
+    async fn authorize(&self, executor: &mut dyn Executor) -> Result<()>;
     async fn load(&self, executor: &mut dyn Executor) -> Result<Self::Record>;
     async fn purchase(&self, record: &Self::Record, executor: &mut dyn Executor) -> Result<Self::Purchase>;
     async fn allocation(
@@ -311,6 +312,7 @@ async fn execute_confirmation_steps<P: ServiceConfirmationPort>(
     port: &P,
     executor: &mut dyn Executor,
 ) -> Result<P::Record> {
+    port.authorize(executor).await?;
     let mut record = port.load(executor).await?;
     let purchase = port.purchase(&record, executor).await?;
     port.allocation(&record, &purchase, executor).await?;
@@ -339,6 +341,18 @@ struct MongoServiceConfirmation<'a> {
 impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
     type Record = ServiceFulfillment;
     type Purchase = erp_procurement::entity::purchase_order::PurchaseOrder;
+
+    async fn authorize(&self, executor: &mut dyn Executor) -> Result<()> {
+        super::task::require_fulfillment_entry(
+            self.db,
+            self.task_identity,
+            "service_fulfillment",
+            self.record_id.as_ref(),
+            self.actor,
+            executor,
+        )
+        .await
+    }
 
     async fn load(&self, executor: &mut dyn Executor) -> Result<Self::Record> {
         Ok(FulfillmentService::new(self.db.clone())
@@ -400,7 +414,7 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
             self.db,
             self.task_identity,
             super::task::FulfillmentTaskObject::ServiceFulfillment(record),
-            self.actor.id(),
+            self.actor,
             executor,
         )
         .await
@@ -540,6 +554,9 @@ mod confirmation_order_tests {
     impl ServiceConfirmationPort for RecordingPort {
         type Record = bool;
         type Purchase = ();
+        async fn authorize(&self, e: &mut dyn Executor) -> Result<()> {
+            self.record("authorize", e)
+        }
         async fn load(&self, e: &mut dyn Executor) -> Result<bool> {
             self.record("draft_version", e)?;
             Ok(false)
@@ -608,6 +625,7 @@ mod confirmation_order_tests {
         .unwrap()
     }
     const STEPS: &[&str] = &[
+        "authorize",
         "draft_version",
         "purchase_prepay",
         "allocation",
@@ -663,6 +681,7 @@ mod confirmation_order_tests {
         assert_eq!(
             *port.calls.lock().unwrap(),
             [
+                "authorize",
                 "draft_version",
                 "purchase_prepay",
                 "allocation",

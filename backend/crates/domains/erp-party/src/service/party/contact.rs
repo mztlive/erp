@@ -20,7 +20,7 @@ use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
 use crate::dto::party::{
     CreatePartyContactRequest, PARTY_CONTACT_SORT_FIELDS, PageView, PartyContactListParams, PartyContactView,
-    SortDir, UpdatePartyContactRequest, normalize_paging,
+    SortDir, UpdatePartyContactRequest, masked_last4, normalize_paging,
 };
 use crate::entity::party::{
     EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyContactUpdate, PartyId,
@@ -143,7 +143,7 @@ impl PartyContactService {
                 contact_name: row.contact_name,
                 title: row.title,
                 telephone: row.telephone,
-                mobile_masked: crate::dto::party::masked_last4(&row.mobile_last4),
+                mobile_masked: masked_last4(&row.mobile_last4),
                 email: row.email,
                 valid_from: row.valid_from,
                 valid_to: row.valid_to,
@@ -321,13 +321,14 @@ impl PartyContactService {
 mod authorization_tests {
     use erp_core::AccountKind;
     use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
 
     async fn service() -> PartyContactService {
-        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await
             .unwrap()
             .database("party_contact_authorization");

@@ -1,5 +1,6 @@
 //! 资金授权解析与范围版本守卫。
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::hash::{Hash, Hasher};
@@ -9,6 +10,7 @@ use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_finance::ports::funds_scope::FundsDataScopePort;
+use erp_finance::service::receivable::mapping::zero_amount;
 use erp_identity::{AuthorizationService, CompiledAccess};
 use erp_permissions::Permission as AccessPermission;
 use mongodb::Database;
@@ -18,6 +20,7 @@ use serde::Serialize;
 use super::repository::source_access::SourceQuery;
 use super::rows::*;
 use crate::ports::invoice_grants::InvoiceGrantReadiness;
+use crate::support::{data_scope_changed, ensure_deep_page};
 use crate::{Error, Result};
 
 /// 当前读取结果的展示元信息，权限凭证由源查询分别持有。
@@ -318,14 +321,12 @@ pub fn summarize_matched_shares(
     owner_of: impl Fn(&str) -> Option<String>,
 ) -> (BTreeMap<String, Amount>, Amount) {
     let mut grouped = BTreeMap::<String, Amount>::new();
-    let mut unassigned = erp_finance::service::receivable::mapping::zero_amount();
+    let mut unassigned = zero_amount();
     for (allocation_id, amount, order_id) in allocations {
         let owner = order_id.as_deref().and_then(&owner_of);
         match owner {
             Some(owner) => {
-                let total = grouped
-                    .remove(&owner)
-                    .unwrap_or_else(erp_finance::service::receivable::mapping::zero_amount);
+                let total = grouped.remove(&owner).unwrap_or_else(zero_amount);
                 grouped.insert(owner, total.checked_add(*amount));
             },
             None => {
@@ -349,7 +350,7 @@ pub fn summarize_matched_shares(
 /// # 错误
 /// 后续页缺少范围版本或版本为空时返回范围变化冲突错误。
 pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
-    crate::support::ensure_deep_page(page, version)
+    ensure_deep_page(page, version)
 }
 
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
@@ -366,7 +367,7 @@ pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)
-        .map_err(|error| crate::support::data_scope_changed(error.detail()))
+        .map_err(|error| data_scope_changed(error.detail()))
 }
 
 /// 把授权与关联单据版本绑定为跨页凭据；不返回内部授权集合。
@@ -381,7 +382,7 @@ pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
 /// # 错误
 /// 不返回错误。
 pub fn scope_version(context: &FundsReadContext, parts: &[String]) -> String {
-    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+    let mut fingerprint = DefaultHasher::new();
     context.scope_version.hash(&mut fingerprint);
     for part in parts {
         part.hash(&mut fingerprint);
@@ -445,11 +446,13 @@ where
 /// # 错误
 /// 不返回错误。
 pub(super) fn changed() -> Error {
-    crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
+    data_scope_changed("数据范围已变化，请从第一页刷新")
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -488,7 +491,7 @@ mod tests {
         ];
         let owners = [("so-1".to_string(), "zhang".to_string()), ("so-2".to_string(), "li".to_string())]
             .into_iter()
-            .collect::<std::collections::HashMap<_, _>>();
+            .collect::<HashMap<_, _>>();
         let (grouped, unassigned) =
             summarize_matched_shares(&allocations, |order| owners.get(order).cloned());
         assert_eq!(grouped["zhang"], "60".parse().unwrap());
@@ -511,7 +514,7 @@ mod tests {
             total: 0,
             summary: FundsSummaryView {
                 grouped: Vec::new(),
-                unassigned: erp_finance::service::receivable::mapping::zero_amount(),
+                unassigned: zero_amount(),
                 whole_total: None,
                 balance_total: None,
                 overdue_total: None,

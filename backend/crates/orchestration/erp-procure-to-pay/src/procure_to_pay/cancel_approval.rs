@@ -12,6 +12,7 @@ use erp_approval_runtime::approval_recovery::recover_approval_command;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::dto::purchase_order::CancelPurchaseOrderApprovalRequest;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -89,7 +90,7 @@ impl PurchaseOrderProcess {
                     recover_purchase_order_cancel(
                         &self.db,
                         command,
-                        self.command_access(actor, "cancel_approval"),
+                        self.command_access(actor, &purchase_order_permissions::CANCEL_APPROVAL),
                         error,
                     )
                     .await
@@ -108,7 +109,7 @@ impl PurchaseOrderProcess {
         command_cell: &OnceLock<DocumentCancelCommand>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let access = self.command_access(actor, "cancel_approval");
+        let access = self.command_access(actor, &purchase_order_permissions::CANCEL_APPROVAL);
         let mut order = access.current(id, executor).await?;
         let subject = purchase_order_subject_ref(id)?;
         let command = DocumentCancelCommand::new(

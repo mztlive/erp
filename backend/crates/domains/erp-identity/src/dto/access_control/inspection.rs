@@ -5,7 +5,7 @@ use crate::entity::access_control::scope_spec::{self, ScopeSource};
 use crate::service::access_control::resolve::AuthorizedDataScope;
 #[cfg(test)]
 use crate::service::access_control::resolve::DataScopeFacts;
-use crate::{Error, Result};
+use crate::{Error, Permission, Result};
 
 /// 管理员发起的只读访问检查。
 #[derive(Clone, Deserialize)]
@@ -29,7 +29,7 @@ impl AccessInspectionRequest {
         if self.user_id.trim().is_empty() || self.user_id.len() > 128 {
             return Err(Error::ValidationError("请选择需要检查的人员".into()));
         }
-        scope_spec::kind(&crate::Permission::parse(format!("{}:{}", self.resource, self.action))?)?;
+        scope_spec::kind(&Permission::parse(format!("{}:{}", self.resource, self.action))?)?;
         if let Some(id) = &self.object_id {
             if id.trim().is_empty() || id.len() > 128 {
                 return Err(Error::ValidationError("请选择有效业务单据".into()));

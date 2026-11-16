@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId, SalesOrderWorkingCopyId};
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SalesOrderService;
 use super::draft_working_copy::DraftStableLines;
@@ -427,6 +427,7 @@ impl SalesOrderService {
     /// * `draft` - 本次提交的完整草稿内容
     /// * `version` - 客户端期望的已有工作副本版本
     /// * `actor` - 当前认证提交人
+    /// * `executor` - 原提交事务执行器。
     ///
     /// # 返回
     /// 返回准备后的工作副本、明细和互斥持久化方案；本方法不写库。
@@ -441,12 +442,21 @@ impl SalesOrderService {
         draft: &SalesOrderDraftRequest,
         version: u64,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>, SalesOrderWorkingCopyPersistPlan)>
     {
         match active_working_copy {
             Some(working_copy) => {
-                self.prepare_existing_submission_copy(order, working_copy, stable, draft, version, actor)
-                    .await
+                self.prepare_existing_submission_copy(
+                    order,
+                    working_copy,
+                    stable,
+                    draft,
+                    version,
+                    actor,
+                    executor,
+                )
+                .await
             },
             None => {
                 let (working_copy, copy_lines) =
@@ -460,7 +470,7 @@ impl SalesOrderService {
         }
     }
 
-    /// 先按客户端版本拒绝过期副本，再读取旧行；行查询不进入调用方事务。
+    /// 先按客户端版本拒绝过期副本，再读取旧行；行查询复用调用方事务。
     async fn prepare_existing_submission_copy(
         &self,
         order: &SalesOrder,
@@ -469,6 +479,7 @@ impl SalesOrderService {
         draft: &SalesOrderDraftRequest,
         version: u64,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>, SalesOrderWorkingCopyPersistPlan)>
     {
         if !working_copy.matches_version(version) {
@@ -476,11 +487,8 @@ impl SalesOrderService {
         }
         let order_id = SalesOrderId::new(order.base.id.clone());
         let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
-        let old_lines = self
-            .db
-            .sales_order_working_copy_lines()
-            .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
-            .await?;
+        let old_lines =
+            self.db.sales_order_working_copy_lines().list_lines_by_working_copy(&copy_id, executor).await?;
         let copy_lines = build_working_copy_lines(&order_id, &copy_id, &stable.all, &draft.lines)?;
         Self::update_submission_copy(order, &mut working_copy, draft, &copy_lines, actor)?;
         let plan = SalesOrderWorkingCopyPersistPlan::ReplaceExisting {

@@ -113,7 +113,7 @@ impl SupplierSettlementService {
             difference_count: differences.len(),
         })
     }
-    /// 按责任、版本、来源和旧明细的原顺序准备刷新；相同来源不创建新快照。
+    /// 先授权结算单，再核验版本、来源和旧明细；相同来源不创建新快照。
     ///
     /// # 参数
     /// * `id` - 结算单主键。
@@ -133,8 +133,8 @@ impl SupplierSettlementService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PreparedRefresh> {
-        let mut statement = self.load_statement(id, executor).await?;
         self.access().require_action(actor, SettlementAction::Refresh, id, executor).await?;
+        let mut statement = self.load_statement(id, executor).await?;
         statement
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;

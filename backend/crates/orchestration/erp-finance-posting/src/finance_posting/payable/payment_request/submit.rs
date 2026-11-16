@@ -22,11 +22,10 @@ use erp_workflow::service::approval::execution::{PlannedWrites, PreparedExecutio
 use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 
 use super::*;
 use crate::FinancePostingPorts;
-use crate::finance_posting::command_recovery::recovered_resource;
 use crate::finance_posting::receivable::start_approval;
 
 /// 在调用方事务内创建并正式提交；回执只在审批启动完成后保存。
@@ -85,12 +84,6 @@ impl PurchasePaymentRequestProcess {
             &req.idempotency_key,
             payload,
         )?;
-        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command, &mut NoTransaction)
-            .await?
-        {
-            return self.authorized_result(&id, actor).await;
-        }
         let db = self.db.clone();
         let rbac = self.rbac.clone();
 
@@ -98,36 +91,80 @@ impl PurchasePaymentRequestProcess {
         let actor = actor.clone();
         let id = id.to_owned();
         let recovery = command.clone();
+        let response_id = id.clone();
         let result = db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    SubmitWrite { db: &db, rbac: &rbac, id: &id, req: &req, actor: &actor, command: &command }
-                        .persist(executor)
-                        .await
+                    let result = SubmitWrite {
+                        db: &db,
+                        rbac: &rbac,
+                        id: &id,
+                        req: &req,
+                        actor: &actor,
+                        command: &command,
+                    }
+                    .persist(executor)
+                    .await?;
+                    authorized_request(&db, &rbac.authorization, &result, &actor, "submit", executor).await
                 })
             })
             .await;
-        self.finish_command(result, &recovery, &response_actor).await
+        self.finish_command(result, &recovery, &response_actor, "submit", &response_id).await
     }
 
+    /// 首次事务直接返回同快照结果；失败只查证原命令，不重放业务写入。
+    /// # 参数
+    /// result 为首次事务结果，command 为原命令回执，actor 为当前认证操作人，
+    /// action 为原命令动作，id 为原付款申请主键。
+    /// # 返回
+    /// 返回同事务授权的付款申请，或已提交命令的当前授权结果。
+    /// # 错误
+    /// 查证缺失保留原错；未知提交下授权或读取失败保留原未知结果。
     pub(super) async fn finish_command(
         &self,
-        result: Result<String>,
+        result: Result<PurchasePaymentRequest>,
         command: &CommandReceipt,
         actor: &AuditActor,
+        action: &'static str,
+        id: &str,
     ) -> Result<PurchasePaymentRequest> {
-        let id = match result {
-            Ok(id) => id,
-            Err(error) => {
-                let recovered = FinanceCommandReceiptService::new(self.db.clone())
-                    .committed_resource_id(command, &mut NoTransaction)
-                    .await;
-                recovered_resource(error, recovered.map_err(Error::from))?.id
-            },
+        let original = match result {
+            Ok(request) => return Ok(request),
+            Err(error) if error.command_may_have_committed() => error,
+            Err(error) => return Err(error),
         };
-        self.authorized_result(&id, actor).await
+        let unknown = matches!(original, Error::OutcomeUnknown(_));
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let command = command.clone();
+        let id = id.to_owned();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let request =
+                        authorized_request(&db, &rbac.authorization, &id, &actor, action, executor).await?;
+                    let committed = FinanceCommandReceiptService::new(db.clone())
+                        .committed_resource_id(&command, executor)
+                        .await?;
+                    match committed {
+                        Some(committed_id) if committed_id == id => Ok(Some(request)),
+                        Some(_) => Err(Error::ConflictError("付款申请命令回执目标不一致".into())),
+                        None => Ok(None),
+                    }
+                })
+            })
+            .await;
+        match recovered {
+            Ok(Some(request)) => Ok(request),
+            Ok(None) => Err(original),
+            Err(_) if unknown => Err(original),
+            Err(error) => Err(error),
+        }
     }
 }
 
@@ -251,11 +288,11 @@ struct SubmitWrite<'a> {
 impl SubmitWrite<'_> {
     async fn persist(&self, executor: &mut dyn Executor) -> Result<String> {
         let Self { db, rbac, id, req, actor, command } = *self;
+        let mut request = authorized_request(db, &rbac.authorization, id, actor, "submit", executor).await?;
         let receipts = FinanceCommandReceiptService::new(db.clone());
         if let Some(id) = receipts.committed_resource_id(command, executor).await? {
             return Ok(id);
         }
-        let mut request = load(db, id, executor).await?;
         let sources = require_sources(db, rbac, &request, actor, "submit", executor).await?;
         ensure_version(&request, req.expected_version)?;
         let submission =

@@ -2,11 +2,11 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_core::Error as CoreError;
 use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::CommitCustomerAcceptanceRequest;
 use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceLine};
 use erp_fulfillment::service::FulfillmentService;
-use erp_fulfillment::service::document_number::next_customer_acceptance_no;
 use erp_identity::AuthorizationService;
 use erp_permissions::sales_order as sales_order_permissions;
 use erp_read_models::fulfillment_center::FulfillmentReadService;
@@ -21,6 +21,7 @@ use validator::Validate;
 use super::CustomerAcceptanceProcess;
 use super::completion::{CompletionKind, complete_acceptance};
 use super::evidence::ensure_evidence;
+use super::number::CreationNumber;
 use super::registration::register_created_customer_acceptance_document;
 use super::replay::{ReplayReader, committed, recover};
 use super::task::prepare_customer_acceptance_task_command;
@@ -59,8 +60,7 @@ impl CustomerAcceptanceProcess {
         if let Some(view) = self.committed_result(&req, actor, &command_receipt).await? {
             return Ok(view);
         }
-        let command =
-            PreparedAcceptanceCommit::new(self, req.clone(), actor, command_receipt.clone()).await?;
+        let command = PreparedAcceptanceCommit::new(self, req.clone(), actor, command_receipt.clone())?;
         let transaction_result = self
             .db
             .client()
@@ -154,22 +154,16 @@ struct PreparedAcceptanceCommit {
     actor: AuditActor,
     receipt: CommandReceipt,
     acceptance_id: CustomerAcceptanceId,
-    generated_acceptance_no: Option<String>,
     final_lines: Vec<CustomerAcceptanceLine>,
 }
 
 impl PreparedAcceptanceCommit {
-    async fn new(
+    fn new(
         process: &CustomerAcceptanceProcess,
         req: CommitCustomerAcceptanceRequest,
         actor: &AuditActor,
         receipt: CommandReceipt,
     ) -> Result<Self> {
-        let generated_acceptance_no = if req.acceptance_id.is_none() {
-            Some(next_customer_acceptance_no(&process.db).await?)
-        } else {
-            None
-        };
         let acceptance_id = req
             .acceptance_id
             .as_ref()
@@ -185,7 +179,6 @@ impl PreparedAcceptanceCommit {
             actor: actor.clone(),
             receipt,
             acceptance_id,
-            generated_acceptance_no,
             final_lines,
         })
     }
@@ -215,7 +208,7 @@ impl PreparedAcceptanceCommit {
     }
 
     async fn persist(
-        mut self,
+        self,
         existing: Option<CustomerAcceptance>,
         executor: &mut dyn Executor,
     ) -> Result<CommitCustomerAcceptanceView> {
@@ -229,11 +222,12 @@ impl PreparedAcceptanceCommit {
             executor,
         )
         .await?;
+        let generated_acceptance_no = self.allocate_number(&existing, executor).await?;
         let (mut acceptance, is_new) = FulfillmentService::prepare_customer_acceptance_commit(
             existing,
             &self.acceptance_id,
             &self.req,
-            self.generated_acceptance_no.take(),
+            generated_acceptance_no,
         )?;
         self.write(&mut acceptance, is_new, executor).await?;
         complete_acceptance(
@@ -249,6 +243,35 @@ impl PreparedAcceptanceCommit {
             .committed_customer_acceptance_view(&acceptance.base.id, &self.req.sales_order_id, executor)
             .await?)
     }
+
+    /// 新建时必须已通过任务资格，再完成创建及凭证授权后消费独立编号。
+    async fn allocate_number(
+        &self,
+        existing: &Option<CustomerAcceptance>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
+        if existing.is_some() {
+            return Ok(None);
+        }
+        let evidence = self
+            .req
+            .evidence_attachment_id
+            .as_ref()
+            .filter(|id| !id.as_ref().trim().is_empty())
+            .ok_or_else(|| CoreError::from("请上传签收单凭证（图片或 PDF）"))?;
+        let number = CreationNumber {
+            db: &self.db,
+            authorization: &self.authorization,
+            workflow: self.workflow.as_ref(),
+            sales_order_id: &self.req.sales_order_id,
+            actor: &self.actor,
+            evidence: Some(evidence),
+        }
+        .allocate(executor)
+        .await?;
+        Ok(Some(number))
+    }
+
     /// 单据注册与验收事实写入沿原命令执行器完成。
     async fn write(
         &self,
@@ -256,12 +279,8 @@ impl PreparedAcceptanceCommit {
         is_new: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let document = CustomerAcceptanceDocument {
-            db: &self.db,
-            workflow: self.workflow.as_ref(),
-            authorization: &self.authorization,
-            actor: &self.actor,
-        };
+        let document =
+            CustomerAcceptanceDocument { db: &self.db, workflow: self.workflow.as_ref(), actor: &self.actor };
         document.prepare(acceptance, is_new, executor).await?;
         FulfillmentService::persist_customer_acceptance_commit(
             &self.db,
@@ -280,29 +299,29 @@ impl PreparedAcceptanceCommit {
 struct CustomerAcceptanceDocument<'a> {
     db: &'a Database,
     workflow: &'a dyn FulfillmentWorkflow,
-    authorization: &'a Arc<AuthorizationService>,
     actor: &'a AuditActor,
 }
 
 impl CustomerAcceptanceDocument<'_> {
-    /// 先校验签收凭证，再按原顺序登记新验收单据。
+    /// 新单沿取号前已校验的资格登记；既有草稿在写入前校验最终凭证。
     async fn prepare(
         &self,
         acceptance: &CustomerAcceptance,
         is_new: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        ensure_evidence(self.db, self.workflow, acceptance.require_evidence()?, self.actor, executor).await?;
         if is_new {
             register_created_customer_acceptance_document(
                 self.db,
                 self.workflow,
-                self.authorization,
                 acceptance,
                 self.actor,
                 executor,
             )
             .await?;
+        } else {
+            ensure_evidence(self.db, self.workflow, acceptance.require_evidence()?, self.actor, executor)
+                .await?;
         }
         Ok(())
     }

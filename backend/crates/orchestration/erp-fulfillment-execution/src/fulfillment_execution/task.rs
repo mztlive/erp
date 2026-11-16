@@ -162,13 +162,32 @@ pub async fn ensure_fulfillment_task(
     creation::ensure(db, authorization, object, executor).await
 }
 
+/// 在写命令读取保护对象前核验当前任务入口。
+/// # 参数
+/// db 为业务数据库，authorization 为共享授权服务，object_type 与 object_id 为原业务对象身份，
+/// actor 为当前认证操作人，executor 为原命令事务执行器。
+/// # 返回
+/// 当前账号仍具备开放任务的完整办理资格时成功。
+/// # 错误
+/// 任务缺失、重复、资格不足或事实读取失败时返回错误。
+pub(crate) async fn require_fulfillment_entry(
+    db: &mongodb::Database,
+    authorization: &Arc<AuthorizationService>,
+    object_type: &str,
+    object_id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    command::require_entry(db, authorization, object_type, object_id, actor, executor).await
+}
+
 /// 在领域草稿更新事务内记录当前责任人的处理活动。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `authorization` - 进程共享授权服务。
 /// * `object` - 已更新且冻结责任身份的强类型履约对象
-/// * `actor_id` - 当前操作人
+/// * `actor` - 已认证的真实操作人
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
@@ -180,10 +199,10 @@ pub(crate) async fn record_fulfillment_activity(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
-    actor_id: &str,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    command::record(db, authorization, object, actor_id, executor).await
+    command::record(db, authorization, object, actor, executor).await
 }
 
 /// 在强类型履约命令事务内完成对应执行任务。
@@ -192,7 +211,7 @@ pub(crate) async fn record_fulfillment_activity(
 /// * `db` - MongoDB 数据库
 /// * `authorization` - 进程共享授权服务。
 /// * `object` - 已形成正式事实且冻结责任身份的强类型履约对象
-/// * `actor_id` - 当前操作人
+/// * `actor` - 已认证的真实操作人
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
@@ -204,10 +223,10 @@ pub async fn complete_fulfillment_task(
     db: &mongodb::Database,
     authorization: &Arc<AuthorizationService>,
     object: FulfillmentTaskObject<'_>,
-    actor_id: &str,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    command::complete(db, authorization, object, actor_id, executor).await
+    command::complete(db, authorization, object, actor, executor).await
 }
 
 /// 校验开放任务与强类型履约对象冻结的责任身份完全一致。

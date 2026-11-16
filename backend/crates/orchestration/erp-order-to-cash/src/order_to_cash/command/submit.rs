@@ -21,29 +21,25 @@ use erp_sales::service::sales_order::command::identity::{
 use erp_sales::service::sales_order::mapper::{build_submission, build_submission_lines, submission_view};
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::entity::document_registry::{
-    DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionType,
-};
+use erp_workflow::entity::document_registry::{WorkflowAction, WorkflowActionData, WorkflowActionType};
 use erp_workflow::service::approval::execution::{PreparedExecution, command_recovery_delay, prepare_start};
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
-use mongodb::Database;
-use persistence_core::{Executor, ReadExecutor, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use super::super::adapter::{
     SalesApprovalPorts, SalesOrderStartCommand, build_sales_order_snapshot,
     execute_sales_order_domain_action, reject_legacy_card_sales_decision, reject_legacy_card_sales_work_item,
-    require_frozen_binding, sales_approval_ports, sales_order_object_readable,
-    sales_order_responsible_org_id, sales_order_start_command,
+    require_frozen_binding, sales_approval_ports, sales_order_responsible_org_id, sales_order_start_command,
 };
 use super::super::adapters::catalog::CatalogQualificationAdapter;
 use super::super::authorization::SalesCommandAccess;
 use super::super::start_approval::{
-    ReplaySalesOrderStartInput, SalesOrderStartInput, SalesOrderStartPersistInput,
-    SalesOrderWorkingCopyPersistPlan, build_sales_order_start_input, load_bound_definition_graph,
-    load_start_receipt, persist_sales_order_start, replay_sales_order_start_with_executor,
+    SalesOrderStartInput, SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
+    build_sales_order_start_input, load_bound_definition_graph_with_executor, load_start_receipt,
+    persist_sales_order_start,
 };
 use crate::order_to_cash::command_event::{
     SalesCommandEvent, finish_receipt_recovery, replay_submission_with_executor,
@@ -52,6 +48,7 @@ use crate::order_to_cash::subject_ref_for_sales_business;
 use crate::{Error, Result};
 
 /// 原提交命令的幂等身份，在预读和实际提交之间保持一致。
+#[derive(Clone)]
 struct SubmissionIdentity {
     idempotency_key: String,
     audit_id: String,
@@ -72,27 +69,6 @@ impl SubmissionIdentity {
             idempotency_key,
         })
     }
-}
-
-/// 销售提交启动恢复入参。
-struct RecoverSalesSubmissionStartInput<'a> {
-    resubmission_reason: Option<&'a str>,
-    /// 销售单主键。
-    sales_order_id: &'a str,
-    /// 提交时冻结的单据类型。
-    document_type: DocumentType,
-    /// 提交时冻结的审批主题版本。
-    subject_version: u32,
-    /// 提交幂等键。
-    idempotency_key: &'a str,
-    /// 提交人。
-    actor: &'a AuditActor,
-    /// 提交审计收据 ID。
-    audit_id: &'a str,
-    /// 命令载荷指纹。
-    fingerprint: &'a str,
-    /// 触发恢复的原始错误。
-    original_error: Error,
 }
 
 /// 销售单提交并启动审批所需的单据集合。
@@ -202,42 +178,63 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SubmissionView> {
         req.validate()?;
-        let access = self.command_access(actor, sales_order_permissions::SUBMIT);
-        let authorized_order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, &mut ReadExecutor::default())
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))?;
         let identity = SubmissionIdentity::new(id, &req, actor)?;
-        if let Some(existing) = self
-            .replay_sales_submission(&identity.audit_id, &identity.fingerprint, &identity.key_hash, id, actor)
-            .await?
-        {
-            return Ok(existing);
-        }
-        let this = self.clone();
-        let read_access = access.clone();
-        let read_actor = actor.clone();
-        let request = req.clone();
-        let draft = self
+        let process = self.clone();
+        let command = identity.clone();
+        let request_id = id.to_owned();
+        let request_actor = actor.clone();
+        let result = self
             .db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    this.prepare_sales_edit(
-                        &read_access,
-                        authorized_order,
-                        (request.contract_id, request.customer_id, request.draft),
-                        &read_actor,
-                        true,
-                        executor,
-                    )
-                    .await
+                    process.submit_command(&request_id, req, &request_actor, command, executor).await
                 })
             })
+            .await;
+        match result {
+            Err(error) if error.command_may_have_committed() => {
+                self.recover_sales_submission(id, actor, &identity, error).await
+            },
+            result => result,
+        }
+    }
+
+    /// 先授权读取原单和回执，再在同一事务准备并保存提交。
+    async fn submit_command(
+        &self,
+        id: &str,
+        req: SubmitSalesOrderRequest,
+        actor: &AuditActor,
+        identity: SubmissionIdentity,
+        executor: &mut dyn Executor,
+    ) -> Result<SubmissionView> {
+        let access = self.command_access(actor, sales_order_permissions::SUBMIT);
+        let order = access.current(id, executor).await?;
+        if let Some(view) = replay_submission_with_executor(
+            &self.db,
+            &identity.audit_id,
+            (&identity.fingerprint, &identity.key_hash),
+            id,
+            actor.id(),
+            &access,
+            executor,
+        )
+        .await?
+        {
+            return Ok(view);
+        }
+        let draft = self
+            .prepare_sales_edit(
+                &access,
+                order,
+                (req.contract_id.clone(), req.customer_id.clone(), req.draft.clone()),
+                actor,
+                true,
+                executor,
+            )
             .await?;
-        self.submit_prepared_draft(id, req, actor, draft, identity).await
+        self.submit_prepared_draft(id, req, actor, draft, identity, executor).await
     }
 
     /// 原读取事务确认关系后，完成目录预检、冻结副本及现有提交写入流程。
@@ -248,16 +245,18 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
         draft: (SalesOrder, SalesOrderDraftRequest),
         identity: SubmissionIdentity,
+        executor: &mut dyn Executor,
     ) -> Result<SubmissionView> {
         let resubmission_reason = req.resubmission_reason.clone();
         let PreparedSubmissionCopy { order, mut working_copy, copy_lines, working_copy_plan } =
-            self.prepare_submission_copy(req, actor, draft).await?;
-        if let Some(existing) = self.submission_for_copy(&working_copy).await? {
+            self.prepare_submission_copy(req, actor, draft, executor).await?;
+        if let Some(existing) = self.submission_for_copy(&working_copy, executor).await? {
             return Ok(existing);
         }
-        self.sales().ensure_sellable_working_copy_lines(&copy_lines, &self.catalog()).await?;
-        self.ensure_procurement_responsibility_before_submit(&order, &copy_lines).await?;
-        let submission_no = self.next_submission_no(&order).await?;
+        let sellable = SalesOrderService::sellable_working_copy_refs(&copy_lines)?;
+        self.sales().ensure_sellable_refs(&sellable, &self.catalog(), executor).await?;
+        self.ensure_procurement_responsibility_before_submit(&order, &copy_lines, executor).await?;
+        let submission_no = self.next_submission_no(&order, executor).await?;
         let submission = build_submission(&working_copy, &copy_lines, submission_no, actor)?;
         let submission_lines = build_submission_lines(&submission, &copy_lines)?;
         working_copy.submit()?;
@@ -276,17 +275,18 @@ impl SalesOrderCommandProcess {
             &identity.idempotency_key,
             identity.audit_id,
             identity.fingerprint,
+            executor,
         )
         .await
     }
 
     /// 从最新冻结提交递增序号，保留原仓储读取及溢出校验。
-    async fn next_submission_no(&self, order: &SalesOrder) -> Result<u32> {
+    async fn next_submission_no(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<u32> {
         let order_id = SalesOrderId::new(order.base.id.clone());
         let latest = self
             .db
             .sales_order_submissions()
-            .find_latest_by_order(&order_id, &mut ReadExecutor::default())
+            .find_latest_by_order(&order_id, executor)
             .await?
             .map(|submission| submission.submission_no)
             .unwrap_or(0);
@@ -299,23 +299,34 @@ impl SalesOrderCommandProcess {
         req: SubmitSalesOrderRequest,
         actor: &AuditActor,
         draft: (SalesOrder, SalesOrderDraftRequest),
+        executor: &mut dyn Executor,
     ) -> Result<PreparedSubmissionCopy> {
         let (order, draft) = draft;
-        self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
+        let refs = draft
+            .lines
+            .iter()
+            .filter_map(|line| line.goods.as_ref())
+            .map(|goods| (goods.sku_id.to_string(), goods.sku_revision_id.to_string()))
+            .collect::<Vec<_>>();
+        self.sales().ensure_sellable_refs(&refs, &self.catalog(), executor).await?;
         let order_id = SalesOrderId::new(order.base.id.clone());
         let active_working_copy = self
             .db
             .sales_order_working_copies()
-            .find_active_by_order_and_purpose(
-                &order_id,
-                WorkingPurpose::FirstSubmission,
-                &mut ReadExecutor::default(),
-            )
+            .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, executor)
             .await?;
-        let stable = self.sales().collect_stable_lines_for_draft(&order_id, &draft.lines).await?;
+        let stable = self.sales().collect_stable_lines_for_draft(&order_id, &draft.lines, executor).await?;
         let (working_copy, copy_lines, working_copy_plan) = self
             .sales()
-            .prepare_submission_copy(&order, active_working_copy, stable, &draft, req.version, actor)
+            .prepare_submission_copy(
+                &order,
+                active_working_copy,
+                stable,
+                &draft,
+                req.version,
+                actor,
+                executor,
+            )
             .await?;
         Ok(PreparedSubmissionCopy { order, working_copy, copy_lines, working_copy_plan })
     }
@@ -324,14 +335,12 @@ impl SalesOrderCommandProcess {
     async fn submission_for_copy(
         &self,
         working_copy: &SalesOrderWorkingCopy,
+        executor: &mut dyn Executor,
     ) -> Result<Option<SubmissionView>> {
         let existing = self
             .db
             .sales_order_submissions()
-            .find_by_working_copy(
-                &SalesOrderWorkingCopyId::new(working_copy.base.id.clone()),
-                &mut ReadExecutor::default(),
-            )
+            .find_by_working_copy(&SalesOrderWorkingCopyId::new(working_copy.base.id.clone()), executor)
             .await?;
         let Some(existing) = existing else {
             return Ok(None);
@@ -340,7 +349,7 @@ impl SalesOrderCommandProcess {
         let existing_lines = self
             .db
             .sales_order_submission_lines()
-            .list_lines_by_submissions(&[existing_id], &mut ReadExecutor::default())
+            .list_lines_by_submissions(&[existing_id], executor)
             .await?;
         Ok(Some(submission_view(existing, existing_lines)))
     }
@@ -369,31 +378,12 @@ impl SalesOrderCommandProcess {
         idempotency_key: &str,
         audit_id: String,
         fingerprint: String,
+        executor: &mut dyn Executor,
     ) -> Result<SubmissionView> {
-        let id = start.id;
-        let PreparedSalesSubmission { access, expected_order_version, input } =
-            self.prepare_sales_submission(start, actor, idempotency_key, &audit_id, &fingerprint).await?;
-        let document_type = input.document_type;
-        let subject_version = input.submission.submission_no;
-        let resubmission_reason = input.resubmission_reason.clone();
-        match persist_sales_order_start(&self.db, access, expected_order_version, input).await {
-            Ok(view) => Ok(view),
-            Err(error) if error.command_may_have_committed() => {
-                self.recover_sales_submission_start(RecoverSalesSubmissionStartInput {
-                    resubmission_reason: resubmission_reason.as_deref(),
-                    sales_order_id: id,
-                    document_type,
-                    subject_version,
-                    idempotency_key,
-                    actor,
-                    audit_id: &audit_id,
-                    fingerprint: &fingerprint,
-                    original_error: error,
-                })
-                .await
-            },
-            Err(error) => Err(error),
-        }
+        let PreparedSalesSubmission { access, expected_order_version, input } = self
+            .prepare_sales_submission(start, actor, idempotency_key, &audit_id, &fingerprint, executor)
+            .await?;
+        persist_sales_order_start(&self.db, access, expected_order_version, input, executor).await
     }
 
     /// 按既有顺序准备领域状态、审批输入、审计和商品引用，不在此开启事务。
@@ -404,9 +394,11 @@ impl SalesOrderCommandProcess {
         idempotency_key: &str,
         audit_id: &str,
         fingerprint: &str,
+        executor: &mut dyn Executor,
     ) -> Result<PreparedSalesSubmission> {
-        let context = self.prepare_submission_domain(&mut start, actor, idempotency_key).await?;
-        let prepared = self.prepare_submission_runtime(&start, &context, actor, idempotency_key).await?;
+        let context = self.prepare_submission_domain(&mut start, actor, idempotency_key, executor).await?;
+        let prepared =
+            self.prepare_submission_runtime(&start, &context, actor, idempotency_key, executor).await?;
         let workflow_action = submission_workflow_action(start.id, actor, start.resubmission_reason.clone())?;
         let audit = submission_event(
             audit_id.to_string(),
@@ -421,7 +413,7 @@ impl SalesOrderCommandProcess {
             .ensure_sellable_refs(
                 &sellable_refs,
                 &CatalogQualificationAdapter::new(self.services.catalog.clone()),
-                &mut ReadExecutor::default(),
+                executor,
             )
             .await?;
         Ok(PreparedSalesSubmission {
@@ -454,15 +446,14 @@ impl SalesOrderCommandProcess {
         start: &mut ApprovalSubmissionStart<'_>,
         actor: &AuditActor,
         idempotency_key: &str,
+        executor: &mut dyn Executor,
     ) -> Result<SalesSubmissionApprovalContext> {
         let access = self.command_access(actor, sales_order_permissions::SUBMIT);
         let expected_order_version = start.order.base.version;
         let ports = sales_approval_ports(start.order.business_type)?;
         let subject = subject_ref_for_sales_business(start.order.business_type, start.id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let binding = find_approval_binding(&self.db, start.id, &mut ReadExecutor::default())
-            .await
-            .map_err(Error::from)?;
+        let binding = find_approval_binding(&self.db, start.id, executor).await.map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         execute_sales_order_domain_action(&mut start.order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
@@ -502,14 +493,16 @@ impl SalesOrderCommandProcess {
         context: &SalesSubmissionApprovalContext,
         actor: &AuditActor,
         idempotency_key: &str,
+        executor: &mut dyn Executor,
     ) -> Result<PreparedExecution> {
-        let graph = load_bound_definition_graph(&self.db, &context.binding).await?;
+        let graph = load_bound_definition_graph_with_executor(&self.db, &context.binding, executor).await?;
         let receipt = load_start_receipt(
             &self.db,
             context.ports.document_type,
             &context.subject,
             start.submission.submission_no,
             idempotency_key,
+            executor,
         )
         .await?;
         let graph = resolve_start_approvers(
@@ -518,7 +511,7 @@ impl SalesOrderCommandProcess {
             graph,
             actor.id(),
             receipt.as_ref(),
-            &mut ReadExecutor::default(),
+            executor,
         )
         .await?;
         let input = build_sales_order_start_input(SalesOrderStartInput {
@@ -572,83 +565,37 @@ impl SalesOrderCommandProcess {
             .await
     }
 
-    /// 每次恢复使用独立只读事务，先验证启动收据，再回读精确提交回执。
-    async fn recover_submission_attempt(
+    /// 未知提交只查证同一完整命令，不重跑提交准备或写入。
+    async fn recover_sales_submission(
         &self,
-        input: &RecoverSalesSubmissionStartInput<'_>,
-    ) -> Result<Option<SubmissionView>> {
-        let db = self.db.clone();
-        let recovery = SalesStartRecovery {
-            resubmission_reason: input.resubmission_reason.map(str::to_string),
-            order_id: input.sales_order_id.to_string(),
-            idempotency_key: input.idempotency_key.to_string(),
-            actor_id: input.actor.id().to_string(),
-            document_type: input.document_type,
-            subject_version: input.subject_version,
-        };
-        let access = self.command_access(input.actor, sales_order_permissions::SUBMIT);
-        let started = self
-            .db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move { recovery.replay(&db, &access, executor).await })
-            })
-            .await?;
-        if started.is_none() {
-            return Ok(None);
-        }
-        self.replay_sales_submission(
-            input.audit_id,
-            input.fingerprint,
-            &CommandFingerprint::from_parts([input.idempotency_key.trim().to_string()]),
-            input.sales_order_id,
-            input.actor,
-        )
-        .await
-    }
-
-    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
-    ///
-    /// # 参数
-    /// * `input` - 销售提交恢复所需的单据类型、主题版本与审计身份
-    ///
-    /// # 返回
-    /// 回读到已提交结果时返回提交视图；否则返回原始错误。
-    ///
-    /// # 错误
-    /// 有界回读仍无法确认提交结果时返回原始错误，或传播不可恢复的冲突。
-    ///
-    /// # 关键业务约束
-    /// 仅在 `command_may_have_committed` 场景进入；不得在确认未提交时吞掉错误。
-    async fn recover_sales_submission_start(
-        &self,
-        input: RecoverSalesSubmissionStartInput<'_>,
+        id: &str,
+        actor: &AuditActor,
+        identity: &SubmissionIdentity,
+        original_error: Error,
     ) -> Result<SubmissionView> {
         const RECOVERY_ATTEMPTS: usize = 8;
         for attempt in 0..RECOVERY_ATTEMPTS {
-            let recovered = self.recover_submission_attempt(&input).await;
-            match recovered {
+            match self
+                .replay_sales_submission(
+                    &identity.audit_id,
+                    &identity.fingerprint,
+                    &identity.key_hash,
+                    id,
+                    actor,
+                )
+                .await
+            {
                 Ok(Some(view)) => return Ok(view),
                 Ok(None) => {},
                 Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return finish_receipt_recovery(input.original_error, Err(error)),
+                Err(error) => return finish_receipt_recovery(original_error, Err(error)),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
                 tokio::time::sleep(command_recovery_delay(attempt)).await;
             }
         }
-        Err(input.original_error)
+        Err(original_error)
     }
-}
-
-/// 在原恢复读取位置加载并验证冻结审批绑定。
-async fn load_frozen_binding(
-    db: &Database,
-    order_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalDefinitionBinding> {
-    let binding = find_approval_binding(db, order_id, executor).await.map_err(Error::from)?;
-    Ok(require_frozen_binding(binding.as_ref())?.clone())
 }
 
 /// 构造原销售单与精确提交快照关联的单个成功事件。
@@ -691,50 +638,6 @@ fn submission_workflow_action(
             comment: resubmission_reason,
         },
     )?)
-}
-
-/// 单次恢复所查证的冻结启动身份。
-struct SalesStartRecovery {
-    resubmission_reason: Option<String>,
-    order_id: String,
-    idempotency_key: String,
-    actor_id: String,
-    document_type: DocumentType,
-    subject_version: u32,
-}
-
-impl SalesStartRecovery {
-    async fn replay(
-        &self,
-        db: &Database,
-        access: &SalesCommandAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<String>> {
-        let order = access.current(&self.order_id, executor).await?;
-        let current_ports = sales_approval_ports(order.business_type)?;
-        if current_ports.document_type != self.document_type {
-            return Err(Error::ConflictError("销售单业务类型在提交恢复期间已变化".to_string()));
-        }
-        let organization_id = sales_order_responsible_org_id(&order)?;
-        let _ = sales_order_object_readable(&organization_id, &self.actor_id)?;
-        let binding = load_frozen_binding(db, &self.order_id, executor).await?;
-        let subject = subject_ref_for_sales_business(order.business_type, &self.order_id)
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-        replay_sales_order_start_with_executor(
-            db,
-            ReplaySalesOrderStartInput {
-                resubmission_reason: self.resubmission_reason.as_deref(),
-                document_type: self.document_type,
-                subject: &subject,
-                subject_version: self.subject_version,
-                idempotency_key: &self.idempotency_key,
-                binding: &binding,
-                actor_id: &self.actor_id,
-            },
-            executor,
-        )
-        .await
-    }
 }
 
 #[cfg(test)]

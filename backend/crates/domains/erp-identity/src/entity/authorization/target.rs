@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 
 use super::{FactValue, ResourceTargets};
+use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::{Error, Permission, Result};
 
 macro_rules! access_key {
@@ -78,6 +79,22 @@ pub struct AccessContext {
     pub as_of: Instant,
 }
 
+impl AccessContext {
+    /// 从本权限的固定规格取得历史事实装载许可，不产生授权结果。
+    /// # 参数
+    /// 无；使用当前上下文绑定的权限。
+    /// # 返回
+    /// 范围动作返回其 allows_history；其他已接入动作返回 false。
+    /// # 错误
+    /// 未接入权限或范围规格缺失时返回校验错误。
+    pub fn allows_history(&self) -> Result<bool> {
+        match scope_spec::kind(&self.permission)? {
+            ActionKind::Scope => Ok(scope_spec::require_scope(&self.permission)?.allows_history()),
+            _ => Ok(false),
+        }
+    }
+}
+
 /// 根对象或来源对象的可信事实；不能从 HTTP 请求直接反序列化。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ObjectFacts {
@@ -118,4 +135,36 @@ pub enum RelationMatch {
     Any,
     AllNonEmpty,
     ExactlyOne,
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_permissions::{internal, purchase_order};
+
+    use super::*;
+
+    #[test]
+    fn history_loading_follows_the_registered_permission_specification() {
+        let mut context = AccessContext {
+            actor: AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin),
+            permission: purchase_order::LIST,
+            resource: "purchase_order".into(),
+            model: None,
+            as_of: Instant::from_unix_secs(1),
+        };
+        for (permission, expected) in [
+            (purchase_order::LIST, true),
+            (purchase_order::DETAIL, true),
+            (purchase_order::SAVE_DRAFT, false),
+            (internal::PAYMENT_REQUEST_CANDIDATES, false),
+            (internal::PURCHASE_PORTAL_IMPACT_READ, false),
+            (internal::WORK_ITEM_EXECUTE, false),
+        ] {
+            context.permission = permission;
+            assert_eq!(context.allows_history().unwrap(), expected, "{}", context.permission);
+        }
+        context.permission = Permission::parse("unknown:list").unwrap();
+        assert!(matches!(context.allows_history(), Err(Error::ValidationError(_))));
+    }
 }

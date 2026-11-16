@@ -5,11 +5,13 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::{PartyBankAccountId, PayableAccountId};
 use erp_finance::repository::PayableExt;
+use erp_finance::service::payable::prepare_payable_account;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_party::SensitiveDataCodec;
 use erp_permissions::payable;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_read_models::finance::payable::PayableReadService;
+use erp_workflow::service::work_item::expected_task_version;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
@@ -46,8 +48,7 @@ impl PayableProcess {
         sensitive_data: &SensitiveDataCodec,
     ) -> Result<PaymentRecipientRevealView> {
         req.validate()?;
-        let expected_task_version =
-            erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
+        let expected_task_version = expected_task_version(&req.expected_task_version)?;
         let account_id = PayableAccountId::new(id);
         let (_, account) = payment_task::authorize_payment_execution(
             &self.db,
@@ -107,7 +108,7 @@ impl PayableProcess {
     ) -> Result<PayableAccountView> {
         req.validate()?;
         let source_id = req.source_document_id.clone();
-        let (account, entry) = erp_finance::service::payable::prepare_payable_account(req, actor.id())?;
+        let (account, entry) = prepare_payable_account(req, actor.id())?;
         let account_id = PayableAccountId::new(account.base.id.clone());
         let audit = actor.clone().resource_log(
             "payable_account.create",

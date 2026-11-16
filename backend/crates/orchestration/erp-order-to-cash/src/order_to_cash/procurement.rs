@@ -4,6 +4,7 @@ use erp_procure_to_pay::procure_to_pay::responsibility::{ProcurementResponsibili
 use erp_sales::entity::sales_order::{
     BusinessType, SalesOrder, SalesOrderSubmissionLine, SalesOrderWorkingCopyLine,
 };
+use persistence_core::Executor;
 
 use super::SalesOrderCommandProcess;
 use crate::Result;
@@ -14,6 +15,7 @@ impl SalesOrderCommandProcess {
     /// # 参数
     /// * `order` - 待提交销售单
     /// * `lines` - 当前工作副本行
+    /// * `executor` - 原销售提交执行器。
     ///
     /// # 返回
     /// 非实物服务单直接通过；全部行解析到合格具体负责人时返回 `Ok(())`。
@@ -24,6 +26,7 @@ impl SalesOrderCommandProcess {
         &self,
         order: &SalesOrder,
         lines: &[SalesOrderWorkingCopyLine],
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         if order.business_type != BusinessType::GoodsService {
             return Ok(());
@@ -33,7 +36,7 @@ impl SalesOrderCommandProcess {
             .map(resolution_input)
             .collect::<Vec<_>>();
         ProcurementResponsibilityProcess::new(self.db.clone(), self.authorization.clone())
-            .resolve_strict(&inputs)
+            .strict_plan(&inputs, executor)
             .await?;
         Ok(())
     }

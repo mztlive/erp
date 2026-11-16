@@ -265,7 +265,7 @@ pub async fn impacts(
 ) -> Result<Value> {
     let service = PortalOfferingImpactReadService::new(
         state.application().db(),
-        purchase_access(state.application().db(), state.application().rbac()),
+        purchase_access(state.application().db(), state.application().authorization().into()),
         Arc::new(PortalReadAuthorization::new(
             state.application().db(),
             state.application().rbac(),

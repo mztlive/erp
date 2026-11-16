@@ -1,18 +1,28 @@
 //! 选品查询：列表、详情、预览与公开页。
 
+use std::collections::BTreeSet;
+use std::mem;
+
+use application_core::{page_or_default, page_size_or_default};
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SalesSelectionService;
 use crate::dto::sales_selection::{
     PublicChoiceView, SalesSelectionBookletListParams, SalesSelectionBookletPage, SalesSelectionBookletView,
-    SalesSelectionProposalView, SalesSelectionSessionView,
+    SalesSelectionProposalListParams, SalesSelectionProposalPage, SalesSelectionProposalView,
+    SalesSelectionSessionView,
 };
-use crate::entity::sales_selection::{SalesSelectionBooklet, SalesSelectionProposal};
+use crate::entity::sales_selection::{
+    SalesSelectionBooklet, SalesSelectionPrepareTask, SalesSelectionProposal,
+};
 use crate::repository::SalesSelectionExt;
 use crate::repository::prelude::*;
-use crate::repository::sales_selection::{SelectionBookFilter, validate_book_sort};
+use crate::repository::sales_selection::{
+    SalesSelectionDomainRepository, SelectionBookFilter, SelectionProposalFilter, SelectionReadScope,
+    validate_book_sort,
+};
 use crate::{Error, Result};
 
 impl SalesSelectionService {
@@ -32,12 +42,11 @@ impl SalesSelectionService {
     /// 查询失败。
     pub async fn proposal_list_with(
         &self,
-        params: &crate::dto::sales_selection::SalesSelectionProposalListParams,
-        authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
+        params: &SalesSelectionProposalListParams,
+        authorized_scope: &SelectionReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<crate::dto::sales_selection::SalesSelectionProposalPage> {
-        use application_core::{page_or_default, page_size_or_default};
-        let filter = crate::repository::sales_selection::SelectionProposalFilter {
+    ) -> Result<SalesSelectionProposalPage> {
+        let filter = SelectionProposalFilter {
             owner_user_ids: params.owner_user_ids.clone(),
             org_unit_ids: params.org_unit_ids.clone(),
             customer_id: params.customer_id.clone(),
@@ -45,10 +54,10 @@ impl SalesSelectionService {
             page: page_or_default(params.page),
             page_size: page_size_or_default(params.page_size),
         };
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
+        let domain = SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_proposals(&filter, authorized_scope, executor).await?;
         authorized_scope.ensure_current(Database::SALES_SELECTION_PROPOSALS, executor)?;
-        Ok(crate::dto::sales_selection::SalesSelectionProposalPage {
+        Ok(SalesSelectionProposalPage {
             items: result.items.iter().map(Self::proposal_list_item).collect(),
             total: result.total,
             page: filter.page,
@@ -73,11 +82,11 @@ impl SalesSelectionService {
     pub async fn list_booklets_with(
         &self,
         params: &SalesSelectionBookletListParams,
-        authorized_scope: &crate::repository::sales_selection::SelectionReadScope,
+        authorized_scope: &SelectionReadScope,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletPage> {
         let filter = booklet_filter(params)?;
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
+        let domain = SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_booklets(&filter, authorized_scope, executor).await?;
         let ids = result.items.iter().map(|book| book.base.id.clone()).collect::<Vec<_>>();
         let summaries = domain.booklet_summaries(&ids, executor).await?;
@@ -102,22 +111,6 @@ impl SalesSelectionService {
         })
     }
 
-    /// 读取选品册详情。
-    ///
-    /// # 参数
-    /// * `id` - 选品册身份
-    ///
-    /// # 返回
-    /// 返回管理端详情，不含令牌明文。
-    ///
-    /// # 错误
-    /// 不存在时返回未找到。
-    pub async fn booklet_detail(&self, id: &str) -> Result<SalesSelectionBookletView> {
-        let mut executor = NoTransaction;
-        let booklet = self.load_booklet(id, &mut executor).await?;
-        self.detail_view(&booklet, None, &mut executor).await
-    }
-
     /// 组装详情视图。
     ///
     /// 组合层授权快照与写命令经本入口复用同一映射；公开页不走本入口。
@@ -139,7 +132,7 @@ impl SalesSelectionService {
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
         let batch = batch_id.as_deref().or(booklet.current_batch_id.as_deref());
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
+        let domain = SalesSelectionDomainRepository::new(&self.db);
         let items = if let Some(batch) = batch {
             domain.list_effective_items(&booklet.base.id, batch, executor).await?
         } else {
@@ -171,7 +164,7 @@ impl SalesSelectionService {
         &self,
         booklet: &SalesSelectionBooklet,
         executor: &mut dyn Executor,
-    ) -> Result<Option<crate::entity::sales_selection::SalesSelectionPrepareTask>> {
+    ) -> Result<Option<SalesSelectionPrepareTask>> {
         let Some(task_id) = booklet.active_task_id.as_deref() else {
             let tasks = self
                 .db
@@ -181,33 +174,6 @@ impl SalesSelectionService {
             return Ok(merge_task_reports(tasks));
         };
         Ok(self.db.sales_selection_prepare_tasks().find_by_id(task_id, executor).await?)
-    }
-
-    /// 读取方案详情。
-    ///
-    /// # 参数
-    /// * `id` - 方案身份；若未命中则按选品册身份再查一次
-    ///
-    /// # 返回
-    /// 返回内部方案视图。
-    ///
-    /// # 错误
-    /// 尚无方案时返回未找到。
-    pub async fn proposal_detail(&self, id: &str) -> Result<SalesSelectionProposalView> {
-        let mut executor = NoTransaction;
-        let proposal = self.db.sales_selection_proposals().find_by_id(id, &mut executor).await?;
-        let proposal = match proposal {
-            Some(item) => item,
-            None => {
-                let domain =
-                    crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-                domain
-                    .find_proposal_by_booklet(id, &mut executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("销售方案不存在".into()))?
-            },
-        };
-        self.proposal_view_of(&proposal, &mut executor).await
     }
 
     /// 读取内部会话快照。
@@ -229,21 +195,6 @@ impl SalesSelectionService {
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionSessionView> {
         self.session_view(booklet_id, executor).await
-    }
-
-    /// 读取内部会话快照。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    ///
-    /// # 返回
-    /// 返回当前会话选择。
-    ///
-    /// # 错误
-    /// 无会话时返回未找到。
-    pub async fn admin_session(&self, booklet_id: &str) -> Result<SalesSelectionSessionView> {
-        let mut executor = NoTransaction;
-        self.session_view(booklet_id, &mut executor).await
     }
 
     /// 组装内部会话视图。
@@ -326,7 +277,6 @@ impl SalesSelectionService {
 /// # 错误
 /// 排序字段非法时拒绝。
 fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionBookFilter> {
-    use application_core::{page_or_default, page_size_or_default};
     let (sort_by, ascending) = validate_book_sort(None, false)?;
     Ok(SelectionBookFilter {
         owner_user_ids: params.owner_user_ids.clone(),
@@ -344,14 +294,12 @@ fn booklet_filter(params: &SalesSelectionBookletListParams) -> Result<SelectionB
 }
 
 /// 当前批次按每档最近成功任务汇总报告，按档重生成不丢失其他档结果。
-fn merge_task_reports(
-    mut tasks: Vec<crate::entity::sales_selection::SalesSelectionPrepareTask>,
-) -> Option<crate::entity::sales_selection::SalesSelectionPrepareTask> {
+fn merge_task_reports(mut tasks: Vec<SalesSelectionPrepareTask>) -> Option<SalesSelectionPrepareTask> {
     tasks.sort_by(|a, b| b.finished_at.cmp(&a.finished_at).then_with(|| b.base.id.cmp(&a.base.id)));
     let mut tasks = tasks.into_iter();
     let mut latest = tasks.next()?;
-    let mut seen = std::collections::BTreeSet::new();
-    latest.tier_reports = std::mem::take(&mut latest.tier_reports)
+    let mut seen = BTreeSet::new();
+    latest.tier_reports = mem::take(&mut latest.tier_reports)
         .into_iter()
         .chain(tasks.flat_map(|task| task.tier_reports))
         .filter(|report| seen.insert(report.tier_id.clone()))

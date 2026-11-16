@@ -45,7 +45,7 @@ pub(super) fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)>
             .map(|permission| (permission, connection_mapping.clone())),
     );
     for (resource, permissions) in [
-        ("supplier_offering", vec![supplier_offering::LIST]),
+        ("supplier_offering", vec![supplier_offering::LIST, supplier_offering::DETAIL]),
         (
             "supplier_fulfillment_order",
             vec![

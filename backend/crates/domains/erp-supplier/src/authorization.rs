@@ -9,10 +9,14 @@ use erp_identity::entity::authorization::{
     QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
-use erp_identity::{AuthorizationService, CompiledAccess, ResourceTargets};
+use erp_identity::{
+    AuthorizationService, CompiledAccess, Error as IdentityError, ResourceTargets, Result as IdentityResult,
+};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, mongo_ops};
+
+use crate::repository::SupplierExt;
 
 /// 身份域编译的当前阶段凭证；不含可由业务组合的权限条款。
 #[derive(Clone)]
@@ -70,14 +74,15 @@ impl CompiledScope {
     pub fn stages(&self) -> &[Document] {
         self.compiled.stages()
     }
-    /// 核验当前事务、读取阶段及有效期，不读取数据库。
+    /// 核验固定供应商模型、当前事务、读取阶段及有效期。
     /// # 参数
     /// executor 为原读取执行器。
     /// # 返回
-    /// 凭证仍属于当前阶段时成功。
+    /// 模型和当前读取边界均匹配时成功，不读取数据库。
     /// # 错误
-    /// 跨事务、跨阶段或已经到期时拒绝。
-    pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
+    /// 资源、集合、行身份、输出粒度错配或凭证失效时拒绝。
+    pub fn ensure_current(&self, executor: &mut dyn Executor) -> IdentityResult<()> {
+        supplier_model(self.compiled.model())?;
         self.compiled.ensure_current(executor)
     }
 
@@ -91,6 +96,18 @@ impl CompiledScope {
     pub async fn validate(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
         self.authorization.validate(&self.compiled, executor).await
     }
+}
+
+/// 完整供应商读取只接受本域固定资源、集合、行身份和对象粒度。
+fn supplier_model(model: &QueryModel) -> IdentityResult<()> {
+    if model.resource != "supplier"
+        || model.collection != <Database as SupplierExt>::SUPPLIER_ACCOUNTS
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(IdentityError::ValidationError("供应商查询授权模型不匹配".into()));
+    }
+    Ok(())
 }
 
 struct Mapping {
@@ -206,7 +223,10 @@ pub fn bindings(db: Database) -> erp_identity::Result<(Arc<dyn AccessFactsPort>,
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::fixed_authorization;
     use erp_permissions::supplier;
+    use persistence_core::ReadExecutor;
 
     use super::*;
 
@@ -220,6 +240,66 @@ mod tests {
                 output: QueryOutput::Object,
                 facts: [FactKind::Owner, FactKind::Organization].into(),
             },
+        }
+    }
+
+    #[test]
+    fn supplier_model_requires_fixed_resource_collection_identity_and_object_output() {
+        let model = mapping().model;
+        supplier_model(&model).unwrap();
+        for invalid in [
+            QueryModel { resource: "warehouse".into(), ..model.clone() },
+            QueryModel { collection: "other_suppliers".into(), ..model.clone() },
+            QueryModel { id_field: "supplier_id".into(), ..model.clone() },
+            QueryModel { output: QueryOutput::Share { fields: ["id".into()].into() }, ..model.clone() },
+            QueryModel { output: QueryOutput::Existence { fields: ["id".into()].into() }, ..model.clone() },
+        ] {
+            assert!(matches!(supplier_model(&invalid), Err(IdentityError::ValidationError(_))));
+        }
+    }
+
+    #[tokio::test]
+    async fn compiled_supplier_scope_rejects_wrong_collection_and_stale_boundaries() {
+        let mut executor = ReadExecutor::default();
+        for wrong_collection in [false, true] {
+            let mut mapping = mapping();
+            if wrong_collection {
+                mapping.model.collection = "other_suppliers".into();
+            }
+            let authorization = fixed_authorization(
+                &[supplier::LIST],
+                ResolvedScope {
+                    role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                    user_limit: None,
+                },
+                vec![],
+                vec![(supplier::LIST, Arc::new(mapping))],
+            )
+            .unwrap();
+            let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+            let compiled = authorization.query(&actor, &supplier::LIST, &mut executor).await.unwrap();
+            let scope = CompiledScope {
+                scope_version: compiled.version(),
+                compiled: Arc::new(compiled),
+                authorization,
+            };
+            if wrong_collection {
+                assert!(matches!(
+                    scope.ensure_current(&mut executor),
+                    Err(IdentityError::ValidationError(_))
+                ));
+            } else {
+                scope.ensure_current(&mut executor).unwrap();
+                assert!(matches!(
+                    scope.ensure_current(&mut ReadExecutor::default()),
+                    Err(IdentityError::ValidationError(_))
+                ));
+                executor.next_read();
+                assert!(matches!(
+                    scope.ensure_current(&mut executor),
+                    Err(IdentityError::ValidationError(_))
+                ));
+            }
         }
     }
 

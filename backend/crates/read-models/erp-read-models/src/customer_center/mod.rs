@@ -1,5 +1,6 @@
 //! 客户对象中心读模型。
 
+pub mod profile;
 mod repository;
 mod service;
 

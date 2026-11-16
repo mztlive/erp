@@ -1,6 +1,7 @@
 //! 采购单写命令的授权快照与事务内账号、范围重验。
 
 use application_core::AuditActor;
+use erp_permissions::Permission;
 use erp_procurement::PurchaseAccess;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use persistence_core::Executor;
@@ -13,18 +14,22 @@ impl PurchaseOrderProcess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册的采购动作
+    /// * `entry` - 中央登记的采购权限常量
     ///
     /// # 返回
     /// 返回可在事务内重验对象范围的检查器。
     ///
     /// # 错误
-    /// 构造不执行 I/O，不返回错误；对象范围由后续检查重验。
+    /// 无。
     ///
     /// # 关键业务约束
     /// 每次检查均重新解析服务端授权，不得复用列表上下文。
-    pub(super) fn command_access(&self, actor: &AuditActor, action: &'static str) -> PurchaseCommandAccess {
-        PurchaseCommandAccess { access: self.ports.access(self.db.clone()), actor: actor.clone(), action }
+    pub(super) fn command_access(&self, actor: &AuditActor, entry: &Permission) -> PurchaseCommandAccess {
+        PurchaseCommandAccess {
+            access: self.ports.access(self.db.clone()),
+            actor: actor.clone(),
+            entry: entry.clone(),
+        }
     }
 }
 
@@ -36,7 +41,7 @@ pub(super) struct PurchaseCommandAccess {
     /// 已认证操作人。
     actor: AuditActor,
     /// 本次命令动作。
-    action: &'static str,
+    entry: Permission,
 }
 
 impl PurchaseCommandAccess {
@@ -55,6 +60,6 @@ impl PurchaseCommandAccess {
     /// # 关键业务约束
     /// 写命令必须在原事务重验，不得把入口事前检查当作凭证。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<PurchaseOrder> {
-        self.access.require_object(&self.actor, self.action, id, executor).await.map_err(crate::Error::from)
+        self.access.require_object(&self.actor, &self.entry, id, executor).await.map_err(crate::Error::from)
     }
 }

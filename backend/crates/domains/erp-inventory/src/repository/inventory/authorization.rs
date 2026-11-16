@@ -109,7 +109,7 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_permissions::Permission;
+    use erp_permissions::inventory;
 
     use super::*;
 
@@ -154,7 +154,7 @@ mod tests {
     fn context() -> AccessContext {
         AccessContext {
             actor: AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin),
-            permission: Permission::parse("stock_balance:list").unwrap(),
+            permission: inventory::STOCK_BALANCE_LIST,
             resource: "stock_balance".into(),
             model: None,
             as_of: Instant::from_unix_secs(1),

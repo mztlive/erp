@@ -22,6 +22,7 @@ use validator::Validate;
 
 use super::FulfillmentProcess;
 use super::customer_acceptance::task::{CustomerAcceptanceTaskReason, ensure_customer_acceptance_task};
+use super::delivery_packing::PackingContext;
 use super::delivery_tracking::ensure_tracking_sources;
 use super::purchase_context::ensure_po_fulfillable;
 use super::task::{FulfillmentTaskObject, complete_fulfillment_task};
@@ -62,17 +63,15 @@ impl FulfillmentProcess {
     ) -> Result<DeliveryView> {
         req.validate()?;
         let delivery_id = DeliveryId::new(id.to_string());
-        let expected_version = req.version;
         if req.packing.is_some() && req.tracking_entries.is_some() {
             return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
         }
-        let packing_context = super::delivery_packing::PackingContext {
+        let packing_context = PackingContext {
             codec: self.sensitive_data.clone(),
             key: self.fingerprint_key.clone(),
             input: req.packing.clone(),
             legacy_tracking: req.tracking_entries.is_some(),
         };
-        let tracking_entries = req.tracking_entries;
         let actor = actor.clone();
         let db = self.db.clone();
         let task_identity = self.task_identity.clone();
@@ -80,36 +79,64 @@ impl FulfillmentProcess {
         let posted = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut delivery, mut lines) = FulfillmentService::new(db.clone())
-                        .prepare_delivery_posting(
-                            &delivery_id,
-                            expected_version,
-                            DeliveryUpdate { tracking_entries },
-                            executor,
-                        )
-                        .await?;
-                    lines = packing_context
-                        .prepare_posting(&db, &task_identity, &mut delivery, lines, executor)
-                        .await?;
-                    let occurred_at = Instant::now();
-                    let delivery_type = delivery.delivery_type;
-                    let line_count = lines.len();
-                    let mut posting = DeliveryPosting {
-                        db: &db,
-                        task_identity: &task_identity,
-                        delivery_id,
-                        delivery,
-                        lines,
-                        occurred_at,
-                        actor,
-                        source_shipped_at: None,
-                    };
-                    execute_posting(&mut posting, delivery_type, line_count, executor).await?;
-                    Ok::<Delivery, Error>(posting.delivery)
+                    DeliveryPostingCommand { db, task_identity, delivery_id, req, packing_context, actor }
+                        .execute(executor)
+                        .await
                 })
             })
             .await?;
         Ok(posted.into())
+    }
+}
+
+/// 单次发货根命令的原始请求与认证上下文。
+struct DeliveryPostingCommand {
+    db: Database,
+    task_identity: Arc<AuthorizationService>,
+    delivery_id: DeliveryId,
+    req: PostDeliveryRequest,
+    packing_context: PackingContext,
+    actor: AuditActor,
+}
+
+impl DeliveryPostingCommand {
+    /// 在同一授权事务内准备最终草稿，再执行库存、履约、任务与审计。
+    async fn execute(self, executor: &mut dyn Executor) -> Result<Delivery> {
+        super::task::require_fulfillment_entry(
+            &self.db,
+            &self.task_identity,
+            "delivery",
+            self.delivery_id.as_ref(),
+            &self.actor,
+            executor,
+        )
+        .await?;
+        let (mut delivery, lines) = FulfillmentService::new(self.db.clone())
+            .prepare_delivery_posting(
+                &self.delivery_id,
+                self.req.version,
+                DeliveryUpdate { tracking_entries: self.req.tracking_entries },
+                executor,
+            )
+            .await?;
+        let lines = self
+            .packing_context
+            .prepare_posting(&self.db, &self.task_identity, &mut delivery, lines, executor)
+            .await?;
+        let delivery_type = delivery.delivery_type;
+        let line_count = lines.len();
+        let mut posting = DeliveryPosting {
+            db: &self.db,
+            task_identity: &self.task_identity,
+            delivery_id: self.delivery_id,
+            delivery,
+            lines,
+            occurred_at: Instant::now(),
+            actor: self.actor,
+            source_shipped_at: None,
+        };
+        execute_posting(&mut posting, delivery_type, line_count, executor).await?;
+        Ok(posting.delivery)
     }
 }
 
@@ -189,7 +216,7 @@ impl PostingSteps for DeliveryPosting<'_> {
                     self.db,
                     self.task_identity,
                     FulfillmentTaskObject::Delivery(&self.delivery),
-                    self.actor.id(),
+                    &self.actor,
                     executor,
                 )
                 .await?;

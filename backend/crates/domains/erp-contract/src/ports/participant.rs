@@ -1,4 +1,4 @@
-//! 合同合法单据参与 Port：只查询本次目标与账号参与修订。
+//! 合同合法单据参与 Port：只查询本次授权目标的历史参与身份。
 
 use std::sync::Arc;
 
@@ -31,15 +31,6 @@ pub trait ContractParticipantPort: Send + Sync {
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>>;
-
-    /// 点查账号历史参与集合的真实修订号。
-    /// # 参数
-    /// user_id 为当前账号，executor 为原授权执行器。
-    /// # 返回
-    /// 追加参与记录时原子推进的修订号；尚无修订记录时为零。
-    /// # 错误
-    /// 未接线、修订损坏或读取失败时拒绝。
-    async fn revision(&self, user_id: &str, executor: &mut dyn Executor) -> Result<i64>;
 }
 
 /// 未接线时失败关闭，不得把参与集合解释为空成功。
@@ -75,10 +66,6 @@ impl ContractParticipantPort for FailClosedContractParticipantPort {
     ) -> Result<Vec<String>> {
         Err(Error::Internal("合同参与端口未接线".into()))
     }
-
-    async fn revision(&self, _: &str, _: &mut dyn Executor) -> Result<i64> {
-        Err(Error::Internal("合同参与端口未接线".into()))
-    }
 }
 
 /// 空参与集合，仅供不涉及历史参与的单元测试。
@@ -94,10 +81,6 @@ impl ContractParticipantPort for EmptyContractParticipants {
         _executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
         Ok(Vec::new())
-    }
-
-    async fn revision(&self, _: &str, _: &mut dyn Executor) -> Result<i64> {
-        Ok(0)
     }
 }
 

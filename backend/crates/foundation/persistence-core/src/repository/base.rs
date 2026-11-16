@@ -361,6 +361,7 @@ where
     ///
     /// # 返回
     /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`。
+    /// 调用开始时使旧读取凭证失效，前置校验失败也不保留旧阶段。
     ///
     /// # 错误
     /// 实体已删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。实体无法编码为 BSON 时返回 `BsonError`。底层写入失败时返回对应错误。
@@ -368,6 +369,7 @@ where
     where
         T: HasBaseModel,
     {
+        executor.next_read();
         ensure_active_for_cas(entity.base())?;
 
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
@@ -395,6 +397,7 @@ where
     ///
     /// # 返回
     /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`，并把 `deleted_at` 设为同一时间。
+    /// 调用开始时使旧读取凭证失效，前置校验失败也不保留旧阶段。
     ///
     /// # 错误
     /// 实体已删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。底层写入失败时返回对应错误。
@@ -402,6 +405,7 @@ where
     where
         T: HasBaseModel,
     {
+        executor.next_read();
         ensure_active_for_cas(entity.base())?;
 
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
@@ -426,6 +430,7 @@ where
     ///
     /// # 返回
     /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`，并把 `deleted_at` 写回 `NOT_DELETED_TIMESTAMP`。
+    /// 调用开始时使旧读取凭证失效，前置校验失败也不保留旧阶段。
     ///
     /// # 错误
     /// 实体未删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。底层写入失败时返回对应错误。
@@ -433,6 +438,7 @@ where
     where
         T: HasBaseModel,
     {
+        executor.next_read();
         ensure_deleted_for_restore(entity.base())?;
 
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), false)?;
@@ -683,14 +689,89 @@ pub fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
 
 #[cfg(test)]
 mod tests {
-    use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP_BSON};
+    use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
+    use mongodb::Client;
     use mongodb::bson::doc;
+    use mongodb::options::{ClientOptions, ServerAddress};
+    use serde::ser::Error as _;
+    use serde::{Deserialize, Serialize, Serializer};
 
     use super::{
-        Pagination, apply_write_result, cas_filter, ensure_active_for_cas, ensure_deleted_for_restore,
-        persisted_document, write_metadata_at,
+        Pagination, Repository, apply_write_result, cas_filter, ensure_active_for_cas,
+        ensure_deleted_for_restore, persisted_document, write_metadata_at,
     };
     use crate::errors::Error;
+    use crate::{Executor, ReadExecutor};
+
+    #[derive(Deserialize)]
+    struct TestEntity {
+        #[serde(flatten)]
+        base: BaseModel,
+    }
+
+    impl Serialize for TestEntity {
+        fn serialize<S: Serializer>(&self, _: S) -> std::result::Result<S::Ok, S::Error> {
+            Err(S::Error::custom("entity serialization rejected"))
+        }
+    }
+
+    impl HasBaseModel for TestEntity {
+        fn base(&self) -> &BaseModel {
+            &self.base
+        }
+
+        fn base_mut(&mut self) -> &mut BaseModel {
+            &mut self.base
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum Write {
+        Update,
+        SoftDelete,
+        Restore,
+    }
+
+    #[tokio::test]
+    async fn failed_repository_preconditions_invalidate_old_reads_without_mutating_entities() {
+        let options = ClientOptions::builder()
+            .hosts(vec![ServerAddress::Tcp { host: "127.0.0.1".into(), port: Some(1) }])
+            .build();
+        let db = Client::with_options(options).unwrap().database("unit_test");
+        let repository = Repository::<TestEntity>::new(&db, "documents");
+        let cases = [
+            (Write::Update, 1, 1),
+            (Write::SoftDelete, 1, 1),
+            (Write::Restore, 0, 1),
+            (Write::Update, 0, u64::MAX),
+            (Write::SoftDelete, 0, u64::MAX),
+            (Write::Restore, 1, u64::MAX),
+            (Write::Update, 0, 1),
+        ];
+
+        for (write, deleted_at, version) in cases {
+            let base = BaseModel { deleted_at, version, ..BaseModel::fake() };
+            let mut entity = TestEntity { base: base.clone() };
+            let mut executor = ReadExecutor::default();
+            let before = executor.boundary().unwrap();
+            let result = match write {
+                Write::Update => repository.update(&mut entity, &mut executor).await,
+                Write::SoftDelete => repository.soft_delete(&mut entity, &mut executor).await,
+                Write::Restore => repository.restore(&mut entity, &mut executor).await,
+            };
+            let error = result.unwrap_err();
+            if version == u64::MAX {
+                assert!(matches!(error, Error::EntityMetadataOutOfRange("version")));
+            } else if matches!(write, Write::Update) && deleted_at == 0 {
+                assert!(matches!(error, Error::BsonError(_)));
+            } else {
+                assert!(matches!(error, Error::OptimisticLockingError));
+            }
+            assert!(!before.is_current(&executor));
+            assert!(executor.boundary().unwrap().is_current(&executor));
+            assert_eq!(entity.base, base);
+        }
+    }
 
     struct TestPagination {
         page: u64,

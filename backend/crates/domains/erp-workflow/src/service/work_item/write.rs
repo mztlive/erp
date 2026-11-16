@@ -1,13 +1,12 @@
 //! 责任队列写入结果、幂等回放与版本冲突投影。
 
-use std::future::Future;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_identity::{CompiledAccess, ResourceTargets};
 use erp_permissions::work_item;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::access::ensure_generic_work_item_mutation;
 use super::{
@@ -120,26 +119,6 @@ pub(super) fn recover_command_error<T>(original: Error, recovery: Result<Option<
 }
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
-    /// 按 ID 读取工作项。
-    ///
-    /// # 参数
-    /// * `id` - 工作项 ID
-    ///
-    /// # 返回
-    /// 返回已存在的工作项。
-    ///
-    /// # 错误
-    /// 任务不存在时返回未找到；仓储读取失败时返回对应错误。
-    pub fn load(&self, id: String) -> impl Future<Output = Result<WorkItem>> + Send + 'static {
-        let db = self.db.clone();
-        async move {
-            db.work_items()
-                .find_work_item(&id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
-        }
-    }
-
     /// 读取已完成的同一幂等命令，并拒绝相同键混用不同请求。
     ///
     /// # 参数
@@ -481,6 +460,7 @@ pub fn expected_task_version(value: &str) -> Result<u64> {
 #[cfg(test)]
 mod receipt_recovery_tests {
     use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::super::testing::unavailable_service;

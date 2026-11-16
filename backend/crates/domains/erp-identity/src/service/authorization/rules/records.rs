@@ -3,13 +3,13 @@ use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use erp_permissions::{
-    admin, approval_instance, bulk_job, catalog, contract, cost, customer, internal, organization,
-    purchase_order, purchase_payment_request, receivable, returns, sales_order, sales_review,
-    sales_selection, supplier, supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement,
-    work_item,
+    admin, approval_instance, bulk_job, catalog, contract, cost, customer, integration_ops, internal,
+    organization, purchase_order, purchase_payment_request, receivable, returns, sales_inquiry, sales_order,
+    sales_review, sales_selection, supplier, supplier_api, supplier_fulfillment, supplier_offering,
+    supplier_settlement, work_item,
 };
 
-use crate::entity::authorization::{AccessFact, AccessRule, FactKind};
+use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions};
 
 pub(crate) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
@@ -70,7 +70,7 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         ),
         (internal::PURCHASE_CREATED_RESULT_READ, vec![purchase_order::CREATE]),
         (internal::SOURCING_CREATED_RESULT_READ, vec![purchase_order::CREATE]),
-        (internal::INVOICE_POSTED_RESULT_READ, vec![erp_permissions::receivable::INVOICE_POST]),
+        (internal::INVOICE_POSTED_RESULT_READ, vec![receivable::INVOICE_POST]),
         (internal::PURCHASE_CHANGE_SOURCE, vec![purchase_order::SAVE_DRAFT, purchase_order::SUBMIT]),
         (internal::PURCHASE_CHANGE_CREATE_SOURCE, vec![purchase_order::SAVE_DRAFT]),
         (internal::PURCHASE_CHANGE_SUBMIT_SOURCE, vec![purchase_order::SUBMIT]),
@@ -79,11 +79,8 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         (internal::PURCHASE_EXPENSE_CONFIRM_SOURCE, vec![purchase_order::SAVE_DRAFT]),
         (internal::PURCHASE_CREATE_AND_SUBMIT, vec![purchase_order::CREATE, purchase_order::SUBMIT]),
         (internal::PURCHASE_PORTAL_IMPACT_READ, vec![purchase_order::DETAIL, purchase_order::LIST]),
-        (
-            internal::SALES_ORDER_PROFIT_LOSS_READ,
-            vec![erp_permissions::sales_order::LIST, erp_permissions::cost::ENTRY_LIST],
-        ),
-        (internal::APPROVAL_MANAGEMENT_READ, vec![erp_permissions::approval_instance::INSTANCE_LIST]),
+        (internal::SALES_ORDER_PROFIT_LOSS_READ, vec![sales_order::LIST, cost::ENTRY_LIST]),
+        (internal::APPROVAL_MANAGEMENT_READ, vec![approval_instance::INSTANCE_LIST]),
         (internal::APPROVAL_INSTANCE_READ, vec![approval_instance::INSTANCE_LIST]),
         (internal::APPROVAL_STARTED_LIST, vec![approval_instance::INSTANCE_LIST]),
         (
@@ -92,16 +89,13 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         ),
         (
             internal::APPROVAL_RECOVER,
-            vec![
-                erp_permissions::approval_instance::RESUME_CURRENT_APPROVER,
-                erp_permissions::approval_instance::INSTANCE_LIST,
-            ],
+            vec![approval_instance::RESUME_CURRENT_APPROVER, approval_instance::INSTANCE_LIST],
         ),
         (internal::CUSTOMER_QUALITY_CUSTOMERS, vec![customer::LIST]),
-        (internal::CUSTOMER_QUALITY_CURRENT, vec![erp_permissions::sales_order::LIST]),
+        (internal::CUSTOMER_QUALITY_CURRENT, vec![sales_order::LIST]),
         (
             internal::SALES_INQUIRY_TEMPLATE_PRODUCTS,
-            vec![erp_permissions::sales_inquiry::COMMANDS_SALES_CREATE, catalog::PRODUCT_SELLABLE_SKU_LIST],
+            vec![sales_inquiry::COMMANDS_SALES_CREATE, catalog::PRODUCT_SELLABLE_SKU_LIST],
         ),
         (internal::DELIVERY_TEMPLATE_READ, vec![supplier_offering::LIST]),
         (internal::DELIVERY_TEMPLATE_WRITE, vec![supplier_offering::REVISE]),
@@ -115,6 +109,7 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         (internal::SALES_ORDER_FINANCIAL_EXPENSE_SOURCE, vec![cost::ENTRY_CREATE, sales_order::DETAIL]),
         (internal::PAYMENT_REQUEST_CANDIDATES, vec![purchase_payment_request::CREATE]),
         (internal::PRODUCT_IMPORT_JOB_READ, vec![catalog::PRODUCT_PRODUCT_LIST]),
+        (internal::PRODUCT_IMPORT_SUBMIT, vec![catalog::PRODUCT_PRODUCT_CREATE]),
         (internal::SUPPLIER_IMPORT_JOB_READ, vec![supplier::IMPORT_SUPPLIER_IMPORT]),
         (internal::SUPPLIER_IMPORT_SUBMIT, vec![supplier::IMPORT_SUPPLIER_IMPORT]),
         (internal::BRAND_IMPORT_JOB_READ, vec![catalog::PRODUCT_BRAND_CREATE]),
@@ -202,7 +197,19 @@ pub(crate) fn qualified(permission: &Permission, qualified: &QualifiedPermission
     permission != &bulk_job::BACKGROUND_JOB_CANCEL_ALL || administrator(qualified)
 }
 
+/// 返回固定对象入口的数据条件。
+/// # 参数
+/// permission 为已登记的对象入口；无正式任务的差异决定按当前处理人判断。
+/// # 返回
+/// 已登记对象入口返回完整条件，其他入口返回 None。
+/// # 错误
+/// 不执行 I/O；缺失事实由条件执行阶段拒绝。
 pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
+    if permission == &integration_ops::DIFFERENCE_DECISION {
+        return Some(
+            AccessRule::Fact(AccessFact::AssignedTo).requiring(&BTreeSet::from([FactKind::Assignee])),
+        );
+    }
     if permission == &internal::APPROVAL_STARTED_LIST {
         return Some(owner());
     }
@@ -216,10 +223,9 @@ pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
             if matches!(permission.action(), "detail" | "authorize" | "catalog_read") =>
         {
             Some(AccessRule::Related {
-                relation: crate::entity::authorization::RelationKey::parse("supplier")
-                    .expect("固定供应商关系"),
+                relation: RelationKey::parse("supplier").expect("固定供应商关系"),
                 resource: "supplier".into(),
-                mode: crate::entity::authorization::RelationMatch::AllNonEmpty,
+                mode: RelationMatch::AllNonEmpty,
                 rule: Box::new(
                     AccessRule::Allow.requiring(&BTreeSet::from([FactKind::Owner, FactKind::Organization])),
                 ),

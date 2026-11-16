@@ -7,6 +7,7 @@ pub mod payment_reversal;
 pub mod purchase_return;
 pub mod receipt_reversal;
 pub mod sales_return;
+pub mod sales_return_query;
 pub mod shared;
 pub mod supplier_refund;
 pub mod version_conflict;

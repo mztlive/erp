@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_permissions::{Permission, purchase_order as purchase_order_permissions};
 use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::ports::PurchaseDataScopePort;
@@ -88,7 +89,7 @@ impl PurchaseAccess {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<(PurchaseOrder, String, PurchaseReadScope)> {
-        let (context, scope) = self.resolve(actor, "detail", executor).await?;
+        let (context, scope) = self.resolve(actor, &purchase_order_permissions::DETAIL, executor).await?;
         let order = self
             .db
             .purchase_orders()
@@ -103,7 +104,7 @@ impl PurchaseAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `action` - 已注册的采购动作
+    /// * `entry` - 中央登记的采购权限常量
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
@@ -117,9 +118,9 @@ impl PurchaseAccess {
     pub async fn resolve(
         &self,
         actor: &AuditActor,
-        action: &str,
+        entry: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<(PurchaseResolvedScope, PurchaseReadScope)> {
-        self.inner.resolve(actor, action, executor).await.map_err(crate::Error::from)
+        self.inner.resolve(actor, entry, executor).await.map_err(crate::Error::from)
     }
 }

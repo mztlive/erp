@@ -30,8 +30,9 @@ validator = { workspace = true }
 
 url = { workspace = true }
 uuid = { workspace = true }
-zeroize = { version = "1.8.2", features = ["serde"] }
+zeroize = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 erp-identity = { workspace = true, features = ["test-support"] }
 hmac = { workspace = true }
+persistence-core = { workspace = true, features = ["test-support"] }

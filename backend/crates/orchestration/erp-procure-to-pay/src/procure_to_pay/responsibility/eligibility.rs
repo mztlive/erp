@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_core::AccountKind;
-use erp_identity::AuthorizationService;
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::service::business_ownership::required_business_org;
-use erp_permissions::{Permission, sales_inquiry};
+use erp_identity::{AccessTarget, AccountDirectoryService, AuthorizationService, Error as IdentityError};
+use erp_permissions::{Permission, internal, sales_inquiry};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -40,24 +40,32 @@ impl ProcurementInquiryEligibility {
     /// # 错误
     /// 账号、组织或必要执行权限失效时拒绝，不以销售权限代替。
     pub async fn assignment_owner(&self, owner: &str, executor: &mut dyn Executor) -> Result<String> {
-        let actor = AuditActor::new(owner.into(), owner.into(), AccountKind::Admin);
-        let permissions = [
-            sales_inquiry::QUERY_PROCUREMENT_DETAIL,
-            sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
-            sales_inquiry::COMMANDS_PROCUREMENT_PUBLISH,
-        ];
-        let qualified = self
-            .rbac
-            .permissions(&actor, &permissions, executor)
+        let account = AccountDirectoryService::new(self.db.clone())
+            .account(owner, executor)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("询价责任采购账号已失效".into()))?;
-        if !qualified.same_role(&permissions) {
-            let account = qualified.account();
-            return Err(Error::BusinessLogicError(format!(
-                "责任采购「{}（{}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试",
-                account.display_name, account.login_account
-            )));
-        }
+        let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+        let candidate = ObjectFacts {
+            resource: "work_item".into(),
+            subject_type: FactValue::Known("SALES_INQUIRY_PROCESSING".into()),
+            subject_source_resource: FactValue::Known("sales_inquiry".into()),
+            ..Default::default()
+        };
+        self.rbac
+            .require(
+                &actor,
+                &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                AccessTarget::Candidate(candidate),
+                executor,
+            )
+            .await
+            .map_err(|error| match error {
+                IdentityError::Forbidden(_) => Error::BusinessLogicError(format!(
+                    "责任采购「{}（{}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试",
+                    account.display_name, account.login_account
+                )),
+                other => other.into(),
+            })?;
         required_business_org(&self.db, owner, executor).await.map_err(Error::from)
     }
 

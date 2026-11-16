@@ -21,7 +21,7 @@ use super::clear_default_marks;
 use super::sensitive::SensitiveDataCodec;
 use crate::dto::party::{
     CreatePartyBankAccountRequest, PARTY_BANK_ACCOUNT_SORT_FIELDS, PageView, PartyBankAccountListParams,
-    PartyBankAccountView, SortDir, UpdatePartyBankAccountRequest, normalize_paging,
+    PartyBankAccountView, SortDir, UpdatePartyBankAccountRequest, masked_last4, normalize_paging,
 };
 use crate::entity::party::{
     EffectiveRecordStatus, PartyBankAccount, PartyBankAccountData, PartyBankAccountId,
@@ -145,7 +145,7 @@ impl PartyBankAccountService {
                 party_id: row.party_id.to_string(),
                 account_name: row.account_name,
                 bank_name: row.bank_name,
-                account_number_masked: crate::dto::party::masked_last4(&row.account_number_last4),
+                account_number_masked: masked_last4(&row.account_number_last4),
                 bank_branch_name: row.bank_branch_name,
                 bank_routing_number: row.bank_routing_number,
                 valid_from: row.valid_from,
@@ -336,13 +336,14 @@ impl PartyBankAccountService {
 mod authorization_tests {
     use erp_core::AccountKind;
     use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
 
     async fn service() -> PartyBankAccountService {
-        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await
             .unwrap()
             .database("party_bank_account_authorization");

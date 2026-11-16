@@ -17,7 +17,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{Permission, document_registry};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 pub use self::dto::{
@@ -394,39 +394,6 @@ impl DocumentRegistryService {
             .await?
             .ok_or_else(|| Error::NotFound("单据注册不存在".to_string()))?;
         Ok(doc.into())
-    }
-
-    /// 查询注册行上的审批绑定。
-    ///
-    /// # 参数
-    /// * `id` - 单据注册 ID
-    ///
-    /// # 返回
-    /// 使用 `NoTransaction` 查询；无绑定返回 `None`。
-    ///
-    /// # 错误
-    /// 单据未注册时返回 `NotFound`。
-    pub async fn approval_binding(&self, id: &str) -> Result<Option<ApprovalDefinitionBinding>> {
-        self.approval_binding_with(id, &mut NoTransaction).await
-    }
-
-    /// 查询注册行上的审批绑定（执行器注入版）。
-    ///
-    /// # 参数
-    /// * `id` - 单据注册 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 无绑定返回 `None`。
-    ///
-    /// # 错误
-    /// 单据未注册时返回 `NotFound`。
-    pub async fn approval_binding_with(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ApprovalDefinitionBinding>> {
-        find_approval_binding(&self.db, id, executor).await
     }
 
     /// 追加工作流动作。

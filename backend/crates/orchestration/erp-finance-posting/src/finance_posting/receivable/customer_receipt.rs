@@ -8,6 +8,7 @@ use erp_core::ids::CustomerReceiptId;
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
+use erp_finance::service::receivable::customer_receipt_commit::convert_allocations;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{Permission, receivable};
@@ -17,7 +18,7 @@ use erp_workflow::service::approval::execution::prepare_cancel;
 use erp_workflow::service::document_registry::find_approval_binding;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
@@ -38,7 +39,7 @@ pub use super::customer_receipt_posting::{
     cancel_customer_receipt_approval_apply, post_customer_receipt_apply,
     reject_customer_receipt_approval_apply,
 };
-use super::customer_receipt_submit::{persist_receipt_submit, submit_receipt};
+use super::customer_receipt_submit::{authorized_receipt, persist_receipt_submit, submit_receipt};
 use super::dto::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
     CustomerReceiptView, SubmitCustomerReceiptRequest,
@@ -214,16 +215,48 @@ impl ReceivableProcess {
     ) -> Result<CustomerReceiptView> {
         req.validate()?;
         let command = submit_receipt(id, &req, actor.id())?;
-        if let Some(view) = self.replay_customer_receipt_submit(id, &command, actor).await? {
-            return Ok(view);
+        let process = Self::new(self.db.clone(), self.rbac.clone());
+        let request_actor = actor.clone();
+        let request_id = id.to_owned();
+        let request_command = command.clone();
+        let result = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    if let Some(view) = process
+                        .replay_receipt_submit(&request_id, &request_command, &request_actor, executor)
+                        .await?
+                    {
+                        return Ok(view);
+                    }
+                    let adapter = customer_receipt_adapter()?;
+                    let mut receipt =
+                        authorized_receipt(&process.db, &process.rbac, &request_actor, &request_id, executor)
+                            .await?;
+                    ensure_expected_version(receipt.base.version, req.expected_version)?;
+                    let allocations = convert_allocations(&req.allocations)?;
+                    start_customer_receipt_approval(&mut receipt, allocations)?;
+                    process
+                        .dispatch_customer_receipt_start(
+                            &request_id,
+                            receipt,
+                            &req,
+                            &request_actor,
+                            adapter,
+                            request_command,
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await;
+        match result {
+            Err(error) if error.command_may_have_committed() => {
+                self.recover_customer_receipt_submit(id, &command, actor, error).await
+            },
+            result => result,
         }
-        let adapter = customer_receipt_adapter()?;
-        let mut receipt = self.load_customer_receipt(id).await?;
-        ensure_expected_version(receipt.base.version, req.expected_version)?;
-        let allocations =
-            erp_finance::service::receivable::customer_receipt_commit::convert_allocations(&req.allocations)?;
-        start_customer_receipt_approval(&mut receipt, allocations)?;
-        self.dispatch_customer_receipt_start(id, receipt, &req, actor, adapter, command).await
     }
 
     /// 撤回客户回款审批，成功后回到草稿且 `subject_version` 不回退。
@@ -248,9 +281,31 @@ impl ReceivableProcess {
         actor: &AuditActor,
     ) -> Result<CustomerReceiptView> {
         req.validate()?;
-        let mut receipt = self.load_customer_receipt(id).await?;
-        ensure_expected_version(receipt.base.version, req.expected_version)?;
-        self.persist_cancelled_customer_receipt(id, &mut receipt, &req, actor).await
+        let process = Self::new(self.db.clone(), self.rbac.clone());
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process
+                        .rbac
+                        .authorization
+                        .require(
+                            &actor,
+                            &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
+                    let mut receipt = process.load_customer_receipt(&id, executor).await?;
+                    ensure_expected_version(receipt.base.version, req.expected_version)?;
+                    process
+                        .persist_cancelled_customer_receipt(&id, &mut receipt, &req, &actor, executor)
+                        .await
+                })
+            })
+            .await
     }
 
     /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
@@ -279,16 +334,10 @@ impl ReceivableProcess {
         actor: &AuditActor,
         adapter: adapter::CustomerReceiptAdapter,
         command: CommandReceipt,
+        executor: &mut dyn Executor,
     ) -> Result<CustomerReceiptView> {
-        let input = self.prepare_receipt_submit_input(id, receipt, req, actor, adapter).await?;
-        let persisted = persist_receipt_submit(&self.db, &self.rbac, input, command.clone()).await;
-        match persisted {
-            Ok(view) => Ok(view),
-            Err(error) if error.command_may_have_committed() => {
-                self.recover_customer_receipt_submit(id, &command, actor, error).await
-            },
-            Err(error) => Err(error),
-        }
+        let input = self.prepare_receipt_submit_input(id, receipt, req, actor, adapter, executor).await?;
+        persist_receipt_submit(&self.db, &self.rbac, input, command, executor).await
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -301,14 +350,15 @@ impl ReceivableProcess {
         receipt: &mut CustomerReceipt,
         req: &CancelCustomerReceiptApprovalRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<CustomerReceiptView> {
         let adapter = customer_receipt_adapter()?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = customer_receipt_subject_ref(id)?;
         let runtime =
-            load_cancel_runtime(&self.db, &binding, &subject, receipt.approval_subject_version).await?;
+            load_cancel_runtime(&self.db, &binding, &subject, receipt.approval_subject_version, executor)
+                .await?;
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_customer_receipt_cancel_input(
@@ -338,6 +388,7 @@ impl ReceivableProcess {
                 now,
                 audit,
             },
+            executor,
         )
         .await
     }
@@ -346,10 +397,10 @@ impl ReceivableProcess {
     ///
     /// # 错误
     /// 不存在时返回 `NotFound`。
-    async fn load_customer_receipt(&self, id: &str) -> Result<CustomerReceipt> {
+    async fn load_customer_receipt(&self, id: &str, executor: &mut dyn Executor) -> Result<CustomerReceipt> {
         self.db
             .customer_receipts()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))
     }

@@ -86,16 +86,28 @@ impl FulfillmentProcess {
         req: UpdatePurchaseReceiptRequest,
         actor: &AuditActor,
     ) -> Result<PurchaseReceiptView> {
-        let mut receipt = self.domain().prepare_purchase_receipt_update(id, req).await?;
         let audit =
             actor.clone().resource_log("purchase_receipt.update", "purchase_receipt", id.to_string())?;
         let db = self.db.clone();
         let task_identity = self.task_identity.clone();
-        let actor_id = actor.id().to_string();
+        let actor = actor.clone();
+        let id = id.to_owned();
         let client = db.client().clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    super::task::require_fulfillment_entry(
+                        &db,
+                        &task_identity,
+                        "purchase_receipt",
+                        &id,
+                        &actor,
+                        executor,
+                    )
+                    .await?;
+                    let mut receipt = erp_fulfillment::service::FulfillmentService::new(db.clone())
+                        .prepare_purchase_receipt_update(&id, req, executor)
+                        .await?;
                     erp_fulfillment::service::FulfillmentService::new(db.clone())
                         .persist_purchase_receipt(&mut receipt, executor)
                         .await?;
@@ -103,7 +115,7 @@ impl FulfillmentProcess {
                         &db,
                         &task_identity,
                         super::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
-                        &actor_id,
+                        &actor,
                         executor,
                     )
                     .await?;

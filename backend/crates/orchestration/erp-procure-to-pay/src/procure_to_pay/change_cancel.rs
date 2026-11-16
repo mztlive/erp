@@ -7,6 +7,7 @@ use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProces
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_permissions::internal;
 use erp_procurement::entity::purchase_order::PurchaseChangeOrder;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -243,7 +244,12 @@ pub(super) async fn persist_purchase_change_cancel(
     } = input;
     ports
         .access(db.clone())
-        .require_object(&actor, "cancel_approval", change_order.purchase_order_id.as_ref(), executor)
+        .require_object(
+            &actor,
+            &internal::PURCHASE_CHANGE_CANCEL_SOURCE,
+            change_order.purchase_order_id.as_ref(),
+            executor,
+        )
         .await?;
     if let PreparedExecution::Apply(writes) = prepared {
         persist_cancel_runtime(db, &writes, &open_tasks, &actor_id, &reason, now, executor).await?;

@@ -227,14 +227,8 @@ async fn persist_remainder(
         }
     }
     if remaining_lines.is_empty() {
-        complete_fulfillment_task(
-            db,
-            task_identity,
-            FulfillmentTaskObject::Delivery(draft),
-            actor.id(),
-            executor,
-        )
-        .await?;
+        complete_fulfillment_task(db, task_identity, FulfillmentTaskObject::Delivery(draft), actor, executor)
+            .await?;
         db.deliveries().soft_delete(draft, executor).await?;
     } else {
         draft.tracking_entries.retain(|entry| {

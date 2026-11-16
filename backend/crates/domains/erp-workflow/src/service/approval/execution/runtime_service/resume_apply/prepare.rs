@@ -10,7 +10,7 @@ use erp_core::common::time::Instant;
 use erp_identity::AccessTarget;
 use erp_permissions::internal;
 use id_generator::next_id;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use super::super::super::apply_plan::PlannedWrites;
 use super::super::super::resume::prepare_resume;
@@ -51,7 +51,7 @@ struct ResumeRuntime {
     spec: ApprovalAdapterSpec,
 }
 
-/// 跨越事务提交边界的恢复计划及冻结元数据。
+/// 同一入口事务内使用的恢复计划及冻结元数据。
 pub(super) struct PreparedResume {
     pub(super) actor_id: String,
     pub(super) writes: PlannedWrites,
@@ -77,6 +77,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// * `actor` - 已认证的恢复操作人
     /// * `command` - 客户端期望的实例、执行、绑定及关闭任务版本
     /// * `idempotency_key` - 已规范化的恢复幂等键
+    /// * `executor` - 恢复入口持有的原事务执行器
     ///
     /// # 返回
     /// 新命令返回冻结的写入计划；规划器要求回放时返回 `None`。
@@ -84,26 +85,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 错误
     /// 恢复动作、版本、冻结主体、管理资格、原审批人资格或定义图不合法时返回错误。
     pub(super) async fn prepare_resume_runtime(
-        &self,
-        actor: &AuditActor,
-        command: &ApprovalResumeCommand,
-        idempotency_key: IdempotencyKey,
-    ) -> Result<Option<PreparedResume>> {
-        let service = self.clone();
-        let actor = actor.clone();
-        let command = command.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service.prepare_resume_stage(&actor, &command, idempotency_key, executor).await
-                })
-            })
-            .await
-    }
-
-    /// 管理授权、版本读取和恢复计划共用同一快照；无资格时不读取业务事实。
-    async fn prepare_resume_stage(
         &self,
         actor: &AuditActor,
         command: &ApprovalResumeCommand,
@@ -389,7 +370,11 @@ mod authorization_tests {
         )
         .unwrap();
         assert!(matches!(
-            service.prepare_resume_stage(&actor, &command, key, &mut SnapshotExecutor::default()).await,
+            service.resume_stage(&actor, &command, key.clone(), &identity, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+        assert!(matches!(
+            service.prepare_resume_runtime(&actor, &command, key, &mut SnapshotExecutor::default()).await,
             Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
         ));
         assert!(matches!(

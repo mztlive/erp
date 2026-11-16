@@ -5,6 +5,7 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 
+use super::access::authorize_planned_orders;
 use super::{
     CREATE_SOURCING_ACTION, CREATE_SOURCING_ITEM_PREFIX, CreateBasisCommand, CreateFromSourcingApplyInput,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
@@ -46,6 +47,7 @@ pub(super) async fn create_from_sourcing_apply(
         return Ok(result);
     }
     let (task, order, plan, sequences) = prepare_plan(db, &input, executor).await?;
+    authorize_planned_orders(db, ports, &input, &order, &plan, executor).await?;
     let stock_reservations = reserve_stock(db, ports, &input, &task, &order, &plan, executor).await?;
     let writes = SourcingWriteContext { db, ports, input: &input };
     let orders = writes.create_orders(&task, &order, &plan, sequences, executor).await?;

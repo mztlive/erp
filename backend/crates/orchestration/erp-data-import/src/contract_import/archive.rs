@@ -11,7 +11,7 @@ use erp_contract::{
     UploadContractView, plan_upload_archive,
 };
 use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
-use erp_permissions::{contract, customer as customer_permissions};
+use erp_permissions::contract;
 use persistence_core::Executor;
 
 use super::ContractImportProcess;
@@ -69,11 +69,7 @@ impl ContractImportProcess {
         proof.confirmed_fields = Some(command.fields.clone());
         let access = self.services.contract_access.clone();
         access.require_create(actor, &proof.customer_id, executor).await?;
-        self.services
-            .customer_access
-            .clone()
-            .require_with(actor.clone(), &customer_permissions::DETAIL, &proof.customer_id, executor)
-            .await?;
+        self.services.customer_access.require_current(actor, &proof.customer_id, executor).await?;
         let request = archive_request(fields, &proof);
         let mut planned = plan_upload_archive(
             request,

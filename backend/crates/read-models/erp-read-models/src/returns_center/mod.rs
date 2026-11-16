@@ -8,7 +8,6 @@ mod purchase_return;
 pub use purchase_return::PurchaseReturnListView;
 mod receipt_reversal;
 mod repository;
-mod sales_return;
 mod supplier_refund;
 use std::sync::Arc;
 

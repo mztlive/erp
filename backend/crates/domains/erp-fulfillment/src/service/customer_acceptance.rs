@@ -1,6 +1,6 @@
 //! 客户验收单域详情和视图映射。
 use erp_core::ids::CustomerAcceptanceLineId;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::FulfillmentService;
 use crate::Result;
@@ -14,26 +14,6 @@ use crate::entity::fulfillment::{
 use crate::repository::FulfillmentExt;
 
 impl FulfillmentService {
-    /// 查询客户验收单详情（表头 + 行 + 分配）。
-    ///
-    /// # 参数
-    /// * `id` - 验收单主键
-    ///
-    /// # 返回
-    /// 返回验收单详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 验收单不存在
-    /// * `RepositoryError` - 数据库查询失败
-    #[tracing::instrument(
-        name = "fulfillment.customer_acceptance_detail",
-        skip_all,
-        fields(layer = "service", domain = "fulfillment", operation = "customer_acceptance_detail")
-    )]
-    pub async fn customer_acceptance_detail(&self, id: &str) -> Result<CustomerAcceptanceDetailView> {
-        self.load_customer_acceptance(id, &mut NoTransaction).await
-    }
-
     /// 在调用方已授权的事务内读取验收详情。
     ///
     /// # 参数

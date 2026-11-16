@@ -2,10 +2,12 @@ use std::slice::from_ref;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_core::ids::SupplierSettlementStatementId;
 use erp_permissions::supplier_settlement;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
+use super::evidence::ensure_difference_version;
 use super::shared::*;
 use super::{SettlementAction, SupplierSettlementService};
 use crate::dto::supplier_fulfillment::SortDir;
@@ -96,7 +98,7 @@ impl SupplierSettlementService {
         Ok(SettlementPageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 结算本域prepare_difference_decision，保持原校验、构造和执行器顺序。
+    /// 先授权结算单，再读取差异、核验归属和版本并准备正式结论。
     ///
     /// # 参数
     /// * `id` - 结算差异主键。
@@ -118,30 +120,14 @@ impl SupplierSettlementService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(SupplierSettlementStatement, SupplierSettlementDifference)> {
-        let mut difference = self
-            .db
-            .supplier_settlement_differences()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("结算差异不存在".to_string()))?;
-        super::evidence::ensure_difference_version(difference.base.version, req.expected_difference_version)?;
-        let item = self
-            .db
-            .supplier_settlement_items()
-            .find_by_id(&difference.statement_item_id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("结算差异所属明细不存在".to_string()))?;
-        let statement_id = erp_core::ids::SupplierSettlementStatementId::new(&req.statement_id);
-        if !item.belongs_to_statement(&statement_id) {
-            return Err(Error::ConflictError("结算差异已不属于当前结算单".to_string()));
-        }
+        self.access()
+            .require_action(actor, SettlementAction::ResolveDifference, &req.statement_id, executor)
+            .await?;
+        let mut difference = self.load_decision_difference(id, req, executor).await?;
         let mut statement = self.load_statement(&req.statement_id, executor).await?;
         statement
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
-        self.access()
-            .require_action(actor, SettlementAction::ResolveDifference, &req.statement_id, executor)
-            .await?;
         if !statement.is_editable() {
             return Err(Error::BusinessLogicError("当前结算状态禁止处理差异".to_string()));
         }
@@ -160,8 +146,34 @@ impl SupplierSettlementService {
             ..Default::default()
         })?;
         statement.update_subject_hash(statement.review_subject_hash(&differences))?;
-
         Ok((statement, difference))
+    }
+
+    /// 结算单授权后核验差异版本和明细归属。
+    async fn load_decision_difference(
+        &self,
+        id: &str,
+        req: &SettlementDifferenceDecisionRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierSettlementDifference> {
+        let difference = self
+            .db
+            .supplier_settlement_differences()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("结算差异不存在".to_string()))?;
+        ensure_difference_version(difference.base.version, req.expected_difference_version)?;
+        let item = self
+            .db
+            .supplier_settlement_items()
+            .find_by_id(&difference.statement_item_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("结算差异所属明细不存在".to_string()))?;
+        let statement_id = SupplierSettlementStatementId::new(&req.statement_id);
+        if !item.belongs_to_statement(&statement_id) {
+            return Err(Error::ConflictError("结算差异已不属于当前结算单".to_string()));
+        }
+        Ok(difference)
     }
     /// 确保正式差异结论仅引用该差异已登记的证据。
     async fn ensure_conclusion_evidence(
@@ -294,5 +306,69 @@ pub fn settlement_difference_view(
         version: difference.base.version,
         created_at: difference.base.created_at,
         evidence: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::service::supplier_settlement::SettlementAccess;
+
+    #[tokio::test]
+    async fn settlement_preparation_stops_before_business_reads_when_authorization_fails() {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("settlement_preparation_authorization_unit");
+        let access = SettlementAccess::new(db.clone(), unavailable_authorization());
+        let service = SupplierSettlementService::new(db).with_data_scope(access);
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        let refresh = RefreshSettlementStatementRequest {
+            action: SettlementDraftAction::Refresh,
+            statement_id: "statement".into(),
+            expected_lock_version: 7,
+            expected_source_snapshot_hash: "a".repeat(64),
+            request_id: "refresh-operation".into(),
+            idempotency_key: "refresh-key".into(),
+        };
+        let decision = SettlementDifferenceDecisionRequest {
+            statement_id: "statement".into(),
+            difference_id: "difference".into(),
+            expected_lock_version: 7,
+            expected_difference_version: 8,
+            resolution: SettlementDifferenceResolution::SupplierAccepted,
+            reason_code: "BILL_ALIGNED".into(),
+            evidence_reference_ids: Vec::new(),
+            operation_id: "difference-operation".into(),
+            idempotency_key: "difference-key".into(),
+        };
+        let conclusion = SettlementDifferenceConclusion::new(
+            SettlementDifferenceConclusionKind::SupplierAccepted,
+            &decision.reason_code,
+            Vec::new(),
+        )
+        .unwrap();
+        let results = [
+            service
+                .prepare_refresh("statement", &refresh, &actor, &mut SnapshotExecutor::default())
+                .await
+                .map(|_| ()),
+            service
+                .prepare_difference_decision(
+                    "difference",
+                    &decision,
+                    &conclusion,
+                    &actor,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .map(|_| ()),
+        ];
+        for result in results {
+            assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+        }
     }
 }

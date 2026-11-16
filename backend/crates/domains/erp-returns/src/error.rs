@@ -57,6 +57,27 @@ pub enum Error {
 
 impl_domain_error_class!(Error);
 
+impl From<erp_identity::Error> for Error {
+    /// 保留身份授权的错误类别与原始载荷。
+    fn from(error: erp_identity::Error) -> Self {
+        match error {
+            erp_identity::Error::Internal(v) | erp_identity::Error::Rbac(v) => Self::Internal(v),
+            erp_identity::Error::NotFound(v) => Self::NotFound(v),
+            erp_identity::Error::ValidationError(v) => Self::ValidationError(v),
+            erp_identity::Error::InvalidInput(v) => Self::InvalidInput(v),
+            erp_identity::Error::BusinessLogicError(v) => Self::BusinessLogicError(v),
+            erp_identity::Error::ConflictError(v) => Self::ConflictError(v),
+            erp_identity::Error::Forbidden(v) => Self::Forbidden(v),
+            erp_identity::Error::Unauthenticated(v) => Self::Unauthenticated(v),
+            erp_identity::Error::Logic(v) => Self::Logic(v),
+            erp_identity::Error::ReceiptDuplicate(v) => Self::ReceiptDuplicate(v),
+            erp_identity::Error::TransientTransaction(v) => Self::TransientTransaction(v),
+            erp_identity::Error::OutcomeUnknown(v) => Self::OutcomeUnknown(v),
+            erp_identity::Error::RepositoryError(v) => Self::RepositoryError(v),
+        }
+    }
+}
+
 impl_repository_error!(
     Error,
     duplicate = |error| { Error::ConflictError(duplicate_key_conflict_message(&error)) }

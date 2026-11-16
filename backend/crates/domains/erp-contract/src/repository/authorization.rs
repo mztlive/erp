@@ -12,11 +12,7 @@ use erp_identity::entity::authorization::{
     AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
     QueryOutput, RelationKey,
 };
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::ports::{
-    AccessFactsPort, AccessMapping, MappingPreparation, QueryFragment, RelationMapping,
-};
-use erp_identity::repository::OrganizationRepository;
+use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
 use erp_identity::{
     Error as IdentityError, OrganizationDirectoryService, ResourceTargets, Result as IdentityResult,
@@ -44,7 +40,7 @@ pub fn bindings(
     if history_collection.trim().is_empty() || history_collection.contains('\0') {
         return Err(IdentityError::ValidationError("合同历史参与来源集合无效".into()));
     }
-    let facts = Arc::new(ContractFacts { db: db.clone(), participants });
+    let facts = Arc::new(ContractFacts { db, participants });
     let model = QueryModel {
         key: QueryModelKey::parse("contract_responsibility")?,
         resource: "contract".into(),
@@ -60,7 +56,7 @@ pub fn bindings(
         .into(),
     };
     model.validate()?;
-    let mapping = Arc::new(ContractMapping { db, model, history_collection: history_collection.into() });
+    let mapping = Arc::new(ContractMapping { model, history_collection: history_collection.into() });
     Ok((facts, mapping))
 }
 
@@ -105,7 +101,6 @@ fn history_predicate(collection: &str, user: &str) -> QueryFragment {
 
 #[derive(Clone)]
 struct ContractMapping {
-    db: Database,
     model: QueryModel,
     history_collection: String,
 }
@@ -116,9 +111,6 @@ impl AccessMapping for ContractMapping {
     }
     fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
         Ok("$id".into())
-    }
-    fn preparation(&self) -> Option<&dyn MappingPreparation> {
-        Some(self)
     }
     fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":NOT_DELETED_TIMESTAMP_BSON}))
@@ -197,29 +189,6 @@ impl AccessFactsPort for ContractFacts {
     }
 }
 
-#[async_trait]
-impl MappingPreparation for ContractMapping {
-    async fn prepare(
-        &self,
-        context: &AccessContext,
-        executor: &mut dyn Executor,
-    ) -> IdentityResult<MappingFacts> {
-        let state = OrganizationRepository::new(&self.db).state(executor).await?;
-        Ok(organization_preparation(&state, context.as_of))
-    }
-}
-
-/// 保留真实组织修订和下一条关系时效边界，不为静态合同集合制造版本。
-fn organization_preparation(state: &OrganizationState, as_of: Instant) -> MappingFacts {
-    let valid_until = state
-        .memberships
-        .iter()
-        .flat_map(|membership| [Some(membership.validity.valid_from), membership.validity.valid_to])
-        .flatten()
-        .filter(|at| *at > as_of)
-        .min();
-    MappingFacts { version: Some(state.version.to_string()), valid_until, ..Default::default() }
-}
 /// 将已读取合同及当前组织事实转换为identity事实。
 fn contract_object(
     row: Document,
@@ -269,17 +238,15 @@ mod tests {
     use std::sync::Mutex;
 
     use application_core::AuditActor;
-    use entity_core::BaseModel;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
-    use erp_identity::entity::organization::{OrgMembership, OrgValidity};
     use erp_permissions::contract;
     use mongodb::Client;
     use mongodb::options::{ClientOptions, ServerAddress};
     use persistence_core::NoTransaction;
 
     use super::*;
-    use crate::{EmptyContractParticipants, Result};
+    use crate::{EmptyContractParticipants, FailClosedContractParticipantPort, Result};
 
     fn context() -> AccessContext {
         AccessContext {
@@ -376,15 +343,10 @@ mod tests {
             self.targets.lock().unwrap().push(ids.to_vec());
             Ok(ids.to_vec())
         }
-
-        async fn revision(&self, user: &str, _: &mut dyn Executor) -> Result<i64> {
-            assert_eq!(user, "sales-a");
-            Ok(20_001)
-        }
     }
 
     #[tokio::test]
-    async fn reads_use_a_point_revision_and_only_the_requested_contract_targets() {
+    async fn reads_load_only_the_requested_contract_targets() {
         let port = Participants { targets: Mutex::new(Vec::new()) };
         let targets = ["contract-a".to_owned()];
         let facts = ContractResponsibility::Read;
@@ -412,7 +374,7 @@ mod tests {
             bindings(db.clone(), Arc::new(EmptyContractParticipants), "participation").unwrap();
         assert_eq!(mapping.model().collection, <Database as ContractExt>::CONTRACTS);
         assert_eq!(mapping.model().output, QueryOutput::Object);
-        assert!(mapping.preparation().is_some());
+        assert!(mapping.preparation().is_none());
         let QueryFragment::Match(ownership) =
             mapping.predicate(&AccessFact::Owned, &context(), None).unwrap()
         else {
@@ -422,6 +384,18 @@ mod tests {
             ownership,
             doc! {"$or": [{"sales_owner_user_id": "sales-a"}, {"shared_sales_user_ids": "sales-a"}]}
         );
+        let orgs = BTreeSet::from(["org-a".into()]);
+        let QueryFragment::Exists { bindings: member, pipeline: memberships, .. } =
+            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context(), None).unwrap()
+        else {
+            panic!("合同组织范围必须关联真实主属关系");
+        };
+        assert_eq!(member, doc! {"member": "$sales_owner_user_id"});
+        assert_eq!(
+            memberships[0].get_document("$match").unwrap().get_document("valid_from").unwrap(),
+            &doc! {"$lte": context().as_of.unix_secs()}
+        );
+        assert_eq!(memberships.last().unwrap(), &doc! {"$match": {"count": 1, "org": {"$in": ["org-a"]}}});
         let QueryFragment::Exists { collection, bindings: bound, pipeline } =
             mapping.predicate(&AccessFact::HistoryParticipant, &context(), None).unwrap()
         else {
@@ -439,34 +413,22 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn organization_preparation_preserves_revision_and_earliest_future_boundary() {
-        let mut state = OrganizationState { version: 17, ..Default::default() };
-        state.memberships = [(1, Some(9)), (10, Some(20)), (30, None)]
-            .into_iter()
-            .map(|(from, to)| OrgMembership {
-                base: BaseModel::fake(),
-                user_id: "owner".into(),
-                org_unit_id: "org".into(),
-                validity: OrgValidity {
-                    valid_from: Instant::from_unix_secs(from),
-                    valid_to: to.map(Instant::from_unix_secs),
-                },
-                changed_by: "admin".into(),
-                reason: "transfer".into(),
-            })
-            .collect();
-        let prepared = organization_preparation(&state, Instant::from_unix_secs(10));
-        assert_eq!(prepared.version.as_deref(), Some("17"));
-        assert_eq!(prepared.valid_until, Some(Instant::from_unix_secs(20)));
-        assert!(prepared.validate(true, Instant::from_unix_secs(19)).is_ok());
+    #[tokio::test]
+    async fn writes_do_not_load_history_and_reads_fail_when_participants_are_unwired() {
+        let port = FailClosedContractParticipantPort;
+        let targets = ["contract-a".into()];
+        assert_eq!(
+            ContractResponsibility::Write
+                .history(&port, &context(), &targets, &mut NoTransaction)
+                .await
+                .unwrap(),
+            Vec::<String>::new()
+        );
         assert!(matches!(
-            prepared.validate(true, Instant::from_unix_secs(20)),
-            Err(IdentityError::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED")
+            ContractResponsibility::Read
+                .history(&port, &context(), &targets, &mut NoTransaction)
+                .await,
+            Err(IdentityError::Internal(message)) if message.contains("合同参与端口未接线")
         ));
-        state.version = 18;
-        let prepared = organization_preparation(&state, Instant::from_unix_secs(30));
-        assert_eq!(prepared.version.as_deref(), Some("18"));
-        assert_eq!(prepared.valid_until, None);
     }
 }

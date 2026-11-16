@@ -5,6 +5,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_finance::repository::PurchasePaymentRequestExt;
 use erp_identity::SharedRbacService;
+use erp_permissions::purchase_order;
 use erp_read_models::finance::payment_request::PurchasePaymentRequestReadService;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_read_models::sales_timeline::{SalesTimelineReadService, TimelineAccessPort, TimelineDocument};
@@ -97,7 +98,7 @@ impl TimelineAccess {
         };
         // 与退货详情一致，使用真实来源采购单重新检查 detail 范围。
         purchase_access(self.db.clone(), self.rbac.clone())
-            .require_object(actor, "detail", order.purchase_order_id.as_ref(), &[], executor)
+            .require_object(actor, &purchase_order::DETAIL, order.purchase_order_id.as_ref(), executor)
             .await?;
         Ok(true)
     }
@@ -126,7 +127,7 @@ impl TimelineAccess {
                 return Ok(false);
             };
             purchase_access(self.db.clone(), self.rbac.clone())
-                .require_object(actor, "detail", id, &[], executor)
+                .require_object(actor, &purchase_order::DETAIL, id, executor)
                 .await?;
         } else {
             let Some(id) = &document.sales_order_id else {

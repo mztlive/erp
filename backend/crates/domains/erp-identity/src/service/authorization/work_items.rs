@@ -105,6 +105,11 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
             sales_inquiry::COMMANDS_PROCUREMENT_PUBLISH,
         ],
     ),
+    (
+        "SUPPLIER_SETTLEMENT_REVIEW",
+        "supplier_settlement_statement",
+        &[supplier_settlement::STATEMENT_REVIEW_DECIDE],
+    ),
     ("PROCUREMENT_ORDER_CREATION", "sales_order", &[purchase_order::CREATE]),
     (
         "PURCHASE_PAYMENT_ARRANGEMENT",

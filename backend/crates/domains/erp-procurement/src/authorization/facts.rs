@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use erp_identity::entity::authorization::{
-    AccessContext, FactValue, ObjectFacts, RelatedObjects, RelationKey,
-};
+use erp_identity::entity::authorization::{AccessContext, FactValue, ObjectFacts};
 use erp_identity::{AccessFactsPort, ResourceTargets, Result};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -71,15 +69,7 @@ impl AccessFactsPort for PurchaseFacts {
         let mut result = Vec::new();
         for id in targets.ids() {
             let Some(order) = self.db.purchase_orders().find_by_id(id, executor).await? else { continue };
-            let mut root = Self::object(&order, &context.resource);
-            root.relations.insert(
-                RelationKey::parse("self_purchase")?,
-                RelatedObjects {
-                    expected_ids: [order.base.id.clone()].into(),
-                    objects: vec![Self::object(&order, "purchase_order")],
-                },
-            );
-            result.push(root);
+            result.push(Self::object(&order, &context.resource));
         }
         Ok(result)
     }
@@ -87,9 +77,16 @@ impl AccessFactsPort for PurchaseFacts {
 
 #[cfg(test)]
 mod tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
     use erp_core::ids::{
         PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId, WarehouseId,
     };
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::entity::authorization::AccessTarget;
+    use erp_identity::testing::fixed_authorization;
+    use erp_permissions::purchase_order;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     use crate::entity::facts::PaymentTermFact;
@@ -141,6 +138,47 @@ mod tests {
         for missing in [None, Some("   \t".into())] {
             order.owner_user_id = missing;
             assert_eq!(PurchaseFacts::object(&order, "purchase_order").owner_id, FactValue::Known(None));
+        }
+    }
+
+    #[test]
+    fn current_purchase_facts_preserve_root_identity_without_source_objects() {
+        let order = order();
+        for resource in ["purchase_order", "supplier_payment"] {
+            let facts = PurchaseFacts::object(&order, resource);
+            assert_eq!(facts.resource, resource);
+            assert_eq!(facts.id, order.base.id);
+            assert_eq!(facts.version, order.base.version.to_string());
+            assert!(facts.relations.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn company_purchase_access_uses_current_facts_without_historical_participants() {
+        let object = PurchaseFacts::object(&order(), "purchase_order");
+        assert_eq!(object.history_participants, FactValue::Missing);
+        let entries = [purchase_order::LIST, purchase_order::DETAIL, purchase_order::SAVE_DRAFT];
+        let authorization = fixed_authorization(
+            &entries,
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![object.clone()],
+            vec![],
+        )
+        .unwrap();
+        let actor = AuditActor::new("other-buyer".into(), "other".into(), AccountKind::Admin);
+        for entry in entries {
+            authorization
+                .require(
+                    &actor,
+                    &entry,
+                    AccessTarget::record(&object.id).unwrap(),
+                    &mut SnapshotExecutor::default(),
+                )
+                .await
+                .unwrap();
         }
     }
 }

@@ -2,6 +2,7 @@
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::{QueryModel, QueryOutput};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -48,7 +49,7 @@ pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Syn
 /// # 返回
 /// 最多size加一条账户，额外一条用于继续分页。
 /// # 错误
-/// 分页非法或读取失败时拒绝。
+/// 查询模型错配、凭证跨边界、分页非法或读取失败时拒绝。
 pub async fn account_page(
     db: &Database,
     supplier: Option<&str>,
@@ -58,6 +59,23 @@ pub async fn account_page(
     access: &CompiledAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierDepositAccount>> {
+    let pipeline = account_pipeline(supplier, payer, skip, size, access, executor)?;
+    let rows = account_rows(db, pipeline, executor).await?;
+    access.ensure_current(executor)?;
+    Ok(rows)
+}
+
+/// 固定账户模型、当前边界和业务过滤通过后才交付可执行阶段。
+fn account_pipeline(
+    supplier: Option<&str>,
+    payer: Option<&str>,
+    skip: u64,
+    size: u32,
+    access: &CompiledAccess,
+    executor: &mut dyn Executor,
+) -> Result<Vec<Document>> {
+    account_model(access.model())?;
+    access.ensure_current(executor)?;
     if size == 0 || size > 100 {
         return Err(Error::ValidationError("账户分页上限为一百条".into()));
     }
@@ -68,9 +86,6 @@ pub async fn account_page(
     if let Some(payer) = payer {
         filter.insert("identity.payer_party_id", payer);
     }
-    if access.model().collection != "supplier_deposit_accounts" {
-        return Err(Error::ValidationError("预存款查询授权模型不匹配".into()));
-    }
     let mut pipeline = access.stages().to_vec();
     pipeline.extend([
         doc! {"$match": filter},
@@ -78,7 +93,19 @@ pub async fn account_page(
         doc! {"$skip": i64::try_from(skip).map_err(|_| Error::ValidationError("分页范围过大".into()))?},
         doc! {"$limit": i64::from(size) + 1},
     ]);
-    account_rows(db, pipeline, executor).await
+    Ok(pipeline)
+}
+
+/// 完整账户读取只接受本域固定资源、集合、行身份和对象粒度。
+fn account_model(model: &QueryModel) -> Result<()> {
+    if model.resource != "supplier_deposit"
+        || model.collection != <Database as SupplierDepositExt>::SUPPLIER_DEPOSIT_ACCOUNTS
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(Error::ValidationError("预存款查询授权模型不匹配".into()));
+    }
+    Ok(())
 }
 
 /// 按真实到账时间和稳定身份装载可分配批次。
@@ -286,4 +313,154 @@ async fn account_rows(
 ) -> Result<Vec<SupplierDepositAccount>> {
     let collection = db.supplier_deposit_accounts().collection();
     Ok(aggregate::rows(&collection, pipeline, executor).await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use application_core::AuditActor;
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::entity::authorization::{
+        AccessContext, AccessFact, FactKind, MappingFacts, QueryModelKey, RelationKey,
+    };
+    use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
+    use erp_identity::testing::fixed_authorization;
+    use erp_identity::{AuthorizationService, Error as IdentityError, Permission, Result as IdentityResult};
+    use mongodb::Client;
+    use mongodb::bson::Bson;
+    use persistence_core::ReadExecutor;
+
+    use super::*;
+
+    struct Mapping(QueryModel);
+
+    #[async_trait]
+    impl AccessMapping for Mapping {
+        fn model(&self) -> &QueryModel {
+            &self.0
+        }
+
+        fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+            Ok("$id".into())
+        }
+
+        fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+            Ok(QueryFragment::Match(doc! {"deleted_at": 0_i64}))
+        }
+
+        fn predicate(
+            &self,
+            _: &AccessFact,
+            _: &AccessContext,
+            _: Option<&MappingFacts>,
+        ) -> IdentityResult<QueryFragment> {
+            Ok(QueryFragment::Match(doc! {"owner_id": "user"}))
+        }
+
+        fn relation(
+            &self,
+            _: &RelationKey,
+            _: &AccessContext,
+            _: Option<&MappingFacts>,
+        ) -> IdentityResult<RelationMapping> {
+            Err(IdentityError::ValidationError("账户没有来源关系".into()))
+        }
+    }
+
+    fn model() -> QueryModel {
+        QueryModel {
+            key: QueryModelKey::parse("supplier_deposit_accounts").unwrap(),
+            resource: "supplier_deposit".into(),
+            collection: "supplier_deposit_accounts".into(),
+            id_field: "id".into(),
+            output: QueryOutput::Object,
+            facts: [
+                FactKind::Owner,
+                FactKind::Organization,
+                FactKind::Collaborators,
+                FactKind::SettlementParty,
+            ]
+            .into(),
+        }
+    }
+
+    async fn access(model: QueryModel, executor: &mut dyn Executor) -> CompiledAccess {
+        let permission = Permission::parse("supplier_deposit:list").unwrap();
+        let service: Arc<AuthorizationService> = fixed_authorization(
+            std::slice::from_ref(&permission),
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(permission.clone(), Arc::new(Mapping(model)))],
+        )
+        .unwrap();
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        service.query(&actor, &permission, executor).await.unwrap()
+    }
+
+    #[test]
+    fn account_model_requires_fixed_resource_collection_identity_and_object_output() {
+        account_model(&model()).unwrap();
+        for invalid in [
+            QueryModel { resource: "supplier".into(), ..model() },
+            QueryModel { collection: "other_accounts".into(), ..model() },
+            QueryModel { id_field: "account_id".into(), ..model() },
+            QueryModel { output: QueryOutput::Share { fields: ["id".into()].into() }, ..model() },
+            QueryModel { output: QueryOutput::Existence { fields: ["id".into()].into() }, ..model() },
+        ] {
+            assert!(matches!(account_model(&invalid), Err(Error::ValidationError(_))));
+        }
+    }
+
+    #[tokio::test]
+    async fn account_filters_preserve_all_authorization_stages_before_pagination() {
+        let mut executor = ReadExecutor::default();
+        let access = access(model(), &mut executor).await;
+        let pipeline =
+            account_pipeline(Some("supplier"), Some("payer"), 3, 7, &access, &mut executor).unwrap();
+        let prefix = access.stages().len();
+        assert_eq!(&pipeline[..prefix], access.stages());
+        assert_eq!(
+            pipeline[prefix],
+            doc! {"$match": {
+                "deleted_at": 0_i64, "identity.supplier_id": "supplier", "identity.payer_party_id": "payer"
+            }}
+        );
+        assert_eq!(pipeline[prefix + 2], doc! {"$skip": 3_i64});
+        assert_eq!(pipeline[prefix + 3], doc! {"$limit": 8_i64});
+    }
+
+    #[tokio::test]
+    async fn account_page_rejects_wrong_models_and_stale_boundaries_before_reading() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("deposit_query_guard");
+        let mut executor = ReadExecutor::default();
+        for invalid in [
+            QueryModel { collection: "other_accounts".into(), ..model() },
+            QueryModel { id_field: "account_id".into(), ..model() },
+        ] {
+            let access = access(invalid, &mut executor).await;
+            assert!(matches!(
+                account_page(&db, None, None, 0, 10, &access, &mut executor).await,
+                Err(Error::ValidationError(_))
+            ));
+        }
+        let access = access(model(), &mut executor).await;
+        assert!(matches!(
+            account_page(&db, None, None, 0, 10, &access, &mut ReadExecutor::default()).await,
+            Err(Error::ValidationError(_))
+        ));
+        executor.next_read();
+        assert!(matches!(
+            account_page(&db, None, None, 0, 10, &access, &mut executor).await,
+            Err(Error::ValidationError(_))
+        ));
+    }
 }

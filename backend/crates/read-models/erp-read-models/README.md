@@ -40,6 +40,8 @@
 5. 库存调整详情的授权、单据、明细、流水、审批绑定、精确实例与人员身份读取必须沿用同一 Executor；独立详情入口在核心快照成功后补齐可降级的姓名和 SKU 展示名称。原命令结果必须按收据实例及主题版本读取，禁止回落到最新实例。
 6. 商品与供给聚合由 `catalog_supply` 提供。Process 只负责消费方 Port 装配及当日投影追平；必须先读取配送和勾选交集，空交集直接返回，不执行投影写入。ReadModel 不追平或修改投影。
 
+客户资料、询价、选品册与方案、供应商履约列表和结算列表必须由本库读取。读取入口必须复用原权限常量、授权结果与事务快照。销售退货单域列表、详情及命令结果装配必须调用 `erp-returns`，本库不保留该查询入口。
+
 ## 代码入口
 
 | 入口 | 用途 |
@@ -49,6 +51,11 @@
 | [src/inventory_center/mod.rs](src/inventory_center/mod.rs) | 库存调整详情、actor-aware 审批动作与精确实例投影 |
 | [src/workbench/mod.rs](src/workbench/mod.rs) | 跨业务审批材料、展示与履约队列 |
 | [src/work_item_links/mod.rs](src/work_item_links/mod.rs) | 仅在业务写入事务捕获上级链路，任务读取不得调用 |
+| [src/customer_center/profile/mod.rs](src/customer_center/profile/mod.rs) | 客户、主体、归属账号与敏感令牌的授权详情 |
+| [src/sales_center/inquiry/mod.rs](src/sales_center/inquiry/mod.rs) | 销售及采购询价任务、内部费用与目录模板的授权读取 |
+| [src/sales_center/selection/mod.rs](src/sales_center/selection/mod.rs) | 选品册与方案列表、详情及来源商品读取 |
+| [src/supplier_center/fulfillment_list.rs](src/supplier_center/fulfillment_list.rs) | 供应商履约列表、当前处理人与账号名称 |
+| [src/supplier_center/settlement/list.rs](src/supplier_center/settlement/list.rs) | 供应商主体及复核任务筛选与授权结算列表 |
 | [src/customer_center/service.rs](src/customer_center/service.rs) | 客户最近合同、销售单及应收汇总 |
 | [src/customer_center/repository/related.rs](src/customer_center/repository/related.rs) | 客户合同与销售单摘要的聚合查询 |
 | [src/purchase_center/mod.rs](src/purchase_center/mod.rs) | 采购列表、中心页、创建依据与责任规则查询 |

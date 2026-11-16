@@ -191,6 +191,7 @@ pub(super) async fn replay_submission_with_executor(
     access: &SalesCommandAccess,
     executor: &mut dyn Executor,
 ) -> Result<Option<SubmissionView>> {
+    access.current(sales_order_id, executor).await?;
     let Some(receipt) = load_command_receipt(
         db,
         command_id,
@@ -222,7 +223,6 @@ pub(super) async fn replay_submission_with_executor(
     )?;
     let lines =
         db.sales_order_submission_lines().list_lines_by_submissions(&[submission_id], executor).await?;
-    access.current(sales_order_id, executor).await?;
     Ok(Some(erp_sales::service::sales_order::mapper::submission_view(submission, lines)))
 }
 

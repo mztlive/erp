@@ -28,6 +28,25 @@ impl std::fmt::Debug for CompiledScope {
     }
 }
 impl CompiledScope {
+    /// 核对固定列表动作及原执行器，禁止挪用同资源的其他动作凭证。
+    /// # 参数
+    /// permission 为入口固定动作，executor 为原授权执行器。
+    /// # 返回
+    /// 模型、动作及执行边界一致时成功。
+    /// # 错误
+    /// 动作、资源、模型或执行边界不一致时拒绝。
+    pub(crate) fn ensure_permission(
+        &self,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> erp_identity::Result<()> {
+        self.ensure_model(permission.resource(), executor)?;
+        if self.compiled.permission() != permission {
+            return Err(erp_identity::Error::ValidationError("供应查询授权动作不匹配".into()));
+        }
+        Ok(())
+    }
+
     /// 返回身份域已编译的完整授权阶段。
     /// # 参数
     /// 无。
@@ -347,8 +366,10 @@ pub fn facts(db: Database, resource: &str) -> erp_identity::Result<Arc<dyn Acces
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
     use erp_permissions::{supplier_fulfillment, supplier_offering, supplier_settlement};
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
     /// 模型构造拒绝未知资源，不从展示目录决定接入能力。
@@ -366,6 +387,37 @@ mod tests {
             authorization.ensure_permission(&supplier_fulfillment::ORDER_CANCEL),
             Err(erp_identity::Error::ValidationError(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn settlement_list_scope_rejects_other_action_and_other_execution_boundary() {
+        let permissions = [supplier_settlement::STATEMENT_LIST, supplier_settlement::STATEMENT_DETAIL];
+        let service = fixed_authorization(
+            &permissions,
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            Vec::new(),
+            permissions
+                .iter()
+                .cloned()
+                .map(|permission| (permission, mapping("supplier_settlement_statement").unwrap()))
+                .collect(),
+        )
+        .unwrap();
+        let authorization = Authorization::new(service, "supplier_settlement_statement").unwrap();
+        let actor = AuditActor::new("responsible".into(), "login".into(), AccountKind::Admin);
+        let mut executor = SnapshotExecutor::default();
+        let list = authorization.resolve(&actor, &permissions[0], &mut executor).await.unwrap();
+        assert!(list.ensure_permission(&permissions[0], &mut executor).is_ok());
+        let detail = authorization.resolve(&actor, &permissions[1], &mut executor).await.unwrap();
+        assert!(matches!(
+            detail.ensure_permission(&permissions[0], &mut executor),
+            Err(erp_identity::Error::ValidationError(_))
+        ));
+        executor.restart();
+        assert!(list.ensure_permission(&permissions[0], &mut executor).is_err());
     }
 
     /// 对象事实和查询谓词使用同一真实责任字段，不能借创建人或供应商授予范围。

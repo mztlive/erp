@@ -1,7 +1,7 @@
 //! 创建选品册。
 
 use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId, SalesSelectionIdempotencyId, SkuId};
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::{IdempotencyStoreInput, SalesSelectionService};
 use crate::dto::sales_selection::{
@@ -22,6 +22,7 @@ impl SalesSelectionService {
     /// 创建选品册并在同一事务内排队首次准备。
     ///
     /// 创建成功后册进入准备中；准备失败恢复仍回草稿。独立准备接口只用于重生成与重新准备。
+    /// 调用方须先在同一执行器核验创建候选；本步骤只复用已授权的创建人和责任事实。
     ///
     /// # 参数
     /// * `req` - 创建请求
@@ -205,22 +206,6 @@ impl SalesSelectionService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("选品册不存在".into()))
-    }
-}
-
-impl SalesSelectionService {
-    /// 无事务读取选品册。
-    ///
-    /// # 参数
-    /// * `id` - 身份
-    ///
-    /// # 返回
-    /// 返回选品册。
-    ///
-    /// # 错误
-    /// 不存在。
-    pub async fn booklet(&self, id: &str) -> Result<crate::entity::sales_selection::SalesSelectionBooklet> {
-        self.load_booklet(id, &mut NoTransaction).await
     }
 }
 

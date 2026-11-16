@@ -273,14 +273,14 @@ mod tests {
 
     #[test]
     fn import_query_partitions_use_the_real_job_domain() {
-        for (action, domain) in [
-            ("product_import_read", "PRODUCT_IMPORT"),
-            ("supplier_import_read", "SUPPLIER_IMPORT"),
-            ("brand_import_read", "BRAND_IMPORT"),
-            ("data_transfer_read", "DATA_TRANSFER"),
+        for (permission, domain) in [
+            (internal::PRODUCT_IMPORT_JOB_READ, "PRODUCT_IMPORT"),
+            (internal::SUPPLIER_IMPORT_JOB_READ, "SUPPLIER_IMPORT"),
+            (internal::BRAND_IMPORT_JOB_READ, "BRAND_IMPORT"),
+            (internal::DATA_TRANSFER_JOB_READ, "DATA_TRANSFER"),
         ] {
             let mut context = context("reader");
-            context.permission = Permission::parse(format!("background_job:{action}")).unwrap();
+            context.permission = permission;
             let QueryFragment::Match(records) = JobMapping(model()).records(&context, None).unwrap() else {
                 panic!("固定资料过滤必须为字段条件")
             };

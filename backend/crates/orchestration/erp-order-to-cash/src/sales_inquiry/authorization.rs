@@ -55,22 +55,6 @@ pub(super) async fn query(
     Ok((Arc::new(compiled), authorization.clone()))
 }
 
-/// 编译实际采购任务查询。
-/// # 参数
-/// authorization 为共享服务，actor 为当前采购，executor 为原读取阶段。
-/// # 返回
-/// 采购询价查询凭证和原共享服务。
-/// # 错误
-/// 缺少资格、范围、事实或执行边界时拒绝。
-pub(super) async fn task_query(
-    authorization: &Arc<AuthorizationService>,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<(Arc<CompiledAccess>, Arc<AuthorizationService>)> {
-    let compiled = authorization.query(actor, &sales_inquiry::QUERY_PROCUREMENT_LIST, executor).await?;
-    Ok((Arc::new(compiled), authorization.clone()))
-}
-
 /// 检查精确采购任务及版本。
 /// # 参数
 /// authorization 为共享服务，actor/permission 为当前入口，task 为读取的精确任务，executor 为原事务。

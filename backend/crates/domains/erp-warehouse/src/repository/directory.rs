@@ -1,15 +1,16 @@
 //! 目录只投影稳定编号、当前名称和状态；授权和搜索先于有界读取。
 use application_core::directory::{DirectoryItem, DirectoryQuery};
-use erp_identity::CompiledAccess;
+use erp_identity::{CompiledAccess, Result as IdentityResult};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
+use mongodb::error::Error as MongoError;
 use mongodb::options::FindOptions;
 use persistence_core::{
-    Executor, PageResult, Pagination, QueryFilter, Result as RepositoryResult, aggregate,
+    Error as RepositoryError, Executor, PageResult, Pagination, QueryFilter, aggregate,
     insert_literal_regex_filter,
 };
 
-use crate::authorization::WarehouseQuery;
+use crate::authorization::{WarehouseQuery, ensure_warehouse_query};
 use crate::dto::warehouse::WAREHOUSE_SORT_FIELDS;
 use crate::repository::warehouse_projection::warehouse_projection;
 use crate::repository::{WarehouseExt, WarehouseFilter, WarehouseRow};
@@ -139,16 +140,19 @@ fn warehouse_options(filter: &WarehouseFilter) -> FindOptions {
 /// # 返回
 /// 完整授权查询存在实际仓库时为真。
 /// # 错误
-/// 数据库读取或解码失败时返回原始错误。
+/// 模型或当前边界错配时返回校验错误；数据库读取或解码失败时透传。
 pub(crate) async fn authorized_rows_exist(
     db: &Database,
     access: &CompiledAccess,
     executor: &mut dyn Executor,
-) -> RepositoryResult<bool> {
+) -> IdentityResult<bool> {
+    ensure_warehouse_query(access, executor)?;
     let mut stages = access.stages().to_vec();
     stages.extend([doc! { "$project": { "_id": 0, "id": 1 } }, doc! { "$limit": 1 }]);
     let collection = db.collection::<Document>(<Database as WarehouseExt>::WAREHOUSES);
-    Ok(!aggregate::rows(&collection, stages, executor).await?.is_empty())
+    let rows = aggregate::rows(&collection, stages, executor).await?;
+    ensure_warehouse_query(access, executor)?;
+    Ok(!rows.is_empty())
 }
 
 /// 执行统一授权阶段后返回真实仓库身份。
@@ -157,27 +161,25 @@ pub(crate) async fn authorized_rows_exist(
 /// # 返回
 /// 当前候选内的已授权仓库 ID，不截断。
 /// # 错误
-/// 数据库或解码失败透传。
+/// 模型或当前边界错配时返回校验错误；数据库或解码失败透传。
 pub(crate) async fn authorized_ids_in(
     db: &Database,
     access: &CompiledAccess,
     ids: &[String],
     executor: &mut dyn Executor,
-) -> RepositoryResult<Vec<String>> {
-    access.ensure_current(executor).map_err(|error| {
-        persistence_core::Error::DatabaseError(mongodb::error::Error::custom(error.to_string()))
-    })?;
+) -> IdentityResult<Vec<String>> {
+    ensure_warehouse_query(access, executor)?;
     let collection = db.collection::<Document>(<Database as WarehouseExt>::WAREHOUSES);
     let mut pipeline = vec![doc! {"$match": {"id": {"$in": ids}}}];
     pipeline.extend_from_slice(access.stages());
     pipeline.push(doc! {"$project":{"_id":0,"id":1}});
-    aggregate::rows(&collection, pipeline, executor)
-        .await?
-        .into_iter()
+    let rows = aggregate::rows(&collection, pipeline, executor).await?;
+    ensure_warehouse_query(access, executor)?;
+    rows.into_iter()
         .map(|row| {
             row.get_str("id")
                 .map(str::to_owned)
-                .map_err(|error| mongodb::error::Error::custom(error.to_string()).into())
+                .map_err(|error| RepositoryError::from(MongoError::custom(error.to_string())).into())
         })
         .collect()
 }

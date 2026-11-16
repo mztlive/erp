@@ -1,8 +1,12 @@
 use std::str::FromStr;
 
+use application_core::AuditActor;
+use async_trait::async_trait;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{SupplierAccountId, SupplierSettlementStatementId, WorkItemId};
 use erp_core::money::Amount;
+use erp_identity::testing::unavailable_authorization;
+use erp_identity::{IdentityAuditPort, PreparedResourceAudit, RbacService, Result as IdentityResult};
 use erp_supply::command_receipt::{
     DifferenceDecisionReceipt, ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult,
 };
@@ -10,9 +14,47 @@ use erp_supply::entity::supplier_settlement::{SupplierSettlementStatement, Suppl
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
+use mongodb::Client;
+use persistence_core::Executor;
 
 use super::review::*;
 use super::*;
+
+struct NoAudit;
+
+#[async_trait]
+impl IdentityAuditPort for NoAudit {
+    fn resource_log(
+        &self,
+        _: AuditActor,
+        _: &str,
+        _: &str,
+        _: String,
+    ) -> IdentityResult<PreparedResourceAudit> {
+        panic!("授权失败不得准备审计")
+    }
+
+    async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> IdentityResult<()> {
+        panic!("授权失败不得写入审计")
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct NoWorkflowAuthorization;
+
+impl WorkflowAuthorizationPort for NoWorkflowAuthorization {}
+
+pub(super) async fn unwired_process() -> SupplierSettlementProcess<NoWorkflowAuthorization> {
+    let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+        .await
+        .unwrap()
+        .database("settlement_replay_authorization_unit");
+    let authorization = unavailable_authorization();
+    let rbac = Arc::new(RbacService::new(db.clone(), Arc::new(NoAudit)));
+    let work_items =
+        WorkItemService::new(db.clone(), rbac.clone(), authorization.clone(), NoWorkflowAuthorization);
+    SupplierSettlementProcess::new(db.clone(), SettlementAccess::unwired(db), rbac, authorization, work_items)
+}
 
 pub(super) fn sample_statement() -> SupplierSettlementStatement {
     let mut statement = SupplierSettlementStatement::new(

@@ -109,6 +109,7 @@ impl SalesSelectionService {
     }
 
     /// 在调用方授权事务内更新访问密码并保存幂等结果。
+    /// 调用方须在同一执行器核验册维护资格；actor 只用于领域留痕和幂等作用域。
     ///
     /// # 参数
     /// `id` 为册，`req` 为密码命令，`password_hash` 为慢哈希，`fingerprint` 为完整原请求的带密钥指纹，`actor` 为操作人，`executor` 必须为事务。

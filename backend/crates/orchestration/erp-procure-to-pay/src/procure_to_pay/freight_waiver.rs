@@ -5,6 +5,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderLineId;
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::dto::purchase_order::{
     WAIVE_FREIGHT_ACTION, WaivePurchaseFreightRequest, WaivePurchaseFreightResult,
 };
@@ -47,7 +48,12 @@ impl PurchaseOrderProcess {
                 Box::pin(async move {
                     let mut order = ports
                         .access(db.clone())
-                        .require_object(&actor, "update", &purchase_order_id, executor)
+                        .require_object(
+                            &actor,
+                            &purchase_order_permissions::FREIGHT_FREIGHT_WAIVER_CREATE,
+                            &purchase_order_id,
+                            executor,
+                        )
                         .await?;
                     let line = SalesOrderLineId::new(req.sales_order_line_id.trim());
                     order

@@ -73,9 +73,14 @@ impl SupplierApiReadService {
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_identity::testing::unbound_authorization;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::{fixed_authorization, unbound_authorization};
+    use erp_identity::{Error as IdentityError, Permission};
+    use erp_permissions::{internal, supplier, supplier_api};
     use erp_supply::dto::supplier_api::SupplierApiConnectionListParams;
     use erp_supply::ports::supplier_reference_registry::SupplierReferenceKind;
+    use erp_supply::repository::supplier_api::connection_mapping;
+    use persistence_core::ReadExecutor;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::{CatalogQuery, SupplierApiReadService};
@@ -91,6 +96,26 @@ mod tests {
         AuditActor::new("buyer".into(), "采购".into(), AccountKind::Admin)
     }
 
+    async fn service_with_permissions(permissions: &[Permission]) -> SupplierApiReadService {
+        let service = service().await;
+        let (_, supplier) = erp_supplier::authorization::bindings(service.db.clone()).unwrap();
+        let connection = connection_mapping(supplier).unwrap();
+        let authorization = fixed_authorization(
+            permissions,
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            Vec::new(),
+            vec![
+                (supplier_api::CONNECTION_DETAIL, connection.clone()),
+                (internal::CONNECTION_CATALOG_READ, connection),
+            ],
+        )
+        .unwrap();
+        SupplierApiReadService::new(service.db, authorization)
+    }
+
     #[tokio::test]
     async fn list_and_detail_reject_missing_authorization_before_loading_connections() {
         let service = service().await;
@@ -102,15 +127,90 @@ mod tests {
             )
             .await;
         assert!(matches!(list, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
-        let detail = service.connection_detail_for_actor("connection", &actor()).await;
-        assert!(matches!(detail, Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"));
+        let detail = service
+            .connection_detail_snapshot("connection", &actor(), &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(detail, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
 
     #[tokio::test]
     async fn catalog_rejects_missing_authorization_before_loading_items_or_jobs() {
         let query = serde_json::from_value::<CatalogQuery>(serde_json::json!({})).unwrap();
-        let result = service().await.catalog("connection", query, &actor()).await;
-        assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"));
+        let result = service()
+            .await
+            .catalog_snapshot("connection", &query, &actor(), &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn display_qualifications_precede_the_final_query_in_the_same_snapshot() {
+        for visible in [false, true] {
+            let mut permissions = vec![supplier_api::CONNECTION_DETAIL, supplier::DETAIL];
+            if visible {
+                permissions.extend([
+                    supplier_api::REFERENCES_OPTIONS,
+                    internal::CONNECTION_UPDATE_BUSINESS_PROFILE,
+                    internal::SUPPLIER_OFFERING_COST_DETAIL,
+                ]);
+            }
+            let service = service_with_permissions(&permissions).await;
+            let executor = &mut SnapshotExecutor::default();
+            let (access, display) = service.connection_detail_access(&actor(), executor).await.unwrap();
+            assert_eq!(display.covers_one(&supplier_api::REFERENCES_OPTIONS), visible);
+            assert_eq!(display.covers_one(&internal::CONNECTION_UPDATE_BUSINESS_PROFILE), visible);
+            service.authorization.validate(&access, executor).await.unwrap();
+            let (access, can_read_cost) = service.catalog_access(&actor(), executor).await.unwrap();
+            assert_eq!(can_read_cost, visible);
+            service.authorization.validate(&access, executor).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn display_permissions_do_not_bypass_final_connection_query_qualification() {
+        let service = service_with_permissions(&[
+            supplier_api::REFERENCES_OPTIONS,
+            internal::CONNECTION_UPDATE_BUSINESS_PROFILE,
+            internal::SUPPLIER_OFFERING_COST_DETAIL,
+        ])
+        .await;
+        let detail = service.connection_detail_access(&actor(), &mut SnapshotExecutor::default()).await;
+        assert!(matches!(detail, Err(Error::Forbidden(_))));
+        let catalog = service.catalog_access(&actor(), &mut SnapshotExecutor::default()).await;
+        assert!(matches!(catalog, Err(Error::Forbidden(_))));
+    }
+
+    #[tokio::test]
+    async fn detail_and_catalog_refuse_non_snapshot_execution_before_business_reads() {
+        let service = service().await;
+        let detail =
+            service.connection_detail_snapshot("connection", &actor(), &mut ReadExecutor::default()).await;
+        assert!(
+            matches!(detail, Err(Error::ValidationError(reason)) if reason == "供应连接详情读取必须使用快照事务")
+        );
+        let query = serde_json::from_value::<CatalogQuery>(serde_json::json!({})).unwrap();
+        let catalog =
+            service.catalog_snapshot("connection", &query, &actor(), &mut ReadExecutor::default()).await;
+        assert!(
+            matches!(catalog, Err(Error::ValidationError(reason)) if reason == "供应连接目录读取必须使用快照事务")
+        );
+    }
+
+    #[tokio::test]
+    async fn final_validation_rejects_detail_and_catalog_credentials_after_a_new_query() {
+        let service = service_with_permissions(&[supplier_api::CONNECTION_DETAIL, supplier::DETAIL]).await;
+        let executor = &mut SnapshotExecutor::default();
+        let (detail, _) = service.connection_detail_access(&actor(), executor).await.unwrap();
+        let (catalog, _) = service.catalog_access(&actor(), executor).await.unwrap();
+        let result = service.authorization.validate(&detail, executor).await;
+        assert!(
+            matches!(result, Err(IdentityError::ValidationError(reason)) if reason == "授权结果不能跨事务或读取阶段使用")
+        );
+        service.connection_detail_access(&actor(), executor).await.unwrap();
+        let result = service.authorization.validate(&catalog, executor).await;
+        assert!(
+            matches!(result, Err(IdentityError::ValidationError(reason)) if reason == "授权结果不能跨事务或读取阶段使用")
+        );
     }
 
     #[tokio::test]

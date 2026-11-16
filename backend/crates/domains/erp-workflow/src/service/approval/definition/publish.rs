@@ -16,11 +16,11 @@ use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PUBLISH_DEFINITION_COMMAND_DOMAIN,
     PreparedDefinitionIdentity, applied_definition, lock_command_identity, map_model_error, now,
     parse_idempotency_key, participant, policy_for_definition, replay_prepared_definition_receipt,
-    require_definition_access, write_definition_audit, write_receipt,
+    write_definition_audit, write_receipt,
 };
 use super::mapping::detail_with_copies;
 use super::replace::{
-    apply_snapshots, rebuild_draft_graph, reload_draft_for_cas, replace_graph, validate_assignees,
+    apply_snapshots, ensure_draft_lock, rebuild_draft_graph, replace_graph, validate_assignees,
 };
 use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::error::Result;
@@ -55,9 +55,7 @@ impl ApprovalDefinitionService {
             request.expected_definition_lock_version,
             actor.id(),
         )?;
-        let graph = self.require_graph(&request.definition_id).await?;
-        let policy = policy_for_definition(&graph.definition)?;
-        self.commit_publish(graph, policy, request, actor, identity).await
+        self.commit_publish(request, actor, identity).await
     }
 
     /// 在唯一事务中发布草稿并退役旧版本。
@@ -66,36 +64,20 @@ impl ApprovalDefinitionService {
     /// 任一校验失败时整体回滚。
     async fn commit_publish(
         &self,
-        graph: DefinitionGraph,
-        policy: ProcessRequiredApprovalPolicy,
         request: PublishDefinitionRequest,
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
-        let authorization = self.authorization.clone();
-        let db = self.db.clone();
-
-        let identity_service = self.identity.clone();
-        let audit = std::sync::Arc::clone(&self.audit);
+        let service = self.clone();
         let transaction_actor = actor.clone();
-        let transaction_policy = policy.clone();
         let transaction_identity = identity.clone();
         let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
-        let client = db.client().clone();
+        let client = self.db.client().clone();
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 publish_tx(
-                    &authorization,
-                    &identity_service,
-                    &db,
-                    graph,
-                    PublishTxInput {
-                        policy: transaction_policy,
-                        request,
-                        actor: &transaction_actor,
-                        identity: &transaction_identity,
-                        audit: audit.as_ref(),
-                    },
+                    &service,
+                    PublishTxInput { request, actor: &transaction_actor, identity: &transaction_identity },
                     executor,
                 )
                 .await
@@ -103,7 +85,6 @@ impl ApprovalDefinitionService {
         });
         self.recover_definition_command(
             outcome.await,
-            &policy,
             &approval_process::PUBLISH_DEFINITION,
             actor,
             identity,
@@ -113,7 +94,7 @@ impl ApprovalDefinitionService {
     }
 }
 
-/// 发布草稿事务的政策、请求、命令身份与操作人。
+/// 发布草稿事务的请求、命令身份与操作人。
 ///
 /// # 用途
 /// 将发布命令上下文字段打包。
@@ -130,16 +111,12 @@ impl ApprovalDefinitionService {
 /// # 关键业务约束
 /// 图、用途、账号或动作任一失败都不得进入发布写库。
 struct PublishTxInput<'a> {
-    /// 单据审批政策。
-    policy: ProcessRequiredApprovalPolicy,
     /// 发布请求。
     request: PublishDefinitionRequest,
     /// 审计操作人。
     actor: &'a AuditActor,
     /// 已规范化的当前命令身份及精确旧格式候选。
     identity: &'a PreparedDefinitionIdentity,
-    /// 注入的审计端口。
-    audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 
 /// 事务内发布草稿。
@@ -148,10 +125,8 @@ struct PublishTxInput<'a> {
 /// 回放收据或刷新快照并发布当前草稿。
 ///
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` - 数据库
-/// * `graph` - 当前草稿图
-/// * `input` - 政策、请求、摘要与操作人
+/// * `service` - 同一应用注入的定义服务与基础设施
+/// * `input` - 请求、摘要与操作人
 /// * `executor` - 执行器
 ///
 /// # 返回
@@ -163,18 +138,16 @@ struct PublishTxInput<'a> {
 /// # 关键业务约束
 /// 任一校验失败必须整体回滚。
 async fn publish_tx(
-    authorization: &AuthorizationService,
-    identity_service: &SharedRbacService,
-    db: &Database,
-    graph: DefinitionGraph,
+    service: &ApprovalDefinitionService,
     input: PublishTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
-    let PublishTxInput { policy, request, actor, identity, audit } = input;
-    require_definition_access(authorization, actor, &approval_process::PUBLISH_DEFINITION, &policy, executor)
+    let PublishTxInput { request, actor, identity } = input;
+    let graph = service
+        .require_graph(&request.definition_id, actor, &approval_process::PUBLISH_DEFINITION, executor)
         .await?;
     if let Some(view) = replay_prepared_definition_receipt(
-        db,
+        &service.db,
         identity,
         &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
         executor,
@@ -183,16 +156,24 @@ async fn publish_tx(
     {
         return Ok(view);
     }
-    let current = publish_candidate(
-        authorization,
-        identity_service,
-        db,
-        &graph,
-        &policy,
-        request.expected_definition_lock_version,
-        executor,
-    )
-    .await?;
+    ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
+    let policy = policy_for_definition(&graph.definition)?;
+    let current =
+        publish_candidate(&service.authorization, &service.identity, &service.db, graph, &policy, executor)
+            .await?;
+    apply_publication(service, current, request, actor, identity, executor).await
+}
+
+/// 在同一事务规划新旧发布状态并持久化结果。
+async fn apply_publication(
+    service: &ApprovalDefinitionService,
+    current: DefinitionGraph,
+    request: PublishDefinitionRequest,
+    actor: &AuditActor,
+    identity: &PreparedDefinitionIdentity,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionDetailView> {
+    let db = &service.db;
     let Publication { mut result, previous, previous_lock } =
         plan_publication(db, &current, actor, executor).await?;
     write_receipt(db, &identity.current, &DefinitionCommandResultRef::from_graph(&result).encode(), executor)
@@ -210,7 +191,7 @@ async fn publish_tx(
         .await?;
     result.definition = applied_definition(outcome)?;
     write_definition_audit(
-        audit,
+        service.audit.as_ref(),
         actor,
         "approval_definition.publish",
         &result,
@@ -258,12 +239,10 @@ async fn publish_candidate(
     authorization: &AuthorizationService,
     identity_service: &SharedRbacService,
     db: &Database,
-    graph: &DefinitionGraph,
+    current: DefinitionGraph,
     policy: &ProcessRequiredApprovalPolicy,
-    expected_lock: u64,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let current = reload_draft_for_cas(db, &graph.definition, expected_lock, executor).await?;
     current.validate_linear().map_err(map_model_error)?;
     validate_required_purposes(policy, &current.purpose_refs())?;
     let snapshots =
@@ -275,4 +254,40 @@ async fn publish_candidate(
     }
     let nodes = apply_snapshots(current.nodes, &snapshots)?;
     rebuild_draft_graph(&current.definition, nodes)
+}
+
+#[cfg(test)]
+mod tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::test_support::unavailable_service;
+    use super::*;
+    use crate::error::Error;
+
+    #[tokio::test]
+    async fn authorization_failure_precedes_definition_facts_receipts_and_lock_checks() {
+        let (service, actor) = unavailable_service().await;
+        let request = PublishDefinitionRequest {
+            definition_id: "definition-never-read".into(),
+            expected_definition_lock_version: 99,
+            idempotency_key: "publish-retry".into(),
+        };
+        let identity = lock_command_identity(
+            parse_idempotency_key(&request.idempotency_key).unwrap(),
+            ApprovalCommandKind::PublishDefinition,
+            PUBLISH_DEFINITION_COMMAND_DOMAIN,
+            &request.definition_id,
+            request.expected_definition_lock_version,
+            actor.id(),
+        )
+        .unwrap();
+        let error = publish_tx(
+            &service,
+            PublishTxInput { request, actor: &actor, identity: &identity },
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
 }

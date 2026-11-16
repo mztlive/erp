@@ -1,4 +1,7 @@
-use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
+use std::collections::BTreeSet;
+
+use application_core::{EmptyScopeVersion, ScopeVersion};
+use erp_core::ids::SupplierAccountId;
 use erp_permissions::supplier_settlement;
 use persistence_core::Executor;
 use validator::Validate;
@@ -15,19 +18,21 @@ use crate::entity::supplier_settlement::{
 };
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
-use crate::repository::supplier_settlement::SupplierSettlementStatementRow;
+use crate::repository::supplier_settlement::{
+    SupplierSettlementStatementRow, SupplierSettlementStatementStatsRow,
+};
 use crate::{Error, Result};
 
 /// 结算单列表筛选条件类型（经 `SupplierSettlementExt` 关联类型跨 crate 可达）。
 type StatementFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementStatementFilter;
 
 impl SupplierSettlementService {
-    /// 按动作解析范围后分页查询结算单。
+    /// 使用原执行器已解析的列表动作凭证分页查询结算单。
     ///
     /// # 参数
     /// * `params` - 查询参数
     /// * `keyword_supplier_ids` - 关键词命中的供应商身份
-    /// * `actor` - 已认证操作人
+    /// * `context` - 原执行器已解析的列表授权凭证
     /// * `handler_open_statement_ids` - 当前开放复核任务命中的结算单
     /// * `executor` - 调用方执行器
     ///
@@ -39,15 +44,15 @@ impl SupplierSettlementService {
     pub async fn statement_list_scoped(
         &self,
         params: &SupplierSettlementStatementListParams,
-        keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
-        actor: &AuditActor,
+        keyword_supplier_ids: Vec<SupplierAccountId>,
+        context: &CompiledScope,
         handler_open_statement_ids: Vec<String>,
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatementListView> {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let context = self.access().resolve(actor, &supplier_settlement::STATEMENT_LIST, executor).await?;
+        context.ensure_permission(&supplier_settlement::STATEMENT_LIST, executor)?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
         let org_ids = expand_org_filter(
             &self.access(),
@@ -61,7 +66,7 @@ impl SupplierSettlementService {
         filter.authorized_scope = Some(context.clone());
         filter.handler_open_statement_ids = handler_open_statement_ids;
         filter.business_org_unit_ids = org_ids.map(|ids| ids.into_iter().collect());
-        let mut view = self.load_statement_page(&filter, &context, executor).await?;
+        let mut view = self.load_statement_page(&filter, context, executor).await?;
         context.validate(executor).await?;
         view.empty_reason = None;
         Ok(view)
@@ -87,7 +92,7 @@ async fn expand_org_filter(
     org_unit_ids: Option<&[String]>,
     include_descendants: bool,
     executor: &mut dyn Executor,
-) -> Result<Option<std::collections::BTreeSet<String>>> {
+) -> Result<Option<BTreeSet<String>>> {
     let Some(ids) = org_unit_ids.filter(|ids| !ids.is_empty()) else {
         return Ok(None);
     };
@@ -163,7 +168,7 @@ fn list_view(
     items: Vec<SupplierSettlementStatementView>,
     total: i64,
     filter: &StatementFilter,
-    stats: Option<crate::repository::supplier_settlement::SupplierSettlementStatementStatsRow>,
+    stats: Option<SupplierSettlementStatementStatsRow>,
     context: &CompiledScope,
 ) -> SupplierSettlementStatementListView {
     let stats = stats.map_or_else(

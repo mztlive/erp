@@ -4,6 +4,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::{persist_log, recover_command};
 use erp_core::ids::SalesOrderRevisionId;
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::dto::purchase_order::{
     SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
 };
@@ -133,7 +134,7 @@ async fn execute_save_draft_transaction(
 ) -> Result<SavePurchaseOrderDraftResult> {
     let DraftSaveServices { service, ports } = context;
     let db = service.db.clone();
-    let object_scope = service.command_access(actor, "update");
+    let object_scope = service.command_access(actor, &purchase_order_permissions::SAVE_DRAFT);
     let transaction_order_id = purchase_order_id.to_string();
     let transaction_actor = actor.clone();
     let transaction_receipt_id = receipt_id.clone();
@@ -475,7 +476,7 @@ async fn recover_saved_draft(
         Ok(result) => Ok(result),
         Err(error) => {
             let db = service.db.clone();
-            let access = service.command_access(actor, "update");
+            let access = service.command_access(actor, &purchase_order_permissions::SAVE_DRAFT);
             let id = purchase_order_id.to_string();
             let identity = receipt_id.clone();
             let fingerprint = fingerprint.to_string();

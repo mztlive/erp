@@ -17,7 +17,7 @@ use erp_workflow::service::approval::execution::{
     CancelExecutionInput, PreparedExecution, claim_and_persist_document_cancel_runtime,
 };
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use super::customer_receipt::receipt_command_result;
 use crate::{FinancePostingPorts, Result};
@@ -31,6 +31,7 @@ use crate::{FinancePostingPorts, Result};
 /// * `binding` - 创建时冻结的定义绑定
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
+/// * `executor` - 原命令执行器。
 ///
 /// # 返回
 /// 返回定义图、实例、当前执行、任务关闭策略与开放任务快照。
@@ -42,6 +43,7 @@ pub(crate) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     subject: &SubjectRef,
     subject_version: u32,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
     Ok(document_cancel_runtime(
         db,
@@ -49,7 +51,7 @@ pub(crate) async fn load_cancel_runtime(
         subject,
         subject_version,
         "客户回款单绑定的审批定义不存在",
-        &mut NoTransaction,
+        executor,
     )
     .await?)
 }
@@ -123,6 +125,7 @@ pub(crate) struct CustomerReceiptCancelPersistInput {
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 回款单、取消计划与开放任务
+/// * `executor` - 原命令执行器。
 ///
 /// # 返回
 /// 返回在原事务重验撤回资格后读取的回款视图。
@@ -136,50 +139,30 @@ pub(crate) async fn persist_customer_receipt_cancel(
     db: &Database,
     rbac: &FinancePostingPorts,
     input: CustomerReceiptCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<CustomerReceiptView> {
     let CustomerReceiptCancelPersistInput { mut receipt, prepared, open_tasks, actor, reason, now, audit } =
         input;
-    let db = db.clone();
-    let rbac = rbac.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                rbac.authorization
-                    .require(
-                        &actor,
-                        &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                if let PreparedExecution::Apply(writes) = prepared {
-                    let actor_id = actor.id().to_string();
-                    let closed_tasks =
-                        WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
-                    claim_and_persist_document_cancel_runtime(
-                        &db,
-                        &writes,
-                        &closed_tasks,
-                        &actor_id,
-                        executor,
-                    )
-                    .await?;
-                    rbac.runtime.persist_cancel_copies(&db, &writes, executor).await?;
-                    db.customer_receipts().update(&mut receipt, executor).await?;
-                    persist_log(&db, &audit, executor).await?;
-                }
-                receipt_command_result(
-                    &db,
-                    &rbac.authorization,
-                    &actor,
-                    &receipt.base.id,
-                    &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
-                    AccessTarget::Operation,
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+    rbac.authorization
+        .require(&actor, &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL, AccessTarget::Operation, executor)
+        .await?;
+    if let PreparedExecution::Apply(writes) = prepared {
+        let actor_id = actor.id().to_string();
+        let closed_tasks =
+            WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
+        claim_and_persist_document_cancel_runtime(db, &writes, &closed_tasks, &actor_id, executor).await?;
+        rbac.runtime.persist_cancel_copies(db, &writes, executor).await?;
+        db.customer_receipts().update(&mut receipt, executor).await?;
+        persist_log(db, &audit, executor).await?;
+    }
+    receipt_command_result(
+        db,
+        &rbac.authorization,
+        &actor,
+        &receipt.base.id,
+        &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL,
+        AccessTarget::Operation,
+        executor,
+    )
+    .await
 }

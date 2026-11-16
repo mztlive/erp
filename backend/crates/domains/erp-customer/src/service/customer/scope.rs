@@ -8,7 +8,7 @@ use erp_core::common::time::BusinessDate;
 use erp_identity::AccountDirectoryService;
 use erp_permissions::customer as customer_permissions;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 use serde::Serialize;
 
 use super::CustomerService;
@@ -54,7 +54,7 @@ pub(super) struct CustomerSnapshot {
 
 /// 列表事务共用的只读依赖（erp-customer-003）。
 ///
-/// 复核路径与首快照共用同一过滤与指纹逻辑，仅 `hydrate` 决定是否执行
+/// 复核路径与分页读取共用同一过滤与指纹逻辑，仅 `hydrate` 决定是否执行
 /// 分页查询与行水合；指纹与总数口径保持一致。
 struct ListTxDeps {
     db: Database,
@@ -71,6 +71,7 @@ impl CustomerService {
     /// # 参数
     /// * `query` - 已归一化查询
     /// * `actor` - 已认证操作人
+    /// * `executor` - 当前列表用例的快照执行器
     ///
     /// # 返回
     /// 返回带范围版本的列表快照，不含负责销售候选。
@@ -84,14 +85,9 @@ impl CustomerService {
         &self,
         query: CustomerListQuery,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<CustomerSnapshot> {
-        let deps = self.list_deps(query, actor);
-        let client = deps.db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move { run_list_snapshot(deps, true, executor).await })
-            })
-            .await
+        run_list_snapshot(self.list_deps(query, actor), true, executor).await
     }
 
     /// 轻量版本复核快照（erp-customer-003）。
@@ -103,6 +99,7 @@ impl CustomerService {
     /// # 参数
     /// * `query` - 已归一化查询
     /// * `actor` - 已认证操作人
+    /// * `executor` - 当前列表用例的快照执行器
     ///
     /// # 返回
     /// 返回仅带范围版本的轻量快照（`items` 为空、`total` 为零）。
@@ -113,14 +110,9 @@ impl CustomerService {
         &self,
         query: CustomerListQuery,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<CustomerSnapshot> {
-        let deps = self.list_deps(query, actor);
-        let client = deps.db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move { run_list_snapshot(deps, false, executor).await })
-            })
-            .await
+        run_list_snapshot(self.list_deps(query, actor), false, executor).await
     }
 
     /// 组装列表事务依赖。
@@ -382,7 +374,7 @@ pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Resu
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 同一查询内两次快照的范围版本必须一致。
+/// 同一快照内两次读取的范围版本必须一致。
 ///
 /// # 参数
 /// * `first` - 首次快照版本

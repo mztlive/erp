@@ -97,6 +97,15 @@ async fn post_receipt(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<PurchaseReceipt> {
+    super::task::require_fulfillment_entry(
+        db,
+        task_identity,
+        "purchase_receipt",
+        receipt_id.as_ref(),
+        actor,
+        executor,
+    )
+    .await?;
     let domain = FulfillmentService::new(db.clone());
     let (mut receipt, lines) =
         domain.prepare_purchase_receipt_posting(receipt_id, req.version, req.warehouse_id, executor).await?;
@@ -301,7 +310,7 @@ impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
                     db,
                     self.task_identity,
                     super::task::FulfillmentTaskObject::PurchaseReceipt(receipt),
-                    actor.id(),
+                    actor,
                     session,
                 )
                 .await?;

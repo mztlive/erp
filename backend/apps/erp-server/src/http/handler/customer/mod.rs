@@ -76,36 +76,7 @@ pub async fn customer_profile_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerProfileDetailView> {
-    ensure_customer_access(&state, &actor, "detail", &id).await?;
-    let mut view = state.application().customer_profile_process().detail(&id).await?;
-    view.allowed_actions = allowed_actions(&state, &actor, view.account.status.is_active()).await?;
-    let can_view_contact = has_permission(&state, &actor, "party_contact:detail").await?;
-    let can_view_address = has_permission(&state, &actor, "party_address:detail").await?;
-    let can_view_tax = has_permission(&state, &actor, "party_tax_profile:detail").await?;
-    let can_view_bank = has_permission(&state, &actor, "party_bank_account:detail").await?;
-    let can_reveal_contact =
-        can_view_contact && has_permission(&state, &actor, "party_contact:reveal").await?;
-    let can_reveal_address =
-        can_view_address && has_permission(&state, &actor, "party_address:reveal").await?;
-    let can_reveal_bank =
-        can_view_bank && has_permission(&state, &actor, "party_bank_account:reveal").await?;
-    view.sensitive_fields.retain(|field| match field.kind {
-        SensitiveFieldKind::ContactMobile => can_reveal_contact,
-        SensitiveFieldKind::Address => can_reveal_address,
-        SensitiveFieldKind::BankAccountNumber => can_reveal_bank,
-    });
-    if !can_view_bank {
-        view.bank_accounts.clear();
-    }
-    if !can_view_contact {
-        view.contacts.clear();
-    }
-    if !can_view_address {
-        view.addresses.clear();
-    }
-    if !can_view_tax {
-        view.tax_profiles.clear();
-    }
+    let view = state.application().customer_profile_read_service().detail(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

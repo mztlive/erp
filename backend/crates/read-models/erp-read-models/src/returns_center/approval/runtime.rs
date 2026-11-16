@@ -2,6 +2,7 @@
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_workflow::BpmExt;
+use erp_workflow::entity::approval_integration::subject_ref_for;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::execution::{
     history_item_from_execution, history_page_from, latest_rejection_reason,
@@ -14,8 +15,8 @@ use super::super::dto::{
     DocumentApprovalView,
 };
 use super::{RECENT_HISTORY_LIMIT, optional_approval_binding};
-use crate::Result;
 use crate::approval_runtime::binding_route;
+use crate::{Error, Result};
 
 /// 为已授权单据详情补齐真实实例、当前执行和有界历史。
 ///
@@ -45,8 +46,8 @@ pub async fn load_runtime(
         definition.name = name;
         definition.nodes = nodes;
     }
-    let subject = erp_workflow::entity::approval_integration::subject_ref_for(document_type, id)
-        .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
+    let subject =
+        subject_ref_for(document_type, id).map_err(|error| Error::ValidationError(error.to_string()))?;
     let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, executor).await? else {
         return Ok(view);
     };

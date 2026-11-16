@@ -5,8 +5,8 @@ use erp_core::money::Amount;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
-use erp_identity::AccessTarget;
 use erp_identity::entity::authorization::{ObjectFacts, RelatedObjects, RelationKey};
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{Permission, purchase_payment_request};
 use erp_procure_to_pay::procure_to_pay::sync_payment_arrangement;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
@@ -59,23 +59,25 @@ impl PurchasePaymentRequestProcess {
         self.rbac = rbac;
         self
     }
-    async fn authorized_result(&self, id: &str, actor: &AuditActor) -> Result<PurchasePaymentRequest> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let id = id.to_owned();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let request = load(&db, &id, executor).await?;
-                    require_sources(&db, &rbac, &request, &actor, "detail", executor).await?;
-                    Ok(request)
-                })
-            })
-            .await
-    }
+}
+
+/// 重放和写入均先证明原动作资格，再读取完整来源与当前结果。
+async fn authorized_request(
+    db: &Database,
+    authorization: &AuthorizationService,
+    id: &str,
+    actor: &AuditActor,
+    action: &str,
+    executor: &mut dyn Executor,
+) -> Result<PurchasePaymentRequest> {
+    let permission = match action {
+        "submit" => purchase_payment_request::SUBMIT,
+        "withdraw" => purchase_payment_request::WITHDRAW,
+        "close" => purchase_payment_request::CLOSE,
+        _ => return Err(Error::ValidationError("未知付款申请命令".into())),
+    };
+    authorization.require(actor, &permission, AccessTarget::record(id)?, executor).await?;
+    load(db, id, executor).await
 }
 
 pub(super) async fn load(
@@ -208,4 +210,48 @@ pub async fn validate_approval_context(
         return Err(Error::ConflictError("审批决定不属于当前付款申请提交版本".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod command_access_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 提交、撤回和关闭均须先取得原动作授权；取证失败不得连接单据仓储。
+    #[tokio::test]
+    async fn command_access_stops_before_document_read_when_authorization_fails() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .unwrap()
+            .database("payment_request_command_access");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for action in ["submit", "withdraw", "close"] {
+            let error = authorized_request(
+                &db,
+                &authorization,
+                "request",
+                &actor,
+                action,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+        let error = authorized_request(
+            &db,
+            &authorization,
+            "request",
+            &actor,
+            "detail",
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message) if message == "未知付款申请命令"));
+    }
 }

@@ -4,17 +4,22 @@ mod customer_names;
 mod detail;
 
 use std::collections::{HashMap, HashSet};
+use std::slice;
 
 use application_core::AuditActor;
+use erp_contract::ContractExt;
 use erp_contract::repository::prelude::*;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
 use erp_core::money::Amount;
+use erp_customer::CustomerExt;
 use erp_customer::repository::prelude::*;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_party::PartyExt;
+use erp_permissions::purchase_order;
 use erp_sales::dto::sales_order::{PageView, SubmissionView};
-use erp_sales::entity::sales_order::{BusinessType, ReviewStatus};
-use erp_sales::repository::sales_order::SalesOrderRow;
+use erp_sales::entity::sales_order::{BusinessType, ReviewStatus, SalesOrder};
+use erp_sales::repository::sales_order::{SalesOrderRow, SalesOrderSearch};
 use erp_sales::repository::{SalesOrderExt, SalesOrderRevisionRepositoryExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
@@ -27,6 +32,7 @@ use super::status::stage_code_label_tone;
 use super::{SalesOrderReadService, dto};
 use crate::purchase_center::creation_authorization::{CreationTaskFilter, query_tasks};
 use crate::purchase_center::freight_follow_up::{FreightFollowUpView, freight_follow_ups};
+use crate::support::ensure_deep_page;
 use crate::{Error, Result};
 
 impl SalesOrderReadService {
@@ -61,7 +67,7 @@ impl SalesOrderReadService {
         actor: &AuditActor,
     ) -> Result<super::SalesListView> {
         let expected = params.scope_version.as_deref();
-        crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
+        ensure_deep_page(params.page.unwrap_or(1), expected)?;
         validator::Validate::validate(params)?;
         self.list_snapshot(params, actor).await
     }
@@ -107,7 +113,7 @@ impl SalesOrderReadService {
     /// 授权边界一致。
     async fn purchase_creation_access(
         &self,
-        order: &erp_sales::entity::sales_order::SalesOrder,
+        order: &SalesOrder,
         coverage: &SalesProcurementCoverageView,
         actor: Option<&AuditActor>,
         executor: &mut dyn Executor,
@@ -146,6 +152,7 @@ impl SalesOrderReadService {
     /// # 参数
     /// * `order` - 销售单
     /// * `actor` - 当前操作人；内部查询为空
+    /// * `executor` - 原详情读取事务执行器。
     ///
     /// # 返回
     /// 返回待追加运费的采购商品；无权或无待跟进时为空。
@@ -154,7 +161,7 @@ impl SalesOrderReadService {
     /// 账号、权限或采购事实读取失败时返回错误。
     pub(super) async fn freight_follow_ups(
         &self,
-        order: &erp_sales::entity::sales_order::SalesOrder,
+        order: &SalesOrder,
         actor: Option<&AuditActor>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<FreightFollowUpView>> {
@@ -162,11 +169,10 @@ impl SalesOrderReadService {
             return Ok(Vec::new());
         };
         let authorization = self.require_rbac()?;
-        if !authorization.has_permission(actor, &erp_permissions::purchase_order::CREATE, executor).await? {
+        if !authorization.has_permission(actor, &purchase_order::CREATE, executor).await? {
             return Ok(Vec::new());
         }
-        let mut grouped =
-            freight_follow_ups(&self.db, std::slice::from_ref(&order.base.id), executor).await?;
+        let mut grouped = freight_follow_ups(&self.db, slice::from_ref(&order.base.id), executor).await?;
         Ok(grouped.remove(&order.base.id).unwrap_or_default())
     }
 
@@ -207,7 +213,7 @@ impl SalesOrderReadService {
     /// 构建当前操作人可安全执行的卡券审批工作面投影。
     async fn resolve_active_card_sales_approval(
         &self,
-        _order: &erp_sales::entity::sales_order::SalesOrder,
+        _order: &SalesOrder,
         _submission_id: &SalesOrderSubmissionId,
         _submission: Option<&SubmissionView>,
         _actor: &AuditActor,
@@ -433,10 +439,7 @@ impl SalesOrderReadService {
         &self,
         q: Option<&str>,
         executor: &mut dyn Executor,
-    ) -> Result<erp_sales::repository::sales_order::SalesOrderSearch> {
-        use erp_contract::ContractExt;
-        use erp_customer::CustomerExt;
-        use erp_party::PartyExt;
+    ) -> Result<SalesOrderSearch> {
         let Some(q) = application_core::normalized_text(q) else {
             return Ok(Default::default());
         };
@@ -450,7 +453,7 @@ impl SalesOrderReadService {
             .collect::<Vec<_>>();
         let customer_ids = self.db.customer_accounts().matching_ids_by_parties(&party_ids, executor).await?;
         let contract_ids = self.db.contracts().matching_ids_by_number(&q, executor).await?;
-        Ok(erp_sales::repository::sales_order::SalesOrderSearch { q: Some(q), customer_ids, contract_ids })
+        Ok(SalesOrderSearch { q: Some(q), customer_ids, contract_ids })
     }
 }
 

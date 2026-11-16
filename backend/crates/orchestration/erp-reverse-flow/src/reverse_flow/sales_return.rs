@@ -4,10 +4,9 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_identity::AccessTarget;
 use erp_permissions::returns;
-use erp_read_models::returns_center::ReturnsReadService;
-use erp_read_models::returns_center::dto::SalesReturnCaseView;
-use erp_returns::dto::CreateSalesReturnCaseRequest;
+use erp_returns::dto::{CreateSalesReturnCaseRequest, SalesReturnCaseView};
 use erp_returns::entity::returns::{SalesReturnCase, SalesReturnLine};
+use erp_returns::service::ReturnsService;
 use erp_returns::service::sales_return::{
     build_sales_return_case_and_line, persist_sales_return_case_with_line,
 };
@@ -255,7 +254,7 @@ async fn persist_created_sales_return_case(
                         executor,
                     )
                     .await?;
-                Ok(ReturnsReadService::new(db.clone(), rbac.identity.clone())
+                Ok(ReturnsService::new(db.clone())
                     .load_sales_return_case_view(&case.base.id, executor)
                     .await?)
             })

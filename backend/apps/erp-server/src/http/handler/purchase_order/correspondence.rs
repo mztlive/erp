@@ -11,7 +11,7 @@ use crate::http::errors::Result;
 use crate::http::extractor::Json;
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::MongoPurchaseDataScope;
+use crate::wiring::PurchaseDataScope;
 
 /// 下载当前保存内容的独立采购单文件。
 /// # 参数
@@ -29,7 +29,7 @@ pub async fn purchase_paper(
         purchase_correspondence::download(
             state.application().db(),
             state.application().rbac(),
-            MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
+            PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
             &id,
             &actor,
         )
@@ -54,7 +54,7 @@ pub async fn send_purchase_email(
         purchase_correspondence::send(
             state.application().db(),
             state.application().rbac(),
-            MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
+            PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
             config.purchase_mail.as_ref(),
             &id,
             req,
@@ -80,7 +80,7 @@ pub async fn purchase_email_history(
         purchase_correspondence::history(
             state.application().db(),
             state.application().rbac(),
-            MongoPurchaseDataScope::shared(state.application().db(), state.application().rbac()),
+            PurchaseDataScope::shared(state.application().db(), state.application().authorization().into()),
             &id,
             &actor,
         )

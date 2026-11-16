@@ -1,6 +1,4 @@
 //! 客户验收草稿创建根事务：注册、履约头行写入、审计。
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
@@ -8,16 +6,17 @@ use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CreateCustomerAcceptanceRequest, CustomerAcceptanceView};
 use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceLine};
 use erp_fulfillment::repository::FulfillmentExt;
-use erp_identity::AuthorizationService;
+use erp_fulfillment::service::customer_acceptance::prepare_customer_acceptance_draft;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CustomerAcceptanceProcess;
-use super::evidence::ensure_evidence;
+use super::number::CreationNumber;
 use super::registration::register_created_customer_acceptance_document;
 use crate::Result;
+use crate::workflow::FulfillmentWorkflow;
 impl CustomerAcceptanceProcess {
     /// 创建客户验收单（草稿，跨集合：表头 + 行 + 审计）。
     ///
@@ -48,25 +47,42 @@ impl CustomerAcceptanceProcess {
         actor: &AuditActor,
     ) -> Result<CustomerAcceptanceView> {
         req.validate()?;
-        let id = CustomerAcceptanceId::new(next_id());
-        let acceptance_no =
-            erp_fulfillment::service::document_number::next_customer_acceptance_no(&self.db).await?;
-        let (acceptance, lines) =
-            erp_fulfillment::service::customer_acceptance::prepare_customer_acceptance_draft(
-                id,
-                acceptance_no,
-                req,
-            )?;
-        persist_created_customer_acceptance(
-            &self.db,
-            self.workflow.clone(),
-            &self.authorization,
-            acceptance.clone(),
-            lines,
-            actor.clone(),
-        )
-        .await?;
-        Ok(acceptance.into())
+        let db = self.db.clone();
+        let workflow = self.workflow.clone();
+        let authorization = self.authorization.clone();
+        let actor = actor.clone();
+        db.client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let acceptance_no = CreationNumber {
+                        db: &db,
+                        authorization: &authorization,
+                        workflow: workflow.as_ref(),
+                        sales_order_id: &req.sales_order_id,
+                        actor: &actor,
+                        evidence: req.evidence_attachment_id.as_ref(),
+                    }
+                    .allocate(executor)
+                    .await?;
+                    let (acceptance, lines) = prepare_customer_acceptance_draft(
+                        CustomerAcceptanceId::new(next_id()),
+                        acceptance_no,
+                        req,
+                    )?;
+                    persist_created_customer_acceptance(
+                        &db,
+                        workflow.as_ref(),
+                        &acceptance,
+                        &lines,
+                        &actor,
+                        executor,
+                    )
+                    .await?;
+                    Ok(acceptance.into())
+                })
+            })
+            .await
     }
 }
 /// 在创建事务内写入客户验收草稿并登记无绑定单据。
@@ -75,40 +91,19 @@ impl CustomerAcceptanceProcess {
 /// 绑定、注册或验收单写入失败时返回错误，调用方必须视作整体回滚。
 async fn persist_created_customer_acceptance(
     db: &Database,
-    workflow: Arc<dyn crate::workflow::FulfillmentWorkflow>,
-    rbac: &Arc<AuthorizationService>,
-    acceptance: CustomerAcceptance,
-    lines: Vec<CustomerAcceptanceLine>,
-    actor: AuditActor,
+    workflow: &dyn FulfillmentWorkflow,
+    acceptance: &CustomerAcceptance,
+    lines: &[CustomerAcceptanceLine],
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let audit = actor.clone().resource_log(
         "customer_acceptance.create",
         "customer_acceptance",
         acceptance.base.id.clone(),
     )?;
-    let db = db.clone();
-    let rbac = rbac.clone();
-
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                if let Some(asset_id) = acceptance.evidence_attachment_id.as_ref() {
-                    ensure_evidence(&db, workflow.as_ref(), asset_id, &actor, executor).await?;
-                }
-                register_created_customer_acceptance_document(
-                    &db,
-                    workflow.as_ref(),
-                    &rbac,
-                    &acceptance,
-                    &actor,
-                    executor,
-                )
-                .await?;
-                db.fulfillment().create_customer_acceptance_with_lines(&acceptance, &lines, executor).await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    register_created_customer_acceptance_document(db, workflow, acceptance, actor, executor).await?;
+    db.fulfillment().create_customer_acceptance_with_lines(acceptance, lines, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }

@@ -1,9 +1,7 @@
 //! 运行实例列表、详情、历史与恢复选项查询。
 
 use erp_identity::{AccessTarget, AuthorizationService};
-use erp_permissions::{
-    approval_instance as approval_permissions, approval_instance, internal as internal_permissions,
-};
+use erp_permissions::{approval_instance as approval_permissions, internal as internal_permissions};
 mod detail;
 mod query_list;
 
@@ -15,7 +13,7 @@ use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalProcessInstanceStatus;
 use erp_core::common::time::Instant;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::super::apply_plan::PlannedWrites;
@@ -159,7 +157,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         query: RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
         query.validate()?;
-        self.ensure_active_instance_reader(actor).await?;
         match query.view {
             RuntimeInstanceListView::Mine => self.list_mine(actor, &query).await,
             _ => self.list_managed_or_started(actor, &query).await,
@@ -327,8 +324,8 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         instance_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<RuntimeRecoveryOptionsView> {
+        self.ensure_management_runtime_read_stage(actor, instance_id, executor).await?;
         let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
-        self.ensure_management_runtime_read_stage(actor, &subject, executor).await?;
         let blocked = subject.instance.status == ApprovalProcessInstanceStatus::Blocked;
         let candidates = recovery_options_for(blocked, subject.instance.blocker_code);
         let actions = authorized_recovery_actions(
@@ -421,32 +418,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         Ok(Some(task.base.version.to_string()))
     }
 
-    /// 重验当前读取主体仍为有效账号；失效时隐藏目标实例存在性。
-    ///
-    /// # 参数
-    /// * `actor` - Handler 已认证但状态可能已经变化的账号快照
-    ///
-    /// # 返回
-    /// 账号仍存在、类型一致且启用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
-    pub(super) async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
-        self.ensure_active_instance_reader_stage(actor, &mut NoTransaction).await
-    }
-
-    /// 身份资格读取使用当前业务执行器，不创建第二个读取阶段。
-    async fn ensure_active_instance_reader_stage(
-        &self,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if self.authorization.has_permission(actor, &approval_instance::COPIES_HISTORY, executor).await? {
-            return Ok(());
-        }
-        Err(hidden_not_found())
-    }
-
     /// 在原执行器读取并核对实例、当前执行与冻结快照。
     pub(super) async fn load_runtime_read_subject_stage(
         &self,
@@ -513,22 +484,21 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     async fn ensure_management_runtime_read_stage(
         &self,
         actor: &AuditActor,
-        subject: &RuntimeReadSubject,
+        instance_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        require_approval_management_with_executor(
-            &self.authorization,
-            actor,
-            &internal_permissions::APPROVAL_MANAGEMENT_READ,
-            subject.document_type,
-            &subject.instance.base.id,
-            executor,
-        )
-        .await
-        .map_err(|error| match error {
-            crate::error::Error::Forbidden(_) => hidden_not_found(),
-            other => other,
-        })
+        self.authorization
+            .require(
+                actor,
+                &internal_permissions::APPROVAL_MANAGEMENT_READ,
+                AccessTarget::record(instance_id)?,
+                executor,
+            )
+            .await
+            .map_err(|error| match Error::from(error) {
+                Error::Forbidden(_) | Error::NotFound(_) => hidden_not_found(),
+                other => other,
+            })
     }
 }
 
@@ -822,5 +792,28 @@ mod runtime_recovery_options_view_tests {
         let value = serde_json::to_value(&view).expect("序列化");
         let round_trip: RuntimeRecoveryOptionsView = serde_json::from_value(value).expect("反序列化");
         assert_eq!(round_trip, view);
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::FailClosedWorkflowAuthorizationPort;
+    use crate::service::approval::definition::test_support::unavailable_service;
+
+    #[tokio::test]
+    async fn recovery_options_stop_before_subject_reads_when_authorization_fails() {
+        let (definition, actor) = unavailable_service().await;
+        let runtime = ApprovalRuntimeService::new(
+            definition.db,
+            definition.identity,
+            definition.authorization,
+            FailClosedWorkflowAuthorizationPort,
+        );
+        let result =
+            runtime.recovery_options_stage(&actor, "unread-instance", &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
 }

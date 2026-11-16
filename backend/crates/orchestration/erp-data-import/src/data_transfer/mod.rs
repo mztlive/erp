@@ -41,6 +41,20 @@ use crate::repository::import_job_access::ImportJobAccess;
 /// 业务适配器只接受固定任务类型；授权与业务规则沿用原用例。
 #[async_trait]
 pub trait TransferHandler: Send + Sync {
+    /// 在读取任务和私有文件前核验当前业务入口资格。
+    /// # 参数
+    /// kind、input 为服务端保存的最小任务分类事实，actor、executor 为当前身份及读取快照。
+    /// # 返回
+    /// 当前业务资格仍成立时成功。
+    /// # 错误
+    /// 身份、业务资格或快照无效时拒绝，不读取或解密私有文件。
+    async fn authorize_read(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
     /// 在登记任务或返回同内容回执的原事务中检查当前业务资格。
     /// # 参数
     /// kind、input 为固定任务类型及其业务参数，actor 为当前身份，executor 为原登记事务。

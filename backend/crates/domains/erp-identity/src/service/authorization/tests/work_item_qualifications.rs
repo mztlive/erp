@@ -4,7 +4,7 @@ use std::sync::Arc;
 use erp_core::common::time::Instant;
 use erp_permissions::{
     Permission, approval_instance, fulfillment, internal, purchase_order, purchase_payment_request,
-    sales_inquiry, sales_order, work_item,
+    sales_inquiry, sales_order, supplier_settlement, work_item,
 };
 use persistence_core::testing::SnapshotExecutor;
 use persistence_core::{Executor, ReadExecutor};
@@ -68,6 +68,129 @@ fn acceptance() -> [Permission; 5] {
         fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
         sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
     ]
+}
+
+#[tokio::test]
+async fn settlement_formation_requires_review_decision_without_adding_read_permissions() {
+    let identity = Arc::new(Identity::default());
+    let service = service(identity.clone(), Arc::new(Facts::default()));
+    let target =
+        AccessTarget::Candidate(candidate("SUPPLIER_SETTLEMENT_REVIEW", "supplier_settlement_statement"));
+    grant(&identity, &[("reviewer", &[supplier_settlement::STATEMENT_REVIEW_DECIDE])]);
+    service
+        .require(
+            &actor(),
+            &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+            target.clone(),
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap();
+    grant(&identity, &[("reader", &[supplier_settlement::STATEMENT_DETAIL, work_item::DETAIL])]);
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                target,
+                &mut SnapshotExecutor::default()
+            )
+            .await,
+        Err(Error::Forbidden(_))
+    ));
+}
+
+#[tokio::test]
+async fn settlement_recipient_requires_same_role_read_and_review_on_the_exact_task() {
+    let identity = Arc::new(Identity::default());
+    let settlement = ObjectFacts {
+        id: "settlement-task".into(),
+        version: "3".into(),
+        owner_id: FactValue::Known(Some("other".into())),
+        org_unit_id: FactValue::Known(None),
+        assignee_id: FactValue::Known(Some("other".into())),
+        ..candidate("SUPPLIER_SETTLEMENT_REVIEW", "supplier_settlement_statement")
+    };
+    let service = service(identity.clone(), Arc::new(Facts::new(vec![settlement])));
+    let required = [supplier_settlement::STATEMENT_DETAIL, supplier_settlement::STATEMENT_REVIEW_DECIDE];
+    let target = AccessTarget::Task { id: "settlement-task".into(), version: "3".into() };
+    grant(&identity, &[("reviewer", &required)]);
+    service
+        .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target.clone(), &mut SnapshotExecutor::default())
+        .await
+        .unwrap();
+    for grants in [
+        vec![("reader", &required[..1])],
+        vec![("reviewer", &required[1..])],
+        vec![("reader", &required[..1]), ("reviewer", &required[1..])],
+    ] {
+        grant(&identity, &grants);
+        assert!(matches!(
+            service
+                .require(
+                    &actor(),
+                    &internal::WORK_ITEM_RECIPIENT,
+                    target.clone(),
+                    &mut SnapshotExecutor::default()
+                )
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+    grant(&identity, &[("reviewer", &required)]);
+    assert!(
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_RECIPIENT,
+                AccessTarget::Task { id: "settlement-task".into(), version: "2".into() },
+                &mut SnapshotExecutor::default()
+            )
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn inquiry_formation_requires_complete_same_role_execution_permissions() {
+    let identity = Arc::new(Identity::default());
+    let service = service(identity.clone(), Arc::new(Facts::default()));
+    let required = [
+        sales_inquiry::QUERY_PROCUREMENT_DETAIL,
+        sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
+        sales_inquiry::COMMANDS_PROCUREMENT_PUBLISH,
+    ];
+    let target = AccessTarget::Candidate(candidate("SALES_INQUIRY_PROCESSING", "sales_inquiry"));
+    grant(&identity, &[("buyer", &required)]);
+    service
+        .require(
+            &actor(),
+            &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+            target.clone(),
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap();
+    for missing in 0..required.len() {
+        let partial = required
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != missing)
+            .map(|(_, permission)| permission.clone())
+            .collect::<Vec<_>>();
+        grant(&identity, &[("partial", &partial), ("other", &required[missing..missing + 1])]);
+        assert!(matches!(
+            service
+                .require(
+                    &actor(),
+                    &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                    target.clone(),
+                    &mut SnapshotExecutor::default()
+                )
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+    }
 }
 
 #[tokio::test]

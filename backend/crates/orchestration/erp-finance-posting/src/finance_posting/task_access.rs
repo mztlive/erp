@@ -15,7 +15,7 @@ use erp_workflow::{WorkItem, WorkItemExt, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::{FinancePostingPorts, Result};
+use crate::{Error, FinancePostingPorts, Result};
 
 /// 固定动作不接受客户端提供的权限或政策。
 pub(crate) enum TaskPurpose {
@@ -25,20 +25,34 @@ pub(crate) enum TaskPurpose {
 }
 
 impl TaskPurpose {
-    fn permission(self) -> Permission {
+    fn permission(&self) -> Permission {
         match self {
             Self::Payment => purchase_payment_request::CREDIT_LIST,
             Self::Reveal => payable::PAYMENT_RECIPIENT_REVEAL,
             Self::Invoice => receivable::INVOICE_POST,
         }
     }
+
+    fn target(&self, actor: &AuditActor, task: &WorkItem) -> Result<AccessTarget> {
+        Ok(match self {
+            Self::Reveal => {
+                if task.owner_user_id.as_deref() != Some(actor.id()) {
+                    return Err(Error::Forbidden("只有当前任务责任人可以揭示收款账号".into()));
+                }
+                AccessTarget::Operation
+            },
+            Self::Payment | Self::Invoice => {
+                AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() }
+            },
+        })
+    }
 }
 
-/// 在原事务重新读取任务，并核对任务版本与当前办理关系。
+/// 在原事务检查固定动作；付款和开票同时核对精确任务。
 /// # 参数
 /// ports 为共享授权能力；task 为同执行器已读任务，purpose 为本次固定动作。
 /// # 返回
-/// 当前功能资格、任务版本和实际指派均成立时成功。
+/// 揭示具备当前功能资格且为任务责任人时成功；付款和开票还须满足任务版本与实际指派。
 /// # 错误
 /// 资格、任务版本、指派或事实读取失败时拒绝。
 pub(crate) async fn require_task(
@@ -51,12 +65,7 @@ pub(crate) async fn require_task(
 ) -> Result<()> {
     Ok(ports
         .authorization
-        .require(
-            actor,
-            &purpose.permission(),
-            AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() },
-            executor,
-        )
+        .require(actor, &purpose.permission(), purpose.target(actor, task)?, executor)
         .await?)
 }
 
@@ -413,6 +422,24 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn reveal_uses_function_qualification_and_other_financial_actions_keep_exact_task() {
+        let mut task = approval_task();
+        let actor = AuditActor::new("approver".into(), "approver".into(), AccountKind::Admin);
+        assert!(matches!(TaskPurpose::Reveal.target(&actor, &task), Ok(AccessTarget::Operation)));
+        for purpose in [TaskPurpose::Payment, TaskPurpose::Invoice] {
+            assert!(matches!(
+                purpose.target(&actor, &task),
+                Ok(AccessTarget::Task { id, version })
+                    if id == task.base.id && version == task.base.version.to_string()
+            ));
+        }
+        for owner in [Some("other".into()), None] {
+            task.owner_user_id = owner;
+            assert!(matches!(TaskPurpose::Reveal.target(&actor, &task), Err(Error::Forbidden(_))));
+        }
     }
 
     #[test]

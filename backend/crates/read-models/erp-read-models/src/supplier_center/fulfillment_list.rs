@@ -4,24 +4,43 @@
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
-use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, ScopeVersion};
+use application_core::{AuditActor, EmptyScopeVersion, OwnershipPage, PageView, ScopeVersion};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_permissions::supplier_fulfillment;
+use erp_supply::FulfillmentOrderAccess;
 use erp_supply::dto::supplier_fulfillment::{
     FulfillmentOrderListQuery, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderListView,
     SupplierFulfillmentOrderView,
 };
 use erp_supply::dto::supplier_fulfillment_scope::SupplierFulfillmentOrderListItem;
-use erp_supply::service::supplier_fulfillment::query::fulfillment_order_filter;
-use persistence_core::Transactional;
+use erp_supply::service::supplier_fulfillment::SupplierFulfillmentService;
+use erp_supply::service::supplier_fulfillment::query::{FulfillmentOrderFilter, fulfillment_order_filter};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::SupplierFulfillmentProcess;
+/// 授权履约订单、账号姓名及 W26 处理人的只读列表。
+pub struct SupplierFulfillmentListReadService {
+    db: Database,
+    domain: Arc<SupplierFulfillmentService>,
+}
 use crate::{Error, Result};
 
-impl SupplierFulfillmentProcess {
+impl SupplierFulfillmentListReadService {
+    /// 绑定已装配范围与处理人 Port 的领域服务。
+    /// # 参数
+    /// db 为原数据库，domain 为共享供应链查询服务。
+    /// # 返回
+    /// 不缓存授权结果的列表读模型。
+    /// # 错误
+    /// 构造不执行 I/O。
+    pub fn new(db: Database, domain: Arc<SupplierFulfillmentService>) -> Self {
+        Self { db, domain }
+    }
+
     /// 分页查询授权范围内的供应商履约订单。
     ///
     /// # 参数
@@ -54,7 +73,7 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<ListSnapshot> {
         let db = self.db.clone();
-        let domain = self.domain();
+        let domain = self.domain.clone();
         let query = query.clone();
         let actor = actor.clone();
         db.client()
@@ -67,7 +86,7 @@ impl SupplierFulfillmentProcess {
 }
 
 struct ListSnapshot {
-    page: application_core::PageView<SupplierFulfillmentOrderListItem>,
+    page: PageView<SupplierFulfillmentOrderListItem>,
 
     scope_version: String,
     policy_version: u64,
@@ -76,11 +95,11 @@ struct ListSnapshot {
 }
 
 async fn build_snapshot(
-    db: &mongodb::Database,
-    domain: &erp_supply::service::supplier_fulfillment::SupplierFulfillmentService,
+    db: &Database,
+    domain: &SupplierFulfillmentService,
     query: &FulfillmentOrderListQuery,
     actor: &AuditActor,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<ListSnapshot> {
     let access = domain.access();
     let mut context = access.resolve(actor, &supplier_fulfillment::ORDER_LIST, executor).await?;
@@ -94,7 +113,7 @@ async fn build_snapshot(
     let names = account_display_names(db, &page.items, executor).await?;
     context.validate(executor).await?;
     Ok(ListSnapshot {
-        page: application_core::PageView {
+        page: PageView {
             items: named_rows(page.items, &names),
             total: page.total,
             page: page.page,
@@ -109,10 +128,10 @@ async fn build_snapshot(
 }
 
 async fn apply_org_filter(
-    access: &erp_supply::FulfillmentOrderAccess,
+    access: &FulfillmentOrderAccess,
     query: &FulfillmentOrderListQuery,
-    filter: &mut erp_supply::service::supplier_fulfillment::query::FulfillmentOrderFilter,
-    executor: &mut dyn persistence_core::Executor,
+    filter: &mut FulfillmentOrderFilter,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let Some(org_ids) = &query.org_unit_ids else {
         if query.include_descendants == Some(true) {
@@ -131,10 +150,10 @@ async fn apply_org_filter(
 }
 
 async fn apply_handler_filter(
-    domain: &erp_supply::service::supplier_fulfillment::SupplierFulfillmentService,
+    domain: &SupplierFulfillmentService,
     query: &FulfillmentOrderListQuery,
-    filter: &mut erp_supply::service::supplier_fulfillment::query::FulfillmentOrderFilter,
-    executor: &mut dyn persistence_core::Executor,
+    filter: &mut FulfillmentOrderFilter,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let Some(handlers) = &query.handler_user_ids else {
         return Ok(());
@@ -145,9 +164,9 @@ async fn apply_handler_filter(
 }
 
 async fn attach_handlers(
-    domain: &erp_supply::service::supplier_fulfillment::SupplierFulfillmentService,
+    domain: &SupplierFulfillmentService,
     items: &mut [SupplierFulfillmentOrderView],
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let order_ids: Vec<String> = items.iter().map(|row| row.id.clone()).collect();
     let handlers = domain.handlers().open_handler_user_ids(&order_ids, executor).await?;
@@ -164,9 +183,9 @@ fn fingerprint(scope_version: &mut String, total: i64) {
 }
 
 async fn account_display_names(
-    db: &mongodb::Database,
+    db: &Database,
     rows: &[SupplierFulfillmentOrderView],
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<HashMap<String, String>> {
     let mut ids = unique_ids(rows.iter().map(|row| row.follow_up_user_id.clone()));
     ids.extend(unique_ids(rows.iter().filter_map(|row| row.handler_user_id.clone())));
@@ -251,7 +270,7 @@ mod tests {
         let items =
             named_rows(vec![order_view("buyer-1", Some("handler-1")), order_view("missing", None)], &names);
         let view = to_list_view(ListSnapshot {
-            page: application_core::PageView { items, total: 2, page: 1, page_size: 20 },
+            page: PageView { items, total: 2, page: 1, page_size: 20 },
             scope_version: "v".to_string(),
             policy_version: 1,
             organization_version: 1,

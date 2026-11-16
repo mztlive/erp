@@ -16,7 +16,7 @@ entity-macros = { workspace = true }
 erp-core = { workspace = true }
 id-generator = { workspace = true }
 zip = { workspace = true }
-roxmltree = "0.21.1"
+roxmltree = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }
 serde = { workspace = true }

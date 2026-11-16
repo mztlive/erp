@@ -13,14 +13,14 @@ use erp_identity::AccountDirectoryService;
 use erp_permissions::supplier;
 use list_view::{SupplierViewAssembleInput, assemble_supplier_views};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use crate::dto::supplier::{
     CommercialProfileView, SupplierCapabilityView, SupplierDetailView, SupplierQualificationView,
     SupplierSensitiveFieldView, SupplierView,
 };
 use crate::entity::supplier::{
-    SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision, SupplierQualification,
+    SupplierAccountId, SupplierCommercialProfileRevision, SupplierQualification,
     SupplierQualificationCapability,
 };
 use crate::error::{Error, Result};
@@ -402,24 +402,6 @@ impl SupplierService {
             )?);
         }
         Ok(fields)
-    }
-
-    /// 按 ID 加载未删除供应商角色。
-    ///
-    /// # 参数
-    /// * `id` - 供应商角色 ID
-    ///
-    /// # 返回
-    /// 返回供应商角色实体。
-    ///
-    /// # 错误
-    /// 供应商角色不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
-    pub async fn load_supplier(&self, id: &str) -> Result<SupplierAccount> {
-        self.db
-            .supplier()
-            .account(&SupplierAccountId::new(id), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))
     }
 }
 

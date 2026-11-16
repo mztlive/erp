@@ -2,19 +2,16 @@ use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
-use erp_identity::AuthorizationService;
 use erp_permissions::approval_process;
-use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::super::definition_dto::{DefinitionDetailView, RetireDefinitionRequest};
-use super::super::policy::ProcessRequiredApprovalPolicy;
 use super::ApprovalDefinitionService;
 use super::command::{
     DefinitionCommandResultRef, DefinitionResultExpectation, PreparedDefinitionIdentity,
     RETIRE_DEFINITION_COMMAND_DOMAIN, ensure_lock, lock_command_identity, map_model_error, now,
-    parse_idempotency_key, participant, policy_for_definition, replay_prepared_definition_receipt,
-    require_definition_access, write_definition_audit, write_receipt,
+    parse_idempotency_key, participant, replay_prepared_definition_receipt, write_definition_audit,
+    write_receipt,
 };
 use super::mapping::detail_with_copies;
 use crate::error::{Error, Result};
@@ -47,9 +44,7 @@ impl ApprovalDefinitionService {
             request.expected_definition_lock_version,
             actor.id(),
         )?;
-        let graph = self.require_graph(&request.definition_id).await?;
-        let policy = policy_for_definition(&graph.definition)?;
-        self.commit_retire(graph, policy, request, actor, identity).await
+        self.commit_retire(request, actor, identity).await
     }
 
     /// 在唯一事务中退役当前发布版本。
@@ -58,34 +53,20 @@ impl ApprovalDefinitionService {
     /// 目标不是当前发布版本或写入失败时返回错误。
     async fn commit_retire(
         &self,
-        graph: DefinitionGraph,
-        policy: ProcessRequiredApprovalPolicy,
         request: RetireDefinitionRequest,
         actor: &AuditActor,
         identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
-        let authorization = self.authorization.clone();
-        let db = self.db.clone();
-
-        let audit = std::sync::Arc::clone(&self.audit);
+        let service = self.clone();
         let transaction_actor = actor.clone();
-        let transaction_policy = policy.clone();
         let transaction_identity = identity.clone();
         let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
-        let client = db.client().clone();
+        let client = self.db.client().clone();
         let outcome = client.with_transaction(move |executor| {
             Box::pin(async move {
                 retire_tx(
-                    &authorization,
-                    &db,
-                    graph,
-                    RetireTxInput {
-                        policy: transaction_policy,
-                        request,
-                        actor: &transaction_actor,
-                        identity: &transaction_identity,
-                        audit: audit.as_ref(),
-                    },
+                    &service,
+                    RetireTxInput { request, actor: &transaction_actor, identity: &transaction_identity },
                     executor,
                 )
                 .await
@@ -93,7 +74,6 @@ impl ApprovalDefinitionService {
         });
         self.recover_definition_command(
             outcome.await,
-            &policy,
             &approval_process::RETIRE_DEFINITION,
             actor,
             identity,
@@ -103,7 +83,7 @@ impl ApprovalDefinitionService {
     }
 }
 
-/// 退役事务的政策、请求、命令身份与操作人。
+/// 退役事务的请求、命令身份与操作人。
 ///
 /// # 用途
 /// 打包 [`retire_tx`] 的非基础设施参数。
@@ -120,16 +100,12 @@ impl ApprovalDefinitionService {
 /// # 关键业务约束
 /// 只能退役当前已发布定义。
 struct RetireTxInput<'a> {
-    /// 单据审批政策。
-    policy: ProcessRequiredApprovalPolicy,
     /// 退役请求。
     request: RetireDefinitionRequest,
     /// 审计操作人。
     actor: &'a AuditActor,
     /// 已规范化的当前命令身份及精确旧格式候选。
     identity: &'a PreparedDefinitionIdentity,
-    /// 注入的审计端口。
-    audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 
 /// 事务内退役当前发布版本。
@@ -138,10 +114,8 @@ struct RetireTxInput<'a> {
 /// 回放收据或退役当前已发布定义并写入审计。
 ///
 /// # 参数
-/// * `authorization` - 共享授权服务。
-/// * `db` - 数据库
-/// * `graph` - 当前定义图
-/// * `input` - 政策、请求、摘要与操作人
+/// * `service` - 同一应用注入的定义服务与基础设施
+/// * `input` - 请求、摘要与操作人
 /// * `executor` - 执行器
 ///
 /// # 返回
@@ -153,15 +127,15 @@ struct RetireTxInput<'a> {
 /// # 关键业务约束
 /// 已有收据必须原样回放，不得重复 persist。
 async fn retire_tx(
-    authorization: &AuthorizationService,
-    db: &Database,
-    graph: DefinitionGraph,
+    service: &ApprovalDefinitionService,
     input: RetireTxInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<DefinitionDetailView> {
-    let RetireTxInput { policy, request, actor, identity, audit } = input;
-    require_definition_access(authorization, actor, &approval_process::RETIRE_DEFINITION, &policy, executor)
+    let RetireTxInput { request, actor, identity } = input;
+    let graph = service
+        .require_graph(&request.definition_id, actor, &approval_process::RETIRE_DEFINITION, executor)
         .await?;
+    let db = &service.db;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -172,19 +146,32 @@ async fn retire_tx(
     {
         return Ok(view);
     }
-    let published = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, executor).await?;
+    apply_retirement(service, graph, request, actor, identity, executor).await
+}
+
+/// 使用原事务图和当前唯一发布记录退役定义，仅更新定义文档。
+async fn apply_retirement(
+    service: &ApprovalDefinitionService,
+    mut graph: DefinitionGraph,
+    request: RetireDefinitionRequest,
+    actor: &AuditActor,
+    identity: &PreparedDefinitionIdentity,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionDetailView> {
+    let db = &service.db;
+    let published =
+        db.bpm_workflow().find_published_by_process_kind(graph.definition.process_kind, executor).await?;
     let mut retired =
         retire_target(published, &graph.definition.base.id, request.expected_definition_lock_version)?;
     let expected = retired.definition_lock_version();
     retired.retire(participant(actor)?, now()?).map_err(map_model_error)?;
-    let mut graph =
-        DefinitionGraph { definition: retired, nodes: graph.nodes, transitions: graph.transitions };
+    graph.definition = retired;
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     graph.definition.base.version = expected;
     db.approval_process_definitions().update(&mut graph.definition, executor).await?;
     write_definition_audit(
-        audit,
+        service.audit.as_ref(),
         actor,
         "approval_definition.retire",
         &graph,
@@ -216,13 +203,41 @@ fn retire_target(
 #[cfg(test)]
 mod tests {
     use bpm::{ParticipantId, ProcessKind, Timestamp};
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::super::super::definition_dto::DefinitionConfigurationStatus;
     use super::super::super::policy::ApprovalRequirement;
     use super::super::mapping::configuration_status;
-    use super::super::test_support::draft_definition;
+    use super::super::test_support::{draft_definition, unavailable_service};
     use super::*;
     use crate::error::ErrorCode;
+
+    #[tokio::test]
+    async fn authorization_failure_precedes_definition_facts_receipts_and_lock_checks() {
+        let (service, actor) = unavailable_service().await;
+        let request = RetireDefinitionRequest {
+            definition_id: "definition-never-read".into(),
+            expected_definition_lock_version: 99,
+            idempotency_key: "retire-retry".into(),
+        };
+        let identity = lock_command_identity(
+            parse_idempotency_key(&request.idempotency_key).unwrap(),
+            ApprovalCommandKind::RetireDefinition,
+            RETIRE_DEFINITION_COMMAND_DOMAIN,
+            &request.definition_id,
+            request.expected_definition_lock_version,
+            actor.id(),
+        )
+        .unwrap();
+        let error = retire_tx(
+            &service,
+            RetireTxInput { request, actor: &actor, identity: &identity },
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
 
     /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
     #[test]

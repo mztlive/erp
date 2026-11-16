@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | 管理一种业务对象，维护它的规则、查询和数据 | 对应业务领域 crate | 客户分配放 erp-customer，库存预占放 erp-inventory |
 | 一个操作需要多个领域共同完成 | 下表所属业务编排库 | 提交销售单并启动审批；收货过账并更新库存 |
-| 一个查询需要组合多个领域的信息 | [erp-read-models](read-models/erp-read-models/README.md) | 客户中心展示合同、销售和应收；采购列表补齐供应商名称 |
+| 一个查询需要组合多个领域的信息 | [erp-read-models](read-models/erp-read-models/README.md) | 客户资料组合主体和账号；询价、选品及供应商列表组合外域事实 |
 | 定义公共权限编码、资源标识或目录 | [erp-permissions](foundation/erp-permissions/README.md) | 定义内置权限常量，供 identity 和 server 生成器共同使用 |
 | 多个领域需要相同的金额、数量、时间类型 | [erp-core](foundation/erp-core/README.md) | 使用 Amount 计算金额，使用 BusinessDate 表达到期日 |
 | 多个用例需要相同的请求处理约定 | [application-core](foundation/application-core/README.md) | 分页结构、调用人上下文、命令重试匹配 |

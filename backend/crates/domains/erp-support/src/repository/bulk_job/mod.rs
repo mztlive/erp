@@ -8,6 +8,7 @@
 //!
 //! 筛选/行类型按集合拆分定义，经 `BulkJobExt` 的关联类型对外暴露。
 
+mod access;
 mod background_job;
 mod background_job_item;
 mod input;

@@ -392,7 +392,16 @@ async fn prepare_basis_draft(
     .await?;
     let warehouse_region = target_warehouse_region(db, target_warehouse_id.as_ref(), executor).await?;
     let judgements = judge_selected_delivery(input.selected_lines, &group.scope, warehouse_region.as_ref())?;
-    let mut order = new_basis_order(db, input, command, target_warehouse_id, executor).await?;
+    let mut order = prepare_basis_order(
+        db,
+        input.sales_order,
+        input.group,
+        &command.req.work_item_id,
+        command.actor,
+        target_warehouse_id,
+        executor,
+    )
+    .await?;
     order.record_sourcing_delivery(group.scope.price_basis, judgements);
     let (submission, lines) = prepare_basis_submission(db, &order, input, executor).await?;
     order.attach_draft_submission(submission.base.id.clone().into())?;
@@ -401,22 +410,25 @@ async fn prepare_basis_draft(
 }
 
 /// 从同阶段依据和当前主属组织构造采购主表，沿用领域的唯一规范化与状态规则。
-async fn new_basis_order(
+/// # 参数
+/// db、executor 为原事务；sales_order、group 为精确依据；work_item_id、actor 为原命令身份；
+/// target_warehouse_id 为本单已确定的目标收货仓。
+/// # 返回
+/// 返回尚未分配正式号、尚未持久化的采购候选。
+/// # 错误
+/// 当前主属组织缺失或候选字段不满足采购领域不变式时拒绝。
+pub(in crate::procure_to_pay) async fn prepare_basis_order(
     db: &Database,
-    input: &VerifiedBasisInput<'_>,
-    command: &CreateBasisCommand<'_>,
+    sales_order: &SalesOrder,
+    group: &BasisGroup,
+    work_item_id: &str,
+    actor: &AuditActor,
     target_warehouse_id: Option<WarehouseId>,
     executor: &mut dyn Executor,
 ) -> Result<PurchaseOrder> {
-    let sales_order = input.sales_order;
-    let group = input.group;
-    let creation_basis_id = basis_id_for(
-        &sales_order_basis_fact(sales_order),
-        group,
-        &command.req.work_item_id,
-        target_warehouse_id.as_ref(),
-    );
-    let business_org_unit_id = required_business_org(db, command.actor.id(), executor).await?;
+    let creation_basis_id =
+        basis_id_for(&sales_order_basis_fact(sales_order), group, work_item_id, target_warehouse_id.as_ref());
+    let business_org_unit_id = required_business_org(db, actor.id(), executor).await?;
     PurchaseOrder::new(
         PurchaseOrderId::new(next_id()),
         PurchaseOrderData {
@@ -429,10 +441,10 @@ async fn new_basis_order(
             purchase_type: group.scope.purchase_type,
             payment_term_code: group.scope.payment_term_code.clone(),
             fulfillment_responsibility: group.scope.fulfillment_responsibility,
-            owner_user_id: command.actor.id().to_string(),
+            owner_user_id: actor.id().to_string(),
             target_warehouse_id,
         },
-        command.actor.id(),
+        actor.id(),
         parse,
     )
     .map_err(Into::into)

@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, CommandFingerprint};
 use erp_core::AccountKind;
+use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
 use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::repository::prelude::*;
@@ -15,6 +16,7 @@ use erp_identity::{
     AccessControlExt, AccessTarget, AccountSummary, AuthorizationService, Error as IdentityError,
 };
 use erp_permissions::{internal as internal_permissions, sales_order as sales_order_permissions};
+use erp_read_models::Error as ReadModelError;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::dto::sales_order::{HandoverCandidateView, HandoverSalesOrderRequest, HandoverSalesOrderView};
 use erp_sales::entity::command_receipt::SalesCommandResult;
@@ -149,13 +151,13 @@ impl SalesOrderCommandProcess {
         &self,
         id: &str,
         actor: &AuditActor,
-        executor: &mut dyn persistence_core::Executor,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<HandoverCandidateView>> {
         let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let order = access.current(id, executor).await?;
         let authorization = self.authorization.clone();
         let approvers = open_approval_assignees(&self.db, &order.base.id, executor).await?;
-        let accounts = self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
+        let accounts = self.db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
         let policy = require_process_required(DocumentType::SalesOrder)?;
         let mut candidates = Vec::new();
         for account in accounts {
@@ -284,7 +286,7 @@ async fn handover_transaction(
                 )
                 .await?
                 {
-                    return Ok::<Option<HandoverSalesOrderView>, crate::Error>(Some(view));
+                    return Ok::<Option<HandoverSalesOrderView>, Error>(Some(view));
                 }
                 apply_handover(
                     &db,
@@ -299,7 +301,7 @@ async fn handover_transaction(
                     executor,
                 )
                 .await?;
-                Ok::<Option<HandoverSalesOrderView>, crate::Error>(None)
+                Ok::<Option<HandoverSalesOrderView>, Error>(None)
             })
         })
         .await
@@ -308,7 +310,7 @@ async fn handover_transaction(
 /// 只更新销售单负责人／组织与开放验收任务；审批、已完成与快照不变。
 #[allow(clippy::too_many_arguments)]
 async fn apply_handover(
-    db: &mongodb::Database,
+    db: &Database,
     target_identity: &Arc<AuthorizationService>,
     id: &str,
     req: &HandoverSalesOrderRequest,
@@ -317,11 +319,11 @@ async fn apply_handover(
     actor: &AuditActor,
     audit_id: &str,
     fingerprint: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     let mut order = prepare_handover_order(db, target_identity, id, req, target, actor, executor).await?;
     let mut acceptance_tasks = open_acceptance_tasks(db, id, executor).await?;
-    let at = erp_core::common::time::Instant::now();
+    let at = Instant::now();
     let mut transferred = Vec::new();
     for task in &mut acceptance_tasks {
         task.reassign(target.to_string(), at)
@@ -379,13 +381,13 @@ async fn prepare_handover_order(
 
 /// 同执行器验证交接命令的完整身份，再读取当前责任及开放任务。
 async fn replay_handover_with_executor(
-    db: &mongodb::Database,
+    db: &Database,
     command_id: &str,
     fingerprint: (&str, &CommandFingerprint),
     sales_order_id: &str,
     actor_id: &str,
     access: &super::authorization::SalesCommandAccess,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<HandoverSalesOrderView>> {
     let Some(receipt) = load_command_receipt(
         db,
@@ -411,7 +413,7 @@ async fn replay_handover_with_executor(
 
 /// 回放视图沿当前销售责任与开放任务构建，不冻结首次交接目标。
 fn handover_view(
-    order: &erp_sales::entity::sales_order::SalesOrder,
+    order: &SalesOrder,
     acceptance_ids: Vec<String>,
     approval_task_count: usize,
 ) -> HandoverSalesOrderView {
@@ -442,10 +444,10 @@ fn handover_view(
 /// # 关键业务约束
 /// 只判定账号与权限事实；提交—审批分离另由 `ensure_handover_separation` 执行。
 async fn ensure_target_qualified(
-    db: &mongodb::Database,
+    db: &Database,
     authorization: &Arc<AuthorizationService>,
     target: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     if acceptance_qualification(db, authorization, target, executor).await?.is_some() {
         return Ok(());
@@ -470,10 +472,10 @@ async fn ensure_target_qualified(
 /// # 关键业务约束
 /// 复用销售单类型审批政策；开放审批任务本身保持不变。
 async fn ensure_handover_separation(
-    db: &mongodb::Database,
+    db: &Database,
     sales_order_id: &str,
     target: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let approvers = open_approval_assignees(db, sales_order_id, executor).await?;
     let policy = require_process_required(DocumentType::SalesOrder)?;
@@ -484,10 +486,10 @@ async fn ensure_handover_separation(
 
 /// 沿原执行器取得验收完整资格与同次读取的目标账号摘要。
 async fn acceptance_qualification(
-    _db: &mongodb::Database,
+    _db: &Database,
     authorization: &Arc<AuthorizationService>,
     target: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<AccountSummary>> {
     let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
     let candidate = ObjectFacts {
@@ -514,11 +516,11 @@ async fn acceptance_qualification(
 
 /// 用拟交接后的责任事实判断接收人的详情范围，不能使用旧负责人或旧组织。
 async fn target_can_read_order(
-    db: &mongodb::Database,
+    db: &Database,
     authorization: &Arc<AuthorizationService>,
     target: &str,
-    planned: &erp_sales::entity::sales_order::SalesOrder,
-    executor: &mut dyn persistence_core::Executor,
+    planned: &SalesOrder,
+    executor: &mut dyn Executor,
 ) -> Result<bool> {
     let actor = AuditActor::new(target.into(), target.into(), AccountKind::Admin);
     let access = SalesAccess::new(db.clone(), authorization.clone());
@@ -527,16 +529,16 @@ async fn target_can_read_order(
         .await
     {
         Ok(()) => Ok(true),
-        Err(erp_read_models::Error::Forbidden(_) | erp_read_models::Error::NotFound(_)) => Ok(false),
+        Err(ReadModelError::Forbidden(_) | ReadModelError::NotFound(_)) => Ok(false),
         Err(error) => Err(error.into()),
     }
 }
 
 /// 列出该销售单全部开放验收任务。
 async fn open_acceptance_tasks(
-    db: &mongodb::Database,
+    db: &Database,
     sales_order_id: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<WorkItem>> {
     Ok(db
         .work_items()
@@ -567,9 +569,9 @@ fn is_handover_transferable_type(work_item_type: WorkItemType) -> bool {
 
 /// 列出开放验收任务 ID（幂等回放用，不校验身份）。
 async fn open_acceptance_task_ids(
-    db: &mongodb::Database,
+    db: &Database,
     sales_order_id: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     Ok(open_acceptance_tasks(db, sales_order_id, executor)
         .await?
@@ -594,9 +596,9 @@ async fn open_acceptance_task_ids(
 /// # 关键业务约束
 /// 只读审批任务用于岗位分离校验、候选过滤与随转计数，不得改写。
 async fn open_approval_assignees(
-    db: &mongodb::Database,
+    db: &Database,
     sales_order_id: &str,
-    executor: &mut dyn persistence_core::Executor,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     Ok(db
         .work_items()
@@ -610,12 +612,17 @@ async fn open_approval_assignees(
 
 #[cfg(test)]
 mod tests {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_workflow::entity::work_item::WorkItemType;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use crate::Error;
+
     #[tokio::test]
     async fn acceptance_candidate_preserves_authorization_failures_before_reading_account_summary() {
-        use erp_identity::testing::unavailable_authorization;
-        use mongodb::Client;
-        use persistence_core::testing::SnapshotExecutor;
-
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let error = super::acceptance_qualification(
             &db,
@@ -625,7 +632,7 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(matches!(error, crate::Error::Internal(message) if message == "测试授权设施不可用"));
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
     use erp_core::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId};
     use erp_sales::entity::sales_order::{
@@ -676,8 +683,6 @@ mod tests {
     /// 仅开放验收任务随交接转交；审批与其他任务类型保持不变。
     #[test]
     fn handover_transfers_only_acceptance_task_type() {
-        use erp_workflow::entity::work_item::WorkItemType;
-
         assert!(is_handover_transferable_type(WorkItemType::CustomerAcceptanceRegistration));
         assert!(!is_handover_transferable_type(WorkItemType::DocumentApproval));
     }
@@ -728,12 +733,6 @@ mod tests {
 
     #[tokio::test]
     async fn handover_stops_at_authorization_before_loading_version_or_target_state() {
-        use application_core::AuditActor;
-        use erp_core::AccountKind;
-        use erp_identity::testing::unavailable_authorization;
-        use mongodb::Client;
-        use persistence_core::testing::SnapshotExecutor;
-
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await
             .unwrap()
@@ -757,6 +756,6 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(matches!(error, crate::Error::Internal(message) if message == "测试授权设施不可用"));
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

@@ -168,6 +168,7 @@ rust_decimal = "1.42.1"
 async-trait = "0.1.92"
 chrono = "0.4.45"
 regex = "1.13.1"
+roxmltree = "0.21.1"
 validator = { version = "0.21.0", features = ["derive"] }
 
 # 日志和追踪
@@ -200,6 +201,7 @@ argon2 = { version = "0.5.3", features = ["std"] }
 md5 = "0.8.1"
 sha1 = "0.11.0"
 subtle = "2.6.1"
+zeroize = "1.8.2"
 aes-gcm = "0.11.1"
 base64 = "0.23.1"
 hex = "0.4.3"

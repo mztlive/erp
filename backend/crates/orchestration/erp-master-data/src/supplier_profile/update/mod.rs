@@ -9,7 +9,6 @@ use erp_core::ids::{
 };
 use erp_party::repository::prelude::*;
 use erp_party::{Party, PartyExt, PartyRevision};
-use erp_permissions::supplier;
 use erp_supplier::{
     SaveSupplierProfileRequest, SupplierAccount, SupplierCommercialProfileRevision, SupplierExt,
     SupplierProfileMutationView, SupplierProfileUpdateViolation, SupplierRatingRevision,
@@ -19,6 +18,7 @@ use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use persistence_core::{Executor, Transactional};
 
+use super::commands::SupplierCommandTarget;
 use super::create::create_tax_profile;
 use super::validation::resolve_supplier_file_references;
 use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult, party_change};
@@ -92,8 +92,7 @@ impl SupplierProfileProcess {
         self.resolve_transaction_result_with_assets(
             transaction,
             &key,
-            "update",
-            Some(supplier_id),
+            &SupplierCommandTarget::Update(supplier_id.to_owned()),
             &request_fingerprint,
             actor,
         )
@@ -111,10 +110,9 @@ impl SupplierProfileProcess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        self.authorization.access.require_with(actor, &supplier::HANDOVER, supplier_id, executor).await?;
-        if let Some(view) = self
-            .replay_command(&req.idempotency_key, "update", Some(supplier_id), fingerprint, actor, executor)
-            .await?
+        let target = SupplierCommandTarget::Update(supplier_id.to_owned());
+        if let Some(view) =
+            self.replay_command(&req.idempotency_key, &target, fingerprint, actor, executor).await?
         {
             return Ok(SupplierProfileWithAssetsResult { view, assets_committed: false });
         }

@@ -139,6 +139,7 @@ pub struct DirectUploadAbortQuery {
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `req` - 文件名、总字节数与幂等请求身份
 ///
 /// # 返回
@@ -148,9 +149,10 @@ pub struct DirectUploadAbortQuery {
 /// 文件名不是 `.xlsx` 或大小越限时返回错误。
 pub async fn product_import_direct_upload_init(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Json(req): Json<ProductImportDirectUploadInitRequest>,
 ) -> Result<ProductImportDirectUploadInitView> {
-    let view = state.application().product_import_process().init_direct_upload(req).await?;
+    let view = state.application().product_import_process().init_direct_upload(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -161,21 +163,26 @@ pub async fn product_import_direct_upload_init(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `upload_id` - 分片上传标识
 /// * `part_number` - 分片序号（1 起）
 /// * `params` - 对象键与请求身份（须绑定）
 ///
 /// # 返回
 /// 返回预签名 PUT 地址。
+///
+/// # 错误
+/// 身份、当前商品创建资格、对象键、分片序号或签名校验失败时返回错误。
 pub async fn product_import_direct_upload_part_url(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path((upload_id, part_number)): Path<(String, i32)>,
     Query(params): Query<DirectUploadPartQuery>,
 ) -> Result<ProductImportDirectUploadPartView> {
     let url = state
         .application()
         .product_import_process()
-        .direct_upload_part_url(&params.object_key, &upload_id, part_number, &params.request_id)
+        .direct_upload_part_url(&params.object_key, &upload_id, part_number, &params.request_id, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(ProductImportDirectUploadPartView {
         url,
@@ -215,20 +222,25 @@ pub async fn product_import_direct_upload_complete(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `upload_id` - 分片上传标识
 /// * `params` - 对象键与请求身份（须绑定）
 ///
 /// # 返回
 /// 成功无返回体；上传已不存在视为成功。
+///
+/// # 错误
+/// 身份、当前商品创建资格、对象键校验或取消失败时返回错误。
 pub async fn product_import_direct_upload_abort(
     State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
     Path(upload_id): Path<String>,
     Query(params): Query<DirectUploadAbortQuery>,
 ) -> Result<()> {
     state
         .application()
         .product_import_process()
-        .abort_direct_upload(&params.object_key, &upload_id, &params.request_id)
+        .abort_direct_upload(&params.object_key, &upload_id, &params.request_id, &actor)
         .await?;
     Ok(ApiResponse::ok())
 }

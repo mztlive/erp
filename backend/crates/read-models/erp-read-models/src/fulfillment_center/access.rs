@@ -9,10 +9,10 @@ use erp_fulfillment::service::FulfillmentService;
 use erp_identity::AuthorizationService;
 use erp_permissions::sales_order as sales_order_permissions;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
-use crate::Result;
 use crate::sales_center::access::SalesAccess;
+use crate::{Error, Result};
 
 /// 客户验收读取授权入口。
 #[derive(Clone)]
@@ -71,7 +71,7 @@ impl AcceptanceReadService {
     /// # 返回
     /// 已授权详情。
     /// # 错误
-    /// 来源不可读时拒绝，不返回验收内容。
+    /// 来源不可读时拒绝，在来源授权命中前不装载验收表头、明细或分配。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<CustomerAcceptanceDetailView> {
         let this = self.clone();
         let id = id.to_string();
@@ -80,22 +80,28 @@ impl AcceptanceReadService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let detail = FulfillmentService::new(this.db.clone())
-                        .load_customer_acceptance(&id, executor)
-                        .await?;
-                    SalesAccess::new(this.db, this.rbac)
-                        .require_object(
-                            &actor,
-                            &sales_order_permissions::DETAIL,
-                            &detail.acceptance.sales_order_id,
-                            executor,
-                        )
-                        .await?;
-                    Ok(detail)
-                })
+                Box::pin(async move { this.load_detail(&id, &actor, executor).await })
             })
             .await
+    }
+
+    /// 先以实际销售来源授权验收身份，再在原快照读取业务详情。
+    async fn load_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerAcceptanceDetailView> {
+        let (context, scope) = SalesAccess::new(self.db.clone(), self.rbac.clone())
+            .resolve(actor, &sales_order_permissions::DETAIL, executor)
+            .await?;
+        let identity = super::repository::acceptance_identity(&self.db, id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户验收单不存在或无权查看".into()))?;
+        let detail =
+            FulfillmentService::new(self.db.clone()).load_customer_acceptance(&identity, executor).await?;
+        context.validate(executor).await?;
+        Ok(detail)
     }
     /// 在来源详情授权的同一事务读取可验收事实。
     /// # 参数
@@ -126,5 +132,49 @@ impl AcceptanceReadService {
                 })
             })
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::sales_center::repository::authorization::SalesMapping;
+
+    /// 实际读取路径必须先经过统一授权，身份设施故障时不得触达验收查询。
+    #[tokio::test]
+    async fn acceptance_detail_rejects_authorization_failure_before_loading_facts() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = AcceptanceReadService::new(
+            client.database("acceptance_authorization"),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);
+        let error =
+            service.load_detail("acceptance", &actor, &mut SnapshotExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+        let db = client.database("acceptance_missing_detail");
+        let authorization = fixed_authorization(
+            &[sales_order_permissions::LIST],
+            ResolvedScope {
+                role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                user_limit: None,
+            },
+            vec![],
+            vec![(
+                sales_order_permissions::DETAIL,
+                Arc::new(SalesMapping::new(db.clone(), "sales_order", "acceptance_sales").unwrap()),
+            )],
+        )
+        .unwrap();
+        let service = AcceptanceReadService::new(db, authorization);
+        let error =
+            service.load_detail("acceptance", &actor, &mut SnapshotExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::Forbidden(_)));
     }
 }

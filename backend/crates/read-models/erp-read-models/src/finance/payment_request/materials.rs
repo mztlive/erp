@@ -9,6 +9,7 @@ use erp_finance::dto::payable::RevealPaymentRecipientRequest;
 use erp_finance::entity::payable::{
     PaymentRequestAccountSnapshot, PurchasePaymentRequest, PurchasePaymentRequestStatus,
 };
+use erp_identity::AccessTarget;
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
 use erp_permissions::{payable as payable_permissions, purchase_payment_request as payment_permissions};
@@ -19,7 +20,6 @@ use erp_workflow::{ApprovalIntegrationExt, DocumentType, WorkItemExt};
 use persistence_core::{Executor, Transactional};
 
 use super::{PaymentRequestAttachmentView, PurchasePaymentRequestReadService};
-use crate::approval_runtime::has_document_permission;
 use crate::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
 use crate::sales_center::materials::{material_from_asset, validate_materials};
 use crate::{Error, Result};
@@ -156,17 +156,9 @@ impl PurchasePaymentRequestReadService {
         fact: &AuthorizedTaskFact,
         executor: &mut dyn Executor,
     ) -> Result<PaymentRequestAccountSnapshot> {
-        if !has_document_permission(
-            &self.db,
-            &self.rbac,
-            actor,
-            &payable_permissions::PAYMENT_RECIPIENT_REVEAL,
-            executor,
-        )
-        .await?
-        {
-            return Err(Error::Forbidden("无权揭示完整收款账号".into()));
-        }
+        self.rbac
+            .require(actor, &payable_permissions::PAYMENT_RECIPIENT_REVEAL, AccessTarget::Operation, executor)
+            .await?;
         let request = self.task_request(actor, input.work_item_id.as_ref(), fact, executor).await?;
         let task = self
             .db
@@ -312,8 +304,11 @@ impl PurchasePaymentRequestReadService {
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
+    use erp_core::ids::WorkItemId;
     use erp_identity::testing::unavailable_authorization;
+    use erp_workflow::WorkItemType;
     use mongodb::Client;
+    use persistence_core::NoTransaction;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
@@ -327,6 +322,36 @@ mod tests {
         let service = PurchasePaymentRequestReadService::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let result = service.material_read(&actor, "request", "file", &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn reveal_requires_snapshot_before_identity_or_request_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .unwrap()
+            .database("payment_request_reveal_guard");
+        let service = PurchasePaymentRequestReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let input = RevealPaymentRecipientRequest {
+            work_item_id: WorkItemId::new("task"),
+            expected_task_version: "1".into(),
+            expected_bank_account_id: "bank-account".into(),
+            expected_bank_account_version: 1,
+        };
+        let fact = AuthorizedTaskFact {
+            work_item_type: WorkItemType::SupplierPaymentExecution,
+            business_object_type: "purchase_payment_request".into(),
+            business_object_id: "request".into(),
+            subject_version: "1".into(),
+            allowed_actions: vec![],
+        };
+        let result = service.reveal_snapshot(&actor, "request", &input, &fact, &mut NoTransaction).await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "写入授权必须使用快照事务")
+        );
+        let result =
+            service.reveal_snapshot(&actor, "request", &input, &fact, &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
 }

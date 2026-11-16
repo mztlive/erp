@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_permissions::{approval_admin, approval_process, internal};
-use persistence_core::Executor;
+use persistence_core::{ExecutionBoundary, Executor};
 
 use super::AuthorizationService;
 use super::rules::TargetForm;
@@ -51,6 +51,12 @@ fn allows(permission: &Permission, object: &ObjectFacts, qualified: &QualifiedPe
 
 impl AuthorizationService {
     /// 固定操作和类型管理资格分别取证，保留既有跨角色独立资格语义。
+    /// # 参数
+    /// actor、permission 为真实身份及定义动作；target 为服务端类型候选；executor 为原快照执行器。
+    /// # 返回
+    /// 资格满足且候选、原快照阶段仍有效时成功。
+    /// # 错误
+    /// 非快照、目标无效或资格不足时拒绝；候选到期或执行阶段失效返回 DATA_SCOPE_CHANGED。
     pub(super) async fn require_definition(
         &self,
         actor: &AuditActor,
@@ -65,15 +71,16 @@ impl AuthorizationService {
         for (_, definition, runtime) in approval_admin::TYPES {
             requested.extend([definition.clone(), runtime.clone()]);
         }
-        let boundary = executor.boundary();
+        let boundary = executor
+            .boundary()
+            .filter(ExecutionBoundary::is_snapshot)
+            .ok_or_else(|| Error::ValidationError("审批定义授权必须使用快照事务".into()))?;
         let qualified = self.permissions(actor, &requested, executor).await?;
         if !qualified.as_ref().map(|q| allows(permission, object, q)).transpose()?.unwrap_or(false) {
             return Err(Error::Forbidden("账号缺少审批定义动作或该主体类型的管理资格".into()));
         }
-        if boundary.is_some_and(|boundary| !boundary.is_current(executor))
-            || object.valid_until.is_some_and(|until| until <= Instant::now())
-        {
-            return Err(Error::ValidationError("审批定义授权目标或执行阶段已失效".into()));
+        if !boundary.is_current(executor) || object.valid_until.is_some_and(|until| until <= Instant::now()) {
+            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：审批定义授权目标或执行阶段已失效".into()));
         }
         Ok(())
     }

@@ -107,6 +107,8 @@ pub const PAYMENT_REQUEST_CANDIDATES: Permission =
     Permission::new("purchase_order", "payment_request_candidate");
 /// 按商品入口资格查看本人导入任务。
 pub const PRODUCT_IMPORT_JOB_READ: Permission = Permission::new("background_job", "product_import_read");
+/// 按商品创建功能资格操作导入上传与登记任务；逐行创建仍校验真实候选范围。
+pub const PRODUCT_IMPORT_SUBMIT: Permission = Permission::new("product_import_job", "submit");
 /// 按供应商创建资格查看本人导入任务。
 pub const SUPPLIER_IMPORT_JOB_READ: Permission = Permission::new("background_job", "supplier_import_read");
 /// 按供应商导入功能资格登记后台任务；逐行创建仍校验真实候选范围。

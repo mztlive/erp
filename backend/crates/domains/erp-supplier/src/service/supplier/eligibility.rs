@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, SupplierCapabilityRevisionId};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use crate::entity::supplier::eligibility::{
     CapabilityEligibilityViolation, OfferingProductKind,
@@ -20,48 +20,6 @@ use crate::error::{Error, Result};
 use crate::repository::SupplierExt;
 use crate::repository::prelude::*;
 
-/// 校验指定供应商能力修订在业务日是否仍为当前启用版本。
-///
-/// 领域判定已由 `crate::entity::supplier::eligibility::ensure_capability_qualified`
-/// 承载；本函数仅加载供应商、能力及修订事实并将领域违例映射为服务层
-/// 业务错误，保持既有 API 文案不变。
-///
-/// 已关联合同必须通过有效期校验；无资质记录时保留当前阶段临时放行政策。
-///
-/// # 参数
-/// * `db` - 目标数据库；读取使用 `NoTransaction`，不加入调用方事务
-/// * `supplier_id` - 供应商角色 ID
-/// * `capability_revision_id` - 待校验的能力修订 ID
-/// * `on_date` - 业务自然日（由调用方显式注入，不读取全局时钟）
-///
-/// # 返回
-/// 校验通过返回 `Ok(())`。
-///
-/// # 错误
-/// * `NotFound` - 供应商不存在
-/// * `BusinessLogicError` - 供应商已停用、能力不存在、版本不存在、
-///   领域判定认为不合格（停用、归属不符、非当前版本、未生效、已过期），
-///   或已关联合约在业务日不合格
-/// * 仓储读取失败时返回对应错误
-///
-/// # 约束
-/// * 仅执行事实加载与领域委派，不在 Service 重复实现校验规则
-/// * 不开启或提交事务；不持有全局时钟、ID 生成器或密钥
-pub async fn ensure_capability_qualified(
-    db: &Database,
-    supplier_id: &SupplierAccountId,
-    capability_revision_id: &SupplierCapabilityRevisionId,
-    on_date: BusinessDate,
-) -> Result<()> {
-    ensure_qualified_with_port(
-        &MongoQualificationFacts { db },
-        supplier_id,
-        capability_revision_id,
-        on_date,
-        &mut NoTransaction,
-    )
-    .await
-}
 /// 读取供给所需当前能力指针，再委派同一权威资格规则。
 ///
 /// 先按商品类型对应的能力代码读取能力；缺失或没有当前修订时立即失败。
@@ -79,7 +37,8 @@ pub async fn ensure_capability_qualified(
 ///
 /// # 错误
 /// 所需能力未启用或缺少当前版本时返回 `BusinessLogicError`。
-/// 其后的失败与 [`ensure_capability_qualified`] 相同，但读取沿用 `executor`。
+/// 供应商停用、能力或版本缺失、版本非当前、未生效、已过期或关联合约不合格时返回业务错误。
+/// 供应商不存在或仓储读取失败时返回对应错误。
 pub async fn ensure_offering_capability_qualified(
     db: &Database,
     supplier_id: &SupplierAccountId,

@@ -12,6 +12,8 @@ chrono = { workspace = true }
 entity-core = { workspace = true }
 entity-macros = { workspace = true }
 erp-core = { workspace = true }
+erp-identity = { workspace = true }
+erp-permissions = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 id-generator = { workspace = true }
@@ -23,3 +25,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+erp-identity = { workspace = true, features = ["test-support"] }
+persistence-core = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["rt", "macros"] }

@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_identity::{AuthorizationService, OrganizationDirectoryService};
-use erp_permissions::Permission;
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService, OrganizationDirectoryService};
+use erp_permissions::{Permission, supplier_fulfillment};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -101,6 +102,40 @@ impl FulfillmentOrderAccess {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))
+    }
+
+    /// 在原事务内同时检查原履约单与服务端完成交接后的归属。
+    /// # 参数
+    /// actor 为操作人，order 为已应用领域交接规则的候选实体，executor 为原写事务。
+    /// # 返回
+    /// 原记录和拟保存的跟进人、业务组织均通过当前固定政策时成功。
+    /// # 错误
+    /// 功能权限、对象或目标归属拒绝，事实缺失及执行器不是快照事务时返回错误。
+    pub(crate) async fn require_owner_change(
+        &self,
+        actor: &AuditActor,
+        order: &SupplierFulfillmentOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        Ok(self
+            .authorization()?
+            .service
+            .require(
+                actor,
+                &supplier_fulfillment::ORDER_HANDOVER,
+                AccessTarget::OwnershipChange {
+                    id: order.base.id.clone(),
+                    candidate: ObjectFacts {
+                        resource: "supplier_fulfillment_order".into(),
+                        id: order.base.id.clone(),
+                        owner_id: FactValue::Known(Some(order.follow_up_user_id.clone())),
+                        org_unit_id: FactValue::Known(Some(order.business_org_unit_id.clone())),
+                        ..Default::default()
+                    },
+                },
+                executor,
+            )
+            .await?)
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。

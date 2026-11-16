@@ -26,28 +26,10 @@ use erp_workflow::service::approval::read;
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::adapter::customer_receipt_object_readable;
 use crate::{Error, FinancePostingPorts, Result};
-
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
-pub(crate) async fn load_bound_definition_graph(
-    db: &Database,
-    binding: &ApprovalDefinitionBinding,
-) -> Result<DefinitionGraph> {
-    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
-}
 
 /// 使用调用方执行器加载绑定定义图。
 ///
@@ -69,30 +51,6 @@ pub(crate) async fn load_bound_definition_graph_with_executor(
     read::bound_definition_graph(db, binding, "客户回款单绑定的审批定义不存在", executor)
         .await
         .map_err(Error::from)
-}
-
-/// 读取候选启动收据；不存在时返回 `None`。
-///
-/// 本步骤只按命令类型、作用域与幂等键查找；载荷一致性由后续启动校验承担。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-///
-/// # 返回
-/// 尚待启动校验确认载荷一致性的候选收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
-pub(crate) async fn load_start_receipt(
-    db: &Database,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-) -> Result<Option<ApprovalCommandReceipt>> {
-    load_start_receipt_with_executor(db, subject, subject_version, idempotency_key, &mut NoTransaction).await
 }
 
 /// 使用调用方执行器读取候选启动收据。

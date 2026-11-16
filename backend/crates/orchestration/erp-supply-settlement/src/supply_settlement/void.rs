@@ -50,12 +50,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatementView> {
+        self.data_scope.require_action(actor, SettlementAction::Void, id, executor).await?;
         self.authorization
             .require(actor, &supplier_settlement::STATEMENT_VOID, AccessTarget::Operation, executor)
-            .await?;
-        self.domain()
-            .access()
-            .require_statement(actor, &supplier_settlement::STATEMENT_REFRESH, id, executor)
             .await?;
         let (mut statement, replayed) = self.domain().prepare_void(id, &req, actor, executor).await?;
         if replayed {
@@ -70,5 +67,29 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         self.domain().persist_statement(&mut statement, executor).await?;
         persist_log(&self.db, &audit, executor).await?;
         Ok(statement.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use persistence_core::NoTransaction;
+
+    use super::*;
+    use crate::Error;
+
+    #[tokio::test]
+    async fn void_replay_cannot_reach_preparation_without_current_command_access() {
+        let process = super::super::tests::unwired_process().await;
+        let actor = AuditActor::new("preparer".into(), "preparer-login".into(), AccountKind::Supplier);
+        let result = process
+            .void_statement_apply(
+                "statement-1",
+                VoidSettlementRequest { version: 1, reason: "重新结算".into() },
+                &actor,
+                &mut NoTransaction,
+            )
+            .await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "供应链授权未接线"));
     }
 }

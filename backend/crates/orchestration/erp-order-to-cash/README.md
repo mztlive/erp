@@ -2,6 +2,7 @@
 
 本 crate 负责销售、询价与选品的跨领域命令与事务协调。
 
+- 询价读取必须调用 `erp-read-models::sales_center::inquiry::InquiryReadService`；选品册及方案的列表、详情必须调用 `sales_center::selection::SalesSelectionReadService`。本库仅承接相关写命令。
 - 必须通过拥有领域的 Service、Repository 与 Port 执行业务步骤。
 - 事务以下步骤必须复用调用方的 `Executor`；外部 I/O 必须位于事务之外。
 - 权限、原始错误分类、冻结身份、命令回执与未知提交恢复合同必须保持。

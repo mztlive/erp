@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
+#[cfg(test)]
+use std::{cell::Cell, future::Future};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
@@ -13,6 +15,11 @@ use crate::ports::AccessMapping;
 use crate::service::authorization::rules::sources;
 use crate::service::authorization::work_items;
 use crate::{Error, Permission, QualifiedPermissions, Result};
+
+#[cfg(test)]
+tokio::task_local! {
+    static PROOF_TIME: Cell<Instant>;
+}
 
 #[derive(Clone)]
 pub(crate) struct AccessProof {
@@ -49,14 +56,48 @@ impl AccessProof {
     }
 
     /// 执行器和有效期必须与本次解析阶段一致。
+    /// # 参数
+    /// executor 为原授权解析使用的执行器。
+    /// # 返回
+    /// 原读取边界仍有效且当前时刻早于截止时刻时成功。
+    /// # 错误
+    /// 跨读取边界返回校验错误；到达截止时刻返回范围变化错误。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("授权结果不能跨事务或读取阶段使用".into()));
         }
-        if self.valid_until.is_some_and(|until| Instant::now() >= until) {
+        #[cfg(test)]
+        let now = PROOF_TIME.try_with(Cell::get).unwrap_or_else(|_| Instant::now());
+        #[cfg(not(test))]
+        let now = Instant::now();
+        if self.valid_until.is_some_and(|until| now >= until) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权关系已到期".into()));
         }
         Ok(())
+    }
+
+    /// 在当前异步任务内控制证明校验时钟，退出作用域后恢复墙钟。
+    /// # 参数
+    /// now 为初始时刻，future 为执行真实授权及校验的测试流程。
+    /// # 返回
+    /// 返回测试流程的结果。
+    /// # 错误
+    /// 不返回错误；测试流程的错误由返回值保留。
+    #[cfg(test)]
+    pub(crate) async fn with_test_time<F: Future>(now: Instant, future: F) -> F::Output {
+        PROOF_TIME.scope(Cell::new(now), future).await
+    }
+
+    /// 将当前测试任务的证明校验时钟推进到指定时刻。
+    /// # 参数
+    /// now 为精确校验时刻；调用必须位于 with_test_time 作用域内。
+    /// # 返回
+    /// 后续证明校验使用指定时刻。
+    /// # 错误
+    /// 不返回错误；缺少测试时钟作用域时 panic。
+    #[cfg(test)]
+    pub(crate) fn set_test_time(now: Instant) {
+        PROOF_TIME.with(|time| time.set(now));
     }
 }
 

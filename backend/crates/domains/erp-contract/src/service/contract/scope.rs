@@ -3,7 +3,7 @@
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_identity::AccountDirectoryService;
 use erp_permissions::contract;
-use persistence_core::Transactional;
+use persistence_core::Executor;
 use serde_json::to_vec;
 
 use super::ContractService;
@@ -29,6 +29,7 @@ impl ContractService {
     /// # 参数
     /// * `query` - 已归一化查询
     /// * `actor` - 已认证操作人
+    /// * `executor` - 当前列表用例的快照执行器
     ///
     /// # 返回
     /// 返回带范围版本的列表快照。
@@ -42,41 +43,28 @@ impl ContractService {
         &self,
         query: ContractListQuery,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<ContractSnapshot> {
-        let db = self.db.clone();
-        let access = self.data_scope.clone();
-        let data_scope = self.data_scope.clone();
-        let accounts = self.accounts.clone();
-        let customers = self.customers.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let context = access.resolve(&actor, &contract::LIST, executor).await?;
-                    let (filter, search, versions) = load_list_filter_and_search(
-                        &db,
-                        &data_scope,
-                        customers.as_ref(),
-                        &accounts,
-                        &context,
-                        &query,
-                        executor,
-                    )
-                    .await?;
-                    context.ensure_current(executor)?;
-                    finish_list_snapshot(&db, filter, search, versions, context, executor)
-                        .await
-                        .map(|(view, context)| ContractSnapshot { view, context })
-                })
-            })
+        let context = self.data_scope.resolve(actor, &contract::LIST, executor).await?;
+        let (filter, search, versions) = load_list_filter_and_search(
+            &self.db,
+            &self.data_scope,
+            self.customers.as_ref(),
+            &self.accounts,
+            &context,
+            &query,
+            executor,
+        )
+        .await?;
+        context.ensure_current(executor)?;
+        finish_list_snapshot(&self.db, filter, search, versions, context, executor)
             .await
+            .map(|(view, context)| ContractSnapshot { view, context })
     }
 
     /// 只复核列表依赖版本，不重复分页、汇总及展示水合。
     /// # 参数
-    /// query 为同一归一化筛选，actor 为当前账号。
+    /// query 为同一归一化筛选，actor 为当前账号，executor 为当前列表的快照执行器。
     /// # 返回
     /// 同一授权和业务事实口径下的范围版本。
     /// # 错误
@@ -85,35 +73,22 @@ impl ContractService {
         &self,
         query: ContractListQuery,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<String> {
-        let db = self.db.clone();
-        let access = self.data_scope.clone();
-        let data_scope = self.data_scope.clone();
-        let accounts = self.accounts.clone();
-        let customers = self.customers.clone();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let mut context = access.resolve(&actor, &contract::LIST, executor).await?;
-                    let (_, search, versions) = load_list_filter_and_search(
-                        &db,
-                        &data_scope,
-                        customers.as_ref(),
-                        &accounts,
-                        &context,
-                        &query,
-                        executor,
-                    )
-                    .await?;
-                    context.scope_version = fingerprint_version(&context.scope_version, &versions, &search)?;
-                    context.validate(executor).await?;
-                    Ok(context.scope_version)
-                })
-            })
-            .await
+        let mut context = self.data_scope.resolve(actor, &contract::LIST, executor).await?;
+        let (_, search, versions) = load_list_filter_and_search(
+            &self.db,
+            &self.data_scope,
+            self.customers.as_ref(),
+            &self.accounts,
+            &context,
+            &query,
+            executor,
+        )
+        .await?;
+        context.scope_version = fingerprint_version(&context.scope_version, &versions, &search)?;
+        context.validate(executor).await?;
+        Ok(context.scope_version)
     }
 }
 
@@ -310,7 +285,7 @@ pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Resu
         .map_err(|error| data_scope_changed(error.detail()))
 }
 
-/// 同一查询内两次快照的范围版本必须一致。
+/// 同一快照内两次读取的范围版本必须一致。
 ///
 /// # 参数
 /// * `first` - 首次快照版本

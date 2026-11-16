@@ -70,9 +70,7 @@ impl Facilities for IdentityFacilities {
         qualified: &QualifiedPermissions,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
-        DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .qualified(context, source, required, qualified, executor)
-            .await
+        DataScopeService::new(self.db.clone()).qualified(context, source, required, qualified, executor).await
     }
 
     async fn grant_revision(

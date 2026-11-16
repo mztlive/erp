@@ -8,17 +8,14 @@ use std::sync::Arc;
 use bpm::engine::{DefinitionGraph, StartAssigneeBinding};
 use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_approval_runtime::ApprovalRuntimePort;
-use erp_approval_runtime::approval_start::{
-    StartReplayErrors, StartTaskContext, persist_start_runtime, persist_start_tasks, replay_start,
-};
+use erp_approval_runtime::approval_start::{StartTaskContext, persist_start_runtime, persist_start_tasks};
 use erp_core::common::time::Instant;
 use erp_identity::AuthorizationService;
 use erp_sales::dto::sales_order::SubmissionView;
-use erp_sales::entity::command_receipt::SalesCommandReceipt;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_sales::service::sales_order::mapper::submission_view;
-use erp_workflow::entity::approval_integration::{ApprovalStartIdentity, ApprovalSubjectSnapshotPayload};
+use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshotPayload;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::repository::prelude::*;
@@ -30,12 +27,11 @@ use erp_workflow::service::approval::execution::start_input::{
 use erp_workflow::service::approval::execution::{
     PlannedWrites, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
-use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
-use persistence_core::{Executor, ReadExecutor, Transactional};
+use persistence_core::Executor;
 
 use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
@@ -43,24 +39,6 @@ use super::adapters::catalog::CatalogQualificationAdapter;
 use super::authorization::SalesCommandAccess;
 use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::{Error, Result};
-
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
-pub(super) async fn load_bound_definition_graph(
-    db: &Database,
-    binding: &ApprovalDefinitionBinding,
-) -> Result<DefinitionGraph> {
-    load_bound_definition_graph_with_executor(db, binding, &mut ReadExecutor::default()).await
-}
 
 /// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
 ///
@@ -92,6 +70,7 @@ pub(super) async fn load_bound_definition_graph_with_executor(
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
 /// * `idempotency_key` - 调用方幂等键
+/// * `executor` - 原提交事务执行器。
 ///
 /// # 返回
 /// 已提交收据或空。
@@ -104,75 +83,11 @@ pub(super) async fn load_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    read::start_receipt(
-        db,
-        document_type,
-        subject,
-        subject_version,
-        idempotency_key,
-        &mut ReadExecutor::default(),
-    )
-    .await
-    .map_err(Error::from)
-}
-
-/// 销售单启动收据回放入参。
-pub(super) struct ReplaySalesOrderStartInput<'a> {
-    pub(super) resubmission_reason: Option<&'a str>,
-    /// 销售单据类型。
-    pub(super) document_type: DocumentType,
-    /// 审批主题引用。
-    pub(super) subject: &'a SubjectRef,
-    /// 主题版本。
-    pub(super) subject_version: u32,
-    /// 启动幂等键。
-    pub(super) idempotency_key: &'a str,
-    /// 冻结的审批定义绑定。
-    pub(super) binding: &'a ApprovalDefinitionBinding,
-    /// 启动人账号 ID。
-    pub(super) actor_id: &'a str,
-}
-
-/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的销售启动结果。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `input` - 单据类型、主题、绑定与启动人
-/// * `executor` - 当前事务执行器
-///
-/// # 返回
-/// 命中同载荷收据时返回实例 ID；无收据时返回 `None`。
-///
-/// # 错误
-/// 载荷冲突或收据与冻结运行事实不一致时返回冲突错误。
-///
-/// # 关键业务约束
-/// 必须按完整 V3/legacy 身份候选范围回读，禁止只认单一 scope。
-pub(super) async fn replay_sales_order_start_with_executor(
-    db: &Database,
-    input: ReplaySalesOrderStartInput<'_>,
     executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    replay_start(
-        db,
-        ApprovalStartIdentity {
-            resubmission_reason: input.resubmission_reason,
-            process_kind: process_kind_of(input.document_type),
-            subject: input.subject,
-            subject_version: input.subject_version,
-            binding: input.binding,
-            actor_id: input.actor_id,
-        },
-        input.idempotency_key,
-        StartReplayErrors {
-            missing_instance: "销售启动收据引用的审批实例不存在",
-            identity_mismatch: "销售启动收据与冻结运行事实不一致",
-        },
-        executor,
-    )
-    .await
-    .map_err(Error::from)
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    read::start_receipt(db, document_type, subject, subject_version, idempotency_key, executor)
+        .await
+        .map_err(Error::from)
 }
 
 /// 销售单启动输入。
@@ -363,6 +278,7 @@ pub(super) use erp_sales::service::sales_order::lifecycle::SalesOrderWorkingCopy
 /// * `access` - 原命令授权检查器，事务内重验关联、责任与版本。
 /// * `expected_order_version` - 预读时的销售单版本。
 /// * `input` - 提交写入集合。
+/// * `executor` - 原提交事务执行器。
 ///
 /// # 返回
 /// 返回提交快照视图。
@@ -377,29 +293,10 @@ pub(super) async fn persist_sales_order_start(
     access: super::authorization::SalesCommandAccess,
     expected_order_version: u64,
     input: SalesOrderStartPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<SubmissionView> {
-    let db = db.clone();
-    let client = db.client().clone();
     let view = submission_view(input.submission.clone(), input.submission_lines.clone());
-    if let Some(view) = check_sales_submission_start(
-        &db,
-        &access,
-        &input.audit.receipt,
-        &input.order.base.id,
-        expected_order_version,
-    )
-    .await?
-    {
-        return Ok(view);
-    }
-    if !matches!(input.prepared, PreparedExecution::Apply(_)) {
-        return Err(Error::Internal("销售提交启动收据缺少领域命令结果".to_string()));
-    }
-    let replayed = client
-        .with_transaction(move |executor| {
-            Box::pin(async move { input.persist(&db, &access, expected_order_version, executor).await })
-        })
-        .await?;
+    let replayed = input.persist(db, &access, expected_order_version, executor).await?;
     Ok(replayed.unwrap_or(view))
 }
 
@@ -498,42 +395,6 @@ impl SalesOrderStartPersistInput {
 
         Ok(None)
     }
-}
-
-/// 在原只读事务内先查证提交回执，未命中才校验待写销售版本。
-async fn check_sales_submission_start(
-    db: &Database,
-    access: &SalesCommandAccess,
-    receipt: &SalesCommandReceipt,
-    order_id: &str,
-    expected_order_version: u64,
-) -> Result<Option<SubmissionView>> {
-    let check = access.clone();
-    let check_id = order_id.to_string();
-    let check_db = db.clone();
-    let receipt = receipt.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                if let Some(view) = replay_submission_with_executor(
-                    &check_db,
-                    &receipt.base.id,
-                    (&receipt.fingerprint, &receipt.idempotency_key_hash),
-                    &check_id,
-                    &receipt.actor_id,
-                    &check,
-                    executor,
-                )
-                .await?
-                {
-                    return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
-                }
-                check.revalidate(&check_id, expected_order_version, executor).await?;
-                Ok(None)
-            })
-        })
-        .await
 }
 
 /// 在原写入位置登记审批启动守卫，保留守卫冲突语义。

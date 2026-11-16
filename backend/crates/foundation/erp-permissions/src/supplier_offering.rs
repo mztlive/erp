@@ -26,6 +26,9 @@ pub const DELIVERY_TEMPLATE_ASSIGN: Permission = REVISE;
 /// 查询供应商供给列表。
 pub const LIST: Permission = Permission::new(resources::SUPPLIER_OFFERING, "list");
 
+/// 查询供应商供给详情。
+pub const DETAIL: Permission = Permission::new(resources::SUPPLIER_OFFERING, "detail");
+
 /// 新增供应商供给。
 pub const CREATE: Permission = Permission::new(resources::SUPPLIER_OFFERING, "create");
 
@@ -45,8 +48,8 @@ pub const OFFERING_HANDOVER: Permission = REVISE;
 /// 查询供给交接候选。
 pub const OFFERING_HANDOVER_CANDIDATES: Permission = REVISE;
 
-/// 查询供应商供给列表。
-pub const READ_DETAIL: Permission = LIST;
+/// 查询供应商供给详情。
+pub const READ_DETAIL: Permission = DETAIL;
 
 /// 查询供应商供给列表。
 pub const READ_HISTORY: Permission = LIST;
@@ -67,6 +70,14 @@ pub const ENTRIES: &[(&str, PermissionDef)] = &[
             permission: &LIST,
             group: groups::SUPPLIER_OFFERING,
             description: "查询供应商供给列表",
+        },
+    ),
+    (
+        "DETAIL",
+        PermissionDef {
+            permission: &DETAIL,
+            group: groups::SUPPLIER_OFFERING,
+            description: "查询供应商供给详情",
         },
     ),
     (

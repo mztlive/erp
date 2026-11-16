@@ -1,7 +1,7 @@
 //! 采购入库单的查询、草稿准备与调用方事务内本域写入。
 use erp_core::ids::PurchaseReceiptId;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::FulfillmentService;
@@ -140,6 +140,7 @@ impl FulfillmentService {
     /// # 参数
     /// * `id` - 入库单主键
     /// * `req` - 带期望版本的更新请求
+    /// * `executor` - 调用方授权事务的同一执行器
     ///
     /// # 返回
     /// 返回已应用更新、尚未写回的草稿。
@@ -151,12 +152,13 @@ impl FulfillmentService {
         &self,
         id: &str,
         req: UpdatePurchaseReceiptRequest,
+        executor: &mut dyn Executor,
     ) -> Result<PurchaseReceipt> {
         req.validate()?;
         let mut receipt = self
             .db
             .purchase_receipts()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购入库单不存在".to_string()))?;
         if receipt.base.version != req.version {

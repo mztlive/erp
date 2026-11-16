@@ -4,6 +4,7 @@ use bpm::SubjectRef;
 use erp_approval_runtime::approver_directory::resolve_start_approvers;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::dto::purchase_order::{PURCHASE_SUBMIT_ACTION, SavePurchaseOrderLinePatch};
 use erp_procurement::entity::purchase_order::{
     PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine, PurchaseSubmitReceipt,
@@ -101,8 +102,10 @@ impl PurchaseOrderProcess {
         command: &PurchaseSubmitCommand<'_>,
         executor: &mut dyn Executor,
     ) -> Result<PurchaseSubmitDraft> {
-        let order =
-            self.command_access(command.actor, "submit").current(command.purchase_order_id, executor).await?;
+        let order = self
+            .command_access(command.actor, &purchase_order_permissions::SUBMIT)
+            .current(command.purchase_order_id, executor)
+            .await?;
         order
             .ensure_expected_version(command.request.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
@@ -305,7 +308,7 @@ impl PurchaseOrderProcess {
             organization_id: context.organization_id,
             now: context.now,
             audit,
-            object_scope: Some(self.command_access(command.actor, "submit")),
+            object_scope: Some(self.command_access(command.actor, &purchase_order_permissions::SUBMIT)),
             receipt: Some((command.identity.clone(), command.fingerprint.to_string(), output.clone())),
         };
         Ok(PreparedPurchaseSubmit { input, output, purchase_order_id, subject_version })

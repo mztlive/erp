@@ -8,6 +8,7 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Error, Executor, Result, mongo_ops};
+use serde::Deserialize;
 
 use super::{
     BpmWorkflowRepository, DEFINITIONS, DefinitionCatalogRow, DefinitionCatalogStatusFact, DefinitionGraph,
@@ -15,7 +16,41 @@ use super::{
     MAX_DEFINITION_VERSIONS, NODE_DEFINITIONS, TRANSITION_DEFINITIONS, clamp_limit, find_limited,
 };
 
+/// 构造定义管理授权目标所需的最小持久化事实。
+#[derive(Deserialize)]
+struct DefinitionProcessKindProjection {
+    process_kind: ProcessKind,
+}
+
 impl<'a> BpmWorkflowRepository<'a> {
+    /// 只读取定义的真实流程种类，供完整图读取前构造授权目标。
+    ///
+    /// # 参数
+    /// * `definition_id` - 精确流程定义 ID。
+    /// * `executor` - 调用方原快照事务执行器。
+    ///
+    /// # 返回
+    /// 返回未删除定义的流程种类；定义缺失时返回 `None`。
+    ///
+    /// # 错误
+    /// 数据库读取或流程种类反序列化失败时返回错误。
+    pub async fn definition_process_kind(
+        &self,
+        definition_id: &ApprovalProcessDefinitionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProcessKind>> {
+        let options =
+            FindOptions::builder().limit(1).projection(doc! { "process_kind": 1, "_id": 0 }).build();
+        let rows = mongo_ops::find_many(
+            &self.db.collection::<DefinitionProcessKindProjection>(DEFINITIONS),
+            doc! { "id": definition_id.as_ref(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            options,
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().next().map(|row| row.process_kind))
+    }
+
     /// 查询同一流程种类当前唯一已发布定义。
     ///
     /// # 参数

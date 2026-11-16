@@ -1,11 +1,11 @@
 //! 文件任务分类与本人业务恢复信息；业务事实与当前授权均在读取时重新核验。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_order_to_cash::sales_inquiry::read::InquiryReadService;
+use erp_read_models::sales_center::inquiry::InquiryReadService;
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use erp_support::{BackgroundJob, BulkJobExt};
 use mongodb::Database;
-use persistence_core::{Executor, ReadExecutor, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde_json::{Value, json};
 
 use super::imports::required;
@@ -26,15 +26,15 @@ impl DataTransferProcess {
     /// # 错误
     /// 非本人读取导入、历史输入不可恢复或当前授权失效时拒绝；过期上下文返回明确过期状态。
     pub async fn context(&self, id: &str, actor: &AuditActor) -> Result<TransferContext> {
-        let job = self.transfer_job(id).await?;
-        let mut source = self.context_input(&job).await?;
-        let owned = self.require_reader(&job, source.kind, actor).await?;
+        let reader = self.reader_snapshot(id, actor, true).await?;
+        let job = &reader.job;
+        let mut source = self.reader_context(&reader, actor).await?;
         let expired = source.expires_at <= Instant::now().unix_secs();
         source.input["__context_expires_at"] = json!(source.expires_at);
         let result =
-            if source.kind.is_export() || expired { None } else { self.context_result(&job).await? };
+            if source.kind.is_export() || expired { None } else { self.context_result(job, actor).await? };
         let mut view = self.handler.context(source.kind, &source.input, result.as_ref(), actor).await?;
-        if !owned {
+        if !reader.owned {
             view.retain_classification();
         }
         view.can_cancel = job.cancellation_allowed();
@@ -44,20 +44,22 @@ impl DataTransferProcess {
         if !expired && job.finished_at.is_none() && !source.kind.is_export() {
             view.state(TransferResumeState::Pending, "任务仍在后台处理，请完成后查看结果");
         }
+        self.validate_reader(job, actor).await?;
         Ok(view)
     }
 
-    pub(super) async fn owned_job(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
-        let job = self.transfer_job(id).await?;
-        self.require_owner(&job, actor).await?;
-        Ok(job)
-    }
-
-    pub(super) async fn transfer_job(&self, id: &str) -> Result<BackgroundJob> {
+    /// 在已完成资格检查的原执行器读取文件任务。
+    /// # 参数
+    /// id 为真实任务，executor 为原授权快照。
+    /// # 返回
+    /// 当前未删除且属于数据转移的完整任务。
+    /// # 错误
+    /// 不存在、任务类型不符或读取失败时拒绝。
+    pub(super) async fn transfer_job(&self, id: &str, executor: &mut dyn Executor) -> Result<BackgroundJob> {
         let job = self
             .db
             .background_jobs()
-            .find_by_id(id, &mut ReadExecutor::default())
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
         if job.domain_job_type.as_deref() != Some(DOMAIN) {
@@ -66,14 +68,14 @@ impl DataTransferProcess {
         Ok(job)
     }
 
-    async fn context_result(&self, job: &BackgroundJob) -> Result<Option<Value>> {
+    async fn context_result(&self, job: &BackgroundJob, actor: &AuditActor) -> Result<Option<Value>> {
         let Some(asset) = job.result_file_asset_id.as_ref() else {
             return Ok(None);
         };
         if job.finished_at.is_none() || job.result_expires_at.is_none_or(|at| at <= Instant::now()) {
             return Ok(None);
         }
-        let result: TransferResult = self.read_private(asset.as_ref(), &job.requested_by).await?;
+        let (result, _): (TransferResult, _) = self.reader_private(job, asset.as_ref(), actor).await?;
         if result.content_type != "application/json" {
             return Ok(None);
         }

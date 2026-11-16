@@ -1,10 +1,9 @@
-//! 客户资料根级命令与对象中心查询。
+//! 客户资料根级跨域命令。
 //!
 //! 页面只通过本服务维护 Party 身份、客户角色、归属首行及当前从属事实；
 //! 创建和修订把全部写入、审计与幂等结果放在同一 MongoDB 事务中。
 
 mod create;
-mod display;
 mod facts;
 mod field_changes;
 mod idempotency;
@@ -50,11 +49,7 @@ impl CustomerProfileProcess {
 }
 
 #[cfg(test)]
-use erp_customer::CustomerAccountStatus;
-#[cfg(test)]
 use idempotency::checked_command_view;
-#[cfg(test)]
-use query::customer_status_blockers;
 
 #[cfg(test)]
 mod tests {
@@ -64,16 +59,8 @@ mod tests {
         CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
     };
 
-    use super::{CustomerAccountStatus, checked_command_view, customer_status_blockers};
+    use super::checked_command_view;
     use crate::Error;
-
-    #[test]
-    fn disabled_customer_blocks_new_business_actions() {
-        assert!(customer_status_blockers(CustomerAccountStatus::Active).is_empty());
-        let blockers = customer_status_blockers(CustomerAccountStatus::Disabled);
-        assert_eq!(blockers.len(), 2);
-        assert!(blockers.iter().all(|item| item.code == "CUSTOMER_DISABLED"));
-    }
 
     #[test]
     fn command_replay_mismatch_maps_to_stable_service_conflict() {

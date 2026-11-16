@@ -10,7 +10,7 @@ use erp_identity::{
 use erp_permissions::{Permission, contract, internal};
 use mongodb::Database;
 use mongodb::bson::Document;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use crate::ports::ContractCreationPort;
 use crate::repository::ContractExt;
@@ -70,27 +70,6 @@ impl ContractAccess {
         ensure_permission(permission)?;
         let compiled = self.authorization.query(actor, permission, executor).await?;
         Ok(scope(compiled, self.authorization.clone()))
-    }
-
-    /// 在独立事务中检查完整合同对象。
-    /// # 参数
-    /// actor 为当前账号，permission/id 为实际入口和合同身份。
-    /// # 返回
-    /// 完整对象资格成立时成功，不编译列表查询。
-    /// # 错误
-    /// 对象缺失、无权、身份或业务事实失效时拒绝。
-    pub async fn require(&self, actor: &AuditActor, permission: &Permission, id: &str) -> Result<()> {
-        let access = self.clone();
-        let actor = actor.clone();
-        let permission = permission.clone();
-        let id = id.to_owned();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { access.require_with(actor, &permission, &id, executor).await })
-            })
-            .await
     }
 
     /// 在原业务事务内检查完整合同对象。

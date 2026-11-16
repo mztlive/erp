@@ -14,7 +14,7 @@ use erp_workflow::service::approval::execution::{
     PlannedWrites, PreparedExecution, claim_and_persist_document_cancel_runtime, prepare_cancel,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 
 use super::*;
 use crate::finance_posting::receivable::cancel_approval as runtime_cancel;
@@ -36,12 +36,6 @@ impl PurchasePaymentRequestProcess {
         actor: &AuditActor,
     ) -> Result<PurchasePaymentRequest> {
         let command = receipt(id, &req, actor, "withdraw")?;
-        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command, &mut NoTransaction)
-            .await?
-        {
-            return self.authorized_result(&id, actor).await;
-        }
         let operation = PaymentWithdrawal {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
@@ -50,25 +44,12 @@ impl PurchasePaymentRequestProcess {
             actor: actor.clone(),
             command,
         };
-        let read = operation.clone();
-        let authorized = self
-            .db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move { read.authorized_request(executor).await })
-            })
-            .await?;
-        let Some((writes, closed)) =
-            prepare_withdraw(&self.db, &authorized, &operation.request, actor).await?
-        else {
-            return self.authorized_result(id, actor).await;
-        };
         let recovery = operation.command.clone();
         let client = operation.db.client().clone();
         let result = client
-            .with_transaction(move |executor| Box::pin(operation.persist(writes, closed, executor)))
+            .with_transaction(move |executor| Box::pin(async move { operation.execute(executor).await }))
             .await;
-        self.finish_command(result, &recovery, actor).await
+        self.finish_command(result, &recovery, actor, "withdraw", id).await
     }
 
     /// 显式终止原批准付款授权，释放尚未支付部分并保留实际付款。
@@ -87,28 +68,25 @@ impl PurchasePaymentRequestProcess {
         actor: &AuditActor,
     ) -> Result<PurchasePaymentRequest> {
         let command = receipt(id, &req, actor, "close")?;
-        if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command, &mut NoTransaction)
-            .await?
-        {
-            return self.authorized_result(&id, actor).await;
-        }
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let response_actor = actor.clone();
         let actor = actor.clone();
         let id = id.to_owned();
         let recovery = command.clone();
+        let response_id = id.clone();
         let result = db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let mut request =
+                        authorized_request(&db, &rbac.authorization, &id, &actor, "close", executor).await?;
                     let receipts = FinanceCommandReceiptService::new(db.clone());
                     if let Some(id) = receipts.committed_resource_id(&command, executor).await? {
-                        return Ok(id);
+                        return authorized_request(&db, &rbac.authorization, &id, &actor, "close", executor)
+                            .await;
                     }
-                    let mut request = load(&db, &id, executor).await?;
                     ensure_version(&request, req.expected_version)?;
                     require_sources(&db, &rbac, &request, &actor, "close", executor).await?;
                     release_remaining(&db, &request, actor.id(), executor).await?;
@@ -122,11 +100,11 @@ impl PurchasePaymentRequestProcess {
                     )?;
                     receipts.save_resource(&command, id.clone(), audit.base.id.clone(), executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<String, Error>(id)
+                    Ok::<PurchasePaymentRequest, Error>(request)
                 })
             })
             .await;
-        self.finish_command(result, &recovery, &response_actor).await
+        self.finish_command(result, &recovery, &response_actor, "close", &response_id).await
     }
 }
 
@@ -142,10 +120,31 @@ struct PaymentWithdrawal {
 }
 
 impl PaymentWithdrawal {
-    async fn authorized_request(&self, executor: &mut dyn Executor) -> Result<PurchasePaymentRequest> {
-        let request = load(&self.db, &self.id, executor).await?;
-        require_sources(&self.db, &self.rbac, &request, &self.actor, "withdraw", executor).await?;
-        Ok(request)
+    /// 授权、幂等判断、运行时准备与写入共用调用方执行器。
+    async fn execute(self, executor: &mut dyn Executor) -> Result<PurchasePaymentRequest> {
+        let request = authorized_request(
+            &self.db,
+            &self.rbac.authorization,
+            &self.id,
+            &self.actor,
+            "withdraw",
+            executor,
+        )
+        .await?;
+        let receipts = FinanceCommandReceiptService::new(self.db.clone());
+        if receipts.committed_resource_id(&self.command, executor).await?.is_some() {
+            return Ok(request);
+        }
+        let Some((writes, closed)) =
+            prepare_withdraw(&self.db, &request, &self.request, &self.actor, executor).await?
+        else {
+            return Ok(request);
+        };
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = self.actor.clone();
+        let id = self.persist(writes, closed, executor).await?;
+        authorized_request(&db, &rbac.authorization, &id, &actor, "withdraw", executor).await
     }
 
     async fn persist(
@@ -158,7 +157,16 @@ impl PaymentWithdrawal {
         if let Some(id) = receipts.committed_resource_id(&self.command, executor).await? {
             return Ok(id);
         }
-        let mut request = self.authorized_request(executor).await?;
+        let mut request = authorized_request(
+            &self.db,
+            &self.rbac.authorization,
+            &self.id,
+            &self.actor,
+            "withdraw",
+            executor,
+        )
+        .await?;
+        require_sources(&self.db, &self.rbac, &request, &self.actor, "withdraw", executor).await?;
         ensure_version(&request, self.request.expected_version)?;
         claim_and_persist_document_cancel_runtime(&self.db, &writes, &closed, self.actor.id(), executor)
             .await?;
@@ -258,10 +266,11 @@ async fn prepare_withdraw(
     request: &PurchasePaymentRequest,
     req: &CancelPurchasePaymentRequest,
     actor: &AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<Option<(PlannedWrites, Vec<WorkItem>)>> {
     let id = request.base.id.as_str();
     ensure_version(request, req.expected_version)?;
-    let binding = find_approval_binding(db, id, &mut NoTransaction)
+    let binding = find_approval_binding(db, id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("申请缺少审批定义".into()))?;
     let runtime = runtime_cancel::load_cancel_runtime(
@@ -269,6 +278,7 @@ async fn prepare_withdraw(
         &binding,
         &subject_ref_for(DocumentType::PurchasePaymentRequest, id)?,
         request.approval_subject_version,
+        executor,
     )
     .await?;
     let now = Instant::now();

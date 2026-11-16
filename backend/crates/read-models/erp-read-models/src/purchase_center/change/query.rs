@@ -187,7 +187,7 @@ async fn read_change_list(
     authorization
         .require(actor, &purchase_order::PURCHASE_CHANGE_LIST, AccessTarget::Operation, executor)
         .await?;
-    let (mut context, scope) = access.resolve(actor, "list", executor).await?;
+    let (mut context, scope) = access.resolve(actor, &purchase_order::LIST, executor).await?;
     let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
     let page = params.page.unwrap_or(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
@@ -288,7 +288,7 @@ async fn load_change_snapshot(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购变更单不存在或无权查看".to_string()))?;
-    let (_, scope) = access.resolve(actor, "detail", executor).await?;
+    let (_, scope) = access.resolve(actor, &purchase_order::DETAIL, executor).await?;
     let order = db
         .purchase_orders()
         .find_authorized(change.purchase_order_id.as_ref(), &scope, executor)
@@ -358,7 +358,7 @@ mod authorization_tests {
         async fn resolve(
             &self,
             _: &AuditActor,
-            _: &str,
+            _: &Permission,
             _: &mut dyn Executor,
         ) -> ProcurementResult<PurchaseResolvedScope> {
             panic!("入口拒绝后不得解析采购来源")

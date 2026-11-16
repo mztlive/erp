@@ -59,7 +59,7 @@ impl AuditedCommand for PriceCommand {
         self.access
             .require_booklet(&self.actor, &sales_selection::BOOKLET_DELETE_ITEM, &self.id, executor)
             .await?;
-        let (mut result, fresh) = SalesSelectionService::new(self.db.clone())
+        let (mut result, fresh) = SalesSelectionService::new(self.db.clone(), self.access.authorization())
             .update_prices(&self.id, self.req.clone(), self.actor.id(), executor)
             .await?;
         enrich_selection_prices(&self.db, &mut result, executor).await?;

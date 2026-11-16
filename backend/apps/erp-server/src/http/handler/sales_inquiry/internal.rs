@@ -1,4 +1,6 @@
 //! 采购内部报价、费用依据和附件使用独立权限及当前任务访问。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
@@ -6,7 +8,7 @@ use axum::response::Response;
 use erp_order_to_cash::sales_inquiry::dto::InquiryMutationView;
 use erp_order_to_cash::sales_inquiry::internal_quote::{SaveInquiryFeeBasisCommand, SaveInquiryQuoteCommand};
 use erp_order_to_cash::sales_inquiry::quote_import::ImportInquiryQuotesCommand;
-use erp_order_to_cash::sales_inquiry::read::{InquiryFeeBasisParams, InquiryReadService};
+use erp_read_models::sales_center::inquiry::{InquiryFeeBasisParams, InquiryReadService};
 use erp_supply::inquiry::InquiryFeeBasis;
 
 use crate::http::errors::{Error, Result};
@@ -83,7 +85,7 @@ pub async fn fee_bases(
     Query(params): Query<InquiryFeeBasisParams>,
 ) -> Result<Vec<InquiryFeeBasis>> {
     Ok(ApiResponse::ok_with_data(
-        InquiryReadService::new(state.application().db(), state.application().rbac())
+        InquiryReadService::new(state.application().db(), Arc::new(state.application().authorization()))
             .fee_bases(&actor, &id, &params)
             .await?,
     ))
@@ -102,7 +104,8 @@ pub async fn fee_basis_attachment(
     Path((id, basis_id, asset_id)): Path<(String, String, String)>,
     Query(params): Query<InquiryFeeBasisParams>,
 ) -> std::result::Result<Response, Error> {
-    let service = InquiryReadService::new(state.application().db(), state.application().rbac());
+    let service =
+        InquiryReadService::new(state.application().db(), Arc::new(state.application().authorization()));
     service.require_fee_basis_attachment(&actor, &id, &params, &basis_id, &asset_id).await?;
     let (view, bytes) = read_asset(&state, &actor, &asset_id).await?;
     service.require_fee_basis_attachment(&actor, &id, &params, &basis_id, &asset_id).await?;

@@ -1,8 +1,10 @@
 //! 销售、采购分别使用独立白名单响应，不提供共享完整实体入口。
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};
-use erp_order_to_cash::sales_inquiry::read::{
+use erp_read_models::sales_center::inquiry::{
     InquiryListParams, InquiryListView, InquiryReadService, InquiryTaskParams, InquiryTemplateProduct,
     InquiryTemplateProductsRequest, ProcurementInquiryDetail,
 };
@@ -15,7 +17,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
 
 fn service(state: &HttpState) -> InquiryReadService {
-    InquiryReadService::new(state.application().db(), state.application().rbac())
+    InquiryReadService::new(state.application().db(), Arc::new(state.application().authorization()))
 }
 
 /// 查询销售询价列表。

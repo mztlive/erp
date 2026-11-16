@@ -5,6 +5,8 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
 use erp_catalog::{PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, ProductImportJobView};
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::internal;
 use erp_support::repository::bulk_job::BackgroundJobInput;
 use erp_support::repository::prelude::*;
 use erp_support::{
@@ -14,7 +16,7 @@ use erp_support::{
     product_import_job_no,
 };
 use id_generator::next_id;
-use persistence_core::{Error as PersistenceError, ReadExecutor, Transactional};
+use persistence_core::{Error as PersistenceError, Executor, Transactional};
 
 use super::ProductImportProcess;
 use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
@@ -36,7 +38,7 @@ impl ProductImportProcess {
     /// 返回新建或幂等回放的导入任务。
     ///
     /// # 错误
-    /// 文件不是原模板、没有数据行或写入失败时返回错误。
+    /// 当前账号无商品创建资格、文件不是原模板、没有数据行或写入失败时返回错误。
     pub async fn submit(
         &self,
         file_name: String,
@@ -45,6 +47,7 @@ impl ProductImportProcess {
         request_id: String,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
+        self.authorize_submission(actor).await?;
         let shared_bytes = Arc::new(bytes);
         let for_parse = shared_bytes.clone();
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
@@ -93,7 +96,7 @@ impl ProductImportProcess {
         };
         let mut manifest_keys = built.uploaded_object_keys;
         manifest_keys.extend(manifest_key);
-        match self.persist_job(file_asset, job, items, file_name, input).await {
+        match self.persist_job(file_asset, job, items, file_name, input, actor).await {
             Ok(view) => Ok(view),
             Err(error) => {
                 if !matches!(error, Error::OutcomeUnknown(_)) {
@@ -112,11 +115,13 @@ impl ProductImportProcess {
     /// * `items` - 逐行明细。
     /// * `file_name` - 原始文件名。
     /// * `input` - 已通过容量校验的可选私有清单。
+    /// * `actor` - 提交人，任务登记前重验当前商品创建资格。
     ///
     /// # 返回
     /// 返回新任务或既有幂等回放任务。
     /// # 错误
-    /// 事务、唯一键或异载荷冲突按原分类传播；未知提交不执行对象补偿。
+    /// 当前账号失效或缺少商品创建资格时拒绝；事务、唯一键或异载荷冲突按原分类传播。
+    /// 未知提交不执行对象补偿。
     pub(super) async fn persist_job(
         &self,
         file_asset: FileAsset,
@@ -124,22 +129,32 @@ impl ProductImportProcess {
         items: Vec<BackgroundJobItem>,
         file_name: String,
         input: Option<BackgroundJobInput>,
+        actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
         let db = self.db.clone();
         let client = db.client().clone();
         let file_for_tx = file_asset.clone();
         let job_for_tx = job.clone();
+        let authorization = self.job_access.service.clone();
+        let operator = actor.clone();
         let registration = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    db.file_assets().create(&file_for_tx, executor).await?;
-                    let registration =
-                        db.bulk_job().create_job_with_items(&job_for_tx, items, executor).await?;
+                    authorize(&authorization, &operator, executor).await?;
+                    db.file_assets().create(&file_for_tx, executor).await.map_err(registration_error)?;
+                    let registration = db
+                        .bulk_job()
+                        .create_job_with_items(&job_for_tx, items, executor)
+                        .await
+                        .map_err(registration_error)?;
                     if let Some(input) = input {
                         let job_id = BackgroundJobId::new(job_for_tx.base.id.clone());
-                        db.bulk_job().create_job_input(&job_id, &input, executor).await?;
+                        db.bulk_job()
+                            .create_job_input(&job_id, &input, executor)
+                            .await
+                            .map_err(registration_error)?;
                     }
-                    Ok::<_, PersistenceError>(registration)
+                    Ok::<_, Error>(registration)
                 })
             })
             .await;
@@ -149,8 +164,10 @@ impl ProductImportProcess {
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
                 Err(Error::ConflictError("同一请求身份已用于不同导入任务".into()))
             },
-            Err(PersistenceError::DuplicateKey(_)) => self.replay_existing_job(&job.request_id).await,
-            Err(error) => Err(error.into()),
+            Err(Error::RepositoryError(PersistenceError::DuplicateKey(_))) => {
+                self.replay_existing_job(&job.request_id, actor).await
+            },
+            Err(error) => Err(error),
         }
     }
 
@@ -158,20 +175,71 @@ impl ProductImportProcess {
     ///
     /// # 参数
     /// * `request_id` - 幂等请求身份。
+    /// * `actor` - 提交人，回放前重验当前商品创建资格。
     ///
     /// # 返回
     /// 返回已存在任务的视图；文件名不随回放恢复。
     ///
     /// # 错误
-    /// 查询失败时返回仓储错误。找不到任务时返回 `ConflictError`。
-    pub(super) async fn replay_existing_job(&self, request_id: &str) -> Result<ProductImportJobView> {
+    /// 当前账号失效、缺少商品创建资格或查询失败时拒绝。找不到任务时返回 `ConflictError`。
+    pub(super) async fn replay_existing_job(
+        &self,
+        request_id: &str,
+        actor: &AuditActor,
+    ) -> Result<ProductImportJobView> {
+        let db = self.db.clone();
+        let authorization = self.job_access.service.clone();
+        let operator = actor.clone();
+        let request_id = request_id.to_string();
         let existing = self
             .db
-            .background_jobs()
-            .find_by_request_id(request_id, &mut ReadExecutor::default())
-            .await?
-            .ok_or_else(|| Error::ConflictError("导入任务唯一竞争结果已变化，请刷新后重试".into()))?;
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    authorize(&authorization, &operator, executor).await?;
+                    db.background_jobs().find_by_request_id(&request_id, executor).await?.ok_or_else(|| {
+                        Error::ConflictError("导入任务唯一竞争结果已变化，请刷新后重试".into())
+                    })
+                })
+            })
+            .await?;
         Ok(job_view(&existing, None))
+    }
+
+    /// 在短快照内证明当前入口资格；解析与对象存储操作在该快照成功后执行。
+    /// # 参数
+    /// actor 为已认证提交人。
+    /// # 返回
+    /// 当前账号具有商品创建功能资格时返回成功。
+    /// # 错误
+    /// 身份、资格取证或快照事务失败时拒绝后续处理。
+    pub(super) async fn authorize_submission(&self, actor: &AuditActor) -> Result<()> {
+        let authorization = self.job_access.service.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { authorize(&authorization, &actor, executor).await })
+            })
+            .await
+    }
+}
+
+/// 导入入口只检查功能资格；商品候选范围由后台逐行创建重新验证。
+async fn authorize(
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    authorization.require(actor, &internal::PRODUCT_IMPORT_SUBMIT, AccessTarget::Operation, executor).await?;
+    Ok(())
+}
+
+/// 保留唯一键竞争的类型，交给登记入口回读；其余持久化错误沿用统一分类。
+fn registration_error(error: PersistenceError) -> Error {
+    match error {
+        error @ PersistenceError::DuplicateKey(_) => Error::RepositoryError(error),
+        error => error.into(),
     }
 }
 
@@ -226,4 +294,107 @@ fn import_job(
         drafts,
     )?;
     Ok(aggregate.into_parts())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::Error as IdentityError;
+    use erp_identity::entity::access_control::ResolvedScope;
+    use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+    use erp_identity::testing::{fixed_authorization, unavailable_authorization};
+    use erp_permissions::{Permission, catalog};
+    use mongodb::error::Error as MongoError;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
+
+    use super::*;
+
+    fn actor() -> AuditActor {
+        AuditActor::new("importer".into(), "operator".into(), AccountKind::Admin)
+    }
+
+    fn authorization(permissions: &[Permission]) -> Arc<AuthorizationService> {
+        fixed_authorization(
+            permissions,
+            ResolvedScope { role_clauses: Vec::new(), user_limit: None },
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn import_entry_requires_current_product_creation_permission() {
+        for permissions in
+            [vec![], vec![catalog::PRODUCT_PRODUCT_LIST], vec![internal::PRODUCT_IMPORT_SUBMIT]]
+        {
+            let denied = authorization(&permissions);
+            assert!(matches!(
+                authorize(&denied, &actor(), &mut SnapshotExecutor::default()).await,
+                Err(Error::Forbidden(_))
+            ));
+        }
+        let allowed = authorization(&[catalog::PRODUCT_PRODUCT_CREATE]);
+        authorize(&allowed, &actor(), &mut SnapshotExecutor::default()).await.unwrap();
+        let unavailable = unavailable_authorization();
+        assert!(matches!(
+            authorize(&unavailable, &actor(), &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(message)) if message == "测试授权设施不可用"
+        ));
+    }
+
+    #[tokio::test]
+    async fn import_entry_rejects_non_snapshot_executors() {
+        let allowed = authorization(&[catalog::PRODUCT_PRODUCT_CREATE]);
+        for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
+            assert!(matches!(
+                authorize(&allowed, &actor(), executor).await,
+                Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn import_qualification_does_not_replace_product_candidate_scope() {
+        let allowed = authorization(&[catalog::PRODUCT_PRODUCT_CREATE]);
+        let mut executor = SnapshotExecutor::default();
+        authorize(&allowed, &actor(), &mut executor).await.unwrap();
+        assert!(matches!(
+            allowed
+                .require(&actor(), &catalog::PRODUCT_PRODUCT_CREATE, AccessTarget::Operation, &mut executor)
+                .await,
+            Err(IdentityError::ValidationError(_))
+        ));
+        let candidate = ObjectFacts {
+            resource: "product".into(),
+            owner_id: FactValue::Known(Some("importer".into())),
+            org_unit_id: FactValue::Known(None),
+            ..Default::default()
+        };
+        assert!(matches!(
+            allowed
+                .require(
+                    &actor(),
+                    &catalog::PRODUCT_PRODUCT_CREATE,
+                    AccessTarget::Candidate(candidate),
+                    &mut executor
+                )
+                .await,
+            Err(IdentityError::Forbidden(_))
+        ));
+    }
+
+    #[test]
+    fn registration_keeps_unique_conflicts_replayable_and_other_error_classes() {
+        let duplicate = PersistenceError::DuplicateKey(MongoError::custom("duplicate"));
+        assert!(matches!(
+            registration_error(duplicate),
+            Error::RepositoryError(PersistenceError::DuplicateKey(_))
+        ));
+        assert!(matches!(
+            registration_error(PersistenceError::OptimisticLockingError),
+            Error::ConflictError(_)
+        ));
+    }
 }

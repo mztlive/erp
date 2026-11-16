@@ -6,6 +6,7 @@ use std::hash::{Hash, Hasher};
 
 use application_core::{AuditActor, PageView};
 use erp_core::ids::{SalesOrderId, SupplierAccountId};
+use erp_permissions::purchase_order as purchase_order_permissions;
 use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::dto::purchase_order::{PurchaseOrderListParams, SortDir};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -170,7 +171,7 @@ async fn list_query(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseOrderFilter)> {
-    let (context, scope) = access.resolve(actor, "list", executor).await?;
+    let (context, scope) = access.resolve(actor, &purchase_order_permissions::LIST, executor).await?;
     params.validate()?;
     let query = params.normalized()?;
     let (keyword_sales_order_ids, keyword_supplier_ids) =

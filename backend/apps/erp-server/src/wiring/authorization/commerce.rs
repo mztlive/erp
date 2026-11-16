@@ -166,7 +166,7 @@ impl AccessFactsPort for PurchaseObjects {
         executor: &mut dyn Executor,
     ) -> Result<Vec<ObjectFacts>> {
         let mut rows = PurchaseFacts::new(self.db.clone()).load(context, ids, executor).await?;
-        if !matches!(context.permission.action(), "list" | "detail") {
+        if !context.allows_history()? {
             return Ok(rows);
         }
         let targets = ids.ids().iter().cloned().collect::<Vec<_>>();
@@ -179,9 +179,6 @@ impl AccessFactsPort for PurchaseObjects {
             .collect::<BTreeSet<_>>();
         for row in &mut rows {
             participants_for(row, context.actor.id(), &participants);
-            for source in row.relations.values_mut().flat_map(|relation| relation.objects.iter_mut()) {
-                participants_for(source, context.actor.id(), &participants);
-            }
         }
         Ok(rows)
     }
@@ -200,6 +197,7 @@ struct InventoryObjects {
     inner: InventoryFacts,
     warehouses: Arc<dyn AccessFactsPort>,
 }
+
 #[async_trait]
 impl AccessFactsPort for InventoryObjects {
     async fn load(

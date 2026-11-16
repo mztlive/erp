@@ -12,9 +12,11 @@ use super::CustomerService;
 use super::scope::{
     CustomerListView, CustomerSnapshot, ensure_page, ensure_scope_version, ensure_stable_snapshot,
 };
-use crate::dto::customer::{CustomerDetailView, CustomerListParams, CustomerOwnerView, CustomerView};
+use crate::dto::customer::{
+    CustomerDetailView, CustomerListParams, CustomerListQuery, CustomerOwnerView, CustomerView,
+};
 use crate::entity::customer::{CustomerAccount, CustomerAssignment};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::repository::CustomerExt;
 use crate::repository::prelude::*;
 use crate::repository::scope::authorized_customer;
@@ -49,9 +51,33 @@ impl CustomerService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let snapshot = self.list_snapshot(query.clone(), actor).await?;
-        ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
-        let current = self.list_version_snapshot(query, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let expected_version = params.scope_version.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.list_stage(query, &actor, expected_version.as_deref(), executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在同一快照内读取列表、复核请求版本并验证交付版本。
+    async fn list_stage(
+        &self,
+        query: CustomerListQuery,
+        actor: &AuditActor,
+        expected_version: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerListView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("客户列表必须使用快照事务".into()));
+        }
+        let snapshot = self.list_snapshot(query.clone(), actor, executor).await?;
+        ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
+        let current = self.list_version_snapshot(query, actor, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
     }
@@ -225,6 +251,7 @@ mod tests {
     use super::super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot};
     use super::CustomerService;
     use crate::CustomerAccess;
+    use crate::dto::customer::CustomerListParams;
     use crate::error::Error;
     use crate::ports::{FailClosedAuditPort, FailClosedPartyFactPort};
 
@@ -239,6 +266,24 @@ mod tests {
             Arc::new(FailClosedPartyFactPort),
             CustomerAccess::new(db, unbound_authorization()),
         )
+    }
+
+    #[tokio::test]
+    async fn list_rejects_non_snapshot_and_missing_binding_before_business_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let params = serde_json::from_value::<CustomerListParams>(serde_json::json!({})).unwrap();
+        let query = params.normalized().unwrap();
+        let result = service.list_stage(query.clone(), &actor, None, &mut ReadExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(message)) if message == "客户列表必须使用快照事务"
+        ));
+        let result = service.list_stage(query, &actor, None, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(message)) if message == "缺少查询 Mapping 绑定"
+        ));
     }
 
     #[tokio::test]

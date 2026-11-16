@@ -2,6 +2,8 @@
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::service::business_ownership::required_business_org;
+use erp_identity::{AccessTarget, AccountDirectoryService};
 use erp_permissions::{internal as internal_permissions, sales_inquiry as sales_inquiry_permissions};
 use erp_sales::entity::sales_inquiry::{InquiryReassignmentData, SalesInquiry};
 use erp_workflow::entity::work_item::WorkItem;
@@ -10,7 +12,7 @@ use persistence_core::Executor;
 
 use super::InquiryCommand;
 use crate::sales_inquiry::SalesInquiryProcess;
-use crate::sales_inquiry::dto::SaveInquiryCommand;
+use crate::sales_inquiry::dto::{ReassignInquiryCommand, SaveInquiryCommand};
 use crate::sales_inquiry::eligibility::normalize_requirement;
 use crate::{Error, Result};
 
@@ -170,30 +172,57 @@ impl SalesInquiryProcess {
                 self.append_fee_basis(actor, inquiry, task, req, executor).await?
             },
             InquiryCommand::Reassign(req) => {
-                self.ensure_reassignment_target(
-                    &inquiry.base.id,
-                    &task.base.id,
-                    &req.owner_user_id,
-                    executor,
-                )
-                .await?;
-                inquiry.reassign_work(
-                    req.expected_version,
-                    actor.id(),
-                    InquiryReassignmentData {
-                        previous_owner: actor.id().to_string(),
-                        target_owner: req.owner_user_id.clone(),
-                        line_ids: task.responsibility_scope_ids().to_vec(),
-                        reason: req.reason.clone(),
-                    },
-                    now,
-                )?;
-                return Ok(task.reassign(&req.owner_user_id, now)?);
+                return self.reassign_task(actor, inquiry, task, req, executor).await;
             },
             _ => return Err(Error::Internal("询价采购命令分派错误".into())),
         }
         task.record_activity(now)?;
         Ok(())
+    }
+
+    /// 改派只按真实目标账号和原任务版本证明接收资格，责任行及组织规则独立保留。
+    async fn reassign_task(
+        &self,
+        actor: &AuditActor,
+        inquiry: &mut SalesInquiry,
+        task: &mut WorkItem,
+        request: &ReassignInquiryCommand,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if self.active_tasks(&inquiry.base.id, executor).await?.iter().any(|other| {
+            other.base.id != task.base.id && other.owner_user_id.as_deref() == Some(&request.owner_user_id)
+        }) {
+            return Err(Error::BusinessLogicError(
+                "目标采购已负责本询价其他任务，请保持一人一组责任行".into(),
+            ));
+        }
+        let account = AccountDirectoryService::new(self.db.clone())
+            .account(&request.owner_user_id, executor)
+            .await?
+            .ok_or_else(|| Error::BusinessLogicError("询价责任采购账号已失效".into()))?;
+        let recipient = AuditActor::new(account.id, account.login_account, account.kind);
+        self.authorization
+            .require(
+                &recipient,
+                &internal_permissions::WORK_ITEM_RECIPIENT,
+                AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() },
+                executor,
+            )
+            .await?;
+        required_business_org(&self.db, &request.owner_user_id, executor).await?;
+        let now = Instant::now();
+        inquiry.reassign_work(
+            request.expected_version,
+            actor.id(),
+            InquiryReassignmentData {
+                previous_owner: actor.id().to_string(),
+                target_owner: request.owner_user_id.clone(),
+                line_ids: task.responsibility_scope_ids().to_vec(),
+                reason: request.reason.clone(),
+            },
+            now,
+        )?;
+        Ok(task.reassign(&request.owner_user_id, now)?)
     }
 
     async fn publish_work(

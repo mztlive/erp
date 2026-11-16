@@ -7,6 +7,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_fulfillment::dto::{CreateDeliveryRequest, DeliveryView, UpdateDeliveryRequest};
 use erp_fulfillment::entity::fulfillment::{Delivery, DeliveryLine};
+use erp_fulfillment::service::FulfillmentService;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::fulfillment;
 use erp_workflow::DocumentRegistryExt;
@@ -22,6 +23,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::FulfillmentProcess;
+use super::delivery_packing::PackingContext;
 use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
@@ -93,48 +95,59 @@ impl FulfillmentProcess {
         if req.packing.is_some() && req.tracking_entries.is_some() {
             return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
         }
-        let packing_context = super::delivery_packing::PackingContext {
+        let packing_context = PackingContext {
             codec: self.sensitive_data.clone(),
             key: self.fingerprint_key.clone(),
             input: req.packing.clone(),
             legacy_tracking: req.tracking_entries.is_some(),
         };
-        let audit = actor.clone().resource_log("delivery.update", "delivery", id.to_string())?;
         let db = self.db.clone();
         let task_identity = self.task_identity.clone();
-        let actor_id = actor.id().to_string();
+        let actor = actor.clone();
         let id = id.to_string();
         let client = db.client().clone();
         let updated = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let service = erp_fulfillment::service::FulfillmentService::new(db.clone());
-                    let (mut delivery, lines) =
-                        service.prepare_delivery_update(&id, req.clone(), executor).await?;
-                    if delivery.packing.is_some() && req.tracking_entries.is_some() {
-                        return Err(Error::ConflictError("请刷新后使用地址包裹登记".into()));
-                    }
-                    packing_context.apply(&db, &mut delivery, &lines, false, executor).await?;
-                    super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor)
-                        .await?;
-                    erp_fulfillment::service::FulfillmentService::new(db.clone())
-                        .persist_delivery(&mut delivery, executor)
-                        .await?;
-                    super::task::record_fulfillment_activity(
-                        &db,
-                        &task_identity,
-                        super::task::FulfillmentTaskObject::Delivery(&delivery),
-                        &actor_id,
-                        executor,
-                    )
-                    .await?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok::<Delivery, crate::Error>(delivery)
+                    apply_delivery_update(&db, &task_identity, &id, req, packing_context, &actor, executor)
+                        .await
                 })
             })
             .await?;
         Ok(updated.into())
     }
+}
+
+/// 同一事务先授权，再读取、保存草稿并同步任务版本。
+async fn apply_delivery_update(
+    db: &Database,
+    task_identity: &Arc<AuthorizationService>,
+    id: &str,
+    req: UpdateDeliveryRequest,
+    packing_context: PackingContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Delivery> {
+    super::task::require_fulfillment_entry(db, task_identity, "delivery", id, actor, executor).await?;
+    let service = FulfillmentService::new(db.clone());
+    let (mut delivery, lines) = service.prepare_delivery_update(id, req.clone(), executor).await?;
+    if delivery.packing.is_some() && req.tracking_entries.is_some() {
+        return Err(Error::ConflictError("请刷新后使用地址包裹登记".into()));
+    }
+    packing_context.apply(db, &mut delivery, &lines, false, executor).await?;
+    super::delivery_tracking::ensure_tracking_sources(db, &delivery, &lines, executor).await?;
+    service.persist_delivery(&mut delivery, executor).await?;
+    super::task::record_fulfillment_activity(
+        db,
+        task_identity,
+        super::task::FulfillmentTaskObject::Delivery(&delivery),
+        actor,
+        executor,
+    )
+    .await?;
+    let audit = actor.clone().resource_log("delivery.update", "delivery", id.to_owned())?;
+    persist_log(db, &audit, executor).await?;
+    Ok(delivery)
 }
 
 /// 发货创建必须跳过绑定：政策只能是 `NO_APPROVAL`。

@@ -10,7 +10,6 @@ use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_core::common::time::BusinessDate;
 use erp_customer::CustomerAccountStatus;
 use erp_sales::Result as SalesResult;
-use erp_sales::dto::sales_selection::SelectionSourceSkuView;
 use erp_sales::entity::sales_selection::{
     ImageAssetSnapshot, PoolFilterSnapshot, PoolPriceKind, SelectionReferencePrices,
     SpecificationAttributeSnapshot,
@@ -20,28 +19,6 @@ use erp_sales::ports::sales_selection::{
 };
 use persistence_core::{Executor, ReadExecutor};
 use storage::S3Storage;
-
-/// 回显已通过册详情权限验证的来源，不扩大来源或返回采购价格。
-/// # 参数
-/// `query` 为已装配目录读取 Port，`ids` 仅允许来自已授权册。
-/// # 返回
-/// 当前仍可售来源的名称与业务编号。
-/// # 错误
-/// 查询失败时返回错误。
-pub(super) async fn source_skus(
-    query: &dyn CatalogSupplyQueryPort,
-    ids: &[String],
-    executor: &mut dyn Executor,
-) -> crate::Result<Vec<SelectionSourceSkuView>> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let rows = query.find_sellable_skus_by_ids(ids, BusinessDate::today(), executor).await?;
-    Ok(rows
-        .into_iter()
-        .map(|row| SelectionSourceSkuView { sku_id: row.sku_id, name: row.name, sku_no: row.sku_no })
-        .collect())
-}
 
 /// 客户适配器。
 pub(super) struct CustomerAdapter {
@@ -162,6 +139,7 @@ impl SelectionCatalogPort for CatalogAdapter {
     /// # 参数
     /// * `refs` - 引用
     /// * `as_of` - 资格日期
+    /// * `executor` - 发布入口持有的原事务执行器
     ///
     /// # 返回
     /// 返回仍合格引用。
@@ -172,12 +150,9 @@ impl SelectionCatalogPort for CatalogAdapter {
         &self,
         refs: &[(String, String)],
         as_of: BusinessDate,
+        executor: &mut dyn Executor,
     ) -> SalesResult<Vec<(String, String)>> {
-        let rows = self
-            .query
-            .find_sellable_sku_refs(refs, as_of, &mut ReadExecutor::default())
-            .await
-            .map_err(map_store)?;
+        let rows = self.query.find_sellable_sku_refs(refs, as_of, executor).await.map_err(map_store)?;
         Ok(rows.into_iter().map(|row| (row.sku_id, row.sku_revision_id)).collect())
     }
 }
@@ -301,3 +276,6 @@ fn to_fact(row: erp_catalog::repository::SellableSkuRow) -> SelectionSkuFact {
 fn map_store(error: persistence_core::Error) -> erp_sales::Error {
     erp_sales::Error::from(error)
 }
+
+#[cfg(test)]
+mod tests;

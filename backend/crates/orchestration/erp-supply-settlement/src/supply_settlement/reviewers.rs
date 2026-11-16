@@ -1,9 +1,10 @@
-//! 指定结算复核人的启用账号、完整财务角色资格及岗位分离。
+//! 指定结算复核人的启用账号、固定任务执行资格及岗位分离。
 
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_identity::{AccountSummary, AuthorizationService, SharedRbacService};
-use erp_permissions::{supplier_settlement, work_item};
+use erp_identity::entity::authorization::{FactValue, ObjectFacts};
+use erp_identity::{AccessTarget, AuthorizationService, Error as IdentityError, SharedRbacService};
+use erp_permissions::internal;
 use erp_supply::service::supplier_settlement::SettlementAction;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::{Executor, Transactional};
@@ -23,22 +24,31 @@ pub struct SettlementReviewerOption {
     pub account: String,
 }
 
-/// 返回同一启用角色具备完整复核资格时读取的账号摘要；岗位分离由业务检查。
+/// 任务形成前仅由统一任务入口核验固定结算复核执行资格。
 async fn qualified_reviewer(
     authorization: &AuthorizationService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<Option<AccountSummary>> {
-    let required = [
-        supplier_settlement::STATEMENT_DETAIL,
-        supplier_settlement::STATEMENT_REVIEW_DECIDE,
-        work_item::DETAIL,
-    ];
-    Ok(authorization
-        .permissions(actor, &required, executor)
-        .await?
-        .filter(|qualified| qualified.same_role(&required))
-        .map(|qualified| qualified.account().clone()))
+) -> Result<bool> {
+    let candidate = ObjectFacts {
+        resource: "work_item".into(),
+        subject_type: FactValue::Known("SUPPLIER_SETTLEMENT_REVIEW".into()),
+        subject_source_resource: FactValue::Known("supplier_settlement_statement".into()),
+        ..Default::default()
+    };
+    match authorization
+        .require(
+            actor,
+            &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+            AccessTarget::Candidate(candidate),
+            executor,
+        )
+        .await
+    {
+        Ok(()) => Ok(true),
+        Err(IdentityError::Forbidden(_)) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
 }
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
@@ -87,8 +97,8 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             if account.id == actor.id() {
                 continue;
             }
-            let candidate = AuditActor::new(account.id, account.login_account, account.kind);
-            if let Some(account) = qualified_reviewer(&self.authorization, &candidate, executor).await? {
+            let candidate = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+            if qualified_reviewer(&self.authorization, &candidate, executor).await? {
                 options.push(SettlementReviewerOption {
                     user_id: account.id,
                     display_name: account.display_name,
@@ -118,9 +128,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     }
 }
 
-/// 在调用方事务内重验岗位分离、账号及同一启用财务角色的完整动作。
+/// 在调用方事务内重验岗位分离、真实账号及固定结算复核执行资格。
 ///
 /// # 参数
+/// * `authorization` - 当前统一任务资格服务。
 /// * `identity_service` - 同一应用注入的共享身份与权限服务。
 /// * `reviewer_id` - 复核人账号。
 /// * `preparer_id` - 经办人账号。
@@ -130,7 +141,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// 资格成立时无返回值。
 ///
 /// # 错误
-/// 复核人不存在时返回 `ValidationError`。资格、权限或财务角色不满足时返回 `Forbidden`。
+/// 复核人不存在时返回 `ValidationError`。账号或任务资格不满足时返回 `Forbidden`。
 /// 账号或权限读取失败时返回对应错误。
 pub(super) async fn ensure_reviewer(
     authorization: &AuthorizationService,
@@ -139,21 +150,17 @@ pub(super) async fn ensure_reviewer(
     preparer_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let account = identity_service
+        .directory()
+        .account(reviewer_id, executor)
+        .await?
+        .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
     if reviewer_id == preparer_id {
-        identity_service
-            .directory()
-            .account(reviewer_id, executor)
-            .await?
-            .ok_or_else(|| Error::ValidationError("复核人不存在，请重新选择".into()))?;
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
     }
-    let actor = AuditActor::new(reviewer_id.into(), reviewer_id.into(), AccountKind::Admin);
-    let qualified = qualified_reviewer(authorization, &actor, executor).await?;
-    if qualified.is_some() {
+    let actor = AuditActor::new(account.id, account.login_account, account.kind);
+    if qualified_reviewer(authorization, &actor, executor).await? {
         return Ok(());
-    }
-    if identity_service.directory().account(reviewer_id, executor).await?.is_none() {
-        return Err(Error::ValidationError("复核人不存在，请重新选择".into()));
     }
     Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()))
 }

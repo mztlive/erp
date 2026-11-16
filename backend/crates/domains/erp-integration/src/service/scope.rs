@@ -1,7 +1,6 @@
 //! 集成列表范围版本与空集口径。
 
 use application_core::{EmptyScopeVersion, ScopeVersion};
-use erp_core::common::time::Instant;
 use erp_identity::CompiledAccess;
 use erp_permissions::Permission;
 
@@ -33,7 +32,7 @@ impl ScopedIntegrationList {
     pub fn from_access(access: &CompiledAccess) -> Self {
         Self {
             scope_version: access.version(),
-            as_of: Instant::now().unix_secs().to_string(),
+            as_of: access.as_of().unix_secs().to_string(),
             scope_summary: "集成当前处理人所属内部组织范围",
             ownership_basis: "current_handler",
         }

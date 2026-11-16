@@ -8,15 +8,14 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_contract::{
     ContractAuditPort, ContractParticipantPort, ContractService, CustomerAccountFact, CustomerFactsPort,
-    Error as ContractError, PreparedContractAudit,
+    PreparedContractAudit,
 };
 use erp_core::ids::CustomerAccountId;
 use erp_customer::CustomerExt;
 use erp_customer::repository::prelude::*;
 use erp_identity::SharedRbacService;
-use erp_workflow::repository::document_registry::participant_access;
+use erp_workflow::DocumentRegistryExt;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::{DocumentRegistryExt, Error as WorkflowError};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
@@ -208,10 +207,6 @@ impl ContractParticipantPort for MongoContractParticipants {
             .await
             .map_err(map_customer_to_contract)
     }
-
-    async fn revision(&self, user_id: &str, executor: &mut dyn Executor) -> erp_contract::Result<i64> {
-        participant_access::revision(&self.db, user_id, executor).await.map_err(map_participation_to_contract)
-    }
 }
 
 /// 构造已接入身份域公共解析器的合同服务。
@@ -269,14 +264,6 @@ map_audit_error!(fn map_audit_to_contract -> erp_contract);
 
 fn map_customer_to_contract(error: persistence_core::Error) -> erp_contract::Error {
     erp_contract::Error::from(error)
-}
-
-fn map_participation_to_contract(error: WorkflowError) -> ContractError {
-    match error {
-        WorkflowError::RepositoryError(error) => ContractError::from(error),
-        WorkflowError::Internal(message) => ContractError::Internal(message),
-        error => ContractError::Internal(error.to_string()),
-    }
 }
 
 #[cfg(test)]

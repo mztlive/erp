@@ -4,11 +4,10 @@ use erp_permissions::internal as internal_permissions;
 mod persist;
 mod prepare;
 
-use std::future::Future;
-
 use application_core::AuditActor;
 use bpm::engine::{CommitRequired, Eligibility, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
+use bpm::model::IdempotencyKey;
 use bpm::model::types::ApprovalProcessInstanceStatus;
 use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
 use mongodb::Database;
@@ -68,13 +67,26 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             command.expected_closed_task_version,
             actor.id(),
         )?;
-        if let Some(view) = self.replay_resume(actor, &instance_id, &identity).await? {
-            return Ok(view);
-        }
-        let Some(prepared) = self.prepare_resume_runtime(actor, &command, idempotency_key).await? else {
-            return self.persisted_resume_view(actor, &instance_id).await;
-        };
-        let view = self.commit_resume(actor, prepared).await;
+        let service = self.clone();
+        let transaction_actor = actor.clone();
+        let transaction_identity = identity.clone();
+        let view = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .resume_stage(
+                            &transaction_actor,
+                            &command,
+                            idempotency_key,
+                            &transaction_identity,
+                            executor,
+                        )
+                        .await
+                })
+            })
+            .await;
         commit_or_recover(
             move || async move { view },
             |error| self.recover_resume_after_competing_commit(actor, instance_id, identity, error),
@@ -82,26 +94,30 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         .await
     }
 
-    /// 冻结端口与计划的所有权，保证事务回调及其 future 可跨线程发送。
-    fn commit_resume(
+    /// 恢复回放、计划准备、写入与回包始终共用入口事务。
+    async fn resume_stage(
         &self,
         actor: &AuditActor,
-        prepared: PreparedResume,
-    ) -> impl Future<Output = Result<ApprovalCommandView>> + Send {
-        let service = self.clone();
-        let client = self.db.client().clone();
-        let actor = actor.clone();
-        async move {
-            client
-                .with_transaction(move |executor| {
-                    Box::pin(async move { apply_resume(&service, &actor, &prepared, executor).await })
-                })
-                .await
+        command: &ApprovalResumeCommand,
+        idempotency_key: IdempotencyKey,
+        identity: &PreparedCommandIdentity,
+        executor: &mut dyn Executor,
+    ) -> Result<ApprovalCommandView> {
+        let instance_id = &command.approval_process_instance_id;
+        if let Some(view) =
+            replay_resume_apply(&self.authorization, &self.db, actor, instance_id, identity, executor).await?
+        {
+            return Ok(view);
         }
+        let Some(prepared) = self.prepare_resume_runtime(actor, command, idempotency_key, executor).await?
+        else {
+            return self.persisted_resume_view(actor, instance_id, executor).await;
+        };
+        apply_resume(self, actor, &prepared, executor).await
     }
 
-    /// 在独立事务快照内按当前权限回放原审批人恢复结果。
-    async fn replay_resume(
+    /// 提交竞争或结果未知后，仅在新的只读快照中查证既有收据，禁止重执行业务写入。
+    async fn prove_resume_commit(
         &self,
         actor: &AuditActor,
         instance_id: &str,
@@ -130,41 +146,25 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         identity: PreparedCommandIdentity,
         original_error: Error,
     ) -> Result<ApprovalCommandView> {
-        recover_by_replay(original_error, || self.replay_resume(actor, &instance_id, &identity)).await
+        recover_by_replay(original_error, || self.prove_resume_commit(actor, &instance_id, &identity)).await
     }
 
-    /// 无需写入时，在一个读取事务内授权并交付既有恢复结果。
+    /// 无需写入时，在入口事务中授权并交付既有恢复结果。
     async fn persisted_resume_view(
         &self,
         actor: &AuditActor,
         instance_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<ApprovalCommandView> {
-        let service = self.clone();
-        let actor = actor.clone();
-        let instance_id = instance_id.to_owned();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    service
-                        .authorization
-                        .require(
-                            &actor,
-                            &internal_permissions::APPROVAL_RECOVER,
-                            AccessTarget::record(&instance_id)?,
-                            executor,
-                        )
-                        .await?;
-                    persisted_command_view_with_executor(
-                        &service.db,
-                        &instance_id,
-                        CommitRequired::Proceed,
-                        true,
-                        executor,
-                    )
-                    .await
-                })
-            })
+        self.authorization
+            .require(
+                actor,
+                &internal_permissions::APPROVAL_RECOVER,
+                AccessTarget::record(instance_id)?,
+                executor,
+            )
+            .await?;
+        persisted_command_view_with_executor(&self.db, instance_id, CommitRequired::Proceed, true, executor)
             .await
     }
 

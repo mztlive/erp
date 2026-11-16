@@ -7,4 +7,6 @@ pub mod data_scope;
 pub mod procurement_responsibility;
 pub mod purchase_order;
 
-pub use data_scope::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort, PurchaseResolvedScope};
+pub use data_scope::{
+    FailClosedPurchaseDataScopePort, PurchaseDataScope, PurchaseDataScopePort, PurchaseResolvedScope,
+};

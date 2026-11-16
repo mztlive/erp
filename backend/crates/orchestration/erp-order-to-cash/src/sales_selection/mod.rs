@@ -17,11 +17,9 @@ mod scope_checks;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_identity::service::business_ownership::required_business_org;
-use erp_read_models::sales_center::selection_pricing::enrich_selection_prices;
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
-    PublishSalesSelectionRequest, SalesSelectionBookletListParams, SalesSelectionBookletView,
-    SalesSelectionCommandRequest, SalesSelectionProposalListParams, SalesSelectionProposalView,
+    PublishSalesSelectionRequest, SalesSelectionBookletView, SalesSelectionCommandRequest,
     SalesSelectionSessionView, SelectionBookletCreator,
 };
 use erp_sales::entity::sales_selection::{IdempotencyOperation, LinkTokenCrypto};
@@ -35,9 +33,8 @@ use storage::S3Storage;
 
 use self::adapters::{CatalogAdapter, CustomerAdapter, ImageAdapter};
 use self::scope_checks::{
-    booklet_list_snapshot, check_create_scope, copy_link_checked, delete_item_checked, image_key_checked,
-    owner_display_names, proposal_list_snapshot, publish_checked, rotate_link_checked, session_checked,
-    start_prepare_checked,
+    check_create_scope, copy_link_checked, delete_item_checked, image_key_checked, publish_checked,
+    rotate_link_checked, session_checked, start_prepare_checked,
 };
 use crate::{Error, Result};
 
@@ -112,94 +109,10 @@ impl SalesSelectionProcess {
                         executor,
                     )
                     .await?;
-                    SalesSelectionService::new(db)
+                    SalesSelectionService::new(db, access.authorization())
                         .create(req, &creator, password_hash, fingerprint, &customer, executor)
                         .await
                         .map_err(Error::from)
-                })
-            })
-            .await
-    }
-
-    /// 列表。
-    ///
-    /// 授权、计数与分页使用同一读取事务。
-    ///
-    /// # 参数
-    /// * `params` - 筛选
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回分页与范围版本；当前页行带负责人显示名，不含筛选候选。
-    ///
-    /// # 错误
-    /// 参数非法或范围变化。
-    pub async fn booklet_list(
-        &self,
-        params: SalesSelectionBookletListParams,
-        actor: AuditActor,
-    ) -> Result<SelectionBookletListView> {
-        let access = self.services.selections.clone();
-        let db = self.db.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { booklet_list_snapshot(&access, &db, &params, &actor, executor).await })
-            })
-            .await
-    }
-
-    /// 详情。
-    ///
-    /// 授权、负责人显示名、来源商品与详情共用同一快照执行器。
-    ///
-    /// # 参数
-    /// * `id` - 选品册
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回详情。
-    ///
-    /// # 错误
-    /// 不存在或无权查看。
-    pub async fn booklet_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionBookletView> {
-        let db = self.db.clone();
-        let services = self.services.clone();
-        let id = id.to_owned();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let access = services.selections.clone();
-                    read::checked(
-                        &access,
-                        &actor,
-                        &sales_selection::BOOKLET_DETAIL,
-                        executor,
-                        move |scope, executor| {
-                            Box::pin(async move {
-                                let book = SalesSelectionDomainRepository::new(&db)
-                                    .find_authorized_booklet(&id, scope, executor)
-                                    .await?
-                                    .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
-                                let mut view = SalesSelectionService::new(db.clone())
-                                    .detail_view(&book, None, executor)
-                                    .await?;
-                                view.sales_owner_name =
-                                    owner_display_names(&db, &[view.sales_owner_user_id.clone()], executor)
-                                        .await?
-                                        .remove(&view.sales_owner_user_id);
-                                view.source_skus =
-                                    adapters::source_skus(services.catalog.as_ref(), &view.sku_ids, executor)
-                                        .await?;
-                                enrich_selection_prices(&db, &mut view, executor).await?;
-                                Ok(view)
-                            })
-                        },
-                    )
-                    .await
                 })
             })
             .await
@@ -319,6 +232,7 @@ impl SalesSelectionProcess {
         let id = id.to_owned();
         let actor = actor.clone();
         let crypto = self.crypto.clone();
+        let authorization = self.services.authorization.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -334,7 +248,7 @@ impl SalesSelectionProcess {
                                     .find_authorized_booklet(&id, scope, executor)
                                     .await?
                                     .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
-                                let token = SalesSelectionService::new(db)
+                                let token = SalesSelectionService::new(db, authorization)
                                     .copy_link(&book.base.id, &crypto, executor)
                                     .await?;
                                 let path = format!("/s/{token}");
@@ -447,80 +361,6 @@ impl SalesSelectionProcess {
         self.command(id, req, actor, CommandKind::Void).await
     }
 
-    /// 方案列表。
-    ///
-    /// 授权、计数与分页使用同一读取事务。
-    ///
-    /// # 参数
-    /// * `params` - 筛选
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回分页与范围版本；当前页行带负责人显示名，不含筛选候选。
-    ///
-    /// # 错误
-    /// 参数非法或范围变化。
-    pub async fn proposal_list(
-        &self,
-        params: SalesSelectionProposalListParams,
-        actor: AuditActor,
-    ) -> Result<SelectionProposalListView> {
-        let access = self.services.selections.clone();
-        let db = self.db.clone();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { proposal_list_snapshot(&access, &db, &params, &actor, executor).await })
-            })
-            .await
-    }
-
-    /// 方案详情。
-    ///
-    /// 授权与方案详情共用同一快照执行器。
-    ///
-    /// # 参数
-    /// * `id` - 方案
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 返回详情。
-    ///
-    /// # 错误
-    /// 不存在或无权查看。
-    pub async fn proposal_detail(&self, id: &str, actor: &AuditActor) -> Result<SalesSelectionProposalView> {
-        let access = self.services.selections.clone();
-        let db = self.db.clone();
-        let id = id.to_owned();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    read::checked(
-                        &access,
-                        &actor,
-                        &sales_selection::PROPOSAL_DETAIL,
-                        executor,
-                        move |scope, executor| {
-                            Box::pin(async move {
-                                let proposal = SalesSelectionDomainRepository::new(&db)
-                                    .find_authorized_proposal(&id, scope, executor)
-                                    .await?
-                                    .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
-                                Ok(SalesSelectionService::new(db)
-                                    .proposal_view_of(&proposal, executor)
-                                    .await?)
-                            })
-                        },
-                    )
-                    .await
-                })
-            })
-            .await
-    }
-
     /// 运行到期准备任务。
     ///
     /// # 参数
@@ -535,7 +375,9 @@ impl SalesSelectionProcess {
         let catalog = CatalogAdapter { query: self.services.catalog.clone() };
         let images =
             ImageAdapter { files: self.services.files.clone(), storage: Arc::new(self.storage.clone()) };
-        Ok(SalesSelectionService::new(self.db.clone()).run_due_prepare_tasks(&catalog, &images).await?)
+        Ok(SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
+            .run_due_prepare_tasks(&catalog, &images)
+            .await?)
     }
 
     /// 读取已通过管理端客户权限校验的册图片。
@@ -643,60 +485,14 @@ impl SalesSelectionProcess {
         actor: AuditActor,
         kind: CommandKind,
     ) -> Result<SalesSelectionBookletView> {
-        let access = self.services.selections.clone();
-        let actor_id = actor.id().to_string();
-        let service = SalesSelectionService::new(self.db.clone()).with_authorization(access, actor);
+        let service = SalesSelectionService::new(self.db.clone(), self.services.authorization.clone());
         match kind {
-            CommandKind::Close => service.close_booklet(&id, req, &actor_id).await,
-            CommandKind::Revoke => service.revoke_access(&id, req, &actor_id).await,
-            CommandKind::Void => service.void_booklet(&id, req, &actor_id).await,
+            CommandKind::Close => service.close_booklet(&id, req, &actor).await,
+            CommandKind::Revoke => service.revoke_access(&id, req, &actor).await,
+            CommandKind::Void => service.void_booklet(&id, req, &actor).await,
         }
         .map_err(Error::from)
     }
-}
-
-/// 选品册列表行：已授权业务行及其负责人显示名，不是筛选候选。
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SelectionBookletListRow {
-    /// 选品册列表行。
-    #[serde(flatten)]
-    item: erp_sales::dto::sales_selection::SalesSelectionBookletListItemView,
-    /// 当前页负责人显示名；账号缺失时省略，不回退人员目录。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sales_owner_name: Option<String>,
-}
-
-/// 方案列表行：已授权业务行及其负责人显示名，不是筛选候选。
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SelectionProposalListRow {
-    /// 方案列表行。
-    #[serde(flatten)]
-    item: erp_sales::dto::sales_selection::SalesSelectionProposalListItemView,
-    /// 当前页负责人显示名；账号缺失时省略，不回退人员目录。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sales_owner_name: Option<String>,
-}
-
-/// 选品册列表视图：分页与范围版本。
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SelectionBookletListView {
-    /// 当前页；行上带负责人显示名。
-    pub page: application_core::PageView<SelectionBookletListRow>,
-    /// 跨页必须原样回传的范围版本。
-    pub scope_version: String,
-    /// 无范围时为 true，前端据此区分空结果。
-    pub no_scope: bool,
-}
-
-/// 方案列表视图：分页与范围版本。
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SelectionProposalListView {
-    /// 当前页；行上带负责人显示名。
-    pub page: application_core::PageView<SelectionProposalListRow>,
-    /// 跨页必须原样回传的范围版本。
-    pub scope_version: String,
-    /// 无范围时为 true，前端据此区分空结果。
-    pub no_scope: bool,
 }
 
 /// 内部命令种类。
