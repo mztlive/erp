@@ -105,6 +105,35 @@ SERVICE_MONGO_RULES = {
     "mongo_ops": re.compile(r"\b(?:database::)?mongo_ops\b"),
 }
 
+SERVICE_MONGO_RULE_HINTS: dict[str, tuple[str, ...]] = {
+    "mongodb_bson": ("mongodb", "bson"),
+    "mongodb_options": ("mongodb", "options"),
+    "doc_macro": ("doc!",),
+    "raw_document": ("Document",),
+    "raw_bson": ("Bson",),
+    "find_one": ("find_one",),
+    "find_many": ("find_many",),
+    "find_many_sorted": ("find_many_sorted",),
+    "find_one_by_field": ("find_one_by_field",),
+    "exists": ("exists",),
+    "raw_collection": ("collection",),
+    "aggregate": ("aggregate",),
+    "count_documents": ("count_documents",),
+    "distinct": ("distinct",),
+    "raw_write": (
+        "insert_one",
+        "insert_many",
+        "update_one",
+        "update_many",
+        "replace_one",
+        "delete_one",
+        "delete_many",
+        "bulk_write",
+    ),
+    "run_command": ("run_command",),
+    "mongo_ops": ("mongo_ops",),
+}
+
 ENTITY_FORBIDDEN = re.compile(
     r"\b(?:axum|mongodb)\s*::|\bRepository\s*<|\btrait\s+Executor\b|\bNoTransaction\b"
 )
@@ -121,7 +150,7 @@ INDEX_CALL = re.compile(
     r"""(?P<fn>unique_index|named_index)\s*\(\s*"(?P<name>[^"]+)"\s*,\s*doc!\s*\{(?P<keys>.*?)\}""",
     re.S,
 )
-USE_START = re.compile(r"(?:pub(?:\s*\([^)]+\))?\s+)?use\s+")
+USE_START = re.compile(r"use\s+")
 
 
 @dataclass
@@ -165,46 +194,23 @@ def ident_to_package(ident: str, known: Mapping[str, str]) -> str | None:
     return known.get(ident)
 
 
+COMMENT_OR_STR_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*[\s\S]*?\*/')
+
+
+def _mask_comment_match(match: re.Match[str]) -> str:
+    token = match.group(0)
+    if token[0] == '"':
+        return token
+    if "\n" not in token:
+        return " " * len(token)
+    return "\n".join(" " * len(line) for line in token.split("\n"))
+
+
 def strip_comments(source: str) -> str:
     """Replace comments with spaces so lexical scans ignore them."""
-    out: list[str] = []
-    i = 0
-    n = len(source)
-    while i < n:
-        ch = source[i]
-        nxt = source[i + 1] if i + 1 < n else ""
-        if ch == "/" and nxt == "/":
-            while i < n and source[i] != "\n":
-                out.append(" ")
-                i += 1
-            continue
-        if ch == "/" and nxt == "*":
-            out.append("  ")
-            i += 2
-            while i < n and not (source[i] == "*" and i + 1 < n and source[i + 1] == "/"):
-                out.append("\n" if source[i] == "\n" else " ")
-                i += 1
-            if i < n:
-                out.append("  ")
-                i += 2
-            continue
-        if ch == '"':
-            out.append(ch)
-            i += 1
-            while i < n:
-                out.append(source[i])
-                if source[i] == "\\" and i + 1 < n:
-                    out.append(source[i + 1])
-                    i += 2
-                    continue
-                if source[i] == '"':
-                    i += 1
-                    break
-                i += 1
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
+    if "//" not in source and "/*" not in source:
+        return source
+    return COMMENT_OR_STR_RE.sub(_mask_comment_match, source)
 
 
 def _parse_use_tree(text: str, prefix: str, paths: list[str]) -> None:
@@ -249,25 +255,33 @@ def _parse_use_tree(text: str, prefix: str, paths: list[str]) -> None:
 
 def extract_use_paths(source: str) -> list[str]:
     """Return crate paths referenced by `use` / `pub use`, including grouped trees."""
+    if "use" not in source:
+        return []
     code = strip_comments(source)
     paths: list[str] = []
     i = 0
+    length = len(code)
     while True:
         match = USE_START.search(code, i)
         if not match:
             break
         start = match.end()
-        j = start
-        depth = 0
-        while j < len(code):
-            ch = code[j]
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-            elif ch == ";" and depth <= 0:
-                break
-            j += 1
+        semi = code.find(";", start)
+        end_bound = semi if semi >= 0 else length
+        if code.find("{", start, end_bound) < 0 and code.find("}", start, end_bound) < 0:
+            j = end_bound
+        else:
+            j = start
+            depth = 0
+            while j < length:
+                ch = code[j]
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                elif ch == ";" and depth <= 0:
+                    break
+                j += 1
         _parse_use_tree(code[start:j], "", paths)
         i = j + 1
     return paths
@@ -395,15 +409,22 @@ def _cycle_notes(graph: Graph, interesting: Sequence[str]) -> list[str]:
     return errors
 
 
-def scan_entity_source(path: str, source: str, *, money_exception: bool) -> list[str]:
+def scan_entity_source(
+    path: str,
+    source: str,
+    *,
+    money_exception: bool,
+    use_paths: Sequence[str] | None = None,
+) -> list[str]:
     """Flag entity modules that reach HTTP/Mongo/Repository APIs."""
     errors: list[str] = []
-    code = strip_comments(source)
-    if ENTITY_FORBIDDEN.search(code):
-        errors.append(f"entity 引用了 Repository/HTTP/Mongo/Executor: {path}")
-    if ENTITY_BSON.search(code) and not money_exception:
-        errors.append(f"entity 引用了 BSON（仅 erp-core 金额编码允许）: {path}")
-    for used in extract_use_paths(source):
+    if any(k in source for k in ("axum", "mongodb", "Repository", "Executor", "NoTransaction", "bson")):
+        code = strip_comments(source)
+        if ENTITY_FORBIDDEN.search(code):
+            errors.append(f"entity 引用了 Repository/HTTP/Mongo/Executor: {path}")
+        if ENTITY_BSON.search(code) and not money_exception:
+            errors.append(f"entity 引用了 BSON（仅 erp-core 金额编码允许）: {path}")
+    for used in (use_paths if use_paths is not None else extract_use_paths(source)):
         root = root_crate(used)
         if root in {"axum", "mongodb", "database", "services", "web_api"}:
             errors.append(f"entity 通过 use 引入禁止 crate {used}: {path}")
@@ -412,23 +433,29 @@ def scan_entity_source(path: str, source: str, *, money_exception: bool) -> list
 
 def scan_service_mongo(path: str, source: str) -> list[str]:
     """Flag Service/Process modules that assemble raw Mongo/BSON queries."""
-    errors: list[str] = []
+    has_doc = "Document" in source
     # XML documents are technical input, not Mongo BSON. Only discard the
     # explicitly aliased XML import; Mongo imports and bare Document stay checked.
-    document_source = re.sub(
-        r"\buse\s+roxmltree::Document\s+as\s+[A-Za-z_][A-Za-z0-9_]*\s*;",
-        "",
-        source,
-    )
-    document_source = re.sub(
-        r"\buse\s+roxmltree::\{[^;]*\};",
-        lambda xml_import: re.sub(
-            r"\bDocument\s+as\s+[A-Za-z_][A-Za-z0-9_]*", "", xml_import.group()
-        ),
-        document_source,
-    )
+    if has_doc and "roxmltree" in source:
+        document_source = re.sub(
+            r"\buse\s+roxmltree::Document\s+as\s+[A-Za-z_][A-Za-z0-9_]*\s*;",
+            "",
+            source,
+        )
+        document_source = re.sub(
+            r"\buse\s+roxmltree::\{[^;]*\};",
+            lambda xml_import: re.sub(
+                r"\bDocument\s+as\s+[A-Za-z_][A-Za-z0-9_]*", "", xml_import.group()
+            ),
+            document_source,
+        )
+    else:
+        document_source = source
+    errors: list[str] = []
     for name, pattern in SERVICE_MONGO_RULES.items():
-        if pattern.search(document_source if name == "raw_document" else source):
+        target = document_source if name == "raw_document" else source
+        hints = SERVICE_MONGO_RULE_HINTS[name]
+        if any(h in target for h in hints) and pattern.search(target):
             errors.append(f"Service/Process 原始 Mongo 操作 {name}: {path}")
     return errors
 
@@ -725,12 +752,24 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     result.errors.extend(directory_errors)
     if result.errors:
         return result
+    source_cache: dict[Path, str] = {}
+
+    def read_cached(path: Path) -> str:
+        text = source_cache.get(path)
+        if text is None:
+            text = path.read_text(encoding="utf-8")
+            source_cache[path] = text
+        return text
+
     if cutover:
         result.errors.extend(legacy_graph_errors(metadata))
         result.errors.extend(legacy_tree_errors(backend))
-        for path in active_source_paths(metadata):
-            result.errors.extend(legacy_source_errors(path, path.read_text(encoding="utf-8")))
+        active_paths = active_source_paths(metadata)
+        for path in active_paths:
+            result.errors.extend(legacy_source_errors(path, read_cached(path)))
         result.notes.append("最终切换模式：所有活动成员/依赖类别/旧源路径均执行零 legacy 检查")
+    else:
+        active_paths = []
     graph = graph_from_metadata(metadata)
     result.errors.extend(forbidden_graph_errors(graph))
     if cutover:
@@ -761,13 +800,39 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     else:
         result.notes.append("cargo metadata 无 kind=test 集成目标")
 
+    paths_by_src: dict[Path, list[Path]] = defaultdict(list)
+    if active_paths:
+        src_roots = {directories[name] / "src" for name in present_planned}
+        if "bpm" in directories:
+            src_roots.add(directories["bpm"] / "src")
+        for path in active_paths:
+            for parent in path.parents:
+                if parent in src_roots:
+                    paths_by_src[parent].append(path)
+                    break
+
+    repo_files_by_crate: dict[str, list[tuple[str, str]]] = {}
     for name in present_planned:
         crate_dir = directories[name]
         src = crate_dir / "src"
-        for path in src.rglob("*.rs"):
+        repo_files: list[tuple[str, str]] = []
+        crate_rs_paths = paths_by_src.get(src) if active_paths else list(src.rglob("*.rs"))
+        for path in crate_rs_paths or ():
             rel = path.relative_to(backend).as_posix()
-            text = path.read_text(encoding="utf-8")
-            for used in extract_use_paths(text):
+            text = read_cached(path)
+            if "/repository/" in f"/{rel}/":
+                repo_files.append((rel, text))
+            is_entity = "/entity/" in f"/{rel}/" or path.parent.name == "entity" or rel.endswith("/entity.rs")
+            need_uses = (
+                is_entity
+                or name in BUSINESS_DOMAINS
+                or (
+                    name not in COMPOSITION
+                    and ("entities" in text or "database" in text or "services" in text)
+                )
+            )
+            use_paths = extract_use_paths(text) if need_uses else []
+            for used in use_paths:
                 root = root_crate(used)
                 if not root:
                     continue
@@ -776,18 +841,22 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
                     result.errors.append(f"新 crate 源码 use 旧三层 {used}: {rel}")
                 if name in BUSINESS_DOMAINS and package in BUSINESS_DOMAINS and package != name:
                     result.errors.append(f"领域源码直接 use 其他领域 {used}: {rel}")
-            if "/entity/" in f"/{rel}/" or path.parent.name == "entity" or rel.endswith("/entity.rs"):
+            if is_entity:
                 money_exception = name == "erp-core" and path.name == "money.rs"
-                result.errors.extend(scan_entity_source(rel, text, money_exception=money_exception))
+                result.errors.extend(
+                    scan_entity_source(rel, text, money_exception=money_exception, use_paths=use_paths)
+                )
             if ("/service/" in f"/{rel}/" or name in COMPOSITION) and not is_repository_source(rel):
                 result.errors.extend(scan_service_mongo(rel, text))
             result.errors.extend(scan_facade(rel, text))
+        repo_files_by_crate[name] = repo_files
 
     bpm_src = directories.get("bpm", backend / "__missing_bpm__") / "src"
     if "bpm" in directories:
-        for path in bpm_src.rglob("*.rs"):
+        bpm_rs_paths = paths_by_src.get(bpm_src) if active_paths else list(bpm_src.rglob("*.rs"))
+        for path in bpm_rs_paths or ():
             rel = path.relative_to(backend).as_posix()
-            result.errors.extend(scan_bpm_source(rel, path.read_text(encoding="utf-8")))
+            result.errors.extend(scan_bpm_source(rel, read_cached(path)))
 
     old_owned = collection_ownership(backend)
     crate_owned: dict[str, set[str]] = {}
@@ -795,21 +864,21 @@ def check_workspace(backend: Path, metadata: Mapping[str, Any], *, cutover: bool
     for name in present_planned:
         if name not in BUSINESS_DOMAINS:
             continue
-        crate_owned[name] = crate_collection_literals(directories[name] / "src" / "repository")
-        migrated |= crate_owned[name]
+        owned_set: set[str] = set()
+        for _rel, text in repo_files_by_crate.get(name, ()):
+            for match in COLLECTION_LITERAL.finditer(text):
+                owned_set.add(match.group(2))
+        crate_owned[name] = owned_set
+        migrated |= owned_set
     leftover_old = set(old_owned) - migrated
     for name in present_planned:
         if name not in BUSINESS_DOMAINS:
             continue
-        repo_root = directories[name] / "src" / "repository"
-        if not repo_root.is_dir():
-            continue
         own = crate_owned.get(name, set())
         foreign = (migrated | leftover_old) - own
-        for path in repo_root.rglob("*.rs"):
-            rel = path.relative_to(backend).as_posix()
+        for rel, text in repo_files_by_crate.get(name, ()):
             result.errors.extend(
-                scan_foreign_collections(rel, path.read_text(encoding="utf-8"), own, foreign)
+                scan_foreign_collections(rel, text, own, foreign)
             )
 
     if cutover:

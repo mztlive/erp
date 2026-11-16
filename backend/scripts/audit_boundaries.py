@@ -66,6 +66,120 @@ def literal_value(literal: str) -> str | None:
     )
 
 
+ENTRY_FAST_KEYWORDS = (
+    "BusinessEventContext",
+    "AuditLog",
+    "PreparedWorkflowAudit",
+    "AuditEvent",
+    "AuditLogService",
+    "prepare_business_log",
+    "run_audited",
+    "execute_audited",
+    "execute_prepared",
+    "persist_log",
+    "record_login_audit",
+    "finish_attempt",
+    "attempt_context",
+    "record_command_attempt",
+    "resource_log",
+    "prepare_resource_log",
+    "audit_logs",
+    "audit_events",
+    "audit_attempts",
+    "with_audited_write",
+    "build_audit_event",
+    "prepare_audit_event",
+    "refresh_policy",
+    ".attempt",
+    "run_system_policy_transaction",
+    "run_authorized_policy_transaction",
+    "run_authorized_audited_policy_transaction",
+    "run_policy_transaction_at_revision",
+    "run_optional_policy_transaction",
+    "finish_policy_transaction",
+)
+PORT_OR_ATTEMPT_RE = re.compile(
+    r"\b(?:audit|audit_port|sink)\s*\.\s*(?:persist(?:_attempt)?|validate)\s*\(|\.\s*attempt\s*\("
+)
+DEP_KEYWORDS = (
+    "audit_logs",
+    "audit_events",
+    "audit_attempts",
+    "CommandReceipt",
+    "SeparationAuditFact",
+    "find_command_receipts_by_ids",
+    "list_separation_facts_by_resources",
+    "list_work_item_creation_audits",
+    "list_successful_work_item_fact_audits",
+    "list_master_mapping_task_histor",
+    "AUDIT_LOGS",
+    "AUDIT_EVENTS",
+    "AUDIT_ATTEMPTS",
+    "AuditLogRepository",
+    "AuditAttemptRepository",
+    "\\x",
+    "\\u",
+)
+CFG_TEST_MOD_SEMI_RE = re.compile(r"#\s*!?\s*\[\s*cfg[^\]]*\btest\b[\s\S]{0,240}?\bmod\s+[A-Za-z_][A-Za-z0-9_]*\s*;")
+
+
+def _has_dep_candidate(text: str) -> bool:
+    return (
+        "audit_logs" in text
+        or "audit_events" in text
+        or "audit_attempts" in text
+        or "CommandReceipt" in text
+        or "SeparationAuditFact" in text
+        or "find_command_receipts_by_ids" in text
+        or "list_separation_facts_by_resources" in text
+        or "list_work_item_creation_audits" in text
+        or "list_successful_work_item_fact_audits" in text
+        or "list_master_mapping_task_histor" in text
+        or "AUDIT_LOGS" in text
+        or "AUDIT_EVENTS" in text
+        or "AUDIT_ATTEMPTS" in text
+        or "AuditLogRepository" in text
+        or "AuditAttemptRepository" in text
+        or "\\x" in text
+        or "\\u" in text
+    )
+
+
+def _has_entry_candidate(text: str, path: str) -> bool:
+    return (
+        "BusinessEventContext" in text
+        or "AuditLog" in text
+        or "PreparedWorkflowAudit" in text
+        or "AuditEvent" in text
+        or "prepare_business_log" in text
+        or "run_audited" in text
+        or "execute_audited" in text
+        or "execute_prepared" in text
+        or "persist_log" in text
+        or "record_login_audit" in text
+        or "finish_attempt" in text
+        or "attempt_context" in text
+        or "record_command_attempt" in text
+        or "resource_log" in text
+        or "prepare_resource_log" in text
+        or "audit_logs" in text
+        or "audit_events" in text
+        or "audit_attempts" in text
+        or "with_audited_write" in text
+        or "build_audit_event" in text
+        or "prepare_audit_event" in text
+        or "refresh_policy" in text
+        or "_policy_transaction" in text
+        or "finish_policy_transaction" in text
+        or (
+            path == "crates/orchestration/erp-supplier-catalog/src/integration_resolution/transaction.rs"
+            and "with_transaction" in text
+        )
+        or (("audit" in text or "sink" in text) and ("persist" in text or "validate" in text))
+        or ("attempt" in text and "." in text and bool(PORT_OR_ATTEMPT_RE.search(text)))
+    )
+
+
 def _prepare_source(
     source: str,
     prepared: tuple[str, list[tuple[int, str]], list[tuple[int, int]]] | None = None,
@@ -86,20 +200,23 @@ def dependencies(
     """Find direct reads, physical writes and retired receipt adapters."""
     code, literals, ranges = _prepare_source(source, prepared)
     findings: Counter[Dependency] = Counter()
-    functions = list(FUNCTION.finditer(code))
-    for accessor in ACCESSOR.finditer(code):
-        operation = OPERATION.match(code, accessor.end())
-        name = operation.group(1) if operation else "escaped_repository"
-        owner = next((fn.group(1) for fn in reversed(functions) if fn.start() < accessor.start()), "module")
-        findings[Dependency(path, owner, f"{accessor.group(1)}.{name}")] += 1
-    if RECEIPT_IMPORT.search(code):
+    accessors = list(ACCESSOR.finditer(code))
+    if accessors:
+        functions = list(FUNCTION.finditer(code))
+        for accessor in accessors:
+            operation = OPERATION.match(code, accessor.end())
+            name = operation.group(1) if operation else "escaped_repository"
+            owner = next((fn.group(1) for fn in reversed(functions) if fn.start() < accessor.start()), "module")
+            findings[Dependency(path, owner, f"{accessor.group(1)}.{name}")] += 1
+    if "CommandReceiptServiceExt" in code and RECEIPT_IMPORT.search(code):
         findings[Dependency(path, "module", "legacy_command_receipt_adapter")] += 1
     if RETIRED_READERS.search(code):
         findings[Dependency(path, "module", "retired_audit_business_reader")] += 1
     owns_audit = path.startswith("crates/domains/erp-audit/") or path.startswith("crates/domains/erp-identity/")
     if not owns_audit:
-        if re.search(r"\b(?:AUDIT_LOGS|AUDIT_EVENTS|AUDIT_ATTEMPTS|AuditLogRepository|AuditAttemptRepository)\b", code):
-            findings[Dependency(path, "module", "raw_audit_repository")] += 1
+        if "AUDIT_" in code or "AuditLogRepository" in code or "AuditAttemptRepository" in code:
+            if re.search(r"\b(?:AUDIT_LOGS|AUDIT_EVENTS|AUDIT_ATTEMPTS|AuditLogRepository|AuditAttemptRepository)\b", code):
+                findings[Dependency(path, "module", "raw_audit_repository")] += 1
         for position, value in literals:
             if (
                 "audit_" in value or "\\" in value
@@ -181,6 +298,16 @@ def execution_entries(
 ) -> dict[tuple[str, str], dict]:
     """Scan actual function bodies, including repeated names in distinct impls."""
     code, _, _ = _prepare_source(source, prepared)
+    entry_matches = [
+        (m.start(), re.sub(r"\s+", "", next(group for group in m.groups() if group)))
+        for m in ENTRY_CALL.finditer(code)
+    ]
+    is_special_tx = (
+        path == "crates/orchestration/erp-supplier-catalog/src/integration_resolution/transaction.rs"
+        and "with_transaction" in code
+    )
+    if not entry_matches and not is_special_tx:
+        return {}
     actual: dict[tuple[str, str], Counter] = {}
     locations: Counter = Counter()
     for function in FN_NAME.finditer(code):
@@ -193,12 +320,9 @@ def execution_entries(
             continue
         key = (path, function.group(1))
         locations[key] += 1
-        body = code[start + 1 : end - 1]
-        calls = Counter(
-            re.sub(r"\s+", "", next(group for group in call.groups() if group))
-            for call in ENTRY_CALL.finditer(body)
-        )
+        calls = Counter(name for pos, name in entry_matches if start < pos < end - 1)
         if key == ("crates/orchestration/erp-supplier-catalog/src/integration_resolution/transaction.rs", "run_audited"):
+            body = code[start + 1 : end - 1]
             calls[".with_transaction"] += len(re.findall(r"\.\s*with_transaction\s*\(", body))
         if calls:
             actual.setdefault(key, Counter()).update(calls)
@@ -337,24 +461,38 @@ def main() -> int:
         raw_sources: dict[str, str] = {}
         prepared_map: dict[str, tuple[str, list[tuple[int, str]], list[tuple[int, int]]]] = {}
         test_files: set[str] = set()
+        dep_candidates: set[str] = set()
+        entry_candidates: set[str] = set()
         for root in (args.backend / "apps", args.backend / "crates"):
             for path in sorted(root.rglob("*.rs")):
                 relative = path.relative_to(args.backend).as_posix()
                 if "src" not in Path(relative).parts or "archive" in Path(relative).parts or is_excluded_path(relative):
                     continue
                 source = path.read_text(encoding="utf-8")
+                has_test_submod = "mod " in source and "test" in source and bool(CFG_TEST_MOD_SEMI_RE.search(source))
+                has_dep = _has_dep_candidate(source)
+                has_entry = _has_entry_candidate(source, relative)
+                if not has_test_submod and not has_dep and not has_entry:
+                    continue
                 code, literals = _code_and_literals(source)
                 ranges, submods = find_test_ranges(code)
                 for name in submods:
                     test_files.update(submodule_paths(relative, name))
-                raw_sources[relative] = source
-                prepared_map[relative] = (mask_ranges(code, ranges), literals, ranges)
+                if has_dep or has_entry:
+                    raw_sources[relative] = source
+                    prepared_map[relative] = (mask_ranges(code, ranges), literals, ranges)
+                    if has_dep:
+                        dep_candidates.add(relative)
+                    if has_entry:
+                        entry_candidates.add(relative)
         sources = {path: source for path, source in raw_sources.items() if path not in test_files}
         findings: Counter[Dependency] = Counter()
-        for path, source in sources.items():
-            findings.update(dependencies(source, path, prepared_map[path]))
+        for path in dep_candidates:
+            if path in sources:
+                findings.update(dependencies(sources[path], path, prepared_map[path]))
         errors = check(findings, registered)
-        errors.extend(check_execution_entries(args.backend, sources, prepared_map))
+        entry_sources = {path: sources[path] for path in entry_candidates if path in sources}
+        errors.extend(check_execution_entries(args.backend, entry_sources, prepared_map))
     except (ValueError, OSError, KeyError) as error:
         errors = [str(error)]
     if errors:

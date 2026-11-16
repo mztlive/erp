@@ -62,14 +62,21 @@ def skip_balanced(code: str, index: int, opener: str, closer: str) -> int:
     """Return the index after a nested opener/closer pair starting at index."""
     if index >= len(code) or code[index] != opener:
         raise ValueError(f"期望 {opener!r}，实际 {code[index:index + 8]!r}")
-    depth = 0
-    for pos in range(index, len(code)):
-        char = code[pos]
-        depth += char == opener
-        depth -= char == closer
-        if depth == 0:
-            return pos + 1
-    raise ValueError(f"{opener} 未闭合")
+    depth = 1
+    pos = index + 1
+    find = code.find
+    while depth > 0:
+        next_close = find(closer, pos)
+        if next_close < 0:
+            raise ValueError(f"{opener} 未闭合")
+        next_open = find(opener, pos, next_close)
+        if next_open >= 0:
+            depth += 1
+            pos = next_open + 1
+        else:
+            depth -= 1
+            pos = next_close + 1
+    return pos
 
 
 def skip_vis(code: str, index: int) -> int:
@@ -193,9 +200,10 @@ def find_test_ranges(code: str) -> tuple[list[tuple[int, int]], list[str]]:
     index = 0
     length = len(code)
     while index < length:
-        if code[index] != "#":
-            index += 1
-            continue
+        hash_pos = code.find("#", index)
+        if hash_pos < 0:
+            break
+        index = hash_pos
         start = index
         try:
             attrs, after_attrs = consume_attrs(code, index)
@@ -224,12 +232,20 @@ def mask_ranges(code: str, ranges: list[tuple[int, int]]) -> str:
     """Replace non-newline characters in ranges with spaces; keep line numbers."""
     if not ranges:
         return code
-    chars = list(code)
+    chunks: list[str] = []
+    cursor = 0
+    length = len(code)
     for start, end in ranges:
-        for pos in range(start, min(end, len(chars))):
-            if chars[pos] != "\n":
-                chars[pos] = " "
-    return "".join(chars)
+        start = max(cursor, min(start, length))
+        end = max(start, min(end, length))
+        if start > cursor:
+            chunks.append(code[cursor:start])
+        seg = code[start:end]
+        chunks.append(" " * len(seg) if "\n" not in seg else "\n".join(" " * len(line) for line in seg.split("\n")))
+        cursor = end
+    if cursor < length:
+        chunks.append(code[cursor:])
+    return "".join(chunks)
 
 
 def production_line_count(source: str, ranges: list[tuple[int, int]]) -> int:

@@ -5,12 +5,18 @@ Cargo, performs database I/O, or treats source scans as runtime proof.
 """
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 import re
 import tomllib
 from typing import Any, Mapping
 
 LEGACY = {"entities", "database", "services"}
+
+
+@functools.lru_cache(maxsize=8192)
+def _cached_resolve(path: Path) -> Path:
+    return path.resolve()
 
 
 def workspace_errors(backend: Path, metadata: Mapping[str, Any], required: set[str]) -> list[str]:
@@ -33,7 +39,8 @@ def workspace_errors(backend: Path, metadata: Mapping[str, Any], required: set[s
     if not isinstance(packages, list) or not packages:
         return ["Cargo metadata 缺少非空 packages"]
     root = metadata.get("workspace_root")
-    if not root or Path(root).resolve() != backend.resolve():
+    backend_resolved = _cached_resolve(backend)
+    if not root or _cached_resolve(Path(root)) != backend_resolved:
         errors.append("Cargo metadata workspace_root 与指定 backend 不一致")
     by_id = {package.get("id"): package for package in packages}
     member_packages = []
@@ -57,19 +64,27 @@ def workspace_errors(backend: Path, metadata: Mapping[str, Any], required: set[s
     names = {package.get("name") for package in member_packages}
     for name in sorted(required - names):
         errors.append(f"workspace 缺少必需活动成员: {name}")
-    actual_manifests = {Path(p["manifest_path"]).resolve() for p in member_packages if p.get("manifest_path")}
-    excluded = {p.resolve() for pattern in workspace.get("exclude", []) for p in backend.glob(pattern)}
+    actual_manifests = {_cached_resolve(Path(p["manifest_path"])) for p in member_packages if p.get("manifest_path")}
+    excluded = {_cached_resolve(p) for pattern in workspace.get("exclude", []) for p in backend_resolved.glob(pattern)}
     patterns = workspace.get("members", [])
     if "package" in data:
         patterns = [*patterns, "."]
     if not patterns:
         errors.append("workspace 没有声明任何成员")
     for pattern in patterns:
-        directories = [p for p in backend.glob(pattern) if p.resolve() not in excluded]
+        if "*" not in pattern and "?" not in pattern and "[" not in pattern:
+            candidate_dir = backend_resolved / pattern
+            directories = (
+                [candidate_dir]
+                if candidate_dir.exists() and (not excluded or _cached_resolve(candidate_dir) not in excluded)
+                else []
+            )
+        else:
+            directories = [p for p in backend_resolved.glob(pattern) if _cached_resolve(p) not in excluded]
         if not directories:
             errors.append(f"workspace member 路径无匹配: {pattern}")
         for directory in directories:
-            candidate = (directory / "Cargo.toml").resolve()
+            candidate = _cached_resolve(directory / "Cargo.toml")
             if not candidate.is_file():
                 errors.append(f"声明成员缺少 Cargo.toml: {candidate}")
             elif candidate not in actual_manifests:
@@ -108,13 +123,13 @@ Rust compilation still supplies the final macro/cfg reachability evidence.
     for package in metadata.get("packages", []):
         if package.get("id") not in members or not package.get("manifest_path"):
             continue
-        directory = Path(package["manifest_path"]).parent.resolve()
+        directory = _cached_resolve(Path(package["manifest_path"]).parent)
         historical = directory / "tests"
         roots = [directory / "src"]
         for target in package.get("targets", []):
             if not target.get("src_path"):
                 continue
-            path = Path(target["src_path"]).resolve()
+            path = _cached_resolve(Path(target["src_path"]))
             if path == historical or historical in path.parents:
                 continue
             if path.is_file():
@@ -126,15 +141,21 @@ Rust compilation still supplies the final macro/cfg reachability evidence.
         if build.is_file():
             paths.add(build)
         for root in roots:
+            is_src_root = root == directory / "src"
             for path in root.rglob("*.rs"):
-                path = path.resolve()
-                if historical not in path.parents:
-                    paths.add(path)
+                if is_src_root:
+                    paths.add(path if not path.is_symlink() else path.resolve())
+                else:
+                    resolved = _cached_resolve(path) if not path.is_symlink() else path.resolve()
+                    if historical not in resolved.parents:
+                        paths.add(resolved)
     return sorted(paths)
 
 
-RAW_STRING_RE = re.compile(r'(?:br|r)(#*)"')
-QUOTED_LITERAL_RE = re.compile(r'''(?:b)?"(?:\\.|[^"\\])*"|(?:b)?'(?:\\.|[^'\\])' ''', re.S | re.X)
+TOKEN_RE = re.compile(
+    r'//|/\*|(?:br|r)(#*)"|(?:b)?"(?:\\.|[^"\\])*"|(?:b)?\'(?:\\.|[^\'\\])\'',
+    re.S,
+)
 LEGACY_CRATE_REF_RE = re.compile(
     r"\b(?:entities|database|services)\s*::|\bextern\s+crate\s+(?:entities|database|services)\b"
 )
@@ -146,53 +167,61 @@ LEGACY_INCLUDE_CONTEXT_RE = re.compile(
 LEGACY_DYNAMIC_CONTEXT_RE = re.compile(r'include(?:_str|_bytes)?\s*!\s*\(\s*concat!\s*\([^;]*$')
 
 
+def _mask_segment(segment: str) -> str:
+    """Replace non-newline characters in segment with spaces."""
+    if "\n" not in segment:
+        return " " * len(segment)
+    return "\n".join(" " * len(line) for line in segment.split("\n"))
+
+
 def _code_and_literals(source: str) -> tuple[str, list[tuple[int, str]]]:
     """Mask Rust comments and string/character literals; keep their offsets."""
-    output = list(source)
-    literals = []
+    chunks: list[str] = []
+    literals: list[tuple[int, str]] = []
     i = 0
     length = len(source)
     while i < length:
-        ch = source[i]
-        if ch not in '/"\'rb':
-            i += 1
-            continue
-        start = i
-        if ch == "/" and source.startswith("//", i):
-            end = source.find("\n", i)
+        match = TOKEN_RE.search(source, i)
+        if not match:
+            chunks.append(source[i:])
+            break
+        start = match.start()
+        if start > i:
+            chunks.append(source[i:start])
+        token = match.group(0)
+        if token == "//":
+            end = source.find("\n", start + 2)
             i = length if end < 0 else end
-        elif ch == "/" and source.startswith("/*", i):
-            i, depth = i + 2, 1
+        elif token == "/*":
+            i, depth = start + 2, 1
             while i < length and depth:
-                if source.startswith("/*", i):
-                    i, depth = i + 2, depth + 1
-                elif source.startswith("*/", i):
-                    i, depth = i + 2, depth - 1
+                next_open = source.find("/*", i)
+                next_close = source.find("*/", i)
+                if next_close < 0:
+                    i = length
+                    break
+                if 0 <= next_open < next_close:
+                    depth += 1
+                    i = next_open + 2
                 else:
-                    i += 1
+                    depth -= 1
+                    i = next_close + 2
+        elif match.group(1) is not None:
+            close = '"' + match.group(1)
+            end = source.find(close, match.end())
+            i = length if end < 0 else end + len(close)
+            literals.append((start, source[start:i]))
         else:
-            raw = RAW_STRING_RE.match(source, i) if ch in "rb" else None
-            if raw:
-                close = '"' + raw.group(1)
-                end = source.find(close, raw.end())
-                i = length if end < 0 else end + len(close)
-                literals.append((start, source[start:i]))
-            else:
-                quoted = QUOTED_LITERAL_RE.match(source, i) if ch in 'b"\'' else None
-                if quoted:
-                    i = quoted.end()
-                    literals.append((start, source[start:i]))
-                else:
-                    i += 1
-                    continue
-        for j in range(start, i):
-            if output[j] != "\n":
-                output[j] = " "
-    return "".join(output), literals
+            i = match.end()
+            literals.append((start, token))
+        chunks.append(_mask_segment(source[start:i]))
+    return "".join(chunks), literals
 
 
 def legacy_source_errors(path: Path, source: str) -> list[str]:
     """Reject real legacy tokens and legacy #[path]/include references."""
+    if "entities" not in source and "database" not in source and "services" not in source:
+        return []
     code, literals = _code_and_literals(source)
     errors = []
     for match in LEGACY_CRATE_REF_RE.finditer(code):
