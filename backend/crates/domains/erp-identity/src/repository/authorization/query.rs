@@ -201,7 +201,7 @@ impl CompiledAccess {
     /// 本次范围取证存在正向角色条款时为 true。
     /// # 错误
     /// 无；个人限制和查询结果为空不能替代本标记。
-    pub(crate) fn has_role_scope(&self) -> bool {
+    pub fn has_role_scope(&self) -> bool {
         self.proof.has_role_scope
     }
 
