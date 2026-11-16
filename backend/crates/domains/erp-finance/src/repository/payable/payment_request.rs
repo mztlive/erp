@@ -2,7 +2,7 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::CompiledAccess;
-use erp_identity::entity::authorization::QueryOutput;
+use erp_identity::entity::authorization::{QueryModel, QueryOutput};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -45,7 +45,7 @@ pub trait PurchasePaymentRequestRepositoryExt {
     /// # 返回
     /// 稳定倒序最多返回 10001 个候选，额外一行供调用方拒绝超限。
     /// # 错误
-    /// 仓储查询或反序列化失败时返回错误。
+    /// 授权模型错配、凭证跨阶段或到期、仓储查询或反序列化失败时返回错误。
     async fn scope_candidates(
         &self,
         query: &PurchasePaymentRequestQuery,
@@ -119,21 +119,9 @@ impl PurchasePaymentRequestRepositoryExt for Repository<'_, PurchasePaymentReque
         access: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<PurchasePaymentRequest>> {
-        if access.model().collection != self.collection().name()
-            || access.model().output != QueryOutput::Object
-        {
-            return Err(crate::Error::ValidationError("付款申请授权查询模型不匹配".into()));
-        }
-        access.ensure_current(executor)?;
+        let prefix = authorized_request_stages(access, self.collection().name(), executor)?;
         let options = FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(10_001).build();
-        let rows = aggregate::find(
-            &self.collection(),
-            query_doc(query),
-            options,
-            access.stages().to_vec(),
-            executor,
-        )
-        .await?;
+        let rows = aggregate::find(&self.collection(), query_doc(query), options, prefix, executor).await?;
         access.ensure_current(executor)?;
         Ok(rows)
     }
@@ -191,6 +179,29 @@ impl PurchasePaymentRequestRepositoryExt for Repository<'_, PurchasePaymentReque
     }
 }
 
+fn authorized_request_stages(
+    access: &CompiledAccess,
+    collection: &str,
+    executor: &mut dyn Executor,
+) -> crate::Result<Vec<Document>> {
+    validate_request_model(access.model(), collection)?;
+    access.ensure_current(executor)?;
+    Ok(access.stages().to_vec())
+}
+
+fn validate_request_model(model: &QueryModel, collection: &str) -> crate::Result<()> {
+    model.validate()?;
+    if model.resource != "purchase_payment_request"
+        || model.collection != collection
+        || model.collection != <Database as PurchasePaymentRequestExt>::PURCHASE_PAYMENT_REQUESTS
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(crate::Error::ValidationError("付款申请授权查询模型不匹配".into()));
+    }
+    Ok(())
+}
+
 fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
     let mut filter = doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON};
     for (field, value) in [
@@ -239,8 +250,85 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_identity::entity::authorization::QueryModelKey;
+    use erp_identity::testing::compiled_access;
+    use persistence_core::ReadExecutor;
+
     use super::*;
     use crate::entity::payable::PurchasePaymentRequestStatus;
+
+    fn request_model() -> QueryModel {
+        QueryModel {
+            key: QueryModelKey::parse("payment_requests").unwrap(),
+            resource: "purchase_payment_request".into(),
+            collection: "purchase_payment_requests".into(),
+            id_field: "id".into(),
+            output: QueryOutput::Object,
+            facts: Default::default(),
+        }
+    }
+
+    #[test]
+    fn request_model_requires_the_complete_object_and_exact_target() {
+        let valid = request_model();
+        validate_request_model(&valid, "purchase_payment_requests").unwrap();
+        let mut wrong_resource = valid.clone();
+        wrong_resource.resource = "supplier_deposit".into();
+        let mut wrong_collection = valid.clone();
+        wrong_collection.collection = "supplier_deposit_accounts".into();
+        let mut wrong_id = valid.clone();
+        wrong_id.id_field = "_id".into();
+        let mut share = valid.clone();
+        share.output = QueryOutput::Share { fields: ["id".into(), "amount".into()].into() };
+        let mut existence = valid.clone();
+        existence.output = QueryOutput::Existence { fields: ["id".into()].into() };
+        for model in [wrong_resource, wrong_collection, wrong_id, share, existence] {
+            model.validate().unwrap();
+            let mut executor = ReadExecutor::default();
+            let access = compiled_access(model, &executor, None).unwrap();
+            assert!(matches!(
+                authorized_request_stages(&access, "purchase_payment_requests", &mut executor),
+                Err(crate::Error::ValidationError(message)) if message == "付款申请授权查询模型不匹配"
+            ));
+        }
+        assert!(matches!(
+            validate_request_model(&valid, "other_collection"),
+            Err(crate::Error::ValidationError(_))
+        ));
+    }
+
+    #[test]
+    fn request_model_rejects_malformed_descriptions() {
+        let mut model = request_model();
+        model.id_field = "nested.$id".into();
+        assert!(matches!(
+            validate_request_model(&model, "purchase_payment_requests"),
+            Err(crate::Error::ValidationError(message)) if message == "授权查询模型非法"
+        ));
+    }
+
+    #[test]
+    fn request_stages_preserve_the_original_prefix_and_reject_stale_or_expired_access() {
+        let mut executor = ReadExecutor::default();
+        let access = compiled_access(request_model(), &executor, None).unwrap();
+        let collection = "purchase_payment_requests";
+        assert_eq!(authorized_request_stages(&access, collection, &mut executor).unwrap(), access.stages());
+        assert!(matches!(
+            authorized_request_stages(&access, collection, &mut ReadExecutor::default()),
+            Err(crate::Error::ValidationError(_))
+        ));
+        executor.next_read();
+        assert!(matches!(
+            authorized_request_stages(&access, collection, &mut executor),
+            Err(crate::Error::ValidationError(_))
+        ));
+        let expired = compiled_access(request_model(), &executor, Some(Instant::from_unix_secs(1))).unwrap();
+        assert!(matches!(
+            authorized_request_stages(&expired, collection, &mut executor),
+            Err(crate::Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权关系已到期"
+        ));
+    }
 
     #[test]
     fn identity_filters_are_exact_and_clearing_removes_them() {

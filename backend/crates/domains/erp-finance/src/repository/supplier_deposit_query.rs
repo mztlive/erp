@@ -2,6 +2,7 @@
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_identity::CompiledAccess;
+use erp_identity::entity::authorization::{QueryModel, QueryOutput};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -48,7 +49,7 @@ pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Syn
 /// # 返回
 /// 最多size加一条账户，额外一条用于继续分页。
 /// # 错误
-/// 分页非法或读取失败时拒绝。
+/// 分页非法、授权模型错配、凭证跨阶段或到期、读取失败时拒绝。
 pub async fn account_page(
     db: &Database,
     supplier: Option<&str>,
@@ -58,18 +59,31 @@ pub async fn account_page(
     access: &CompiledAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierDepositAccount>> {
+    let pipeline = account_pipeline(supplier, payer, skip, size, access, executor)?;
+    let rows = account_rows(db, pipeline, executor).await?;
+    access.ensure_current(executor)?;
+    Ok(rows)
+}
+
+fn account_pipeline(
+    supplier: Option<&str>,
+    payer: Option<&str>,
+    skip: u64,
+    size: u32,
+    access: &CompiledAccess,
+    executor: &mut dyn Executor,
+) -> Result<Vec<Document>> {
     if size == 0 || size > 100 {
         return Err(Error::ValidationError("账户分页上限为一百条".into()));
     }
+    validate_account_model(access.model())?;
+    access.ensure_current(executor)?;
     let mut filter = doc! {"deleted_at": 0_i64};
     if let Some(supplier) = supplier {
         filter.insert("identity.supplier_id", supplier);
     }
     if let Some(payer) = payer {
         filter.insert("identity.payer_party_id", payer);
-    }
-    if access.model().collection != "supplier_deposit_accounts" {
-        return Err(Error::ValidationError("预存款查询授权模型不匹配".into()));
     }
     let mut pipeline = access.stages().to_vec();
     pipeline.extend([
@@ -78,7 +92,19 @@ pub async fn account_page(
         doc! {"$skip": i64::try_from(skip).map_err(|_| Error::ValidationError("分页范围过大".into()))?},
         doc! {"$limit": i64::from(size) + 1},
     ]);
-    account_rows(db, pipeline, executor).await
+    Ok(pipeline)
+}
+
+fn validate_account_model(model: &QueryModel) -> Result<()> {
+    model.validate()?;
+    if model.resource != "supplier_deposit"
+        || model.collection != <Database as SupplierDepositExt>::SUPPLIER_DEPOSIT_ACCOUNTS
+        || model.id_field != "id"
+        || model.output != QueryOutput::Object
+    {
+        return Err(Error::ValidationError("预存款查询授权模型不匹配".into()));
+    }
+    Ok(())
 }
 
 /// 按真实到账时间和稳定身份装载可分配批次。
@@ -286,4 +312,146 @@ async fn account_rows(
 ) -> Result<Vec<SupplierDepositAccount>> {
     let collection = db.supplier_deposit_accounts().collection();
     Ok(aggregate::rows(&collection, pipeline, executor).await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_identity::entity::authorization::QueryModelKey;
+    use erp_identity::testing::compiled_access;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    fn account_model() -> QueryModel {
+        QueryModel {
+            key: QueryModelKey::parse("deposit_accounts").unwrap(),
+            resource: "supplier_deposit".into(),
+            collection: "supplier_deposit_accounts".into(),
+            id_field: "id".into(),
+            output: QueryOutput::Object,
+            facts: Default::default(),
+        }
+    }
+
+    #[test]
+    fn account_model_requires_the_complete_object_and_exact_target() {
+        let valid = account_model();
+        validate_account_model(&valid).unwrap();
+        let mut wrong_resource = valid.clone();
+        wrong_resource.resource = "purchase_payment_request".into();
+        let mut wrong_collection = valid.clone();
+        wrong_collection.collection = "purchase_payment_requests".into();
+        let mut wrong_id = valid.clone();
+        wrong_id.id_field = "_id".into();
+        let mut share = valid.clone();
+        share.output = QueryOutput::Share { fields: ["id".into(), "amount".into()].into() };
+        let mut existence = valid.clone();
+        existence.output = QueryOutput::Existence { fields: ["id".into()].into() };
+        for model in [wrong_resource, wrong_collection, wrong_id, share, existence] {
+            model.validate().unwrap();
+            let mut executor = ReadExecutor::default();
+            let access = compiled_access(model, &executor, None).unwrap();
+            assert!(matches!(
+                account_pipeline(None, None, 0, 10, &access, &mut executor),
+                Err(Error::ValidationError(message)) if message == "预存款查询授权模型不匹配"
+            ));
+        }
+    }
+
+    #[test]
+    fn account_model_rejects_malformed_descriptions() {
+        let mut model = account_model();
+        model.id_field = "nested.$id".into();
+        assert!(matches!(
+            validate_account_model(&model),
+            Err(Error::ValidationError(message)) if message == "授权查询模型非法"
+        ));
+    }
+
+    #[test]
+    fn account_pipeline_keeps_authorization_before_intersecting_filters_sort_and_paging() {
+        let mut executor = SnapshotExecutor::default();
+        let access = compiled_access(account_model(), &executor, None).unwrap();
+        for (supplier, payer, filter) in [
+            (None, None, doc! {"deleted_at": 0_i64}),
+            (Some("supplier"), None, doc! {"deleted_at": 0_i64, "identity.supplier_id": "supplier"}),
+            (None, Some("payer"), doc! {"deleted_at": 0_i64, "identity.payer_party_id": "payer"}),
+            (
+                Some("supplier"),
+                Some("payer"),
+                doc! {"deleted_at": 0_i64, "identity.supplier_id": "supplier", "identity.payer_party_id": "payer"},
+            ),
+        ] {
+            let pipeline = account_pipeline(supplier, payer, 20, 10, &access, &mut executor).unwrap();
+            assert_eq!(&pipeline[..access.stages().len()], access.stages());
+            assert_eq!(
+                &pipeline[access.stages().len()..],
+                &[
+                    doc! {"$match": filter},
+                    doc! {"$sort": {"created_at": -1, "id": -1}},
+                    doc! {"$skip": 20_i64},
+                    doc! {"$limit": 11_i64},
+                ]
+            );
+        }
+        access.ensure_current(&mut executor).unwrap();
+    }
+
+    #[test]
+    fn account_pipeline_rejects_invalid_paging_before_database_access() {
+        let mut executor = ReadExecutor::default();
+        let access = compiled_access(account_model(), &executor, None).unwrap();
+        for (skip, size) in [(0, 0), (0, 101), (u64::MAX, 10)] {
+            assert!(matches!(
+                account_pipeline(None, None, skip, size, &access, &mut executor),
+                Err(Error::ValidationError(_))
+            ));
+        }
+        let pipeline = account_pipeline(None, None, 0, 100, &access, &mut executor).unwrap();
+        assert_eq!(pipeline.last().unwrap(), &doc! {"$limit": 101_i64});
+    }
+
+    fn assert_stale(access: &CompiledAccess, executor: &mut dyn Executor) {
+        assert!(matches!(
+            account_pipeline(None, None, 0, 10, access, executor),
+            Err(Error::ValidationError(message)) if message == "授权结果不能跨事务或读取阶段使用"
+        ));
+    }
+
+    #[test]
+    fn account_pipeline_rejects_changed_read_transaction_and_released_boundaries() {
+        let mut reader = ReadExecutor::default();
+        let access = compiled_access(account_model(), &reader, None).unwrap();
+        assert_stale(&access, &mut ReadExecutor::default());
+        reader.next_read();
+        assert_stale(&access, &mut reader);
+
+        let mut snapshot = SnapshotExecutor::default();
+        let access = compiled_access(account_model(), &snapshot, None).unwrap();
+        snapshot.restart();
+        assert_stale(&access, &mut snapshot);
+        let access = compiled_access(account_model(), &snapshot, None).unwrap();
+        // 统一写操作在尝试 I/O 前调用同一 next_read，模拟写入推进阶段。
+        snapshot.next_read();
+        assert_stale(&access, &mut snapshot);
+        let access = compiled_access(account_model(), &snapshot, None).unwrap();
+        snapshot.session();
+        assert_stale(&access, &mut snapshot);
+
+        let origin = ReadExecutor::default();
+        let access = compiled_access(account_model(), &origin, None).unwrap();
+        drop(origin);
+        assert_stale(&access, &mut ReadExecutor::default());
+    }
+
+    #[test]
+    fn account_pipeline_preserves_the_expiry_conflict() {
+        let mut executor = SnapshotExecutor::default();
+        let access = compiled_access(account_model(), &executor, Some(Instant::from_unix_secs(1))).unwrap();
+        assert!(matches!(
+            account_pipeline(None, None, 0, 10, &access, &mut executor),
+            Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权关系已到期"
+        ));
+    }
 }
