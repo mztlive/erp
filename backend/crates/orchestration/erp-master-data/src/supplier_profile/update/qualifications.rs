@@ -14,7 +14,7 @@ use erp_supplier::{
     SupplierQualificationRevision, SupplierQualificationUpdate, profile_change, qualification_identity_key,
 };
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::super::SupplierProfileProcess;
 use super::persist::QualificationChanges;
@@ -46,8 +46,9 @@ impl SupplierProfileProcess {
         req: &SaveSupplierProfileRequest,
         capability_ids: &HashMap<String, SupplierCapabilityId>,
         actor_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<QualificationChanges> {
-        let mut plan = self.qualification_plan(supplier_id, req, capability_ids).await?;
+        let mut plan = self.qualification_plan(supplier_id, req, capability_ids, executor).await?;
         let mut changes = QualificationChanges::default();
         for key in plan.changes.qualification_updates {
             let qualification = plan
@@ -58,15 +59,22 @@ impl SupplierProfileProcess {
                 .requested
                 .get(&key)
                 .ok_or_else(|| Error::Internal("资质请求与计划不一致".to_string()))?;
-            self.prepare_qualification_update(qualification, input, capability_ids, actor_id, &mut changes)
-                .await?;
+            self.prepare_qualification_update(
+                qualification,
+                input,
+                capability_ids,
+                actor_id,
+                &mut changes,
+                executor,
+            )
+            .await?;
         }
         for key in plan.changes.qualification_disables {
             let qualification = plan
                 .existing
                 .remove(&key)
                 .ok_or_else(|| Error::Internal("资质停用计划与已加载事实不一致".to_string()))?;
-            self.prepare_qualification_disable(qualification, actor_id, &mut changes).await?;
+            self.prepare_qualification_disable(qualification, actor_id, &mut changes, executor).await?;
         }
         for input in plan.changes.qualification_creates {
             changes.append_created(supplier_id, &input, capability_ids, actor_id)?;
@@ -80,9 +88,10 @@ impl SupplierProfileProcess {
         supplier_id: &SupplierAccountId,
         req: &SaveSupplierProfileRequest,
         capability_ids: &HashMap<String, SupplierCapabilityId>,
+        executor: &mut dyn Executor,
     ) -> Result<QualificationPlan> {
-        let existing = self.db.supplier().list_qualifications(supplier_id, &mut NoTransaction).await?;
-        let linked_capabilities = self.qualification_links(&existing).await?;
+        let existing = self.db.supplier().list_qualifications(supplier_id, executor).await?;
+        let linked_capabilities = self.qualification_links(&existing, executor).await?;
         let planned_inputs: Vec<PlannedQualificationInput> = req
             .qualifications
             .iter()
@@ -117,13 +126,14 @@ impl SupplierProfileProcess {
     async fn qualification_links(
         &self,
         existing: &[SupplierQualification],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, HashSet<String>>> {
         let qualification_ids: Vec<SupplierQualificationId> =
             existing.iter().map(|item| SupplierQualificationId::new(&item.base.id)).collect();
         let existing_links = self
             .db
             .supplier_qualification_capabilities()
-            .list_by_qualification_ids(&qualification_ids, &mut NoTransaction)
+            .list_by_qualification_ids(&qualification_ids, executor)
             .await?;
         let mut linked_capabilities: HashMap<String, HashSet<String>> = HashMap::new();
         for link in existing_links {
@@ -143,6 +153,7 @@ impl SupplierProfileProcess {
         capability_ids: &HashMap<String, SupplierCapabilityId>,
         actor_id: &str,
         changes: &mut QualificationChanges,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         profile_change::apply_qualification_input(
             &mut qualification,
@@ -153,7 +164,7 @@ impl SupplierProfileProcess {
             actor_id,
         )
         .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-        let revision = self.qualification_revision(&mut qualification).await?;
+        let revision = self.qualification_revision(&mut qualification, executor).await?;
         let link_ids = input
             .capability_codes
             .iter()
@@ -177,6 +188,7 @@ impl SupplierProfileProcess {
         mut qualification: SupplierQualification,
         actor_id: &str,
         changes: &mut QualificationChanges,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         qualification
             .update(
@@ -190,7 +202,7 @@ impl SupplierProfileProcess {
                 actor_id,
             )
             .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
-        let revision = self.qualification_revision(&mut qualification).await?;
+        let revision = self.qualification_revision(&mut qualification, executor).await?;
         changes.updated.push(qualification);
         changes.revisions.push(revision);
         Ok(())
@@ -200,6 +212,7 @@ impl SupplierProfileProcess {
     async fn qualification_revision(
         &self,
         qualification: &mut SupplierQualification,
+        executor: &mut dyn Executor,
     ) -> Result<SupplierQualificationRevision> {
         let revision_no = self
             .db
@@ -208,7 +221,7 @@ impl SupplierProfileProcess {
                 &qualification.supplier_id,
                 qualification.qualification_type,
                 &qualification.certificate_no,
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         let revision_id = SupplierQualificationRevisionId::new(next_id());

@@ -13,7 +13,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -109,7 +109,12 @@ impl PartyAddressService {
     ) -> Result<PageView<PartyAddressView>> {
         self.authorization.require(actor, &party::ADDRESS_LIST, AccessTarget::Operation, executor).await?;
         params.validate()?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
+        super::ensure_outside_supplier_profile(
+            self.supplier_roles.as_ref(),
+            &PartyId::new(party_id),
+            executor,
+        )
+        .await?;
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -168,7 +173,24 @@ impl PartyAddressService {
         actor: &AuditActor,
     ) -> Result<PartyAddressView> {
         req.validate()?;
-        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create_stage(&party_id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 仅使用已验证输入构造本域事实，不读取数据库。
+    fn prepare_record(
+        &self,
+        party_id: &str,
+        req: CreatePartyAddressRequest,
+        actor: &AuditActor,
+    ) -> Result<PartyAddress> {
         let address_plaintext = req.address.clone();
         let mut address = PartyAddress::new(
             PartyAddressId::new(next_id()),
@@ -186,36 +208,32 @@ impl PartyAddressService {
             actor.id(),
         )?;
         address.address_ciphertext = self.sensitive_data.encrypt(&address_plaintext)?;
+        Ok(address)
+    }
+
+    /// 在授权快照中核验主体和供应商边界，再原子写入默认标记、事实与审计。
+    async fn create_stage(
+        &self,
+        party_id: &str,
+        req: CreatePartyAddressRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyAddressView> {
+        self.authorization.require(actor, &party::ADDRESS_CREATE, AccessTarget::Operation, executor).await?;
+        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+        let address = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "party_address.create",
             "party_address",
             address.base.id.clone(),
         )?;
-
-        let authorization = self.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let address_for_tx = address;
-        let created = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &party::ADDRESS_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    if address_for_tx.is_default {
-                        clear_default_marks!(db, party_addresses, address_for_tx.party_id, None, executor);
-                    }
-                    db.party_addresses().create(&address_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyAddress, crate::error::Error>(address_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(created.into())
+        if address.is_default {
+            clear_default_marks!(self.db, party_addresses, address.party_id, None, executor);
+        }
+        self.db.party_addresses().create(&address, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(address.into())
     }
 
     /// 更新地址（仅生命周期字段；默认标记跨行事务）。
@@ -238,8 +256,34 @@ impl PartyAddressService {
         actor: &AuditActor,
     ) -> Result<PartyAddressView> {
         req.validate()?;
-        let mut address = self.load_address(id).await?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_stage(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 先验证功能资格，再从原事务读取版本及完整事实，修改与审计使用同一执行器。
+    async fn update_stage(
+        &self,
+        id: &str,
+        req: UpdatePartyAddressRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyAddressView> {
+        self.authorization.require(actor, &party::ADDRESS_UPDATE, AccessTarget::Operation, executor).await?;
+        let mut address = self
+            .db
+            .party_addresses()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("地址不存在".into()))?;
+        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id, executor)
+            .await?;
         super::map_version_conflict(address.ensure_version(req.version))?;
         address.update(
             PartyAddressUpdate {
@@ -255,43 +299,67 @@ impl PartyAddressService {
             "party_address",
             address.base.id.clone(),
         )?;
-
-        let authorization = self.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let mut address_for_tx = address;
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &party::ADDRESS_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    if address_for_tx.is_default {
-                        clear_default_marks!(
-                            db,
-                            party_addresses,
-                            address_for_tx.party_id,
-                            Some(&address_for_tx.base.id),
-                            executor
-                        );
-                    }
-                    db.party_addresses().update(&mut address_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyAddress, crate::error::Error>(address_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(updated.into())
+        if address.is_default {
+            clear_default_marks!(
+                self.db,
+                party_addresses,
+                address.party_id,
+                Some(&address.base.id),
+                executor
+            );
+        }
+        self.db.party_addresses().update(&mut address, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(address.into())
     }
-    /// 读取仍存在的本域地址事实。
-    async fn load_address(&self, id: &str) -> Result<PartyAddress> {
-        self.db
-            .party_addresses()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("地址不存在".to_string()))
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
+
+    async fn service() -> PartyAddressService {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("party_address_authorization");
+        PartyAddressService::new(
+            db,
+            Arc::new(SensitiveDataCodec::from_secret(b"party-test-secret")),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedSupplierRolePort),
+            unavailable_authorization(),
+        )
+    }
+
+    #[tokio::test]
+    async fn update_authorizes_before_existence_version_or_supplier_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for version in [1, 999] {
+            let req = serde_json::from_value(serde_json::json!({"version":version})).unwrap();
+            let error = service
+                .update_stage("unread-record", req, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("无资格不得探测存在性、版本或供应商角色");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    #[tokio::test]
+    async fn create_authorizes_before_party_or_supplier_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let req = serde_json::from_value(serde_json::json!({"address_type":"operating","contact_name":"name","address":"address","valid_from":"2026-01-01","is_default":false})).unwrap();
+        let error = service
+            .create_stage("unread-party", req, &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("无资格不得探测主体或供应商角色");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

@@ -13,6 +13,7 @@ use erp_supply::Error as SupplyError;
 use mongodb::Database;
 use persistence_core::Executor;
 
+pub use super::repository::material_mappings;
 use super::request_access::{RequestAction, RequestTarget, require_request};
 use crate::wiring::CatalogServices;
 use crate::{Error, Result};

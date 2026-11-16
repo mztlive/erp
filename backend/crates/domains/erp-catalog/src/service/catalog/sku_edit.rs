@@ -1,6 +1,6 @@
 use erp_core::common::time::BusinessDate;
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::CatalogService;
 use crate::dto::{ProductSkuInput, SpecEntryInput};
@@ -41,6 +41,7 @@ impl CatalogService {
     /// 规范化自由规格、校验新身份意图与条码占用，并创建稳定 SKU 及首个修订。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `ctx` - 新 SKU 所属商品、生效区间与创建人
     /// * `input` - SKU 输入行
     ///
@@ -53,10 +54,11 @@ impl CatalogService {
         &self,
         ctx: NewSkuContext<'_>,
         input: ProductSkuInput,
+        executor: &mut dyn Executor,
     ) -> Result<SkuEditItem> {
         sku_edit_identity(&input, None).ensure_new().map_err(map_sku_edit_error)?;
         let signature = specification_signature_for(&input.spec_entries)?;
-        self.ensure_barcode_available(&input.barcode, None).await?;
+        self.ensure_barcode_available(&input.barcode, None, executor).await?;
         let revision =
             sku_revision_for_input(SkuId::new(next_id()), 1, ctx.effective_from, ctx.effective_to, &input)?;
         let mut sku = Sku::new(
@@ -78,6 +80,7 @@ impl CatalogService {
     /// 校验条码未被其他在用 SKU 使用。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `barcode` - 条码原值
     /// * `current_sku_id` - 本次写入归属 SKU；同一 SKU 自身修订不视为冲突
     ///
@@ -90,11 +93,12 @@ impl CatalogService {
         &self,
         barcode: &Option<String>,
         current_sku_id: Option<&str>,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let Some(barcode) = barcode.as_deref().map(str::trim).filter(|value| !value.is_empty()) else {
             return Ok(());
         };
-        let owners = self.db.catalog().barcode_owner_sku_ids(barcode, &mut NoTransaction).await?;
+        let owners = self.db.catalog().barcode_owner_sku_ids(barcode, executor).await?;
         if owners.iter().any(|sku_id| sku_id != current_sku_id.unwrap_or_default()) {
             return Err(Error::BusinessLogicError(format!("条码已被其他在用SKU使用: {barcode}")));
         }
@@ -104,6 +108,7 @@ impl CatalogService {
     /// 计算某 SKU 应写入的下一修订序号。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `sku_id` - SKU 稳定 ID
     ///
     /// # 返回
@@ -111,8 +116,12 @@ impl CatalogService {
     ///
     /// # 错误
     /// 仓储查询失败或修订序号达到上限时返回错误。
-    pub(super) async fn next_sku_revision_no(&self, sku_id: &SkuId) -> Result<u32> {
-        let latest = self.db.catalog().latest_sku_revision_no(sku_id, &mut NoTransaction).await?;
+    pub(super) async fn next_sku_revision_no(
+        &self,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        let latest = self.db.catalog().latest_sku_revision_no(sku_id, executor).await?;
         Ok(next_revision_no(latest)?)
     }
 }

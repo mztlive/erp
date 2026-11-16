@@ -5,7 +5,7 @@ use erp_core::ids::{CustomerReceiptId, ReceiptReversalId};
 use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::ReturnsService;
 use super::approval::{ensure_receipt_reversal_final_approve_posting, start_receipt_reversal_approval};
@@ -134,9 +134,10 @@ impl ReturnsService {
         Err(Error::ConflictError("回款冲正过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
     }
 
-    /// 按主键读取回款冲正单（非事务快照：直读最新提交版本，不加入调用方事务）。
+    /// 按主键在调用方原执行器中读取回款冲正单。
     ///
     /// # 参数
+    /// * `executor` - 原用例授权事务或读取阶段的执行器。
     /// * `id` - 冲正单主键。
     ///
     /// # 返回
@@ -144,11 +145,12 @@ impl ReturnsService {
     ///
     /// # 错误
     /// 不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
-    pub async fn load_receipt_reversal(&self, id: &str) -> Result<ReceiptReversal> {
-        or_not_found(
-            self.db.receipt_reversals().find_by_id(id, &mut NoTransaction).await?,
-            "回款冲正单不存在",
-        )
+    pub async fn load_receipt_reversal(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ReceiptReversal> {
+        or_not_found(self.db.receipt_reversals().find_by_id(id, executor).await?, "回款冲正单不存在")
     }
 
     /// 读取冲正单并执行最终通过守卫；本接口不修改财务或销售事实。

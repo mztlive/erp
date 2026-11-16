@@ -4,13 +4,15 @@ use std::sync::atomic::Ordering;
 
 use erp_core::common::time::Instant;
 use erp_permissions::{
-    Permission, cost, customer, fulfillment, internal, sales_order, supplier, supplier_fulfillment,
+    Permission, cost, customer, fulfillment, internal, inventory, purchase_order, returns, sales_order,
+    supplier, supplier_fulfillment,
 };
+use persistence_core::ReadExecutor;
 use persistence_core::testing::SnapshotExecutor;
 
 use super::fixtures::{Facts, Identity, actor, candidate, complete, inquiry_members, object};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
-use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts};
+use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey};
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
@@ -175,6 +177,145 @@ fn complete_with_identity(identity: Arc<Identity>) -> AuthorizationService {
 }
 
 #[tokio::test]
+async fn purchase_return_source_requires_the_complete_command_role_without_a_detail_menu() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::new(vec![object("purchase_order", "purchase", "other")]));
+    let service = bound(identity.clone(), "purchase_order", facts.clone());
+    let permission = &internal::PURCHASE_RETURN_SOURCE;
+    identity.scopes.lock().unwrap().insert(
+        (permission.clone(), permission.clone()),
+        ResolvedScope {
+            role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+            user_limit: None,
+        },
+    );
+    let required = [purchase_order::SAVE_DRAFT, returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE];
+    let detail_only = [purchase_order::DETAIL];
+    let mut executor = SnapshotExecutor::default();
+    grant(&identity, &[("operator", &required)]);
+    service
+        .require(&actor(), permission, AccessTarget::record("purchase").unwrap(), &mut executor)
+        .await
+        .expect("固定采购退货来源使用已取证的公司范围，完整命令角色无需详情菜单资格");
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 1);
+    for roles in [
+        vec![("operator", &required[..1])],
+        vec![("operator", &required[1..])],
+        vec![("editor", &required[..1]), ("creator", &required[1..])],
+        vec![("reader", detail_only.as_slice())],
+    ] {
+        grant(&identity, &roles);
+        let calls = facts.calls.load(Ordering::SeqCst);
+        assert!(matches!(
+            service
+                .require(&actor(), permission, AccessTarget::record("purchase").unwrap(), &mut executor)
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+        assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
+    }
+    grant(&identity, &[("operator", &required)]);
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                permission,
+                AccessTarget::record("purchase").unwrap(),
+                &mut ReadExecutor::default()
+            )
+            .await,
+        Err(Error::ValidationError(_))
+    ));
+}
+
+#[tokio::test]
+async fn stock_adjustment_update_checks_the_persisted_record_and_complete_warehouse_source() {
+    let identity = Arc::new(Identity::default());
+    let permission = &inventory::STOCK_ADJUSTMENT_UPDATE;
+    let required = [inventory::STOCK_ADJUSTMENT_UPDATE, inventory::STOCK_ADJUSTMENT_DETAIL];
+    grant(&identity, &[("warehouse-editor", &required)]);
+    identity.scopes.lock().unwrap().insert(
+        (permission.clone(), permission.clone()),
+        ResolvedScope {
+            role_clauses: vec![ScopeClause {
+                warehouse_ids: ["warehouse".into()].into(),
+                ..Default::default()
+            }],
+            user_limit: None,
+        },
+    );
+    let warehouse_relation = RelationKey::parse("warehouse").unwrap();
+    let adjustment = ObjectFacts {
+        warehouse_id: FactValue::Known(Some("warehouse".into())),
+        relations: [(
+            warehouse_relation.clone(),
+            RelatedObjects {
+                expected_ids: ["warehouse".into()].into(),
+                objects: vec![object("warehouse", "warehouse", "other")],
+            },
+        )]
+        .into(),
+        ..object("stock_adjustment", "adjustment", "other")
+    };
+    let facts = Arc::new(Facts::new(vec![adjustment.clone()]));
+    let service = bound(identity.clone(), "stock_adjustment", facts.clone());
+    let mut executor = SnapshotExecutor::default();
+    let target = || AccessTarget::record("adjustment").unwrap();
+    service
+        .require(&actor(), permission, target(), &mut executor)
+        .await
+        .expect("库存调整更新与详情必须来自同一角色，真实仓库在该角色范围内");
+    for roles in [
+        vec![("update-only", &required[..1])],
+        vec![("detail-only", &required[1..])],
+        vec![("editor", &required[..1]), ("reader", &required[1..])],
+    ] {
+        grant(&identity, &roles);
+        let calls = facts.calls.load(Ordering::SeqCst);
+        assert!(matches!(
+            service.require(&actor(), permission, target(), &mut executor).await,
+            Err(Error::Forbidden(_))
+        ));
+        assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
+    }
+    grant(&identity, &[("warehouse-editor", &required)]);
+    facts.objects.lock().unwrap()[0].warehouse_id = FactValue::Known(Some("outside".into()));
+    assert!(matches!(
+        service.require(&actor(), permission, target(), &mut executor).await,
+        Err(Error::Forbidden(_))
+    ));
+    *facts.objects.lock().unwrap() = vec![adjustment.clone()];
+    facts.objects.lock().unwrap()[0].relations.get_mut(&warehouse_relation).unwrap().objects.clear();
+    assert!(matches!(
+        service.require(&actor(), permission, target(), &mut executor).await,
+        Err(Error::Forbidden(_))
+    ));
+    *facts.objects.lock().unwrap() = vec![adjustment];
+    facts.objects.lock().unwrap()[0].warehouse_id = FactValue::Missing;
+    assert!(matches!(
+        service.require(&actor(), permission, target(), &mut executor).await,
+        Err(Error::ValidationError(message)) if message.contains("Warehouse")
+    ));
+    assert!(matches!(
+        service.require(&actor(), permission, AccessTarget::record("missing").unwrap(), &mut executor).await,
+        Err(Error::NotFound(_))
+    ));
+    let calls = facts.calls.load(Ordering::SeqCst);
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                permission,
+                AccessTarget::Candidate(candidate("stock_adjustment", "user")),
+                &mut executor
+            )
+            .await,
+        Err(Error::ValidationError(message)) if message == "此权限不支持该授权目标"
+    ));
+    assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
+}
+
+#[tokio::test]
 async fn supplier_import_registration_requires_current_import_qualification() {
     let identity = Arc::new(Identity::default());
     let service = complete_with_identity(identity.clone());
@@ -247,6 +388,46 @@ async fn supplier_completion_replay_requires_one_role_with_all_three_current_per
             Err(Error::Forbidden(_))
         ));
     }
+}
+
+#[tokio::test]
+async fn customer_creation_receipt_rechecks_the_real_record_with_only_current_creation_scope() {
+    let identity = Arc::new(Identity::default());
+    grant(&identity, &[("creator", &[customer::CREATE])]);
+    let facts = Arc::new(Facts::new(vec![object("customer", "customer", "user")]));
+    let service = bound(identity.clone(), "customer", facts.clone());
+    let mut executor = SnapshotExecutor::default();
+    let permission = &internal::CUSTOMER_CREATED_RESULT_READ;
+    service
+        .require(&actor(), permission, AccessTarget::record("customer").unwrap(), &mut executor)
+        .await
+        .unwrap();
+    for target in [AccessTarget::Operation, AccessTarget::Candidate(candidate("customer", "user"))] {
+        assert!(matches!(
+            service.require(&actor(), permission, target, &mut executor).await,
+            Err(Error::ValidationError(_))
+        ));
+    }
+    {
+        let mut objects = facts.objects.lock().unwrap();
+        objects[0].owner_id = FactValue::Known(Some("other".into()));
+        objects[0].history_participants = FactValue::Known(["user".into()].into());
+    }
+    assert!(matches!(
+        service.require(&actor(), permission, AccessTarget::record("customer").unwrap(), &mut executor).await,
+        Err(Error::Forbidden(_))
+    ));
+    assert!(matches!(
+        service.require(&actor(), permission, AccessTarget::record("missing").unwrap(), &mut executor).await,
+        Err(Error::NotFound(_))
+    ));
+    grant(&identity, &[("reader", &[customer::DETAIL])]);
+    let calls = facts.calls.load(Ordering::SeqCst);
+    assert!(matches!(
+        service.require(&actor(), permission, AccessTarget::record("customer").unwrap(), &mut executor).await,
+        Err(Error::Forbidden(_))
+    ));
+    assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
 }
 
 #[tokio::test]

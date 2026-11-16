@@ -228,7 +228,7 @@ impl FundsAccess {
             Some(InvoiceDirection::Purchase) => FinanceSearchTarget::PurchaseInvoice,
             _ => FinanceSearchTarget::SalesInvoice,
         };
-        let keyword_ids = keyword_ids(&self.db, query.q.as_deref(), target).await?;
+        let keyword_ids = keyword_ids(&self.db, query.q.as_deref(), target, executor).await?;
         let filter = InvoiceFilter {
             keyword_ids,
             invoice_direction: query.invoice_direction,
@@ -419,6 +419,18 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedInvoiceRow>> {
+        let (view, authorization) = self.invoice_detail_read(id, actor, executor).await?;
+        authorization.deliver(executor).await?;
+        Ok(view)
+    }
+
+    /// 返回尚未交付的详情及原凭证，供附件读取完成后统一验证。
+    pub(super) async fn invoice_detail_read(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(FundsScopedResult<ScopedInvoiceRow>, FundsAuthorization)> {
         let (_access, authorization) =
             self.resolve_dual(actor, &receivable_permissions::INVOICE_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
@@ -467,8 +479,8 @@ impl FundsAccess {
         let data = Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
         let parts =
             invoice_detail_parts(&row, &sales_matched, &purchase_matched, &sales_facts, &purchase_facts);
-        authorization.deliver(executor).await?;
-        Ok(invoice_detail_result(&authorization, data, &parts))
+        let view = invoice_detail_result(&authorization, data, &parts);
+        Ok((view, authorization))
     }
 }
 

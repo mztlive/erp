@@ -6,7 +6,7 @@ use erp_warehouse::{
     WarehouseFulfillmentOperation,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::ReadExecutor;
+use persistence_core::{Executor, ReadExecutor};
 
 use super::ensure_dictionary::{EnsureOutcome, step_label};
 use super::plan::DemoStep;
@@ -73,13 +73,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
 
     /// 读取现行仓库并通过正式身份事实核对两项收发责任。
     async fn verify_warehouse_ready(&self, id: &str) -> Result<()> {
+        let mut executor = ReadExecutor::default();
         let warehouse = self
             .db
             .warehouses()
-            .find_by_id(id, &mut ReadExecutor::default())
+            .find_by_id(id, &mut executor)
             .await?
             .ok_or_else(|| Error::NotFound("演示仓库未能读回，请核对登记记录".into()))?;
-        warehouse_ready(&warehouse, self.ports.warehouse_identity.as_ref()).await
+        warehouse_ready(&warehouse, self.ports.warehouse_identity.as_ref(), &mut executor).await
     }
 
     /// 登记仓库实际主键。
@@ -108,7 +109,11 @@ fn warehouse_request(template: &CreateWarehouseRequest, handler_user_id: &str) -
 }
 
 /// 使用领域责任解析与身份端口验证现行经办人，不调整仓库状态或负责人。
-async fn warehouse_ready(warehouse: &Warehouse, identity: &dyn IdentityFactPort) -> Result<()> {
+async fn warehouse_ready(
+    warehouse: &Warehouse,
+    identity: &dyn IdentityFactPort,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     for (operation, duty) in [
         (WarehouseFulfillmentOperation::Receipt, HandlerDuty::Inbound),
         (WarehouseFulfillmentOperation::WarehouseShip, HandlerDuty::Outbound),
@@ -116,7 +121,7 @@ async fn warehouse_ready(warehouse: &Warehouse, identity: &dyn IdentityFactPort)
         let id = warehouse.fulfillment_handler(operation).map_err(|error| {
             Error::ValidationError(format!("演示仓库 {} 未就绪：{error}", warehouse.warehouse_code))
         })?;
-        let fact = identity.handler_identity(id).await?;
+        let fact = identity.handler_identity(id, executor).await?;
         if !fact.as_ref().is_some_and(|fact| fact.can_login && duty.is_eligible(fact)) {
             return Err(Error::ValidationError(format!(
                 "演示仓库 {} 的{}经办人不可用或缺少完整执行权限，请先调整仓库责任或账号权限后重试",
@@ -141,20 +146,29 @@ mod tests {
     struct Identity {
         facts: Vec<HandlerIdentityFact>,
         calls: Mutex<Vec<String>>,
+        executor_ids: Mutex<Vec<usize>>,
         fail: bool,
     }
 
     #[async_trait]
     impl IdentityFactPort for Identity {
-        async fn handler_identity(&self, id: &str) -> erp_warehouse::Result<Option<HandlerIdentityFact>> {
+        async fn handler_identity(
+            &self,
+            id: &str,
+            executor: &mut dyn Executor,
+        ) -> erp_warehouse::Result<Option<HandlerIdentityFact>> {
             self.calls.lock().unwrap().push(id.into());
+            self.executor_ids.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
             if self.fail {
                 return Err(erp_warehouse::Error::Internal("身份读取失败".into()));
             }
             Ok(self.facts.iter().find(|fact| fact.user_id == id).cloned())
         }
 
-        async fn admin_handler_identities(&self) -> erp_warehouse::Result<Vec<HandlerIdentityFact>> {
+        async fn admin_handler_identities(
+            &self,
+            _: &mut dyn Executor,
+        ) -> erp_warehouse::Result<Vec<HandlerIdentityFact>> {
             panic!("演示就绪校验不得扫描全部账号")
         }
     }
@@ -163,6 +177,7 @@ mod tests {
         Identity {
             facts: vec![fact("inbound", true, false), fact("outbound", false, true)],
             calls: Mutex::new(vec![]),
+            executor_ids: Mutex::new(vec![]),
             fail: false,
         }
     }
@@ -194,9 +209,12 @@ mod tests {
         let warehouse = warehouse();
         let before = warehouse.clone();
         let identity = identity();
-        warehouse_ready(&warehouse, &identity).await.unwrap();
+        let mut executor = ReadExecutor::default();
+        let expected = &mut executor as *mut ReadExecutor as usize;
+        warehouse_ready(&warehouse, &identity, &mut executor).await.unwrap();
         assert_eq!(warehouse, before);
         assert_eq!(*identity.calls.lock().unwrap(), ["inbound", "outbound"]);
+        assert_eq!(*identity.executor_ids.lock().unwrap(), [expected, expected]);
     }
 
     #[tokio::test]
@@ -204,11 +222,11 @@ mod tests {
         let mut warehouse = warehouse();
         let identity = identity();
         warehouse.stable.status = EnableStatus::Disabled;
-        assert!(matches!(warehouse_ready(&warehouse, &identity).await,
+        assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(message)) if message.contains("停用")));
         warehouse.stable.status = EnableStatus::Active;
         warehouse.inbound_handler_user_id = None;
-        assert!(matches!(warehouse_ready(&warehouse, &identity).await,
+        assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(message)) if message.contains("未配置入库经办人")));
         assert!(identity.calls.lock().unwrap().is_empty());
     }
@@ -223,13 +241,13 @@ mod tests {
             } else {
                 identity.facts[0].can_login = false;
             }
-            assert!(matches!(warehouse_ready(&warehouse, &identity).await,
+            assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,
                 Err(Error::ValidationError(message)) if message.contains("入库经办人不可用")));
             assert_eq!(*identity.calls.lock().unwrap(), ["inbound"]);
         }
         let mut identity = identity();
         identity.facts[1].outbound_eligible = false;
-        assert!(matches!(warehouse_ready(&warehouse, &identity).await,
+        assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(message)) if message.contains("仓发经办人")));
         assert_eq!(*identity.calls.lock().unwrap(), ["inbound", "outbound"]);
     }
@@ -238,7 +256,7 @@ mod tests {
     async fn identity_provider_failure_preserves_original_error_and_stops() {
         let mut identity = identity();
         identity.fail = true;
-        assert!(matches!(warehouse_ready(&warehouse(), &identity).await,
+        assert!(matches!(warehouse_ready(&warehouse(), &identity, &mut ReadExecutor::default()).await,
             Err(Error::Internal(message)) if message == "身份读取失败"));
         assert_eq!(*identity.calls.lock().unwrap(), ["inbound"]);
     }

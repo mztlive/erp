@@ -21,7 +21,7 @@ use erp_identity::AccountDirectoryService;
 use erp_permissions::customer as customer_permissions;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use crate::dto::customer::{
@@ -111,38 +111,46 @@ impl CustomerService {
         actor: &AuditActor,
     ) -> Result<CustomerView> {
         req.validate()?;
-        self.party.ensure_exists(&req.party_id).await?;
-        let owner_user_id = actor.id().to_string();
         let (account, assignment) = prepare_new_customer(&req, actor.id())?;
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create_stage(account, assignment, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原创建事务校验候选归属、账号和主体，再原子写入客户、负责人及审计。
+    async fn create_stage(
+        &self,
+        account: CustomerAccount,
+        assignment: CustomerAssignment,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerView> {
+        self.access.require_candidate(actor, &account.base.id, executor).await?;
+        self.accounts
+            .account(actor.id(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
+            .ensure_can_login()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        if !self
+            .party
+            .identities_by_ids(std::slice::from_ref(&account.party_id), executor)
+            .await?
+            .iter()
+            .any(|identity| identity.party_id == account.party_id.as_ref())
+        {
+            return Err(Error::NotFound("主体不存在".into()));
+        }
         let audit =
             self.audit.resource_log(actor.clone(), "customer.create", "customer", account.base.id.clone())?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let account_for_tx = account;
-        let assignment_for_tx = assignment;
-        let access = self.access.clone();
-        let accounts = self.accounts.clone();
-        let actor_for_tx = actor.clone();
-        let created = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    accounts
-                        .account(&owner_user_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
-                        .ensure_can_login()
-                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-                    access.require_candidate(&actor_for_tx, &account_for_tx.base.id, executor).await?;
-                    persist_new_account(&db, &account_for_tx, &assignment_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(created.into())
+        persist_new_account(&self.db, &account, &assignment, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(account.into())
     }
 
     /// 在调用方 Executor 上写入客户角色与首条 OWNER 归属。
@@ -190,7 +198,32 @@ impl CustomerService {
         actor: &AuditActor,
     ) -> Result<CustomerView> {
         req.validate()?;
-        let mut account = self.load_customer(id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_stage(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 原事务先授权客户，再读取业务版本并更新及记录审计。
+    async fn update_stage(
+        &self,
+        id: &str,
+        req: UpdateCustomerRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerView> {
+        self.access.require_with(actor.clone(), &customer_permissions::UPDATE, id, executor).await?;
+        let mut account = self
+            .db
+            .customer_accounts()
+            .find_customer(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
         account.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
         account.update(
             CustomerAccountUpdate {
@@ -199,50 +232,10 @@ impl CustomerService {
             },
             actor.id(),
         )?;
-        let audit =
-            self.audit.resource_log(actor.clone(), "customer.update", "customer", account.base.id.clone())?;
-
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let mut account_for_tx = account;
-        let access = self.access.clone();
-        let actor_for_tx = actor.clone();
-        let customer_id = id.to_string();
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .require_with(actor_for_tx, &customer_permissions::UPDATE, &customer_id, executor)
-                        .await?;
-                    db.customer_accounts().update(&mut account_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(updated.into())
-    }
-
-    /// 按 ID 加载未删除客户角色。
-    ///
-    /// # 参数
-    /// * `id` - 客户角色 ID
-    ///
-    /// # 返回
-    /// 返回客户角色实体。
-    ///
-    /// # 错误
-    /// * `NotFound` - 客户角色不存在
-    ///
-    /// 查询失败时返回仓储错误。
-    pub async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
-        self.db
-            .customer_accounts()
-            .find_customer(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户不存在".to_string()))
+        let audit = self.audit.resource_log(actor.clone(), "customer.update", "customer", id.to_owned())?;
+        self.db.customer_accounts().update(&mut account, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(account.into())
     }
 }
 
@@ -359,15 +352,45 @@ pub(super) fn assemble_customer_views(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
     use erp_core::common::time::BusinessDate;
     use erp_core::ids::PartyId;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
     use serde_json::json;
 
-    use super::{assemble_customer_views, prepare_new_customer};
+    use super::{CustomerService, assemble_customer_views, prepare_new_customer};
+    use crate::CustomerAccess;
     use crate::dto::customer::{CreateCustomerRequest, CustomerScope, customer_status_blockers};
     use crate::entity::customer::{AssignmentRole, CustomerAccountStatus, CustomerAssignment};
-    use crate::ports::PartyIdentityFact;
+    use crate::error::Error;
+    use crate::ports::{FailClosedAuditPort, FailClosedPartyFactPort, PartyIdentityFact};
     use crate::repository::CustomerAccountRow;
+
+    #[tokio::test]
+    async fn update_authorizes_before_customer_existence_and_version_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("customer_update_authorization");
+        let service = CustomerService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedPartyFactPort),
+            CustomerAccess::new(db, unavailable_authorization()),
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for version in [1, 999] {
+            let request = serde_json::from_value(json!({"version": version})).unwrap();
+            let error = service
+                .update_stage("unread-customer", request, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("授权失败不得探测客户存在性或版本");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
 
     #[test]
     fn create_customer_ignores_submitted_owner_and_uses_actor() {

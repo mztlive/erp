@@ -185,7 +185,7 @@ impl FundsAccess {
         let (_, authorization) =
             self.resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_LIST, executor).await?;
         let condition = self.payment_condition(query, executor).await?;
-        let filter = self.payment_filter(query).await?;
+        let filter = self.payment_filter(query, executor).await?;
         let snapshot =
             payment_repository::page(&self.db, query, &filter, &authorization, &condition, executor).await?;
         let total = snapshot.count()?;
@@ -216,9 +216,14 @@ impl FundsAccess {
     }
 
     /// 关键词与主表条件保持既有合同，关联负责人和组织在最终聚合筛选。
-    async fn payment_filter(&self, query: &SupplierPaymentListQuery) -> Result<SupplierPaymentFilter> {
+    async fn payment_filter(
+        &self,
+        query: &SupplierPaymentListQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierPaymentFilter> {
         Ok(SupplierPaymentFilter {
-            keyword_ids: keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payment).await?,
+            keyword_ids: keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payment, executor)
+                .await?,
             payment_no: query.payment_no.clone(),
             supplier_id: query.supplier_id.clone(),
             status: query.status,
@@ -244,7 +249,7 @@ impl FundsAccess {
                         .resolve_with_purchase(&actor, &payable_permissions::SUPPLIER_PAYMENT_LIST, executor)
                         .await?;
                     let condition = this.payment_condition(&query, executor).await?;
-                    let filter = this.payment_filter(&query).await?;
+                    let filter = this.payment_filter(&query, executor).await?;
                     let versions = payment_repository::versions(
                         &this.db,
                         &query,

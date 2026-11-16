@@ -25,7 +25,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::bank_routing::BankRoutingChange;
-use crate::Result;
+use crate::{Result, command_insert_error};
 
 /// 主体从属事实的追加式变更。
 #[derive(Default)]
@@ -214,7 +214,7 @@ impl PreparedUpdate {
         self.capabilities.persist(db, executor).await?;
         self.qualifications.persist(db, executor).await?;
         self.ratings.persist(db, executor).await?;
-        db.supplier_profile_commands().create(&self.command, executor).await?;
+        db.supplier_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
     }

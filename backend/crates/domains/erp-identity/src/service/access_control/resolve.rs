@@ -179,31 +179,6 @@ impl DataScopeService {
         self.resolve_boundary(actor, entry_permission, source_permission.permission(), &[], executor).await
     }
 
-    /// 同一角色必须满足全部权限，范围仍只绑定目标资源动作。
-    ///
-    /// # 参数
-    /// * `actor` - 当前账号。
-    /// * `entry_permission` - 已解析的目标资源动作。
-    /// * `permissions` - 同一角色必须同时具备的权限。
-    /// * `executor` - 调用方事务执行器。
-    ///
-    /// # 返回
-    /// 返回目标资源动作上的授权范围。
-    ///
-    /// # 错误
-    /// 未注册资源、账号失效、完整权限缺失或事务版本不一致均拒绝。
-    pub(crate) async fn resolve_permissions(
-        &self,
-        actor: &AuditActor,
-        entry_permission: &Permission,
-        permissions: &[Permission],
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let source_permission = scope_spec::runtime_source(scope_spec::require_scope(entry_permission)?)?;
-        self.resolve_boundary(actor, entry_permission, source_permission.permission(), permissions, executor)
-            .await
-    }
-
     /// 动作资格与数据边界在同一策略快照中独立取证。
     async fn resolve_boundary(
         &self,

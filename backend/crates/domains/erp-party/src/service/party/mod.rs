@@ -19,7 +19,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{Permission, party};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
@@ -145,13 +145,6 @@ impl PartyService {
             actor.id(),
         )?;
         party.company_profile = company;
-        self.ensure_party_identity_available(
-            &party.party_no,
-            party.unified_credit_code.as_deref(),
-            None,
-            &mut NoTransaction,
-        )
-        .await?;
         let revision = PartyRevision::new(
             revision_id.clone(),
             PartyRevisionData {
@@ -174,29 +167,41 @@ impl PartyService {
         actor: &AuditActor,
         permission: Permission,
     ) -> Result<PartyView> {
-        let audit = self.audit.resource_log(actor.clone(), "party.create", "party", party.base.id.clone())?;
-
-        let authorization = self.authorization.clone();
+        let service = self.clone();
         let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let party_for_tx = party;
-        let revision_for_tx = revision;
-        let created = client
+        self.db
+            .client()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization.require(&actor, &permission, AccessTarget::Operation, executor).await?;
-                    ensure_identity_available(&db, &party_for_tx, &revision_for_tx, executor).await?;
-                    db.party_revisions().create(&revision_for_tx, executor).await?;
-                    db.parties().create(&party_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<Party, crate::error::Error>(party_for_tx)
-                })
+                Box::pin(
+                    async move { service.create_stage(party, revision, &actor, &permission, executor).await },
+                )
             })
-            .await?;
+            .await
+    }
 
-        Ok(created.into())
+    /// 先取得入口资格，再在原快照校验唯一身份并写入全部记录。
+    async fn create_stage(
+        &self,
+        party: Party,
+        revision: PartyRevision,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyView> {
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+        self.ensure_party_identity_available(
+            &party.party_no,
+            party.unified_credit_code.as_deref(),
+            None,
+            executor,
+        )
+        .await?;
+        ensure_identity_available(&self.db, &party, &revision, executor).await?;
+        let audit = self.audit.resource_log(actor.clone(), "party.create", "party", party.base.id.clone())?;
+        self.db.party_revisions().create(&revision, executor).await?;
+        self.db.parties().create(&party, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(party.into())
     }
 
     /// 分页查询主体列表。
@@ -344,6 +349,34 @@ impl PartyService {
         self.update_party_record(id, req, None, actor, party::UPDATE).await
     }
 
+    /// 在调用方事务内授权并软删除主体；成功审计由拥有根事务的流程写入。
+    ///
+    /// # 参数
+    /// * `id` - 真实主体 ID。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方的原写入事务。
+    /// # 返回
+    /// 主体允许删除且软删除写入成功时返回。
+    /// # 错误
+    /// 资格不足、主体不存在、供应商资料边界或数据库失败时拒绝。
+    pub async fn delete_party(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.authorization.require(actor, &party::DELETE, AccessTarget::Operation, executor).await?;
+        let mut party = self
+            .db
+            .parties()
+            .find_party(&PartyId::new(id), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("主体不存在".into()))?;
+        ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(id), executor).await?;
+        self.db.parties().soft_delete(&mut party, executor).await?;
+        Ok(())
+    }
+
     /// 公司和名称修订在同一主体事务中更新。
     async fn update_party_record(
         &self,
@@ -354,48 +387,43 @@ impl PartyService {
         permission: Permission,
     ) -> Result<PartyView> {
         req.validate()?;
-        let prepared = self.load_party_for_update(id, req, company.as_ref(), actor).await?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "party.update",
-            "party",
-            prepared.party_id().to_string(),
-        )?;
-        let updated_by = actor.id().to_string();
-
-        // 下一修订号必须在写事务快照内读取，避免并发复用序号。
-        let authorization = self.authorization.clone();
+        let service = self.clone();
         let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
+        let id = id.to_owned();
+        self.db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    authorization.require(&actor, &permission, AccessTarget::Operation, executor).await?;
-                    let next_no = db
-                        .party_revisions()
-                        .next_revision_no(&PartyId::new(prepared.party_id().to_string()), executor)
-                        .await?;
-                    let (mut party, revision_for_tx, party_update) = prepared.into_parts();
-                    let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision_for_tx };
-                    party.update(party_update, &updated_by)?;
-                    ensure_identity_available(&db, &party, &revision, executor).await?;
-                    db.party().append_party_revision(&mut party, &revision, &updated_by, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<Party, crate::error::Error>(party)
+                    service.update_stage(&id, req, company.as_ref(), &actor, &permission, executor).await
                 })
             })
-            .await?;
-
-        Ok(updated.into())
+            .await
     }
 
-    /// 加载主体并完成事务外的全部守卫与预校验（erp-party-004）。
-    ///
-    /// 公司分支守卫、供应商资料边界、乐观锁版本校验与信用代码预冲突查询
-    /// 均在此完成；事务内只保留修订号分配、实体更新与追加写入。
-    /// 校验顺序与冲突语义保持不变。
+    /// 在同一授权事务中读取原主体、版本和修订号，完成状态更新与审计。
+    async fn update_stage(
+        &self,
+        id: &str,
+        req: UpdatePartyRequest,
+        company: Option<&crate::entity::party::company::CompanyProfile>,
+        actor: &AuditActor,
+        permission: &Permission,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyView> {
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+        let prepared = self.load_party_for_update(id, req, company, actor, executor).await?;
+        let next_no = self.db.party_revisions().next_revision_no(&PartyId::new(id), executor).await?;
+        let (mut party, revision, update) = prepared.into_parts();
+        let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision };
+        party.update(update, actor.id())?;
+        ensure_identity_available(&self.db, &party, &revision, executor).await?;
+        let audit = self.audit.resource_log(actor.clone(), "party.update", "party", id.to_owned())?;
+        self.db.party().append_party_revision(&mut party, &revision, actor.id(), executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(party.into())
+    }
+
+    /// 使用已授权的原事务读取主体并校验分支、供应商边界、版本及信用代码冲突。
     ///
     /// # 参数
     /// * `id` - 主体 ID
@@ -416,15 +444,21 @@ impl PartyService {
         req: UpdatePartyRequest,
         company: Option<&crate::entity::party::company::CompanyProfile>,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PendingPartyUpdate> {
-        let mut party = self.load_party(id).await?;
+        let mut party = self
+            .db
+            .parties()
+            .find_party(&PartyId::new(id), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("主体不存在".into()))?;
         if party.company_profile.is_some() && company.is_none() {
             return Err(Error::BusinessLogicError("请在公司主体维护中修改公司资料".into()));
         }
         if let Some(company) = company {
             party.company_profile = Some(company.clone());
         }
-        ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(id)).await?;
+        ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(id), executor).await?;
         map_version_conflict(party.ensure_version(req.version))?;
 
         // 预校验信用代码冲突：与实体规范化规则一致，避免仅依赖唯一索引透出笼统冲突。
@@ -441,7 +475,7 @@ impl PartyService {
                 &probe.party_no,
                 probe.unified_credit_code.as_deref(),
                 Some(party.base.id.as_str()),
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         }
@@ -545,24 +579,6 @@ impl PartyService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 按 ID 加载未删除主体。
-    ///
-    /// # 参数
-    /// * `id` - 主体 ID
-    ///
-    /// # 返回
-    /// 返回主体实体。
-    ///
-    /// # 错误
-    /// * `NotFound` - 主体不存在
-    pub async fn load_party(&self, id: &str) -> Result<Party> {
-        self.db
-            .parties()
-            .find_party(&PartyId::new(id), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("主体不存在".to_string()))
-    }
-
     /// 确保主体编号与统一社会信用代码未被占用。
     ///
     /// 全局唯一索引包含软删除记录，因此必须按「含已删除」查询占用状态；
@@ -609,8 +625,7 @@ impl PartyService {
 
 /// 待更新主体与事务内应用的更新意图（erp-party-004）。
 ///
-/// `load_party_for_update` 在事务外完成全部守卫后，把实体更新意图与修订草稿
-/// 暂存于此；事务闭包内解包应用，避免闭包 `move` 大量请求状态。
+/// 原事务内读取并校验主体后，携带实体更新意图与待分配序号的修订草稿。
 struct PendingPartyUpdate {
     party: Party,
     revision: PartyRevision,
@@ -618,17 +633,6 @@ struct PendingPartyUpdate {
 }
 
 impl PendingPartyUpdate {
-    /// 返回待更新主体的稳定 ID。
-    ///
-    /// # 参数
-    /// * `self` - 待更新主体包装
-    ///
-    /// # 返回
-    /// 返回主体稳定 ID 引用。
-    fn party_id(&self) -> &str {
-        &self.party.base.id
-    }
-
     /// 解包为事务内应用的三元组。
     ///
     /// # 参数
@@ -649,6 +653,7 @@ impl PendingPartyUpdate {
 /// # 参数
 /// * `supplier_roles` - 供应商角色事实端口。
 /// * `party_id` - 主体 ID。
+/// * `executor` - 原事务或读取阶段执行器。
 ///
 /// # 返回
 /// 主体未挂供应商角色时返回 `Ok(())`。
@@ -658,15 +663,16 @@ impl PendingPartyUpdate {
 pub async fn ensure_outside_supplier_profile(
     supplier_roles: &dyn SupplierRolePort,
     party_id: &PartyId,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let has_supplier_role = supplier_roles.party_has_supplier_role(party_id).await?;
+    let has_supplier_role = supplier_roles.party_has_supplier_role(party_id, executor).await?;
     ensure_supplier_profile_boundary(has_supplier_role)
 }
 
 /// 校验从属事实所属主体存在（erp-party-001）。
 ///
 /// 四个从属事实服务（联系人/地址/税务资料/银行账户）创建入口的同一守卫；
-/// 存在性读取使用非事务执行器，与调用方后续事务边界无关。
+/// 存在性读取使用已授权的原事务执行器。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -677,9 +683,13 @@ pub async fn ensure_outside_supplier_profile(
 ///
 /// # 错误
 /// * `NotFound` - 主体不存在
-pub(crate) async fn ensure_party_exists(db: &Database, party_id: &str) -> Result<()> {
+pub(crate) async fn ensure_party_exists(
+    db: &Database,
+    party_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     db.parties()
-        .find_by_id(party_id, &mut NoTransaction)
+        .find_by_id(party_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
     Ok(())
@@ -704,9 +714,10 @@ pub(crate) async fn ensure_new_fact_guards(
     db: &Database,
     supplier_roles: &dyn SupplierRolePort,
     party_id: &str,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_party_exists(db, party_id).await?;
-    ensure_outside_supplier_profile(supplier_roles, &PartyId::new(party_id)).await
+    ensure_party_exists(db, party_id, executor).await?;
+    ensure_outside_supplier_profile(supplier_roles, &PartyId::new(party_id), executor).await
 }
 
 /// 将实体乐观锁冲突映射为稳定的业务冲突错误（erp-party-011）。
@@ -755,7 +766,120 @@ pub(crate) use clear_default_marks;
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_supplier_profile_boundary, map_version_conflict};
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
+
+    async fn service() -> PartyService {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("party_write_authorization");
+        PartyService::new(
+            db,
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedSupplierRolePort),
+            unavailable_authorization(),
+        )
+    }
+
+    #[tokio::test]
+    async fn update_and_delete_authorize_before_original_existence_or_version_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for permission in [party::UPDATE, party::COMPANY_COMPANY_UPDATE] {
+            for version in [1, 999] {
+                let req = serde_json::from_value(
+                    serde_json::json!({"version":version,"legal_name":"name","change_reason":"edit"}),
+                )
+                .unwrap();
+                let error = service
+                    .update_stage(
+                        "unread-party",
+                        req,
+                        None,
+                        &actor,
+                        &permission,
+                        &mut SnapshotExecutor::default(),
+                    )
+                    .await
+                    .expect_err("无资格不得探测主体存在性或版本");
+                assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+            }
+        }
+        let error = service
+            .delete_party("unread-party", &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("无资格不得读取或删除主体");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn create_authorizes_before_duplicate_identity_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for permission in [party::CREATE, party::COMPANY_COMPANY_CREATE] {
+            let record = Party::new(
+                PartyId::new("new-party"),
+                PartyData {
+                    party_no: "P-NEW".into(),
+                    party_kind: PartyKind::Enterprise,
+                    unified_credit_code: None,
+                    status: PartyStatus::Active,
+                },
+                actor.id(),
+            )
+            .unwrap();
+            let revision = PartyRevision::new(
+                PartyRevisionId::new("new-revision"),
+                PartyRevisionData {
+                    party_id: PartyId::new("new-party"),
+                    revision_no: 1,
+                    legal_name: "name".into(),
+                    short_name: None,
+                    change_reason: "create".into(),
+                },
+            )
+            .unwrap();
+            let error = service
+                .create_stage(record, revision, &actor, &permission, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("无资格不得查询身份冲突");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    struct SnapshotSupplierRole(bool);
+
+    #[async_trait]
+    impl SupplierRolePort for SnapshotSupplierRole {
+        async fn party_has_supplier_role(
+            &self,
+            party_id: &PartyId,
+            executor: &mut dyn Executor,
+        ) -> Result<bool> {
+            assert_eq!(party_id.as_ref(), "party");
+            assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
+            Ok(self.0)
+        }
+    }
+
+    #[tokio::test]
+    async fn supplier_guard_uses_original_snapshot_and_preserves_boundary_result() {
+        let id = PartyId::new("party");
+        let mut executor = SnapshotExecutor::default();
+        ensure_outside_supplier_profile(&SnapshotSupplierRole(false), &id, &mut executor).await.unwrap();
+        let error = ensure_outside_supplier_profile(&SnapshotSupplierRole(true), &id, &mut executor)
+            .await
+            .expect_err("供应商主体必须由根级资料接口维护");
+        assert!(
+            matches!(error, Error::BusinessLogicError(message) if message == "供应商主体资料只能通过供应商资料根级接口维护")
+        );
+    }
 
     #[test]
     fn supplier_party_rejects_shared_party_subresource_access() {

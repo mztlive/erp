@@ -1,6 +1,7 @@
 //! 文件只沿申请允许清单及精确来源读取，完整银行账号另经当前任务资格揭示。
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
@@ -19,7 +20,7 @@ use persistence_core::{Executor, Transactional};
 
 use super::{PaymentRequestAttachmentView, PurchasePaymentRequestReadService};
 use crate::approval_runtime::has_document_permission;
-use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
+use crate::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
 use crate::sales_center::materials::{material_from_asset, validate_materials};
 use crate::{Error, Result};
 
@@ -54,18 +55,27 @@ impl PurchasePaymentRequestReadService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let request = this.load(&id, executor).await?;
-                    let scope = this.source_scope(&actor, &payment_permissions::DETAIL, executor).await?;
-                    if !this.readable(&request, &scope, executor).await? {
-                        return Err(Error::NotFound("付款申请材料不存在或无权下载".into()));
-                    }
-                    let material = this.material(&request, &asset_id, executor).await?;
-                    scope.deliver(executor).await?;
-                    Ok(material)
-                })
+                Box::pin(async move { this.material_read(&actor, &id, &asset_id, executor).await })
             })
             .await
+    }
+
+    /// 详情资格先于申请和文件读取，全部补齐后验证原查询。
+    async fn material_read(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        asset_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PaymentRequestMaterialReference> {
+        let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
+        let request = self.load(id, executor).await?;
+        if !self.readable(&request, &scope, executor).await? {
+            return Err(Error::NotFound("付款申请材料不存在或无权下载".into()));
+        }
+        let material = self.material(&request, asset_id, executor).await?;
+        scope.deliver(executor).await?;
+        Ok(material)
     }
 
     /// 当前审批和执行任务只可下载本申请冻结允许材料。
@@ -81,29 +91,25 @@ impl PurchasePaymentRequestReadService {
         actor: &AuditActor,
         task_id: &str,
         asset_id: &str,
-        auth: &impl WorkItemAuthorizationReadPort,
+        auth: Arc<dyn WorkItemAuthorizationReadPort>,
     ) -> Result<PaymentRequestMaterialReference> {
-        let fact = auth.authorize(task_id, actor).await?;
         let this = self.clone();
         let id = task_id.to_owned();
         let asset_id = asset_id.to_owned();
-        let expected = fact.clone();
         let actor_for_tx = actor.clone();
-        let reference = self
-            .db
+        self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let (expected, access) = auth.authorize(&id, &actor_for_tx, executor).await?;
                     let request = this.task_request(&actor_for_tx, &id, &expected, executor).await?;
-                    this.material(&request, &asset_id, executor).await
+                    let material = this.material(&request, &asset_id, executor).await?;
+                    this.rbac.validate(&access, executor).await?;
+                    Ok::<_, Error>(material)
                 })
             })
-            .await?;
-        if auth.authorize(task_id, actor).await? != fact {
-            return Err(Error::ConflictError("付款申请任务资格已变化".into()));
-        }
-        Ok(reference)
+            .await
     }
 
     /// 主动揭示先重验敏感动作、当前任务与申请冻结账户版本。
@@ -119,56 +125,61 @@ impl PurchasePaymentRequestReadService {
         actor: &AuditActor,
         id: &str,
         input: &RevealPaymentRecipientRequest,
-        auth: &impl WorkItemAuthorizationReadPort,
+        auth: Arc<dyn WorkItemAuthorizationReadPort>,
     ) -> Result<PaymentRequestAccountSnapshot> {
-        let fact = auth.authorize(input.work_item_id.as_ref(), actor).await?;
         let this = self.clone();
         let actor_for_tx = actor.clone();
         let id = id.to_owned();
         let input_for_tx = input.clone();
-        let expected = fact.clone();
-        let snapshot = self
-            .db
+        self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    if !has_document_permission(
-                        &this.db,
-                        &this.rbac,
-                        &actor_for_tx,
-                        &payable_permissions::PAYMENT_RECIPIENT_REVEAL,
-                        executor,
-                    )
-                    .await?
-                    {
-                        return Err(Error::Forbidden("无权揭示完整收款账号".into()));
-                    }
-                    let request = this
-                        .task_request(&actor_for_tx, input_for_tx.work_item_id.as_ref(), &expected, executor)
-                        .await?;
-                    let task = this
-                        .db
-                        .work_items()
-                        .find_by_id(input_for_tx.work_item_id.as_ref(), executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("付款申请任务不存在".into()))?;
-                    if request.base.id != id
-                        || task.base.version.to_string() != input_for_tx.expected_task_version
-                    {
-                        return Err(Error::ConflictError("付款申请任务版本已变化".into()));
-                    }
-                    let snapshot = request
-                        .payee_account
-                        .ok_or_else(|| Error::ConflictError("付款申请未冻结收款账户".into()))?;
-                    this.validate_reveal_account(&snapshot, &input_for_tx, executor).await?;
+                    let (expected, access) =
+                        auth.authorize(input_for_tx.work_item_id.as_ref(), &actor_for_tx, executor).await?;
+                    let snapshot =
+                        this.reveal_snapshot(&actor_for_tx, &id, &input_for_tx, &expected, executor).await?;
+                    this.rbac.validate(&access, executor).await?;
                     Ok(snapshot)
                 })
             })
-            .await?;
-        if auth.authorize(input.work_item_id.as_ref(), actor).await? != fact {
-            return Err(Error::ConflictError("付款申请任务资格已变化".into()));
+            .await
+    }
+
+    /// 在原任务读取阶段核对敏感资格、精确任务版本与真实冻结账户。
+    async fn reveal_snapshot(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        input: &RevealPaymentRecipientRequest,
+        fact: &AuthorizedTaskFact,
+        executor: &mut dyn Executor,
+    ) -> Result<PaymentRequestAccountSnapshot> {
+        if !has_document_permission(
+            &self.db,
+            &self.rbac,
+            actor,
+            &payable_permissions::PAYMENT_RECIPIENT_REVEAL,
+            executor,
+        )
+        .await?
+        {
+            return Err(Error::Forbidden("无权揭示完整收款账号".into()));
         }
+        let request = self.task_request(actor, input.work_item_id.as_ref(), fact, executor).await?;
+        let task = self
+            .db
+            .work_items()
+            .find_by_id(input.work_item_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("付款申请任务不存在".into()))?;
+        if request.base.id != id || task.base.version.to_string() != input.expected_task_version {
+            return Err(Error::ConflictError("付款申请任务版本已变化".into()));
+        }
+        let snapshot =
+            request.payee_account.ok_or_else(|| Error::ConflictError("付款申请未冻结收款账户".into()))?;
+        self.validate_reveal_account(&snapshot, input, executor).await?;
         Ok(snapshot)
     }
 
@@ -295,5 +306,27 @@ impl PurchasePaymentRequestReadService {
             files.push(material_from_asset(&file));
         }
         Ok(files)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn material_authorization_failure_stops_before_request_and_file_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("payment_request_material_qualification");
+        let service = PurchasePaymentRequestReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result = service.material_read(&actor, "request", "file", &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
 }

@@ -1,22 +1,9 @@
-//! 域 D10 `catalog` 服务编排。
+//! 商品字典、SPU/SKU、卡券与来源同步的本域用例。
 //!
-//! 事务边界只在 Service（conventions §6.1）：
-//! - 字典（分类/品牌/单位/规格属性/属性值）单集合 CRUD → `&mut NoTransaction`
-//!   （审计日志按 D01 既有写法独立写入）；
-//! - 商品创建与规格编辑：跨集合（products + product_revisions + 媒体 +
-//!   skus + sku_revisions + 审计）→
-//!   `persistence_core::Transactional::with_transaction`，保证「SPU 身份 + 修订快照 +
-//!   SKU 身份 + 规格签名」原子可见（数据模型 §6.3）；
-//! - 卡券类目原子创建：跨集合（[新建分类] + products + product_revisions +
-//!   唯一 SKU + sku_revisions + voucher_category_profile_revisions + 审计）→
-//!   `persistence_core::Transactional::with_transaction`，与商品创建同构（数据模型
-//!   §6.3：卡券类目即 VOUCHER 类型的单 SKU 商品，不再要求预先存在 SKU）。
-//!
-//! 业务规则来自 entities（`new()`/`update()` 已完成校验与规范化，
-//! `specification::compute_specification_signature` 计算签名），Service 只编排：
-//! 字典存在性与启用校验、条码冲突、成环检测、规格签名分类
-//! （保留/新增/重新启用/移除）与事务写入。跨域只调对方 Repository（D05
-//! `file_assets` 校验媒体引用；D02 `audit_logs` 写审计），禁止 Service 依赖 Service。
+//! 公开写入口开启一个快照事务；授权、决定写入的事实、版本检查、写入和审计
+//! 必须使用原执行器。跨域命令通过草稿写入步骤加入所属 Process 的事务。
+//! 草稿准备只规范化输入及临时附件引用，不读取数据库或签发授权结果。
+//! 文件与审计事实由本域窄 Port 提供；实体维护状态及修订不变式。
 use std::sync::Arc;
 
 use mongodb::Database;
@@ -66,7 +53,7 @@ pub use crate::dto::{
 /// 商品域服务。
 ///
 /// 提供商品字典、SPU/SKU 与卡券类目的创建、查询、更新编排。
-/// 商品修订规则留在本域；附件原子编排的根事务由 `erp-processes` 持有，本服务
+/// 商品修订规则留在本域；跨域附件原子编排的根事务由所属 Process 持有，本服务
 /// 只通过 [`crate::ports::PendingAttachmentBatch`] 与 [`FileAssetFactsPort`] 消费附件事实。
 #[derive(Clone)]
 pub struct CatalogService {
@@ -121,3 +108,36 @@ pub use product_update::SpecEditPlan;
 pub use sellable::{prepare_sellable_sku_list, sellable_sku_page_view};
 
 mod source_unit;
+
+#[cfg(test)]
+pub(super) mod testing {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+
+    use super::*;
+    use crate::ports::{EmptyFileAssetFacts, FailClosedAuditPort};
+    use crate::{Error, Result};
+
+    pub(super) async fn service() -> CatalogService {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("catalog_authorization_unit");
+        CatalogService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(EmptyFileAssetFacts),
+            CatalogAccess::new(db, unavailable_authorization()),
+        )
+    }
+
+    pub(super) fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin)
+    }
+
+    pub(super) fn denied<T>(result: Result<T>) {
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
+}

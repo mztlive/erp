@@ -17,9 +17,12 @@ mod grants;
 mod new_products;
 mod offerings;
 mod qualification;
+mod repository;
 mod request_access;
 pub use request_access::material_facts_port;
 mod tasks;
+#[cfg(test)]
+mod testing;
 
 pub use assets::{PortalAssetKind, PortalAssetView, PortalCatalogAssetAccess, PreparedPortalAsset};
 pub use batch::{

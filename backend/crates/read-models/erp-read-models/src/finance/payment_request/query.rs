@@ -1,5 +1,7 @@
 //! 完整来源资格先于分页与整单金额，当前事实与冻结依据分别返回。
 
+use std::sync::Arc;
+
 use application_core::{AuditActor, PageView};
 use erp_finance::dto::payable::payment_request::PurchasePaymentRequestQuery;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
@@ -63,20 +65,32 @@ impl PurchasePaymentRequestReadService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let request = this.load(&id, executor).await?;
-                    let allowed_actions = this.allowed_actions(&actor, &request, executor).await?;
-                    let scope = this.source_scope(&actor, &payment_permissions::DETAIL, executor).await?;
-                    if !this.readable(&request, &scope, executor).await? {
-                        return Err(unavailable());
-                    }
-                    let mut view = this.view(request, allowed_actions, executor).await?;
-                    view.review_lines = Some(this.review_lines(&view.request, executor).await?);
-                    scope.deliver(executor).await?;
-                    Ok::<_, Error>(view)
-                })
+                Box::pin(async move { this.detail_read(&actor, &id, executor).await })
             })
             .await
+    }
+
+    /// 先取得详情资格再读取申请；动作检查后重新生成最终交付凭证。
+    async fn detail_read(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchasePaymentRequestView> {
+        let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
+        let request = self.load(id, executor).await?;
+        if !self.readable(&request, &scope, executor).await? {
+            return Err(unavailable());
+        }
+        let allowed_actions = self.allowed_actions(actor, &request, executor).await?;
+        let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
+        if !self.readable(&request, &scope, executor).await? {
+            return Err(unavailable());
+        }
+        let mut view = self.view(request, allowed_actions, executor).await?;
+        view.review_lines = Some(self.review_lines(&view.request, executor).await?);
+        scope.deliver(executor).await?;
+        Ok(view)
     }
 
     /// 当前审批人和执行人只凭专用任务资格读取本申请必要资料。
@@ -91,19 +105,17 @@ impl PurchasePaymentRequestReadService {
         &self,
         actor: &AuditActor,
         task_id: &str,
-        auth: &impl WorkItemAuthorizationReadPort,
+        auth: Arc<dyn WorkItemAuthorizationReadPort>,
     ) -> Result<PurchasePaymentRequestView> {
-        let fact = auth.authorize(task_id, actor).await?;
         let this = self.clone();
         let id = task_id.to_owned();
-        let expected = fact.clone();
         let actor_for_tx = actor.clone();
-        let view = self
-            .db
+        self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let (expected, access) = auth.authorize(&id, &actor_for_tx, executor).await?;
                     let request = this.task_request(&actor_for_tx, &id, &expected, executor).await?;
                     let mut view = this.view(request, Vec::new(), executor).await?;
                     view.review_lines = Some(this.review_lines(&view.request, executor).await?);
@@ -113,14 +125,11 @@ impl PurchasePaymentRequestReadService {
                     {
                         view.allowed_actions.push("PAY".into());
                     }
+                    this.rbac.validate(&access, executor).await?;
                     Ok::<_, Error>(view)
                 })
             })
-            .await?;
-        if auth.authorize(task_id, actor).await? != fact {
-            return Err(Error::ConflictError("付款申请任务资格已变化".into()));
-        }
-        Ok(view)
+            .await
     }
 
     async fn list_snapshot(
@@ -366,7 +375,24 @@ fn task_material_actionable(fact: &AuthorizedTaskFact) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+
+    #[tokio::test]
+    async fn detail_authorization_failure_stops_before_request_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("payment_request_detail_qualification");
+        let service = PurchasePaymentRequestReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result = service.detail_read(&actor, "request", &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
 
     #[test]
     fn approval_panel_requires_the_real_authorized_action_as_well_as_state() {

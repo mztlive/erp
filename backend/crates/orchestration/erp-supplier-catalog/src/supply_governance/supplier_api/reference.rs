@@ -1,6 +1,7 @@
 //! 外部引用解析位于两次本域校验之间；提交事务始终重新读取连接。
 use application_core::AuditActor;
-use erp_identity::AccessTarget;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::Permission;
 use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
 use erp_supply::entity::supplier_api::{SupplierCommandOutcome, SupplierConnectionAction};
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
@@ -10,7 +11,8 @@ use erp_supply::ports::supplier_reference_registry::{
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
 use erp_supply::service::supplier_api::context::action_permission;
-use persistence_core::{NoTransaction, Transactional};
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::SupplierApiGovernanceProcess;
 use super::receipt::{CommandReceiptWrite, persist_command_receipt};
@@ -116,7 +118,7 @@ async fn execute_reference<P: ReferenceCommandPort>(port: P) -> Result<P::Output
     let resolved = port.resolve(checked).await?;
     port.commit(resolved).await
 }
-/// 实际 provider 保留事务外 NoTransaction 和结果事务内第二次校验。
+/// 本地预检使用授权快照；外部引用解析在事务外，结果提交时重新授权。
 struct ReferenceCommand<'a> {
     process: &'a SupplierApiGovernanceProcess,
     id: &'a str,
@@ -131,12 +133,31 @@ impl ReferenceCommandPort for ReferenceCommand<'_> {
     type Resolved = ResolvedSupplierReference;
     type Output = SupplierConnectionCommandResult;
     async fn preflight(&self) -> Result<Self::Checked> {
-        let connection = self
-            .process
-            .domain()
-            .load_reference_target(self.id, self.expected_version, &mut NoTransaction)
-            .await?;
-        Ok(SupplierReferenceTarget::from(&connection))
+        let (process, id, version, action, actor) = (
+            self.process.clone(),
+            self.id.to_owned(),
+            self.expected_version,
+            self.action,
+            self.actor.clone(),
+        );
+        self.process
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    reference_target(
+                        &process.db,
+                        &process.authorization,
+                        &actor,
+                        &action_permission(action),
+                        &id,
+                        version,
+                        executor,
+                    )
+                    .await
+                })
+            })
+            .await
     }
     async fn resolve(&self, target: Self::Checked) -> Result<Self::Resolved> {
         let kind = match self.action {
@@ -164,6 +185,20 @@ impl ReferenceCommandPort for ReferenceCommand<'_> {
             .await
     }
 }
+async fn reference_target(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    permission: &Permission,
+    id: &str,
+    version: u64,
+    executor: &mut dyn Executor,
+) -> Result<SupplierReferenceTarget> {
+    authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+    let connection = SupplierApiService::new(db.clone()).load_reference_target(id, version, executor).await?;
+    Ok(SupplierReferenceTarget::from(&connection))
+}
+
 #[cfg(test)]
 mod tests {
     use std::future::Future;
@@ -180,6 +215,26 @@ mod tests {
     };
 
     use super::*;
+    #[tokio::test]
+    async fn reference_preflight_rejects_before_loading_connection_without_snapshot_or_permission() {
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use mongodb::Client;
+        use persistence_core::ReadExecutor;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("reference");
+        let authorization = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let permission = action_permission(SupplierConnectionAction::BindEndpointReference);
+        assert!(
+            matches!(reference_target(&db, &authorization, &actor, &permission, "connection", 1, &mut ReadExecutor::default()).await, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
+        );
+        assert!(
+            matches!(reference_target(&db, &authorization, &actor, &permission, "connection", 1, &mut SnapshotExecutor::default()).await, Err(Error::Internal(message)) if message == "测试授权设施不可用")
+        );
+    }
+
     struct RecordingReference {
         calls: Arc<Mutex<Vec<&'static str>>>,
         fail_at: Option<usize>,

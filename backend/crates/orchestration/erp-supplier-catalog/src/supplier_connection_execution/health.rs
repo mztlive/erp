@@ -5,6 +5,8 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{HealthCheckResult, SupplierApiConnection, SupplierHealthCheckRun};
 use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
@@ -33,18 +35,28 @@ impl SupplierConnectionExecutionProcess {
     /// # 错误
     /// 启动或结果事务失败时返回错误。
     pub(super) async fn process_health_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {
-        execute(&HealthExecution(self), job, actor).await
+        execute(&HealthExecution { process: self, actor }, job, actor).await
     }
 
     async fn start_health_job(
         &self,
         job: BackgroundJob,
+        actor: &AuditActor,
     ) -> Result<(SupplierApiConnection, BackgroundJob, SupplierHealthCheckRun)> {
+        let (authorization, actor) = (self.authorization.clone(), actor.clone());
         let db = self.db.clone();
         let client = db.client().clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(
+                            &actor,
+                            &internal::CONNECTION_HEALTH_CHECK,
+                            AccessTarget::Operation,
+                            executor,
+                        )
+                        .await?;
                     let mut job = db
                         .background_jobs()
                         .find_by_id(&job.base.id, executor)
@@ -157,19 +169,22 @@ async fn persist_health_result(
 }
 
 /// 生产适配器：start/finish 各自完成根事务，invoke 只持有已提交事实。
-struct HealthExecution<'a>(&'a SupplierConnectionExecutionProcess);
+struct HealthExecution<'a> {
+    process: &'a SupplierConnectionExecutionProcess,
+    actor: &'a AuditActor,
+}
 impl ConnectionJobExecutionPort for HealthExecution<'_> {
     type Job = BackgroundJob;
     type Started = (SupplierApiConnection, BackgroundJob, SupplierHealthCheckRun);
     type Outcome = (std::result::Result<(), ClassifiedError>, u64);
     async fn start(&self, job: Self::Job) -> Result<Self::Started> {
-        self.0.start_health_job(job).await
+        self.process.start_health_job(job, self.actor).await
     }
     async fn invoke(&self, started: &Self::Started) -> Self::Outcome {
-        invoke_health_check(self.0.gateway.as_ref(), started).await
+        invoke_health_check(self.process.gateway.as_ref(), started).await
     }
     async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
-        self.0.finish_health_job(started.1, started.2, outcome.0, outcome.1, actor).await
+        self.process.finish_health_job(started.1, started.2, outcome.0, outcome.1, actor).await
     }
 }
 

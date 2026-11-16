@@ -11,6 +11,7 @@ use erp_permissions::{
 pub(crate) const PERMISSIONS: &[Permission] = &[
     internal::SALES_CHANGE_DRAFT_READ,
     supplier_api::CONNECTION_DETAIL,
+    supplier_api::JD_VOP_AUTHORIZE,
     internal::CONNECTION_CATALOG_READ,
     internal::APPROVAL_MANAGEMENT_READ,
     internal::PURCHASE_PORTAL_IMPACT_READ,
@@ -68,6 +69,7 @@ pub(crate) const PERMISSIONS: &[Permission] = &[
     offering::LIST,
     fulfillment::ORDER_LIST,
     fulfillment::ORDER_DETAIL,
+    fulfillment::ORDER_SUBMIT,
     fulfillment::ORDER_CANCEL,
     fulfillment::ORDER_REFUND,
     warehouse::LIST,

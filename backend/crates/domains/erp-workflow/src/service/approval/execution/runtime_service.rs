@@ -16,7 +16,7 @@ mod resume_apply;
 mod route;
 mod task_read;
 pub(super) mod tasks;
-pub use task_read::{approval_task_readable_with_executor, approval_tasks_readable_with_executor};
+pub(crate) use task_read::approval_task_facts_current;
 mod upgrade;
 
 use std::future::Future;

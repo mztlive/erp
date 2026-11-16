@@ -3,7 +3,7 @@ use application_core::AuditActor;
 use erp_permissions::integration_ops;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::IntegrationOpsService;
@@ -77,6 +77,7 @@ impl IntegrationOpsService {
     /// 确认关联入站消息存在；不校验处理状态。
     ///
     /// # 参数
+    /// * `executor` - 原用例授权事务或读取阶段的执行器。
     /// * `id` - 消息 ID
     ///
     /// # 返回
@@ -84,10 +85,10 @@ impl IntegrationOpsService {
     ///
     /// # 错误
     /// 消息不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
-    pub async fn ensure_message_exists(&self, id: &str) -> Result<()> {
+    pub async fn ensure_message_exists(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
         self.db
             .inbox_messages()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("关联消息不存在".to_string()))?;
         Ok(())

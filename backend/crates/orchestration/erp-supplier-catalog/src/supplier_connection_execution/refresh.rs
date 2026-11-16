@@ -1,6 +1,7 @@
 //! 定向商品补查与目录消息共用的授权和连接复核。
 use application_core::AuditActor;
-use erp_identity::AccessControlExt;
+use erp_identity::{AccessControlExt, AccessTarget, AuthorizationService};
+use erp_permissions::supplier_api;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_support::BulkJobExt;
@@ -32,7 +33,7 @@ pub(crate) async fn catalog_refresh_actor(db: &Database, connection: &str) -> Re
 
 /// 在来源应用事务内复核连接与授权人，并与配置写入产生版本冲突保护。
 /// # 参数
-/// 数据库、补查使用的连接快照、授权人和同一事务执行器。
+/// 数据库、补查使用的连接快照、授权人、共享授权服务和同一事务执行器。
 /// # 返回
 /// 当前配置与账号仍然有效时成功。
 /// # 错误
@@ -41,8 +42,10 @@ pub(crate) async fn guard_catalog_refresh(
     db: &Database,
     connection: &SupplierApiConnection,
     actor: &AuditActor,
+    authorization: &AuthorizationService,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    authorization.require(actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor).await?;
     let service = SupplierApiService::new(db.clone());
     let mut current = service.load_connection(&connection.base.id, executor).await?;
     if current.technical_config_version != connection.technical_config_version
@@ -52,13 +55,5 @@ pub(crate) async fn guard_catalog_refresh(
         return Err(Error::ConflictError("商品补查期间连接配置已变化".into()));
     }
     service.persist_connection(&mut current, executor).await?;
-    if !db
-        .accounts()
-        .find_by_id(actor.id(), executor)
-        .await?
-        .is_some_and(|account| account.is_active_backoffice())
-    {
-        return Err(Error::Forbidden("商品采集授权人已失效".into()));
-    }
     Ok(())
 }

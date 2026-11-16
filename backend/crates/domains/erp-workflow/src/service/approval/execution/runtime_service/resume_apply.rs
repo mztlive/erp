@@ -13,7 +13,7 @@ use bpm::model::types::ApprovalProcessInstanceStatus;
 use erp_identity::{AccessTarget, AuthorizationService, SharedRbacService};
 use mongodb::Database;
 use persist::persist_resume_writes;
-use persistence_core::{Executor, NoTransaction, ReadExecutor, Transactional};
+use persistence_core::{Executor, Transactional};
 use prepare::PreparedResume;
 
 use super::super::idempotency::{
@@ -28,12 +28,12 @@ use super::read_auth::{
 };
 use super::{
     ApprovalRuntimeService, commit_or_recover, ensure_command_actor, find_receipt_for_identity,
-    hidden_not_found, load_exact_runtime_snapshot, persisted_command_view_with_executor, recover_by_replay,
+    hidden_not_found, persisted_command_view_with_executor, recover_by_replay,
 };
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::BpmExt;
-use crate::service::approval::{ApprovalResumeCommand, require_approval_management_with_executor};
+use crate::service::approval::ApprovalResumeCommand;
 
 impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 在原审批人重新合格后恢复当前受阻执行。
@@ -68,9 +68,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             command.expected_closed_task_version,
             actor.id(),
         )?;
-        if find_receipt_for_identity(&self.db, &identity, &mut ReadExecutor::default()).await?.is_some()
-            && let Some(view) = self.replay_resume(actor, &instance_id, &identity).await?
-        {
+        if let Some(view) = self.replay_resume(actor, &instance_id, &identity).await? {
             return Ok(view);
         }
         let Some(prepared) = self.prepare_resume_runtime(actor, &command, idempotency_key).await? else {
@@ -171,11 +169,16 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 实例缺失时隐藏存在性；当前 blocker 不允许该动作时返回冲突。
-    async fn require_recovery_action(&self, instance_id: &str, wanted: RuntimeRecoveryAction) -> Result<()> {
+    async fn require_recovery_action(
+        &self,
+        instance_id: &str,
+        wanted: RuntimeRecoveryAction,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let instance = self
             .db
             .bpm_workflow()
-            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
+            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
             .await?
             .ok_or_else(hidden_not_found)?;
         let blocked = instance.status == ApprovalProcessInstanceStatus::Blocked;
@@ -193,6 +196,15 @@ async fn apply_resume(
     prepared: &PreparedResume,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalCommandView> {
+    service
+        .authorization
+        .require(
+            actor,
+            &internal_permissions::APPROVAL_RECOVER,
+            AccessTarget::record(prepared.snapshot.approval_process_instance_id.as_ref())?,
+            executor,
+        )
+        .await?;
     for intent in &prepared.writes.create_tasks {
         let TaskIntent::HumanTaskRequested { assignee, .. } = intent else {
             continue;
@@ -202,7 +214,6 @@ async fn apply_resume(
             &service.db,
             &service.identity,
             &service.auth,
-            actor,
             RevalidateDecisionApproverInput {
                 assignee_id: assignee.as_str(),
                 assignee_name: &prepared.assignee_name,
@@ -228,25 +239,15 @@ async fn apply_resume(
     ))
 }
 
-/// 在恢复写入的同一事务中重验管理者及原审批人，所有单据类型一致执行。
+/// 管理者已经授权后，在原写事务中重验待创建任务的原审批人。
 async fn revalidate_resume_with_executor(
     authorization: &AuthorizationService,
     db: &Database,
     identity_service: &SharedRbacService,
     rbac: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    require_approval_management_with_executor(
-        authorization,
-        actor,
-        &internal_permissions::APPROVAL_RECOVER,
-        input.snapshot.document_type,
-        input.snapshot.approval_process_instance_id.as_ref(),
-        executor,
-    )
-    .await?;
     let eligibility =
         revalidate_decision_approver(authorization, db, identity_service, rbac, input, executor).await?;
     ensure_resume_approver_recovered(&eligibility)
@@ -264,21 +265,9 @@ async fn replay_resume_apply(
     identity: &PreparedCommandIdentity,
     executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalCommandView>> {
-    let instance = db
-        .bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
-        .await?
-        .ok_or_else(hidden_not_found)?;
-    let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, executor, true).await?;
-    require_approval_management_with_executor(
-        authorization,
-        actor,
-        &internal_permissions::APPROVAL_RECOVER,
-        snapshot.document_type,
-        instance_id,
-        executor,
-    )
-    .await?;
+    authorization
+        .require(actor, &internal_permissions::APPROVAL_RECOVER, AccessTarget::record(instance_id)?, executor)
+        .await?;
     let Some(receipt) = find_receipt_for_identity(db, identity, executor).await? else {
         return Ok(None);
     };

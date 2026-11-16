@@ -196,9 +196,12 @@ impl FundsAccess {
                         .resolve_with_purchase(&actor, &payable_permissions::ACCOUNT_LIST, executor)
                         .await?;
                     let condition = this.payable_account_condition(&query, executor).await?;
-                    this.payable_database_snapshot(&query, &authorization, &condition, false, executor)
+                    let version = this
+                        .payable_database_snapshot(&query, &authorization, &condition, false, executor)
                         .await?
-                        .version(&authorization)
+                        .version(&authorization)?;
+                    authorization.deliver(executor).await?;
+                    Ok(version)
                 })
             })
             .await

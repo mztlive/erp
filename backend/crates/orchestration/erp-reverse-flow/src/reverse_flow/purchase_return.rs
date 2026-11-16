@@ -3,7 +3,7 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_identity::AccessTarget;
-use erp_permissions::returns;
+use erp_permissions::internal;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::PurchaseReturnOrderView;
 use erp_returns::dto::CreatePurchaseReturnOrderRequest;
@@ -49,13 +49,25 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<PurchaseReturnOrderView> {
         req.validate()?;
-        let (order_id, order, line) = build_purchase_return_order_and_line(req, actor.id())?;
-        persist_created_purchase_return_order(&self.db, &self.rbac, order, line, actor.clone()).await?;
-        ReturnsReadService::new(self.db.clone(), self.rbac.identity.clone())
-            .with_purchase_scope(self.rbac.purchase_scope.clone())
-            .purchase_return_order_detail(&order_id, actor)
+        let (_, order, line) = build_purchase_return_order_and_line(req, actor.id())?;
+        let process = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    persist_created_purchase_return_order(
+                        &process.db,
+                        &process.rbac,
+                        order,
+                        line,
+                        actor,
+                        executor,
+                    )
+                    .await
+                })
+            })
             .await
-            .map_err(crate::Error::from)
     }
 }
 
@@ -224,44 +236,26 @@ async fn persist_created_purchase_return_order(
     order: PurchaseReturnOrder,
     line: PurchaseReturnLine,
     actor: AuditActor,
-) -> Result<()> {
+    executor: &mut dyn Executor,
+) -> Result<PurchaseReturnOrderView> {
+    rbac.identity
+        .require(
+            &actor,
+            &internal::PURCHASE_RETURN_SOURCE,
+            AccessTarget::record(order.purchase_order_id.as_ref())?,
+            executor,
+        )
+        .await?;
     let audit = actor.clone().resource_log(
         "purchase_return_order.create",
         "purchase_return_order",
         order.base.id.clone(),
     )?;
-    let db = db.clone();
-    let rbac = rbac.clone();
-
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                rbac.identity
-                    .require(
-                        &actor,
-                        &returns::PURCHASE_RETURN_PURCHASE_RETURN_ORDER_CREATE,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                let mut creation = MongoCreation {
-                    db: &db,
-                    rbac: &rbac,
-                    order: &order,
-                    line: &line,
-                    actor: &actor,
-                    audit: &audit,
-                };
-                rbac.purchase
-                    .clone()
-                    .require_object(&actor, "update", order.purchase_order_id.as_ref(), executor)
-                    .await?;
-                persist_creation(&mut creation, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    let mut creation = MongoCreation { db, rbac, order: &order, line: &line, actor: &actor, audit: &audit };
+    persist_creation(&mut creation, executor).await?;
+    Ok(ReturnsReadService::new(db.clone(), rbac.identity.clone())
+        .purchase_return_created_result(&order.base.id, order.purchase_order_id.as_ref(), &actor, executor)
+        .await?)
 }
 
 /// 无审批创建的既有写入边界；每一步复用调用方 Executor，首错停止。
@@ -433,5 +427,39 @@ mod creation_sequence_tests {
             assert!(matches!(error, Error::ConflictError(message) if message == *fail));
             assert_eq!(steps.events, all[..=at]);
         }
+    }
+}
+
+#[cfg(test)]
+mod creation_authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::{actor, denied, process};
+    use super::*;
+
+    /// 统一来源授权失败必须先于注册、写入、审计及命令回包读取。
+    #[tokio::test]
+    async fn creation_authorizes_the_purchase_source_before_any_business_io() {
+        let process = process().await;
+        let actor = actor();
+        let request: CreatePurchaseReturnOrderRequest = serde_json::from_value(serde_json::json!({
+            "purchase_return_no": "PR-test",
+            "purchase_order_id": "purchase-source",
+            "return_mode": "company_warehouse_to_supplier",
+            "lines": [{"purchase_order_revision_line_id": "line", "return_quantity": "1"}]
+        }))
+        .unwrap();
+        let (_, order, line) = build_purchase_return_order_and_line(request, actor.id()).unwrap();
+        denied(
+            persist_created_purchase_return_order(
+                &process.db,
+                &process.rbac,
+                order,
+                line,
+                actor,
+                &mut SnapshotExecutor::default(),
+            )
+            .await,
+        );
     }
 }

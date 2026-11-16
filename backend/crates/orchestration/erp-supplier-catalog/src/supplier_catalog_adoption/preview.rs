@@ -1,8 +1,8 @@
 use application_core::AuditActor;
 use entity_core::BaseModel;
 use erp_core::common::time::Instant;
-use erp_identity::PermissionSet;
-use erp_permissions::{internal, supplier_api};
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use erp_supply::catalog_adoption::{
     CatalogAdoptionExt, CatalogAdoptionPreview, MAX_CONFIRM_ROWS, MAX_PREVIEW_ROWS, PreviewAdoptionRequest,
 };
@@ -167,17 +167,15 @@ impl SupplierCatalogAdoptionProcess {
             .ok_or_else(|| Error::NotFound("供应商商品不存在".into()))
     }
 
-    /// 一次读取选品功能资格；各项可以来自不同的启用角色。
+    /// 在原快照核验固定选品资格；资格组合由 identity 统一执行。
     pub(super) async fn ensure_adoption_permissions(
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let required = [supplier_api::ADOPTIONS_PREVIEW, internal::SUPPLIER_OFFERING_COST_DETAIL];
-        let qualified = self.authorization.permissions(actor, &required, executor).await?;
-        if !qualified.is_some_and(|value| value.permissions().covers(&PermissionSet::new(required))) {
-            return Err(Error::Forbidden("当前账号无权执行选品操作".into()));
-        }
-        Ok(())
+        Ok(self
+            .authorization
+            .require(actor, &internal::CATALOG_ADOPTION, AccessTarget::Operation, executor)
+            .await?)
     }
 }

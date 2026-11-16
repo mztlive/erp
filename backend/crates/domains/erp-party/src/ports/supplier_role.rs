@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use erp_core::ids::PartyId;
+use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
@@ -14,13 +15,14 @@ pub trait SupplierRolePort: Send + Sync {
     ///
     /// # 参数
     /// * `party_id` - 稳定主体 ID。
+    /// * `executor` - 调用方的原事务或读取阶段执行器。
     ///
     /// # 返回
     /// 当前带有供应商角色时返回 `true`，否则返回 `false`。
     ///
     /// # 错误
     /// 适配器或存储读取失败时返回对应错误。
-    async fn party_has_supplier_role(&self, party_id: &PartyId) -> Result<bool>;
+    async fn party_has_supplier_role(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<bool>;
 }
 
 /// 组合根未注入适配器时使用的失败关闭供应商角色端口。
@@ -39,7 +41,11 @@ impl SupplierRolePort for FailClosedSupplierRolePort {
     ///
     /// # 错误
     /// 始终返回 `Internal`，提示供应商角色端口未接线。
-    async fn party_has_supplier_role(&self, _party_id: &PartyId) -> Result<bool> {
+    async fn party_has_supplier_role(
+        &self,
+        _party_id: &PartyId,
+        _executor: &mut dyn Executor,
+    ) -> Result<bool> {
         Err(Error::Internal("供应商角色端口未接线".to_string()))
     }
 }

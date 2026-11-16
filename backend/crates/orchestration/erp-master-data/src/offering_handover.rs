@@ -6,8 +6,8 @@ use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_audit::AuditAction;
 use erp_audit::execution::{AuditedCommand, AuditedWrite, run_audited_event};
-use erp_identity::AuthorizationService;
 use erp_identity::service::organization_access::ensure_org_enabled;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::supplier_offering;
 use erp_supply::entity::handover_receipt::{
     HANDOVER_ACTION, HANDOVER_LABEL, HANDOVER_RESOURCE, OfferingHandoverReceipt,
@@ -218,6 +218,9 @@ impl AuditedCommand for OfferingHandoverCommand {
     /// # 错误
     /// 回执不匹配、目标账号或组织校验失败、供给不可更新、交接写入、回执构造或保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
+        self.rbac
+            .require(&self.actor, &supplier_offering::REVISE, AccessTarget::record(&self.id)?, executor)
+            .await?;
         if let Some(view) =
             replay(&self.db, &self.ports.access, &self.command, &self.id, &self.actor, executor).await?
         {
@@ -299,7 +302,57 @@ fn handover_fingerprint(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+
+    #[tokio::test]
+    async fn handover_authorizes_source_before_receipt_target_account_and_organization_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("offering_handover_authorization");
+        let authorization = unavailable_authorization();
+        let access = OfferingAccess::new(db.clone(), authorization.clone());
+        let service = SupplierOfferingService::new(db.clone()).with_data_scope(access.clone());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let command = CommandReceipt::from_resource_parts(
+            "offering-handover-",
+            actor.id(),
+            HANDOVER_ACTION,
+            HANDOVER_RESOURCE,
+            "unread-offering",
+            "key",
+            ["payload".to_owned()],
+        )
+        .unwrap();
+        let operation = OfferingHandoverCommand {
+            db,
+            rbac: authorization,
+            ports: OfferingHandoverPorts::new(access, service),
+            id: "unread-offering".into(),
+            req: HandoverSupplierOfferingRequest {
+                target_user_id: "unread-user".into(),
+                target_org_unit_id: Some("unread-org".into()),
+                reason: "交接".into(),
+                expected_version: 1,
+                idempotency_key: "key".into(),
+            },
+            actor,
+            command,
+            event_id: "event".into(),
+        };
+        let result = operation.execute(&mut ReadExecutor::default()).await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
+        );
+        let result = operation.execute(&mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
 
     fn request() -> HandoverSupplierOfferingRequest {
         HandoverSupplierOfferingRequest {

@@ -41,7 +41,7 @@ impl SupplierApiGovernanceProcess {
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
-        let deployment = self.deployment(id).await?;
+        let process = self.clone();
         let authorization = self.authorization.clone();
         let (db, actor, connection_id_value) = (self.db.clone(), actor.clone(), id.to_string());
         let client = db.client().clone();
@@ -58,7 +58,7 @@ impl SupplierApiGovernanceProcess {
                             executor,
                         )
                         .await?;
-                    if deployment.apply(&mut connection, actor.id())? {
+                    if process.deployment(&connection)?.apply(&mut connection, actor.id())? {
                         domain.persist_connection(&mut connection, executor).await?;
                     }
                     let job = background_job(
@@ -111,7 +111,7 @@ impl SupplierApiGovernanceProcess {
         identity: CommandIdentity,
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
-        let deployment = self.deployment(id).await?;
+        let process = self.clone();
         let authorization = self.authorization.clone();
         let (db, actor, connection_id_value) = (self.db.clone(), actor.clone(), id.to_string());
         let client = db.client().clone();
@@ -131,7 +131,7 @@ impl SupplierApiGovernanceProcess {
                         )
                         .await?;
                     clear_stalled(&db, &connection.base.id, executor).await?;
-                    deployment.apply(&mut connection, actor.id())?;
+                    process.deployment(&connection)?.apply(&mut connection, actor.id())?;
                     connection.stable.touch(actor.id());
                     domain.persist_connection(&mut connection, executor).await?;
                     let job = background_job(

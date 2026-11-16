@@ -26,7 +26,8 @@ impl FundsAccess {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let invoice = this.load_invoice_detail(&id, &actor, executor).await?.data;
+                    let (invoice, authorization) = this.invoice_detail_read(&id, &actor, executor).await?;
+                    let invoice = invoice.data;
                     ensure_whole_invoice(invoice.permission_limited)?;
                     let attachments = this
                         .db
@@ -35,7 +36,7 @@ impl FundsAccess {
                         .await?;
                     let ids = attachments.into_iter().map(|row| row.file_asset_id).collect::<Vec<_>>();
                     let files = this.db.file_assets().find_by_ids(&ids, executor).await?;
-                    Ok(files
+                    let view = files
                         .into_iter()
                         .filter(readable_file)
                         .map(|file| {
@@ -45,7 +46,9 @@ impl FundsAccess {
                                 file,
                             )
                         })
-                        .collect())
+                        .collect();
+                    authorization.deliver(executor).await?;
+                    Ok(view)
                 })
             })
             .await

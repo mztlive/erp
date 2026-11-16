@@ -15,11 +15,15 @@ use erp_customer::{
 };
 use erp_identity::AccountDirectoryService;
 use erp_party::repository::prelude::*;
-use erp_party::{Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision};
-use erp_permissions::customer as customer_permissions;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use erp_party::{
+    Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision, PartyTaxProfile,
+    SensitiveFieldKind,
+};
+use erp_permissions::{customer as customer_permissions, party as party_permissions};
+use persistence_core::{Executor, Transactional};
 
 use super::CustomerProfileProcess;
+use super::display::{self, ProfileDisplay};
 use crate::{Error, Result};
 
 impl CustomerProfileProcess {
@@ -73,10 +77,9 @@ impl CustomerProfileProcess {
             assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
         let account_names =
             AccountDirectoryService::new(self.db.clone()).names(&account_ids, executor).await?;
-        let (contacts, addresses, tax_profiles, bank_accounts) =
-            self.db.party().load_current_facts(&account.party_id, BusinessDate::today(), executor).await?;
-        let sensitive_fields = self.sensitive_fields(customer_id, &contacts, &addresses, &bank_accounts)?;
-        let detail = build_detail(
+        let ProfileFacts { contacts, addresses, tax_profiles, bank_accounts, sensitive_fields, display } =
+            self.visible_facts(customer_id, &account.party_id, actor, executor).await?;
+        let mut detail = build_detail(
             ProfileDetailParts {
                 account,
                 party,
@@ -91,8 +94,39 @@ impl CustomerProfileProcess {
             },
             &account_names,
         );
+        detail.allowed_actions = display.actions(detail.account.status.is_active());
         self.access.validate(&context, executor).await?;
         Ok(detail)
+    }
+
+    /// 字段资格、当前事实及可揭示令牌留在根查询的同一读取阶段。
+    async fn visible_facts(
+        &self,
+        customer_id: &str,
+        party_id: &PartyId,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ProfileFacts> {
+        let (contacts, addresses, tax_profiles, bank_accounts) =
+            self.db.party().load_current_facts(party_id, BusinessDate::today(), executor).await?;
+        let display = ProfileDisplay(
+            self.authorization
+                .permissions(actor, display::PERMISSIONS, executor)
+                .await?
+                .ok_or_else(|| Error::Forbidden("账号已失效".into()))?
+                .permissions(),
+        );
+        let contacts = display.filter(&party_permissions::CONTACT_DETAIL, contacts);
+        let addresses = display.filter(&party_permissions::ADDRESS_DETAIL, addresses);
+        let tax_profiles = display.filter(&party_permissions::TAX_PROFILE_DETAIL, tax_profiles);
+        let bank_accounts = display.filter(&party_permissions::BANK_ACCOUNT_DETAIL, bank_accounts);
+        let sensitive_fields = self.sensitive_fields(
+            customer_id,
+            if display.reveal(SensitiveFieldKind::ContactMobile) { &contacts } else { &[] },
+            if display.reveal(SensitiveFieldKind::Address) { &addresses } else { &[] },
+            if display.reveal(SensitiveFieldKind::BankAccountNumber) { &bank_accounts } else { &[] },
+        )?;
+        Ok(ProfileFacts { contacts, addresses, tax_profiles, bank_accounts, sensitive_fields, display })
     }
 
     /// 按主键加载客户角色。
@@ -105,10 +139,14 @@ impl CustomerProfileProcess {
     ///
     /// # 错误
     /// 客户不存在时返回未找到；查询失败时返回仓储错误。
-    pub(super) async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
+    pub(super) async fn load_customer(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerAccount> {
         self.db
             .customer_accounts()
-            .find_customer(id, &mut NoTransaction)
+            .find_customer(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))
     }
@@ -123,16 +161,25 @@ impl CustomerProfileProcess {
     ///
     /// # 错误
     /// 主体不存在时返回未找到；查询失败时返回仓储错误。
-    pub(super) async fn load_party(&self, party_id: &PartyId) -> Result<Party> {
+    pub(super) async fn load_party(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<Party> {
         self.db
             .parties()
-            .find_party(party_id, &mut NoTransaction)
+            .find_party(party_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("客户关联主体不存在".to_string()))
     }
 }
 
 /// 客户资料完整详情视图的已加载事实。
+struct ProfileFacts {
+    contacts: Vec<PartyContact>,
+    addresses: Vec<PartyAddress>,
+    tax_profiles: Vec<PartyTaxProfile>,
+    bank_accounts: Vec<PartyBankAccount>,
+    sensitive_fields: Vec<CustomerSensitiveFieldView>,
+    display: ProfileDisplay,
+}
+
 struct ProfileDetailParts {
     account: CustomerAccount,
     party: Party,
@@ -245,7 +292,7 @@ mod tests {
     use erp_core::AccountKind;
     use erp_core::ids::{CustomerAssignmentId, PartyRevisionId};
     use erp_customer::{CustomerAccess, CustomerAccountData, CustomerAssignmentData};
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use erp_party::{PartyData, PartyKind, PartyRevisionData, PartyStatus, SensitiveDataCodec};
     use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
@@ -255,11 +302,12 @@ mod tests {
     #[tokio::test]
     async fn profile_detail_rejects_missing_query_binding_before_reading_customer_or_party() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("profile_guard");
-        let access = CustomerAccess::new(db.clone(), unavailable_authorization());
+        let access = CustomerAccess::new(db.clone(), unbound_authorization());
         let process = CustomerProfileProcess::new(
             db,
             Arc::new(SensitiveDataCodec::from_secret(b"profile-guard")),
             access,
+            unbound_authorization(),
         );
         let actor = AuditActor::new("operator".into(), "operator".into(), AccountKind::Admin);
         let error =

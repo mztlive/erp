@@ -13,7 +13,7 @@ use erp_sales::repository::prelude::*;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use serde::Serialize;
 
 use crate::finance::extra_cost::{order_costs, purchase_expense_facts, purchase_expense_views};
@@ -52,6 +52,7 @@ pub struct ApprovalExtraCostSummary {
 /// # 参数
 /// * `db` - 数据库
 /// * `materials` - 已授权的审批资料
+/// * `executor` - 原审批授权快照。
 ///
 /// # 返回
 /// 费用采购单返回来源销售单的附加费用合计。
@@ -61,18 +62,18 @@ pub struct ApprovalExtraCostSummary {
 pub(crate) async fn extra_cost_summary(
     db: &Database,
     materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalExtraCostSummary>> {
-    let Some(order) = db.purchase_orders().find_by_id(&materials.document_id, &mut NoTransaction).await?
-    else {
+    let Some(order) = db.purchase_orders().find_by_id(&materials.document_id, executor).await? else {
         return Ok(None);
     };
     if order.purchase_type != PurchaseType::Expense {
         return Ok(None);
     }
     let sales_order_id = order.sales_order_id.to_string();
-    let (entries, allocations) = order_costs(db, &sales_order_id, &mut NoTransaction).await?;
+    let (entries, allocations) = order_costs(db, &sales_order_id, executor).await?;
     let mut items = SalesExtraCostView::registrations(&entries, &allocations);
-    let facts = purchase_expense_facts(db, std::slice::from_ref(&sales_order_id), &mut NoTransaction).await?;
+    let facts = purchase_expense_facts(db, std::slice::from_ref(&sales_order_id), executor).await?;
     items.extend(purchase_expense_views(&facts));
     let list = SalesExtraCostListView::from_items(items);
     Ok(Some(ApprovalExtraCostSummary {
@@ -99,7 +100,7 @@ pub struct ApprovalPurchaseSourceLine {
 
 /// 已授权资料的精确采购提交对照；历史未冻结来源时不回填。
 /// # 参数
-/// 数据库及已经通过审批实例读取授权的资料。
+/// 数据库、已经通过审批实例读取授权的资料及原快照执行器。
 /// # 返回
 /// 全部采购提交行；没有冻结销售来源的历史资料返回空值。
 /// # 错误
@@ -107,6 +108,7 @@ pub struct ApprovalPurchaseSourceLine {
 pub(crate) async fn purchase_lines(
     db: &Database,
     materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
 ) -> Result<Option<Vec<ApprovalPurchaseLine>>> {
     if materials.display.source_sales.is_empty() {
         return Ok(None);
@@ -116,13 +118,13 @@ pub(crate) async fn purchase_lines(
         .find_by_order_and_submission_no(
             &PurchaseOrderId::new(&materials.document_id),
             &format!("SUB-{:06}", materials.subject_version),
-            &mut NoTransaction,
+            executor,
         )
         .await?
         .ok_or_else(|| Error::ConflictError("本次审批对应的采购提交不存在".into()))?;
     let lines = db
         .purchase_order()
-        .list_submission_lines(&PurchaseOrderSubmissionId::new(&submission.base.id), &mut NoTransaction)
+        .list_submission_lines(&PurchaseOrderSubmissionId::new(&submission.base.id), executor)
         .await?;
     validate_submission(
         materials,
@@ -134,20 +136,20 @@ pub(crate) async fn purchase_lines(
         .iter()
         .filter_map(|line| line.sales_order_revision_line_id.as_ref().map(ToString::to_string))
         .collect::<Vec<_>>();
-    let sources = revision_lines(db, &ids, &mut NoTransaction).await?;
-    validate_revisions(db, &materials.display.source_sales).await?;
+    let sources = revision_lines(db, &ids, executor).await?;
+    validate_revisions(db, &materials.display.source_sales, executor).await?;
     let goods = db
         .sales_order_goods_service_line_revisions()
         .list_by_revision_line_ids(
             &ids.iter().map(SalesOrderRevisionLineId::new).collect::<Vec<_>>(),
-            &mut NoTransaction,
+            executor,
         )
         .await?;
     let mut views = lines
         .iter()
         .map(|line| comparison_line(line, &materials.display.source_sales, &sources, &goods))
         .collect::<Result<Vec<_>>>()?;
-    let prices = revision_line_prices(db, &ids, &mut NoTransaction).await?;
+    let prices = revision_line_prices(db, &ids, executor).await?;
     for (view, line) in views.iter_mut().zip(&lines) {
         if let Some(source) = &mut view.source {
             source.sales_prices =
@@ -176,9 +178,13 @@ fn validate_submission(
     Ok(())
 }
 
-async fn validate_revisions(db: &Database, allowed: &[ApprovalRelatedSalesSnapshot]) -> Result<()> {
+async fn validate_revisions(
+    db: &Database,
+    allowed: &[ApprovalRelatedSalesSnapshot],
+    executor: &mut dyn Executor,
+) -> Result<()> {
     let ids = allowed.iter().map(|source| source.revision_id.clone()).collect::<Vec<_>>();
-    let revisions = db.sales_order_revisions().find_revisions_by_ids(&ids, &mut NoTransaction).await?;
+    let revisions = db.sales_order_revisions().find_revisions_by_ids(&ids, executor).await?;
     if revisions.len() != allowed.len()
         || allowed.iter().any(|source| {
             !revisions.iter().any(|revision| {

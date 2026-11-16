@@ -43,32 +43,53 @@ impl CatalogService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let product = service
-                        .access()
-                        .require_product(&actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, &id, executor)
-                        .await?;
-                    let Some(source) = service.db.product_sources().find_by_id(&id, executor).await? else {
-                        return Ok(None);
-                    };
-                    let current = service.source_company_content(&id, executor).await?;
-                    let mut view = source.view(product.base.version);
-                    view.sku_versions = current.sku_versions;
-                    for field in &mut view.fields {
-                        field.sku_no =
-                            field.sku_id.as_ref().and_then(|id| current.sku_numbers.get(id)).cloned();
-                    }
-                    for field in &mut view.fields {
-                        if let Some((_, _, value)) =
-                            current.values.iter().find(|(f, s, _)| *f == field.field && *s == field.sku_id)
-                        {
-                            field.company = value.clone();
-                        }
-                    }
-                    Ok(Some(view))
-                })
+                Box::pin(async move { service.source_diff_snapshot(&id, &actor, executor).await })
             })
             .await
+    }
+
+    /// 在原读取阶段执行完整授权过滤，来源缺失与完整展示均在交付前复验。
+    async fn source_diff_snapshot(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductSourceDiffView>> {
+        let scope =
+            self.access().resolve(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, executor).await?;
+        let product = self
+            .db
+            .catalog()
+            .authorized_product(id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))?;
+        let view = self.source_diff_view(id, product.base.version, executor).await?;
+        scope.validate(executor).await?;
+        Ok(view)
+    }
+
+    /// 仅水合已授权商品的真实来源、SKU 版本及公司展示内容，不提前交付空结果。
+    async fn source_diff_view(
+        &self,
+        id: &str,
+        product_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductSourceDiffView>> {
+        let Some(source) = self.db.product_sources().find_by_id(id, executor).await? else {
+            return Ok(None);
+        };
+        let current = self.source_company_content(id, executor).await?;
+        let mut view = source.view(product_version);
+        view.sku_versions = current.sku_versions;
+        for field in &mut view.fields {
+            field.sku_no = field.sku_id.as_ref().and_then(|id| current.sku_numbers.get(id)).cloned();
+            if let Some((_, _, value)) =
+                current.values.iter().find(|(f, s, _)| *f == field.field && *s == field.sku_id)
+            {
+                field.company = value.clone();
+            }
+        }
+        Ok(Some(view))
     }
 
     /// 确认用户实际比较过的来源和公司版本，回执与商品修订原子保存。
@@ -113,6 +134,8 @@ impl CatalogService {
 
     /// 读取公司当前商品与SKU主图，避免缓存代替真实编辑事实。
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
+    ///
     /// 商品身份及调用方执行器。
     /// # 返回
     /// 公司展示内容和SKU版本。
@@ -183,6 +206,8 @@ impl CatalogService {
 
     /// 在真实商品编辑事务内登记人工维护责任。
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
+    ///
     /// 已更新商品身份及当前事务执行器。
     /// # 返回
     /// 无来源商品保持原行为；有来源时保存字段责任。
@@ -204,6 +229,8 @@ impl CatalogService {
 
     /// 只追加展示资料修订，保留价格、规格、公司分类和主动停用状态。
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
+    ///
     /// 商品、字段变更、审计身份及调用方事务。
     /// # 返回
     /// 保存后的公司商品版本。
@@ -623,5 +650,36 @@ mod tests {
         assert_eq!(next.sales_visible_price_gross, old.sales_visible_price_gross);
         assert_eq!(next.market_price, old.market_price);
         assert_eq!(next.barcode, old.barcode);
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_identity::testing::unbound_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::{actor, denied, service};
+    use super::*;
+    use crate::CatalogAccess;
+
+    #[tokio::test]
+    async fn source_diff_requires_query_binding_before_reading_product_or_missing_source() {
+        let mut service = service().await;
+        service.data_scope = CatalogAccess::new(service.db.clone(), unbound_authorization());
+        let error = service
+            .source_diff_snapshot("unread-product", &actor(), &mut SnapshotExecutor::default())
+            .await
+            .expect_err("缺少查询绑定不得读取商品或提前交付空来源");
+        assert!(matches!(error, Error::ValidationError(message) if message == "缺少查询 Mapping 绑定"));
+    }
+
+    #[tokio::test]
+    async fn source_diff_propagates_identity_failure_before_product_or_source_reads() {
+        denied(
+            service()
+                .await
+                .source_diff_snapshot("unread-product", &actor(), &mut SnapshotExecutor::default())
+                .await,
+        );
     }
 }

@@ -27,6 +27,7 @@ pub(super) fn supports(permission: &Permission) -> bool {
         internal::APPROVAL_RECOVER,
         approval_instance::CANCEL_BLOCKED,
         approval_instance::UPGRADE_BINDING,
+        inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
     ]
     .contains(permission)
 }
@@ -45,6 +46,9 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
         permissions.push(runtime.clone());
     }
     permissions.push(policy_permission::FINANCE_LEDGER_READ);
+    if permission == &inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
+        permissions.push(inventory::STOCK_ADJUSTMENT_DETAIL);
+    }
     permissions.sort();
     permissions.dedup();
     permissions
@@ -169,6 +173,9 @@ impl AuthorizationService {
     ) -> Result<Vec<AccessProof>> {
         if !supports(&proof.context.permission) {
             return Ok(vec![]);
+        }
+        if proof.context.permission == inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
+            return self.stock_adjustment_cancel_sources(proof, facts, executor).await;
         }
         let mut sources = Vec::new();
         for object in facts.roots() {

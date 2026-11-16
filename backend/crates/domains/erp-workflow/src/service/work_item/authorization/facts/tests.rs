@@ -33,13 +33,14 @@ fn task() -> WorkItem {
 #[test]
 fn task_facts_preserve_actual_identity_version_and_assignment() {
     let item = task();
-    let facts = item_facts(item, Some("current-org".into()));
+    let facts = item_facts(item, Some("current-org".into()), None);
     assert_eq!(facts.resource, "work_item");
     assert_eq!(facts.subject_type, FactValue::Known("SUPPLIER_PORTAL_REVIEW".into()));
     assert_eq!(facts.subject_source_resource, FactValue::Known("supplier_portal_request".into()));
     assert_eq!(facts.id, "review-task");
     assert_eq!(facts.owner_id, FactValue::Known(Some("reviewer".into())));
     assert_eq!(facts.assignee_id, facts.owner_id);
+    assert_eq!(facts.completed, FactValue::Known(false));
     assert_eq!(facts.org_unit_id, FactValue::Known(Some("current-org".into())));
 }
 
@@ -81,7 +82,8 @@ fn empty_collaboration_and_real_task_history_match_object_and_query_scope() {
     assert!(mapping.model().facts.contains(&FactKind::HistoryParticipants));
     for item in [completed, closed] {
         let row = serialize_to_document(&item).unwrap();
-        let facts = item_facts(item, None);
+        let facts = item_facts(item, None, None);
+        assert_eq!(facts.completed, FactValue::Known(true));
         let QueryFragment::Match(records) = mapping.records(&context("reader"), None).unwrap() else {
             panic!("任务存在性不得依赖当前负责人或主属关系");
         };
@@ -124,4 +126,15 @@ fn empty_collaboration_and_real_task_history_match_object_and_query_scope() {
             }
         }
     }
+}
+
+#[test]
+fn task_owner_organization_keeps_expiry_and_future_membership_boundaries() {
+    let boundary = Instant::from_unix_secs(300);
+    for org in [Some("current-org".into()), None] {
+        let facts = item_facts(task(), org.clone(), Some(boundary));
+        assert_eq!(facts.org_unit_id, FactValue::Known(org));
+        assert_eq!(facts.valid_until, Some(boundary));
+    }
+    assert_eq!(item_facts(task(), None, None).valid_until, None);
 }

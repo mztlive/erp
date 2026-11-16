@@ -1,10 +1,10 @@
 //! 页面授权命名用例：先持久互斥，再在事务外单次调用官方端点，最后CAS保存密文及审计。
-use erp_permissions::supplier_api;
 mod access;
 mod dto;
 mod engine;
 mod policy;
 pub use policy::connection_facts_port;
+mod read;
 mod status;
 mod store;
 mod tasks;
@@ -17,16 +17,13 @@ use application_core::AuditActor;
 use config::JdVopConfig;
 pub use dto::{JdVopAuthorizationRequest, JdVopAuthorizationStatus, JdVopAuthorizationStatusQuery};
 use engine::AuthorizationEngine;
-use erp_core::common::time::Instant;
 use erp_identity::AuthorizationService;
 use erp_supply::ports::jd_vop::authorization::AuthorizationHttp;
 pub use erp_supply::ports::jd_vop::authorization::{AuthorizationError, Result};
 use mongodb::Database;
-use persistence_core::{ReadExecutor, Transactional};
+use persistence_core::Transactional;
 pub use tasks::JdVopAuthorizationTasks;
 pub use tokens::JdVopTokenConfiguration;
-
-use crate::Error as ProcessError;
 
 #[cfg(test)]
 mod tests;
@@ -74,44 +71,28 @@ impl JdVopAuthorizationProcess {
         operation_id: Option<&str>,
     ) -> Result<JdVopAuthorizationStatus> {
         let access = self.access.clone();
-        let target_id = id.to_string();
-        let current_actor = actor.clone();
-        let connection = self
-            .access
+        let engine = self.engine.clone();
+        let (id, actor, operation_id) = (id.to_owned(), actor.clone(), operation_id.map(str::to_owned));
+        self.access
             .db
             .client()
-            .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { access.require(&target_id, &current_actor, "detail", executor).await })
+                Box::pin(async move {
+                    Ok::<_, read::TransactionError>(
+                        read::status(
+                            &access,
+                            engine.as_ref().map_err(|error| *error),
+                            &id,
+                            &actor,
+                            operation_id.as_deref(),
+                            executor,
+                        )
+                        .await?,
+                    )
+                })
             })
-            .await?;
-        let Ok(engine) = &self.engine else {
-            return Ok(JdVopAuthorizationStatus::empty(
-                "unconfigured",
-                false,
-                "京东授权配置未就绪，请联系管理员配置应用资料",
-            ));
-        };
-        if self.access.binding(&connection).is_err() {
-            return Ok(JdVopAuthorizationStatus::empty(
-                "unconfigured",
-                false,
-                "京东连接与已部署账号配置不一致，请联系管理员核验",
-            ));
-        }
-        let mut status = engine.status(operation_id).await;
-        let permitted = self
-            .access
-            .authorization
-            .has_permission(actor, &supplier_api::JD_VOP_AUTHORIZE, &mut ReadExecutor::default())
             .await
-            .map_err(ProcessError::from)?;
-        status.can_authorize &= permitted;
-        status.can_configure_tokens = permitted
-            && status.state != "unconfigured"
-            && (status.state != "unreadable" || status.version.is_some())
-            && status.recovery_after.is_none_or(|deadline| deadline <= Instant::now().unix_secs());
-        Ok(status)
+            .map_err(|error| error.0)
     }
 
     /// 领取单次授权并交给应用后台有界执行，页面立即获得pending或原操作状态。
@@ -129,21 +110,32 @@ impl JdVopAuthorizationProcess {
     ) -> Result<JdVopAuthorizationStatus> {
         request.validate()?;
         let access = self.access.clone();
-        let target_id = id.to_string();
+        let engine = self.engine.clone();
+        let target_id = id.to_owned();
         let current_actor = actor.clone();
-        let connection = self
+        let (request, command, replayed) = self
             .access
             .db
             .client()
-            .clone()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { access.require(&target_id, &current_actor, "authorize", executor).await },
-                )
+                Box::pin(async move {
+                    let (command, replayed) = read::authorization_command(
+                        &access,
+                        engine.as_ref().map_err(|error| *error),
+                        &target_id,
+                        &current_actor,
+                        &request,
+                        executor,
+                    )
+                    .await?;
+                    Ok::<_, read::TransactionError>((request, command, replayed))
+                })
             })
-            .await?;
-        self.access.binding(&connection)?;
-        let engine = self.engine.as_ref().map_err(|error| *error)?;
-        engine.authorize(id, request, actor).await
+            .await
+            .map_err(|error| error.0)?;
+        if let Some(status) = replayed {
+            return Ok(status);
+        }
+        self.engine.as_ref().map_err(|error| *error)?.authorize_prepared(id, request, actor, command).await
     }
 }

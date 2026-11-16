@@ -3,6 +3,8 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_api;
 use erp_supply::catalog_membership::repository as memberships;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
@@ -10,7 +12,7 @@ use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::context::digest;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 
 use super::SupplierConnectionExecutionProcess;
 use super::execution::{ConnectionJobExecutionPort, execute};
@@ -33,12 +35,20 @@ impl SupplierConnectionExecutionProcess {
         execute(&CatalogExecution { process: self, actor }, job, actor).await
     }
 
-    async fn start_background_job(&self, job: BackgroundJob) -> Result<BackgroundJob> {
+    async fn start_background_job(
+        &self,
+        job: BackgroundJob,
+        actor: &AuditActor,
+    ) -> Result<(SupplierApiConnection, BackgroundJob)> {
+        let (authorization, actor) = (self.authorization.clone(), actor.clone());
         let db = self.db.clone();
         let client = db.client().clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor)
+                        .await?;
                     let mut job = db
                         .background_jobs()
                         .find_by_id(&job.base.id, executor)
@@ -47,9 +57,15 @@ impl SupplierConnectionExecutionProcess {
                     if job.status != JobStatus::Pending {
                         return Err(Error::ConflictError("后台任务已开始或已结束".to_string()));
                     }
+                    let connection_id = job
+                        .domain_job_id
+                        .as_deref()
+                        .ok_or_else(|| Error::BusinessLogicError("目录同步任务缺少连接ID".into()))?;
+                    let connection =
+                        SupplierApiService::new(db.clone()).load_connection(connection_id, executor).await?;
                     job.start(Instant::now())?;
                     db.background_jobs().update(&mut job, executor).await?;
-                    Ok(job)
+                    Ok((connection, job))
                 })
             })
             .await
@@ -115,7 +131,7 @@ impl SupplierConnectionExecutionProcess {
     }
 }
 
-/// 生产适配器：连接在启动事务之前读取，结果事务不增加配置复验。
+/// 生产适配器：启动事务授权并读取连接，结果事务保留外呼结果证据。
 struct CatalogExecution<'a> {
     process: &'a SupplierConnectionExecutionProcess,
     actor: &'a AuditActor,
@@ -125,15 +141,7 @@ impl ConnectionJobExecutionPort for CatalogExecution<'_> {
     type Started = (SupplierApiConnection, BackgroundJob);
     type Outcome = std::result::Result<(), ClassifiedError>;
     async fn start(&self, job: Self::Job) -> Result<Self::Started> {
-        let connection_id = job
-            .domain_job_id
-            .clone()
-            .ok_or_else(|| Error::BusinessLogicError("目录同步任务缺少连接ID".to_string()))?;
-        let connection = SupplierApiService::new(self.process.db.clone())
-            .load_connection(&connection_id, &mut NoTransaction)
-            .await?;
-        let started_job = self.process.start_background_job(job).await?;
-        Ok((connection, started_job))
+        self.process.start_background_job(job, self.actor).await
     }
     async fn invoke(&self, started: &Self::Started) -> Self::Outcome {
         self.process.scan_catalog(&started.0, &started.1, self.actor).await

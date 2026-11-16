@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
+use erp_permissions::approval_instance;
 use mongodb::Database;
 use persistence_core::{Executor, Repository};
 use serde::Serialize;
@@ -11,7 +12,7 @@ use serde::Serialize;
 use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind};
 use crate::repository::OrganizationRepository;
 use crate::repository::organization::ORG_UNITS;
-use crate::{Error, Permission, Result, SharedRbacService};
+use crate::{Error, Result, SharedRbacService};
 
 /// 查询申请人主属组织到根的完整有效路径，按最近同类组织取得负责人。
 /// # 参数
@@ -84,8 +85,7 @@ pub async fn own_leader_preview(
                 let unit = applicant_leader(&db, &applicant.base.id, kind, Instant::now(), ex).await?;
                 let leader = unit.leader.ok_or_else(|| Error::ValidationError("组织负责人未设置".into()))?;
                 let subject = AuditActor::new(leader.user_id.clone(), leader.user_id, AccountKind::Admin);
-                let required = ["approval_instance:read", "approval_instance:decide"]
-                    .map(|code| Permission::parse(code).expect("固定审批权限合法"));
+                let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
                 let qualified =
                     identity.qualified_permissions(&subject, &required, ex).await?.ok_or_else(|| {
                         Error::ValidationError("审批负责人账号不存在或已停用，请调整负责人".into())

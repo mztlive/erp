@@ -3,11 +3,12 @@
 use std::future::Future;
 
 use async_trait::async_trait;
+use erp_audit::execution::recover_command;
 use persistence_core::Executor;
 
-use crate::{Error, Result};
+use crate::Result;
 
-/// 首次回放命中时不准备事务；任意事务错误只做一次全新回放。
+/// 首次回放命中时不准备事务；仅可能已提交的错误执行一次重新授权的只读查证。
 ///
 /// # 参数
 /// * `replay` - 读取已提交结果；命中时返回 `Some`。
@@ -17,7 +18,7 @@ use crate::{Error, Result};
 /// 回放命中的结果，或写入成功后的结果。写入失败但随后回放命中时仍返回该结果。
 ///
 /// # 错误
-/// 首次回放失败时返回该错误。写入失败且二次回放无结果时返回写入错误；写入为 `OutcomeUnknown` 时保留该错误。二次回放自身失败且写入不是 `OutcomeUnknown` 时返回回放错误。
+/// 首次回放失败或写入明确失败时保留原错误。可能已提交且查证无结果时保留写入错误；未知提交的查证失败仍保留原未知提交来源。
 pub(super) async fn execute_with_receipt<T, R, RF, W, WF>(mut replay: R, write: W) -> Result<T>
 where
     R: FnMut() -> RF,
@@ -30,12 +31,8 @@ where
     }
     match write().await {
         Ok(result) => Ok(result),
-        Err(error) => match replay().await {
-            Ok(Some(result)) => Ok(result),
-            Ok(None) => Err(error),
-            Err(_) if matches!(error, Error::OutcomeUnknown(_)) => Err(error),
-            Err(recovery_error) => Err(recovery_error),
-        },
+        Err(error) if error.command_may_have_committed() => recover_command(error, replay().await),
+        Err(error) => Err(error),
     }
 }
 

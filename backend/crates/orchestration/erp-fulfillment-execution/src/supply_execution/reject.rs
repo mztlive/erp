@@ -1,6 +1,8 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
+use erp_core::common::time::Instant;
+use erp_core::ids::SupplierFulfillmentOrderId;
 use erp_permissions::supplier_fulfillment;
 use erp_supply::dto::supplier_fulfillment::{RecordSupplierRejectRequest, SupplierOrderStatusHistoryView};
 use erp_supply::repository::SupplierFulfillmentExt;
@@ -10,7 +12,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
-use crate::Result;
+use crate::{Error, Result};
 
 impl SupplierFulfillmentProcess {
     /// 登记供应商拒单结果（回调幂等键 `(connection_id, external_event_id)`，§6.19）。
@@ -64,9 +66,16 @@ impl SupplierFulfillmentProcess {
             .find_by_connection_and_event(&order.connection_id, &req.external_event_id, executor)
             .await?
         {
+            if !existing.matches_reject(
+                &SupplierFulfillmentOrderId::new(id),
+                &req.supplier_status_version,
+                Instant::from_unix_secs(req.occurred_at),
+            ) {
+                return Err(Error::ConflictError("外部事件已用于不同订单或拒单结果".into()));
+            }
             return Ok(existing.into());
         }
-        let (history, mut action) = self.domain().prepare_reject(id, &mut order, req).await?;
+        let (history, mut action) = self.domain().prepare_reject(id, &mut order, req, executor).await?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.reject",
             "supplier_fulfillment_order",

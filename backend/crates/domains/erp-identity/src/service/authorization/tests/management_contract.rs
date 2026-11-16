@@ -1,17 +1,22 @@
 //! 管理操作通过真实公共入口执行完整固定资格和目标合同。
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use erp_permissions::{
     access_control, admin, approval_admin, approval_process, catalog, internal, organization, sales_inquiry,
     supplier_offering,
 };
-use persistence_core::ReadExecutor;
+use mongodb::Client;
 use persistence_core::testing::SnapshotExecutor;
+use persistence_core::{Executor, ReadExecutor};
 
 use super::fixtures::{Facts, Identity, actor, service};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts};
-use crate::{Error, Permission};
+use crate::entity::resource_access::{GrantTarget, SourceUpdate};
+use crate::ports::ResourceGrantFacts;
+use crate::service::resource_access::ResourceGrantService;
+use crate::{Error, Permission, Result};
 
 fn grants(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
@@ -24,6 +29,67 @@ fn candidate(subject: &str) -> AccessTarget {
         subject_type: FactValue::Known(subject.into()),
         ..Default::default()
     })
+}
+
+struct NoGrantFacts;
+
+#[async_trait]
+impl ResourceGrantFacts for NoGrantFacts {
+    async fn validate_targets(&self, _: &[GrantTarget], _: &mut dyn Executor) -> Result<()> {
+        panic!("管理员资格检查不得读取授权目标")
+    }
+
+    async fn validate_source(&self, _: &SourceUpdate, _: &mut dyn Executor) -> Result<()> {
+        panic!("管理员资格检查不得读取自动来源")
+    }
+}
+
+#[tokio::test]
+async fn record_grant_management_uses_the_complete_shared_scope_qualification() {
+    let identity = Arc::new(Identity::default());
+    let authorization = Arc::new(service(identity.clone(), Arc::new(Facts::default())));
+    let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+        .await
+        .unwrap()
+        .database("resource_manager_unit");
+    let manager = ResourceGrantService::new(db, authorization, Arc::new(NoGrantFacts));
+    let required = [
+        access_control::RESOURCE_GRANT_MANAGE,
+        organization::CHANGE,
+        admin::ACCOUNT_LIST_ADMINS,
+        admin::ROLE_LIST_ROLES,
+    ];
+    let source = (access_control::RESOURCE_GRANT_MANAGE, organization::CHANGE);
+    identity.scopes.lock().unwrap().insert(
+        source.clone(),
+        ResolvedScope {
+            role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+            user_limit: None,
+        },
+    );
+    grants(&identity, &[("manager", &required)]);
+    manager.authorize_manager(&actor(), &mut SnapshotExecutor::default()).await.unwrap();
+    for roles in [
+        vec![("legacy-manager", &required[..2])],
+        vec![("scope", &required[..2]), ("directory", &required[2..])],
+    ] {
+        grants(&identity, &roles);
+        assert!(matches!(
+            manager.authorize_manager(&actor(), &mut SnapshotExecutor::default()).await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+    grants(&identity, &[("manager", &required)]);
+    identity.scopes.lock().unwrap().get_mut(&source).unwrap().user_limit =
+        Some(ScopeClause { self_owned: true, ..Default::default() });
+    assert!(matches!(
+        manager.authorize_manager(&actor(), &mut SnapshotExecutor::default()).await,
+        Err(Error::Forbidden(_))
+    ));
+    assert!(matches!(
+        manager.authorize_manager(&actor(), &mut ReadExecutor::default()).await,
+        Err(Error::ValidationError(_))
+    ));
 }
 
 #[tokio::test]
@@ -187,7 +253,7 @@ async fn transfer_prechecks_use_fixed_independent_qualifications_without_interna
             &actor(),
             &internal::DATA_TRANSFER_SUPPLIER_QUOTES,
             AccessTarget::Operation,
-            &mut ReadExecutor::default(),
+            &mut SnapshotExecutor::default(),
         )
         .await
         .unwrap();
@@ -198,7 +264,7 @@ async fn transfer_prechecks_use_fixed_independent_qualifications_without_interna
                 &actor(),
                 &internal::DATA_TRANSFER_SUPPLIER_QUOTES,
                 AccessTarget::Operation,
-                &mut ReadExecutor::default(),
+                &mut SnapshotExecutor::default(),
             )
             .await,
         Err(Error::Forbidden(_))

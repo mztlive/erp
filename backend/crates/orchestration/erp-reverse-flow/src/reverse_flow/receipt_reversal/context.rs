@@ -7,7 +7,7 @@ use erp_workflow::DocumentRegistryExt;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::service::approval::binding::{BindPublishedDefinitionCommand, attach_published_binding};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::super::adapter::{receipt_reversal_object_readable, receipt_reversal_responsible_org_id};
 use crate::{Error, Result, ReverseFlowPorts};
@@ -26,10 +26,11 @@ use crate::{Error, Result, ReverseFlowPorts};
 pub(super) async fn load_receipt_reversal_context(
     db: &Database,
     original_receipt_id: &CustomerReceiptId,
+    executor: &mut dyn Executor,
 ) -> Result<(String, Option<CustomerAccountId>)> {
     let receipt = db
         .customer_receipts()
-        .find_by_id(original_receipt_id, &mut NoTransaction)
+        .find_by_id(original_receipt_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原回款不存在".to_string()))?;
     let organization_id = receipt_reversal_responsible_org_id(receipt.counterparty_party_id.as_ref())?;

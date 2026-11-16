@@ -5,7 +5,7 @@ use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_permissions::catalog as catalog_permissions;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -26,8 +26,13 @@ use crate::error::Result;
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
 
-/// 商品规格编辑计划（数据模型 §6.3 全量替换语义）。
+/// 已规范化的商品规格编辑输入；当前商品和修订在原写事务读取。
 pub struct SpecEditPlan {
+    id: String,
+    request: UpdateProductRequest,
+}
+
+struct PreparedSpecEditPlan {
     /// 写入审计日志的变更原因。
     change_reason: Option<String>,
     /// 修订后的 SPU。
@@ -188,19 +193,19 @@ impl CatalogService {
         let plan = self.prepare_product_update(id, req, &pending_assets, actor).await?;
         let service = self.clone();
         let actor = actor.clone();
-        let product = self
-            .db
+        self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { service.write_spec_edit_plan(plan, &actor, pending_assets, executor).await },
-                )
+                Box::pin(async move {
+                    let product =
+                        service.write_spec_edit_plan(plan, &actor, pending_assets, executor).await?;
+                    service.product_view(product, executor).await
+                })
             })
-            .await?;
-        self.product_view(product).await
+            .await
     }
 
-    /// 校验更新请求并构造商品编辑计划，供跨域用例原子提交。
+    /// 校验更新输入及附件引用；版本、字典和规格事实由原写事务核验。
     ///
     /// # 参数
     /// * `id` - 商品 ID。
@@ -210,13 +215,13 @@ impl CatalogService {
     /// # 返回
     /// 返回尚未持久化的编辑计划。
     /// # 错误
-    /// 权限、版本、字典、媒体或规格校验失败时返回错误。
+    /// 输入、临时附件引用或未使用附件校验失败时返回错误。
     pub async fn prepare_product_update(
         &self,
         id: &str,
         mut req: UpdateProductRequest,
         pending_assets: &Arc<dyn PendingAttachmentBatch>,
-        actor: &AuditActor,
+        _actor: &AuditActor,
     ) -> Result<SpecEditPlan> {
         req.validate()?;
         let used = resolve_product_file_references(
@@ -226,10 +231,7 @@ impl CatalogService {
             pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
-        let product = self.access().product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id).await?;
-        product.ensure_has_responsibility()?;
-        ensure_version(product.base.version, req.version)?;
-        self.build_spec_edit_plan(product, req, actor, pending_assets.as_ref()).await
+        Ok(SpecEditPlan { id: id.to_owned(), request: req })
     }
 
     /// 构造规格编辑计划（分类保留/新增/重新启用/移除 + 新商品修订与媒体）。
@@ -250,8 +252,9 @@ impl CatalogService {
         mut req: UpdateProductRequest,
         actor: &AuditActor,
         pending_assets: &dyn PendingAttachmentBatch,
-    ) -> Result<SpecEditPlan> {
-        let mut base = self.prepare_spec_edit_base(&product, &req, pending_assets).await?;
+        executor: &mut dyn Executor,
+    ) -> Result<PreparedSpecEditPlan> {
+        let mut base = self.prepare_spec_edit_base(&product, &req, pending_assets, executor).await?;
         let existing_sku_nos = base.current_by_signature.values().map(|sku| sku.sku_no.clone());
         ProductSkuInput::fill_blank_sku_nos(&product.product_no, existing_sku_nos, &mut req.skus);
         let change_reason = req.change_reason.as_deref().map(str::trim);
@@ -272,13 +275,14 @@ impl CatalogService {
                     &mut signatures,
                     &line_ctx,
                     sku_input,
+                    executor,
                 )
                 .await?,
             );
         }
         let disable = sweep_removed_signatures(&mut base.current_by_signature, &signatures, actor.id())?;
         let revision = assemble_spec_product_revision(&mut product, &base, req, actor.id())?;
-        Ok(SpecEditPlan {
+        Ok(PreparedSpecEditPlan {
             change_reason: audit_message,
             product,
             revision,
@@ -305,6 +309,7 @@ impl CatalogService {
         product: &Product,
         req: &UpdateProductRequest,
         pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
     ) -> Result<SpecEditBase> {
         self.ensure_product_dictionaries(
             &req.category_id,
@@ -312,21 +317,34 @@ impl CatalogService {
             &req.skus,
             product.product_kind,
             pending_assets,
+            executor,
         )
         .await?;
         let product_id = ProductId::new(product.base.id.clone());
-        let existing = self.db.catalog().skus_for_product(&product_id, &mut NoTransaction).await?;
+        let existing = self.db.catalog().skus_for_product(&product_id, executor).await?;
         let current_by_signature: HashMap<String, Sku> =
             existing.into_iter().map(|sku| (sku.specification_signature.clone(), sku)).collect();
-        let next_product_revision_no = self.next_product_revision_no(&product_id).await?;
+        let next_product_revision_no = self.next_product_revision_no(&product_id, executor).await?;
         let revision_id = ProductRevisionId::new(next_id());
         let media = self
-            .build_media_rows(&revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets)
+            .build_media_rows(
+                &revision_id,
+                &req.carousel_media,
+                MediaRole::Carousel,
+                pending_assets,
+                executor,
+            )
             .await?
             .into_iter()
             .chain(
-                self.build_media_rows(&revision_id, &req.detail_media, MediaRole::Detail, pending_assets)
-                    .await?,
+                self.build_media_rows(
+                    &revision_id,
+                    &req.detail_media,
+                    MediaRole::Detail,
+                    pending_assets,
+                    executor,
+                )
+                .await?,
             )
             .collect::<Vec<_>>();
         Ok(SpecEditBase { product_id, current_by_signature, next_product_revision_no, revision_id, media })
@@ -353,15 +371,17 @@ impl CatalogService {
         signatures: &mut SpecificationSignatureSet,
         line_ctx: &SkuLineContext<'_>,
         sku_input: ProductSkuInput,
+        executor: &mut dyn Executor,
     ) -> Result<SkuEditItem> {
         let signature = specification_signature_for(&sku_input.spec_entries)?;
         signatures.register_signature(signature.clone())?;
         if let Some(mut existing_sku) = current_by_signature.remove(&signature) {
             let identity = sku_edit_identity(&sku_input, line_ctx.change_reason);
             let action = existing_sku.classify_edit(&identity).map_err(map_sku_edit_error)?;
-            self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str())).await?;
+            self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str()), executor)
+                .await?;
             let sku_id = SkuId::new(existing_sku.base.id.clone());
-            let revision_no = self.next_sku_revision_no(&sku_id).await?;
+            let revision_no = self.next_sku_revision_no(&sku_id, executor).await?;
             let revision = super::sku_edit::sku_revision_for_input(
                 sku_id,
                 revision_no,
@@ -380,6 +400,7 @@ impl CatalogService {
                     created_by: line_ctx.created_by,
                 },
                 sku_input,
+                executor,
             )
             .await
         }
@@ -408,7 +429,17 @@ impl CatalogService {
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         executor: &mut dyn Executor,
     ) -> Result<Product> {
-        let SpecEditPlan { change_reason, mut product, revision, media, mut sku_items, mut disable } = plan;
+        let product = self
+            .access()
+            .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &plan.id, executor)
+            .await?;
+        product.ensure_has_responsibility()?;
+        ensure_version(product.base.version, plan.request.version)?;
+        let plan = self
+            .build_spec_edit_plan(product, plan.request, actor, pending_assets.as_ref(), executor)
+            .await?;
+        let PreparedSpecEditPlan { change_reason, mut product, revision, media, mut sku_items, mut disable } =
+            plan;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.update",
@@ -418,11 +449,6 @@ impl CatalogService {
         )?;
         let db = self.db.clone();
         let audit_port = self.audit.clone();
-        let access = self.access();
-        let actor = actor.clone();
-        access
-            .require(&actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &product.base.id, executor)
-            .await?;
         pending_assets.persist(&db, executor).await?;
         db.products().update(&mut product, executor).await?;
         db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
@@ -448,6 +474,7 @@ impl CatalogService {
     /// 计算某商品已有修订的最大序号 + 1。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `product_id` - 商品 ID
     ///
     /// # 返回
@@ -455,8 +482,44 @@ impl CatalogService {
     ///
     /// # 错误
     /// 数据库查询失败时返回错误。
-    pub(super) async fn next_product_revision_no(&self, product_id: &ProductId) -> Result<u32> {
-        let latest = self.db.catalog().latest_product_revision_no(product_id, &mut NoTransaction).await?;
+    pub(super) async fn next_product_revision_no(
+        &self,
+        product_id: &ProductId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        let latest = self.db.catalog().latest_product_revision_no(product_id, executor).await?;
         Ok(next_revision_no(latest)?)
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, service};
+    use super::*;
+
+    #[tokio::test]
+    async fn edit_input_defers_current_versions_and_rejects_before_reading_original_product() {
+        let service = service().await;
+        let actor = actor();
+        let pending: Arc<dyn PendingAttachmentBatch> = Arc::new(EmptyPendingAttachments);
+        for version in [1, 999] {
+            let request = serde_json::from_value(json!({
+                "version":version, "name":"product", "category_id":"missing-category", "brand_id":"missing-brand",
+                "status":"active", "effective_from":"2026-01-01",
+                "skus":[{"name":"sku", "base_unit_id":"missing-unit"}]
+            })).unwrap();
+            let plan =
+                service.prepare_product_update("missing-product", request, &pending, &actor).await.unwrap();
+            assert_eq!(plan.id, "missing-product");
+            assert_eq!(plan.request.version, version);
+            denied(
+                service
+                    .write_spec_edit_plan(plan, &actor, pending.clone(), &mut SnapshotExecutor::default())
+                    .await,
+            );
+        }
     }
 }

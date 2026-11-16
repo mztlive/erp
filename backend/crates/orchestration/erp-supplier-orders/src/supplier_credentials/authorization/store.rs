@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
+#[cfg(test)]
 use erp_integration::Error as IntegrationError;
 use erp_integration::entity::supplier_credential::{
     SupplierCredential, SupplierCredentialAuthorizationRequest, SupplierCredentialBinding,
@@ -10,7 +11,9 @@ use erp_integration::entity::supplier_credential::{
 };
 use erp_integration::indexes::supplier_credential::ensure;
 use erp_integration::repository::SupplierCredentialExt;
-use persistence_core::{Executor, NoTransaction, Transactional};
+#[cfg(test)]
+use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use super::access::ConnectionAccess;
 use super::{AuthorizationError, Result};
@@ -24,6 +27,7 @@ pub(super) struct CommandContext {
 
 #[async_trait]
 pub(super) trait AuthorizationStore: Send + Sync {
+    #[cfg(test)]
     async fn load(&self) -> Result<Option<SupplierCredential>>;
     async fn reserve(
         &self,
@@ -145,6 +149,7 @@ async fn audit(
 
 #[async_trait]
 impl AuthorizationStore for MongoAuthorizationStore {
+    #[cfg(test)]
     async fn load(&self) -> Result<Option<SupplierCredential>> {
         self.access
             .db

@@ -11,7 +11,7 @@ use erp_supply::order_tracking::repository::OrderTrackingExt;
 use erp_supply::ports::connector::order::{ConfirmationState, ShipmentLine};
 use erp_supply::ports::connector::order_tree::{OrderNodeRole, OrderTree};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use serde::Serialize;
 
 use crate::{Error, Result};
@@ -77,6 +77,7 @@ impl SupplierExecutionProgressReadModel {
     /// 读取原采购商品标签及供应商订单树和多运单。
     /// # 参数
     /// `execution` 已经服务端授权；`external_skus` 为同执行加密快照中的外部身份映射。
+    /// `executor` 为原授权读取阶段的执行器，所有关联事实共用它。
     /// # 返回
     /// 去除成本、内部明细身份及个人资料的业务视图。
     /// # 错误
@@ -85,8 +86,9 @@ impl SupplierExecutionProgressReadModel {
         &self,
         execution: &ApiOrderExecution,
         external_skus: &BTreeMap<String, String>,
+        executor: &mut dyn Executor,
     ) -> Result<(Option<ExecutionOrderTreeView>, Vec<ExecutionShipmentView>)> {
-        let labels = self.execution_line_labels(execution, external_skus).await?;
+        let labels = self.execution_line_labels(execution, external_skus, executor).await?;
         let pending = execution.pending_order_tree.is_some();
         let tree = execution
             .pending_order_tree
@@ -94,16 +96,14 @@ impl SupplierExecutionProgressReadModel {
             .or(execution.order_tree.as_ref())
             .map(|tree| ExecutionOrderTreeView::from_tree(tree, &labels, pending));
         let Some(tracking) =
-            self.db.supplier_order_tracking().find_by_id(&execution.base.id, &mut NoTransaction).await?
+            self.db.supplier_order_tracking().find_by_id(&execution.base.id, executor).await?
         else {
             return Ok((tree, vec![]));
         };
         let Some(id) = tracking.latest_observation_id else {
             return Ok((tree, vec![]));
         };
-        let Some(observation) =
-            self.db.supplier_order_observations().find_by_id(&id, &mut NoTransaction).await?
-        else {
+        let Some(observation) = self.db.supplier_order_observations().find_by_id(&id, executor).await? else {
             return Ok((tree, vec![]));
         };
         if observation.order_id != execution.base.id || observation.connection_id != execution.connection_id {
@@ -122,20 +122,21 @@ impl SupplierExecutionProgressReadModel {
         &self,
         execution: &ApiOrderExecution,
         external_skus: &BTreeMap<String, String>,
+        executor: &mut dyn Executor,
     ) -> Result<LineLabels> {
         let mut labels = BTreeMap::new();
         for source in &execution.source_lines {
             let line = self
                 .db
                 .purchase_order_revision_lines()
-                .find_by_id(&source.purchase_order_revision_line_id, &mut NoTransaction)
+                .find_by_id(&source.purchase_order_revision_line_id, executor)
                 .await?
                 .filter(|line| {
                     line.purchase_order_revision_id.as_ref() == execution.purchase_order_revision_id
                 })
                 .ok_or_else(|| Error::NotFound("原执行采购明细不存在".into()))?;
             let sku = external_skus.get(&source.fulfillment_item_id).cloned().unwrap_or_default();
-            let unit = self.unit_label(line.base_unit_code.as_deref()).await?;
+            let unit = self.unit_label(line.base_unit_code.as_deref(), executor).await?;
             labels.insert(
                 source.fulfillment_item_id.clone(),
                 (line.product_name_snapshot.unwrap_or_else(|| "来源商品待核实".into()), unit, sku),
@@ -144,11 +145,11 @@ impl SupplierExecutionProgressReadModel {
         Ok(labels)
     }
 
-    async fn unit_label(&self, code: Option<&str>) -> Result<Option<String>> {
+    async fn unit_label(&self, code: Option<&str>, executor: &mut dyn Executor) -> Result<Option<String>> {
         let Some(code) = code else {
             return Ok(None);
         };
-        let value = self.db.catalog().unit_by_code(code, &mut NoTransaction).await?;
+        let value = self.db.catalog().unit_by_code(code, executor).await?;
         Ok(Some(value.map(|unit| unit.name).unwrap_or_else(|| code.into())))
     }
 }

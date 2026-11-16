@@ -10,7 +10,7 @@ use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::InventoryAdjustmentProcess;
 use crate::{Error, Result};
@@ -50,7 +50,7 @@ impl CancelAuthority {
 
 /// 读取取消计划所需的冻结提交人及责任组织；写事务另行执行完整授权。
 /// # 参数
-/// service、instance为当前用例与精确实例，actor为待执行操作人。
+/// service、instance为当前用例与精确实例，actor为待执行操作人，executor为已授权准备快照。
 /// # 返回
 /// 仅用于准备计划的责任事实，不代表授权通过。
 /// # 错误
@@ -59,8 +59,9 @@ pub(crate) async fn cancel_authority_facts(
     service: &InventoryAdjustmentProcess,
     instance: &ApprovalProcessInstance,
     actor: &AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<CancelAuthorization> {
-    let snapshot = cancel_authorization_snapshot(&service.db, instance, &mut NoTransaction).await?;
+    let snapshot = cancel_authorization_snapshot(&service.db, instance, executor).await?;
     Ok(CancelAuthorization {
         authority: if snapshot.payload.submitted_by == actor.id() {
             CancelAuthority::Submitter

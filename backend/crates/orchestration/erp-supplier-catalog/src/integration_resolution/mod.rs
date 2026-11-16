@@ -30,6 +30,7 @@ use erp_integration::ports::evidence::IntegrationEvidenceAuthority;
 use erp_integration::service::IntegrationOpsService;
 use mongodb::Database;
 /// 集成七类写入口；原事务和证据能力由组合根提供。
+#[derive(Clone)]
 pub struct IntegrationResolutionProcess {
     pub(super) work_items_factory: Arc<dyn Fn() -> Arc<dyn CatalogWorkItems> + Send + Sync>,
     pub(super) authorization: Arc<AuthorizationService>,
@@ -63,5 +64,40 @@ impl IntegrationResolutionProcess {
     }
     fn domain(&self) -> IntegrationOpsService {
         IntegrationOpsService::new(self.db.clone(), self.data_scope.clone())
+    }
+}
+
+#[cfg(test)]
+pub(super) mod testing {
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+
+    use super::evidence_adapter::MongoIntegrationEvidenceAuthority;
+    use super::*;
+    use crate::{Error, Result};
+
+    pub(super) async fn process() -> IntegrationResolutionProcess {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("integration_command_authorization");
+        let authorization = unavailable_authorization();
+        IntegrationResolutionProcess::new(
+            db.clone(),
+            Arc::new(MongoIntegrationEvidenceAuthority::new(db.clone())),
+            IntegrationAccess::new(db, authorization.clone()),
+            authorization,
+            Arc::new(|| panic!("授权失败不得构造或改变正式工作项")),
+        )
+    }
+
+    pub(super) fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin)
+    }
+
+    pub(super) fn denied<T>(result: Result<T>) {
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
     }
 }

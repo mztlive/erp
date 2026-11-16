@@ -182,7 +182,7 @@ async fn committed_receipt_bypasses_closed_task_and_preparation_path() {
 }
 
 #[tokio::test]
-async fn any_transaction_error_recovers_once_and_missing_receipt_keeps_original_error() {
+async fn possible_commit_recovers_once_and_missing_receipt_keeps_original_error() {
     for recovered in [Some("committed"), None] {
         let trace = RefCell::new(Vec::new());
         let receipts = RefCell::new(VecDeque::from([None, recovered]));
@@ -193,7 +193,9 @@ async fn any_transaction_error_recovers_once_and_missing_receipt_keeps_original_
             },
             || {
                 trace.borrow_mut().push("transaction");
-                std::future::ready(Err(Error::Forbidden("original-auth-error".to_string())))
+                std::future::ready(Err(Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(
+                    mongodb::error::Error::custom("receipt race"),
+                ))))
             },
         )
         .await;
@@ -201,7 +203,7 @@ async fn any_transaction_error_recovers_once_and_missing_receipt_keeps_original_
         match recovered {
             Some(value) => assert_eq!(result.unwrap(), value),
             None => {
-                assert!(matches!(result, Err(Error::Forbidden(message)) if message == "original-auth-error"))
+                assert!(matches!(result, Err(Error::ReceiptDuplicate(_))))
             },
         }
     }
@@ -223,7 +225,9 @@ async fn replay_read_error_stops_initially_or_replaces_transaction_error_on_reco
             },
             || {
                 *writes.borrow_mut() += 1;
-                std::future::ready(Err(Error::Forbidden("transaction".to_string())))
+                std::future::ready(Err(Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(
+                    mongodb::error::Error::custom("receipt race"),
+                ))))
             },
         )
         .await;
@@ -262,4 +266,21 @@ async fn unknown_commit_recovery_failure_preserves_source_and_never_reexecutes()
     }
     assert_eq!(*reads.borrow(), 2);
     assert_eq!(*writes.borrow(), 1);
+}
+
+#[tokio::test]
+async fn rejected_transaction_never_recovers_as_success_or_reads_another_receipt() {
+    for error in [Error::Forbidden("revoked".into()), Error::ConflictError("stale version".into())] {
+        let reads = RefCell::new(0);
+        let result = execute_with_receipt(
+            || {
+                *reads.borrow_mut() += 1;
+                std::future::ready(Ok(if *reads.borrow() == 1 { None } else { Some("old-result") }))
+            },
+            || std::future::ready(Err(error)),
+        )
+        .await;
+        assert!(matches!(result, Err(Error::Forbidden(_)) | Err(Error::ConflictError(_))));
+        assert_eq!(*reads.borrow(), 1);
+    }
 }

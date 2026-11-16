@@ -19,6 +19,7 @@ mod jobs;
 mod receipt;
 mod reference;
 /// 供应连接跨域命令入口，默认引用注册表保持失败关闭。
+#[derive(Clone)]
 pub struct SupplierApiGovernanceProcess {
     db: Database,
     services: Arc<CatalogServices>,

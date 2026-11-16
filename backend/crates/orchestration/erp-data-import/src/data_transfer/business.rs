@@ -10,7 +10,7 @@ use erp_permissions::{Permission, internal};
 use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use erp_supplier_catalog::supply_governance::SupplierOfferingProcess;
 use mongodb::Database;
-use persistence_core::{Executor, ReadExecutor};
+use persistence_core::{Executor, Transactional};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use storage::S3Storage;
@@ -32,6 +32,20 @@ pub trait TransferReader: Send + Sync {
     /// # 错误
     /// 原业务权限、版本和查询错误原样保留。
     async fn page(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<Value>;
+    /// 在原功能授权快照中读取商品池或报价来源页。
+    /// # 参数
+    /// kind、input 为固定商品池或报价任务，actor 为当前身份，executor 为原事务。
+    /// # 返回
+    /// 与业务页面相同的已授权分页视图。
+    /// # 错误
+    /// 不支持的任务、原业务授权或数据库失败时返回错误，不切换执行器。
+    async fn page_with(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Value>;
     /// 读取原报表的完整 CSV。
     /// # 参数
     /// 固定报表类型、条件与认证人。
@@ -51,6 +65,7 @@ pub struct BusinessTransferServices {
 }
 
 /// 默认导入导出业务实现。
+#[derive(Clone)]
 pub struct BusinessTransfers {
     pub(super) db: Database,
     pub(super) authorization: Arc<AuthorizationService>,
@@ -75,8 +90,23 @@ impl BusinessTransfers {
     ) -> Self {
         Self { db, authorization, reader, storage, services }
     }
+    /// 在独立快照中预检当前功能或门户会话资格。
+    /// # 参数
+    /// kind、input 为固定任务，actor 为当前身份。
+    /// # 返回
+    /// 本次预检通过时完成；实际业务读取和写入仍重新授权。
+    /// # 错误
+    /// 事务、资格或身份读取失败时返回错误。
     pub(super) async fn access(&self, kind: TransferKind, input: &Value, actor: &AuditActor) -> Result<()> {
-        self.access_with(kind, input, actor, &mut ReadExecutor::default()).await
+        let service = self.clone();
+        let input = input.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.access_with(kind, &input, &actor, executor).await })
+            })
+            .await
     }
     /// 在调用方执行器核验本任务原有功能资格，目标条件由所属业务入口执行。
     /// # 参数
@@ -98,9 +128,7 @@ impl BusinessTransfers {
         if kind == TransferKind::PortalBatch {
             return self.portal_actor_with(input, actor, executor).await?.require_write().map_err(Into::into);
         }
-        let permission = transfer_permission(kind, input)?;
-        self.authorization.require(actor, &permission, AccessTarget::Operation, executor).await?;
-        Ok(())
+        function_access(&self.authorization, kind, input, actor, executor).await
     }
     pub(super) async fn collect(
         &self,
@@ -155,19 +183,37 @@ impl BusinessTransfers {
         }
         Err(Error::ValidationError("导出超过十万行，请缩小范围".into()))
     }
-    /// 已接入完整授权的列表由拥有域复验；无账号列表及报价的附加资格在读取前补验。
-    async fn export_page(&self, kind: TransferKind, query: &Value, actor: &AuditActor) -> Result<Value> {
-        if matches!(
-            kind,
-            TransferKind::ProductPoolExcel
-                | TransferKind::SupplierQuoteArchive
-                | TransferKind::SupplierQuotePreview
-        ) || (kind == TransferKind::MasterData && query["resource"] == "sellable")
-        {
-            self.access(kind, query, actor).await?;
+    /// 商品池及报价页的附加资格与实际业务读取使用同一快照。
+    /// # 参数
+    /// kind、query 为固定业务分页，actor 为当前身份。
+    /// # 返回
+    /// 原业务已完成授权的分页结果。
+    /// # 错误
+    /// 功能资格、数据授权或业务读取失败时拒绝交付。
+    pub(super) async fn export_page(
+        &self,
+        kind: TransferKind,
+        query: &Value,
+        actor: &AuditActor,
+    ) -> Result<Value> {
+        if snapshot_page(kind, query) {
+            let authorization = self.authorization.clone();
+            let reader = self.reader.clone();
+            let query = query.clone();
+            let actor = actor.clone();
+            return self
+                .db
+                .client()
+                .with_transaction(move |executor| {
+                    Box::pin(async move {
+                        authorized_page(&authorization, reader.as_ref(), kind, &query, &actor, executor).await
+                    })
+                })
+                .await;
         }
         self.reader.page(kind, query, actor).await
     }
+
     async fn check_final_scope(
         &self,
         kind: TransferKind,
@@ -266,7 +312,7 @@ impl TransferHandler for BusinessTransfers {
         {
             input["page"] = json!(1);
             input["page_size"] = json!(100);
-            let first = self.reader.page(kind, &input, actor).await?;
+            let first = self.export_page(kind, &input, actor).await?;
             if first["empty_reason"] == "no_scope" {
                 return Err(Error::Forbidden("当前无可导出范围".into()));
             }
@@ -308,6 +354,48 @@ impl TransferHandler for BusinessTransfers {
         Ok(())
     }
 }
+/// 固定任务资格只通过统一授权服务检查，不在文件任务中组合政策。
+async fn function_access(
+    authorization: &AuthorizationService,
+    kind: TransferKind,
+    input: &Value,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if actor.kind() != AccountKind::Admin {
+        return Err(Error::Forbidden("此任务仅供管理端使用".into()));
+    }
+    let permission = transfer_permission(kind, input)?;
+    authorization.require(actor, &permission, AccessTarget::Operation, executor).await?;
+    Ok(())
+}
+
+/// 读取前在原快照核对全部功能资格，再委托实际业务数据授权。
+async fn authorized_page(
+    authorization: &AuthorizationService,
+    reader: &dyn TransferReader,
+    kind: TransferKind,
+    query: &Value,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Value> {
+    if !snapshot_page(kind, query) {
+        return Err(Error::ValidationError("此任务不使用附加资格快照读取".into()));
+    }
+    function_access(authorization, kind, query, actor, executor).await?;
+    reader.page_with(kind, query, actor, executor).await
+}
+
+/// 需要与附加功能资格共用读取事务的固定任务类型。
+fn snapshot_page(kind: TransferKind, input: &Value) -> bool {
+    matches!(
+        kind,
+        TransferKind::ProductPoolExcel
+            | TransferKind::SupplierQuoteArchive
+            | TransferKind::SupplierQuotePreview
+    ) || (kind == TransferKind::MasterData && input["resource"] == "sellable")
+}
+
 pub(super) fn is_report(kind: TransferKind) -> bool {
     matches!(
         kind,
@@ -380,9 +468,105 @@ fn supply_batch_entry(input: &Value) -> Result<Permission> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
     use serde_json::json;
 
     use super::*;
+
+    #[derive(Default)]
+    struct Reader(AtomicUsize);
+
+    #[async_trait]
+    impl TransferReader for Reader {
+        async fn page(&self, _: TransferKind, _: &Value, _: &AuditActor) -> Result<Value> {
+            panic!("附加资格读取不得切换到独立业务入口")
+        }
+
+        async fn page_with(
+            &self,
+            _: TransferKind,
+            _: &Value,
+            _: &AuditActor,
+            _: &mut dyn Executor,
+        ) -> Result<Value> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(json!({"items":[],"total":0}))
+        }
+
+        async fn report(&self, _: TransferKind, _: &Value, _: &AuditActor) -> Result<Value> {
+            panic!("商品和报价页不得切换到报表入口")
+        }
+    }
+
+    #[tokio::test]
+    async fn supplemental_pages_reject_non_snapshot_or_unavailable_identity_before_business_reads() {
+        let authorization = unavailable_authorization();
+        let reader = Reader::default();
+        let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin);
+        for (kind, query) in [
+            (TransferKind::ProductPoolExcel, json!({})),
+            (TransferKind::MasterData, json!({"resource":"sellable"})),
+            (TransferKind::SupplierQuoteArchive, json!({"source":"products"})),
+            (TransferKind::SupplierQuotePreview, json!({"sku_id":"sku"})),
+        ] {
+            let error =
+                authorized_page(&authorization, &reader, kind, &query, &actor, &mut ReadExecutor::default())
+                    .await
+                    .unwrap_err();
+            assert!(
+                matches!(error, Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")
+            );
+            let error = authorized_page(
+                &authorization,
+                &reader,
+                kind,
+                &query,
+                &actor,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+        assert_eq!(reader.0.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn unrelated_pages_and_supplier_identity_cannot_use_supplemental_read_entry() {
+        let authorization = unavailable_authorization();
+        let reader = Reader::default();
+        let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin);
+        let error = authorized_page(
+            &authorization,
+            &reader,
+            TransferKind::SalesOrders,
+            &json!({}),
+            &actor,
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "此任务不使用附加资格快照读取")
+        );
+        let supplier = AuditActor::new("supplier".into(), "login".into(), AccountKind::Supplier);
+        let error = authorized_page(
+            &authorization,
+            &reader,
+            TransferKind::ProductPoolExcel,
+            &json!({}),
+            &supplier,
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::Forbidden(message) if message == "此任务仅供管理端使用"));
+        assert_eq!(reader.0.load(Ordering::SeqCst), 0);
+    }
 
     #[test]
     fn supply_batch_permissions_allow_maintenance_and_reject_creation() {

@@ -109,19 +109,35 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.copy_detail_stage(&actor, &id, after, executor).await })
+                Box::pin(async move {
+                    let (detail, access) = service.copy_read(&actor, &id, after, executor).await?;
+                    service.validate_copy_read(&access, executor).await?;
+                    Ok(detail)
+                })
             })
             .await
     }
 
-    /// 在原快照中授权并装配详情，收件与冻结资料不跨读取执行器。
-    async fn copy_detail_stage(
+    /// 在原快照中授权并读取抄送资料，保留完整补齐后的交付凭证。
+    /// # 参数
+    /// actor、id、after 为当前账号、精确抄送及历史游标，executor 为完整读取用例的活动快照事务。
+    /// # 返回
+    /// 详情与原查询凭证；调用方补齐全部展示资料后必须调用 validate_copy_read。
+    /// # 错误
+    /// 非快照执行器、收件无权、冻结关系错配或读取失败时拒绝。
+    pub async fn copy_read(
         &self,
         actor: &AuditActor,
         id: &str,
         after: Option<u32>,
         executor: &mut dyn Executor,
-    ) -> Result<CopyDetail> {
+    ) -> Result<(CopyDetail, CompiledAccess)> {
+        if !executor
+            .boundary()
+            .is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
+        {
+            return Err(Error::ValidationError("抄送资料读取必须使用快照事务".into()));
+        }
         let (receipt, snapshot, instance, access) = self.copy_subject(actor, id, executor).await?;
         let mut display =
             snapshot.display.ok_or_else(|| Error::ConflictError("该审批未保存可预览资料".into()))?;
@@ -147,8 +163,28 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             display,
             attachments: snapshot.material_files.iter().map(ApprovalMaterialView::from).collect(),
         };
-        self.authorization.validate(&access, executor).await?;
-        Ok(CopyDetail { receipt, instance_status: instance.status.as_str().into(), materials, history })
+        Ok((
+            CopyDetail { receipt, instance_status: instance.status.as_str().into(), materials, history },
+            access,
+        ))
+    }
+
+    /// 在抄送资料及全部展示补齐结束后验证原读取凭证。
+    /// # 参数
+    /// access 为 copy_read 返回的原凭证，executor 为同一事务与读取阶段。
+    /// # 返回
+    /// 原服务、事务、阶段及有效期仍成立时成功，并结束当前读取阶段。
+    /// # 错误
+    /// 权限不匹配、跨服务、跨阶段、跨事务或到期时拒绝交付。
+    pub async fn validate_copy_read(
+        &self,
+        access: &CompiledAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if access.permission() != &internal::APPROVAL_COPY_DETAIL {
+            return Err(Error::ValidationError("抄送交付凭证权限错配".into()));
+        }
+        Ok(self.authorization.validate(access, executor).await?)
     }
 
     /// 文件读取前后用同一收件关系和冻结允许清单授权。
@@ -321,7 +357,32 @@ fn copy_not_found() -> Error {
 
 #[cfg(test)]
 mod tests {
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+    use crate::ports::FailClosedWorkflowAuthorizationPort;
+    use crate::service::approval::definition::test_support::unavailable_service;
+
+    #[tokio::test]
+    async fn shared_copy_read_requires_snapshot_and_authorizes_before_loading_receipt() {
+        let (definition, actor) = unavailable_service().await;
+        let runtime = ApprovalRuntimeService::new(
+            definition.db,
+            definition.identity,
+            definition.authorization,
+            FailClosedWorkflowAuthorizationPort,
+        );
+        assert!(matches!(
+            runtime.copy_read(&actor, "copy", None, &mut NoTransaction).await,
+            Err(Error::ValidationError(reason)) if reason == "抄送资料读取必须使用快照事务"
+        ));
+        assert!(matches!(
+            runtime.copy_read(&actor, "copy", None, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+    }
+
     #[test]
     fn read_command_is_bounded_and_deduplicated() {
         assert!(CopyReadRequest { ids: vec![] }.prepare().is_err());

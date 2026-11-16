@@ -92,6 +92,7 @@ impl PurchasePaymentRequestReadService {
         version: u32,
         executor: &mut dyn Executor,
     ) -> Result<(PurchasePaymentRequest, PaymentReadScope)> {
+        let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
         let request = self
             .db
             .purchase_payment_request_snapshots()
@@ -106,10 +107,33 @@ impl PurchasePaymentRequestReadService {
             })
             .map(|snapshot| snapshot.request)
             .ok_or_else(|| Error::NotFound("付款申请历史提交不存在或无权查看".into()))?;
-        let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
         if !self.readable(&request, &scope, executor).await? {
             return Err(Error::NotFound("付款申请历史提交不存在或无权查看".into()));
         }
         Ok((request, scope))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn historical_submission_authorization_failure_stops_before_frozen_request_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("payment_request_submission_qualification");
+        let service = PurchasePaymentRequestReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        let result = service
+            .authorized_submission(&actor, "historical-request", 3, &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
 }

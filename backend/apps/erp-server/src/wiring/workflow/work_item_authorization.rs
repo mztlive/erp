@@ -2,10 +2,11 @@
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_identity::SharedRbacService;
+use erp_identity::{CompiledAccess, SharedRbacService};
 use erp_read_models::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
 use erp_workflow::service::work_item::WorkItemService;
 use mongodb::Database;
+use persistence_core::Executor;
 
 use super::{WorkflowAuth, work_item_service};
 
@@ -38,20 +39,29 @@ impl WorkItemAuthorizationReadPort for WorkItemAuthorizationAdapter {
     /// # 参数
     /// * `id` - 工作项编号。
     /// * `actor` - 当前操作人。
+    /// * `executor` - 详情用例的原快照事务执行器。
     ///
     /// # 返回
-    /// 返回类型、业务对象、对象版本与允许动作。
+    /// 返回类型、业务对象、对象版本、允许动作与未交付的原读取凭证。
     ///
     /// # 错误
     /// 原工作流错误直接透传，不按字符串重新分类。
-    async fn authorize(&self, id: &str, actor: &AuditActor) -> erp_workflow::Result<AuthorizedTaskFact> {
-        let authorized = self.service.authorize_work_item(id, actor).await?;
-        Ok(AuthorizedTaskFact {
-            work_item_type: authorized.item.work_item_type,
-            business_object_type: authorized.item.business_object_type,
-            business_object_id: authorized.item.business_object_id,
-            subject_version: authorized.item.subject_version,
-            allowed_actions: authorized.allowed_actions,
-        })
+    async fn authorize(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> erp_workflow::Result<(AuthorizedTaskFact, CompiledAccess)> {
+        let (authorized, access) = self.service.work_item_read(id, actor, executor).await?;
+        Ok((
+            AuthorizedTaskFact {
+                work_item_type: authorized.item.work_item_type,
+                business_object_type: authorized.item.business_object_type,
+                business_object_id: authorized.item.business_object_id,
+                subject_version: authorized.item.subject_version,
+                allowed_actions: authorized.allowed_actions,
+            },
+            access,
+        ))
     }
 }

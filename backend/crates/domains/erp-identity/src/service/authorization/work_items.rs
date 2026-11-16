@@ -8,7 +8,7 @@ use erp_permissions::{
 };
 use persistence_core::Executor;
 
-use super::targets::TargetFacts;
+use super::targets::{SourceEvidence, TargetFacts};
 use super::{AuthorizationService, rules};
 use crate::entity::authorization::{AccessContext, AccessTarget, ObjectFacts, RelationKey};
 use crate::repository::authorization::AccessProof;
@@ -225,6 +225,9 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required.extend(EXECUTION.iter().flat_map(|(_, _, required)| required.iter().cloned()));
     required.push(work_item::DETAIL);
     required.extend_from_slice(DECISION);
+    if [work_item::DETAIL, internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
+        required.extend(super::approvals::qualifications(&internal::APPROVAL_MANAGEMENT_READ));
+    }
     for permission in [
         internal::PORTAL_MATERIAL_READ,
         internal::PORTAL_MATERIAL_READ_OFFERING,
@@ -333,12 +336,20 @@ impl AuthorizationService {
         proof: &AccessProof,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<AccessProof>> {
-        if ![internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(&proof.context.permission) {
-            return Ok(vec![]);
+    ) -> Result<SourceEvidence> {
+        if proof.context.permission == work_item::DETAIL {
+            return self.work_item_detail_sources(proof, facts, executor).await;
         }
-        let mut sources = Vec::new();
+        if ![internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(&proof.context.permission) {
+            return Ok(SourceEvidence::default());
+        }
+        let mut sources = SourceEvidence::default();
         for object in facts.roots() {
+            if object.subject_type.get()? == "DOCUMENT_APPROVAL" {
+                requirements("DOCUMENT_APPROVAL", object.subject_source_resource.get()?)?;
+                sources.extend(self.approval_task_sources(proof, object, executor).await?);
+                continue;
+            }
             if !execution_qualified(
                 object.subject_type.get()?,
                 object.subject_source_resource.get()?,
@@ -347,17 +358,17 @@ impl AuthorizationService {
                 return Err(Error::Forbidden("当前账号不具备同角色完整任务办理资格".into()));
             }
             if let Some(resource) = order_resource(object.subject_source_resource.get()?) {
-                sources.push(self.work_item_order(proof, facts, object, resource, executor).await?);
+                sources.proofs.push(self.work_item_order(proof, facts, object, resource, executor).await?);
             }
             if object.subject_source_resource.get()? == "supplier_portal_request" {
-                sources.extend(self.work_item_portal(proof, facts, object, executor).await?);
+                sources.proofs.extend(self.work_item_portal(proof, facts, object, executor).await?);
             }
         }
         Ok(sources)
     }
 
     /// 保留任务详情入口的独立订单读取范围及显式记录读取补充。
-    async fn work_item_order(
+    pub(super) async fn work_item_order(
         &self,
         proof: &AccessProof,
         facts: &TargetFacts,
@@ -410,7 +421,7 @@ impl AuthorizationService {
     }
 
     /// 所有来源和最早到期时点留在同一个原始读取阶段，禁止创建新的授权阶段。
-    async fn check_work_item_source(
+    pub(super) async fn check_work_item_source(
         &self,
         proof: &AccessProof,
         facts: &TargetFacts,
@@ -426,7 +437,7 @@ impl AuthorizationService {
 }
 
 /// 只有原任务政策要求独立订单读取的真实业务种类才检查订单来源。
-fn order_resource(source: &str) -> Option<&'static str> {
+pub(super) fn order_resource(source: &str) -> Option<&'static str> {
     match source {
         "sales_order" | "voucher_sales_order" | "sales_change_order" | "delivery" => Some("sales_order"),
         "purchase_order"
@@ -439,7 +450,11 @@ fn order_resource(source: &str) -> Option<&'static str> {
 }
 
 /// 固定来源必须恰有一个真实对象，引用集合、身份及资源均必须匹配。
-fn exact_source<'a>(object: &'a ObjectFacts, key: &str, resource: &str) -> Result<&'a ObjectFacts> {
+pub(super) fn exact_source<'a>(
+    object: &'a ObjectFacts,
+    key: &str,
+    resource: &str,
+) -> Result<&'a ObjectFacts> {
     let related = object
         .relations
         .get(&RelationKey::parse(key)?)

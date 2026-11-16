@@ -15,7 +15,7 @@ use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
 use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::ReturnsProcess;
@@ -43,14 +43,43 @@ impl ReturnsProcess {
         req: CreateReceiptReversalRequest,
         actor: &AuditActor,
     ) -> Result<ReceiptReversalView> {
+        let process = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.create_receipt_reversal_stage(req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 原创建事务内先授权，再读取真实往来主体、绑定定义并原子登记。
+    async fn create_receipt_reversal_stage(
+        &self,
+        req: CreateReceiptReversalRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ReceiptReversalView> {
+        self.rbac
+            .identity
+            .require(
+                actor,
+                &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+
         req.validate()?;
         let reversal = build_create(req, actor.id())?;
-        persist_created_receipt_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
-        self.receipt_reversal_result(
+        persist_created_receipt_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone(), executor)
+            .await?;
+        self.receipt_reversal_result_read(
             &reversal.base.id,
             actor,
             &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
             AccessTarget::Operation,
+            executor,
         )
         .await
     }
@@ -67,9 +96,18 @@ async fn persist_created_receipt_reversal(
     rbac: &ReverseFlowPorts,
     reversal: ReceiptReversal,
     actor: AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
+    rbac.identity
+        .require(
+            &actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
+            AccessTarget::Operation,
+            executor,
+        )
+        .await?;
     let (organization_id, _) =
-        load_receipt_reversal_context(db, &reversal.original_customer_receipt_id).await?;
+        load_receipt_reversal_context(db, &reversal.original_customer_receipt_id, executor).await?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::ReceiptReversal,
         business_object_id: reversal.base.id.clone(),
@@ -87,34 +125,30 @@ async fn persist_created_receipt_reversal(
         "receipt_reversal",
         reversal.base.id.clone(),
     )?;
-    let db = db.clone();
-    let rbac = rbac.clone();
 
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                rbac.identity
-                    .require(
-                        &actor,
-                        &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CREATE,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                persist_bound_receipt_reversal_document(
-                    &db,
-                    &rbac,
-                    document,
-                    &bind_command,
-                    &actor,
-                    executor,
-                )
-                .await?;
-                ReturnsService::persist_created_receipt_reversal(&db, &reversal, executor).await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    persist_bound_receipt_reversal_document(db, rbac, document, &bind_command, &actor, executor).await?;
+    ReturnsService::persist_created_receipt_reversal(db, &reversal, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod creation_authorization_tests {
+    use erp_core::common::time::Instant;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::super::testing::{actor, denied, process};
+
+    #[tokio::test]
+    async fn creation_authorizes_before_counterparty_source_or_definition_reads() {
+        let process = process().await;
+        let request=serde_json::from_value(serde_json::json!({
+"refund_no":"RF-1","reversal_no":"RV-1","customer_id":"unread-customer","supplier_id":"unread-supplier",
+"original_customer_receipt_id":"unread-receipt","original_supplier_payment_id":"unread-payment",
+"reason_text":"reason","amount":"1","handled_by":"actor","reviewed_by":"reviewer","occurred_at":Instant::from_unix_secs(100)
+})).unwrap();
+        denied(
+            process.create_receipt_reversal_stage(request, &actor(), &mut SnapshotExecutor::default()).await,
+        );
+    }
 }

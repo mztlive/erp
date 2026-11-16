@@ -58,6 +58,36 @@ impl InventoryAction {
 /// 库存用来从身份事实计算仓库范围授权的端口。
 #[async_trait]
 pub trait AuthorizationPort: Send + Sync {
+    /// 在读取库存调整单之前执行统一详情对象授权。
+    ///
+    /// # 参数
+    /// actor、id 为真实账号和调整单；executor 为完整详情读取的原快照事务。
+    /// # 返回
+    /// 统一服务按 STOCK_ADJUSTMENT_DETAIL 检查完整资格和真实仓库来源后成功。
+    /// # 错误
+    /// 资格、对象或仓库来源无权时拒绝；取证及执行边界错误原样返回。
+    async fn require_adjustment(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
+    /// 在读取库存调整单之前执行统一修改对象授权。
+    ///
+    /// # 参数
+    /// actor、id 为真实账号和既有调整单；executor 为修改命令的原快照事务。
+    /// # 返回
+    /// 统一服务按 STOCK_ADJUSTMENT_UPDATE 的固定完整资格和真实对象事实检查后成功。
+    /// # 错误
+    /// 资格、对象或真实仓库来源无权时拒绝；取证及执行边界错误原样返回。
+    async fn require_adjustment_update(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
+
     /// 在调用方执行器快照上返回 `actor` 的库存仓库范围。
     ///
     /// # 参数

@@ -25,7 +25,6 @@ use crate::{Error, Result, ReverseFlowPorts};
 pub(in crate::reverse_flow) struct ReversalSubmitReplayInput {
     pub id: String,
     pub document_type: DocumentType,
-    pub submit_permission: &'static str,
     pub command_receipt: CommandReceipt,
     pub actor: AuditActor,
 }
@@ -54,6 +53,21 @@ impl ReturnsProcess {
                 Box::pin(async move { replay_submit_apply(&db, &rbac, &input, executor).await })
             })
             .await
+    }
+
+    /// 在原提交事务先重验完整资格和真实来源，再匹配精确请求收据。
+    /// # 参数
+    /// input 为原命令身份与操作人，executor 为本次提交事务。
+    /// # 返回
+    /// 已提交同载荷命令返回真实结果 ID；未提交返回 None。
+    /// # 错误
+    /// 资格、来源、收据不符或数据库故障时拒绝。
+    pub(in crate::reverse_flow) async fn replay_reversal_submit_stage(
+        &self,
+        input: &ReversalSubmitReplayInput,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<String>> {
+        replay_submit_apply(&self.db, &self.rbac, input, executor).await
     }
 
     /// 结果未知或收据竞争后只回读已提交命令，不自动执行第二次写事务。
@@ -116,7 +130,6 @@ async fn replay_submit_apply(
                 rbac,
                 &input.actor,
                 input.document_type,
-                input.submit_permission,
                 &input.id,
                 executor,
             )

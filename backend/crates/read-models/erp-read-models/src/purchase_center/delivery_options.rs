@@ -4,15 +4,23 @@
 //! 重新分配，每个地址扣除本采购之外其他有效采购已承担的数量。
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::ids::SalesOrderRevisionId;
+use erp_identity::AuthorizationService;
+use erp_permissions::purchase_order;
 use erp_procurement::entity::purchase_order::{
     ChangeQuantityBound, FulfillmentResponsibility, ProcurementCoverageFacts, PurchaseOrder,
     business_date_of, remaining_delivery_capacity,
 };
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_procurement::repository::purchase_order::scope::{
+    PurchaseOrderRepositoryScopeExt, PurchaseReadScope,
+};
 use erp_sales::repository::SalesOrderExt;
-use persistence_core::NoTransaction;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::PurchaseOrderReadService;
 use super::change_bounds::load_change_quantity_facts;
@@ -21,7 +29,6 @@ use super::dto::{
     PurchaseQuantityBoundView,
 };
 use super::repository::load_procurement_coverage_facts;
-use crate::support::data_scope_changed;
 use crate::{Error, Result};
 
 impl PurchaseOrderReadService {
@@ -41,49 +48,78 @@ impl PurchaseOrderReadService {
         actor: &AuditActor,
         id: &str,
     ) -> Result<PurchaseDeliveryOptionsView> {
-        let (order, expected) = self.access().detail(actor, id).await?;
-        let view = self.delivery_options_view(&order).await?;
-        let (_, current) = self.access().detail(actor, id).await?;
-        if current != expected {
-            return Err(data_scope_changed("数据范围或采购单已变化，请刷新"));
-        }
-        Ok(view)
+        let (db, authorization, actor, id) =
+            (self.db.clone(), self.rbac.clone(), actor.clone(), id.to_owned());
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { delivery_snapshot(&db, authorization, &actor, &id, executor).await })
+            })
+            .await
     }
+}
 
-    /// 按销售当前版本装配交付安排范围；已生效采购附带改单数量范围。
-    async fn delivery_options_view(&self, order: &PurchaseOrder) -> Result<PurchaseDeliveryOptionsView> {
-        if !order.stable.status.allows_change() {
-            return self.draft_delivery_options_view(order).await;
-        }
-        let facts = load_change_quantity_facts(&self.db, order, &mut NoTransaction).await?;
-        let mut view = delivery_options(order, &facts.state.facts)?;
-        attach_quantity_bounds(&mut view, &facts.bounds)?;
-        Ok(view)
+/// 授权、来源地址和数量上限均使用原事务，完整投影后交付原查询凭证。
+async fn delivery_snapshot(
+    db: &Database,
+    authorization: Arc<AuthorizationService>,
+    actor: &AuditActor,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseDeliveryOptionsView> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("采购交付安排读取必须使用快照事务".into()));
     }
+    let access = Arc::new(authorization.query(actor, &purchase_order::DETAIL, executor).await?);
+    let scope = PurchaseReadScope::from_compiled(access, authorization);
+    let order = db
+        .purchase_orders()
+        .find_authorized(id, &scope, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
+    let view = delivery_options_view(db, &order, executor).await?;
+    scope.validate(executor).await?;
+    Ok(view)
+}
 
-    /// 采购草稿只需交付安排范围。
-    async fn draft_delivery_options_view(
-        &self,
-        order: &PurchaseOrder,
-    ) -> Result<PurchaseDeliveryOptionsView> {
-        let sales = self
-            .db
-            .sales_orders()
-            .find_by_id(order.sales_order_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
-        let revision_id = sales
-            .current_revision_id()
-            .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".into()))?;
-        let facts = load_procurement_coverage_facts(
-            &self.db,
-            &SalesOrderRevisionId::new(revision_id),
-            &order.sales_order_id,
-            &mut NoTransaction,
-        )
-        .await?;
-        delivery_options(order, &facts)
+/// 按销售当前版本装配交付安排范围；已生效采购附带改单数量范围。
+async fn delivery_options_view(
+    db: &Database,
+    order: &PurchaseOrder,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseDeliveryOptionsView> {
+    if !order.stable.status.allows_change() {
+        return draft_delivery_options_view(db, order, executor).await;
     }
+    let facts = load_change_quantity_facts(db, order, executor).await?;
+    let mut view = delivery_options(order, &facts.state.facts)?;
+    attach_quantity_bounds(&mut view, &facts.bounds)?;
+    Ok(view)
+}
+
+/// 采购草稿只需交付安排范围。
+async fn draft_delivery_options_view(
+    db: &Database,
+    order: &PurchaseOrder,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseDeliveryOptionsView> {
+    let sales = db
+        .sales_orders()
+        .find_by_id(order.sales_order_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
+    let revision_id = sales
+        .current_revision_id()
+        .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".into()))?;
+    let facts = load_procurement_coverage_facts(
+        db,
+        &SalesOrderRevisionId::new(revision_id),
+        &order.sales_order_id,
+        executor,
+    )
+    .await?;
+    delivery_options(order, &facts)
 }
 
 /// 由覆盖事实计算采购各行的交付安排范围。
@@ -197,6 +233,8 @@ fn referenced_lines(order: &PurchaseOrder, facts: &ProcurementCoverageFacts) -> 
 mod tests {
     use std::str::FromStr;
 
+    use application_core::AuditActor;
+    use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::{
         ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId,
@@ -204,6 +242,7 @@ mod tests {
         SalesOrderRevisionLineId, SkuId, SkuRevisionId, SupplierAccountId, WarehouseId,
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_identity::testing::unavailable_authorization;
     use erp_procurement::entity::facts::{
         FactIdentity, PaymentTermFact, SalesGoodsLineFact, SalesLineType, SalesRevisionLineFact,
     };
@@ -212,8 +251,30 @@ mod tests {
         PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
         PurchaseType,
     };
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
-    use super::delivery_options;
+    use super::{delivery_options, delivery_snapshot};
+    use crate::Error;
+
+    #[tokio::test]
+    async fn delivery_options_requires_snapshot_and_authorization_before_order_or_address_reads() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("purchase_delivery_options_test");
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let authorization = unavailable_authorization();
+        let result =
+            delivery_snapshot(&db, authorization.clone(), &actor, "purchase", &mut ReadExecutor::default())
+                .await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "采购交付安排读取必须使用快照事务")
+        );
+        let result =
+            delivery_snapshot(&db, authorization, &actor, "purchase", &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
 
     fn qty(value: &str) -> Quantity {
         Quantity::from_str(value).unwrap()

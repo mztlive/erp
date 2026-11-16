@@ -2,7 +2,10 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use erp_permissions::{access_control, admin, internal, purchase_order, sales_order, sales_review};
+use erp_permissions::{
+    access_control, admin, internal, party, purchase_order, sales_order, sales_review, supplier_api,
+    supplier_fulfillment,
+};
 use persistence_core::testing::SnapshotExecutor;
 use persistence_core::{Executor, ReadExecutor};
 
@@ -13,6 +16,125 @@ use crate::{AccessTarget, AuthorizationService, Error, Permission};
 
 fn grant(identity: &Identity, permissions: Vec<(String, Vec<Permission>)>) {
     identity.state.lock().unwrap().grants = permissions;
+}
+
+#[tokio::test]
+async fn adoption_and_its_unit_preparation_preserve_separate_role_qualifications() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::default());
+    let service = service(identity.clone(), facts.clone());
+    for permissions in [vec![supplier_api::ADOPTIONS_PREVIEW], vec![internal::SUPPLIER_OFFERING_COST_DETAIL]]
+    {
+        grant(&identity, vec![("incomplete".into(), permissions)]);
+        assert!(matches!(
+            service
+                .require(
+                    &actor(),
+                    &internal::CATALOG_ADOPTION,
+                    AccessTarget::Operation,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+    grant(
+        &identity,
+        vec![
+            ("catalog".into(), vec![supplier_api::ADOPTIONS_PREVIEW]),
+            ("cost".into(), vec![internal::SUPPLIER_OFFERING_COST_DETAIL]),
+        ],
+    );
+    service
+        .require(
+            &actor(),
+            &internal::CATALOG_ADOPTION,
+            AccessTarget::Operation,
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::CATALOG_ADOPTION,
+                AccessTarget::Operation,
+                &mut ReadExecutor::default(),
+            )
+            .await,
+        Err(Error::ValidationError(_))
+    ));
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn customer_material_qualifications_preserve_existing_codes_and_require_their_own_grants() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::default());
+    let service = service(identity.clone(), facts.clone());
+    for (permission, code) in [
+        (party::CONTACT_DETAIL, "party_contact:detail"),
+        (party::CONTACT_REVEAL, "party_contact:reveal"),
+        (party::ADDRESS_DETAIL, "party_address:detail"),
+        (party::ADDRESS_REVEAL, "party_address:reveal"),
+        (party::BANK_ACCOUNT_DETAIL, "party_bank_account:detail"),
+        (party::TAX_PROFILE_DETAIL, "party_tax_profile:detail"),
+    ] {
+        assert_eq!(permission, Permission::parse(code).unwrap());
+        grant(&identity, vec![("reader".into(), vec![party::CONTACT_LIST])]);
+        assert!(matches!(
+            service
+                .require(&actor(), &permission, AccessTarget::Operation, &mut SnapshotExecutor::default())
+                .await,
+            Err(Error::Forbidden(_))
+        ));
+        grant(&identity, vec![("qualified".into(), vec![permission.clone()])]);
+        service
+            .require(&actor(), &permission, AccessTarget::Operation, &mut SnapshotExecutor::default())
+            .await
+            .unwrap();
+        assert!(matches!(
+            service
+                .require(&actor(), &permission, AccessTarget::Operation, &mut ReadExecutor::default())
+                .await,
+            Err(Error::ValidationError(_))
+        ));
+    }
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn execution_setup_result_query_preserves_submit_qualification_without_detail_menu_access() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::new(vec![object("supplier_fulfillment_order", "order", "user")]));
+    let mut builder = complete();
+    builder.facilities = identity.clone();
+    builder.facts.insert("supplier_fulfillment_order".into(), facts);
+    let service = builder.build().unwrap();
+    let permission = supplier_fulfillment::ORDER_SUBMIT;
+    grant(&identity, vec![("submitter".into(), vec![permission.clone()])]);
+    let mut executor = SnapshotExecutor::default();
+    service
+        .require(&actor(), &permission, AccessTarget::record("order").unwrap(), &mut executor)
+        .await
+        .unwrap();
+    let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
+    service.validate(&access, &mut executor).await.unwrap();
+    assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+    grant(&identity, vec![("reader".into(), vec![supplier_fulfillment::ORDER_DETAIL])]);
+    assert!(matches!(service.query(&actor(), &permission, &mut executor).await, Err(Error::Forbidden(_))));
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &permission,
+                AccessTarget::record("order").unwrap(),
+                &mut ReadExecutor::default()
+            )
+            .await,
+        Err(Error::ValidationError(_))
+    ));
 }
 
 #[tokio::test]

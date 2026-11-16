@@ -10,6 +10,7 @@ use approval_outcome::{ApprovalOutcome, persist_approval_outcome};
 mod cancel_approval;
 mod cancel_write;
 pub(crate) mod command_recovery;
+mod commit_access;
 mod customer_refund;
 mod direct_return;
 mod draft_update;
@@ -37,6 +38,7 @@ pub use receipt_reversal::ReceiptReversalProcess;
 use crate::{Error, Result};
 
 /// 退货、退款和冲正命令的原事务与审批授权组合。
+#[derive(Clone)]
 pub struct ReturnsProcess {
     db: Database,
     rbac: ReverseFlowPorts,
@@ -251,5 +253,92 @@ mod boundary_tests {
         .await;
         assert!(matches!(result, Err(Error::Internal(message)) if message.contains("运行时事务")));
         assert!(boundary.is_current(&executor));
+    }
+}
+
+#[cfg(test)]
+pub(super) mod testing {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_approval_runtime::ApprovalRuntime;
+    use erp_core::AccountKind;
+    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
+    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::{RbacService, Result as IdentityResult};
+    use erp_workflow::entity::work_item::{FinanceResponsibilityOperation, WorkItemType};
+    use erp_workflow::ports::{FailClosedAuditPort, FinanceResponsibilityPort};
+    use erp_workflow::service::work_item::ResolvedFinanceResponsibility;
+    use erp_workflow::{Result as WorkflowResult, WorkflowAuthorizationPort};
+    use mongodb::Client;
+
+    use super::*;
+
+    #[derive(Clone)]
+    struct NoAuth;
+    #[async_trait]
+    impl WorkflowAuthorizationPort for NoAuth {}
+
+    struct NoIdentityAudit;
+    #[async_trait]
+    impl IdentityAuditPort for NoIdentityAudit {
+        fn resource_log(
+            &self,
+            _: AuditActor,
+            _: &str,
+            _: &str,
+            _: String,
+        ) -> IdentityResult<PreparedResourceAudit> {
+            panic!("拒绝的撤回不得构造身份审计")
+        }
+        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> IdentityResult<()> {
+            panic!("拒绝的撤回不得写入身份审计")
+        }
+    }
+
+    struct NoFinance;
+    #[async_trait]
+    impl FinanceResponsibilityPort for NoFinance {
+        async fn resolve_finance_responsibility(
+            &self,
+            _: FinanceResponsibilityOperation,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> WorkflowResult<ResolvedFinanceResponsibility> {
+            panic!("拒绝的撤回不得分配财务责任")
+        }
+        async fn resolve_return_finance_responsibility(
+            &self,
+            _: WorkItemType,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> WorkflowResult<ResolvedFinanceResponsibility> {
+            panic!("拒绝的撤回不得分配退货责任")
+        }
+    }
+
+    pub(super) async fn process() -> ReturnsProcess {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("reverse_cancel_authorization");
+        let identity = unavailable_authorization();
+        let rbac = Arc::new(RbacService::new(db.clone(), Arc::new(NoIdentityAudit)));
+        let runtime = Arc::new(ApprovalRuntime::new(
+            db.clone(),
+            identity.clone(),
+            rbac,
+            NoAuth,
+            Arc::new(FailClosedAuditPort),
+        ));
+        ReturnsProcess::new(db.clone(), ReverseFlowPorts::new(identity, runtime, Arc::new(NoFinance)))
+    }
+
+    pub(super) fn actor() -> AuditActor {
+        AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin)
+    }
+
+    pub(super) fn denied<T>(result: Result<T>) {
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
     }
 }

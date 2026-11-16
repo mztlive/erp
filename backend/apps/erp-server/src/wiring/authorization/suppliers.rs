@@ -40,7 +40,7 @@ pub(super) fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)>
         (supplier_deposit::DETAIL, deposit_mapping),
     ];
     mappings.extend(
-        [supplier_api::CONNECTION_DETAIL, internal::CONNECTION_CATALOG_READ]
+        [supplier_api::CONNECTION_DETAIL, supplier_api::JD_VOP_AUTHORIZE, internal::CONNECTION_CATALOG_READ]
             .into_iter()
             .map(|permission| (permission, connection_mapping.clone())),
     );
@@ -51,6 +51,7 @@ pub(super) fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)>
             vec![
                 supplier_fulfillment::ORDER_LIST,
                 supplier_fulfillment::ORDER_DETAIL,
+                supplier_fulfillment::ORDER_SUBMIT,
                 supplier_fulfillment::ORDER_CANCEL,
                 supplier_fulfillment::ORDER_REFUND,
             ],

@@ -1,7 +1,9 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
-use erp_core::ids::{InboxMessageId, SourceSystemId, SupplierApiConnectionId, SupplierRefundFactId};
+use erp_core::ids::{
+    InboxMessageId, SourceSystemId, SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierRefundFactId,
+};
 use erp_integration::entity::integration_ops::{
     InboxMessage, InboxMessageData, InboxMessageStatus, MessageType,
 };
@@ -16,7 +18,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
-use crate::Result;
+use crate::{Error, Result};
 
 impl SupplierFulfillmentProcess {
     /// 登记供应商退款成功结果（幂等键 `(connection_id, external_refund_no,
@@ -70,7 +72,7 @@ impl SupplierFulfillmentProcess {
         if let Some(view) = self.replayed_refund_result(id, req, &connection_id, actor, executor).await? {
             return Ok(view);
         }
-        self.domain().advance_refund_result(id, &mut order, req.refund_amount).await?;
+        self.domain().advance_refund_result(id, &mut order, req.refund_amount, executor).await?;
         let message = build_refund_message(&order, req, &connection_id, InboxMessageStatus::Received)?;
         let (fact, allocations) = self.domain().build_refund_fact(
             &order,
@@ -107,6 +109,14 @@ impl SupplierFulfillmentProcess {
             )
             .await?
         {
+            if !existing.matches_result(
+                &SupplierFulfillmentOrderId::new(id),
+                req.refund_amount,
+                Instant::from_unix_secs(req.refunded_at),
+                &req.source_event_id,
+            ) {
+                return Err(Error::ConflictError("外部退款身份已用于不同订单或退款结果".into()));
+            }
             tracing::info!(account = %actor.id(), order_id = %id, "退款结果幂等命中");
             let fact_id = SupplierRefundFactId::new(existing.base.id.as_str());
             let allocations = self

@@ -9,10 +9,12 @@ use erp_identity::entity::authorization::{
     QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
-use erp_identity::{AuthorizationService, CompiledAccess, ResourceTargets};
+use erp_identity::{AuthorizationService, CompiledAccess, Error as IdentityError, ResourceTargets};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, mongo_ops};
+
+use crate::repository::CatalogExt;
 
 /// 身份域编译的当前阶段凭证；不含可由业务组合的权限条款。
 #[derive(Clone)]
@@ -78,7 +80,20 @@ impl CompiledScope {
     /// # 错误
     /// 跨事务、跨阶段或已经到期时拒绝。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
+        Self::ensure_model(self.compiled.model())?;
         self.compiled.ensure_current(executor)
+    }
+
+    /// 商品仓储只接受真实商品集合的完整对象凭证。
+    fn ensure_model(model: &QueryModel) -> erp_identity::Result<()> {
+        if model.resource != "product"
+            || model.collection != <Database as CatalogExt>::PRODUCTS
+            || model.id_field != "id"
+            || model.output != QueryOutput::Object
+        {
+            return Err(IdentityError::ValidationError("商品查询凭证的资源、集合或输出不符".into()));
+        }
+        Ok(())
     }
 
     /// 复验账号、权限、版本和有效期。
@@ -118,7 +133,7 @@ impl AccessMapping for Mapping {
             AccessFact::OrganizationIn(orgs) => Ok(QueryFragment::Match(
                 doc! {"business_org_unit_id":{"$in":orgs.iter().collect::<Vec<_>>()}},
             )),
-            _ => Err(erp_identity::Error::ValidationError("共享资料未登记该授权事实".into())),
+            _ => Err(IdentityError::ValidationError("共享资料未登记该授权事实".into())),
         }
     }
     fn relation(
@@ -127,7 +142,7 @@ impl AccessMapping for Mapping {
         _: &AccessContext,
         _: Option<&MappingFacts>,
     ) -> erp_identity::Result<RelationMapping> {
-        Err(erp_identity::Error::ValidationError("共享资料未登记来源关系".into()))
+        Err(IdentityError::ValidationError("共享资料未登记来源关系".into()))
     }
 }
 struct Facts {
@@ -158,13 +173,10 @@ impl AccessFactsPort for Facts {
 fn object(resource: &str, row: Document) -> erp_identity::Result<ObjectFacts> {
     Ok(ObjectFacts {
         resource: resource.into(),
-        id: row
-            .get_str("id")
-            .map_err(|_| erp_identity::Error::ValidationError("授权对象缺少主键".into()))?
-            .into(),
+        id: row.get_str("id").map_err(|_| IdentityError::ValidationError("授权对象缺少主键".into()))?.into(),
         version: row
             .get("version")
-            .ok_or_else(|| erp_identity::Error::ValidationError("授权对象缺少业务版本".into()))?
+            .ok_or_else(|| IdentityError::ValidationError("授权对象缺少业务版本".into()))?
             .to_string(),
         owner_id: FactValue::Known(responsibility_text(&row, "maintainer_user_id")?),
         org_unit_id: FactValue::Known(responsibility_text(&row, "business_org_unit_id")?),
@@ -176,7 +188,7 @@ fn responsibility_text(row: &Document, field: &str) -> erp_identity::Result<Opti
     match row.get(field) {
         None | Some(Bson::Null) => Ok(None),
         Some(Bson::String(value)) => Ok((!value.trim().is_empty()).then(|| value.clone())),
-        _ => Err(erp_identity::Error::ValidationError(format!("授权责任字段{field}类型无效"))),
+        _ => Err(IdentityError::ValidationError(format!("授权责任字段{field}类型无效"))),
     }
 }
 
@@ -220,6 +232,28 @@ mod tests {
                 output: QueryOutput::Object,
                 facts: [FactKind::Owner, FactKind::Organization].into(),
             },
+        }
+    }
+
+    #[test]
+    fn product_repository_rejects_other_resources_collections_and_restricted_outputs() {
+        let model = mapping().model;
+        assert!(CompiledScope::ensure_model(&model).is_ok());
+        for (resource, collection, id_field, output) in [
+            ("customer", "products", "id", QueryOutput::Object),
+            ("product", "customers", "id", QueryOutput::Object),
+            ("product", "products", "source_id", QueryOutput::Object),
+            ("product", "products", "id", QueryOutput::Share { fields: ["id".into()].into() }),
+            ("product", "products", "id", QueryOutput::Existence { fields: ["id".into()].into() }),
+        ] {
+            let invalid = QueryModel {
+                resource: resource.into(),
+                collection: collection.into(),
+                id_field: id_field.into(),
+                output,
+                ..model.clone()
+            };
+            assert!(matches!(CompiledScope::ensure_model(&invalid), Err(IdentityError::ValidationError(_))));
         }
     }
 

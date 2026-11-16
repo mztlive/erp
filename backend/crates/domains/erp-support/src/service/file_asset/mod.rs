@@ -263,7 +263,7 @@ mod tests {
         use erp_core::AccountKind;
         use erp_core::ids::BusinessDocumentId;
         use erp_identity::testing::unavailable_authorization;
-        use persistence_core::ReadExecutor;
+        use persistence_core::testing::SnapshotExecutor;
 
         use crate::ports::{FailClosedAuditPort, FailClosedBusinessDocumentPort};
         use crate::{Error, FileAssetListParams};
@@ -281,19 +281,19 @@ mod tests {
                 .file_asset_list_snapshot(
                     &FileAssetListParams::default(),
                     &actor,
-                    &mut ReadExecutor::default(),
+                    &mut SnapshotExecutor::default(),
                 )
                 .await
                 .expect_err("必须拒绝"),
             service
-                .file_asset_detail_snapshot("asset", &actor, &mut ReadExecutor::default())
+                .file_asset_detail_snapshot("asset", &actor, &mut SnapshotExecutor::default())
                 .await
                 .expect_err("必须拒绝"),
             service
                 .document_attachment_list_snapshot(
                     &BusinessDocumentId::new("document"),
                     &actor,
-                    &mut ReadExecutor::default(),
+                    &mut SnapshotExecutor::default(),
                 )
                 .await
                 .expect_err("必须拒绝"),

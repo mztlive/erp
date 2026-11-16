@@ -4,8 +4,8 @@ use persistence_core::Transactional;
 
 use super::dto::ProfitLossQuery;
 use super::{ActualProfitLossReadModel, source};
-use crate::Result;
 use crate::historical_directory::{HistoricalDirectoryView, ProfitLossDirectoryQuery};
+use crate::{Error, Result};
 
 impl ActualProfitLossReadModel {
     /// 独立读取冻结归属目录，沿用报表同角色销售与成本权限证明。
@@ -48,10 +48,12 @@ impl ActualProfitLossReadModel {
                         source::authorized_orders(&this.db, &tx_query, bounds, scope, executor).await?;
                     let expected = source::version(&context.scope_version, &orders);
                     super::ensure_version(input.scope_version.as_deref(), &expected)?;
-                    HistoricalDirectoryView::from_attributions(
+                    let view = HistoricalDirectoryView::from_attributions(
                         orders.iter().filter_map(|row| row.attribution.as_ref()),
                         expected,
-                    )
+                    )?;
+                    context.validate(executor).await?;
+                    Ok::<_, Error>(view)
                 })
             })
             .await?;

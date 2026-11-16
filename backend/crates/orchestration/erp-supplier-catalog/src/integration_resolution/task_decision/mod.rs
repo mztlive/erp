@@ -7,6 +7,7 @@ mod complete;
 mod direct;
 mod execution;
 mod guard;
+mod replay;
 #[cfg(test)]
 mod tests;
 

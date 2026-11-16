@@ -21,6 +21,7 @@ pub use query::{CatalogUpdate, query_current};
 use crate::supplier_connection_execution::catalog_refresh_actor;
 use crate::{Error, Result};
 
+#[derive(Clone)]
 pub struct SupplierCatalogCallbackProcess {
     catalog: CatalogService,
     db: Database,

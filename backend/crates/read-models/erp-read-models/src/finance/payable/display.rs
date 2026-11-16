@@ -17,7 +17,7 @@ use erp_supplier::SupplierExt;
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::PayableReadService;
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
@@ -37,23 +37,6 @@ struct AllocationSource {
 }
 
 impl PayableReadService {
-    /// 批量把冲正记录挂到原付款视图，避免付款列表逐行查询。
-    ///
-    /// # 参数
-    /// * `views` - 当前付款列表或单笔详情视图
-    ///
-    /// # 返回
-    /// 成功时就地写入按创建时间倒序的冲正摘要。
-    ///
-    /// # 错误
-    /// 冲正记录查询失败时返回错误。
-    pub(super) async fn attach_supplier_payment_reversals(
-        &self,
-        views: &mut [SupplierPaymentView],
-    ) -> Result<()> {
-        self.attach_supplier_payment_reversals_with_executor(views, &mut NoTransaction).await
-    }
-
     pub(super) async fn attach_supplier_payment_reversals_with_executor(
         &self,
         views: &mut [SupplierPaymentView],
@@ -127,28 +110,6 @@ fn payment_reversal_view(reversal: PaymentReversal) -> SupplierPaymentReversalVi
         occurred_at: reversal.occurred_at,
         created_at: reversal.base.created_at,
     }
-}
-
-/// 批量为多笔付款的核销分配补全应付子账与来源业务单号（FIN-R02）。
-///
-/// 将各笔付款的分配视图拼接后一次装载分录、子账与来源单号，
-/// 再按原分组切回；空输入不访问数据库。缺失分录或子账的行保持
-/// 展示字段为空，与单笔路径语义一致。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `grouped` - 按付款分组的分配视图
-///
-/// # 返回
-/// 返回与输入分组对齐的补全后分配视图。
-///
-/// # 错误
-/// 仓储读取失败时返回错误。
-pub(super) async fn enrich_payment_allocation_views_batched(
-    db: &Database,
-    grouped: Vec<Vec<PaymentAllocationView>>,
-) -> Result<Vec<Vec<PaymentAllocationView>>> {
-    enrich_payment_allocation_views_batched_with_executor(db, grouped, &mut NoTransaction).await
 }
 
 pub(super) async fn enrich_payment_allocation_views_batched_with_executor(

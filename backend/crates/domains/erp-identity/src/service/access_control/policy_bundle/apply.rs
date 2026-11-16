@@ -10,7 +10,7 @@ use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::authorization_bundle::plan::PolicyPlan;
 use crate::entity::authorization_bundle::receipt::PolicyReceipt;
 use crate::repository::policy_receipt::receipts;
-use crate::{AccessControlExt, AccessTarget, Error, Result};
+use crate::{AccessControlExt, Error, Result};
 
 impl PolicyBundleService {
     /// 根据原审核摘要原子应用文件。
@@ -57,18 +57,23 @@ impl PolicyBundleService {
         actor: AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<(PolicyApplyResult, bool)> {
-        self.access
+        let authorization = self
+            .access
             .authorization
-            .require(&actor, &access_control::POLICY_BUNDLE_APPLY, AccessTarget::Operation, executor)
+            .require_policy_bundle(
+                &actor,
+                &access_control::POLICY_BUNDLE_APPLY,
+                Some(&request.document),
+                executor,
+            )
             .await?;
-        let authorization = self.authorize(&request.document, &actor, executor).await?;
         if let Some(receipt) = receipts(&self.access.db).find_by_id(command.id(), executor).await? {
             return Ok((receipt.replay(&command)?, false));
         }
-        if authorization.policy_version != request.expected_policy_version {
+        if authorization.scope.policy_version != request.expected_policy_version {
             return Err(Error::ConflictError("授权版本已变化，请重新预览".into()));
         }
-        let plan = self.plan(request.document, &actor, authorization, executor).await?;
+        let plan = self.plan(request.document, &actor, &authorization.scope, executor).await?;
         if plan.preview.review_hash != request.review_hash {
             return Err(Error::ConflictError("审核文件或目标事实已变化，请重新预览".into()));
         }

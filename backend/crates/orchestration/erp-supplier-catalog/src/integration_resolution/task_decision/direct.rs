@@ -7,14 +7,14 @@ use erp_integration::dto::{
 use erp_integration::entity::integration_ops::{DirectReceiptResult, IntegrationCommandIdentity};
 use erp_integration::service::task_decision::DirectFact;
 use erp_integration::service::task_decision::direct::execute_direct_decision;
-use erp_permissions::integration_ops;
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, ReadExecutor};
+use persistence_core::Executor;
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::command_identity;
+use super::replay::ReplayTarget;
 use super::{DIRECT_DECISION_AUDIT, store_receipt};
 use crate::{Error, Result};
 
@@ -79,7 +79,6 @@ impl IntegrationResolutionProcess {
         actor: &AuditActor,
     ) -> Result<DirectReconciliationResult> {
         command.validate()?;
-        self.ensure_direct_permission(actor).await?;
         if command.difference_id != path_id {
             return Err(Error::ValidationError("路径差异 ID 与命令不一致".to_string()));
         }
@@ -96,15 +95,6 @@ impl IntegrationResolutionProcess {
             || self.transact_direct_decision(command.clone(), actor.clone(), receipt.clone()),
         )
         .await
-    }
-
-    /// 独立决定与重放统一检验当前静态权限，任务关联由各自读取闸门拒绝。
-    async fn ensure_direct_permission(&self, actor: &AuditActor) -> Result<()> {
-        let permission = integration_ops::DIFFERENCE_DECISION;
-        if !self.authorization.has_permission(actor, &permission, &mut ReadExecutor::default()).await? {
-            return Err(Error::Forbidden("当前账号已不具备对账差异决定权限".into()));
-        }
-        Ok(())
     }
 
     async fn transact_direct_decision(
@@ -150,11 +140,11 @@ impl IntegrationResolutionProcess {
         command: &DirectReconciliationCommand,
         actor: &AuditActor,
     ) -> Result<Option<DirectReconciliationResult>> {
-        let Some(message) = self.replay_receipt::<DirectReceiptResult>(receipt, actor).await? else {
+        let Some(message) =
+            self.replay_receipt::<DirectReceiptResult>(receipt, actor, ReplayTarget::Difference).await?
+        else {
             return Ok(None);
         };
-        self.ensure_direct_permission(actor).await?;
-        ensure_no_work_item(&self.db, &command.difference_id, &mut ReadExecutor::default()).await?;
         Ok(Some(DirectReconciliationResult {
             difference_id: command.difference_id.clone(),
             operation_id: command.operation_id.clone(),
@@ -167,7 +157,11 @@ impl IntegrationResolutionProcess {
     }
 }
 
-async fn ensure_no_work_item(db: &Database, difference_id: &str, executor: &mut dyn Executor) -> Result<()> {
+pub(super) async fn ensure_no_work_item(
+    db: &Database,
+    difference_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     let items = db.work_items().find_unique_for_reconciliation_difference(difference_id, executor).await?;
     if items.is_empty() {
         return Ok(());

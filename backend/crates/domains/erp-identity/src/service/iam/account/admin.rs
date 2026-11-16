@@ -186,7 +186,7 @@ impl AdminService {
                     let admins = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
                     let account_ids =
                         admins.iter().map(|account| account.base.id.clone()).collect::<Vec<_>>();
-                    let mut role_ids = rbac.role_ids_by_accounts(AccountKind::Admin, &account_ids).await?;
+                    let mut role_ids = rbac.account_roles(AccountKind::Admin, &account_ids, executor).await?;
                     let items = admins
                         .into_iter()
                         .map(|account| {

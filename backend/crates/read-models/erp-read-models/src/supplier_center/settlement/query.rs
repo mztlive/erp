@@ -10,7 +10,9 @@ use erp_supply::entity::supplier_settlement::{
     SupplierSettlementDifference, SupplierSettlementDifferenceEvidence, SupplierSettlementStatement,
 };
 use erp_supply::repository::SupplierSettlementExt;
-use erp_supply::repository::supplier_settlement::SupplierSettlementStatementDetailSnapshot;
+use erp_supply::repository::supplier_settlement::{
+    SupplierSettlementStatementDetailSnapshot, SupplierSettlementStatementRepositoryExt,
+};
 use erp_supply::service::supplier_settlement::difference::settlement_difference_view;
 use erp_supply::service::supplier_settlement::evidence::evidence_view;
 use erp_supply::service::supplier_settlement::query::{settlement_item_view, settlement_object_actions};
@@ -27,6 +29,16 @@ use view_dto::SupplierSettlementStatementDetailView;
 use super::display_dto::SettlementStatementDisplayDetail;
 use super::{SupplierSettlementReadService, dto as view_dto, require_reviewer};
 use crate::{Error, Result};
+/// 动作检查产生的展示资格，不携带已读取的根、金额、明细或凭证。
+struct DetailPresentation {
+    processing_state: String,
+    review_work_item: Option<view_dto::SettlementReviewWorkItemView>,
+    review_processing_state: dto::SettlementReviewProcessingState,
+    review_action_blockers: Vec<dto::SettlementReviewActionBlockerView>,
+    allowed_actions: Vec<String>,
+    action_blockers: Vec<dto::SettlementReviewActionBlockerView>,
+}
+
 impl SupplierSettlementReadService {
     /// 查询供应商结算单详情（结算单 + 全部明细 + 全部差异）。
     ///
@@ -79,20 +91,31 @@ impl SupplierSettlementReadService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<SettlementStatementDisplayDetail> {
-        let snapshot = self.authorized_snapshot(id, actor, executor).await?;
-        let stats = settlement_detail_stats(&snapshot);
-        let statement = snapshot.statement;
-        let items = snapshot.items;
-        let differences = snapshot.differences;
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("供应商结算详情读取必须使用快照事务".into()));
+        }
+        let prepared = self.authorized_snapshot(id, actor, executor).await?;
+        let presentation = self.detail_actions(id, &prepared, actor, executor).await?;
+        self.detail_read(id, actor, presentation, executor).await
+    }
+
+    /// 业务动作只形成展示结果；所有会推进阶段的动作检查在最终根查询之前完成。
+    async fn detail_actions(
+        &self,
+        id: &str,
+        snapshot: &SupplierSettlementStatementDetailSnapshot,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<DetailPresentation> {
         let access = SettlementAccess::new(self.db.clone(), self.identity.clone())
             .actions(actor, id, executor)
             .await?;
         let (mut allowed_actions, mut action_blockers, processing_state) =
-            settlement_object_actions(&statement, &differences, &access);
-        let cost_delta = statement.accepted_cost_delta(&items, &differences)?;
+            settlement_object_actions(&snapshot.statement, &snapshot.differences, &access);
+        let cost_delta = snapshot.statement.accepted_cost_delta(&snapshot.items, &snapshot.differences)?;
         let cost_adjustment_ready = cost_delta.is_zero();
         let (review_work_item, review_action_blockers, review_domain_actions) =
-            self.settlement_review_work_item_view(&statement, actor, executor).await?;
+            self.settlement_review_work_item_view(&snapshot.statement, actor, executor).await?;
         allowed_actions.extend(
             review_domain_actions.into_iter().filter(|action| action != "CONFIRM" || cost_adjustment_ready),
         );
@@ -112,19 +135,54 @@ impl SupplierSettlementReadService {
             dto::SettlementReviewProcessingState::ApprovalBlocked
         };
 
-        let detail = SupplierSettlementStatementDetailView {
-            statement: statement.into(),
-            items: items.into_iter().map(settlement_item_view).collect(),
-            differences: settlement_difference_views(differences, snapshot.evidence_by_difference),
-            stats,
+        Ok(DetailPresentation {
             processing_state,
             review_work_item,
             review_processing_state,
             review_action_blockers,
             allowed_actions,
             action_blockers,
+        })
+    }
+
+    /// 最终根查询之后重新读取交付数据，展示补齐后验证这一原查询。
+    async fn detail_read(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        presentation: DetailPresentation,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementStatementDisplayDetail> {
+        let scope = SettlementAccess::new(self.db.clone(), self.identity.clone())
+            .resolve(actor, &supplier_settlement::STATEMENT_DETAIL, executor)
+            .await?;
+        self.db
+            .supplier_settlement_statements()
+            .find_authorized(id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商结算单不存在或无权查看".into()))?;
+        let snapshot = self
+            .db
+            .supplier_settlement()
+            .statement_detail_snapshot(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商结算单不存在或无权查看".into()))?;
+        let stats = settlement_detail_stats(&snapshot);
+        let detail = SupplierSettlementStatementDetailView {
+            statement: snapshot.statement.into(),
+            items: snapshot.items.into_iter().map(settlement_item_view).collect(),
+            differences: settlement_difference_views(snapshot.differences, snapshot.evidence_by_difference),
+            stats,
+            processing_state: presentation.processing_state,
+            review_work_item: presentation.review_work_item,
+            review_processing_state: presentation.review_processing_state,
+            review_action_blockers: presentation.review_action_blockers,
+            allowed_actions: presentation.allowed_actions,
+            action_blockers: presentation.action_blockers,
         };
-        self.detail_display_view(detail, executor).await
+        let view = self.detail_display_view(detail, executor).await?;
+        scope.validate(executor).await?;
+        Ok(view)
     }
 
     /// 为详情返回当前 actor 的 W27 领域动作，不把领域动作塞进通用责任注册表。
@@ -277,6 +335,7 @@ mod tests {
     use erp_core::AccountKind;
     use erp_identity::testing::unavailable_authorization;
     use mongodb::Client;
+    use persistence_core::ReadExecutor;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
@@ -291,9 +350,37 @@ mod tests {
         let service = SupplierSettlementReadService::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "操作人".into(), AccountKind::Admin);
         let error = service
+            .detail("statement", &actor, &mut ReadExecutor::default())
+            .await
+            .expect_err("详情及动作补齐只允许活动快照");
+        assert!(
+            matches!(error, Error::ValidationError(reason) if reason == "供应商结算详情读取必须使用快照事务")
+        );
+        let error = service
             .detail("statement", &actor, &mut SnapshotExecutor::default())
             .await
             .expect_err("入口授权失败不能读取结算及名称");
         assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
+
+    #[tokio::test]
+    async fn prepared_display_actions_cannot_bypass_final_detail_query() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("settlement_final_query_authorization");
+        let service = SupplierSettlementReadService::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "操作人".into(), AccountKind::Admin);
+        let presentation = DetailPresentation {
+            processing_state: "READY".into(),
+            review_work_item: None,
+            review_processing_state: dto::SettlementReviewProcessingState::Ready,
+            review_action_blockers: vec![],
+            allowed_actions: vec!["SUBMIT".into()],
+            action_blockers: vec![],
+        };
+        let result =
+            service.detail_read("statement", &actor, presentation, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
 }

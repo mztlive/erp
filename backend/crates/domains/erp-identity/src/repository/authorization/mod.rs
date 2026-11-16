@@ -8,6 +8,8 @@ mod phase5_tests;
 mod query;
 #[cfg(test)]
 pub(crate) mod testing;
+#[cfg(feature = "test-support")]
+pub(crate) mod unavailable;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

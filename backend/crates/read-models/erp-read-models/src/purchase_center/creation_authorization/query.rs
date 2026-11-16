@@ -35,7 +35,7 @@ pub(crate) async fn query_tasks(
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
 
@@ -49,7 +49,7 @@ mod tests {
         let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
         let result = query_tasks(
             &db,
-            &unavailable_authorization(),
+            &unbound_authorization(),
             &actor,
             CreationTaskFilter { sales_order_id: None, work_item_id: None },
             &mut SnapshotExecutor::default(),

@@ -15,6 +15,7 @@ use persistence_core::Executor;
 
 use super::super::IntegrationResolutionProcess;
 use super::guard::{command_identity, load_bound_work_item};
+use super::replay::ReplayTarget;
 use super::{TASK_COMPLETION_AUDIT, store_receipt};
 use crate::Result;
 use crate::wiring::CatalogWorkItems;
@@ -163,11 +164,16 @@ impl IntegrationResolutionProcess {
         command: &IntegrationTaskCompletionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskCompletionResult>> {
-        let Some(message) = self.replay_receipt::<CompletionReceiptResult>(receipt, actor).await? else {
+        let Some(message) = self
+            .replay_receipt::<CompletionReceiptResult>(
+                receipt,
+                actor,
+                ReplayTarget::Task(command.as_non_terminal_action()),
+            )
+            .await?
+        else {
             return Ok(None);
         };
-        self.ensure_replay_task_access(&command.work_item_id, &command.as_non_terminal_action(), actor)
-            .await?;
         Ok(Some(completion_result(command, receipt.receipt_id(), message.terminal_evidence_reference)))
     }
 }

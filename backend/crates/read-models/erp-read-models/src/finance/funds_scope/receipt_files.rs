@@ -26,9 +26,14 @@ impl FundsAccess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let receipt = this.load_customer_receipt_detail(&id, &actor, executor).await?.data;
+                    let (receipt, authorization) =
+                        this.customer_receipt_detail_read(&id, &actor, executor).await?;
+                    let receipt = receipt.data;
                     ensure_whole_receipt(receipt.permission_limited)?;
-                    financial_document_files(&this.db, &id, &receipt.receipt_no, executor).await
+                    let files =
+                        financial_document_files(&this.db, &id, &receipt.receipt_no, executor).await?;
+                    authorization.deliver(executor).await?;
+                    Ok(files)
                 })
             })
             .await

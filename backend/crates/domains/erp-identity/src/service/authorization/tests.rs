@@ -1,4 +1,5 @@
 //! 用替身设施执行真实 Builder 和公共 API；不连接数据库。
+mod approval_cancel;
 mod approval_management;
 mod contract_import;
 mod entry_migration;
@@ -8,12 +9,15 @@ mod migration_fixes;
 mod phase5;
 mod phase5_regressions;
 mod phase5_review_fixes;
+mod policy_bundles;
 mod purchase_entries;
 mod read_delivery_expiry;
+mod reverse_commit;
 mod review_handover_delivery;
 mod review_management_query;
 mod review_query_targets;
 mod sales_change_draft;
+mod work_item_detail;
 mod work_item_execution;
 mod work_item_qualifications;
 

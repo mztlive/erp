@@ -77,14 +77,14 @@ fn bindings(db: Database) -> Result<(FactsBindings, MappingBindings)> {
     );
     extend(&mut facts, &mut mappings, inquiries::bindings(db.clone())?);
     extend(&mut facts, &mut mappings, directories::bindings(db.clone())?);
+    let approval = approvals::bindings(db.clone(), &facts, &mappings)?;
+    extend(&mut facts, &mut mappings, approval);
     runtime_bindings(
         db.clone(),
         &mut facts,
         &mut mappings,
         authorization_task_facts(db.clone(), financial)?,
     )?;
-    let approval = approvals::bindings(db, &facts, &mappings)?;
-    extend(&mut facts, &mut mappings, approval);
     Ok((facts, mappings))
 }
 
@@ -98,9 +98,11 @@ fn runtime_bindings(
     let roots = facts.iter().cloned().collect();
     facts.push(("work_item".into(), Arc::new(tasks::TaskFacts { db: db.clone(), items, financial, roots })));
     let task_mapping = work_items::authorization_mapping();
-    for permission in [work_item::LIST, work_item::DETAIL, work_item::MANAGE] {
+    let detail_mapping = tasks::TaskDetailMapping::shared(task_mapping.clone(), mappings)?;
+    for permission in [work_item::LIST, work_item::MANAGE] {
         mappings.push((permission, task_mapping.clone()));
     }
+    mappings.push((work_item::DETAIL, detail_mapping));
     mappings.push((purchase_order::CREATE, Arc::new(CreationTaskMapping::new()?)));
     facts.push(("approval_copy".into(), copies::authorization_facts(db.clone())));
     let copy_mapping = copies::authorization_mapping()?;

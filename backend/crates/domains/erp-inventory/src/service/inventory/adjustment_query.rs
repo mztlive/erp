@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::ids::StockAdjustmentId;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
@@ -13,7 +13,7 @@ use crate::dto::{
 };
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
 use crate::error::{Error, Result};
-use crate::ports::{AdjustmentPeopleFact, InventoryAction, InventoryAuthorization, intersect_object_ids};
+use crate::ports::{AdjustmentPeopleFact, InventoryAction, intersect_object_ids};
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockAdjustmentFilter, StockAdjustmentRow};
 
@@ -44,76 +44,65 @@ impl InventoryService {
     ) -> Result<InventoryListPage<StockAdjustmentView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let (page, authorization, people) = self.search_stock_adjustments(&query, actor).await?;
-        let meta = authorization.meta(InventoryAction::AdjustmentList);
-        ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
-        let mut items =
-            page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect::<Vec<_>>();
-        self.enrich_adjustment_people_names(&mut items, &mut NoTransaction).await?;
-        Ok(InventoryListPage::from_page(
-            PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
-            meta,
-            authorization.no_scope(InventoryAction::AdjustmentList),
-            ADJUSTMENT_SCOPE_SUMMARY,
-            ADJUSTMENT_OWNERSHIP_BASIS,
-        ))
-    }
-
-    /// 在同一事务快照内按授权、人员交集和 SKU 条件分页查询调整单。
-    async fn search_stock_adjustments(
-        &self,
-        query: &StockAdjustmentListQuery,
-        actor: &AuditActor,
-    ) -> Result<(
-        persistence_core::PageResult<StockAdjustmentRow>,
-        InventoryAuthorization,
-        HashMap<String, AdjustmentPeopleFact>,
-    )> {
-        let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let catalog = std::sync::Arc::clone(&self.catalog_facts);
-        let people_facts = std::sync::Arc::clone(&self.people_facts);
-        let query = query.clone();
+        let service = self.clone();
         let actor = actor.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let authorization = authorization_port
-                        .authorize(&actor, InventoryAction::AdjustmentList, executor)
-                        .await?;
-                    if !authorization.actor_is_active() {
-                        return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
-                    }
-                    let id_in = people_object_ids(people_facts.as_ref(), &query, executor).await?;
-                    let search = super::search::sku_filter(
-                        catalog.as_ref(),
-                        query.q.as_deref(),
-                        query.sku_id.as_ref(),
-                        executor,
-                    )
-                    .await?;
-                    let search = db
-                        .inventory()
-                        .adjustment_search(search, query.adjustment_id.as_deref(), executor)
-                        .await?;
-                    let filter = adjustment_filter(query, search, id_in);
-                    let page = db
-                        .stock_adjustments()
-                        .search_authorized_stock_adjustments(
-                            &filter,
-                            authorization.query(InventoryAction::AdjustmentList),
-                            executor,
-                        )
-                        .await?;
-                    let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-                    let people = people_facts.people_by_adjustment_ids(&ids, executor).await?;
-                    authorization.validate(executor).await?;
-                    Ok::<_, Error>((page, authorization, people))
-                })
+                Box::pin(async move { service.search_stock_adjustments(&query, &actor, executor).await })
             })
             .await
+    }
+
+    /// 在原快照完成过滤、分页、投影及姓名补齐，最后复验读取凭证。
+    async fn search_stock_adjustments(
+        &self,
+        query: &StockAdjustmentListQuery,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InventoryListPage<StockAdjustmentView>> {
+        let authorization =
+            self.authorization.authorize(actor, InventoryAction::AdjustmentList, executor).await?;
+        if !authorization.actor_is_active() {
+            return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
+        }
+        let id_in = people_object_ids(self.people_facts.as_ref(), query, executor).await?;
+        let search = super::search::sku_filter(
+            self.catalog_facts.as_ref(),
+            query.q.as_deref(),
+            query.sku_id.as_ref(),
+            executor,
+        )
+        .await?;
+        let search =
+            self.db.inventory().adjustment_search(search, query.adjustment_id.as_deref(), executor).await?;
+        let filter = adjustment_filter(query.clone(), search, id_in);
+        let page = self
+            .db
+            .stock_adjustments()
+            .search_authorized_stock_adjustments(
+                &filter,
+                authorization.query(InventoryAction::AdjustmentList),
+                executor,
+            )
+            .await?;
+        let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let people = self.people_facts.people_by_adjustment_ids(&ids, executor).await?;
+        let meta = authorization.meta(InventoryAction::AdjustmentList);
+        ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
+        let mut items =
+            page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect::<Vec<_>>();
+        self.enrich_adjustment_people_names(&mut items, executor).await?;
+        let result = InventoryListPage::from_page(
+            PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
+            meta,
+            authorization.no_scope(InventoryAction::AdjustmentList),
+            ADJUSTMENT_SCOPE_SUMMARY,
+            ADJUSTMENT_OWNERSHIP_BASIS,
+        );
+        authorization.validate(executor).await?;
+        Ok(result)
     }
 
     /// 按主键批量读取调整单申请人与当前审批人，详情与列表同一口径。
@@ -135,7 +124,7 @@ impl InventoryService {
         self.people_facts.people_by_adjustment_ids(ids, executor).await
     }
 
-    /// 在同一快照内加载表头并验证对象读取范围；拒绝结果隐藏资源存在性。
+    /// 在同一快照先验证完整对象授权再加载表头；拒绝结果隐藏资源存在性。
     ///
     /// # 参数
     /// * `id` - 调整单主键。
@@ -154,23 +143,19 @@ impl InventoryService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustment> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("库存调整详情必须使用快照事务".into()));
+        }
+        self.authorization.require_adjustment(actor, id, executor).await.map_err(|error| match error {
+            Error::Forbidden(_) | Error::NotFound(_) => Error::NotFound("库存调整单不存在".into()),
+            other => other,
+        })?;
         let adjustment = self
             .db
             .inventory()
             .stock_adjustment(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        if !super::warehouse_allowed(
-            self.authorization.as_ref(),
-            actor,
-            InventoryAction::AdjustmentDetail,
-            adjustment.warehouse_id.as_ref(),
-            executor,
-        )
-        .await?
-        {
-            return Err(Error::NotFound("库存调整单不存在".to_string()));
-        }
         Ok(adjustment)
     }
 
@@ -178,16 +163,21 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `id` - 调整单主键。
+    /// * `executor` - 调用方已授权的原事务或读取阶段执行器。
     ///
     /// # 返回
     /// 返回未删除的调整单。
     ///
     /// # 错误
     /// 不存在时返回 `Error::NotFound`。仓储查询失败时返回对应错误。
-    pub async fn load_stock_adjustment(&self, id: &str) -> Result<StockAdjustment> {
+    pub async fn load_stock_adjustment(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<StockAdjustment> {
         self.db
             .inventory()
-            .stock_adjustment(id, &mut NoTransaction)
+            .stock_adjustment(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))
     }
@@ -357,7 +347,107 @@ impl From<StockAdjustmentLine> for StockAdjustmentLineView {
 
 #[cfg(test)]
 mod people_projection_tests {
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+    use crate::ports::{
+        AuthorizationPort, FailClosedAdjustmentPeopleFactsPort, FailClosedAuditPort, FailClosedCatalogFacts,
+        FailClosedFulfillmentFacts, FailClosedWarehouseFacts, InventoryAuthorization,
+    };
+
+    struct DeniedAuthorization(bool);
+
+    #[async_trait]
+    impl AuthorizationPort for DeniedAuthorization {
+        async fn require_adjustment_update(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            panic!("详情读取不得检查修改资格")
+        }
+
+        async fn require_adjustment(
+            &self,
+            actor: &AuditActor,
+            id: &str,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            assert_eq!((actor.id(), id), ("reader", "adjustment"));
+            assert!(executor.boundary().unwrap().is_snapshot());
+            if self.0 {
+                Err(Error::Internal("authorization-unavailable".into()))
+            } else {
+                Err(Error::Forbidden("denied".into()))
+            }
+        }
+
+        async fn authorize(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &mut dyn Executor,
+        ) -> Result<InventoryAuthorization> {
+            panic!("对象读取不得另起列表资格解析")
+        }
+
+        async fn require_warehouse(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            panic!("对象授权不得重复解析仓库资格")
+        }
+
+        async fn allowed_warehouses(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> Result<BTreeSet<String>> {
+            panic!("详情读取不得枚举授权仓库")
+        }
+    }
+
+    #[tokio::test]
+    async fn adjustment_detail_authorizes_before_any_record_read_and_preserves_evidence_failures() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("adjustment_access_unit");
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        for unavailable in [false, true] {
+            let service = InventoryService::new(
+                db.clone(),
+                Arc::new(DeniedAuthorization(unavailable)),
+                Arc::new(FailClosedWarehouseFacts),
+                Arc::new(FailClosedCatalogFacts),
+                Arc::new(FailClosedFulfillmentFacts),
+                Arc::new(FailClosedAuditPort),
+                Arc::new(FailClosedAdjustmentPeopleFactsPort),
+            );
+            let result = service
+                .readable_stock_adjustment("adjustment", &actor, &mut SnapshotExecutor::default())
+                .await;
+            if unavailable {
+                assert!(
+                    matches!(result, Err(Error::Internal(value)) if value == "authorization-unavailable")
+                );
+            } else {
+                assert!(matches!(result, Err(Error::NotFound(_))));
+            }
+        }
+    }
 
     #[test]
     fn list_projection_uses_snapshot_applicant_not_created_by() {

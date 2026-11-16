@@ -34,35 +34,6 @@ pub async fn require_supplier_portal_task_read(
     Err(Error::Forbidden("当前账号不具备供应商申请读取范围".into()))
 }
 
-/// 重验当前内部账号对精确供应商申请的商品与供给业务确认资格。
-///
-/// # 参数
-/// * `auth` - 已装配的工作流授权 Port
-/// * `actor` - 同一执行器内已经验证的内部确认人身份
-/// * `kind` - 固定任务关系中的对象种类
-/// * `object_id` - 权威申请主键
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 供应商申请业务动作和责任范围全部满足时成功；其他对象沿原授权规则执行。
-/// # 错误
-/// 外部身份、资格撤销或越界拒绝；配置和基础设施错误原样传播。
-pub(super) async fn require_supplier_portal_task_review(
-    auth: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    kind: ObjectKind,
-    object_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    if kind != ObjectKind::SupplierPortalRequest {
-        return Ok(());
-    }
-    if auth.supplier_portal_request_reviewable(actor, object_id, executor).await? {
-        return Ok(());
-    }
-    Err(Error::Forbidden("当前账号不具备供应商申请所需的商品或供给业务确认资格".into()))
-}
-
 /// 隐藏不可见对象的存在性，保留配置、版本及基础设施错误供调用方处理。
 ///
 /// # 参数

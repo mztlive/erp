@@ -1,6 +1,7 @@
 //! 仓库经办人资格所需的身份事实消费端口。
 
 use async_trait::async_trait;
+use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
@@ -80,25 +81,31 @@ pub trait IdentityFactPort: Send + Sync {
     ///
     /// # 参数
     /// * `account_id` - 候选账号 ID。
+    /// * `executor` - 原业务授权事务或读取阶段的执行器。
     ///
     /// # 返回
     /// 找到可用账号时返回身份事实；缺失或停用时返回 `None`。
     ///
     /// # 错误
     /// 除账号缺失以外的身份查询失败时返回错误。
-    async fn handler_identity(&self, account_id: &str) -> Result<Option<HandlerIdentityFact>>;
+    async fn handler_identity(
+        &self,
+        account_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<HandlerIdentityFact>>;
 
     /// 返回全公司管理端经办人候选，不按组织过滤。
     ///
     /// # 参数
-    /// 无。
+    /// executor 为原授权读取事务的执行器。
     ///
     /// # 返回
     /// 返回身份事实列表。
     ///
     /// # 错误
     /// 身份列举或权限判断失败时返回错误。
-    async fn admin_handler_identities(&self) -> Result<Vec<HandlerIdentityFact>>;
+    async fn admin_handler_identities(&self, executor: &mut dyn Executor)
+    -> Result<Vec<HandlerIdentityFact>>;
 }
 
 /// Fail-closed identity port used when composition has not injected an adapter.
@@ -107,11 +114,18 @@ pub struct FailClosedIdentityFactPort;
 
 #[async_trait]
 impl IdentityFactPort for FailClosedIdentityFactPort {
-    async fn handler_identity(&self, _account_id: &str) -> Result<Option<HandlerIdentityFact>> {
+    async fn handler_identity(
+        &self,
+        _account_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<Option<HandlerIdentityFact>> {
         Err(Error::Internal("身份端口未接线".to_string()))
     }
 
-    async fn admin_handler_identities(&self) -> Result<Vec<HandlerIdentityFact>> {
+    async fn admin_handler_identities(
+        &self,
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<HandlerIdentityFact>> {
         Err(Error::Internal("身份端口未接线".to_string()))
     }
 }

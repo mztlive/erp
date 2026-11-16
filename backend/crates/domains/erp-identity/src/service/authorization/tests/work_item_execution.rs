@@ -2,8 +2,9 @@
 use std::sync::Arc;
 
 use erp_permissions::{
-    Permission, catalog, internal, legacy_import, purchase_order, purchase_payment_request, receivable,
-    supplier, supplier_fulfillment, supplier_offering, supplier_portal, work_item,
+    Permission, approval_instance, catalog, internal, legacy_import, purchase_order,
+    purchase_payment_request, receivable, supplier, supplier_fulfillment, supplier_offering, supplier_portal,
+    work_item,
 };
 use persistence_core::ReadExecutor;
 use persistence_core::testing::SnapshotExecutor;
@@ -44,6 +45,115 @@ fn bound(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
 }
 
 #[tokio::test]
+async fn approval_execution_keeps_complete_decision_qualification_and_terminal_owner_reading() {
+    let identity = Arc::new(Identity::default());
+    let mut item = task("DOCUMENT_APPROVAL", "sales_order");
+    item.completed = FactValue::Known(false);
+    related(&mut item, "approval_instance", object("approval_instance", "instance", "user"));
+    let facts = Arc::new(Facts::new(vec![item]));
+    let mut instance = object("approval_instance", "instance", "user");
+    instance.subject_type = FactValue::Known("sales_order".into());
+    related(&mut instance, "subject_source", object("sales_order", "order", "user"));
+    let mut builder = complete();
+    builder.facilities = identity.clone();
+    builder.facts.insert("work_item".into(), facts.clone());
+    builder.facts.insert("approval_instance".into(), Arc::new(Facts::new(vec![instance])));
+    let service = builder.build().unwrap();
+    for decision in [
+        vec![],
+        vec![("history", vec![approval_instance::COPIES_HISTORY])],
+        vec![
+            ("history", vec![approval_instance::COPIES_HISTORY]),
+            ("decision", vec![approval_instance::SUBMIT_DECISION]),
+        ],
+        vec![("approver", vec![approval_instance::COPIES_HISTORY, approval_instance::SUBMIT_DECISION])],
+    ] {
+        let qualified = decision.iter().any(|(_, permissions)| permissions.len() == 2);
+        let mut roles = vec![("task-reader", vec![work_item::DETAIL])];
+        roles.extend(decision);
+        let roles =
+            roles.iter().map(|(name, permissions)| (*name, permissions.as_slice())).collect::<Vec<_>>();
+        grant(&identity, &roles);
+        let result = service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTE,
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
+                &mut SnapshotExecutor::default(),
+            )
+            .await;
+        if qualified {
+            result.unwrap();
+        } else {
+            assert!(matches!(result, Err(Error::Forbidden(_))), "{result:?}");
+        }
+    }
+    facts.objects.lock().unwrap()[0].completed = FactValue::Known(true);
+    grant(&identity, &[("reader", &[work_item::DETAIL, approval_instance::COPIES_HISTORY])]);
+    service
+        .require(
+            &actor(),
+            &internal::WORK_ITEM_EXECUTE,
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .unwrap();
+    facts.objects.lock().unwrap()[0].subject_source_resource = FactValue::Known("unknown".into());
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTE,
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
+                &mut SnapshotExecutor::default(),
+            )
+            .await,
+        Err(Error::ValidationError(_))
+    ));
+}
+
+#[tokio::test]
+async fn task_execution_requires_exact_task_identity_and_version() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::new(vec![task("IMPORT_BUSINESS_CONFIRMATION", "LEGACY_IMPORT_BATCH")]));
+    let service = bound(identity.clone(), facts);
+    grant(&identity, &[("executor", &[work_item::DETAIL, legacy_import::BATCH_DETAIL])]);
+    let mut executor = SnapshotExecutor::default();
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTE,
+                AccessTarget::record("task").unwrap(),
+                &mut executor,
+            )
+            .await,
+        Err(Error::ValidationError(_))
+    ));
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTE,
+                AccessTarget::Task { id: "task".into(), version: "stale".into() },
+                &mut executor,
+            )
+            .await,
+        Err(Error::ConflictError(message)) if message == "任务版本已改变"
+    ));
+    service
+        .require(
+            &actor(),
+            &internal::WORK_ITEM_EXECUTE,
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
+            &mut executor,
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn terminal_replay_retains_full_qualification_without_inventing_current_assignment() {
     let identity = Arc::new(Identity::default());
     let facts = Arc::new(Facts::new(vec![task("IMPORT_BUSINESS_CONFIRMATION", "LEGACY_IMPORT_BATCH")]));
@@ -53,7 +163,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
         .require(
             &actor(),
             &internal::WORK_ITEM_EXECUTE,
-            AccessTarget::record("task").unwrap(),
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
             &mut SnapshotExecutor::default(),
         )
         .await
@@ -64,7 +174,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default()
             )
             .await,
@@ -75,7 +185,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut ReadExecutor::default()
             )
             .await,
@@ -107,7 +217,7 @@ async fn task_execution_cannot_split_the_original_complete_permissions_between_r
         .require(
             &actor(),
             &internal::WORK_ITEM_EXECUTE,
-            AccessTarget::record("task").unwrap(),
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
             &mut SnapshotExecutor::default(),
         )
         .await
@@ -132,7 +242,7 @@ async fn task_execution_cannot_split_the_original_complete_permissions_between_r
                 .require(
                     &actor(),
                     &internal::WORK_ITEM_EXECUTE,
-                    AccessTarget::record("task").unwrap(),
+                    AccessTarget::Task { id: "task".into(), version: "v1".into() },
                     &mut SnapshotExecutor::default()
                 )
                 .await,
@@ -155,7 +265,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
         .require(
             &actor(),
             &internal::WORK_ITEM_EXECUTE,
-            AccessTarget::record("task").unwrap(),
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
             &mut SnapshotExecutor::default(),
         )
         .await
@@ -167,7 +277,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default()
             )
             .await,
@@ -178,7 +288,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
         .require(
             &actor(),
             &internal::WORK_ITEM_EXECUTE,
-            AccessTarget::record("task").unwrap(),
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
             &mut SnapshotExecutor::default(),
         )
         .await
@@ -189,7 +299,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default()
             )
             .await,
@@ -216,7 +326,7 @@ async fn task_execution_rejects_unknown_missing_or_mismatched_persisted_subjects
                 .require(
                     &actor(),
                     &internal::WORK_ITEM_EXECUTE,
-                    AccessTarget::record("task").unwrap(),
+                    AccessTarget::Task { id: "task".into(), version: "v1".into() },
                     &mut SnapshotExecutor::default()
                 )
                 .await,
@@ -251,7 +361,7 @@ async fn portal_task_requires_original_independent_sources_and_real_supplier_sco
         .require(
             &actor(),
             &internal::WORK_ITEM_EXECUTE,
-            AccessTarget::record("task").unwrap(),
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
             &mut SnapshotExecutor::default(),
         )
         .await
@@ -267,7 +377,7 @@ async fn portal_task_requires_original_independent_sources_and_real_supplier_sco
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default()
             )
             .await,
@@ -293,7 +403,7 @@ async fn portal_task_requires_original_independent_sources_and_real_supplier_sco
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default()
             )
             .await,
@@ -404,7 +514,7 @@ async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_r
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default(),
             )
             .await
@@ -423,7 +533,7 @@ async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_r
                         .require(
                             &actor(),
                             &internal::WORK_ITEM_EXECUTE,
-                            AccessTarget::record("task").unwrap(),
+                            AccessTarget::Task { id: "task".into(), version: "v1".into() },
                             &mut SnapshotExecutor::default()
                         )
                         .await,
@@ -446,7 +556,7 @@ async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_r
                         .require(
                             &actor(),
                             &internal::WORK_ITEM_EXECUTE,
-                            AccessTarget::record("task").unwrap(),
+                            AccessTarget::Task { id: "task".into(), version: "v1".into() },
                             &mut SnapshotExecutor::default()
                         )
                         .await,
@@ -489,7 +599,7 @@ async fn financial_execution_tasks_require_every_original_action_in_one_role() {
             .require(
                 &actor(),
                 &internal::WORK_ITEM_EXECUTE,
-                AccessTarget::record("task").unwrap(),
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut SnapshotExecutor::default(),
             )
             .await
@@ -508,7 +618,7 @@ async fn financial_execution_tasks_require_every_original_action_in_one_role() {
                         .require(
                             &actor(),
                             &internal::WORK_ITEM_EXECUTE,
-                            AccessTarget::record("task").unwrap(),
+                            AccessTarget::Task { id: "task".into(), version: "v1".into() },
                             &mut SnapshotExecutor::default()
                         )
                         .await,
@@ -531,7 +641,7 @@ async fn financial_execution_tasks_require_every_original_action_in_one_role() {
                         .require(
                             &actor(),
                             &internal::WORK_ITEM_EXECUTE,
-                            AccessTarget::record("task").unwrap(),
+                            AccessTarget::Task { id: "task".into(), version: "v1".into() },
                             &mut SnapshotExecutor::default()
                         )
                         .await,
@@ -576,7 +686,7 @@ async fn offering_update_task_requires_both_independent_read_and_review_ranges()
         .require(
             &actor(),
             &internal::WORK_ITEM_EXECUTE,
-            AccessTarget::record("task").unwrap(),
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
             &mut SnapshotExecutor::default(),
         )
         .await
@@ -595,7 +705,7 @@ async fn offering_update_task_requires_both_independent_read_and_review_ranges()
                     .require(
                         &actor(),
                         &internal::WORK_ITEM_EXECUTE,
-                        AccessTarget::record("task").unwrap(),
+                        AccessTarget::Task { id: "task".into(), version: "v1".into() },
                         &mut SnapshotExecutor::default()
                     )
                     .await,
@@ -626,7 +736,7 @@ async fn offering_update_task_requires_both_independent_read_and_review_ranges()
                     .require(
                         &actor(),
                         &internal::WORK_ITEM_EXECUTE,
-                        AccessTarget::record("task").unwrap(),
+                        AccessTarget::Task { id: "task".into(), version: "v1".into() },
                         &mut SnapshotExecutor::default()
                     )
                     .await,

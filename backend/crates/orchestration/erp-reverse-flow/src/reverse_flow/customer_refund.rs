@@ -10,14 +10,13 @@ use erp_audit::execution::persist_log;
 
 mod commit_source;
 mod start;
-use application_core::{AuditActor, CommandReceipt};
+use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CustomerAccountId, CustomerReceiptId};
 use erp_customer::CustomerExt;
 use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_read_models::returns_center::dto::CustomerRefundView;
-use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::{
     CancelCustomerRefundApprovalRequest, CreateCustomerRefundRequest, SubmitCustomerRefundRequest,
 };
@@ -32,7 +31,7 @@ use erp_workflow::service::approval::execution::idempotency::normalize_idempoten
 use erp_workflow::service::approval::execution::{prepare_cancel, prepare_start};
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 pub(super) use start::authorized_customer_refund;
 use validator::Validate;
 
@@ -48,8 +47,8 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     CustomerRefundStartPersistInput, ReversalSubmitReplayInput, ReverseStartInput,
-    build_customer_refund_start_input, ensure_return_start_replay_authorized, ensure_submit_permission,
-    load_start_graph, load_start_receipt, persist_customer_refund_start, reversal_result_read_error,
+    build_customer_refund_start_input, ensure_submit_permission, load_start_graph, load_start_receipt,
+    persist_customer_refund_start, reversal_result_read_error,
 };
 use crate::{Error, Result};
 
@@ -77,13 +76,42 @@ impl ReturnsProcess {
         req: CreateCustomerRefundRequest,
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
+        let process = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.create_customer_refund_stage(req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 原创建事务内先授权，再读取真实往来主体、绑定定义并原子登记。
+    async fn create_customer_refund_stage(
+        &self,
+        req: CreateCustomerRefundRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerRefundView> {
+        self.rbac
+            .identity
+            .require(
+                actor,
+                &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+
         let refund = erp_returns::service::ReturnsService::prepare_customer_refund(req, actor.id())?;
-        persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone()).await?;
-        self.customer_refund_result(
+        persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone(), executor)
+            .await?;
+        self.customer_refund_result_read(
             &refund.base.id,
             actor,
             &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
             AccessTarget::Operation,
+            executor,
         )
         .await
     }
@@ -115,23 +143,42 @@ impl ReturnsProcess {
         let submission = ReversalSubmitReplayInput {
             id: id.to_owned(),
             document_type: DocumentType::CustomerRefund,
-            submit_permission: "customer_refund:submit",
             command_receipt: req.command_receipt(id, actor.id())?,
             actor: actor.clone(),
         };
-        if let Some(id) = self.replay_reversal_submit(&submission).await? {
-            return self
-                .customer_refund_result(
-                    &id,
-                    actor,
-                    &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
-                    AccessTarget::record(&id)?,
-                )
-                .await
-                .map_err(reversal_result_read_error);
+        let process = self.clone();
+        let command = submission.clone();
+        let persisted = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.submit_customer_refund_stage(req, &command, executor).await })
+            })
+            .await;
+        self.finish_reversal_submit(&submission, persisted).await?;
+        self.customer_refund_result(
+            &submission.id,
+            actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+            AccessTarget::record(&submission.id)?,
+        )
+        .await
+        .map_err(reversal_result_read_error)
+    }
+
+    /// 原提交事务先授权与匹配收据，再读取版本、来源、定义和人员并写入。
+    async fn submit_customer_refund_stage(
+        &self,
+        req: SubmitCustomerRefundRequest,
+        submission: &ReversalSubmitReplayInput,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if self.replay_reversal_submit_stage(submission, executor).await?.is_some() {
+            return Ok(());
         }
+        let id = submission.id.as_str();
         let adapter = customer_refund_adapter()?;
-        let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
+        let mut refund = self.domain().load_customer_refund(id, executor).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         start_customer_refund_approval(&mut refund)?;
         self.dispatch_customer_refund_start(
@@ -139,7 +186,8 @@ impl ReturnsProcess {
             req.idempotency_key,
             req.resubmission_reason,
             adapter,
-            submission,
+            submission.clone(),
+            executor,
         )
         .await
     }
@@ -165,15 +213,47 @@ impl ReturnsProcess {
         req: CancelCustomerRefundApprovalRequest,
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
+        let process = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    process.cancel_customer_refund_approval_stage(&id, req, &actor, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 原撤回事务内先授权，再读取精确版本及审批事实并写入。
+    async fn cancel_customer_refund_approval_stage(
+        &self,
+        id: &str,
+        req: CancelCustomerRefundApprovalRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerRefundView> {
+        self.rbac
+            .identity
+            .require(
+                actor,
+                &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+
         req.validate()?;
-        let mut refund = self.domain().load_customer_refund(id, &mut NoTransaction).await?;
+        let mut refund = self.domain().load_customer_refund(id, executor).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
-        self.persist_cancelled_customer_refund(id, &mut refund, &req, actor).await?;
-        self.customer_refund_result(
+        self.persist_cancelled_customer_refund(id, &mut refund, &req, actor, executor).await?;
+        self.customer_refund_result_read(
             id,
             actor,
             &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
             AccessTarget::Operation,
+            executor,
         )
         .await
     }
@@ -303,8 +383,12 @@ async fn persist_created_customer_refund(
     rbac: &ReverseFlowPorts,
     refund: CustomerRefund,
     actor: AuditActor,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
-    let organization_id = load_customer_responsible_org_id(db, &refund.customer_id).await?;
+    rbac.identity
+        .require(&actor, &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE, AccessTarget::Operation, executor)
+        .await?;
+    let organization_id = load_customer_responsible_org_id(db, &refund.customer_id, executor).await?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::CustomerRefund,
         business_object_id: refund.base.id.clone(),
@@ -316,81 +400,28 @@ async fn persist_created_customer_refund(
             .map_err(crate::Error::from)?;
     let audit =
         actor.clone().resource_log("customer_refund.create", "customer_refund", refund.base.id.clone())?;
-    let db = db.clone();
-    let rbac = rbac.clone();
 
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                rbac.identity
-                    .require(
-                        &actor,
-                        &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                persist_bound_customer_refund_document(&db, &rbac, document, &bind_command, &actor, executor)
-                    .await?;
-                erp_returns::service::ReturnsService::new(db.clone())
-                    .create_customer_refund(&refund, executor)
-                    .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
-        })
-        .await
+    persist_bound_customer_refund_document(db, rbac, document, &bind_command, &actor, executor).await?;
+    erp_returns::service::ReturnsService::new(db.clone()).create_customer_refund(&refund, executor).await?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }
 
 /// 查询客户往来主体作为责任组织。
 ///
 /// # 错误
 /// 客户不存在或往来主体为空时返回错误。
-async fn load_customer_responsible_org_id(db: &Database, customer_id: &CustomerAccountId) -> Result<String> {
+async fn load_customer_responsible_org_id(
+    db: &Database,
+    customer_id: &CustomerAccountId,
+    executor: &mut dyn Executor,
+) -> Result<String> {
     let customer = db
         .customer_accounts()
-        .find_by_id(customer_id, &mut NoTransaction)
+        .find_by_id(customer_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
     customer_refund_responsible_org_id(customer.party_id.as_ref())
-}
-
-/// 按原顺序重验原回款权限、版本及既有命令结果的退款权限。
-async fn replay_customer_commit(
-    db: &Database,
-    rbac: &ReverseFlowPorts,
-    actor: &AuditActor,
-    source: (&CustomerReceiptId, u64),
-    receipt: &CommandReceipt,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    ensure_return_start_replay_authorized(
-        db,
-        rbac,
-        actor,
-        DocumentType::CustomerReceipt,
-        "customer_refund:submit",
-        source.0.as_ref(),
-        executor,
-    )
-    .await?;
-    validate_customer_refund_source(db, source.0, source.1, executor).await?;
-    let result =
-        ReturnsCommandReceiptService::new(db.clone()).committed_resource_id(receipt, executor).await?;
-    if let Some(existing_id) = &result {
-        ensure_return_start_replay_authorized(
-            db,
-            rbac,
-            actor,
-            DocumentType::CustomerRefund,
-            "customer_refund:submit",
-            existing_id,
-            executor,
-        )
-        .await?;
-    }
-    Ok(result)
 }
 
 /// 在创建退款的同一事务中重读并校验原回款事实。
@@ -546,6 +577,85 @@ mod posting_contract_tests {
                 matches!(execute_refund_posting(&mut steps,&mut executor).await,Err(Error::ConflictError(message)) if message=="原退款写入冲突")
             );
             assert_eq!(steps.calls, order[..=index]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::{actor, denied, process};
+
+    #[tokio::test]
+    async fn cancellation_authorizes_before_original_versions_bindings_or_runtime_reads() {
+        let process = process().await;
+        for version in [1, 999] {
+            let request = serde_json::from_value(
+                serde_json::json!({"expected_version":version,"reason":"cancel","idempotency_key":"key"}),
+            )
+            .unwrap();
+            denied(
+                process
+                    .cancel_customer_refund_approval_stage(
+                        "unread-record",
+                        request,
+                        &actor(),
+                        &mut SnapshotExecutor::default(),
+                    )
+                    .await,
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod creation_authorization_tests {
+    use erp_core::common::time::Instant;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::{actor, denied, process};
+
+    #[tokio::test]
+    async fn creation_authorizes_before_counterparty_source_or_definition_reads() {
+        let process = process().await;
+        let request=serde_json::from_value(serde_json::json!({
+"refund_no":"RF-1","reversal_no":"RV-1","customer_id":"unread-customer","supplier_id":"unread-supplier",
+"original_customer_receipt_id":"unread-receipt","original_supplier_payment_id":"unread-payment",
+"reason_text":"reason","amount":"1","handled_by":"actor","reviewed_by":"reviewer","occurred_at":Instant::from_unix_secs(100)
+})).unwrap();
+        denied(
+            process.create_customer_refund_stage(request, &actor(), &mut SnapshotExecutor::default()).await,
+        );
+    }
+}
+
+#[cfg(test)]
+mod submission_authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::{actor, denied, process};
+    use super::*;
+
+    #[tokio::test]
+    async fn submission_authorizes_before_receipt_versions_sources_definitions_or_people() {
+        let process = process().await;
+        let actor = actor();
+        for expected_version in [1, 999] {
+            let req: SubmitCustomerRefundRequest = serde_json::from_value(serde_json::json!({
+                "expected_version": expected_version,
+                "idempotency_key": "submit-command"
+            }))
+            .unwrap();
+            let command = ReversalSubmitReplayInput {
+                id: "unread-record".into(),
+                document_type: DocumentType::CustomerRefund,
+                command_receipt: req.command_receipt("unread-record", actor.id()).unwrap(),
+                actor: actor.clone(),
+            };
+            denied(
+                process.submit_customer_refund_stage(req, &command, &mut SnapshotExecutor::default()).await,
+            );
         }
     }
 }

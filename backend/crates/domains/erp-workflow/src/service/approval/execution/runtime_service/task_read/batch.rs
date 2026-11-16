@@ -2,20 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use application_core::AuditActor;
 use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_identity::{AuthorizationService, SharedRbacService};
-use erp_permissions::approval_instance;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::{ensure_exact_runtime_snapshot, runtime_document_type, runtime_snapshot_mismatch};
-use super::{RuntimeReadSubject, manager_can_read, task_chain_matches_subject};
+use super::{RuntimeReadSubject, task_chain_matches_subject};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::work_item::{AssignmentSource, WorkItem, WorkItemStatus, WorkItemType};
-use crate::error::{Error, Result};
-use crate::ports::WorkflowAuthorizationPort;
+use crate::error::Result;
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
@@ -27,123 +23,36 @@ struct RuntimeBatchFacts {
     snapshots: HashMap<String, ApprovalSubjectSnapshot>,
 }
 
-/// 同一批次只取得一次读者资格，逐任务读取责任事实，返回前复验身份版本。
-///
+/// 中央授权已通过后，只核对该审批任务的冻结运行主体和责任链。
 /// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` / `auth` - 工作流仓储与当前权限端口
-/// * `actor` - 同一已认证读者
-/// * `items` - 服务端读取的当前批任务，调用方负责保持输入顺序
-/// * `executor` - 当前查询或命令的同一执行器
-///
+/// db 为工作流数据库，item 为同一快照已授权的任务，executor 为原读取执行器。
 /// # 返回
-/// 返回与输入等长、同顺序的可读标志；空输入不读取任何事实。
-///
+/// 精确执行、实例、冻结快照及当前开放或终态责任全部一致时返回 true。
 /// # 错误
-/// 保留逐任务权限、冻结主体、责任链及管理来源的原错误映射。
-///
-/// # 关键业务约束
-/// 账号及同角色读写资格仅在本批次复用；返回前核对完整身份版本，不为拒绝项加载运行链。
-/// 原单任务入口复用此入口，运行事实不得跨批次或独立授权快照缓存。
-///
-/// # Panics
-/// 准入任务与主体结果必须等长且同序；`subjects.next()` 为 `None` 时 `expect`，表示本函数内部拼接被破坏。
-pub async fn approval_tasks_readable_with_executor(
-    authorization: &AuthorizationService,
-    _identity_service: &SharedRbacService,
+/// 仓储、正式单据类型或冻结主体损坏时返回对应错误。
+pub(crate) async fn approval_task_facts_current(
     db: &Database,
-    _auth: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    items: &[&WorkItem],
+    item: &WorkItem,
     executor: &mut dyn Executor,
-) -> Result<Vec<bool>> {
-    if !items.iter().any(|item| {
-        item.work_item_type == WorkItemType::DocumentApproval
-            && item.assignment_source == AssignmentSource::ApprovalRuntime
-    }) {
-        return Ok(vec![false; items.len()]);
+) -> Result<bool> {
+    if item.work_item_type != WorkItemType::DocumentApproval
+        || item.assignment_source != AssignmentSource::ApprovalRuntime
+        || item.approval_node_execution_id.is_none()
+    {
+        return Ok(false);
     }
-    let required = [approval_instance::COPIES_HISTORY.clone(), approval_instance::SUBMIT_DECISION.clone()];
-    let Some(qualified) = authorization.permissions(actor, &required, executor).await? else {
-        return Ok(vec![false; items.len()]);
-    };
-    if !qualified.permissions().covers_one(&required[0]) {
-        return Ok(vec![false; items.len()]);
-    }
-    let result =
-        read_tasks(authorization, db, actor, items, qualified.same_role(&required), executor).await?;
-    let current = authorization.permissions(actor, &required, executor).await?;
-    if current.as_ref().is_none_or(|current| current.version() != qualified.version()) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：审批读取资格已改变".into()));
-    }
-    Ok(result)
-}
-
-/// 在已证明的账号资格内批量读取责任链；逐任务错误按输入顺序返回。
-async fn read_tasks(
-    authorization: &AuthorizationService,
-    db: &Database,
-    actor: &AuditActor,
-    items: &[&WorkItem],
-    can_decide: bool,
-    executor: &mut dyn Executor,
-) -> Result<Vec<bool>> {
-    let checks = items
-        .iter()
-        .map(|item| {
-            item.work_item_type == WorkItemType::DocumentApproval
-                && item.assignment_source == AssignmentSource::ApprovalRuntime
-                && item.approval_node_execution_id.is_some()
-        })
-        .collect::<Vec<_>>();
-    let candidates = eligible_items(items, &checks);
-    let facts = load_runtime_facts(db, &candidates, executor).await?;
-    let subjects = candidates.iter().map(|item| subject_for_task(item, &facts)).collect::<Vec<_>>();
-    let open_tasks = load_open_tasks(db, &candidates, &subjects, executor).await?;
-    let mut subjects = subjects.into_iter();
-    let mut result = Vec::with_capacity(items.len());
-    for (item, check) in items.iter().zip(checks) {
-        if !check {
-            result.push(false);
-            continue;
-        }
-        let subject = subjects.next().expect("每个准入任务均有同顺序的运行主体结果")?;
-        let Some(subject) = subject else {
-            result.push(false);
-            continue;
-        };
-        let tasks = item
-            .approval_node_execution_id
-            .as_ref()
-            .and_then(|id| open_tasks.get(id.as_ref()))
-            .map_or(&[][..], Vec::as_slice);
-        let readable = if !task_chain_matches_subject(item, &subject, tasks)? {
-            false
-        } else if item.owner_user_id.as_deref() == Some(actor.id())
-            && (item.status != WorkItemStatus::Open || can_decide)
-        {
-            true
-        } else {
-            manager_can_read(authorization, actor, &subject, executor).await?
-        };
-        result.push(readable);
-    }
-    Ok(result)
-}
-
-/// 只保留原权限阶段已经成功准入的任务引用。
-///
-/// # 参数
-/// * `items` - 原任务顺序
-/// * `checks` - 同顺序任务类型及执行引用准入结果
-///
-/// # 返回
-/// 返回准入任务的有序子集，不克隆任务事实。
-///
-/// # 错误
-/// 无；冻结主体和责任链错误由最终按原任务顺序传播。
-fn eligible_items<'a>(items: &[&'a WorkItem], checks: &[bool]) -> Vec<&'a WorkItem> {
-    items.iter().zip(checks).filter_map(|(item, check)| check.then_some(*item)).collect()
+    let items = [item];
+    let facts = load_runtime_facts(db, &items, executor).await?;
+    let subjects = [subject_for_task(item, &facts)];
+    let tasks = load_open_tasks(db, &items, &subjects, executor).await?;
+    let [subject] = subjects;
+    let Some(subject) = subject? else { return Ok(false) };
+    let open = item
+        .approval_node_execution_id
+        .as_ref()
+        .and_then(|id| tasks.get(id.as_ref()))
+        .map_or(&[][..], Vec::as_slice);
+    task_chain_matches_subject(item, &subject, open)
 }
 
 /// 按准入任务执行引用批量读取执行、存在实例和合法类型的冻结快照。
@@ -354,6 +263,7 @@ mod tests {
     use super::super::tests::fixture;
     use super::*;
     use crate::entity::document_registry::DocumentType;
+    use crate::error::Error;
 
     /// 将同一条真实运行夹具拆成批量 loader 消费的身份映射。
     fn facts(mut subject: RuntimeReadSubject) -> RuntimeBatchFacts {
@@ -368,21 +278,13 @@ mod tests {
         }
     }
 
-    /// 未准入任务不进入运行读取集合，准入任务保留原次序。
     #[test]
-    fn approval_task_batch_candidates_preserve_eligible_order() {
+    fn execution_references_are_empty_or_deduplicated() {
         let (_, task) = fixture();
         let mut other = task.clone();
         other.base.id = "task-2".into();
-        let mut failed = task.clone();
-        failed.base.id = "task-3".into();
-        let items = [&task, &other, &failed];
-        let checks = [false, true, false];
-        let selected = eligible_items(&items, &checks);
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].base.id, "task-2");
         assert!(execution_ids(&[]).is_empty());
-        assert_eq!(execution_ids(&[&task, &other]).len(), 1);
+        assert_eq!(execution_ids(&[&task, &other]), [ApprovalNodeExecutionId::new("execution-1")]);
     }
 
     /// 缺失执行或实例保持不可读，不把缺关联改成冻结主体冲突。

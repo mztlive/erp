@@ -18,7 +18,7 @@ use erp_permissions::integration_ops;
 use erp_support::SourceRegistryExt;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::IntegrationResolutionProcess;
@@ -48,10 +48,28 @@ impl IntegrationResolutionProcess {
         req: RegisterInboxMessageRequest,
         actor: &AuditActor,
     ) -> Result<InboxMessageView> {
+        let process = self.clone();
+        let actor = actor.clone();
+        self.run_audited(move |_, executor| {
+            Box::pin(async move { process.register_inbox_message_stage(req, &actor, executor).await })
+        })
+        .await
+    }
+
+    /// 原快照先核验固定资格，再读取真实来源、版本及责任组织并写入。
+    async fn register_inbox_message_stage(
+        &self,
+        req: RegisterInboxMessageRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InboxMessageView> {
+        self.authorization
+            .require(actor, &integration_ops::INBOX_MESSAGE_REGISTER, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
         self.db
             .source_systems()
-            .find_by_id(req.source_system_id.as_ref(), &mut NoTransaction)
+            .find_by_id(req.source_system_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源系统不存在".to_string()))?;
 
@@ -59,26 +77,9 @@ impl IntegrationResolutionProcess {
         let message = prepare_registered_inbox_message(req, received_at)?;
         let audit =
             actor.clone().resource_log("inbox_message.register", "inbox_message", message.base.id.clone())?;
-        let stored = message.clone();
-        let authorization = self.authorization.clone();
-        let current_actor = actor.clone();
-        self.run_audited(move |db, executor| {
-            Box::pin(async move {
-                authorization
-                    .require(
-                        &current_actor,
-                        &integration_ops::INBOX_MESSAGE_REGISTER,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                persist_inbox_message(db, &stored, executor).await?;
-                persist_log(db, &audit, executor).await?;
-                Ok(())
-            })
-        })
-        .await?;
 
+        persist_inbox_message(&self.db, &message, executor).await?;
+        persist_log(&self.db, &audit, executor).await?;
         Ok(message.into())
     }
 
@@ -106,11 +107,31 @@ impl IntegrationResolutionProcess {
         req: WriteBackInboxResultRequest,
         actor: &AuditActor,
     ) -> Result<InboxMessageView> {
+        let process = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.run_audited(move |_, executor| {
+            Box::pin(async move { process.write_back_inbox_result_stage(&id, req, &actor, executor).await })
+        })
+        .await
+    }
+
+    /// 原快照先核验固定资格，再读取真实来源、版本及责任组织并写入。
+    async fn write_back_inbox_result_stage(
+        &self,
+        id: &str,
+        req: WriteBackInboxResultRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InboxMessageView> {
+        self.authorization
+            .require(actor, &integration_ops::INBOX_MESSAGE_WRITE_BACK, AccessTarget::Operation, executor)
+            .await?;
         let outcome = PreparedWriteBackOutcome::prepare(&req, Instant::now())?;
         let message = self
             .db
             .inbox_messages()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("消息不存在".to_string()))?;
         ensure_version(message.base.version, req.version)?;
@@ -120,26 +141,19 @@ impl IntegrationResolutionProcess {
                 prepare_processed_message(message, processed_at, actor)?
             },
             PreparedWriteBackOutcome::Failed { error_class, attempt_summary, attempt_at } => {
-                self.prepare_failed_message(message, error_class, attempt_summary, attempt_at, actor).await?
+                self.prepare_failed_message(
+                    message,
+                    error_class,
+                    attempt_summary,
+                    attempt_at,
+                    actor,
+                    executor,
+                )
+                .await?
             },
         };
-        let authorization = self.authorization.clone();
-        let current_actor = actor.clone();
-        let stored = self
-            .run_audited(move |db, executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(
-                            &current_actor,
-                            &integration_ops::INBOX_MESSAGE_WRITE_BACK,
-                            AccessTarget::Operation,
-                            executor,
-                        )
-                        .await?;
-                    write.persist(db, executor).await
-                })
-            })
-            .await?;
+
+        let stored = write.persist(&self.db, executor).await?;
         Ok(stored.into())
     }
 
@@ -150,10 +164,10 @@ impl IntegrationResolutionProcess {
         attempt_summary: Option<String>,
         attempt_at: Instant,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<InboxResultWrite> {
         apply_failed_outcome(&mut message)?;
-        let org =
-            self.domain().access().require_handler_org(actor.id(), attempt_at, &mut NoTransaction).await?;
+        let org = self.domain().access().require_handler_org(actor.id(), attempt_at, executor).await?;
         let task = prepare_failed_message_task(
             InboxMessageId::new(message.base.id.clone()),
             error_class,
@@ -214,4 +228,45 @@ fn prepare_processed_message(
 /// 返回当前时间的秒级时间戳。
 fn now_secs() -> i64 {
     Instant::now().unix_secs()
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_integration::entity::integration_ops::MessageType;
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, process};
+
+    #[tokio::test]
+    async fn registration_authorizes_before_source_existence_and_payload_reads() {
+        let process = process().await;
+        let request = serde_json::from_value(json!({"source_system_id":"unread-source", "source_event_id":"event", "message_type":MessageType::PaymentSucceeded, "business_fact_key":"fact", "payload_schema_version":"v1"})).unwrap();
+        denied(
+            process.register_inbox_message_stage(request, &actor(), &mut SnapshotExecutor::default()).await,
+        );
+    }
+
+    #[tokio::test]
+    async fn every_write_back_outcome_authorizes_before_version_or_handler_reads() {
+        let process = process().await;
+        for version in [1, 999] {
+            for outcome in ["processed", "failed"] {
+                let request = serde_json::from_value(
+                    json!({"version":version,"outcome":outcome,"error_class":"transient_failure"}),
+                )
+                .unwrap();
+                denied(
+                    process
+                        .write_back_inbox_result_stage(
+                            "unread-message",
+                            request,
+                            &actor(),
+                            &mut SnapshotExecutor::default(),
+                        )
+                        .await,
+                );
+            }
+        }
+    }
 }

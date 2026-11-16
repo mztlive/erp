@@ -4,7 +4,9 @@
 //! 创建和修订把全部写入、审计与幂等结果放在同一 MongoDB 事务中。
 
 mod create;
+mod display;
 mod facts;
+mod field_changes;
 mod idempotency;
 mod identity;
 mod numbering;
@@ -15,6 +17,7 @@ mod views;
 use std::sync::Arc;
 
 use erp_customer::CustomerAccess;
+use erp_identity::AuthorizationService;
 use erp_party::SensitiveDataCodec;
 use mongodb::Database;
 
@@ -24,19 +27,25 @@ pub struct CustomerProfileProcess {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
     access: CustomerAccess,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl CustomerProfileProcess {
     /// 创建具备完整授权能力的客户资料服务。
     ///
     /// # 参数
-    /// db 为业务数据库，sensitive_data 为敏感数据编解码器，access 为客户授权能力。
+    /// db 为业务数据库，sensitive_data 为敏感数据编解码器；access 和 authorization 来自同次共享授权装配。
     /// # 返回
     /// 可在原事务中重验客户访问资格的服务。
     /// # 错误
     /// 构造不执行 I/O。
-    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>, access: CustomerAccess) -> Self {
-        Self { db, sensitive_data, access }
+    pub fn new(
+        db: Database,
+        sensitive_data: Arc<SensitiveDataCodec>,
+        access: CustomerAccess,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self { db, sensitive_data, access, authorization }
     }
 }
 

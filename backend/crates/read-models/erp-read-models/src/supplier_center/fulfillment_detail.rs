@@ -1,9 +1,14 @@
 //! 供应商履约详情的跨域只读装配，包括主体名称与 W26 正式任务授权。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
+use erp_identity::{AuthorizationService, CompiledAccess};
+use erp_permissions::supplier_fulfillment;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_supply::after_sales::{RefundExecutionView, refunds_for_order};
 use erp_supply::api_order::ApiOrderExt;
+use erp_supply::authorization::CompiledScope;
 use erp_supply::dto::supplier_fulfillment::{
     SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView, SupplierOrderAddressView,
     SupplierOrderAllowedAction, SupplierOrderInvestigationEvidenceView, SupplierOrderInvestigationOutcome,
@@ -21,16 +26,18 @@ use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use crate::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
 use crate::purchase_center::repository::supplier_names::current_legal_names_by_account_ids;
 use crate::{Error, Result};
 
 /// 组合履约订单、主体名称、调查证据和正式任务授权的详情读取器。
+#[derive(Clone)]
 pub struct SupplierFulfillmentDetailReadService {
     pub(super) db: mongodb::Database,
-    fulfillment: SupplierFulfillmentService,
+    fulfillment: Arc<SupplierFulfillmentService>,
+    authorization: Arc<AuthorizationService>,
 }
 
 struct OrderDetailFacts {
@@ -63,6 +70,27 @@ struct InvestigationAccess {
     formal_entry: bool,
 }
 
+/// 两种固定入口保留各自原查询凭证；订单凭证由拥有领域验证模型与读取边界。
+enum DetailReadAccess {
+    Task(Box<CompiledAccess>),
+    Order(CompiledScope),
+}
+
+impl DetailReadAccess {
+    /// 所有展示补齐结束后验证原入口凭证，不重新开始授权阶段。
+    async fn validate(
+        &self,
+        authorization: &AuthorizationService,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        match self {
+            Self::Task(access) => authorization.validate(access, executor).await?,
+            Self::Order(scope) => scope.validate(executor).await?,
+        }
+        Ok(())
+    }
+}
+
 impl SupplierFulfillmentDetailReadService {
     /// 使用同一数据库和组合根已配置的履约服务创建详情读取器。
     ///
@@ -71,14 +99,19 @@ impl SupplierFulfillmentDetailReadService {
     /// # 参数
     /// * `db` - 数据库。
     /// * `fulfillment` - 组合根已配置的履约读取服务。
+    /// * `authorization` - 与任务授权端口共用的统一授权服务。
     ///
     /// # 返回
     /// 返回详情读取器。构造不执行查询。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: mongodb::Database, fulfillment: SupplierFulfillmentService) -> Self {
-        Self { db, fulfillment }
+    pub fn new(
+        db: mongodb::Database,
+        fulfillment: SupplierFulfillmentService,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self { db, fulfillment: Arc::new(fulfillment), authorization }
     }
 
     /// 查询供应商履约订单详情（订单 + 明细 + 状态历史 + 动作 + 退款事实）。
@@ -104,30 +137,101 @@ impl SupplierFulfillmentDetailReadService {
         id: &str,
         params: &SupplierFulfillmentOrderDetailParams,
         actor: &AuditActor,
-        task_auth: &dyn WorkItemAuthorizationReadPort,
+        task_auth: Arc<dyn WorkItemAuthorizationReadPort>,
     ) -> Result<SupplierFulfillmentOrderDetailView> {
-        let order = self.fulfillment.load_order(id).await?;
-        let facts = self.order_detail_facts(&SupplierFulfillmentOrderId::new(id)).await?;
-        let supplier_name = current_legal_names_by_account_ids(
-            &self.db,
-            std::slice::from_ref(&order.supplier_id),
-            &mut NoTransaction,
-        )
-        .await?
-        .remove(order.supplier_id.as_ref());
+        let (this, id, params, actor) = (self.clone(), id.to_owned(), params.clone(), actor.clone());
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.detail_snapshot(&id, &params, &actor, task_auth.as_ref(), executor).await
+                })
+            })
+            .await
+    }
+
+    /// 先取得当前入口的唯一凭证，再读取全部履约资料，最后交付原凭证。
+    async fn detail_snapshot(
+        &self,
+        id: &str,
+        params: &SupplierFulfillmentOrderDetailParams,
+        actor: &AuditActor,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierFulfillmentOrderDetailView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("供应商履约详情读取必须使用快照事务".into()));
+        }
+        let (order, formal, access) =
+            self.detail_authorization(id, params, actor, task_auth, executor).await?;
+        let view = self.detail_view(order, formal.as_ref(), executor).await?;
+        access.validate(&self.authorization, executor).await?;
+        Ok(view)
+    }
+
+    /// 正式任务沿工作流固定来源资格读取；普通入口使用订单完整对象查询。
+    async fn detail_authorization(
+        &self,
+        id: &str,
+        params: &SupplierFulfillmentOrderDetailParams,
+        actor: &AuditActor,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
+        executor: &mut dyn Executor,
+    ) -> Result<(SupplierFulfillmentOrder, Option<AuthorizedTaskFact>, DetailReadAccess)> {
+        if let Some(task_id) = params.work_item_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
+            let (formal, access) = task_auth.authorize(task_id, actor, executor).await?;
+            ensure_task_target(&formal, id)?;
+            let order = self
+                .db
+                .supplier_fulfillment_orders()
+                .find_by_id(id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("供应商履约订单不存在或无权查看".into()))?;
+            if formal.subject_version != order.base.version.to_string() {
+                return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".into()));
+            }
+            return Ok((order, Some(formal), DetailReadAccess::Task(Box::new(access))));
+        }
+        let scope = FulfillmentOrderAccess::new(self.db.clone(), self.authorization.clone())
+            .resolve(actor, &supplier_fulfillment::ORDER_DETAIL, executor)
+            .await?;
+        let order = self
+            .db
+            .supplier_fulfillment_orders()
+            .find_authorized(id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商履约订单不存在或无权查看".into()))?;
+        Ok((order, None, DetailReadAccess::Order(scope)))
+    }
+
+    /// 全部名称、退款、调查和物流事实沿当前入口的原执行器补齐。
+    async fn detail_view(
+        &self,
+        order: SupplierFulfillmentOrder,
+        formal: Option<&AuthorizedTaskFact>,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierFulfillmentOrderDetailView> {
+        let id = order.base.id.as_str();
+        let facts = self.order_detail_facts(&SupplierFulfillmentOrderId::new(id), executor).await?;
+        let supplier_name =
+            current_legal_names_by_account_ids(&self.db, std::slice::from_ref(&order.supplier_id), executor)
+                .await?
+                .remove(order.supplier_id.as_ref());
         let mut action_blockers = display_blockers(supplier_name.is_some());
         let projection = self
-            .order_action_projection(&order, &facts.actions, params, actor, task_auth, &mut action_blockers)
+            .order_action_projection(&order, &facts.actions, formal, &mut action_blockers, executor)
             .await?;
-        let display_items = self.item_display(facts.items).await?;
+        let display_items = self.item_display(facts.items, executor).await?;
         let connection_code = self
             .db
             .supplier_api_connections()
-            .find_by_id(&order.connection_id, &mut NoTransaction)
+            .find_by_id(&order.connection_id, executor)
             .await?
             .map(|connection| connection.connection_code);
-        let (tracking_error, purchase_order_id, purchase_order_no) = self.api_tracking_context(id).await?;
-        let api_refunds = refunds_for_order(&self.db, id, &mut NoTransaction)
+        let (tracking_error, purchase_order_id, purchase_order_no) =
+            self.api_tracking_context(id, executor).await?;
+        let api_refunds = refunds_for_order(&self.db, id, executor)
             .await?
             .into_iter()
             .map(RefundExecutionView::try_from)
@@ -161,17 +265,18 @@ impl SupplierFulfillmentDetailReadService {
     async fn api_tracking_context(
         &self,
         id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<(Option<String>, Option<String>, Option<String>)> {
         let tracking_error = self
             .db
             .supplier_order_tracking()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .and_then(|tracking| tracking.last_error);
         let purchase_order = if let Some(execution) =
-            self.db.supplier_api_order_executions().find_by_id(id, &mut NoTransaction).await?
+            self.db.supplier_api_order_executions().find_by_id(id, executor).await?
         {
-            self.db.purchase_orders().find_by_id(&execution.purchase_order_id, &mut NoTransaction).await?
+            self.db.purchase_orders().find_by_id(&execution.purchase_order_id, executor).await?
         } else {
             None
         };
@@ -180,20 +285,20 @@ impl SupplierFulfillmentDetailReadService {
         Ok((tracking_error, purchase_order_id, purchase_order_no))
     }
 
-    async fn order_detail_facts(&self, order_id: &SupplierFulfillmentOrderId) -> Result<OrderDetailFacts> {
+    async fn order_detail_facts(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<OrderDetailFacts> {
         let items = self
             .db
             .supplier_fulfillment_items()
-            .find_items_by_order_ids(std::slice::from_ref(order_id), &mut NoTransaction)
+            .find_items_by_order_ids(std::slice::from_ref(order_id), executor)
             .await?;
-        let actions =
-            self.db.supplier_order_actions().list_by_order_newest(order_id, &mut NoTransaction).await?;
-        let histories = self
-            .db
-            .supplier_order_status_histories()
-            .list_by_order_chronological(order_id, &mut NoTransaction)
-            .await?;
-        let refunds = self.refund_views_for_order(order_id).await?;
+        let actions = self.db.supplier_order_actions().list_by_order_newest(order_id, executor).await?;
+        let histories =
+            self.db.supplier_order_status_histories().list_by_order_chronological(order_id, executor).await?;
+        let refunds = self.refund_views_for_order(order_id, executor).await?;
         Ok(OrderDetailFacts { items, actions, histories, refunds })
     }
 
@@ -201,18 +306,11 @@ impl SupplierFulfillmentDetailReadService {
         &self,
         order: &SupplierFulfillmentOrder,
         actions: &[SupplierOrderAction],
-        params: &SupplierFulfillmentOrderDetailParams,
-        actor: &AuditActor,
-        task_auth: &dyn WorkItemAuthorizationReadPort,
+        formal: Option<&AuthorizedTaskFact>,
         blockers: &mut Vec<SupplierOrderActionBlockerView>,
+        executor: &mut dyn Executor,
     ) -> Result<OrderActionProjection> {
-        if self
-            .db
-            .supplier_api_order_executions()
-            .find_by_id(&order.base.id, &mut NoTransaction)
-            .await?
-            .is_some()
-        {
+        if self.db.supplier_api_order_executions().find_by_id(&order.base.id, executor).await?.is_some() {
             return Ok(OrderActionProjection::automatic(blockers));
         }
         let target = actions.iter().find(|action| action.action_type != SupplierOrderActionType::Query);
@@ -222,7 +320,7 @@ impl SupplierFulfillmentDetailReadService {
                 (record.target_supplier_action_id() == target.base.id).then_some((candidate, record))
             })
         });
-        let access = self.investigation_access(order, params, actor, task_auth, blockers).await?;
+        let access = self.investigation_access(order, formal, blockers, executor).await?;
         let mut allowed_actions = Vec::new();
         if access.can_investigate {
             if let Some(target) = target {
@@ -231,8 +329,8 @@ impl SupplierFulfillmentDetailReadService {
                     target,
                     latest.as_ref(),
                     access.formal_entry,
-                    &mut allowed_actions,
-                    blockers,
+                    (&mut allowed_actions, blockers),
+                    executor,
                 )
                 .await?;
             } else {
@@ -255,22 +353,19 @@ impl SupplierFulfillmentDetailReadService {
     async fn investigation_access(
         &self,
         order: &SupplierFulfillmentOrder,
-        params: &SupplierFulfillmentOrderDetailParams,
-        actor: &AuditActor,
-        task_auth: &dyn WorkItemAuthorizationReadPort,
+        formal: Option<&AuthorizedTaskFact>,
         blockers: &mut Vec<SupplierOrderActionBlockerView>,
+        executor: &mut dyn Executor,
     ) -> Result<InvestigationAccess> {
-        let work_item_id = params.work_item_id.as_deref().map(str::trim).filter(|value| !value.is_empty());
-        let formal = self.formal_task(order, work_item_id, actor, task_auth).await?;
         let has_active_task = self
             .db
             .work_items()
-            .list_active_by_object(W26_BUSINESS_OBJECT_TYPE, &order.base.id, &mut NoTransaction)
+            .list_active_by_object(W26_BUSINESS_OBJECT_TYPE, &order.base.id, executor)
             .await?
             .into_iter()
             .next()
             .is_some();
-        let can_investigate = if let Some(formal) = &formal {
+        let can_investigate = if let Some(formal) = formal {
             if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
                 block_supplier_order_domain_actions(
                     blockers,
@@ -279,7 +374,6 @@ impl SupplierFulfillmentDetailReadService {
                 );
                 false
             } else {
-                self.ensure_formal_task_exists(work_item_id.expect("formal work item id")).await?;
                 true
             }
         } else if has_active_task {
@@ -295,39 +389,6 @@ impl SupplierFulfillmentDetailReadService {
         Ok(InvestigationAccess { can_investigate, formal_entry: formal.is_some() })
     }
 
-    async fn formal_task(
-        &self,
-        order: &SupplierFulfillmentOrder,
-        work_item_id: Option<&str>,
-        actor: &AuditActor,
-        task_auth: &dyn WorkItemAuthorizationReadPort,
-    ) -> Result<Option<AuthorizedTaskFact>> {
-        let Some(work_item_id) = work_item_id else {
-            return Ok(None);
-        };
-        let view = task_auth.authorize(work_item_id, actor).await?;
-        if !matches!(
-            view.work_item_type,
-            WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
-        ) || view.business_object_type != W26_BUSINESS_OBJECT_TYPE
-            || view.business_object_id != order.base.id
-            || view.subject_version != order.base.version.to_string()
-        {
-            return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".to_string()));
-        }
-        Ok(Some(view))
-    }
-
-    /// 返回详情前重读正式任务存在性；办理资格已由工作流授权结果证明。
-    async fn ensure_formal_task_exists(&self, work_item_id: &str) -> Result<()> {
-        self.db
-            .work_items()
-            .find_by_id(work_item_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-        Ok(())
-    }
-
     /// 以原供应商动作、连接能力和最新结构化证据投影 W26 动作。
     async fn project_supplier_order_actions(
         &self,
@@ -335,18 +396,21 @@ impl SupplierFulfillmentDetailReadService {
         target: &SupplierOrderAction,
         latest_investigation: Option<&(&SupplierOrderAction, InvestigationEvidenceRecord)>,
         formal_entry: bool,
-        allowed_actions: &mut Vec<SupplierOrderAllowedAction>,
-        action_blockers: &mut Vec<SupplierOrderActionBlockerView>,
+        (allowed_actions, action_blockers): (
+            &mut Vec<SupplierOrderAllowedAction>,
+            &mut Vec<SupplierOrderActionBlockerView>,
+        ),
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let (connection_active, capabilities) =
-            self.project_query_action(order, target, allowed_actions, action_blockers).await?;
+            self.project_query_action(order, target, allowed_actions, action_blockers, executor).await?;
 
         let replay_capability_ready = capability_for_action(target.action_type)
             .ok()
             .is_some_and(|needed| ensure_capability(&capabilities, needed).is_ok());
         if (connection_active || target.action_type != SupplierOrderActionType::Place)
             && replay_capability_ready
-            && ensure_replay_safe(&self.db, order, target, &mut NoTransaction).await.is_ok()
+            && ensure_replay_safe(&self.db, order, target, executor).await.is_ok()
         {
             allowed_actions.push(SupplierOrderAllowedAction::Replay);
         } else {
@@ -390,9 +454,10 @@ impl SupplierFulfillmentDetailReadService {
         target: &SupplierOrderAction,
         allowed_actions: &mut Vec<SupplierOrderAllowedAction>,
         action_blockers: &mut Vec<SupplierOrderActionBlockerView>,
+        executor: &mut dyn Executor,
     ) -> Result<(bool, Vec<SupplierApiCapabilityCode>)> {
         let connection =
-            self.db.supplier_api_connections().find_by_id(&order.connection_id, &mut NoTransaction).await?;
+            self.db.supplier_api_connections().find_by_id(&order.connection_id, executor).await?;
         let connection_active = connection.as_ref().is_some_and(SupplierApiConnection::is_active);
         let capabilities = connection
             .as_ref()
@@ -438,11 +503,24 @@ impl SupplierFulfillmentDetailReadService {
     async fn refund_views_for_order(
         &self,
         order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierRefundFactView>> {
-        let bundles =
-            self.db.supplier_fulfillment().refund_fact_bundles_by_order(order_id, &mut NoTransaction).await?;
+        let bundles = self.db.supplier_fulfillment().refund_fact_bundles_by_order(order_id, executor).await?;
         Ok(bundles.into_iter().map(|bundle| refund_fact_view(&bundle.fact, &bundle.allocations)).collect())
     }
+}
+
+/// 正式任务必须精确引用本次订单；不允许其他业务对象的任务放行详情。
+fn ensure_task_target(task: &AuthorizedTaskFact, id: &str) -> Result<()> {
+    if !matches!(
+        task.work_item_type,
+        WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
+    ) || task.business_object_type != W26_BUSINESS_OBJECT_TYPE
+        || task.business_object_id != id
+    {
+        return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".into()));
+    }
+    Ok(())
 }
 
 fn display_blockers(has_supplier_name: bool) -> Vec<SupplierOrderActionBlockerView> {
@@ -511,6 +589,84 @@ use erp_supply::service::supplier_fulfillment::investigate::{
 };
 use erp_supply::service::supplier_fulfillment::mapping::refund_fact_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
-use erp_supply::service::supplier_fulfillment::{SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE};
+use erp_supply::service::supplier_fulfillment::{
+    FulfillmentOrderAccess, SupplierFulfillmentService, W26_BUSINESS_OBJECT_TYPE,
+};
 
 use super::fulfillment_dto::SupplierFulfillmentOrderDetailView;
+
+#[cfg(test)]
+mod authorization_tests {
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    struct DeniedTask;
+
+    #[async_trait]
+    impl WorkItemAuthorizationReadPort for DeniedTask {
+        async fn authorize(
+            &self,
+            id: &str,
+            _: &AuditActor,
+            executor: &mut dyn Executor,
+        ) -> erp_workflow::Result<(AuthorizedTaskFact, CompiledAccess)> {
+            assert_eq!(id, "task");
+            assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
+            Err(erp_workflow::Error::Forbidden("正式任务无权读取".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn both_detail_entries_authorize_before_order_and_related_reads() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("fulfillment_detail_authorization");
+        let service = SupplierFulfillmentDetailReadService::new(
+            db.clone(),
+            SupplierFulfillmentService::new(db),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let params = SupplierFulfillmentOrderDetailParams::default();
+        let result = service
+            .detail_snapshot("order", &params, &actor, &DeniedTask, &mut ReadExecutor::default())
+            .await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "供应商履约详情读取必须使用快照事务")
+        );
+        let result = service
+            .detail_snapshot("order", &params, &actor, &DeniedTask, &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+        let params = SupplierFulfillmentOrderDetailParams { work_item_id: Some(" task ".into()) };
+        let result = service
+            .detail_snapshot("order", &params, &actor, &DeniedTask, &mut SnapshotExecutor::default())
+            .await;
+        assert!(matches!(result, Err(Error::Forbidden(reason)) if reason == "正式任务无权读取"));
+    }
+
+    #[test]
+    fn formal_task_must_reference_the_requested_fulfillment_order() {
+        let task = AuthorizedTaskFact {
+            work_item_type: WorkItemType::IntegrationResultUnknown,
+            business_object_type: W26_BUSINESS_OBJECT_TYPE.into(),
+            business_object_id: "order".into(),
+            subject_version: "1".into(),
+            allowed_actions: vec![],
+        };
+        ensure_task_target(&task, "order").unwrap();
+        assert!(matches!(ensure_task_target(&task, "other"), Err(Error::BusinessLogicError(_))));
+        let mut wrong = task.clone();
+        wrong.business_object_type = "sales_order".into();
+        assert!(matches!(ensure_task_target(&wrong, "order"), Err(Error::BusinessLogicError(_))));
+        let mut wrong = task;
+        wrong.work_item_type = WorkItemType::DocumentApproval;
+        assert!(matches!(ensure_task_target(&wrong, "order"), Err(Error::BusinessLogicError(_))));
+    }
+}

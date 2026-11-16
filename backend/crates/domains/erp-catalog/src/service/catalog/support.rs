@@ -1,5 +1,5 @@
 use erp_permissions::catalog as catalog_permissions;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::CatalogService;
 use crate::entity::catalog::product::Product;
@@ -14,6 +14,7 @@ impl CatalogService {
     /// 解析创建维护人及其主属组织，并校验写范围。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `requested` - 请求维护人；空则使用操作人
     /// * `actor` - 已认证操作人
     ///
@@ -26,13 +27,11 @@ impl CatalogService {
         &self,
         requested: Option<&str>,
         actor: &application_core::AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(String, String)> {
         let access = self.access();
-        let (maintainer, org) = access.maintainer_org(requested, actor, &mut NoTransaction).await?;
-        access
-            .ensure_writable(actor, &catalog_permissions::PRODUCT_PRODUCT_CREATE, &mut NoTransaction)
-            .await?;
-        Ok((maintainer, org))
+        access.ensure_writable(actor, &catalog_permissions::PRODUCT_PRODUCT_CREATE, executor).await?;
+        access.maintainer_org(requested, actor, executor).await
     }
 
     // ---------- 私有加载与写入辅助 ----------
@@ -40,6 +39,7 @@ impl CatalogService {
     /// 按 ID 加载未删除分类。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `id` - 分类 ID
     ///
     /// # 返回
@@ -47,10 +47,14 @@ impl CatalogService {
     ///
     /// # 错误
     /// 分类不存在时返回 `NotFound`。
-    pub(super) async fn load_category(&self, id: &str) -> Result<ProductCategory> {
+    pub(super) async fn load_category(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductCategory> {
         self.db
             .product_categories()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))
     }
@@ -58,6 +62,7 @@ impl CatalogService {
     /// 按 ID 加载未删除品牌。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `id` - 品牌 ID
     ///
     /// # 返回
@@ -65,10 +70,10 @@ impl CatalogService {
     ///
     /// # 错误
     /// 品牌不存在时返回 `NotFound`。
-    pub(super) async fn load_brand(&self, id: &str) -> Result<ProductBrand> {
+    pub(super) async fn load_brand(&self, id: &str, executor: &mut dyn Executor) -> Result<ProductBrand> {
         self.db
             .product_brands()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("商品品牌不存在".to_string()))
     }
@@ -76,6 +81,7 @@ impl CatalogService {
     /// 按 ID 加载未删除计量单位。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `id` - 单位 ID
     ///
     /// # 返回
@@ -83,10 +89,10 @@ impl CatalogService {
     ///
     /// # 错误
     /// 单位不存在时返回 `NotFound`。
-    pub(super) async fn load_unit(&self, id: &str) -> Result<UnitOfMeasure> {
+    pub(super) async fn load_unit(&self, id: &str, executor: &mut dyn Executor) -> Result<UnitOfMeasure> {
         self.db
             .unit_of_measures()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("计量单位不存在".to_string()))
     }
@@ -94,6 +100,7 @@ impl CatalogService {
     /// 按 ID 加载未删除商品。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `id` - 商品 ID
     ///
     /// # 返回
@@ -101,10 +108,10 @@ impl CatalogService {
     ///
     /// # 错误
     /// 商品不存在时返回 `NotFound`。
-    pub(super) async fn load_product(&self, id: &str) -> Result<Product> {
+    pub(super) async fn load_product(&self, id: &str, executor: &mut dyn Executor) -> Result<Product> {
         self.db
             .products()
-            .find_by_id(id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("商品不存在".to_string()))
     }
@@ -113,6 +120,7 @@ impl CatalogService {
     /// 原子创建复用——此时分类可能是本次事务内才新建的草稿）。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `brand_id` - ERP 品牌
     /// * `base_unit_ids` - 待校验的基础单位 ID 集合
     ///
@@ -125,10 +133,11 @@ impl CatalogService {
         &self,
         brand_id: &ProductBrandId,
         base_unit_ids: impl Iterator<Item = &'a UnitOfMeasureId>,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.load_brand(brand_id.as_ref()).await?;
+        self.load_brand(brand_id.as_ref(), executor).await?;
         for unit_id in base_unit_ids {
-            let unit = self.load_unit(unit_id.as_ref()).await?;
+            let unit = self.load_unit(unit_id.as_ref(), executor).await?;
             if !unit.is_active() {
                 return Err(Error::BusinessLogicError("基础单位已停用".to_string()));
             }

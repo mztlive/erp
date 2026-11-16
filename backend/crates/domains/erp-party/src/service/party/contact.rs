@@ -13,7 +13,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -109,7 +109,12 @@ impl PartyContactService {
     ) -> Result<PageView<PartyContactView>> {
         self.authorization.require(actor, &party::CONTACT_LIST, AccessTarget::Operation, executor).await?;
         params.validate()?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
+        super::ensure_outside_supplier_profile(
+            self.supplier_roles.as_ref(),
+            &PartyId::new(party_id),
+            executor,
+        )
+        .await?;
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -175,7 +180,24 @@ impl PartyContactService {
         actor: &AuditActor,
     ) -> Result<PartyContactView> {
         req.validate()?;
-        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create_stage(&party_id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 仅使用已验证输入构造本域事实，不读取数据库。
+    fn prepare_record(
+        &self,
+        party_id: &str,
+        req: CreatePartyContactRequest,
+        actor: &AuditActor,
+    ) -> Result<PartyContact> {
         let mobile = req.mobile.clone();
         let mut contact = PartyContact::new(
             PartyContactId::new(next_id()),
@@ -195,36 +217,32 @@ impl PartyContactService {
             actor.id(),
         )?;
         contact.mobile_ciphertext = self.sensitive_data.encrypt(&mobile)?;
+        Ok(contact)
+    }
+
+    /// 在授权快照中核验主体和供应商边界，再原子写入默认标记、事实与审计。
+    async fn create_stage(
+        &self,
+        party_id: &str,
+        req: CreatePartyContactRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyContactView> {
+        self.authorization.require(actor, &party::CONTACT_CREATE, AccessTarget::Operation, executor).await?;
+        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+        let contact = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "party_contact.create",
             "party_contact",
             contact.base.id.clone(),
         )?;
-
-        let authorization = self.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let contact_for_tx = contact;
-        let created = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &party::CONTACT_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    if contact_for_tx.is_default {
-                        clear_default_marks!(db, party_contacts, contact_for_tx.party_id, None, executor);
-                    }
-                    db.party_contacts().create(&contact_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyContact, crate::error::Error>(contact_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(created.into())
+        if contact.is_default {
+            clear_default_marks!(self.db, party_contacts, contact.party_id, None, executor);
+        }
+        self.db.party_contacts().create(&contact, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(contact.into())
     }
 
     /// 更新联系人（仅生命周期字段；默认标记跨行事务）。
@@ -247,8 +265,34 @@ impl PartyContactService {
         actor: &AuditActor,
     ) -> Result<PartyContactView> {
         req.validate()?;
-        let mut contact = self.load_contact(id).await?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_stage(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 先验证功能资格，再从原事务读取版本及完整事实，修改与审计使用同一执行器。
+    async fn update_stage(
+        &self,
+        id: &str,
+        req: UpdatePartyContactRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyContactView> {
+        self.authorization.require(actor, &party::CONTACT_UPDATE, AccessTarget::Operation, executor).await?;
+        let mut contact = self
+            .db
+            .party_contacts()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("联系人不存在".into()))?;
+        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id, executor)
+            .await?;
         super::map_version_conflict(contact.ensure_version(req.version))?;
         contact.update(
             PartyContactUpdate {
@@ -264,43 +308,61 @@ impl PartyContactService {
             "party_contact",
             contact.base.id.clone(),
         )?;
-
-        let authorization = self.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let mut contact_for_tx = contact;
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &party::CONTACT_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    if contact_for_tx.is_default {
-                        clear_default_marks!(
-                            db,
-                            party_contacts,
-                            contact_for_tx.party_id,
-                            Some(&contact_for_tx.base.id),
-                            executor
-                        );
-                    }
-                    db.party_contacts().update(&mut contact_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyContact, crate::error::Error>(contact_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(updated.into())
+        if contact.is_default {
+            clear_default_marks!(self.db, party_contacts, contact.party_id, Some(&contact.base.id), executor);
+        }
+        self.db.party_contacts().update(&mut contact, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(contact.into())
     }
-    /// 读取仍存在的本域联系人事实。
-    async fn load_contact(&self, id: &str) -> Result<PartyContact> {
-        self.db
-            .party_contacts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
+
+    async fn service() -> PartyContactService {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("party_contact_authorization");
+        PartyContactService::new(
+            db,
+            Arc::new(SensitiveDataCodec::from_secret(b"party-test-secret")),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedSupplierRolePort),
+            unavailable_authorization(),
+        )
+    }
+
+    #[tokio::test]
+    async fn update_authorizes_before_existence_version_or_supplier_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for version in [1, 999] {
+            let req = serde_json::from_value(serde_json::json!({"version":version})).unwrap();
+            let error = service
+                .update_stage("unread-record", req, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("无资格不得探测存在性、版本或供应商角色");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    #[tokio::test]
+    async fn create_authorizes_before_party_or_supplier_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let req = serde_json::from_value(serde_json::json!({"contact_name":"name","mobile":"13800000000","valid_from":"2026-01-01","is_default":false})).unwrap();
+        let error = service
+            .create_stage("unread-party", req, &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("无资格不得探测主体或供应商角色");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

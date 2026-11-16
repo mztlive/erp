@@ -1,5 +1,7 @@
 //! 履约任务仅获得其采购单的付款金额与申请进度，不扩展整份合并申请的读取资格。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PurchaseOrderId;
@@ -42,31 +44,31 @@ pub struct FulfillmentRequestView {
 }
 
 impl BusinessFinanceFiles {
-    /// 在读取前后核验任务资格，按任务真实采购来源读取付款摘要。
+    /// 在原快照内核验任务资格，按任务真实采购来源读取付款摘要。
     /// # 参数
     /// 当前账号、任务身份及工作流授权端口。
     /// # 返回
     /// 当前采购单的应付余额、冻结付款条件与逐申请金额。
     /// # 错误
-    /// 无任务资格、非采购履约、缺少正式来源或读取期间资格变化时拒绝。
+    /// 无任务资格、非采购履约、缺少正式来源或交付凭证失效时拒绝。
     pub async fn fulfillment_payment(
         &self,
         actor: &AuditActor,
         task_id: &str,
-        auth: &impl WorkItemAuthorizationReadPort,
+        auth: Arc<dyn WorkItemAuthorizationReadPort>,
     ) -> Result<FulfillmentPaymentView> {
-        let fact = auth.authorize(task_id, actor).await?;
-        if fact.work_item_type != WorkItemType::FulfillmentOperation {
-            return Err(Error::NotFound("采购履约任务不存在或无权查看".into()));
-        }
-        let expected = fact.clone();
         let this = self.clone();
-        let view = self
-            .db
+        let actor = actor.clone();
+        let task_id = task_id.to_owned();
+        self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    let (expected, access) = auth.authorize(&task_id, &actor, executor).await?;
+                    if expected.work_item_type != WorkItemType::FulfillmentOperation {
+                        return Err(Error::NotFound("采购履约任务不存在或无权查看".into()));
+                    }
                     let purchase_id = this
                         .purchase_source(
                             &expected.business_object_type,
@@ -74,14 +76,12 @@ impl BusinessFinanceFiles {
                             executor,
                         )
                         .await?;
-                    this.purchase_payment(&purchase_id, executor).await
+                    let view = this.purchase_payment(&purchase_id, executor).await?;
+                    this.rbac.validate(&access, executor).await?;
+                    Ok::<_, Error>(view)
                 })
             })
-            .await?;
-        if auth.authorize(task_id, actor).await? != fact {
-            return Err(Error::ConflictError("履约任务资格已变化，请刷新后重试".into()));
-        }
-        Ok(view)
+            .await
     }
 
     async fn purchase_payment(

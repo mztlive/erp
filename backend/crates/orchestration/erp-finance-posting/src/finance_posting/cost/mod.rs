@@ -2,14 +2,14 @@
 //!
 //! 成本事实、分配金额规则及业务唯一键归 `erp-finance`；销售单存在性通过
 //! `erp-sales` 仓储批量读取。入口先完成请求校验，再在单一事务中校验关联并使用
-//! 同一 Executor 保存成本事实、分配行和审计。提交后由财务领域读取登记详情。
+//! 同一 Executor 保存成本事实、分配行和审计，并装配登记结果后提交。
 
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
-use erp_core::ids::CostEntryId;
+use erp_core::ids::{CostEntryId, SalesOrderId};
 use erp_finance::dto::cost::{CostEntryView, CreateCostEntryRequest};
 use erp_finance::service::cost::{
     CostService as FinanceCostService, dedupe_order_ids, missing_order_id, persist_cost_entry,
@@ -20,7 +20,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::cost;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use crate::{Error, Result};
 /// 手工成本登记的跨域流程。
@@ -84,32 +84,72 @@ impl CostProcess {
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let existing = db.sales_order().find_existing_ids(&unique_order_ids, executor).await?;
-                    if missing_order_id(&unique_order_ids, &existing).is_some() {
-                        return Err(Error::NotFound("成本归属销售单不存在".into()));
-                    }
-                    let candidate = ObjectFacts {
-                        resource: "cost_entry".into(),
-                        relations: [(
-                            RelationKey::parse("sales_source")?,
-                            RelatedObjects {
-                                expected_ids: unique_order_ids.iter().map(ToString::to_string).collect(),
-                                objects: vec![],
-                            },
-                        )]
-                        .into(),
-                        ..Default::default()
-                    };
-                    authorization
-                        .require(&actor, &cost::ENTRY_CREATE, AccessTarget::Candidate(candidate), executor)
-                        .await?;
+                    authorize_cost_sources(&db, &authorization, &actor, &unique_order_ids, executor).await?;
                     persist_cost_entry(&db, prepared, executor).await?;
                     persist_log(&db, &audit, executor).await?;
-                    Ok::<(), Error>(())
+                    Ok(FinanceCostService::new(db)
+                        .cost_entry_detail_with_executor(&entry_id, executor)
+                        .await?)
                 })
             })
-            .await?;
+            .await
+    }
+}
 
-        Ok(FinanceCostService::new(self.db.clone()).cost_entry_detail(&entry_id).await?)
+/// 先检查创建及真实来源资格，再解释业务来源缺失；全部读取共用原事务。
+async fn authorize_cost_sources(
+    db: &Database,
+    authorization: &AuthorizationService,
+    actor: &AuditActor,
+    order_ids: &[SalesOrderId],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let candidate = ObjectFacts {
+        resource: "cost_entry".into(),
+        relations: [(
+            RelationKey::parse("sales_source")?,
+            RelatedObjects {
+                expected_ids: order_ids.iter().map(ToString::to_string).collect(),
+                objects: vec![],
+            },
+        )]
+        .into(),
+        ..Default::default()
+    };
+    authorization.require(actor, &cost::ENTRY_CREATE, AccessTarget::Candidate(candidate), executor).await?;
+    let existing = db.sales_order().find_existing_ids(order_ids, executor).await?;
+    if missing_order_id(order_ids, &existing).is_some() {
+        return Err(Error::NotFound("成本归属销售单不存在".into()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn denied_creation_does_not_probe_sales_order_existence() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("cost-source-authorization-unit");
+        let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin);
+        let error = authorize_cost_sources(
+            &db,
+            &unavailable_authorization(),
+            &actor,
+            &[SalesOrderId::new("unread-order")],
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .expect_err("授权设施失败后不得读取销售单存在性");
+        assert!(matches!(error, Error::Internal(message)
+            if message == "测试授权设施不可用"));
     }
 }

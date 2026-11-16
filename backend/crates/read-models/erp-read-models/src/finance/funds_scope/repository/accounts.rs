@@ -151,7 +151,7 @@ impl FundsAccess {
         let result: crate::Result<_> = async {
             let filter = receivable_filter(
                 query,
-                keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable).await?,
+                keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable, executor).await?,
             );
             let scope = linked_condition_document(condition, "sales_owner_user_id");
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
@@ -225,7 +225,7 @@ impl FundsAccess {
         let result: crate::Result<_> = async {
             let filter = payable_filter(
                 query,
-                keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payable).await?,
+                keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payable, executor).await?,
             );
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
             pipeline.extend(authorization.guard_stages());

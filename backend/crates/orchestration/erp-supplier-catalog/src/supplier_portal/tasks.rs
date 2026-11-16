@@ -10,6 +10,38 @@ use super::{PortalReview, SupplierPortalProcess};
 use crate::{Error, Result};
 
 impl SupplierPortalProcess {
+    /// 当前完整办理资格与真实申请关联先于命令回放；不要求旧任务仍开放。
+    /// # 参数
+    /// request_id、task_id 为原命令申请及任务；actor 为当前人，executor 为原事务。
+    /// # 返回
+    /// 当前仍有完整资格并属于原申请时成功。
+    /// # 错误
+    /// 资格撤销、指派改变、任务或关联缺失时拒绝。
+    pub(super) async fn require_review_result(
+        &self,
+        request_id: &str,
+        task_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.services.work_items.require_result_access(actor, task_id, executor).await?;
+        let task = self
+            .db
+            .work_items()
+            .find_work_item(task_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商申请任务不存在".into()))?;
+        if !task.matches_supplier_portal_review(SupplierPortalReviewIdentity {
+            task_id,
+            request_id,
+            subject_version: &task.subject_version,
+            task_version: task.base.version,
+        }) {
+            return Err(Error::ConflictError("任务与供应商申请不一致".into()));
+        }
+        Ok(())
+    }
+
     /// 按当前任务版本和申请主题校验门户审核任务仍可由该内部处理人处理。
     ///
     /// # 参数
@@ -129,5 +161,26 @@ impl SupplierPortalProcess {
             )
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{Executor, ReadExecutor};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn review_replay_requires_current_task_execution_before_reading_request_or_receipt() {
+        let process = super::super::testing::unavailable_process().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for executor in [&mut ReadExecutor::default() as &mut dyn Executor, &mut SnapshotExecutor::default()]
+        {
+            let result = process.require_review_result("request", "task", &actor, executor).await;
+            // require_result_access 先执行普通 work_item:detail；两类执行器都应进入真实身份取证。
+            assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+        }
     }
 }

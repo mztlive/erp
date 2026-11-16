@@ -51,7 +51,7 @@ impl ConnectionAccess {
 }
 
 /// 隐藏对象存在性，设施失败和授权漂移仍保留原分类。
-fn conceal_missing(error: ProcessError) -> ProcessError {
+pub(super) fn conceal_missing(error: ProcessError) -> ProcessError {
     match error {
         ProcessError::NotFound(_) => ProcessError::Forbidden("当前账号不能操作此供应商连接".into()),
         other => other,

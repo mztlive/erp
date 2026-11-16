@@ -41,8 +41,6 @@ impl From<SupplierConnectorType> for SupplierConnectorTypeOption {
 /// 连接列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const SUPPLIER_API_CONNECTION_SORT_FIELDS: &[&str] =
     &["created_at", "connection_code", "updated_at"];
-/// 能力列表允许的排序字段白名单。
-pub(crate) const SUPPLIER_API_CAPABILITY_SORT_FIELDS: &[&str] = &["created_at", "updated_at"];
 
 /// 排序方向。
 pub use application_core::SortDir;
@@ -248,49 +246,6 @@ pub struct SupplierApiCapabilityListParams {
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
-}
-
-/// 归一化后的能力列表查询参数。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SupplierApiCapabilityListQuery {
-    /// 所属连接筛选。
-    pub connection_id: Option<erp_core::ids::SupplierApiConnectionId>,
-    /// 能力代码筛选。
-    pub capability_code: Option<SupplierApiCapabilityCode>,
-    /// 能力启停状态筛选。
-    pub status: Option<SupplierApiCapabilityStatus>,
-    /// 分页与排序参数。
-    pub paging: PageParams,
-}
-
-impl SupplierApiCapabilityListParams {
-    /// 归一化能力列表查询参数。
-    ///
-    /// 分页取默认值、排序字段过白名单校验。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回不依赖仓储类型的规范化查询参数。
-    ///
-    /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
-    pub(crate) fn normalized(&self) -> Result<SupplierApiCapabilityListQuery> {
-        let (sort_by, sort_dir) =
-            normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_API_CAPABILITY_SORT_FIELDS)?;
-        Ok(SupplierApiCapabilityListQuery {
-            connection_id: self.connection_id.clone(),
-            capability_code: self.capability_code,
-            status: self.status,
-            paging: PageParams {
-                page: page_or_default(self.page),
-                page_size: page_size_or_default(self.page_size),
-                sort_by,
-                sort_dir,
-            },
-        })
-    }
 }
 
 /// 健康检查请求（携带幂等键；重复提交由 `inbox_message` 身份唯一索引承接）。

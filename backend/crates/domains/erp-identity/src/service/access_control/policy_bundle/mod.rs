@@ -8,11 +8,11 @@ use erp_permissions::access_control;
 use persistence_core::{Executor, Transactional};
 
 use super::AccessControlService;
-use super::resolve::{AuthorizedDataScope, DataScopeService};
+use super::resolve::AuthorizedDataScope;
 use crate::dto::authorization_bundle::PolicyPreview;
 use crate::entity::authorization_bundle::PolicyDocument;
 use crate::entity::authorization_bundle::plan::PolicyPlan;
-use crate::{AccessTarget, Error, Permission, Result};
+use crate::{Permission, Result};
 
 /// 持有当前版本权限目录及既有范围配置端口。
 #[derive(Clone)]
@@ -50,72 +50,22 @@ impl PolicyBundleService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service
+                    let authorization = service
                         .access
                         .authorization
-                        .require(
+                        .require_policy_bundle(
                             &actor,
                             &access_control::POLICY_BUNDLE_PREVIEW,
-                            AccessTarget::Operation,
+                            Some(&document),
                             executor,
                         )
                         .await?;
-                    let authorization = service.authorize(&document, &actor, executor).await?;
-                    Ok(service.plan(document, &actor, authorization, executor).await?.preview)
+                    let plan = service.plan(document, &actor, &authorization.scope, executor).await?;
+                    authorization.ensure_current(executor)?;
+                    Ok(plan.preview)
                 })
             })
             .await
-    }
-
-    /// 所有写配置能力在开始时一次性证明；同批增权不能成为后续授权依据。
-    async fn authorize(
-        &self,
-        document: &PolicyDocument,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let mut codes = vec![
-            "authorization_policy:preview",
-            "authorization_policy:apply",
-            "admin:list",
-            "role:list",
-            "data_scope:list",
-        ];
-        if !document.roles.is_empty() {
-            codes.extend(["role:create", "role:update"]);
-        }
-        if !document.bindings.is_empty() {
-            codes.push("admin:update");
-        }
-        if !document.data_scopes.is_empty() {
-            codes.push("data_scope:create");
-        }
-        self.company_access(actor, &codes, "manage", executor).await
-    }
-
-    /// 按既有同角色完整资格及公司组织边界证明配置入口。
-    async fn company_access(
-        &self,
-        actor: &AuditActor,
-        codes: &[&str],
-        action: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
-        let permissions = codes.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
-        let access = DataScopeService::new(self.access.db.clone(), self.access.rbac.clone())
-            .resolve_permissions(
-                actor,
-                &Permission::parse(format!("{}:{}", "org_unit", action))?,
-                &permissions,
-                executor,
-            )
-            .await?;
-        if !access.scope.role_clauses.iter().any(|clause| clause.company)
-            || access.scope.user_limit.as_ref().is_some_and(|clause| !clause.company)
-        {
-            return Err(Error::Forbidden("授权文件操作需要公司范围的组织配置或查看资格".into()));
-        }
-        Ok(access)
     }
 
     /// 读取真实事实，复用目标校验，编译批次最终权限。
@@ -123,7 +73,7 @@ impl PolicyBundleService {
         &self,
         document: PolicyDocument,
         actor: &AuditActor,
-        authorization: AuthorizedDataScope,
+        authorization: &AuthorizedDataScope,
         executor: &mut dyn Executor,
     ) -> Result<PolicyPlan> {
         let facts = self.facts(&document, executor).await?;

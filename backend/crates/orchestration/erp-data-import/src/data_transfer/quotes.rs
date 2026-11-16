@@ -77,8 +77,7 @@ impl BusinessTransfers {
                 continue;
             }
             let product = self
-                .reader
-                .page(
+                .export_page(
                     TransferKind::SupplierQuoteArchive,
                     &json!({"source":"products","sku_ids":line["sku_id"],"page":1,"page_size":100}),
                     actor,

@@ -22,18 +22,6 @@ pub struct PartyIdentityFact {
 /// Port customer uses to read Party existence and identity facts.
 #[async_trait]
 pub trait PartyFactPort: Send + Sync {
-    /// 主体不存在时拒绝。
-    ///
-    /// # 参数
-    /// * `party_id` - 主体稳定 ID。
-    ///
-    /// # 返回
-    /// 主体存在时无返回值。
-    ///
-    /// # 错误
-    /// 主体不存在时返回 `NotFound`。适配器读取失败时返回对应错误。
-    async fn ensure_exists(&self, party_id: &PartyId) -> Result<()>;
-
     /// 返回给定主体 ID 的身份事实。
     ///
     /// 缺失的主体省略；调用方把缺口当作静默降级。
@@ -73,10 +61,6 @@ pub struct FailClosedPartyFactPort;
 
 #[async_trait]
 impl PartyFactPort for FailClosedPartyFactPort {
-    async fn ensure_exists(&self, _party_id: &PartyId) -> Result<()> {
-        Err(Error::Internal("主体端口未接线".to_string()))
-    }
-
     async fn identities_by_ids(
         &self,
         _party_ids: &[PartyId],

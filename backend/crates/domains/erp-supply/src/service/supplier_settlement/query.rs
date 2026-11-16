@@ -1,6 +1,6 @@
 use application_core::{AuditActor, EmptyScopeVersion, ScopeVersion};
 use erp_permissions::supplier_settlement;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::{SettlementActionAccess, SupplierSettlementService, dto, zero_amount};
@@ -22,29 +22,6 @@ use crate::{Error, Result};
 type StatementFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementStatementFilter;
 
 impl SupplierSettlementService {
-    /// 分页查询供应商结算单列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `keyword_supplier_ids` - 读取模型按关键词解析的完整供应商身份
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 参数校验或规范化失败，以及仓储查询失败时返回对应错误。
-    pub async fn supplier_settlement_statement_list(
-        &self,
-        params: &SupplierSettlementStatementListParams,
-        keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
-    ) -> Result<SupplierSettlementStatementListView> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let mut filter = statement_filter(&query);
-        filter.keyword_supplier_ids = keyword_supplier_ids;
-        self.load_statement_page(&filter, None, &mut NoTransaction).await
-    }
-
     /// 按动作解析范围后分页查询结算单。
     ///
     /// # 参数
@@ -84,7 +61,7 @@ impl SupplierSettlementService {
         filter.authorized_scope = Some(context.clone());
         filter.handler_open_statement_ids = handler_open_statement_ids;
         filter.business_org_unit_ids = org_ids.map(|ids| ids.into_iter().collect());
-        let mut view = self.load_statement_page(&filter, Some(&context), executor).await?;
+        let mut view = self.load_statement_page(&filter, &context, executor).await?;
         context.validate(executor).await?;
         view.empty_reason = None;
         Ok(view)
@@ -121,7 +98,7 @@ impl SupplierSettlementService {
     async fn load_statement_page(
         &self,
         filter: &StatementFilter,
-        context: Option<&CompiledScope>,
+        context: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatementListView> {
         let page = self
@@ -187,7 +164,7 @@ fn list_view(
     total: i64,
     filter: &StatementFilter,
     stats: Option<crate::repository::supplier_settlement::SupplierSettlementStatementStatsRow>,
-    context: Option<&CompiledScope>,
+    context: &CompiledScope,
 ) -> SupplierSettlementStatementListView {
     let stats = stats.map_or_else(
         || dto::SettlementStatementListStatsView {
@@ -210,10 +187,10 @@ fn list_view(
         page_size: filter.page_size,
         stats,
         processing_state: if total == 0 { "EMPTY" } else { "READY" }.to_string(),
-        scope_version: context.map(|ctx| ctx.scope_version.clone()).unwrap_or_default(),
-        policy_version: context.map(|ctx| ctx.policy_version()).unwrap_or_default(),
-        organization_version: context.map(|ctx| ctx.organization_version()).unwrap_or_default(),
-        as_of: context.map(|ctx| ctx.as_of().as_utc().to_rfc3339()).unwrap_or_default(),
+        scope_version: context.scope_version.clone(),
+        policy_version: context.policy_version(),
+        organization_version: context.organization_version(),
+        as_of: context.as_of().as_utc().to_rfc3339(),
         empty_reason: None,
         scope_summary: "结算单按岗位权限共享；负责人筛选为额外收窄",
         ownership_basis: "settlement_prepared_by",

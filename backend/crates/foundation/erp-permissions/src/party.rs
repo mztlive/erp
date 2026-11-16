@@ -34,6 +34,12 @@ pub const REVISION_LIST: Permission = Permission::new(resources::PARTY_REVISION,
 /// 查询联系人列表。
 pub const CONTACT_LIST: Permission = Permission::new(resources::PARTY_CONTACT, "list");
 
+/// 客户资料中的既有联系人详情资格。
+pub const CONTACT_DETAIL: Permission = Permission::new(resources::PARTY_CONTACT, "detail");
+
+/// 客户资料中的既有联系人敏感字段揭示资格。
+pub const CONTACT_REVEAL: Permission = Permission::new(resources::PARTY_CONTACT, "reveal");
+
 /// 创建联系人。
 pub const CONTACT_CREATE: Permission = Permission::new(resources::PARTY_CONTACT, "create");
 
@@ -42,6 +48,12 @@ pub const CONTACT_UPDATE: Permission = Permission::new(resources::PARTY_CONTACT,
 
 /// 查询地址列表。
 pub const ADDRESS_LIST: Permission = Permission::new(resources::PARTY_ADDRESS, "list");
+
+/// 客户资料中的既有地址详情资格。
+pub const ADDRESS_DETAIL: Permission = Permission::new(resources::PARTY_ADDRESS, "detail");
+
+/// 客户资料中的既有地址敏感字段揭示资格。
+pub const ADDRESS_REVEAL: Permission = Permission::new(resources::PARTY_ADDRESS, "reveal");
 
 /// 创建地址。
 pub const ADDRESS_CREATE: Permission = Permission::new(resources::PARTY_ADDRESS, "create");
@@ -52,6 +64,9 @@ pub const ADDRESS_UPDATE: Permission = Permission::new(resources::PARTY_ADDRESS,
 /// 查询税务资料列表。
 pub const TAX_PROFILE_LIST: Permission = Permission::new(resources::PARTY_TAX_PROFILE, "list");
 
+/// 客户资料中的既有税务资料详情资格。
+pub const TAX_PROFILE_DETAIL: Permission = Permission::new(resources::PARTY_TAX_PROFILE, "detail");
+
 /// 创建税务资料。
 pub const TAX_PROFILE_CREATE: Permission = Permission::new(resources::PARTY_TAX_PROFILE, "create");
 
@@ -60,6 +75,9 @@ pub const TAX_PROFILE_UPDATE: Permission = Permission::new(resources::PARTY_TAX_
 
 /// 查询银行账户列表。
 pub const BANK_ACCOUNT_LIST: Permission = Permission::new(resources::PARTY_BANK_ACCOUNT, "list");
+
+/// 客户资料中的既有银行账户详情资格。
+pub const BANK_ACCOUNT_DETAIL: Permission = Permission::new(resources::PARTY_BANK_ACCOUNT, "detail");
 
 /// 创建银行账户。
 pub const BANK_ACCOUNT_CREATE: Permission = Permission::new(resources::PARTY_BANK_ACCOUNT, "create");

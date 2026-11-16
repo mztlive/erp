@@ -4,7 +4,7 @@ use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventStatus}
 use erp_identity::service::resource_access::{
     GrantEventService, GrantQueueHealth, GrantRecompute, ResourceGrantService,
 };
-use erp_identity::{Error, Result, SharedRbacService};
+use erp_identity::{AuthorizationService, Error, Result};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -13,19 +13,19 @@ use super::facts::Facts;
 #[derive(Clone)]
 pub struct ResourceGrantProcess {
     pub(crate) db: Database,
-    pub(crate) rbac: SharedRbacService,
+    pub(crate) authorization: Arc<AuthorizationService>,
 }
 
 impl ResourceGrantProcess {
     /// 装配独立授权处理器。
     /// # 参数
-    /// db、rbac 为组合根共享设施。
+    /// db、authorization 为组合根的数据库及共享授权服务。
     /// # 返回
     /// 不启动循环的处理器。
     /// # 错误
     /// 无。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, authorization }
     }
 
     /// 装配独立队列能力。
@@ -49,7 +49,7 @@ impl ResourceGrantProcess {
     pub(crate) fn access(&self, event: Option<GrantEvent>) -> ResourceGrantService {
         ResourceGrantService::new(
             self.db.clone(),
-            self.rbac.clone(),
+            self.authorization.clone(),
             Arc::new(Facts { db: self.db.clone(), event }),
         )
     }

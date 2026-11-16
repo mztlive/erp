@@ -148,28 +148,88 @@ impl SupplierPortalProcess {
             + Send
             + 'static,
     {
-        let (action, supplier_permission, portal_permission) = action;
-        let command = scoped_command(actor.id(), supplier_id, action, key, payload)?;
+        let command = scoped_command(actor.id(), supplier_id, action.0, key, payload)?;
+        let supplier_id = supplier_id.to_string();
+        self.internal_target_command(
+            actor,
+            action,
+            move |_, _, _| Box::pin(async move { Ok((supplier_id, command)) }),
+            write,
+        )
+        .await
+    }
+
+    /// 固定入口资格、真实目标解析、供应商授权、回放和写入共用原事务。
+    /// # 参数
+    /// actor、action 为认证人及固定动作；resolve 只读取真实目标并构造原命令，write 执行业务写入。
+    /// # 返回
+    /// 本次写入或当前仍有资格读取的原命令结果。
+    /// # 错误
+    /// 入口资格、目标范围、幂等指纹或业务执行失败时拒绝。
+    pub(super) async fn internal_target_command<T, R, F>(
+        &self,
+        actor: &AuditActor,
+        action: (&'static str, Permission, Permission),
+        resolve: R,
+        write: F,
+    ) -> Result<T>
+    where
+        T: Serialize + DeserializeOwned + Send + Sync + 'static,
+        R: for<'a> FnOnce(
+                SupplierPortalProcess,
+                AuditActor,
+                &'a mut dyn Executor,
+            ) -> WriteFuture<'a, (String, CommandReceipt)>
+            + Send
+            + 'static,
+        F: for<'a> FnOnce(SupplierPortalProcess, AuditActor, &'a mut dyn Executor) -> WriteFuture<'a, T>
+            + Send
+            + 'static,
+    {
         let this = self.clone();
         let actor = actor.clone();
-        let supplier_id = supplier_id.to_string();
         self.db
             .client()
-            .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    this.internal_supplier(&actor, &supplier_permission, &supplier_id, executor).await?;
-                    this.internal_permission(&actor, &portal_permission, executor).await?;
-                    let service = PortalOfferingService::new(this.db.clone());
-                    if let Some(result) = service.command_result(&command, executor).await? {
-                        return decode(result);
-                    }
-                    let result = write(this.clone(), actor.clone(), executor).await?;
-                    this.command_commit(&command, &actor, &supplier_id, &result, executor).await?;
-                    Ok(result)
-                })
+                Box::pin(
+                    async move { this.internal_target_stage(&actor, action, resolve, write, executor).await },
+                )
             })
             .await
+    }
+
+    /// 原事务内的内部命令步骤；组合调用不得另开事务或跳过目标解析。
+    async fn internal_target_stage<T, R, F>(
+        &self,
+        actor: &AuditActor,
+        action: (&'static str, Permission, Permission),
+        resolve: R,
+        write: F,
+        executor: &mut dyn Executor,
+    ) -> Result<T>
+    where
+        T: Serialize + DeserializeOwned + Send + Sync + 'static,
+        R: for<'a> FnOnce(
+                SupplierPortalProcess,
+                AuditActor,
+                &'a mut dyn Executor,
+            ) -> WriteFuture<'a, (String, CommandReceipt)>
+            + Send
+            + 'static,
+        F: for<'a> FnOnce(SupplierPortalProcess, AuditActor, &'a mut dyn Executor) -> WriteFuture<'a, T>
+            + Send
+            + 'static,
+    {
+        self.internal_permission(actor, &action.2, executor).await?;
+        let (supplier_id, command) = resolve(self.clone(), actor.clone(), executor).await?;
+        self.internal_supplier(actor, &action.1, &supplier_id, executor).await?;
+        let service = PortalOfferingService::new(self.db.clone());
+        if let Some(result) = service.command_result(&command, executor).await? {
+            return decode(result);
+        }
+        let result = write(self.clone(), actor.clone(), executor).await?;
+        self.command_commit(&command, actor, &supplier_id, &result, executor).await?;
+        Ok(result)
     }
 
     async fn command_commit<T: Serialize + Sync>(
@@ -317,6 +377,49 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[tokio::test]
+    async fn internal_entry_rejects_before_target_resolution_receipt_or_write() {
+        use erp_permissions::{supplier, supplier_portal};
+        use persistence_core::testing::SnapshotExecutor;
+        use persistence_core::{Executor, ReadExecutor};
+
+        let process = super::super::testing::unavailable_process().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for (executor, snapshot) in [
+            (&mut ReadExecutor::default() as &mut dyn Executor, false),
+            (&mut SnapshotExecutor::default() as &mut dyn Executor, true),
+        ] {
+            for permission in [
+                supplier_portal::ADMIN_UPDATE_ACCOUNT,
+                supplier_portal::ADMIN_REVIEW,
+                supplier_portal::ADMIN_UPDATE_GRANT,
+            ] {
+                let result = process
+                    .internal_target_stage::<serde_json::Value, _, _>(
+                        &actor,
+                        ("supplier_portal.account_update", supplier::DETAIL, permission),
+                        |_, _, _| {
+                            Box::pin(async {
+                                panic!("入口资格失败不得读取目标、来源或收据")
+                            })
+                        },
+                        |_, _, _| Box::pin(async { panic!("入口资格失败不得执行业务写入") }),
+                        executor,
+                    )
+                    .await;
+                if snapshot {
+                    assert!(
+                        matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用")
+                    );
+                } else {
+                    assert!(
+                        matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn terminal_rejections_decode_to_the_original_error_before_normal_result_deserialization() {

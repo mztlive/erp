@@ -18,6 +18,8 @@ use super::dto::SalesOrderView;
 use crate::sales_center::access::{SalesAccess, SalesReadContext};
 use crate::{Error, Result};
 
+mod export;
+
 /// 查询直接复用领域 DTO，scope_version 与原有数值参数均在 URL 边界解码。
 pub type SalesListParams = SalesOrderListParams;
 

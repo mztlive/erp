@@ -14,7 +14,7 @@ use crate::{Error, Result};
 /// 返回公共权限目录中的固定提交权限。
 /// # 错误
 /// 未登记的单据类型返回校验错误。
-pub(super) fn submit_permission(kind: DocumentType) -> Result<Permission> {
+pub(in crate::reverse_flow) fn submit_permission(kind: DocumentType) -> Result<Permission> {
     match kind {
         DocumentType::CustomerRefund => Ok(returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT),
         DocumentType::SupplierRefund => Ok(returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT),

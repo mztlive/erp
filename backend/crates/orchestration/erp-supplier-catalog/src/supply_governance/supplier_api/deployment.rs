@@ -1,7 +1,6 @@
 //! 技术配置自动解析；任务登记事务内重验连接身份和版本。
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::ports::supplier_reference_registry::{SupplierDeploymentConfig, SupplierReferenceTarget};
-use persistence_core::NoTransaction;
 
 use super::SupplierApiGovernanceProcess;
 use crate::{Error, Result};
@@ -13,14 +12,13 @@ pub(super) struct Deployment {
 impl SupplierApiGovernanceProcess {
     /// 只读解析当前部署，不发送外部请求。
     /// # 参数
-    /// `id` 为已授权连接。
+    /// connection 为原授权快照中读取的连接。
     /// # 返回
     /// 当前连接与部署配置的绑定。
     /// # 错误
     /// 连接不存在或配置未登记时拒绝。
-    pub(super) async fn deployment(&self, id: &str) -> Result<Deployment> {
-        let connection = self.domain().load_connection(id, &mut NoTransaction).await?;
-        let target = SupplierReferenceTarget::from(&connection);
+    pub(super) fn deployment(&self, connection: &SupplierApiConnection) -> Result<Deployment> {
+        let target = SupplierReferenceTarget::from(connection);
         let config = self
             .reference_registry
             .deployment_config(&target)

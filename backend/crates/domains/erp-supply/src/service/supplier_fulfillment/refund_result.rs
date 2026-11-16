@@ -4,7 +4,7 @@ use erp_core::ids::{InboxMessageId, SupplierRefundAllocationId, SupplierRefundFa
 use erp_core::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
@@ -83,6 +83,7 @@ impl SupplierFulfillmentService {
     /// * `id` - 供应商履约订单主键。
     /// * `order` - 就地推进退款状态的子订单。
     /// * `refund_amount` - 本次退款金额。
+    /// * `executor` - 原退款命令授权及写入的事务执行器。
     ///
     /// # 返回
     /// 无返回值。累计金额等于订单成本时进入 `Refunded`，否则进入 `Partial`。
@@ -94,11 +95,12 @@ impl SupplierFulfillmentService {
         id: &str,
         order: &mut SupplierFulfillmentOrder,
         refund_amount: Amount,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let financial = self
             .db
             .supplier_fulfillment()
-            .refund_financial_snapshot(&SupplierFulfillmentOrderId::new(id), &mut NoTransaction)
+            .refund_financial_snapshot(&SupplierFulfillmentOrderId::new(id), executor)
             .await?;
         let order_total = financial.order_cost_gross;
         let refunded_total = financial.refunded_total;

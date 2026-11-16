@@ -17,7 +17,7 @@ use erp_party::{
 };
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::CustomerProfileProcess;
 use super::numbering::business_no;
@@ -83,30 +83,22 @@ impl CustomerProfileProcess {
         party_id: &PartyId,
         req: &SaveCustomerProfileRequest,
         actor: &str,
+        executor: &mut dyn Executor,
     ) -> Result<PartyFactChanges> {
         let mut changes = PartyFactChanges::default();
         if let Some(inputs) = &req.contacts {
-            let existing = self
-                .db
-                .party_contacts()
-                .list_active_on(party_id, req.effective_from, &mut NoTransaction)
-                .await?;
+            let existing =
+                self.db.party_contacts().list_active_on(party_id, req.effective_from, executor).await?;
             changes.contacts = self.diff_contacts(existing, inputs, party_id, req.effective_from, actor)?;
         }
         if let Some(inputs) = &req.addresses {
-            let existing = self
-                .db
-                .party_addresses()
-                .list_active_on(party_id, req.effective_from, &mut NoTransaction)
-                .await?;
+            let existing =
+                self.db.party_addresses().list_active_on(party_id, req.effective_from, executor).await?;
             changes.addresses = self.diff_addresses(existing, inputs, party_id, req.effective_from, actor)?;
         }
         if let Some(inputs) = &req.bank_accounts {
-            let existing = self
-                .db
-                .party_bank_accounts()
-                .list_active_on(party_id, req.effective_from, &mut NoTransaction)
-                .await?;
+            let existing =
+                self.db.party_bank_accounts().list_active_on(party_id, req.effective_from, executor).await?;
             changes.bank_accounts =
                 self.diff_bank_accounts(existing, inputs, party_id, req.effective_from, actor)?;
         }

@@ -2,61 +2,63 @@
 
 use std::collections::HashSet;
 
+use application_core::AuditActor;
+use erp_audit::execution::recover_command;
 use erp_core::ids::PartyId;
 use erp_party::PartyExt;
 use erp_supplier::{
-    QualificationAttachmentSensitivity, SaveSupplierProfileRequest, SupplierProfileMutationView,
-    SupplierProfileQualificationInput, SupplierQualificationSelection, command_view,
-    validate_profile_selection,
+    QualificationAttachmentSensitivity, SaveSupplierProfileRequest, SupplierProfileQualificationInput,
+    SupplierQualificationSelection, validate_profile_selection,
 };
 use erp_support::{FileAssetExt, PendingAttachmentBatch, SensitivityClass};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
 use crate::{Error, Result};
 
 impl SupplierProfileProcess {
-    /// 事务失败时查询同幂等键结果；并发首请求已提交时返回该稳定结果。
-    ///
-    /// # 参数
-    /// * `transaction_result` - 刚结束的业务事务结果。
-    /// * `intended_result` - 事务成功时要返回的视图。
-    /// * `idempotency_key` - 根资料命令幂等键。
-    /// * `operation` - 期望的命令操作名，用于核对重放。
-    /// * `supplier_id` - 更新时的供应商 ID；创建时为 `None`。
-    /// * `request_fingerprint` - 本次请求摘要。
-    ///
-    /// # 返回
-    /// 事务成功时返回原视图且 `assets_committed` 为 `true`。事务失败但同键同参命令已存在时返回该命令视图；只有原错误是 `OutcomeUnknown` 时把 `assets_committed` 标为可能已提交。
-    ///
-    /// # 错误
-    /// 幂等记录查询失败时返回该错误。已有命令与本次操作、供应商或摘要不一致时返回 `ConflictError`。没有可恢复命令时返回原事务错误。
+    /// 仅对可能已提交的失败执行重新授权的只读查证。
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn resolve_transaction_result_with_assets(
         &self,
-        transaction_result: Result<()>,
-        intended_result: SupplierProfileMutationView,
-        idempotency_key: &str,
+        transaction: Result<SupplierProfileWithAssetsResult>,
+        key: &str,
         operation: &str,
         supplier_id: Option<&str>,
-        request_fingerprint: &str,
+        fingerprint: &str,
+        actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        match transaction_result {
-            Ok(()) => Ok(SupplierProfileWithAssetsResult { view: intended_result, assets_committed: true }),
-            Err(error) => {
-                let assets_may_be_committed = matches!(&error, Error::OutcomeUnknown(_));
-                match self.command_record(idempotency_key).await? {
-                    Some(command) => {
-                        command
-                            .ensure_replayable(operation, supplier_id, request_fingerprint)
-                            .map_err(|e| Error::ConflictError(e.to_string()))?;
-                        Ok(SupplierProfileWithAssetsResult {
-                            view: command_view(command),
-                            assets_committed: assets_may_be_committed,
+        match transaction {
+            Err(error) if error.command_may_have_committed() => {
+                let assets_committed = matches!(&error, Error::OutcomeUnknown(_));
+                let this = self.clone();
+                let actor = actor.clone();
+                let key = key.to_owned();
+                let operation = operation.to_owned();
+                let id = supplier_id.map(str::to_owned);
+                let fingerprint = fingerprint.to_owned();
+                let recovered = self
+                    .db
+                    .client()
+                    .with_transaction(move |executor| {
+                        Box::pin(async move {
+                            this.command_qualified(&actor, executor).await?;
+                            this.replay_command(
+                                &key,
+                                &operation,
+                                id.as_deref(),
+                                &fingerprint,
+                                &actor,
+                                executor,
+                            )
+                            .await
                         })
-                    },
-                    None => Err(error),
-                }
+                    })
+                    .await
+                    .map(|view| view.map(|view| SupplierProfileWithAssetsResult { view, assets_committed }));
+                recover_command(error, recovered)
             },
+            other => other,
         }
     }
 
@@ -70,11 +72,15 @@ impl SupplierProfileProcess {
     ///
     /// # 错误
     /// 主体不存在、已停用或仓储查询失败时返回错误。
-    pub(super) async fn ensure_party_active(&self, party_id: &PartyId) -> Result<()> {
+    pub(super) async fn ensure_party_active(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let party = self
             .db
             .party()
-            .party(party_id, &mut NoTransaction)
+            .party(party_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("签约或付款主体不存在".to_string()))?;
         if party.company_profile.is_none() {
@@ -101,6 +107,7 @@ impl SupplierProfileProcess {
         &self,
         qualifications: &[SupplierProfileQualificationInput],
         pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         for qualification in qualifications {
             let Some(attachment_id) = qualification.attachment_id.as_ref() else {
@@ -111,7 +118,7 @@ impl SupplierProfileProcess {
                 None => {
                     self.db
                         .file_assets()
-                        .find_by_id(attachment_id.as_ref(), &mut NoTransaction)
+                        .find_by_id(attachment_id.as_ref(), executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("资质附件不存在，请先上传文件".to_string()))?
                         .sensitivity_class

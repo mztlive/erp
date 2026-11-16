@@ -13,7 +13,9 @@ use bpm::model::{
     IdempotencyKey, ParticipantId, Timestamp,
 };
 use erp_core::common::time::Instant;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_inventory::{CancelStockAdjustmentApprovalRequest, InventoryExt, StockAdjustmentView};
+use erp_permissions::inventory;
 use erp_workflow::entity::approval_integration::ApprovalNotificationEventKind;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -33,11 +35,11 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::InventoryAdjustmentProcess;
 use super::adapter::stock_adjustment_adapter;
-use super::approval_prepare::load_bound_definition_graph;
+use super::approval_prepare::load_bound_definition_graph_with_executor;
 pub(crate) use super::cancel_authorization::{CancelAuthority, CancelAuthorization, cancel_authority_facts};
 use super::cancel_facts::{cancellation_fact, ensure_receipt};
 use crate::{Error, Result};
@@ -64,6 +66,7 @@ pub(crate) struct LoadedCancelRuntime {
 /// # 参数
 /// * `db` - 审批实例所在数据库。
 /// * `instance_id` - 命令中的审批实例 ID。
+/// * `executor` - 本阶段已授权的快照执行器。
 ///
 /// # 返回
 /// 返回该 ID 对应的审批实例。
@@ -73,9 +76,10 @@ pub(crate) struct LoadedCancelRuntime {
 pub(crate) async fn load_cancel_instance(
     db: &Database,
     instance_id: &str,
+    executor: &mut dyn Executor,
 ) -> Result<ApprovalProcessInstance> {
     db.bpm_workflow()
-        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
         .await?
         .ok_or_else(|| Error::NotFound("审批实例不存在".to_string()))
 }
@@ -88,6 +92,7 @@ pub(crate) async fn load_cancel_instance(
 /// * `db` - 执行、任务与定义所在数据库。
 /// * `binding` - 单据创建时冻结的定义绑定。
 /// * `instance` - 已加载的候选实例。
+/// * `executor` - 本阶段已授权的快照执行器。
 ///
 /// # 返回
 /// 返回定义图、实例、当前执行、任务关闭策略和全部开放任务。
@@ -98,6 +103,7 @@ pub(crate) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
     instance: ApprovalProcessInstance,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
     let task_policy =
         instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
@@ -105,22 +111,19 @@ pub(crate) async fn load_cancel_runtime(
         .bpm_workflow()
         .current_execution_for_cancellation(
             &ApprovalProcessInstanceId::new(instance.base.id.clone()),
-            &mut NoTransaction,
+            executor,
         )
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db
         .work_items()
-        .open_approval_tasks_for_execution(
-            &ApprovalNodeExecutionId::new(current.base.id.clone()),
-            &mut NoTransaction,
-        )
+        .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
         .await?;
     current
         .ensure_cancellation_tasks(task_policy, open_tasks.len())
         .map_err(|error| Error::ConflictError(error.to_string()))?;
     Ok(LoadedCancelRuntime {
-        graph: load_bound_definition_graph(db, binding).await?,
+        graph: load_bound_definition_graph_with_executor(db, binding, executor).await?,
         instance,
         current,
         task_policy,
@@ -168,15 +171,12 @@ pub(crate) async fn committed_cancel_replay(
             actor_id: actor.id(),
         })?,
     };
-    if find_cancel_receipt(&service.db, &input.identity, &mut NoTransaction).await?.is_none() {
-        return Ok(None);
-    }
     let db = service.db.clone();
-    let workflow = service.workflow.clone();
+    let authorization = service.identity.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
-            Box::pin(async move { replay_cancel_step(&db, workflow.as_ref(), input, executor).await })
+            Box::pin(async move { replay_cancel_step(&db, &authorization, input, executor).await })
         })
         .await
 }
@@ -190,13 +190,21 @@ struct CancelReplayCommand {
     identity: PreparedCommandIdentity,
 }
 
-/// 新会话首先读取回执；重验当前授权后再证明原 actor 和终态。
+/// 原快照先重验当前资格，再读取精确回执并证明原 actor 和终态。
 async fn replay_cancel_step(
     db: &Database,
-    workflow: &dyn crate::workflow::FulfillmentWorkflow,
+    authorization: &AuthorizationService,
     input: CancelReplayCommand,
     executor: &mut dyn Executor,
 ) -> Result<Option<StockAdjustmentView>> {
+    authorization
+        .require(
+            &input.actor,
+            &inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
+            AccessTarget::record(&input.request.approval_process_instance_id)?,
+            executor,
+        )
+        .await?;
     let receipt = find_cancel_receipt(db, &input.identity, executor).await?;
     let instance = db
         .bpm_workflow()
@@ -207,7 +215,6 @@ async fn replay_cancel_step(
         .await?
         .ok_or_else(|| Error::NotFound("审批实例不存在".into()))?;
     ensure_cancel_instance_subject(&instance, &input.id, input.request.expected_subject_version)?;
-    workflow.authorize_stock_adjustment_cancel(&instance, &input.actor, executor).await?;
     ensure_replay_terminal(db, &instance, receipt.as_ref(), &input, executor).await?;
     let Some(receipt) = receipt else {
         return Ok(None);
@@ -652,4 +659,65 @@ pub(crate) fn build_stock_adjustment_cancel_input(
         blocked_port: false,
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
     })
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    fn command() -> CancelReplayCommand {
+        let request = CancelStockAdjustmentApprovalRequest {
+            expected_version: 1,
+            approval_process_instance_id: "instance".into(),
+            expected_subject_version: 1,
+            expected_instance_version: 2,
+            expected_execution_version: 3,
+            expected_task_version: Some(4),
+            reason: "撤回".into(),
+            idempotency_key: "cancel-key".into(),
+        };
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let identity = document_cancel_identity(DocumentCancelIdentityParams {
+            idempotency_key: IdempotencyKey::parse(&request.idempotency_key).unwrap(),
+            instance_id: &request.approval_process_instance_id,
+            subject_version: request.expected_subject_version,
+            expected_document_version: request.expected_version,
+            expected_instance_version: request.expected_instance_version,
+            expected_execution_version: request.expected_execution_version,
+            expected_task_version: request.expected_task_version,
+            reason: &request.reason,
+            actor_id: actor.id(),
+        })
+        .unwrap();
+        CancelReplayCommand {
+            id: "adjustment".into(),
+            reason: request.reason.clone(),
+            request,
+            actor,
+            identity,
+        }
+    }
+
+    #[tokio::test]
+    async fn cancellation_replay_requires_snapshot_authorization_before_receipt_or_state_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("cancel_replay_unit");
+        let authorization = unavailable_authorization();
+        let error = replay_cancel_step(&db, &authorization, command(), &mut ReadExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+        let error = replay_cancel_step(&db, &authorization, command(), &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
 }

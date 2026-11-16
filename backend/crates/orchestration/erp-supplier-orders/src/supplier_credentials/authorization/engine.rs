@@ -57,8 +57,17 @@ impl AuthorizationEngine {
         })
     }
 
+    #[cfg(test)]
     pub(super) async fn status(&self, operation_id: Option<&str>) -> JdVopAuthorizationStatus {
-        match self.store.load().await {
+        self.project_status(self.store.load().await, operation_id)
+    }
+
+    pub(super) fn project_status(
+        &self,
+        record: Result<Option<SupplierCredential>>,
+        operation_id: Option<&str>,
+    ) -> JdVopAuthorizationStatus {
+        match record {
             Ok(Some(record)) => operation_projection(&record, &self.crypto, self.clock.now(), operation_id),
             Ok(None) => JdVopAuthorizationStatus::empty(
                 "missing",
@@ -78,6 +87,7 @@ impl AuthorizationEngine {
         }
     }
 
+    #[cfg(test)]
     pub(super) async fn authorize(
         &self,
         id: &str,
@@ -85,18 +95,40 @@ impl AuthorizationEngine {
         actor: &AuditActor,
     ) -> Result<JdVopAuthorizationStatus> {
         let current = self.store.load().await?;
-        let mut command = self.command(&request, current.as_ref(), actor)?;
-        if let Some(mut existing) = current.clone().filter(|record| {
-            record.authorization_history.iter().any(|event| event.operation_id == request.operation_id)
-        }) {
-            existing.claim_authorization(&command).map_err(|_| AuthorizationError::Conflict)?;
-            return Ok(operation_projection(
-                &existing,
-                &self.crypto,
-                self.clock.now(),
-                Some(&request.operation_id),
-            ));
+        let (command, replayed) = self.prepare_authorization(&request, actor, current.as_ref())?;
+        if let Some(status) = replayed {
+            return Ok(status);
         }
+        self.authorize_prepared(id, request, actor, command).await
+    }
+
+    pub(super) fn prepare_authorization(
+        &self,
+        request: &JdVopAuthorizationRequest,
+        actor: &AuditActor,
+        current: Option<&SupplierCredential>,
+    ) -> Result<(SupplierCredentialAuthorizationRequest, Option<JdVopAuthorizationStatus>)> {
+        let command = self.command(request, current, actor)?;
+        let replayed = current.filter(|record| {
+            record.authorization_history.iter().any(|event| event.operation_id == request.operation_id)
+        });
+        let status = if let Some(existing) = replayed {
+            let mut existing = existing.clone();
+            existing.claim_authorization(&command).map_err(|_| AuthorizationError::Conflict)?;
+            Some(operation_projection(&existing, &self.crypto, self.clock.now(), Some(&request.operation_id)))
+        } else {
+            None
+        };
+        Ok((command, status))
+    }
+
+    pub(super) async fn authorize_prepared(
+        &self,
+        id: &str,
+        request: JdVopAuthorizationRequest,
+        actor: &AuditActor,
+        mut command: SupplierCredentialAuthorizationRequest,
+    ) -> Result<JdVopAuthorizationStatus> {
         let permit = self.tasks.permit()?;
         let app_key = self.settings.app_key.clone();
         let http = self.http.clone();

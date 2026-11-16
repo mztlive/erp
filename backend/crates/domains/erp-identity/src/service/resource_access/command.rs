@@ -1,4 +1,5 @@
 use application_core::AuditActor;
+use erp_permissions::access_control;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
@@ -7,8 +8,7 @@ use crate::dto::GrantSourcePage;
 use crate::entity::resource_access::event::{GrantEvent, GrantEventEvidence};
 use crate::entity::resource_access::{GrantSource, SourceKey, SourceUpdate};
 use crate::repository::resource_grants;
-use crate::service::access_control::resolve::DataScopeService;
-use crate::{AccessControlExt, Error, Permission, Result};
+use crate::{AccessControlExt, AccessTarget, Error, Result};
 
 impl ResourceGrantService {
     /// 管理员按稳定来源授予指定记录；重放不写库。
@@ -102,7 +102,7 @@ impl ResourceGrantService {
     }
     /// 管理员查看指定接收账号的来源及终止原因。
     /// # 参数
-    /// actor 为管理员；recipient 为接收账号；after 为上一页游标；executor 为调用执行器。
+    /// actor 为管理员；recipient 为接收账号；after 为上一页游标；executor 为原快照事务执行器。
     /// # 返回
     /// 最多 100 个来源及下一页游标，包含终止记录。
     /// # 错误
@@ -121,18 +121,13 @@ impl ResourceGrantService {
     /// # 参数
     /// actor 为当前管理员，executor 为维护事务。
     /// # 返回
-    /// 同角色具备范围维护及全公司组织管理资格时成功。
+    /// 同角色具备统一范围维护的全部资格和全公司组织范围时成功。
     /// # 错误
     /// 身份失效、资格不足或数据库失败时拒绝。
     pub async fn authorize_manager(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
-        let permissions = [Permission::parse("data_scope:create")?];
-        let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve_permissions(actor, &Permission::parse("org_unit:manage")?, &permissions, executor)
-            .await?;
-        if access.scope.user_limit.is_some() || !access.scope.role_clauses.iter().any(|c| c.company) {
-            return Err(Error::Forbidden("指定记录授权管理需要全公司组织管理资格".into()));
-        }
-        Ok(())
+        self.authorization
+            .require(actor, &access_control::RESOURCE_GRANT_MANAGE, AccessTarget::Operation, executor)
+            .await
     }
     async fn apply(
         &self,

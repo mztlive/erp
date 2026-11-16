@@ -5,7 +5,7 @@ use entity_core::BaseModel;
 use erp_core::common::time::BusinessDate;
 use erp_identity::AccessTarget;
 use erp_permissions::contract;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::ContractTemplateService;
 use crate::dto::template::{ApplicationView, ApplyTemplateRequest};
@@ -62,19 +62,61 @@ impl ContractTemplateService {
                 })
             })
             .await;
-        if matches!(
-            &result,
-            Err(Error::ConflictError(_) | Error::TransientTransaction(_) | Error::OutcomeUnknown(_))
+        self.finish_apply(result, &request, actor).await
+    }
+
+    /// 写事务退出后只读查证胜者；不自动重放写入，未知提交保留原始错误。
+    async fn finish_apply(
+        &self,
+        result: Result<ApplicationView>,
+        request: &ApplyTemplateRequest,
+        actor: &AuditActor,
+    ) -> Result<ApplicationView> {
+        let original = match result {
+            Ok(view) => return Ok(view),
+            Err(error) => error,
+        };
+        if !matches!(
+            original,
+            Error::ConflictError(_) | Error::TransientTransaction(_) | Error::OutcomeUnknown(_)
         ) {
-            // 只核对已提交的同键记录，不自动重放任何写入。
-            if let Some(existing) =
-                application_by_command(&self.db, actor.id(), &request.command_id, &mut NoTransaction).await?
-            {
-                existing.require_same(&request.template_id, &request.purpose)?;
-                return Ok(existing.into());
-            }
+            return Err(original);
         }
-        result
+        let service = self.clone();
+        let actor = actor.clone();
+        let request = request.clone();
+        let replay = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.application_replay(&request, &actor, executor).await })
+            })
+            .await;
+        match replay {
+            Ok(Some(view)) => Ok(view),
+            Ok(None) => Err(original),
+            Err(_) if matches!(original, Error::OutcomeUnknown(_)) => Err(original),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 在新快照先核验原申请资格，再查证同申请人和幂等键的已提交结果。
+    async fn application_replay(
+        &self,
+        request: &ApplyTemplateRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApplicationView>> {
+        self.authorization
+            .require(actor, &contract::TEMPLATES_APPLY, AccessTarget::Operation, executor)
+            .await?;
+        let Some(existing) =
+            application_by_command(&self.db, actor.id(), &request.command_id, executor).await?
+        else {
+            return Ok(None);
+        };
+        existing.require_same(&request.template_id, &request.purpose)?;
+        Ok(Some(existing.into()))
     }
 
     async fn apply_step(
@@ -220,5 +262,55 @@ impl ContractTemplateService {
                 })
             })
             .await
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::{FailClosedAuditPort, SigningCompanyFact, SigningCompanyPort};
+
+    struct NoCompanies;
+    #[async_trait]
+    impl SigningCompanyPort for NoCompanies {
+        async fn company(&self, _: &str, _: &mut dyn Executor) -> Result<Option<SigningCompanyFact>> {
+            panic!("申请结果查证不得读取公司或重放申请写入")
+        }
+    }
+
+    #[tokio::test]
+    async fn application_replay_requires_original_qualification_in_its_new_snapshot() {
+        let service = ContractTemplateService::new(
+            Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+                .await
+                .unwrap()
+                .database("application_replay_unit"),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(NoCompanies),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let request = ApplyTemplateRequest {
+            command_id: "command".into(),
+            template_id: "template".into(),
+            purpose: "purpose".into(),
+        };
+        assert!(matches!(
+            service.application_replay(&request, &actor, &mut NoTransaction).await,
+            Err(Error::ValidationError(_))
+        ));
+        assert!(matches!(
+            service.application_replay(&request, &actor, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(message)) if message == "测试授权设施不可用"
+        ));
     }
 }

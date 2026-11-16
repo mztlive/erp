@@ -2,8 +2,10 @@
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_identity::CompiledAccess;
 use erp_workflow::WorkItemType;
 use erp_workflow::dto::work_item::WorkItemAllowedAction;
+use persistence_core::Executor;
 
 /// 原工作流授权结果中两条详情实际消费的字段。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,8 +24,8 @@ pub struct AuthorizedTaskFact {
 
 /// 由组合根注入，详情在原读取位置请求正式工作流授权。
 ///
-/// 不接受 Executor：原 authorize_work_item 独立执行 NoTransaction 读取，
-/// 该端口不改变其快照边界，也不替代详情后续的任务重读和领域动作判断。
+/// 任务资格、业务事实与详情投影必须使用调用方的同一快照执行器。
+/// 实现不得另开事务，也不得把授权结果带到其他读取阶段复用。
 #[async_trait]
 pub trait WorkItemAuthorizationReadPort: Send + Sync {
     /// 授权后返回该详情需要的最小正式任务事实。
@@ -31,11 +33,18 @@ pub trait WorkItemAuthorizationReadPort: Send + Sync {
     /// # 参数
     /// * `id` - 正式任务身份
     /// * `actor` - 已认证操作人
+    /// * `executor` - 读取用例的原快照事务执行器
     ///
     /// # 返回
-    /// 返回任务类型、业务对象、冻结版本和允许动作。
+    /// 返回任务类型、业务对象、冻结版本、允许动作及尚未交付的读取凭证。
+    /// 调用方完成全部业务资料读取后，必须用原共享授权服务验证该凭证。
     ///
     /// # 错误
     /// 保留工作流原 `NotFound`、`Forbidden`、`Conflict` 与底层读取错误。
-    async fn authorize(&self, id: &str, actor: &AuditActor) -> erp_workflow::Result<AuthorizedTaskFact>;
+    async fn authorize(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> erp_workflow::Result<(AuthorizedTaskFact, CompiledAccess)>;
 }

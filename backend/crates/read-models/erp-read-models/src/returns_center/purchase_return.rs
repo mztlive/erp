@@ -4,11 +4,13 @@ use std::hash::{Hash, Hasher};
 
 use application_core::AuditActor;
 use erp_core::ids::PurchaseReturnOrderId;
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use erp_procurement::PurchaseResolvedScope;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
-use erp_returns::entity::returns::PurchaseReturnLine;
+use erp_returns::entity::returns::{PurchaseReturnLine, PurchaseReturnOrder};
 use erp_returns::repository::ReturnsExt;
 use erp_returns::repository::prelude::*;
 use erp_returns::repository::returns::{PurchaseReturnOrderRow, PurchaseReturnVersion};
@@ -48,6 +50,42 @@ pub struct PurchaseReturnListView {
 }
 
 impl ReturnsReadService {
+    /// 按采购退货创建命令的固定资格读取精确结果，不追加详情菜单资格。
+    ///
+    /// # 参数
+    /// * `id` - 原创建命令生成的采购退货主键。
+    /// * `source_id` - 原创建命令已校验的采购单主键，必须与持久化结果一致。
+    /// * `actor` - 原命令的真实操作人。
+    /// * `executor` - 原命令持有的快照事务执行器。
+    ///
+    /// # 返回
+    /// 返回原事务中的退货主单及全部明细。
+    ///
+    /// # 错误
+    /// 非原快照、创建或来源采购修改资格不足、结果来源不符或读取失败时拒绝。
+    pub async fn purchase_return_created_result(
+        &self,
+        id: &str,
+        source_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseReturnOrderView> {
+        Self::ensure_command_snapshot(executor)?;
+        self.authorization
+            .require(actor, &internal::PURCHASE_RETURN_SOURCE, AccessTarget::record(source_id)?, executor)
+            .await?;
+        let order = self
+            .db
+            .purchase_return_orders()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("采购退货单不存在".into()))?;
+        if order.purchase_order_id.as_ref() != source_id {
+            return Err(Error::ValidationError("采购退货命令结果与原采购来源不一致".into()));
+        }
+        purchase_return_order_with_lines(&self.db, order, executor).await
+    }
+
     /// 分页查询采购退货单列表。
     ///
     /// # 参数
@@ -387,6 +425,15 @@ async fn purchase_return_order_view(
         .find_by_id(&id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购退货单不存在".to_string()))?;
+    purchase_return_order_with_lines(db, order, executor).await
+}
+
+/// 使用已读取的精确主单装配明细，维持调用方的同一执行器。
+async fn purchase_return_order_with_lines(
+    db: &Database,
+    order: PurchaseReturnOrder,
+    executor: &mut dyn Executor,
+) -> Result<PurchaseReturnOrderView> {
     let lines =
         db.purchase_return_lines().find_lines_by_orders(&[order.base.id.clone().into()], executor).await?;
     Ok(PurchaseReturnOrderView {
@@ -407,12 +454,36 @@ mod tests {
     use std::str::FromStr;
 
     use entity_core::BaseModel;
+    use erp_core::AccountKind;
     use erp_core::common::stable::StableBase;
     use erp_core::ids::{PurchaseOrderRevisionLineId, WarehouseId};
     use erp_core::money::Quantity;
+    use erp_identity::testing::unavailable_authorization;
     use erp_returns::entity::returns::{PurchaseReturnStatus, ReturnMode};
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+
+    /// 原命令回包先核对快照和原创建来源资格，不得先读取退货单或明细。
+    #[tokio::test]
+    async fn created_result_requires_original_snapshot_and_source_authorization_before_loading() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service =
+            ReturnsReadService::new(client.database("purchase_return_result"), unavailable_authorization());
+        let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
+        let error = service
+            .purchase_return_created_result("return", "purchase", &actor, &mut ReadExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(reason) if reason.contains("原授权快照")));
+        let error = service
+            .purchase_return_created_result("return", "purchase", &actor, &mut SnapshotExecutor::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+    }
 
     /// 构造已授权页行，主单字段必须完整映射。
     fn row() -> PurchaseReturnOrderRow {

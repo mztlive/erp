@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::CatalogService;
 use crate::dto::{ProductMediaInput, ProductSkuInput};
@@ -20,6 +20,7 @@ impl CatalogService {
     /// 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `category_id` - ERP 分类
     /// * `brand_id` - ERP 品牌
     /// * `skus` - SKU 行（校验每个基础单位存在且启用）
@@ -37,12 +38,13 @@ impl CatalogService {
         skus: &[ProductSkuInput],
         product_kind: ProductKind,
         pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let unit_ids = skus.iter().map(|sku| sku.base_unit_id.clone()).collect::<Vec<_>>();
         let references = self
             .db
             .catalog()
-            .catalog_reference_data(Some(category_id), brand_id, &unit_ids, &mut NoTransaction)
+            .catalog_reference_data(Some(category_id), brand_id, &unit_ids, executor)
             .await?;
         let category = references.category.ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))?;
         if category.product_kind != product_kind {
@@ -58,7 +60,7 @@ impl CatalogService {
             .filter(|asset_id| !pending_assets.contains_id(asset_id))
             .cloned()
             .collect::<Vec<_>>();
-        if !self.file_assets.missing_ids(&asset_ids, &mut NoTransaction).await?.is_empty() {
+        if !self.file_assets.missing_ids(&asset_ids, executor).await?.is_empty() {
             return Err(Error::NotFound("SKU 主图文件不存在".to_string()));
         }
         Ok(())
@@ -67,6 +69,7 @@ impl CatalogService {
     /// 构造媒体行（校验 `file_asset` 引用存在，媒体角色与顺序落位）。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `revision_id` - 所属商品修订
     /// * `inputs` - 媒体输入
     /// * `role` - 媒体用途
@@ -82,6 +85,7 @@ impl CatalogService {
         inputs: &[ProductMediaInput],
         role: MediaRole,
         pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<ProductRevisionMedia>> {
         let asset_ids = inputs
             .iter()
@@ -89,7 +93,7 @@ impl CatalogService {
             .filter(|asset_id| !pending_assets.contains_id(asset_id))
             .cloned()
             .collect::<Vec<_>>();
-        if !self.file_assets.missing_ids(&asset_ids, &mut NoTransaction).await?.is_empty() {
+        if !self.file_assets.missing_ids(&asset_ids, executor).await?.is_empty() {
             return Err(Error::NotFound("媒体文件不存在".to_string()));
         }
         let rows = inputs

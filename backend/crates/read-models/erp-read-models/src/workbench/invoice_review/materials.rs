@@ -49,7 +49,7 @@ fn reference(
 
 /// 在冻结提交资料之外补充当前销售依据，业务不可用不影响原资料。
 /// # 参数
-/// 数据库与已授权实例资料。
+/// 数据库、已授权实例资料及原快照执行器。
 /// # 返回
 /// 当前开票来源或单独的不可用提示；其他审批类型均为空。
 /// # 错误
@@ -57,11 +57,12 @@ fn reference(
 pub(crate) async fn optional_sales_basis(
     db: &Database,
     materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
 ) -> Result<(Option<InvoiceSalesBasis>, Option<String>)> {
     if materials.document_type != "sales_invoice_request" {
         return Ok((None, None));
     }
-    match sales_basis(db, materials).await {
+    match sales_basis(db, materials, executor).await {
         Ok(basis) => Ok((Some(basis), None)),
         Err(error) => {
             material_unavailable(error)?;
@@ -72,24 +73,12 @@ pub(crate) async fn optional_sales_basis(
 
 /// 读取已授权开票实例的唯一销售来源。
 /// # 参数
-/// 数据库及经过运行时实例授权的提交资料。
+/// 数据库、经过运行时实例授权的提交资料及原快照执行器。
 /// # 返回
 /// 同一事务中的销售版本、完整明细与合同凭证目录。
 /// # 错误
 /// 类型、申请版本、应收或销售来源不一致时拒绝。
 pub(crate) async fn sales_basis(
-    db: &Database,
-    materials: &ApprovalMaterialsView,
-) -> Result<InvoiceSalesBasis> {
-    let db = db.clone();
-    let materials = materials.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| Box::pin(async move { load(&db, &materials, executor).await }))
-        .await
-}
-
-async fn load(
     db: &Database,
     materials: &ApprovalMaterialsView,
     executor: &mut dyn Executor,
@@ -143,11 +132,19 @@ pub async fn invoice_sales_reference<A: WorkflowAuthorizationPort>(
     revision_id: &str,
     file_id: &str,
 ) -> Result<ApprovalMaterialFile> {
-    let materials = runtime.materials(actor, instance_id).await?;
-    let basis = sales_basis(db, &materials).await?;
-    let file = reference(&basis.source.revision_id, &basis.files, revision_id, file_id)?;
-    runtime.materials(actor, instance_id).await?;
-    Ok(file)
+    let (db, runtime, actor) = (db.clone(), runtime.clone(), actor.clone());
+    let (instance_id, revision_id, file_id) =
+        (instance_id.to_owned(), revision_id.to_owned(), file_id.to_owned());
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                let materials = runtime.materials_with(&actor, &instance_id, executor).await?;
+                let basis = sales_basis(&db, &materials, executor).await?;
+                reference(&basis.source.revision_id, &basis.files, &revision_id, &file_id)
+            })
+        })
+        .await
 }
 
 #[cfg(test)]

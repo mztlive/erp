@@ -73,7 +73,7 @@ impl SupplierApiReadService {
 mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use erp_supply::dto::supplier_api::SupplierApiConnectionListParams;
     use erp_supply::ports::supplier_reference_registry::SupplierReferenceKind;
     use persistence_core::testing::SnapshotExecutor;
@@ -84,7 +84,7 @@ mod tests {
     async fn service() -> SupplierApiReadService {
         let client =
             mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
-        SupplierApiReadService::new(client.database("connection_authorization"), unavailable_authorization())
+        SupplierApiReadService::new(client.database("connection_authorization"), unbound_authorization())
     }
 
     fn actor() -> AuditActor {

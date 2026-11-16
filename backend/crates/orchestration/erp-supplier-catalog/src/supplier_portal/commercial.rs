@@ -9,9 +9,10 @@ use erp_supplier::SupplierExt;
 use erp_supplier::portal::{CooperationApplication, CooperationRepository, plan_confirmed_cooperation};
 use erp_workflow::entity::work_item::SupplierPortalReviewTaskData;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use serde_json::json;
 
+use super::command::scoped_command;
 use super::offerings::review_comment;
 use super::{CooperationSave, PortalDecision, PortalReview, PortalTransition, SupplierPortalProcess};
 use crate::{Error, Result};
@@ -198,10 +199,6 @@ impl SupplierPortalProcess {
         input: PortalReview,
         actor: &AuditActor,
     ) -> Result<CooperationApplication> {
-        let current = CooperationRepository::new(&self.db)
-            .find_any(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合作申请不存在".into()))?;
         let payload = json!({"application_id":id,"input":input});
         let key = input.idempotency_key.clone();
         let id = id.to_string();
@@ -209,9 +206,10 @@ impl SupplierPortalProcess {
             PortalDecision::Approve => "supplier_portal.commercial_approve",
             PortalDecision::Return => "supplier_portal.commercial_return",
         };
-        self.internal_command(
+        let target_id = id.clone();
+        let task_id = input.work_item_id.clone();
+        self.internal_target_command(
             actor,
-            &current.supplier_id,
             (
                 action,
                 match input.decision {
@@ -220,8 +218,17 @@ impl SupplierPortalProcess {
                 },
                 supplier_portal::ADMIN_REVIEW,
             ),
-            &key,
-            &payload,
+            move |this, actor, executor| {
+                Box::pin(async move {
+                    this.require_review_result(&target_id, &task_id, &actor, executor).await?;
+                    let current = CooperationRepository::new(&this.db)
+                        .find_any(&target_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("合作申请不存在".into()))?;
+                    let command = scoped_command(actor.id(), &current.supplier_id, action, &key, &payload)?;
+                    Ok((current.supplier_id, command))
+                })
+            },
             move |this, actor, executor| {
                 Box::pin(async move { this.review_cooperation(&id, &input, &actor, executor).await })
             },

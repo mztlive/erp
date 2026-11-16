@@ -93,6 +93,6 @@ where
         id: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        self.authorization.require_assigned(actor, id, executor).await
+        self.authorization.require_assigned(actor, id, executor).await.map(|_| ())
     }
 }

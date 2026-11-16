@@ -7,8 +7,9 @@ use dto::CommitCustomerAcceptanceView;
 use erp_core::ids::SalesOrderId;
 use erp_fulfillment::service::FulfillmentService;
 use mongodb::Database;
+use persistence_core::Executor;
 
-use crate::Result;
+use crate::{Error, Result};
 
 /// 组合销售版本展示信息与履约资格、验收历史的只读服务。
 pub struct FulfillmentReadService {
@@ -34,19 +35,32 @@ impl FulfillmentReadService {
     /// # 参数
     /// * `acceptance_id` - 已提交的客户验收单
     /// * `sales_order_id` - 剩余资格所依据的销售单
+    /// * `executor` - 命令授权、回执和结果共用的原快照执行器。
     ///
     /// # 返回
     /// 返回验收单详情和该销售单的剩余验收资格。
     ///
     /// # 错误
-    /// 验收详情读取失败或剩余资格装载失败时返回对应错误。
+    /// 非活动快照、结果销售来源不匹配、验收详情或剩余资格读取失败时拒绝。
     pub async fn committed_customer_acceptance_view(
         &self,
         acceptance_id: &str,
         sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
     ) -> Result<CommitCustomerAcceptanceView> {
-        let acceptance = self.domain.customer_acceptance_detail(acceptance_id).await?.acceptance;
-        let remaining_eligibility = self.acceptance_eligibility(sales_order_id.as_ref()).await?;
+        let boundary = executor
+            .boundary()
+            .filter(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
+            .ok_or_else(|| Error::ValidationError("验收命令结果读取必须使用原授权快照".into()))?;
+        let acceptance = self.domain.load_customer_acceptance(acceptance_id, executor).await?.acceptance;
+        if acceptance.sales_order_id != sales_order_id.as_ref() {
+            return Err(Error::ConflictError("验收命令结果与销售单不一致".into()));
+        }
+        let remaining_eligibility =
+            self.load_acceptance_eligibility(sales_order_id.as_ref(), executor).await?;
+        if !boundary.is_current(executor) {
+            return Err(Error::ValidationError("验收命令结果读取跨越授权快照".into()));
+        }
         Ok(CommitCustomerAcceptanceView { acceptance, remaining_eligibility })
     }
 }

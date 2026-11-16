@@ -14,7 +14,7 @@ use erp_identity::{AccessTarget, AccountDirectoryService};
 use erp_permissions::{customer as customer_permissions, customer};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::CustomerAccess;
@@ -197,11 +197,6 @@ impl CustomerAssignmentService {
     ) -> Result<Vec<CustomerAssignmentView>> {
         let new_assignment = command
             .into_assignment(CustomerAssignmentId::new(next_id()), CustomerAccountId::new(customer_id))?;
-        self.db
-            .customer_accounts()
-            .find_customer(customer_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "customer_assignment.assign",
@@ -308,18 +303,18 @@ async fn require_assignment(
     assignment: &CustomerAssignment,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    access.service.require(actor, &customer::ASSIGNMENT_APPLY, AccessTarget::Operation, executor).await?;
+    access.require_with(actor.clone(), &customer_permissions::UPDATE, customer_id, executor).await?;
     accounts
         .account(&assignment.user_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("负责销售账号不存在".into()))?
         .ensure_can_login()
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-    access.service.require(actor, &customer::ASSIGNMENT_APPLY, AccessTarget::Operation, executor).await?;
     if assignment.assignment_role == AssignmentRole::Owner {
-        access.require_owner_change(actor, customer_id, &assignment.user_id, executor).await
-    } else {
-        access.require_with(actor.clone(), &customer_permissions::UPDATE, customer_id, executor).await
+        access.require_owner_change(actor, customer_id, &assignment.user_id, executor).await?;
     }
+    Ok(())
 }
 
 /// 锁定客户根记录后校验并写入人员关系；必须收到事务执行器。
@@ -391,6 +386,40 @@ mod tests {
 
     use super::*;
     use crate::ports::FailClosedAuditPort;
+
+    #[tokio::test]
+    async fn assigning_checks_entry_before_customer_or_target_account_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("customer_assignment_create_authorization");
+        let access = CustomerAccess::new(db.clone(), unavailable_authorization());
+        let accounts = AccountDirectoryService::new(db);
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let assignment = AssignCustomerAssignment::new(
+            "unread-owner".into(),
+            AssignmentRole::Owner,
+            BusinessDate::from_ymd(2026, 11, 13).unwrap(),
+            None,
+            "新增负责人".into(),
+        )
+        .unwrap()
+        .into_assignment(
+            CustomerAssignmentId::new("new-assignment"),
+            CustomerAccountId::new("unread-customer"),
+        )
+        .unwrap();
+        let error = require_assignment(
+            &accounts,
+            &access,
+            &actor,
+            "unread-customer",
+            &assignment,
+            &mut SnapshotExecutor::default(),
+        )
+        .await
+        .expect_err("授权失败不得探测客户或目标账号");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+    }
 
     #[tokio::test]
     async fn ending_assignment_authorizes_original_before_detail_or_version_reads() {

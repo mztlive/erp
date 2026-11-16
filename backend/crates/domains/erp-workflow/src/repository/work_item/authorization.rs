@@ -20,7 +20,7 @@ use serde::Deserialize;
 
 use super::WorkItemFilter;
 use crate::WorkItemExt;
-use crate::entity::work_item::WorkItem;
+use crate::entity::work_item::{WorkItem, WorkItemStatus};
 
 pub(crate) struct WorkItemMapping {
     model: QueryModel,
@@ -41,6 +41,7 @@ impl WorkItemMapping {
                     FactKind::Collaborators,
                     FactKind::Organization,
                     FactKind::HistoryParticipants,
+                    FactKind::Completed,
                 ]
                 .into(),
             },
@@ -73,6 +74,11 @@ impl AccessMapping for WorkItemMapping {
                 { "completed_by": context.actor.id() },
                 { "closed_by": context.actor.id() },
             ] })),
+            AccessFact::Completed(completed) => Ok(QueryFragment::Match(if *completed {
+                doc! { "status": { "$ne": WorkItemStatus::Open.as_str() } }
+            } else {
+                doc! { "status": WorkItemStatus::Open.as_str() }
+            })),
             AccessFact::OrganizationIn(ids) => {
                 Ok(primary_membership_query("$owner_user_id".into(), Some(ids), context.as_of))
             },

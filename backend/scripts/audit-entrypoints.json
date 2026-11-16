@@ -738,115 +738,115 @@
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/attribute.rs",
-      "function": "sku_attribute_delete",
+      "function": "sku_attribute_delete_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 sku_attribute_delete 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "sku_attribute_delete_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/attribute.rs",
-      "function": "sku_attribute_update",
+      "function": "sku_attribute_update_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 sku_attribute_update 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "sku_attribute_update_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/attribute.rs",
-      "function": "sku_attribute_value_delete",
+      "function": "sku_attribute_value_delete_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 sku_attribute_value_delete 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "sku_attribute_value_delete_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/attribute.rs",
-      "function": "sku_attribute_value_update",
+      "function": "sku_attribute_value_update_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 sku_attribute_value_update 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "sku_attribute_value_update_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/brand.rs",
-      "function": "product_brand_create_with_assets",
+      "function": "product_brand_create_with_assets_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 product_brand_create_with_assets 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "product_brand_create_with_assets_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/brand.rs",
-      "function": "product_brand_delete",
+      "function": "product_brand_delete_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 product_brand_delete 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "product_brand_delete_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/brand.rs",
-      "function": "product_brand_update_with_assets",
+      "function": "product_brand_update_with_assets_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 product_brand_update_with_assets 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "product_brand_update_with_assets_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/brand_import.rs",
@@ -866,51 +866,51 @@
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/category.rs",
-      "function": "product_category_delete",
+      "function": "product_category_delete_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 product_category_delete 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "product_category_delete_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/category.rs",
-      "function": "product_category_move",
+      "function": "product_category_move_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 product_category_move 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "product_category_move_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/category.rs",
-      "function": "product_category_update",
+      "function": "product_category_update_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 product_category_update 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "product_category_update_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/listing.rs",
@@ -919,14 +919,14 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log_with_message",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log_with_message": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 write_product_listing_change 在自身事务或已声明 run_audited 边界通过 .resource_log_with_message、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "write_product_listing_change 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/listing.rs",
@@ -935,14 +935,14 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log_with_message",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log_with_message": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 write_sku_listing_change 在自身事务或已声明 run_audited 边界通过 .resource_log_with_message、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "write_sku_listing_change 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/product_create.rs",
@@ -1054,35 +1054,35 @@
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/unit.rs",
-      "function": "unit_of_measure_delete",
+      "function": "unit_of_measure_delete_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 unit_of_measure_delete 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "unit_of_measure_delete_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/unit.rs",
-      "function": "unit_of_measure_update",
+      "function": "unit_of_measure_update_stage",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 unit_of_measure_update 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "unit_of_measure_update_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/voucher.rs",
@@ -1091,14 +1091,14 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 write_voucher_category_draft 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "write_voucher_category_draft 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/voucher.rs",
@@ -1107,14 +1107,14 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 write_voucher_category_update_draft 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "write_voucher_category_update_draft 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/voucher_defaults.rs",
@@ -1123,14 +1123,14 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 ensure_voucher_default_brand 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "ensure_voucher_default_brand 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/voucher_defaults.rs",
@@ -1139,14 +1139,14 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 ensure_voucher_default_unit 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "ensure_voucher_default_unit 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/domains/erp-catalog/src/service/catalog/voucher_defaults.rs",
@@ -1155,28 +1155,30 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 ensure_voucher_root_category 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "ensure_voucher_root_category 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
-      "path": "crates/domains/erp-contract/src/service/contract/mod.rs",
-      "function": "archive_contract_revision",
+      "path": "crates/domains/erp-contract/src/service/contract/commands.rs",
+      "function": "archive_stage",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Transaction",
       "boundaries": [
-        ".resource_log"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 archive_contract_revision 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "合同命令在原事务内检查当前授权、对象版本与业务状态，写入、审计和完整回包共用同一 Executor；审计失败时终止事务。"
     },
     {
       "path": "crates/domains/erp-contract/src/service/contract/mod.rs",
@@ -1207,32 +1209,36 @@
       "reason": "用例 execute_authorized_transaction 在自身事务或已声明 run_audited 边界通过 audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
-      "path": "crates/domains/erp-contract/src/service/contract/mod.rs",
-      "function": "terminate_contract",
+      "path": "crates/domains/erp-contract/src/service/contract/commands.rs",
+      "function": "terminate_stage",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Transaction",
       "boundaries": [
-        ".resource_log"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 terminate_contract 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "合同命令在原事务内检查当前授权、对象版本与业务状态，写入、审计和完整回包共用同一 Executor；审计失败时终止事务。"
     },
     {
       "path": "crates/domains/erp-contract/src/service/contract/sales_access.rs",
-      "function": "set_sales_access",
+      "function": "sales_access_stage",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Command",
       "boundaries": [
-        ".resource_log"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "合同共享销售命令构造明确的 contract.share 审计上下文；复用 execute_authorized_transaction 在原 Executor 重验合同更新范围、期望版本和共享账号，原子写入名单与审计，不读取审计恢复业务。"
+      "reason": "合同共享销售命令在原事务执行固定共享授权后核对版本及账号，构造 contract.share 审计上下文；名单、审计与命令回包共用原 Executor，不读取审计恢复业务。"
     },
     {
       "path": "crates/domains/erp-contract/src/service/template/application.rs",
@@ -1364,35 +1370,35 @@
     },
     {
       "path": "crates/domains/erp-customer/src/service/customer/mod.rs",
-      "function": "create_customer",
+      "function": "create_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create_customer 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-customer/src/service/customer/mod.rs",
-      "function": "update_customer",
+      "function": "update_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 update_customer 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-identity/src/service/access_control/mod.rs",
@@ -2042,67 +2048,67 @@
     },
     {
       "path": "crates/domains/erp-party/src/service/party/address.rs",
-      "function": "create_party_address",
+      "function": "create_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create_party_address 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/address.rs",
-      "function": "update_party_address",
+      "function": "update_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 update_party_address 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/bank_account.rs",
-      "function": "create_party_bank_account",
+      "function": "create_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create_party_bank_account 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/bank_account.rs",
-      "function": "update_party_bank_account",
+      "function": "update_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 update_party_bank_account 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/builtin/mod.rs",
@@ -2122,99 +2128,99 @@
     },
     {
       "path": "crates/domains/erp-party/src/service/party/contact.rs",
-      "function": "create_party_contact",
+      "function": "create_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create_party_contact 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/contact.rs",
-      "function": "update_party_contact",
+      "function": "update_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 update_party_contact 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/mod.rs",
-      "function": "update_party_record",
+      "function": "create_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 update_party_record 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/mod.rs",
-      "function": "write_party_record",
+      "function": "update_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 write_party_record 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/tax_profile.rs",
-      "function": "create_party_tax_profile",
+      "function": "create_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 create_party_tax_profile 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-party/src/service/party/tax_profile.rs",
-      "function": "update_party_tax_profile",
+      "function": "update_stage",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 update_party_tax_profile 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/domains/erp-support/src/service/bulk_job/cancel_all.rs",
@@ -2239,11 +2245,11 @@
       "stage": "Transaction",
       "boundaries": [
         ".resource_log",
-        "audit_port.persist"
+        "audit.persist"
       ],
       "call_counts": {
         ".resource_log": 1,
-        "audit_port.persist": 1
+        "audit.persist": 1
       },
       "location_count": 1,
       "reason": "用例 cancel_background_job 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
@@ -2407,74 +2413,84 @@
       "reason": "用例 update_source_system 在自身事务或已声明 run_audited 边界通过 .resource_log、audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
-      "path": "crates/domains/erp-warehouse/src/service/warehouse/mod.rs",
-      "function": "warehouse_create",
+      "path": "crates/domains/erp-warehouse/src/service/warehouse/commands.rs",
+      "function": "create",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Command",
       "boundaries": [
-        ".resource_log"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 warehouse_create 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "命令步骤沿用公开入口事务，先完成授权及决定写入的真实事实读取，再通过仓库审计 Port 构造并持久化成功事件；业务写入与审计复用原 Executor。此登记核对调用边界，不证明真实数据库回滚或并发结果。"
     },
     {
-      "path": "crates/domains/erp-warehouse/src/service/warehouse/mod.rs",
-      "function": "warehouse_fulfillment_handlers_update",
+      "path": "crates/domains/erp-warehouse/src/service/warehouse/commands.rs",
+      "function": "delete_policy",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Command",
       "boundaries": [
-        ".resource_log_with_message"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log_with_message": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 warehouse_fulfillment_handlers_update 通过 .resource_log_with_message 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "命令步骤沿用公开入口事务，先完成授权及决定写入的真实事实读取，再通过仓库审计 Port 构造并持久化成功事件；业务写入与审计复用原 Executor。此登记核对调用边界，不证明真实数据库回滚或并发结果。"
     },
     {
-      "path": "crates/domains/erp-warehouse/src/service/warehouse/mod.rs",
-      "function": "warehouse_sku_policy_delete",
+      "path": "crates/domains/erp-warehouse/src/service/warehouse/commands.rs",
+      "function": "update",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Command",
       "boundaries": [
-        ".resource_log"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 warehouse_sku_policy_delete 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "命令步骤沿用公开入口事务，先完成授权及决定写入的真实事实读取，再通过仓库审计 Port 构造并持久化成功事件；业务写入与审计复用原 Executor。此登记核对调用边界，不证明真实数据库回滚或并发结果。"
     },
     {
-      "path": "crates/domains/erp-warehouse/src/service/warehouse/mod.rs",
-      "function": "warehouse_sku_policy_update",
+      "path": "crates/domains/erp-warehouse/src/service/warehouse/commands.rs",
+      "function": "update_handlers",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Command",
       "boundaries": [
-        ".resource_log"
+        ".resource_log_with_message",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log_with_message": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 warehouse_sku_policy_update 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "命令步骤沿用公开入口事务，先完成授权及决定写入的真实事实读取，再通过仓库审计 Port 构造并持久化成功事件；业务写入与审计复用原 Executor。此登记核对调用边界，不证明真实数据库回滚或并发结果。"
     },
     {
-      "path": "crates/domains/erp-warehouse/src/service/warehouse/mod.rs",
-      "function": "warehouse_update",
+      "path": "crates/domains/erp-warehouse/src/service/warehouse/commands.rs",
+      "function": "update_policy",
       "policy": "Audited",
-      "stage": "MetadataFactory",
+      "stage": "Command",
       "boundaries": [
-        ".resource_log"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        ".resource_log": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 warehouse_update 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "命令步骤沿用公开入口事务，先完成授权及决定写入的真实事实读取，再通过仓库审计 Port 构造并持久化成功事件；业务写入与审计复用原 Executor。此登记核对调用边界，不证明真实数据库回滚或并发结果。"
     },
     {
       "path": "crates/domains/erp-workflow/src/service/approval/binding/bind.rs",
@@ -2761,20 +2777,6 @@
       "reason": "元数据工厂/准备步骤 prepare_close_audit 通过 PreparedWorkflowAudit::resource_with_message、audit.validate 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "crates/domains/erp-workflow/src/service/work_item/reassign.rs",
-      "function": "reassign_command",
-      "policy": "Audited",
-      "stage": "MetadataFactory",
-      "boundaries": [
-        "audit.validate"
-      ],
-      "call_counts": {
-        "audit.validate": 1
-      },
-      "location_count": 1,
-      "reason": "规范化转派命令并校验安全审计上下文；本步骤不读取决定事实、不执行正式业务、不持久化成功事件，任务授权和目标资格由入口的同一事务核验。"
-    },
-    {
       "path": "crates/domains/erp-workflow/src/service/work_item/finance_responsibility.rs",
       "function": "create_finance_responsibility_rule",
       "policy": "Audited",
@@ -2807,6 +2809,20 @@
       "reason": "该步骤使用调用方业务 Executor 执行登记的审计调用；授权、业务写入和成功审计保持在同一业务事务，身份政策版本不因业务写入推进。"
     },
     {
+      "path": "crates/domains/erp-workflow/src/service/work_item/reassign.rs",
+      "function": "reassign_command",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        "audit.validate"
+      ],
+      "call_counts": {
+        "audit.validate": 1
+      },
+      "location_count": 1,
+      "reason": "规范化转派命令并校验安全审计上下文；本步骤不读取决定事实、不执行正式业务、不持久化成功事件，任务授权和目标资格由入口的同一事务核验。"
+    },
+    {
       "path": "crates/domains/erp-workflow/src/service/work_item/reassign_apply.rs",
       "function": "apply_reassignment",
       "policy": "Audited",
@@ -2835,20 +2851,6 @@
       "reason": "元数据工厂/准备步骤 prepare_reassignment_audits 通过 audit.validate 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
-      "path": "crates/domains/erp-workflow/src/service/work_item/write.rs",
-      "function": "finish_command",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        "record_command_attempt"
-      ],
-      "call_counts": {
-        "record_command_attempt": 2
-      },
-      "location_count": 1,
-      "reason": "关闭或转派的原写事务结束后，按版本冲突或服务错误保存一次独立尝试；并发冲突或未知结果只能在新只读事务中重新授权并查证精确回执，不重放写入、不追加成功事件。"
-    },
-    {
       "path": "crates/domains/erp-workflow/src/service/work_item/reassign_apply.rs",
       "function": "reassignment_audits",
       "policy": "Audited",
@@ -2861,6 +2863,20 @@
       },
       "location_count": 1,
       "reason": "元数据工厂/准备步骤 reassignment_audits 通过 PreparedWorkflowAudit::resource_with_id 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+    },
+    {
+      "path": "crates/domains/erp-workflow/src/service/work_item/write.rs",
+      "function": "finish_command",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "record_command_attempt"
+      ],
+      "call_counts": {
+        "record_command_attempt": 2
+      },
+      "location_count": 1,
+      "reason": "关闭或转派的原写事务结束后，按版本冲突或服务错误保存一次独立尝试；并发冲突或未知结果只能在新只读事务中重新授权并查证精确回执，不重放写入、不追加成功事件。"
     },
     {
       "path": "crates/domains/erp-workflow/src/service/work_item/write.rs",
@@ -3126,22 +3142,6 @@
     },
     {
       "path": "crates/orchestration/erp-demo-data/src/demo_master_data/lifecycle.rs",
-      "function": "restore_record",
-      "policy": "Audited",
-      "stage": "Transaction",
-      "boundaries": [
-        ".resource_log",
-        "run_audited"
-      ],
-      "call_counts": {
-        ".resource_log": 1,
-        "run_audited": 1
-      },
-      "location_count": 1,
-      "reason": "恢复用例在 run_audited 事务内检查演示生成权限、读取当前实体并按版本恢复；业务写入和审计使用原 Executor。"
-    },
-    {
-      "path": "crates/orchestration/erp-demo-data/src/demo_master_data/lifecycle.rs",
       "function": "restore_product_graph",
       "policy": "Audited",
       "stage": "Transaction",
@@ -3155,6 +3155,22 @@
       },
       "location_count": 1,
       "reason": "用例 restore_product_graph 在自身事务或已声明 run_audited 边界通过 .resource_log、run_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+    },
+    {
+      "path": "crates/orchestration/erp-demo-data/src/demo_master_data/lifecycle.rs",
+      "function": "restore_record",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "run_audited"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "恢复用例在 run_audited 事务内检查演示生成权限、读取当前实体并按版本恢复；业务写入和审计使用原 Executor。"
     },
     {
       "path": "crates/orchestration/erp-demo-data/src/demo_master_data/removal.rs",
@@ -4436,9 +4452,9 @@
     },
     {
       "path": "crates/orchestration/erp-master-data/src/customer_profile/sensitive.rs",
-      "function": "reveal_sensitive",
+      "function": "reveal_snapshot",
       "policy": "Audited",
-      "stage": "SpecialLifecycle",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
         "persist_log"
@@ -4448,7 +4464,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "敏感内容读取或文件预览以 .resource_log、persist_log 记录授权读取动作；复用现行单次 NoTransaction 留痕，审计失败按原读取合同返回错误。该边界不套用普通正式业务写事务，不保存解密明文或文件正文。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/orchestration/erp-master-data/src/customer_profile/update.rs",
@@ -4610,9 +4626,9 @@
     },
     {
       "path": "crates/orchestration/erp-master-data/src/supplier_profile/sensitive.rs",
-      "function": "reveal_sensitive",
+      "function": "reveal_snapshot",
       "policy": "Audited",
-      "stage": "SpecialLifecycle",
+      "stage": "Command",
       "boundaries": [
         ".resource_log",
         "persist_log"
@@ -4622,7 +4638,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "敏感内容读取或文件预览以 .resource_log、persist_log 记录授权读取动作；复用现行单次 NoTransaction 留痕，审计失败按原读取合同返回错误。该边界不套用普通正式业务写事务，不保存解密明文或文件正文。"
+      "reason": "原用例事务内先授权并读取真实业务事实，再构造和持久化审计；业务及审计写入使用原 Executor。登记核对实际调用边界，数据库原子性与并发行为按事务合同验证。"
     },
     {
       "path": "crates/orchestration/erp-master-data/src/supplier_profile/update/persist.rs",
@@ -4916,20 +4932,6 @@
     },
     {
       "path": "crates/orchestration/erp-order-to-cash/src/sales_change/commands.rs",
-      "function": "prepare_change_cancel",
-      "policy": "Audited",
-      "stage": "MetadataFactory",
-      "boundaries": [
-        ".resource_log"
-      ],
-      "call_counts": {
-        ".resource_log": 1
-      },
-      "location_count": 1,
-      "reason": "元数据工厂/准备步骤 prepare_change_cancel 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
-    },
-    {
-      "path": "crates/orchestration/erp-order-to-cash/src/sales_change/commands.rs",
       "function": "new",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -4955,6 +4957,20 @@
       },
       "location_count": 1,
       "reason": "用例 persist_created_change_order 在自身事务或已声明 run_audited 边界通过 persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+    },
+    {
+      "path": "crates/orchestration/erp-order-to-cash/src/sales_change/commands.rs",
+      "function": "prepare_change_cancel",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "元数据工厂/准备步骤 prepare_change_cancel 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
       "path": "crates/orchestration/erp-order-to-cash/src/sales_change/commands.rs",
@@ -5548,7 +5564,7 @@
     },
     {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/service.rs",
-      "function": "persist_created_rule",
+      "function": "create_rule_stage",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
@@ -5558,21 +5574,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "该步骤使用调用方业务 Executor 执行登记的审计调用；授权、业务写入和成功审计保持在同一业务事务，身份政策版本不因业务写入推进。"
-    },
-    {
-      "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/service.rs",
-      "function": "persist_updated_rule",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        "persist_log"
-      ],
-      "call_counts": {
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "该步骤使用调用方业务 Executor 执行登记的审计调用；授权、业务写入和成功审计保持在同一业务事务，身份政策版本不因业务写入推进。"
+      "reason": "采购责任管理步骤在原授权事务内验证引用、成员资格，写入规则并持久化审计。调用边界登记不替代数据库原子性和并发验证。"
     },
     {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/service.rs",
@@ -5587,6 +5589,20 @@
       },
       "location_count": 1,
       "reason": "元数据工厂/准备步骤 update_rule 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+    },
+    {
+      "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/responsibility/service.rs",
+      "function": "update_rule_stage",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "采购责任管理步骤在原授权事务内验证引用、成员资格，写入规则并持久化审计。调用边界登记不替代数据库原子性和并发验证。"
     },
     {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/source_maintain.rs",
@@ -5992,7 +6008,7 @@
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/customer_refund.rs",
-      "function": "persist_start",
+      "function": "persist_customer_refund_start",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
@@ -6006,7 +6022,7 @@
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/payment_reversal.rs",
-      "function": "persist_payment_reversal_start_apply",
+      "function": "persist_payment_reversal_start",
       "policy": "Audited",
       "stage": "MetadataFactory",
       "boundaries": [
@@ -6016,11 +6032,11 @@
         ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 persist_payment_reversal_start_apply 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "元数据工厂/准备步骤 persist_payment_reversal_start 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/receipt_reversal.rs",
-      "function": "persist_receipt_reversal_start_apply",
+      "function": "persist_receipt_reversal_start",
       "policy": "Audited",
       "stage": "MetadataFactory",
       "boundaries": [
@@ -6030,7 +6046,7 @@
         ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 persist_receipt_reversal_start_apply 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "元数据工厂/准备步骤 persist_receipt_reversal_start 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/reversal_submit.rs",
@@ -6048,7 +6064,7 @@
     },
     {
       "path": "crates/orchestration/erp-reverse-flow/src/reverse_flow/start_approval/supplier_refund.rs",
-      "function": "persist_start",
+      "function": "persist_supplier_refund_start",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
@@ -6122,19 +6138,31 @@
     },
     {
       "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/error_task.rs",
+      "function": "create_error_task",
+      "policy": "Audited",
+      "stage": "Command",
+      "reason": "create_error_task 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。",
+      "boundaries": [
+        ".run_audited"
+      ],
+      "call_counts": {
+        ".run_audited": 1
+      },
+      "location_count": 1
+    },
+    {
+      "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/error_task.rs",
       "function": "store_error_task",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
-        ".resource_log",
-        ".run_audited"
+        ".resource_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
-        ".run_audited": 1
+        ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "用例 store_error_task 在自身事务或已声明 run_audited 边界通过 .resource_log、.run_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "store_error_task 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/inbox_message.rs",
@@ -6184,17 +6212,29 @@
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
+        ".run_audited"
+      ],
+      "call_counts": {
+        ".run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "register_inbox_message 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
+    },
+    {
+      "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/inbox_message.rs",
+      "function": "register_inbox_message_stage",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
         ".resource_log",
-        ".run_audited",
         "persist_log"
       ],
       "call_counts": {
         ".resource_log": 1,
-        ".run_audited": 1,
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 register_inbox_message 在自身事务或已声明 run_audited 边界通过 .resource_log、.run_audited、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "register_inbox_message_stage 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/inbox_message.rs",
@@ -6212,19 +6252,31 @@
     },
     {
       "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/reconciliation_difference.rs",
+      "function": "create_difference",
+      "policy": "Audited",
+      "stage": "Command",
+      "reason": "create_difference 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。",
+      "boundaries": [
+        ".run_audited"
+      ],
+      "call_counts": {
+        ".run_audited": 1
+      },
+      "location_count": 1
+    },
+    {
+      "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/reconciliation_difference.rs",
       "function": "store_difference",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
-        ".resource_log",
-        ".run_audited"
+        ".resource_log"
       ],
       "call_counts": {
-        ".resource_log": 1,
-        ".run_audited": 1
+        ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "用例 store_difference 在自身事务或已声明 run_audited 边界通过 .resource_log、.run_audited 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "store_difference 在用例原事务内构造或持久化审计，或委托已登记的根事务。业务与审计使用同一 Executor；登记只核对入口及调用边界，真实数据库回滚、并发和运行授权须分别验证。"
     },
     {
       "path": "crates/orchestration/erp-supplier-catalog/src/integration_resolution/task_decision/action.rs",
@@ -6869,7 +6921,7 @@
       "reason": "收货通知的原动作登记、查询结果及阻断状态与供应商履约审计在同一事务保存。"
     },
     {
-      "path": "crates/orchestration/erp-supplier-orders/src/supplier_api_orders/setup.rs",
+      "path": "crates/orchestration/erp-supplier-orders/src/supplier_api_orders/setup/write.rs",
       "function": "persist_setup",
       "policy": "Audited",
       "stage": "Transaction",

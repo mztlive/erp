@@ -2,7 +2,7 @@
 
 use erp_supply::dto::supplier_fulfillment::SupplierFulfillmentItemView;
 use erp_supply::entity::supplier_fulfillment::SupplierFulfillmentItem;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::fulfillment_detail::SupplierFulfillmentDetailReadService;
 use super::fulfillment_dto::SupplierFulfillmentItemDisplayView;
@@ -13,8 +13,9 @@ impl SupplierFulfillmentDetailReadService {
     pub(super) async fn item_display(
         &self,
         items: Vec<SupplierFulfillmentItem>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierFulfillmentItemDisplayView>> {
-        let names = item_names(&self.db, &items, &mut NoTransaction).await?;
+        let names = item_names(&self.db, &items, executor).await?;
         Ok(items.into_iter().map(|item| item_view(item, &names)).collect())
     }
 }

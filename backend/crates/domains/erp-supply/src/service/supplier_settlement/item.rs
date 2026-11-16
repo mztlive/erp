@@ -93,7 +93,7 @@ mod tests {
     use erp_core::AccountKind;
     use erp_identity::testing::unavailable_authorization;
     use mongodb::Client;
-    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
     use serde_json::json;
 
     use super::*;
@@ -115,7 +115,7 @@ mod tests {
             "period_end": "2026-11-30"
         }))
         .unwrap();
-        let mut executor = ReadExecutor::default();
+        let mut executor = SnapshotExecutor::default();
         let errors = [
             service.item_page(&item_params, &actor, &mut executor).await.expect_err("必须拒绝"),
             service.difference_page(&difference_params, &actor, &mut executor).await.expect_err("必须拒绝"),

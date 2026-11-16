@@ -19,15 +19,13 @@ use super::*;
 #[tokio::test]
 async fn list_rejects_unavailable_authorization_before_reading_sales_or_expenses() {
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use persistence_core::testing::SnapshotExecutor;
 
     let client =
         mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
-    let service = SalesExtraCostReadModel::new(
-        client.database("extra_cost_authorization"),
-        unavailable_authorization(),
-    );
+    let service =
+        SalesExtraCostReadModel::new(client.database("extra_cost_authorization"), unbound_authorization());
     let actor = AuditActor::new("sales".into(), "销售".into(), AccountKind::Admin);
     let error = service
         .read("sales-order", &actor, &mut SnapshotExecutor::default())

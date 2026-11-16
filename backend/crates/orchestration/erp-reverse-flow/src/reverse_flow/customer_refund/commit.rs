@@ -33,9 +33,9 @@ use super::super::start_approval::{
     persist_runtime_writes,
 };
 use super::{
-    load_customer_responsible_org_id, persist_bound_customer_refund_document, replay_customer_commit,
+    load_customer_responsible_org_id, persist_bound_customer_refund_document, validate_customer_refund_source,
 };
-use crate::reverse_flow::command_recovery::{CommitApproval, commit_audits, recovered_resource, save_commit};
+use crate::reverse_flow::command_recovery::{CommitApproval, commit_audits, save_commit};
 use crate::{Error, Result, ReverseFlowPorts};
 
 impl ReturnsProcess {
@@ -68,36 +68,30 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(id) = self.customer_refund_commit_replay(&command_receipt, actor).await? {
-            return self
-                .customer_refund_result(
-                    &id,
-                    actor,
-                    &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
-                    AccessTarget::record(&id)?,
-                )
-                .await;
-        }
-        let input = self.prepare_customer_refund_commit(&req, actor, &command_receipt).await?;
-        let id = input.refund.base.id.clone();
-        let command = command_receipt.clone();
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-
-        let client = db.client().clone();
+        let this = self.clone();
         let actor_owned = actor.clone();
-        let transaction_result = client
+        let command = command_receipt.clone();
+        let source_id = req.source_fact_id.clone();
+        let transaction_result = self
+            .db
+            .client()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { apply_commit(&db, &rbac, input, &command, &actor_owned, executor).await },
-                )
+                Box::pin(async move {
+                    this.commit_customer_refund_snapshot(&req, &command, &actor_owned, executor).await
+                })
             })
             .await;
         let detail_id = match transaction_result {
-            Ok(Some(existing_id)) => existing_id,
-            Ok(None) => id,
+            Ok(id) => id,
             Err(error) => {
-                recovered_resource(error, self.customer_refund_commit_replay(&command_receipt, actor).await)?
+                self.recover_return_commit(
+                    error,
+                    &command_receipt,
+                    actor,
+                    DocumentType::CustomerRefund,
+                    &source_id,
+                )
+                .await?
             },
         };
         self.customer_refund_result(
@@ -109,20 +103,43 @@ impl ReturnsProcess {
         .await
     }
 
+    /// 原事务先授权服务端候选，再读取收据、准备来源并完成全部写入。
+    async fn commit_customer_refund_snapshot(
+        &self,
+        req: &CommitCustomerRefundRequest,
+        command: &CommandReceipt,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        self.require_commit_source(actor, DocumentType::CustomerRefund, &req.source_fact_id, executor)
+            .await?;
+        if let Some(id) =
+            self.committed_return_command(command, actor, DocumentType::CustomerRefund, executor).await?
+        {
+            return Ok(id);
+        }
+        let input = self.prepare_customer_refund_commit(req, actor, command, executor).await?;
+        let id = input.refund.base.id.clone();
+        apply_commit(&self.db, &self.rbac, input, command, actor, executor).await?;
+        Ok(id)
+    }
+
     /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。
     async fn prepare_customer_refund_commit(
         &self,
         req: &CommitCustomerRefundRequest,
         actor: &AuditActor,
         receipt: &CommandReceipt,
+        executor: &mut dyn Executor,
     ) -> Result<CommitPreparation> {
         let (source_fact_id, source_version, mut refund) =
-            self.customer_refund_commit_source(req, actor).await?;
+            self.customer_refund_commit_source(req, actor, executor).await?;
         let adapter = customer_refund_adapter()?;
         start_customer_refund_approval(&mut refund)?;
         let id = refund.base.id.clone();
         let subject = customer_refund_subject_ref(&id)?;
-        let organization_id = load_customer_responsible_org_id(&self.db, &refund.customer_id).await?;
+        let organization_id =
+            load_customer_responsible_org_id(&self.db, &refund.customer_id, executor).await?;
         let _ = customer_refund_object_readable(&organization_id, actor.id())?;
         let now = Instant::now();
         let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
@@ -155,7 +172,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 事务前准备的数据；来源版本必须在写入事务内重验。
+/// 原事务内准备的来源版本、待写实体和审批上下文。
 struct CommitPreparation {
     source_fact_id: CustomerReceiptId,
     source_version: u64,
@@ -166,7 +183,7 @@ struct CommitPreparation {
     audits: (AuditLog, AuditLog),
 }
 
-/// 保留先重验来源、再查命令收据、最后执行写入的顺序。
+/// 已授权且未命中收据后，在原事务校验来源业务状态并执行写入。
 async fn apply_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -174,21 +191,9 @@ async fn apply_commit(
     command: &CommandReceipt,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    if let Some(id) = replay_customer_commit(
-        db,
-        rbac,
-        actor,
-        (&input.source_fact_id, input.source_version),
-        command,
-        executor,
-    )
-    .await?
-    {
-        return Ok(Some(id));
-    }
-    write_commit(db, rbac, input, command, actor, executor).await?;
-    Ok(None)
+) -> Result<()> {
+    validate_customer_refund_source(db, &input.source_fact_id, input.source_version, executor).await?;
+    write_commit(db, rbac, input, command, actor, executor).await
 }
 
 /// 绑定、审批准备、实体、运行事实、审计及回执严格按原顺序写入。
@@ -265,4 +270,36 @@ async fn prepare_commit_start(
         now: approval.now,
     })?;
     Ok(prepare_start(start_input)?)
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::super::testing::{actor, denied, process};
+    use super::*;
+
+    #[tokio::test]
+    async fn creation_and_submission_authorize_before_receipt_source_or_definition_reads() {
+        let process = process().await;
+        let actor = actor();
+        let request: CommitCustomerRefundRequest = serde_json::from_value(serde_json::json!({
+            "source_fact_id":"unread-source", "reason":"correct", "idempotency_key":"command"
+        }))
+        .unwrap();
+        let receipt = CommandReceipt::from_payload(
+            "customer-refund-commit-",
+            actor.id(),
+            "customer_refund.commit",
+            "customer_refund",
+            &request.idempotency_key,
+            &request,
+        )
+        .unwrap();
+        denied(
+            process
+                .commit_customer_refund_snapshot(&request, &receipt, &actor, &mut SnapshotExecutor::default())
+                .await,
+        );
+    }
 }

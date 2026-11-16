@@ -15,12 +15,12 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
-use super::CustomerProfileProcess;
 use super::facts::PartyFacts;
-use super::idempotency::{checked_command_view, command_view};
+use super::idempotency::command_view;
 use super::identity::CreationIdentity;
 use super::numbering::business_no;
-use crate::Result;
+use super::{CustomerProfileProcess, field_changes};
+use crate::{Result, command_insert_error};
 
 impl CustomerProfileProcess {
     /// 原子创建 Party、客户角色、首条 OWNER 与首批资料事实。
@@ -47,11 +47,9 @@ impl CustomerProfileProcess {
         req.validate_protocol()?;
         req.validate_structure(CustomerProfileOperation::Create)?;
         let replay = req.replay_context(CustomerProfileOperation::Create, None, actor.id())?;
-        if let Some(command) = self.command_record(replay.idempotency_key()).await? {
-            return checked_command_view(command, &replay);
-        }
+        let fields = field_changes::permissions(&req, CustomerProfileOperation::Create);
         let transaction = self.commit_create(req, replay.clone(), actor).await;
-        self.resolve_transaction(transaction, &replay).await
+        self.resolve_transaction(transaction, &replay, actor, &fields).await
     }
 
     /// 在同一写入事务内重验创建范围并持久化资料。
@@ -83,6 +81,15 @@ impl CustomerProfileProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     rbac.require_create(&actor, executor).await?;
+                    this.require_fields(
+                        &actor,
+                        &field_changes::permissions(&req, CustomerProfileOperation::Create),
+                        executor,
+                    )
+                    .await?;
+                    if let Some(view) = this.replay_command(&replay, &actor, executor).await? {
+                        return Ok(view);
+                    }
                     let identity = this.creation_identity(&req, &actor, executor).await?;
                     let prepared = this.prepare_create(req, identity, replay, &actor)?;
                     let result = prepared.result.clone();
@@ -202,7 +209,7 @@ impl PreparedCreate {
         if let Some(facts) = self.facts {
             facts.persist(db, executor).await?;
         }
-        db.customer_profile_commands().create(&self.command, executor).await?;
+        db.customer_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
     }
@@ -301,11 +308,12 @@ mod tests {
     async fn reuse_creates_only_customer_role_and_preserves_existing_identity() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let rbac = unavailable_authorization();
-        let access = CustomerAccess::new(db.clone(), rbac);
+        let access = CustomerAccess::new(db.clone(), rbac.clone());
         let service = CustomerProfileProcess::new(
             db,
             Arc::new(SensitiveDataCodec::from_secret(b"reuse-unit-test")),
             access,
+            rbac,
         );
         let actor = AuditActor::new("sales-a".into(), "sales".into(), AccountKind::Admin);
         let mut req: SaveCustomerProfileRequest = serde_json::from_value(json!({

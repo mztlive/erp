@@ -1,14 +1,10 @@
-//! 只根据财务事实装配发票列表与详情。
+//! 在已授权命令的原执行器中装配发票结果。
 
-use std::collections::HashMap;
-
-use erp_core::ids::InvoiceId;
 use erp_core::money::Amount;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
+use persistence_core::Executor;
 
 use super::ReceivableService;
-use crate::dto::receivable::{InvoiceListParams, InvoiceView, PageView, SortDir};
+use crate::dto::receivable::InvoiceView;
 use crate::entity::payable::PurchaseInvoiceAllocation;
 use crate::entity::receivable::{AllocationAction, InvoiceDirection, InvoiceKind, SalesInvoiceAllocation};
 use crate::repository::prelude::*;
@@ -17,128 +13,6 @@ use crate::service::receivable::mapping::zero_amount;
 use crate::{Error, Result};
 
 impl ReceivableService {
-    /// 分页查询发票列表（销项/进项共用，`invoice_direction` 筛选）。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    ///
-    /// * `keyword_ids` - 读取模型提供的完整关键词命中身份；None 只适用于无关键词
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 分页、排序、范围版本或其他请求字段校验失败，或包含下级但未提供组织时返回 `ValidationError`；
-    /// 发票或分配的仓储读取失败时返回对应错误。
-    pub async fn invoice_list(
-        &self,
-        params: &InvoiceListParams,
-        keyword_ids: Option<Vec<String>>,
-    ) -> Result<PageView<InvoiceView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let scope_query = crate::repository::ScopedInvoiceQuery {
-            keyword_ids,
-            invoice_direction: query.invoice_direction,
-            invoice_kind: query.invoice_kind,
-            party_id: query.party_id,
-            invoice_no: query.invoice_no,
-            status: query.status,
-            scope: crate::repository::ReceivableListScope {
-                sales_order_id: query.sales_order_id,
-                receivable_account_id: query.receivable_account_id,
-            },
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page =
-            self.db.receivable().search_invoices_in_account_scope(&scope_query, &mut NoTransaction).await?;
-        let invoice_ids = page.items.iter().map(|row| InvoiceId::new(row.id.clone())).collect::<Vec<_>>();
-        let mut sales_allocations_by_invoice = HashMap::<String, Vec<SalesInvoiceAllocation>>::new();
-        for allocation in self
-            .db
-            .sales_invoice_allocations()
-            .find_allocations_by_invoices(&invoice_ids, &mut NoTransaction)
-            .await?
-        {
-            sales_allocations_by_invoice
-                .entry(allocation.invoice_id.to_string())
-                .or_default()
-                .push(allocation);
-        }
-        let mut purchase_allocations_by_invoice = HashMap::<String, Vec<PurchaseInvoiceAllocation>>::new();
-        for allocation in self
-            .db
-            .purchase_invoice_allocations()
-            .find_allocations_by_invoices(&invoice_ids, &mut NoTransaction)
-            .await?
-        {
-            purchase_allocations_by_invoice
-                .entry(allocation.invoice_id.to_string())
-                .or_default()
-                .push(allocation);
-        }
-        for allocations in sales_allocations_by_invoice.values_mut() {
-            allocations.sort_unstable_by_key(|allocation| allocation.allocation_seq);
-        }
-        for allocations in purchase_allocations_by_invoice.values_mut() {
-            allocations.sort_unstable_by_key(|allocation| allocation.allocation_seq);
-        }
-        let mut views = Vec::with_capacity(page.items.len());
-        for row in page.items {
-            let (allocated_total, allocations) = match row.invoice_direction {
-                InvoiceDirection::Sales => {
-                    sales_allocation_view(sales_allocations_by_invoice.remove(&row.id).unwrap_or_default())
-                },
-                InvoiceDirection::Purchase => purchase_allocation_view(
-                    purchase_allocations_by_invoice.remove(&row.id).unwrap_or_default(),
-                ),
-            };
-            views.push(InvoiceView {
-                sales_invoice_request_id: row.sales_invoice_request_id,
-                id: row.id,
-                invoice_direction: row.invoice_direction,
-                invoice_kind: row.invoice_kind,
-                party_id: row.party_id,
-                invoice_code: row.invoice_code,
-                invoice_no: row.invoice_no,
-                invoice_date: row.invoice_date,
-                gross_amount: row.gross_amount,
-                net_amount: row.net_amount,
-                tax_amount: row.tax_amount,
-                rounding_adjustment_amount: row.rounding_adjustment_amount,
-                rounding_reason: row.rounding_reason,
-                original_invoice_id: row.original_invoice_id,
-                status: row.stable.status(),
-                version: row.version,
-                created_at: row.created_at,
-                allocated_total,
-                unallocated_amount: unallocated_amount(row.invoice_kind, row.gross_amount, allocated_total),
-                allocations,
-            });
-        }
-        Ok(PageView {
-            items: views,
-            total: page.total,
-            page: scope_query.page,
-            page_size: scope_query.page_size,
-        })
-    }
-    /// 查询发票详情（含分配行）。
-    ///
-    /// # 参数
-    /// * `id` - 发票 ID
-    ///
-    /// # 返回
-    /// 返回发票视图。
-    ///
-    /// # 错误
-    /// 发票不存在时返回 `NotFound`；发票或分配的仓储读取失败时返回对应错误。
-    pub async fn invoice_detail(&self, id: &str) -> Result<InvoiceView> {
-        self.invoice_detail_with_executor(id, &mut NoTransaction).await
-    }
     /// 在调用方执行器装配财务事实；访问资格由调用方先行统一授权。
     ///
     /// # 参数

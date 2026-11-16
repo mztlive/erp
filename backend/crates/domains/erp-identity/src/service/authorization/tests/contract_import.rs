@@ -2,11 +2,12 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use erp_permissions::{contract, internal, supplier_fulfillment};
+use erp_permissions::{contract, customer, internal, supplier_fulfillment};
 use persistence_core::testing::SnapshotExecutor;
 use persistence_core::{Executor, NoTransaction, ReadExecutor};
 
 use super::fixtures::{Facts, Identity, actor, candidate, complete, object, service};
+use crate::entity::authorization::FactValue;
 use crate::{AccessTarget, Error};
 
 #[tokio::test]
@@ -108,4 +109,51 @@ async fn supplier_place_candidates_and_replays_share_qualification_and_current_o
             Err(Error::Forbidden(_))
         ));
     }
+}
+
+#[tokio::test]
+async fn sales_sharing_uses_fixed_independent_qualification_and_the_contract_write_scope() {
+    let identity = Arc::new(Identity::default());
+    let facts = Arc::new(Facts::new(vec![object("contract", "contract", "user")]));
+    let mut builder = complete();
+    builder.facilities = identity.clone();
+    builder.facts.insert("contract".into(), facts.clone());
+    let service = builder.build().unwrap();
+    let target = AccessTarget::record("contract").unwrap();
+    let permission = &internal::CONTRACT_SALES_ACCESS;
+    identity.state.lock().unwrap().grants = vec![
+        ("contract-writer".into(), vec![contract::TERMINATE]),
+        ("assignment-manager".into(), vec![customer::ASSIGNMENT_APPLY]),
+    ];
+    service.require(&actor(), permission, target.clone(), &mut SnapshotExecutor::default()).await.unwrap();
+    for granted in [vec![contract::TERMINATE], vec![customer::ASSIGNMENT_APPLY], vec![permission.clone()]] {
+        identity.state.lock().unwrap().grants = vec![("incomplete".into(), granted)];
+        assert!(matches!(
+            service.require(&actor(), permission, target.clone(), &mut SnapshotExecutor::default()).await,
+            Err(Error::Forbidden(_))
+        ));
+    }
+    identity.state.lock().unwrap().grants = vec![("writer".into(), vec![contract::TERMINATE])];
+    service
+        .require(&actor(), &contract::TERMINATE, target.clone(), &mut SnapshotExecutor::default())
+        .await
+        .unwrap();
+    identity.state.lock().unwrap().grants =
+        vec![("writer".into(), vec![contract::TERMINATE, customer::ASSIGNMENT_APPLY])];
+    facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("other".into()));
+    assert!(matches!(
+        service.require(&actor(), permission, target.clone(), &mut SnapshotExecutor::default()).await,
+        Err(Error::Forbidden(_))
+    ));
+    facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("user".into()));
+    assert!(matches!(
+        service.require(&actor(), permission, target, &mut ReadExecutor::default()).await,
+        Err(Error::ValidationError(_))
+    ));
+    assert!(matches!(
+        service
+            .require(&actor(), permission, AccessTarget::Operation, &mut SnapshotExecutor::default())
+            .await,
+        Err(Error::ValidationError(_))
+    ));
 }

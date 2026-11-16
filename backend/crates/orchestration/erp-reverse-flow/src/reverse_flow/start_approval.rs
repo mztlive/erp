@@ -18,6 +18,7 @@ pub(super) use customer_refund::{
     CustomerRefundStartPersistInput, build_customer_refund_start_input, load_start_receipt,
     persist_customer_refund_start, persist_runtime_writes,
 };
+pub(super) use financial_access::submit_permission;
 pub(super) use payment_reversal::{
     PaymentReversalStartPersistInput, build_payment_reversal_start_input,
     load_payment_reversal_start_receipt, persist_payment_reversal_runtime, persist_payment_reversal_start,

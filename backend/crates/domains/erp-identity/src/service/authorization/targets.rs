@@ -14,6 +14,7 @@ use crate::entity::authorization::{
 };
 use crate::entity::resource_access::ResourceKind;
 use crate::ports::AccessFactsPort;
+use crate::repository::authorization::AccessProof;
 use crate::{Error, Result};
 
 type FactsBindings = BTreeMap<String, Arc<dyn AccessFactsPort>>;
@@ -31,6 +32,21 @@ pub(super) struct TargetFacts {
     candidate: Option<ObjectFacts>,
     boundary: ExecutionBoundary,
     task: bool,
+}
+
+/// 来源证明保留独立加载的完整事实，供原读取阶段统一复验和最终期限检查。
+#[derive(Default)]
+pub(super) struct SourceEvidence {
+    pub(super) proofs: Vec<AccessProof>,
+    pub(super) facts: Vec<(AccessContext, TargetFacts)>,
+}
+
+impl SourceEvidence {
+    /// 合并同一读取阶段的来源，不能丢弃只用于对象复验的事实。
+    pub(super) fn extend(&mut self, other: Self) {
+        self.proofs.extend(other.proofs);
+        self.facts.extend(other.facts);
+    }
 }
 
 impl TargetFacts {
@@ -131,7 +147,7 @@ impl TargetFacts {
         Ok(flattened)
     }
 
-    fn ensure_current(&self) -> Result<()> {
+    pub(super) fn ensure_current(&self) -> Result<()> {
         self.flattened().map(|_| ())
     }
 

@@ -10,7 +10,7 @@ use super::mapping::build_adjustment_line_updates;
 use crate::dto::{StockAdjustmentView, UpdateStockAdjustmentRequest};
 use crate::entity::inventory::{StockAdjustment, StockAdjustmentLineUpdate, StockAdjustmentUpdate};
 use crate::error::{Error, Result};
-use crate::ports::{AuthorizationPort, InventoryAction, InventoryAuditPort, PreparedInventoryAudit};
+use crate::ports::{AuthorizationPort, InventoryAuditPort, PreparedInventoryAudit};
 use crate::repository::InventoryExt;
 
 impl InventoryService {
@@ -101,22 +101,20 @@ async fn adjustment_for_update(
     version: u64,
     executor: &mut dyn Executor,
 ) -> Result<StockAdjustment> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+        return Err(Error::ValidationError("库存调整修改必须使用快照事务".into()));
+    }
+    authorization_port.require_adjustment_update(actor, id.as_ref(), executor).await.map_err(|error| {
+        match error {
+            Error::Forbidden(_) | Error::NotFound(_) => Error::NotFound("库存调整单不存在".into()),
+            other => other,
+        }
+    })?;
     let adjustment = db
         .inventory()
         .stock_adjustment(id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
-    if !super::warehouse_allowed(
-        authorization_port,
-        actor,
-        InventoryAction::Update,
-        adjustment.warehouse_id.as_ref(),
-        executor,
-    )
-    .await?
-    {
-        return Err(Error::NotFound("库存调整单不存在".into()));
-    }
     if !adjustment.matches_version(version) {
         return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".into()));
     }
@@ -155,3 +153,6 @@ async fn persist_update(
     audit_port.persist(&audit, executor).await?;
     Ok(adjustment)
 }
+
+#[cfg(test)]
+mod tests;

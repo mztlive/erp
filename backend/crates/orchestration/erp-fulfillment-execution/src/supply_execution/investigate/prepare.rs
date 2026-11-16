@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_identity::AuthorizationService;
 use erp_permissions::supplier_fulfillment;
 use erp_supply::FulfillmentOrderAccess;
 use erp_supply::dto::supplier_fulfillment::SupplierOrderInvestigationAction;
-use erp_supply::entity::supplier_api::SupplierApiCapabilityCode;
+use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentOrder, SupplierOrderAction, SupplierOrderActionType,
 };
@@ -20,8 +21,9 @@ use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
+use super::super::{legacy, task_authorization};
 use super::{
     InvestigationCommandContext, InvestigationIdentity, InvestigationTaskContext, SupplierFulfillmentProcess,
     ensure_no_active_w26_task, ensure_task_subject_matches_order, validate_w26_task,
@@ -34,7 +36,21 @@ struct InvestigationIntent {
     identity: InvestigationIdentity,
     actor: AuditActor,
     workflow: Arc<dyn FulfillmentWorkflow>,
+    authorization: Arc<AuthorizationService>,
     access: FulfillmentOrderAccess,
+}
+
+/// 外呼输入在授权快照中冻结；供应商通信只在事务成功后执行。
+enum InvestigationInput {
+    Prepared(PreparedInvestigation),
+    Gateway(Box<InvestigationGatewayInput>),
+}
+
+struct InvestigationGatewayInput {
+    action: SupplierOrderInvestigationAction,
+    order: SupplierFulfillmentOrder,
+    target_action: SupplierOrderAction,
+    connection: SupplierApiConnection,
 }
 
 impl SupplierFulfillmentProcess {
@@ -59,6 +75,7 @@ impl SupplierFulfillmentProcess {
             identity: identity.clone(),
             actor: actor.clone(),
             workflow: self.identity.workflow.clone(),
+            authorization: self.identity.rbac.clone(),
             access: self.data_scope.clone(),
         };
         let db = self.db.clone();
@@ -126,49 +143,72 @@ impl SupplierFulfillmentProcess {
         context: &InvestigationCommandContext,
         actor: &AuditActor,
     ) -> Result<PreparedInvestigation> {
-        let (order, target_action) = load_investigation_facts(&self.db, context, &mut NoTransaction).await?;
-        if let Some(task_context) = &context.task {
-            load_investigation_task(
-                &self.db,
-                task_context,
-                &order.base.id,
-                order.base.version,
-                actor,
-                None,
-                &mut NoTransaction,
-            )
+        let (process, context, actor) = (self.clone(), context.clone(), actor.clone());
+        let input = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { process.investigation_input(&context, &actor, executor).await })
+            })
             .await?;
-        } else {
-            ensure_no_active_w26_task(&self.db, &order.base.id, &mut NoTransaction).await?;
+        match input {
+            InvestigationInput::Prepared(result) => Ok(result),
+            InvestigationInput::Gateway(input) => self.call_investigation_gateway(*input).await,
         }
+    }
+
+    /// 授权、业务版本、任务来源及外呼连接沿同一快照取证。
+    async fn investigation_input(
+        &self,
+        context: &InvestigationCommandContext,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InvestigationInput> {
+        authorize_investigation(
+            &self.db,
+            &self.identity.rbac,
+            &self.data_scope,
+            self.identity.workflow.as_ref(),
+            context,
+            actor,
+            executor,
+        )
+        .await?;
+        let (order, target_action) = load_investigation_facts(&self.db, context, executor).await?;
         if context.action == SupplierOrderInvestigationAction::QueryResult {
             if let Some(resolution) = order.verified_resolution(&target_action).map(Into::into) {
-                return Ok(PreparedInvestigation::PersistedTerminal(resolution));
+                return Ok(InvestigationInput::Prepared(PreparedInvestigation::PersistedTerminal(
+                    resolution,
+                )));
             }
         } else {
-            ensure_replay_safe(&self.db, &order, &target_action, &mut NoTransaction).await?;
+            ensure_replay_safe(&self.db, &order, &target_action, executor).await?;
         }
-        self.call_investigation_gateway(context.action, &order, &target_action).await
+        let connection = self
+            .db
+            .supplier_api_connections()
+            .find_by_id(&order.connection_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商连接不存在".into()))?;
+        Ok(InvestigationInput::Gateway(Box::new(InvestigationGatewayInput {
+            action: context.action,
+            order,
+            target_action,
+            connection,
+        })))
     }
 
     async fn call_investigation_gateway(
         &self,
-        action: SupplierOrderInvestigationAction,
-        order: &SupplierFulfillmentOrder,
-        target_action: &SupplierOrderAction,
+        input: InvestigationGatewayInput,
     ) -> Result<PreparedInvestigation> {
-        let connection = self
-            .db
-            .supplier_api_connections()
-            .find_by_id(&order.connection_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
+        let InvestigationGatewayInput { action, order, target_action, connection } = input;
         let capabilities = self.domain().capabilities(&connection)?;
         match action {
             SupplierOrderInvestigationAction::QueryResult => {
                 ensure_capability(&capabilities, SupplierApiCapabilityCode::Query)?;
                 Ok(PreparedInvestigation::Queried(
-                    self.gateway.investigate(target_action, order, &connection).await,
+                    self.gateway.investigate(&target_action, &order, &connection).await,
                 ))
             },
             SupplierOrderInvestigationAction::Replay => {
@@ -177,7 +217,7 @@ impl SupplierFulfillmentProcess {
                 }
                 ensure_capability(&capabilities, capability_for_action(target_action.action_type)?)?;
                 Ok(PreparedInvestigation::Replayed(
-                    self.gateway.dispatch(target_action, order, &connection).await,
+                    self.gateway.dispatch(&target_action, &order, &connection).await,
                 ))
             },
         }
@@ -190,31 +230,8 @@ impl InvestigationIntent {
         db: &Database,
         executor: &mut dyn Executor,
     ) -> Result<Option<PreparedInvestigation>> {
-        if self.context.task.is_none() {
-            self.access
-                .require_order(
-                    &self.actor,
-                    &supplier_fulfillment::ORDER_INVESTIGATION,
-                    &self.context.order_id,
-                    executor,
-                )
-                .await?;
-        }
+        self.authorize(db, executor).await?;
         let (order, target_action) = load_investigation_facts(db, &self.context, executor).await?;
-        if let Some(task_context) = &self.context.task {
-            load_investigation_task(
-                db,
-                task_context,
-                &order.base.id,
-                order.base.version,
-                &self.actor,
-                Some(self.workflow.as_ref()),
-                executor,
-            )
-            .await?;
-        } else {
-            ensure_no_active_w26_task(db, &order.base.id, executor).await?;
-        }
         if self.context.action == SupplierOrderInvestigationAction::Replay {
             ensure_replay_safe(db, &order, &target_action, executor).await?;
         }
@@ -241,6 +258,69 @@ impl InvestigationIntent {
         create_action(db, &intent, executor).await?;
         Ok(None)
     }
+    /// 在订单事实读取前核对原任务或对象资格，并执行旧入口排除检查。
+    async fn authorize(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        authorize_investigation(
+            db,
+            &self.authorization,
+            &self.access,
+            self.workflow.as_ref(),
+            &self.context,
+            &self.actor,
+            executor,
+        )
+        .await
+        .map(|_| ())
+    }
+}
+
+/// 统一调查预检、意图和提交阶段的原对象或精确任务授权。
+///
+/// # 参数
+/// db、authorization、access、workflow 为同一应用注入的事实与授权能力；context、actor 和 executor 属于当前调查命令。
+/// # 返回
+/// 当前完整资格与原入口约束均成立时，返回原快照中已核验的正式任务；对象入口返回 None。
+/// # 错误
+/// 无活动快照、当前资格或任务来源失效，以及旧入口约束不符时拒绝。
+pub(super) async fn authorize_investigation(
+    db: &Database,
+    authorization: &AuthorizationService,
+    access: &FulfillmentOrderAccess,
+    workflow: &dyn FulfillmentWorkflow,
+    context: &InvestigationCommandContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Option<WorkItem>> {
+    let task = if let Some(task) = &context.task {
+        task_authorization::require_target(
+            authorization,
+            actor,
+            &task.work_item_id,
+            task.expected_task_version,
+            executor,
+        )
+        .await?;
+        Some(
+            load_investigation_task(
+                db,
+                task,
+                &context.order_id,
+                context.expected_order_version,
+                actor,
+                workflow,
+                executor,
+            )
+            .await?,
+        )
+    } else {
+        access
+            .require_order(actor, &supplier_fulfillment::ORDER_INVESTIGATION, &context.order_id, executor)
+            .await?;
+        ensure_no_active_w26_task(db, &context.order_id, executor).await?;
+        None
+    };
+    legacy::ensure(db, &context.order_id, executor).await?;
+    Ok(task)
 }
 
 /// 在调用方读取边界内按订单、版本、原动作的次序取得调查事实。
@@ -285,7 +365,7 @@ pub(super) async fn load_investigation_facts(
 /// * `order_id` - 当前订单。
 /// * `order_version` - 调查前订单版本。
 /// * `actor` - 当前操作人。
-/// * `rbac` - 事务内必须验证的决策权限；事务外准备阶段沿原合同不传。
+/// * `workflow` - 原快照中必须验证的任务决策权限。
 /// * `executor` - 调用方执行器。
 /// # 返回
 /// 返回已校验任务。
@@ -297,7 +377,7 @@ pub(super) async fn load_investigation_task(
     order_id: &str,
     order_version: u64,
     actor: &AuditActor,
-    workflow: Option<&dyn FulfillmentWorkflow>,
+    workflow: &dyn FulfillmentWorkflow,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
     let work_item = db
@@ -307,8 +387,6 @@ pub(super) async fn load_investigation_task(
         .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
     validate_w26_task(&work_item, order_id, task.expected_task_version, &task.expected_subject_version)?;
     ensure_task_subject_matches_order(&work_item, &task.expected_subject_version, order_version)?;
-    if let Some(workflow) = workflow {
-        workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
-    }
+    workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
     Ok(work_item)
 }

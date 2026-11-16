@@ -13,11 +13,12 @@ use erp_supplier::SupplierAccess;
 use erp_supplier::authorization::CompiledScope;
 use erp_supplier::repository::{SupplierAccountFilter, SupplierAccountRepositoryScopeExt, SupplierExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use serde_json::json;
 use validator::Validate;
 
 use super::SupplierPortalProcess;
+use super::command::scoped_command;
 use crate::{Error, Result};
 
 impl SupplierPortalProcess {
@@ -189,16 +190,21 @@ impl SupplierPortalProcess {
         idempotency_key: &str,
         actor: &AuditActor,
     ) -> Result<PortalAccountView> {
-        let service = PortalIdentityService::new(self.db.clone());
-        let current = service.account_detail(account_id, &mut NoTransaction).await?;
-        let payload = json!({"account_id":account_id,"supplier_id":current.supplier_id,"input":params});
         let account_id = account_id.to_string();
-        self.internal_command(
+        let target_id = account_id.clone();
+        let target_params = params.clone();
+        let key = idempotency_key.to_owned();
+        self.internal_target_command(
             actor,
-            &current.supplier_id,
             ("supplier_portal.account_update", supplier::DETAIL, supplier_portal::ADMIN_UPDATE_ACCOUNT),
-            idempotency_key,
-            &payload,
+            move |this, actor, executor| {
+                Box::pin(async move {
+                    let current = PortalIdentityService::new(this.db).account_detail(&target_id, executor).await?;
+                    let payload = json!({"account_id":target_id,"supplier_id":current.supplier_id,"input":target_params});
+                    let command = scoped_command(actor.id(), &current.supplier_id, "supplier_portal.account_update", &key, &payload)?;
+                    Ok((current.supplier_id, command))
+                })
+            },
             move |this, actor, executor| {
                 Box::pin(async move {
                     Ok(PortalIdentityService::new(this.db)
@@ -215,7 +221,7 @@ impl SupplierPortalProcess {
 mod read_tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use erp_supplier::SupplierAccess;
     use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
@@ -228,7 +234,7 @@ mod read_tests {
     #[tokio::test]
     async fn management_lists_reject_unscoped_executors_before_reading_supplier() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let access = SupplierAccess::new(db.clone(), unavailable_authorization());
+        let access = SupplierAccess::new(db.clone(), unbound_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
             assert!(matches!(
@@ -242,7 +248,7 @@ mod read_tests {
     #[tokio::test]
     async fn management_lists_stop_before_business_reads_when_query_binding_is_missing() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
-        let access = SupplierAccess::new(db.clone(), unavailable_authorization());
+        let access = SupplierAccess::new(db.clone(), unbound_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         assert!(matches!(
             SupplierPortalProcess::management_supplier(

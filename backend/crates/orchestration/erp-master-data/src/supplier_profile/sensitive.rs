@@ -5,9 +5,11 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::SupplierAccountId;
+use erp_identity::AccessTarget;
 use erp_party::{PartyExt, SensitiveFieldKind};
+use erp_permissions::supplier;
 use erp_supplier::{RevealSupplierSensitiveRequest, SupplierExt, SupplierSensitiveRevealView};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierProfileProcess;
@@ -32,13 +34,34 @@ impl SupplierProfileProcess {
         actor: &AuditActor,
     ) -> Result<SupplierSensitiveRevealView> {
         req.validate()?;
+        let this = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.reveal_snapshot(&req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原事务内核验揭示资格、真实主体归属并记录审计。
+    async fn reveal_snapshot(
+        &self,
+        req: &RevealSupplierSensitiveRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierSensitiveRevealView> {
+        self.authorization
+            .rbac
+            .require(actor, &supplier::SENSITIVE_REVEAL, AccessTarget::Operation, executor)
+            .await?;
         let now = u64::try_from(Instant::now().unix_secs())
             .map_err(|_| Error::Internal("系统时间非法".to_string()))?;
         let scope = self.sensitive_data.verify_reveal_token(&req.reveal_token, now)?;
         let supplier = self
             .db
             .supplier()
-            .account(&SupplierAccountId::new(&scope.supplier_id), &mut NoTransaction)
+            .account(&SupplierAccountId::new(&scope.supplier_id), executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         let ciphertext = match scope.kind {
@@ -46,7 +69,7 @@ impl SupplierProfileProcess {
                 let record = self
                     .db
                     .party()
-                    .contact(&scope.record_id, &mut NoTransaction)
+                    .contact(&scope.record_id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
@@ -56,7 +79,7 @@ impl SupplierProfileProcess {
                 let record = self
                     .db
                     .party()
-                    .address(&scope.record_id, &mut NoTransaction)
+                    .address(&scope.record_id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
@@ -66,7 +89,7 @@ impl SupplierProfileProcess {
                 let record = self
                     .db
                     .party()
-                    .bank_account(&scope.record_id, &mut NoTransaction)
+                    .bank_account(&scope.record_id, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
@@ -76,7 +99,44 @@ impl SupplierProfileProcess {
         let value = self.sensitive_data.decrypt(&ciphertext)?;
         let audit =
             actor.clone().resource_log("supplier_sensitive.reveal", "supplier_sensitive", scope.record_id)?;
-        persist_log(&self.db, &audit, &mut NoTransaction).await?;
+        persist_log(&self.db, &audit, executor).await?;
         Ok(SupplierSensitiveRevealView { value })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use erp_party::SensitiveDataCodec;
+    use erp_supplier::SupplierAccess;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn reveal_rejects_missing_current_permission_before_supplier_and_ciphertext_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("reveal_guard");
+        let authorization = unavailable_authorization();
+        let access = SupplierAccess::new(db.clone(), authorization.clone());
+        let process = SupplierProfileProcess::new(
+            db,
+            Arc::new(SensitiveDataCodec::from_secret(b"supplier-reveal-guard")),
+            authorization,
+            access,
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error = process
+            .reveal_snapshot(
+                &RevealSupplierSensitiveRequest { reveal_token: "unused".into() },
+                &actor,
+                &mut SnapshotExecutor::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

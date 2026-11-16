@@ -12,11 +12,11 @@ use erp_permissions::supplier_offering as supplier_offering_permissions;
 use erp_supply::repository::supplier_offering::SupplierOfferingFilter;
 use erp_supply::repository::supplier_offering::procurement::ProcurementOfferingRepositoryExt;
 use erp_supply::{OfferingAccess, SupplierOfferingExt};
-use persistence_core::Transactional;
+use persistence_core::{Executor, Transactional};
 
 use super::procurement::{OfferingProcurementOwners, ensure_authorized_count};
 use super::{SupplierOfferingListParams, SupplierOfferingListView, SupplierOfferingReadService};
-use crate::Result;
+use crate::{Error, Result};
 
 impl SupplierOfferingReadService {
     /// 分页查询授权范围内的供给列表。
@@ -35,14 +35,53 @@ impl SupplierOfferingReadService {
         params: &SupplierOfferingListParams,
         actor: &AuditActor,
     ) -> Result<SupplierOfferingListView> {
+        let service = Self::new(self.db.clone(), self.access.clone(), self.procurement.clone());
+        let (params, actor) = (params.clone(), actor.clone());
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.list_with(&params, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在调用方快照内读取完整供给分页并完成展示补齐与原凭证交付检查。
+    ///
+    /// # 参数
+    /// * `params` - 原供给筛选、排序、分页及跨页范围版本。
+    /// * `actor` - 当前已认证账号。
+    /// * `executor` - 调用方活动快照，资格、候选、分页、计数及补齐共用它。
+    ///
+    /// # 返回
+    /// 返回原供给列表视图，保留分页成员、顺序、总数及范围元信息。
+    ///
+    /// # 错误
+    /// 非快照、无列表资格、范围版本变化、非法参数或任一读取失败时拒绝。
+    pub async fn list_with(
+        &self,
+        params: &SupplierOfferingListParams,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierOfferingListView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("供给列表读取必须使用快照事务".into()));
+        }
         crate::support::ensure_deep_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
-        let snapshot = self.list_snapshot(params, actor).await?;
+        let snapshot = build_snapshot(
+            self.db.clone(),
+            self.access.clone(),
+            self.procurement.clone(),
+            params.clone(),
+            actor.clone(),
+            executor,
+        )
+        .await?;
         if params.scope_version.as_deref().is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
         Ok(SupplierOfferingListView {
             data: OwnershipPage { ownership_basis: "offering_maintainer", page: snapshot.page },
-
             scope_version: snapshot.scope_version,
             policy_version: snapshot.policy_version,
             organization_version: snapshot.organization_version,
@@ -50,26 +89,6 @@ impl SupplierOfferingReadService {
             empty_reason: None,
             scope_summary: "供给按岗位权限共享；维护人及采购负责人筛选为额外收窄",
         })
-    }
-
-    async fn list_snapshot(
-        &self,
-        params: &SupplierOfferingListParams,
-        actor: &AuditActor,
-    ) -> Result<OfferingSnapshot> {
-        let db = self.db.clone();
-        let access = self.access.clone();
-        let procurement = self.procurement.clone();
-        let params = params.clone();
-        let actor = actor.clone();
-        db.client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(
-                    async move { build_snapshot(db, access, procurement, params, actor, executor).await },
-                )
-            })
-            .await
     }
 }
 
@@ -170,12 +189,37 @@ fn intersect_ids(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::AccountKind;
     use erp_core::ids::{SkuId, SupplierAccountId};
+    use erp_identity::testing::unavailable_authorization;
     use erp_supply::entity::supplier_offering::{OfferingSourceType, OfferingStatus};
-    use persistence_core::{NoTransaction, QueryFilter};
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, QueryFilter, ReadExecutor};
 
     use super::*;
+    use crate::supplier_center::offering::MongoOfferingProcurementOwners;
     use crate::supplier_center::offering::procurement::MapOfferingProcurementOwners;
+
+    #[tokio::test]
+    async fn offering_list_with_rejects_non_snapshot_and_missing_qualification_before_business_reads() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("offering_list_snapshot_authorization");
+        let service = SupplierOfferingReadService::new(
+            db.clone(),
+            OfferingAccess::new(db.clone(), unavailable_authorization()),
+            MongoOfferingProcurementOwners::shared(db),
+        );
+        let params = SupplierOfferingListParams::default();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result = service.list_with(&params, &actor, &mut ReadExecutor::default()).await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "供给列表读取必须使用快照事务")
+        );
+        let result = service.list_with(&params, &actor, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+    }
 
     #[test]
     /// 最终负责人身份与已解析的可供状态/既有身份求交，不能放宽候选或丢掉空筛选。

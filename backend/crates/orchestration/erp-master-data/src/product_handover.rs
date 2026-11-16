@@ -13,8 +13,8 @@ use erp_catalog::repository::handover_receipt::ProductHandoverReceiptExt;
 use erp_catalog::{
     CatalogAccess, CatalogService, HandoverCandidateView, HandoverProductRequest, HandoverProductView,
 };
-use erp_identity::AuthorizationService;
 use erp_identity::service::organization_access::ensure_org_enabled;
+use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{catalog as catalog_permissions, catalog};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -221,6 +221,9 @@ impl AuditedCommand for ProductHandoverCommand {
     /// # 错误
     /// 回执不匹配、目标账号或组织校验失败、商品不可更新、交接写入、回执构造或保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
+        self.rbac
+            .require(&self.actor, &catalog::PRODUCT_PRODUCT_UPDATE, AccessTarget::record(&self.id)?, executor)
+            .await?;
         if let Some(view) =
             replay(&self.db, &self.ports.access, &self.command, &self.id, &self.actor, executor).await?
         {
@@ -298,4 +301,65 @@ fn handover_fingerprint(
         key,
     ))
     .map_err(|error| Error::Internal(format!("商品交接命令序列化失败: {error}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_catalog::ports::{EmptyFileAssetFacts, FailClosedAuditPort};
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn handover_authorizes_source_before_receipt_target_account_and_organization_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("product_handover_authorization");
+        let authorization = unavailable_authorization();
+        let access = CatalogAccess::new(db.clone(), authorization.clone());
+        let service = CatalogService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(EmptyFileAssetFacts),
+            access.clone(),
+        );
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let command = CommandReceipt::from_resource_parts(
+            "product-handover-",
+            actor.id(),
+            HANDOVER_ACTION,
+            HANDOVER_RESOURCE,
+            "unread-product",
+            "key",
+            ["payload".to_owned()],
+        )
+        .unwrap();
+        let operation = ProductHandoverCommand {
+            db,
+            rbac: authorization,
+            ports: CatalogHandoverPorts::new(access, service),
+            id: "unread-product".into(),
+            req: HandoverProductRequest {
+                target_user_id: "unread-user".into(),
+                target_org_unit_id: Some("unread-org".into()),
+                reason: "交接".into(),
+                expected_version: 1,
+                idempotency_key: "key".into(),
+            },
+            actor,
+            command,
+            event_id: "event".into(),
+        };
+        let result = operation.execute(&mut ReadExecutor::default()).await;
+        assert!(
+            matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
+        );
+        let result = operation.execute(&mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
 }

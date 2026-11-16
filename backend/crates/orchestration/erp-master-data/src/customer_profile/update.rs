@@ -16,12 +16,12 @@ use erp_party::{Party, PartyExt, PartyRevision, PartyRevisionData, PartyUpdate};
 use erp_permissions::customer as customer_permissions;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
-use super::CustomerProfileProcess;
 use super::facts::PartyFactChanges;
-use super::idempotency::{checked_command_view, command_view};
-use crate::{Error, Result};
+use super::idempotency::command_view;
+use super::{CustomerProfileProcess, field_changes};
+use crate::{Error, Result, command_insert_error};
 
 impl CustomerProfileProcess {
     /// 原子修订 Party 身份、客户角色与显式提交的资料事实集合。
@@ -48,49 +48,38 @@ impl CustomerProfileProcess {
         req.validate_protocol()?;
         req.validate_structure(CustomerProfileOperation::Update)?;
         let replay = req.replay_context(CustomerProfileOperation::Update, Some(customer_id), actor.id())?;
-        if let Some(command) = self.command_record(replay.idempotency_key()).await? {
-            return checked_command_view(command, &replay);
-        }
-        let prepared = self.prepare_update(customer_id, req, replay.clone(), actor).await?;
-        let intended = prepared.result.clone();
-        let transaction = self.commit_update(customer_id, prepared, actor).await;
-        self.resolve_transaction(transaction.map(|()| intended), &replay).await
-    }
-
-    /// 在同一写入事务内重验对象范围并持久化修订。
-    ///
-    /// # 参数
-    /// * `customer_id` - 目标客户
-    /// * `prepared` - 已构造的修订事务载荷
-    /// * `actor` - 已认证操作人
-    ///
-    /// # 返回
-    /// 事务成功时返回 `Ok`；失败时返回原事务错误供幂等恢复。
-    ///
-    /// # 错误
-    /// 账号、动作或对象资格失效、乐观锁冲突或写入失败时拒绝。
-    ///
-    /// # 关键业务约束
-    /// 必须在原领域事务调用 `require_with`，handler 事前检查不能代替。
-    async fn commit_update(
-        &self,
-        customer_id: &str,
-        prepared: PreparedUpdate,
-        actor: &AuditActor,
-    ) -> Result<()> {
-        let rbac = self.access.clone();
-        let actor = actor.clone();
-        let customer_id = customer_id.to_string();
-        let db = self.db.clone();
-        db.client()
-            .clone()
+        let fields = field_changes::permissions(&req, CustomerProfileOperation::Update);
+        let fields_owned = fields.clone();
+        let this = self.clone();
+        let actor_owned = actor.clone();
+        let customer_id = customer_id.to_owned();
+        let replay_owned = replay.clone();
+        let transaction = self
+            .db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.require_with(actor, &customer_permissions::UPDATE, &customer_id, executor).await?;
-                    prepared.persist(&db, executor).await
+                    this.access
+                        .require_with(
+                            actor_owned.clone(),
+                            &customer_permissions::UPDATE,
+                            &customer_id,
+                            executor,
+                        )
+                        .await?;
+                    this.require_fields(&actor_owned, &fields_owned, executor).await?;
+                    if let Some(view) = this.replay_command(&replay_owned, &actor_owned, executor).await? {
+                        return Ok(view);
+                    }
+                    let prepared =
+                        this.prepare_update(&customer_id, req, replay_owned, &actor_owned, executor).await?;
+                    let result = prepared.result.clone();
+                    prepared.persist(&this.db, executor).await?;
+                    Ok(result)
                 })
             })
-            .await
+            .await;
+        self.resolve_transaction(transaction, &replay, actor, &fields).await
     }
 
     /// 装载并校验修订载荷；不写入、不重验范围。
@@ -108,26 +97,26 @@ impl CustomerProfileProcess {
     /// 客户不存在、版本冲突或事实校验失败时拒绝。
     ///
     /// # 关键业务约束
-    /// 范围重验必须留在 `commit_update` 的同一写入事务内。
+    /// 授权、载荷读取和落库必须使用原写入事务执行器。
     async fn prepare_update(
         &self,
         customer_id: &str,
         req: SaveCustomerProfileRequest,
         replay: CustomerProfileReplayContext,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<PreparedUpdate> {
-        let mut account = self.load_customer(customer_id).await?;
+        let mut account = self.load_customer(customer_id, executor).await?;
         account
             .ensure_version(req.expected_customer_version.unwrap_or_default())
             .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let mut party = self.load_party(&account.party_id).await?;
+        let mut party = self.load_party(&account.party_id, executor).await?;
         party
             .ensure_version(req.expected_party_version.unwrap_or_default())
             .map_err(|error| Error::ConflictError(error.to_string()))?;
-        let revision_no =
-            self.db.party_revisions().next_revision_no(&account.party_id, &mut NoTransaction).await?;
+        let revision_no = self.db.party_revisions().next_revision_no(&account.party_id, executor).await?;
         let revision = update_roots(&mut party, &mut account, &req, revision_no, actor.id())?;
-        let facts = self.prepare_fact_changes(&account.party_id, &req, actor.id()).await?;
+        let facts = self.prepare_fact_changes(&account.party_id, &req, actor.id(), executor).await?;
         PreparedUpdate::new(party, revision, account, facts, req, replay, actor)
     }
 }
@@ -185,7 +174,7 @@ impl PreparedUpdate {
         db.parties().update(&mut self.party, executor).await?;
         db.customer_accounts().update(&mut self.account, executor).await?;
         self.facts.persist(db, executor).await?;
-        db.customer_profile_commands().create(&self.command, executor).await?;
+        db.customer_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
     }

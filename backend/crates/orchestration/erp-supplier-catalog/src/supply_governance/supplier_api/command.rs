@@ -3,20 +3,19 @@ use erp_core::common::time::Instant;
 use erp_identity::AccessTarget;
 use erp_supply::dto::supplier_api::{SupplierConnectionCommand, SupplierConnectionCommandResult};
 use erp_supply::entity::supplier_api::{
-    HealthCheckResult, PreparedSupplierConnectionCommand, SupplierApiConnectionId, SupplierCommandOutcome,
-    SupplierConnectionAction,
+    HealthCheckResult, PreparedSupplierConnectionCommand, SupplierCommandOutcome, SupplierConnectionAction,
 };
-use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
 use erp_supply::service::supplier_api::context::{action_permission, map_command_shape_rejection};
-use erp_support::BulkJobExt;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 use validator::Validate;
 
 use super::SupplierApiGovernanceProcess;
 use super::receipt::{CommandReceiptWrite, persist_command_receipt};
-use crate::{Error, Result};
+use crate::Result;
+
+mod replay;
 impl SupplierApiGovernanceProcess {
     /// 执行固定连接治理命令并返回可幂等重放的正式回执。
     ///
@@ -40,27 +39,10 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
         command.validate()?;
-        self.ensure_permission(actor, &action_permission(command.action)).await?;
-        let authorization = self.authorization.clone();
-        let current_actor = actor.clone();
-        let permission = action_permission(command.action);
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    Ok::<(), Error>(
-                        authorization
-                            .require(&current_actor, &permission, AccessTarget::Operation, executor)
-                            .await?,
-                    )
-                })
-            })
-            .await?;
-        let identity = CommandIdentity::new(id, actor.id(), &command)?;
-        if let Some(result) = self.replay_command(&identity).await? {
+        if let Some(result) = self.replay_command(id, &command, actor).await? {
             return Ok(result);
         }
+        let identity = CommandIdentity::new(id, actor.id(), &command)?;
         let prepared = PreparedSupplierConnectionCommand::try_from_parts(
             command.action,
             command.expected_version,
@@ -124,7 +106,7 @@ impl SupplierApiGovernanceProcess {
         actor: &AuditActor,
     ) -> Result<SupplierConnectionCommandResult> {
         let deployment = if action == SupplierConnectionAction::Enable {
-            Some(self.checked_deployment(id, expected_version, actor.id()).await?)
+            Some(self.checked_deployment(id, expected_version, actor).await?)
         } else {
             None
         };
@@ -164,43 +146,5 @@ impl SupplierApiGovernanceProcess {
                 })
             })
             .await
-    }
-
-    async fn replay_command(
-        &self,
-        identity: &CommandIdentity,
-    ) -> Result<Option<SupplierConnectionCommandResult>> {
-        let Some(receipt) = self
-            .db
-            .supplier_api()
-            .command_receipt(
-                &SupplierApiConnectionId::new(&identity.connection_id),
-                identity.action,
-                &identity.actor_id,
-                &identity.idempotency_hash,
-                &mut NoTransaction,
-            )
-            .await?
-        else {
-            return Ok(None);
-        };
-        if receipt.request_fingerprint != identity.fingerprint {
-            return Err(Error::ConflictError("同一幂等键不能提交不同参数".to_string()));
-        }
-        let job_no = match receipt.job_id.as_deref() {
-            Some(job_id) => {
-                self.db.background_jobs().find_by_id(job_id, &mut NoTransaction).await?.map(|job| job.job_no)
-            },
-            None => None,
-        };
-        Ok(Some(SupplierConnectionCommandResult {
-            outcome: receipt.outcome,
-            action: receipt.action,
-            operation_id: receipt.base.id,
-            connection_version: receipt.connection_version,
-            job_id: receipt.job_id,
-            job_no,
-            audit_event_id: receipt.audit_event_id,
-        }))
     }
 }

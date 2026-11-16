@@ -55,10 +55,11 @@ impl CatalogService {
         let access = self.access();
         let actor = actor.clone();
         let id = id.to_string();
-        let updated = client
+        let service = self.clone();
+        client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    write_disabled_product(
+                    let product = write_disabled_product(
                         DisableWrite {
                             db: &db,
                             access: &access,
@@ -70,11 +71,11 @@ impl CatalogService {
                         },
                         executor,
                     )
-                    .await
+                    .await?;
+                    service.product_view(product, executor).await
                 })
             })
-            .await?;
-        self.product_view(updated).await
+            .await
     }
 }
 

@@ -28,6 +28,7 @@ pub use mapping::build_adjustment_line_updates;
 pub use stock_write::apply_posted_adjustment;
 
 /// 库存查询与本域事务内命令。
+#[derive(Clone)]
 pub struct InventoryService {
     pub(crate) db: Database,
     pub(crate) authorization: Arc<dyn AuthorizationPort>,

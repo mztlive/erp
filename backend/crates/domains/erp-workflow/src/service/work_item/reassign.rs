@@ -13,10 +13,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::access::candidate_facts_current;
-use super::order_access::{
-    require_order_task_read, require_supplier_portal_task_read, require_supplier_portal_task_review,
-    task_read_error,
-};
+use super::order_access::task_read_error;
 use super::reassign_apply::reassignment_audits;
 use super::write::{
     IDEMPOTENCY_AUDIT_PREFIX, WorkItemWriteError, WorkItemWriteOutcome, expected_task_version, required_text,
@@ -26,7 +23,7 @@ use super::{
 };
 use crate::entity::work_item::{FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy};
 use crate::error::{Error, Result};
-use crate::ports::{PreparedWorkflowAudit, TaskReadAction, WorkflowAuthorizationPort};
+use crate::ports::{PreparedWorkflowAudit, WorkflowAuthorizationPort};
 
 /// 服务端规范化的转交输入，不保存事务外任务或授权结果。
 struct ReassignCommand {
@@ -314,7 +311,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 executor,
             )
             .await?;
-        self.ensure_assignment_candidate_access_with_executor(item, &actor, executor)
+        self.ensure_assignment_candidate_access_with_executor(item, executor)
             .await
             .map_err(task_read_error)?;
         self.ensure_assignment_separation(user_id, item, allow_current_owner, executor).await
@@ -368,11 +365,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         non_empty_assignment_actors(actors)
     }
 
-    /// 使用调用方 executor 重验转交目标的对象访问条件。
+    /// 统一接收者授权后，沿原执行器核验冻结业务版本。
     ///
     /// # 参数
     /// * `item` - 待转交任务
-    /// * `actor` - 已由统一资格入口核验的目标账号
     /// * `executor` - 调用方事务执行器
     ///
     /// # 返回
@@ -386,7 +382,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     async fn ensure_assignment_candidate_access_with_executor(
         &self,
         item: &WorkItem,
-        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let policy = item
@@ -395,34 +390,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.facts.load_object_facts(&keys, executor).await?;
-        let fact = facts
-            .get(&(policy.object_kind, item.business_object_id.clone()))
-            .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
-        require_supplier_portal_task_read(
-            &self.auth,
-            actor,
-            policy.object_kind,
-            &item.business_object_id,
-            executor,
-        )
-        .await?;
-        require_order_task_read(
-            &self.auth,
-            actor,
-            policy.object_kind,
-            fact,
-            TaskReadAction::Detail,
-            executor,
-        )
-        .await?;
-        require_supplier_portal_task_review(
-            &self.auth,
-            actor,
-            policy.object_kind,
-            &item.business_object_id,
-            executor,
-        )
-        .await?;
         if !candidate_facts_current(item, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
@@ -488,7 +455,7 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: WorkflowAuthorizationP
                 executor,
             )
             .await?;
-        service.ensure_assignment_candidate_access_with_executor(task, &actor, executor).await?;
+        service.ensure_assignment_candidate_access_with_executor(task, executor).await?;
     }
     Ok(())
 }

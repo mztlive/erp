@@ -1,0 +1,55 @@
+//! 库存调整普通撤回保留原提交人和运行管理员两个固定分支。
+use erp_permissions::{approval_admin, approval_instance, inventory};
+use persistence_core::Executor;
+
+use super::AuthorizationService;
+use super::targets::TargetFacts;
+use super::work_items::exact_source;
+use crate::entity::authorization::AccessContext;
+use crate::repository::authorization::AccessProof;
+use crate::{Error, Result};
+
+impl AuthorizationService {
+    /// 原提交人无需库存详情菜单；代办管理员必须独立证明库存详情资格及真实仓库范围。
+    pub(super) async fn stock_adjustment_cancel_sources(
+        &self,
+        proof: &AccessProof,
+        facts: &TargetFacts,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AccessProof>> {
+        let mut sources = Vec::new();
+        for object in facts.roots() {
+            if object.subject_type.get()? != "stock_adjustment" {
+                return Err(Error::ValidationError("普通撤回的冻结业务类型未登记".into()));
+            }
+            let source = exact_source(object, "subject_source", "stock_adjustment")?;
+            let warehouse = exact_source(source, "warehouse", "warehouse")?;
+            if source.warehouse_id.get()?.as_deref() != Some(warehouse.id.as_str()) {
+                return Err(Error::ValidationError("库存调整来源与真实仓库不一致".into()));
+            }
+            if object.owner_id.get()?.as_deref() == Some(proof.context.actor.id()) {
+                continue;
+            }
+            let required = [
+                inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
+                approval_instance::INSTANCE_LIST,
+                approval_admin::STOCK_ADJUSTMENT_RUNTIME,
+            ];
+            if !proof.qualified.same_role(&required)
+                || !proof.qualified.same_role(&[inventory::STOCK_ADJUSTMENT_DETAIL])
+            {
+                return Err(Error::Forbidden("撤回需要原提交人或完整运行管理及独立库存详情资格".into()));
+            }
+            let context = AccessContext {
+                permission: inventory::STOCK_ADJUSTMENT_DETAIL,
+                resource: "stock_adjustment".into(),
+                model: None,
+                ..proof.context.clone()
+            };
+            let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
+            self.check_work_item_source(&access, facts, source, executor).await?;
+            sources.push(access);
+        }
+        Ok(sources)
+    }
+}

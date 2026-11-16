@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::run_audited;
+use erp_customer::repository::prelude::*;
 use erp_customer::{CustomerAccess, CustomerExt, CustomerService};
 use erp_permissions::customer as customer_permissions;
 use mongodb::Database;
@@ -42,18 +43,22 @@ pub fn process_name() -> &'static str {
 /// handler 事前检查不能代替事务内 `require_with`；历史参与不授予删除。
 pub async fn delete_customer(
     db: Database,
-    service: CustomerService,
+    _service: CustomerService,
     access: CustomerAccess,
     id: String,
     actor: AuditActor,
 ) -> Result<()> {
-    let mut account = service.load_customer(&id).await?;
-    let audit = actor.clone().resource_log("customer.delete", "customer", account.base.id.clone())?;
+    let audit = actor.clone().resource_log("customer.delete", "customer", id.clone())?;
     let actor_for_tx = actor.clone();
     let customer_id = id.clone();
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
             access.require_with(actor_for_tx, &customer_permissions::DELETE, &customer_id, executor).await?;
+            let mut account = db
+                .customer_accounts()
+                .find_customer(&customer_id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
             db.customer_accounts().soft_delete(&mut account, executor).await?;
             Ok::<(), Error>(())
         })

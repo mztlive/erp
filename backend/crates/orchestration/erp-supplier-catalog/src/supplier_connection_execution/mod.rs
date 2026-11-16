@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_catalog::CatalogService;
+use erp_identity::AuthorizationService;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierConnectorType};
 use erp_supply::ports::catalog_sync::CatalogSyncPolicy;
@@ -33,6 +34,7 @@ pub(crate) use refresh::{catalog_refresh_actor, guard_catalog_refresh};
 
 /// 消费组合根已注入的供应商网关，执行已登记的连接任务。
 pub struct SupplierConnectionExecutionProcess {
+    authorization: Arc<AuthorizationService>,
     catalog: CatalogService,
     db: Database,
     gateway: Arc<dyn SupplierApiGateway>,
@@ -47,14 +49,27 @@ impl SupplierConnectionExecutionProcess {
     /// * `db` - 应用数据库。
     /// * `gateway` - 组合根注入的供应商网关。
     /// * `catalog` - 已装配审计与文件资产 Port 的商品服务。
+    /// * `authorization` - 应用共享的统一授权服务。
     ///
     /// # 返回
     /// 返回连接任务执行流程。
     ///
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, gateway: Arc<dyn SupplierApiGateway>, catalog: CatalogService) -> Self {
-        Self { db, gateway, catalog, source_media: None, control: CatalogTaskControl::default() }
+    pub fn new(
+        db: Database,
+        gateway: Arc<dyn SupplierApiGateway>,
+        catalog: CatalogService,
+        authorization: Arc<AuthorizationService>,
+    ) -> Self {
+        Self {
+            db,
+            gateway,
+            catalog,
+            authorization,
+            source_media: None,
+            control: CatalogTaskControl::default(),
+        }
     }
 
     /// 绑定应用退出时使用的目录任务控制器。

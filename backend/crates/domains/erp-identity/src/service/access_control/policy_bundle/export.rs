@@ -6,7 +6,7 @@ use persistence_core::{Executor, Transactional};
 use super::PolicyBundleService;
 use crate::dto::authorization_bundle::{ExportPolicyRequest, PolicyExport};
 use crate::entity::authorization_bundle::PolicyDocument;
-use crate::{AccessTarget, Error, Result};
+use crate::{Error, Result};
 
 impl PolicyBundleService {
     /// 导出明确选择的角色及人员当前配置。
@@ -36,29 +36,23 @@ impl PolicyBundleService {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<PolicyExport> {
-        self.access
-            .authorization
-            .require(actor, &access_control::POLICY_BUNDLE_EXPORT, AccessTarget::Operation, executor)
-            .await?;
         let authorization = self
-            .company_access(
-                actor,
-                &["authorization_policy:export", "admin:list", "role:list", "data_scope:list"],
-                "list",
-                executor,
-            )
+            .access
+            .authorization
+            .require_policy_bundle(actor, &access_control::POLICY_BUNDLE_EXPORT, None, executor)
             .await?;
         let facts = self.facts(&selection, executor).await?;
         if selection.roles.iter().any(|r| !facts.roles.contains_key(r.id.as_str())) {
             return Err(Error::NotFound("所选角色不存在".into()));
         }
-        let output = facts.export(authorization.policy_version)?;
+        let output = facts.export(authorization.scope.policy_version)?;
         output.document.validate_catalog(&self.catalog)?;
         self.access
             .rbac
             .clone()
-            .ensure_policy_snapshot_with_executor(authorization.policy_version, executor)
+            .ensure_policy_snapshot_with_executor(authorization.scope.policy_version, executor)
             .await?;
+        authorization.ensure_current(executor)?;
         Ok(output)
     }
 }

@@ -1,17 +1,20 @@
 //! 工作项根与精确任务目标复用同一读取器，财务任务追加真实业务来源。
+mod detail;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+pub(super) use detail::TaskDetailMapping;
 use erp_identity::entity::authorization::{AccessContext, ObjectFacts, RelatedObjects, RelationKey};
 use erp_identity::{AccessFactsPort, Error, ResourceTargets, Result};
 use erp_permissions::{
     Permission, internal, payable, purchase_order, purchase_payment_request, receivable, sales_order,
+    work_item,
 };
 use erp_read_models::Error as ReadError;
 use erp_read_models::workbench::authority::WorkItemFactsReader;
 use erp_workflow::ports::{ObjectFact, ObjectKind, OrderTaskSource};
-use erp_workflow::repository::WorkItemRepositoryExt;
+use erp_workflow::repository::{BpmExt, WorkItemRepositoryExt};
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemType};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -33,7 +36,9 @@ impl AccessFactsPort for TaskFacts {
     ) -> Result<Vec<ObjectFacts>> {
         if context.resource == "work_item" {
             let mut facts = self.items.load(context, ids, executor).await?;
-            if [internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(&context.permission) {
+            if [internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT, work_item::DETAIL]
+                .contains(&context.permission)
+            {
                 self.execution_sources(context, &mut facts, executor).await?;
             }
             return Ok(facts);
@@ -80,6 +85,11 @@ impl TaskFacts {
                 .find_work_item(&object.id, executor)
                 .await?
                 .ok_or_else(|| Error::NotFound("任务真实业务来源缺失".into()))?;
+            if task.work_item_type.is_document_approval()
+                && self.approval_source(context, &task, object, executor).await?
+            {
+                continue;
+            }
             let relation = task
                 .work_item_type
                 .brief_relation(&task.business_object_type)
@@ -111,6 +121,42 @@ impl TaskFacts {
             }
         }
         Ok(())
+    }
+
+    /// 审批任务沿实际执行定位唯一实例，不以业务展示根代替审批身份。
+    async fn approval_source(
+        &self,
+        context: &AccessContext,
+        task: &WorkItem,
+        object: &mut ObjectFacts,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let execution_id = task
+            .approval_node_execution_id
+            .as_ref()
+            .ok_or_else(|| Error::ValidationError("审批任务缺少实际执行引用".into()))?;
+        let execution = self
+            .db
+            .approval_node_executions()
+            .find_by_id(execution_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("审批任务实际执行不存在".into()))?;
+        self.approval_instance_facts(context, object, execution.process_instance_id.as_ref(), executor).await
+    }
+
+    /// 详情只需实例来源；办理与接收者还需继续补齐原业务来源。
+    async fn approval_instance_facts(
+        &self,
+        context: &AccessContext,
+        object: &mut ObjectFacts,
+        instance_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let related = self
+            .related(context, "approval_instance", instance_id, internal::APPROVAL_STARTED_LIST, executor)
+            .await?;
+        object.relations.insert(RelationKey::parse("approval_instance")?, related);
+        Ok(context.permission == work_item::DETAIL)
     }
 
     /// 用原执行器读取真实来源的完整事实，保留精确引用供 identity 校验完整性。
@@ -168,7 +214,10 @@ fn ensure_subject(task: &WorkItem, resource: &str) -> Result<()> {
             task.work_item_type == WorkItemType::ProcurementOrderCreation
                 && task.business_object_type == "sales_order"
         },
-        "supplier_settlement_statement" => task.work_item_type == WorkItemType::SupplierSettlementReview,
+        "supplier_settlement_statement" => {
+            task.work_item_type == WorkItemType::SupplierSettlementReview
+                && task.business_object_type == "supplier_settlement_statement"
+        },
         "customer_acceptance" => {
             task.work_item_type == WorkItemType::CustomerAcceptanceRegistration
                 && task.business_object_type == "sales_order"
@@ -206,11 +255,45 @@ mod tests {
     use application_core::AuditActor;
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
     use erp_identity::entity::authorization::FactValue;
+    use erp_workflow::entity::work_item::SupplierPortalReviewTaskData;
     use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+
+    #[test]
+    fn settlement_task_requires_the_actual_statement_source_and_registered_kind() {
+        let mut task = WorkItem::new_supplier_portal_review(
+            WorkItemId::new("task"),
+            SupplierPortalReviewTaskData {
+                request_id: "statement".into(),
+                subject_version: "1".into(),
+                owner_user_id: "reviewer".into(),
+                owner_organization_id: "finance".into(),
+                due_at: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap();
+        task.work_item_type = WorkItemType::SupplierSettlementReview;
+        task.business_object_type = "supplier_settlement_statement".into();
+        assert!(ensure_subject(&task, "supplier_settlement_statement").is_ok());
+        for source in ["purchase_order", "SUPPLIER_FULFILLMENT_ORDER", ""] {
+            task.business_object_type = source.into();
+            assert!(matches!(
+                ensure_subject(&task, "supplier_settlement_statement"),
+                Err(Error::ValidationError(_))
+            ));
+        }
+        task.business_object_type = "supplier_settlement_statement".into();
+        task.work_item_type = WorkItemType::SupplierPortalReview;
+        assert!(matches!(
+            ensure_subject(&task, "supplier_settlement_statement"),
+            Err(Error::ValidationError(_))
+        ));
+    }
 
     #[test]
     fn order_sources_use_real_foreign_keys_instead_of_display_roots() {
@@ -289,6 +372,52 @@ mod tests {
             _: &mut dyn Executor,
         ) -> Result<Vec<ObjectFacts>> {
             panic!("真实来源装配不得递归读取任务或调用财务办理授权")
+        }
+    }
+
+    #[tokio::test]
+    async fn approval_task_sources_keep_instance_for_every_entry_and_business_sources_for_commands() {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap();
+        let reader = Arc::new(SourceReader { fail: false, calls: Mutex::new(vec![]) });
+        let adapter = TaskFacts {
+            db: client.database("approval_task_source_unit"),
+            items: Arc::new(UnusedReader),
+            financial: Arc::new(UnusedReader),
+            roots: [("approval_instance".into(), reader.clone() as Arc<dyn AccessFactsPort>)].into(),
+        };
+        let mut executor = SnapshotExecutor::default();
+        let expected = &mut executor as *mut SnapshotExecutor as usize;
+        for permission in [work_item::DETAIL, internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT] {
+            let context = AccessContext {
+                actor: AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin),
+                permission: permission.clone(),
+                resource: "work_item".into(),
+                model: None,
+                as_of: Instant::from_unix_secs(100),
+            };
+            let order = RelatedObjects { expected_ids: ["order".into()].into(), objects: vec![] };
+            let mut object = ObjectFacts {
+                resource: "work_item".into(),
+                id: "task".into(),
+                subject_type: FactValue::Known("DOCUMENT_APPROVAL".into()),
+                relations: [(RelationKey::parse("order_source").unwrap(), order.clone())].into(),
+                ..Default::default()
+            };
+            let complete = adapter
+                .approval_instance_facts(&context, &mut object, "actual-instance", &mut executor)
+                .await
+                .unwrap();
+            assert_eq!(complete, permission == work_item::DETAIL);
+            let instance = &object.relations[&RelationKey::parse("approval_instance").unwrap()];
+            assert_eq!(instance.expected_ids, ["actual-instance".into()].into());
+            assert_eq!(
+                (instance.objects[0].resource.as_str(), instance.objects[0].id.as_str()),
+                ("approval_instance", "actual-instance")
+            );
+            assert_eq!(object.relations[&RelationKey::parse("order_source").unwrap()], order);
+            let (seen, ids, pointer) = reader.calls.lock().unwrap().last().cloned().unwrap();
+            assert_eq!(seen.permission, internal::APPROVAL_STARTED_LIST);
+            assert_eq!((seen.actor, ids, pointer), (context.actor, vec!["actual-instance".into()], expected));
         }
     }
 

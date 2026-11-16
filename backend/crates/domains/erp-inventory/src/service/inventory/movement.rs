@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, PageResult, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
@@ -14,7 +14,7 @@ use crate::dto::{
 };
 use crate::entity::inventory::{MovementType, StockMovement};
 use crate::error::{Error, Result};
-use crate::ports::{InventoryAction, InventoryAuthorization};
+use crate::ports::{InventoryAction, InventoryAuthorization, WarehouseFactsPort};
 use crate::repository::prelude::*;
 use crate::repository::{InventoryExt, StockMovementFilter, StockMovementRow};
 
@@ -45,73 +45,72 @@ impl InventoryService {
     ) -> Result<InventoryListPage<StockMovementView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let (page, authorization, source_document_nos) = self.search_stock_movements(&query, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.search_stock_movements(&query, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原快照中读取完整列表、来源单号及仓库名称，最后检查交付。
+    async fn search_stock_movements(
+        &self,
+        query: &StockMovementListQuery,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<InventoryListPage<StockMovementView>> {
+        let authorization =
+            self.authorization.authorize(actor, InventoryAction::MovementList, executor).await?;
+        if !authorization.actor_is_active() {
+            return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
+        }
+        let page = self.movement_page(query, &authorization, executor).await?;
         let meta = authorization.meta(InventoryAction::MovementList);
         ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
         let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
-        self.hydrate_movement_warehouses(&mut items).await?;
+        let numbers =
+            load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items, executor)
+                .await?;
+        hydrate_movement_warehouses(self.warehouse_facts.as_ref(), &mut items, executor).await?;
         for item in &mut items {
-            item.source_document_no = source_document_nos.get(&item.source_document_id).cloned();
+            item.source_document_no = numbers.get(&item.source_document_id).cloned();
         }
-        Ok(InventoryListPage::from_page(
+        let result = InventoryListPage::from_page(
             PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
             meta,
             authorization.no_scope(InventoryAction::MovementList),
             MOVEMENT_SCOPE_SUMMARY,
             MOVEMENT_OWNERSHIP_BASIS,
-        ))
+        );
+        authorization.validate(executor).await?;
+        Ok(result)
     }
 
-    /// 在同一事务快照内按授权和 SKU 条件分页查询流水。
-    async fn search_stock_movements(
+    /// 授权过滤先于分页和计数，保留原执行器。
+    async fn movement_page(
         &self,
         query: &StockMovementListQuery,
-        actor: &AuditActor,
-    ) -> Result<(
-        persistence_core::PageResult<StockMovementRow>,
-        InventoryAuthorization,
-        HashMap<String, String>,
-    )> {
-        let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let catalog = std::sync::Arc::clone(&self.catalog_facts);
-        let fulfillment = self.fulfillment_facts.clone();
-        let query = query.clone();
-        let actor = actor.clone();
+        authorization: &InventoryAuthorization,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<StockMovementRow>> {
+        let search = super::search::sku_filter(
+            self.catalog_facts.as_ref(),
+            query.q.as_deref(),
+            query.sku_id.as_ref(),
+            executor,
+        )
+        .await?;
+        let filter = movement_filter(query.clone(), search);
         self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let authorization =
-                        authorization_port.authorize(&actor, InventoryAction::MovementList, executor).await?;
-                    if !authorization.actor_is_active() {
-                        return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
-                    }
-                    let search = super::search::sku_filter(
-                        catalog.as_ref(),
-                        query.q.as_deref(),
-                        query.sku_id.as_ref(),
-                        executor,
-                    )
-                    .await?;
-                    let filter = movement_filter(query, search);
-                    let page = db
-                        .stock_movements()
-                        .search_authorized_stock_movements(
-                            &filter,
-                            authorization.query(InventoryAction::MovementList),
-                            executor,
-                        )
-                        .await?;
-                    let views = page.items.iter().cloned().map(movement_row_view).collect::<Vec<_>>();
-                    let numbers =
-                        load_movement_source_document_nos(&db, fulfillment.as_ref(), &views, executor)
-                            .await?;
-                    authorization.validate(executor).await?;
-                    Ok::<_, Error>((page, authorization, numbers))
-                })
-            })
+            .stock_movements()
+            .search_authorized_stock_movements(
+                &filter,
+                authorization.query(InventoryAction::MovementList),
+                executor,
+            )
             .await
     }
 }
@@ -237,28 +236,122 @@ impl From<StockMovement> for StockMovementView {
     }
 }
 
-impl InventoryService {
-    /// 补齐已授权结果页的仓库名称，不产生目录候选或扩大流水范围。
-    async fn hydrate_movement_warehouses(&self, items: &mut [StockMovementView]) -> Result<()> {
-        if items.is_empty() {
-            return Ok(());
+/// 补齐已授权结果页的仓库名称，不产生目录候选或扩大流水范围。
+async fn hydrate_movement_warehouses(
+    warehouse: &dyn WarehouseFactsPort,
+    items: &mut [StockMovementView],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let ids = items.iter().map(|row| row.warehouse_id.clone()).collect::<Vec<_>>();
+    let warehouses = warehouse.warehouses_by_ids(&ids, executor).await?;
+    let revision_ids =
+        warehouses.values().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
+    let revisions = warehouse.warehouse_revisions_by_ids(&revision_ids, executor).await?;
+    for item in items {
+        item.warehouse_name = warehouses.get(&item.warehouse_id).map(|warehouse| {
+            warehouse
+                .current_revision_id
+                .as_ref()
+                .and_then(|id| revisions.get(id))
+                .map(|revision| revision.name.clone())
+                .unwrap_or_else(|| warehouse.warehouse_code.clone())
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use async_trait::async_trait;
+    use erp_core::ids::{SkuId, WarehouseId};
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::entity::inventory::MovementDirection;
+    use crate::ports::{WarehouseFact, WarehouseRevisionFact};
+
+    struct Warehouses {
+        executor_id: usize,
+        fail_revision: bool,
+    }
+
+    impl Warehouses {
+        fn check_executor(&self, executor: &mut dyn Executor) {
+            assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.executor_id);
+            assert!(executor.boundary().unwrap().is_snapshot());
         }
-        let ids = items.iter().map(|row| row.warehouse_id.clone()).collect::<Vec<_>>();
-        let warehouses = self.warehouse_facts.warehouses_by_ids(&ids, &mut NoTransaction).await?;
-        let revision_ids =
-            warehouses.values().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
-        let revisions =
-            self.warehouse_facts.warehouse_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
-        for item in items {
-            item.warehouse_name = warehouses.get(&item.warehouse_id).map(|warehouse| {
-                warehouse
-                    .current_revision_id
-                    .as_ref()
-                    .and_then(|id| revisions.get(id))
-                    .map(|revision| revision.name.clone())
-                    .unwrap_or_else(|| warehouse.warehouse_code.clone())
-            });
+    }
+
+    #[async_trait]
+    impl WarehouseFactsPort for Warehouses {
+        async fn warehouse_exists(&self, _: &str, _: &mut dyn Executor) -> Result<bool> {
+            panic!("展示不得查询仓库候选");
         }
-        Ok(())
+        async fn warehouses_by_ids(
+            &self,
+            ids: &[String],
+            executor: &mut dyn Executor,
+        ) -> Result<HashMap<String, WarehouseFact>> {
+            self.check_executor(executor);
+            assert_eq!(ids, ["warehouse"]);
+            Ok([(
+                "warehouse".into(),
+                WarehouseFact {
+                    id: "warehouse".into(),
+                    warehouse_code: "WH-1".into(),
+                    current_revision_id: Some("revision".into()),
+                },
+            )]
+            .into())
+        }
+        async fn warehouse_revisions_by_ids(
+            &self,
+            ids: &[String],
+            executor: &mut dyn Executor,
+        ) -> Result<HashMap<String, WarehouseRevisionFact>> {
+            self.check_executor(executor);
+            assert_eq!(ids, ["revision"]);
+            if self.fail_revision {
+                return Err(Error::Internal("revision-unavailable".into()));
+            }
+            Ok([(
+                "revision".into(),
+                WarehouseRevisionFact { id: "revision".into(), name: "原快照仓库".into() },
+            )]
+            .into())
+        }
+    }
+
+    #[tokio::test]
+    async fn warehouse_display_uses_original_snapshot_and_propagates_read_failure() {
+        for fail_revision in [false, true] {
+            let mut executor = SnapshotExecutor::default();
+            let warehouse =
+                Warehouses { executor_id: &mut executor as *mut SnapshotExecutor as usize, fail_revision };
+            let mut items = vec![movement_row_view(StockMovementRow {
+                id: "movement".into(),
+                warehouse_id: WarehouseId::new("warehouse"),
+                sku_id: SkuId::new("sku"),
+                movement_type: MovementType::StockGain,
+                direction: MovementDirection::Increase,
+                quantity: "1".parse().unwrap(),
+                source_document_id: "adjustment".into(),
+                source_line_id: None,
+                occurred_at: Instant::now(),
+                recorded_at: Instant::now(),
+                recorded_by: "actor".into(),
+            })];
+            let result = hydrate_movement_warehouses(&warehouse, &mut items, &mut executor).await;
+            if fail_revision {
+                assert!(matches!(result, Err(Error::Internal(message)) if message == "revision-unavailable"));
+                assert!(items[0].warehouse_name.is_none());
+            } else {
+                result.unwrap();
+                assert_eq!(items[0].warehouse_name.as_deref(), Some("原快照仓库"));
+            }
+        }
     }
 }

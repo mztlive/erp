@@ -7,6 +7,7 @@ use erp_catalog::CatalogService;
 use erp_core::common::time::Instant;
 use erp_integration::entity::supplier_callback::SupplierCallbackReceipt;
 use erp_integration::repository::SupplierCallbackExt;
+use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::repository::supplier_catalog::SupplierCatalogExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -50,32 +51,42 @@ impl SupplierCatalogCallbackProcess {
         context: &Context,
         update: Option<CatalogUpdate>,
     ) -> Result<SupplierCallbackReceipt> {
-        let (db, receipt) = (self.db.clone(), receipt.clone());
-        let catalog = self.catalog.clone();
+        let (process, receipt) = (self.clone(), receipt.clone());
         let (connection, actor) = (context.connection.clone(), context.actor.clone());
         self.db
             .client()
-            .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut current = load_claimed(&db, &receipt, executor).await?;
-                    guard_catalog_refresh(&db, &connection, &actor, executor).await?;
-                    advance_after_apply(&mut current, async {
-                        if let Some(update) = update {
-                            let id = update.id().to_owned();
-                            apply_update(&db, &catalog, update, &actor, executor).await?;
-                            Ok(Some(id))
-                        } else {
-                            Ok(None)
-                        }
-                    })
-                    .await?;
-                    current.next_attempt_at = Some(after(300));
-                    db.supplier_callback_receipts().update(&mut current, executor).await?;
-                    Ok(current)
+                    process.save_step_stage(&receipt, &connection, &actor, update, executor).await
                 })
             })
             .await
+    }
+
+    /// 当前采集资格必须在写入快照内成立，事务外预检不能代替保存授权。
+    async fn save_step_stage(
+        &self,
+        receipt: &SupplierCallbackReceipt,
+        connection: &SupplierApiConnection,
+        actor: &AuditActor,
+        update: Option<CatalogUpdate>,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierCallbackReceipt> {
+        guard_catalog_refresh(&self.db, connection, actor, &self.authorization, executor).await?;
+        let mut current = load_claimed(&self.db, receipt, executor).await?;
+        advance_after_apply(&mut current, async {
+            if let Some(update) = update {
+                let id = update.id().to_owned();
+                apply_update(&self.db, &self.catalog, update, actor, executor).await?;
+                Ok(Some(id))
+            } else {
+                Ok(None)
+            }
+        })
+        .await?;
+        current.next_attempt_at = Some(after(300));
+        self.db.supplier_callback_receipts().update(&mut current, executor).await?;
+        Ok(current)
     }
 
     /// 完成或交接当前有界批次。
@@ -183,6 +194,80 @@ mod tests {
     use erp_integration::entity::supplier_callback::SupplierRefreshHint;
 
     use super::*;
+
+    #[tokio::test]
+    async fn callback_commit_requires_current_snapshot_qualification_before_checkpoint_reads_or_writes() {
+        use std::sync::Arc;
+
+        use erp_catalog::CatalogAccess;
+        use erp_catalog::ports::{EmptyFileAssetFacts, FailClosedAuditPort};
+        use erp_core::AccountKind;
+        use erp_core::ids::SupplierAccountId;
+        use erp_identity::testing::unavailable_authorization;
+        use erp_supply::connector_registry::SupplierConnectorRegistry;
+        use erp_supply::entity::supplier_api::{
+            SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierConnectorType,
+        };
+        use mongodb::Client;
+        use persistence_core::ReadExecutor;
+        use persistence_core::testing::SnapshotExecutor;
+
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("callback_commit_authorization");
+        let authorization = unavailable_authorization();
+        let catalog = CatalogService::new(
+            db.clone(),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(EmptyFileAssetFacts),
+            CatalogAccess::new(db.clone(), authorization.clone()),
+        );
+        let process = SupplierCatalogCallbackProcess::new(
+            db,
+            Arc::new(SupplierConnectorRegistry::default()),
+            authorization,
+            catalog,
+        );
+        let connection = SupplierApiConnection::new(
+            SupplierApiConnectionId::new("connection"),
+            SupplierApiConnectionData {
+                supplier_id: SupplierAccountId::new("supplier"),
+                connection_code: "CONNECTION".into(),
+                connector_type: SupplierConnectorType::Dangaoshushu,
+                endpoint_reference: "endpoint".into(),
+                credential_reference: None,
+                rate_limit_policy: None,
+                status: SupplierApiConnectionStatus::Active,
+            },
+            "actor",
+        )
+        .unwrap();
+        let receipt = SupplierCallbackReceipt::received(
+            "receipt".into(),
+            SupplierApiConnectionId::new("connection"),
+            Instant::from_unix_secs(1),
+            "product".into(),
+            "cipher".into(),
+            vec![SupplierRefreshHint {
+                topic: "product".into(),
+                target_kind: "sku".into(),
+                object_id: "sku".into(),
+                product_id: None,
+                funds_transaction_id: None,
+            }],
+        )
+        .unwrap();
+        let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+        assert!(matches!(
+            process.save_step_stage(&receipt, &connection, &actor, None, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(message)) if message == "测试授权设施不可用"
+        ));
+        assert!(matches!(
+            process.save_step_stage(&receipt, &connection, &actor, None, &mut ReadExecutor::default()).await,
+            Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
+        ));
+    }
 
     #[tokio::test]
     async fn catalog_checkpoint_advances_only_after_successful_business_application() {

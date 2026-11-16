@@ -23,6 +23,7 @@ use std::sync::Arc;
 pub use change_guard::supersede_purchase_executions;
 pub use delivery_drafts::create_api_delivery_drafts;
 pub use enqueue::enqueue_purchase;
+use erp_identity::AuthorizationService;
 use erp_party::SensitiveDataCodec;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, ApiOrderStage};
 use erp_supply::connector_registry::SupplierConnectorRegistry;
@@ -43,6 +44,7 @@ pub struct SupplierApiOrderProcess {
     runtime: Arc<SupplierConnectorRegistry>,
     codec: Arc<SensitiveDataCodec>,
     funds: Arc<dyn SupplierOrderFunds<Error = Error>>,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl SupplierApiOrderProcess {
@@ -58,8 +60,9 @@ impl SupplierApiOrderProcess {
         runtime: Arc<SupplierConnectorRegistry>,
         codec: Arc<SensitiveDataCodec>,
         funds: Arc<dyn SupplierOrderFunds<Error = Error>>,
+        authorization: Arc<AuthorizationService>,
     ) -> Self {
-        Self { db, runtime, codec, funds }
+        Self { db, runtime, codec, funds, authorization }
     }
 
     /// 处理一批到期意图；单个异常只延迟该订单，后续订单继续执行。

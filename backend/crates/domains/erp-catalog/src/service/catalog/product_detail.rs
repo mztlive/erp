@@ -10,6 +10,7 @@ use erp_permissions::catalog as catalog_permissions;
 use persistence_core::{Executor, Transactional};
 
 use super::CatalogService;
+use crate::authorization::CompiledScope;
 use crate::dto::{
     PageView, ProductRevisionListParams, ProductRevisionView, SkuListParams, SkuRevisionListParams,
     SkuRevisionView, SkuView,
@@ -43,7 +44,7 @@ impl CatalogService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.require_visible_product(&actor, &product_id, executor).await?;
+                    let scope = service.visible_product_scope(&actor, &product_id, executor).await?;
                     let params = ProductRevisionListParams {
                         product_id: Some(ProductId::new(product_id.to_string())),
                         status: None,
@@ -52,7 +53,9 @@ impl CatalogService {
                         sort_by: Some("revision_no".to_string()),
                         sort_dir: Some("desc".to_string()),
                     };
-                    service.product_revision_rows(&params, executor).await
+                    let view = service.product_revision_rows(&params, executor).await?;
+                    scope.validate(executor).await?;
+                    Ok(view)
                 })
             })
             .await
@@ -82,7 +85,7 @@ impl CatalogService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.require_visible_product(&actor, &product_id, executor).await?;
+                    let scope = service.visible_product_scope(&actor, &product_id, executor).await?;
                     let params = SkuListParams {
                         q: None,
                         sku_no: None,
@@ -94,7 +97,9 @@ impl CatalogService {
                         sort_by: None,
                         sort_dir: None,
                     };
-                    service.sku_rows(&params, executor).await
+                    let view = service.sku_rows(&params, executor).await?;
+                    scope.validate(executor).await?;
+                    Ok(view)
                 })
             })
             .await
@@ -127,26 +132,34 @@ impl CatalogService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.require_visible_product(&actor, &product_id, executor).await?;
-                    if let Some(sku_id) = sku_id {
-                        return service.product_sku_revisions(&product_id, &sku_id, executor).await;
-                    }
-                    service.merged_product_sku_revisions(&product_id, executor).await
+                    let scope = service.visible_product_scope(&actor, &product_id, executor).await?;
+                    let view = if let Some(sku_id) = sku_id {
+                        service.product_sku_revisions(&product_id, &sku_id, executor).await?
+                    } else {
+                        service.merged_product_sku_revisions(&product_id, executor).await?
+                    };
+                    scope.validate(executor).await?;
+                    Ok(view)
                 })
             })
             .await
     }
 
-    async fn require_visible_product(
+    /// 在原读取阶段过滤真实商品；调用方须在完整子资源读取后核验返回的凭证。
+    async fn visible_product_scope(
         &self,
         actor: &AuditActor,
         product_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.access()
-            .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, product_id, executor)
-            .await?;
-        Ok(())
+    ) -> Result<CompiledScope> {
+        let scope =
+            self.access().resolve(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, executor).await?;
+        self.db
+            .catalog()
+            .authorized_product(product_id, &scope, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))?;
+        Ok(scope)
     }
 
     async fn product_sku_revisions(
@@ -208,5 +221,36 @@ fn sku_revision_params(sku_id: String) -> SkuRevisionListParams {
         page_size: Some(100),
         sort_by: Some("revision_no".to_string()),
         sort_dir: Some("desc".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_identity::testing::unbound_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::testing::{actor, denied, service};
+    use super::*;
+    use crate::CatalogAccess;
+
+    #[tokio::test]
+    async fn detail_subresources_require_query_binding_before_product_or_child_reads() {
+        let mut service = service().await;
+        service.data_scope = CatalogAccess::new(service.db.clone(), unbound_authorization());
+        let error = service
+            .visible_product_scope(&actor(), "unread-product", &mut SnapshotExecutor::default())
+            .await
+            .expect_err("缺少查询绑定不得读取商品或其子资源");
+        assert!(matches!(error, Error::ValidationError(message) if message == "缺少查询 Mapping 绑定"));
+    }
+
+    #[tokio::test]
+    async fn detail_subresources_propagate_identity_failure_before_any_product_reads() {
+        denied(
+            service()
+                .await
+                .visible_product_scope(&actor(), "unread-product", &mut SnapshotExecutor::default())
+                .await,
+        );
     }
 }

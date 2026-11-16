@@ -13,11 +13,11 @@ use erp_permissions::supplier;
 use erp_supplier::{
     SaveSupplierProfileRequest, SupplierAccount, SupplierCommercialProfileRevision, SupplierExt,
     SupplierProfileMutationView, SupplierProfileUpdateViolation, SupplierRatingRevision,
-    SupplierRatingRevisionData, command_view, next_supplier_revision_no, profile_change,
+    SupplierRatingRevisionData, next_supplier_revision_no, profile_change,
 };
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::create::create_tax_profile;
 use super::validation::resolve_supplier_file_references;
@@ -69,56 +69,67 @@ impl SupplierProfileProcess {
     pub async fn update_with_assets(
         &self,
         supplier_id: &str,
-        mut req: SaveSupplierProfileRequest,
+        req: SaveSupplierProfileRequest,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        let rbac = self.authorization.clone();
         req.validate_contract()?;
         let request_fingerprint = req.fingerprint()?;
-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            command
-                .ensure_replayable("update", Some(supplier_id), &request_fingerprint)
-                .map_err(|e| Error::ConflictError(e.to_string()))?;
-            return Ok(SupplierProfileWithAssetsResult {
-                view: command_view(command),
-                assets_committed: false,
-            });
-        }
-        let used = resolve_supplier_file_references(&mut req, pending_assets.as_ref())?;
-        pending_assets.ensure_all_used(&used)?;
-        self.ensure_party_active(&req.signing_entity_party_id).await?;
-        self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachment_references(&req.qualifications, &pending_assets).await?;
-        self.ensure_unique_inputs(&req)?;
-        let idempotency_key = req.idempotency_key.clone();
-        let prepared =
-            self.prepare_update(supplier_id, req, request_fingerprint.clone(), actor, pending_assets).await?;
-        let result = prepared.result.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor = actor.clone();
-        let scoped_id = supplier_id.to_string();
-        let transaction_result = client
+        let key = req.idempotency_key.clone();
+        let id = supplier_id.to_owned();
+        let this = self.clone();
+        let actor_owned = actor.clone();
+        let fingerprint = request_fingerprint.clone();
+        let transaction = self
+            .db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    rbac.access
-                        .clone()
-                        .require_with(&actor, &supplier::HANDOVER, &scoped_id, executor)
-                        .await?;
-                    prepared.persist(&db, executor).await
+                    this.update_snapshot(&id, req, pending_assets, &fingerprint, &actor_owned, executor).await
                 })
             })
             .await;
         self.resolve_transaction_result_with_assets(
-            transaction_result,
-            result,
-            &idempotency_key,
+            transaction,
+            &key,
             "update",
             Some(supplier_id),
             &request_fingerprint,
+            actor,
         )
         .await
+    }
+
+    /// 对象授权、回放和修订事实准备均留在原事务。
+    #[allow(clippy::too_many_arguments)]
+    async fn update_snapshot(
+        &self,
+        supplier_id: &str,
+        mut req: SaveSupplierProfileRequest,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
+        fingerprint: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierProfileWithAssetsResult> {
+        self.authorization.access.require_with(actor, &supplier::HANDOVER, supplier_id, executor).await?;
+        if let Some(view) = self
+            .replay_command(&req.idempotency_key, "update", Some(supplier_id), fingerprint, actor, executor)
+            .await?
+        {
+            return Ok(SupplierProfileWithAssetsResult { view, assets_committed: false });
+        }
+        let used = resolve_supplier_file_references(&mut req, pending_assets.as_ref())?;
+        pending_assets.ensure_all_used(&used)?;
+        self.ensure_party_active(&req.signing_entity_party_id, executor).await?;
+        self.ensure_party_active(&req.payment_entity_party_id, executor).await?;
+        self.ensure_attachment_references(&req.qualifications, pending_assets.as_ref(), executor).await?;
+        self.ensure_unique_inputs(&req)?;
+        let prepared = self
+            .prepare_update(supplier_id, req, fingerprint.to_owned(), actor, pending_assets, executor)
+            .await?;
+        let view = prepared.result.clone();
+        prepared.persist(&self.db, executor).await?;
+        Ok(SupplierProfileWithAssetsResult { view, assets_committed: true })
     }
 
     /// 加载当前聚合并构造修订事务载荷。
@@ -129,16 +140,18 @@ impl SupplierProfileProcess {
         request_fingerprint: String,
         actor: &AuditActor,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
+        executor: &mut dyn Executor,
     ) -> Result<PreparedUpdate> {
         let UpdateRoots { party, party_revision, supplier, commercial_profile } =
-            self.prepare_update_roots(supplier_id, &req, actor).await?;
+            self.prepare_update_roots(supplier_id, &req, actor, executor).await?;
         let party_id = supplier.party_id.clone();
         let supplier_id = SupplierAccountId::new(supplier_id);
-        let facts = self.prepare_party_facts(&party_id, &req, actor.id()).await?;
-        let capabilities = self.prepare_capability_changes(&supplier_id, &req, actor.id()).await?;
-        let qualifications =
-            self.prepare_qualification_changes(&supplier_id, &req, &capabilities.ids, actor.id()).await?;
-        let ratings = self.prepare_rating_changes(&supplier_id, &req).await?;
+        let facts = self.prepare_party_facts(&party_id, &req, actor.id(), executor).await?;
+        let capabilities = self.prepare_capability_changes(&supplier_id, &req, actor.id(), executor).await?;
+        let qualifications = self
+            .prepare_qualification_changes(&supplier_id, &req, &capabilities.ids, actor.id(), executor)
+            .await?;
+        let ratings = self.prepare_rating_changes(&supplier_id, &req, executor).await?;
         PreparedUpdate::new(
             PreparedUpdateContext {
                 party,
@@ -165,13 +178,14 @@ impl SupplierProfileProcess {
         supplier_id: &str,
         req: &SaveSupplierProfileRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<UpdateRoots> {
-        let mut supplier = self.load_supplier_for_update(supplier_id, req).await?;
-        let mut party = self.load_party_for_update(&supplier, req).await?;
+        let mut supplier = self.load_supplier_for_update(supplier_id, req, executor).await?;
+        let mut party = self.load_party_for_update(&supplier, req, executor).await?;
         let party_id = supplier.party_id.clone();
         let supplier_id = SupplierAccountId::new(supplier_id);
-        let party_revision_no = self.next_party_revision_no(&party_id).await?;
-        let profile_revision_no = self.next_profile_revision_no(&supplier_id).await?;
+        let party_revision_no = self.next_party_revision_no(&party_id, executor).await?;
+        let profile_revision_no = self.next_profile_revision_no(&supplier_id, executor).await?;
         let party_revision_id = PartyRevisionId::new(next_id());
         let commercial_profile_id = SupplierCommercialProfileRevisionId::new(next_id());
         let party_revision = party_change::plan_party_revision(party_change::PlanPartyRevisionParams {
@@ -222,11 +236,12 @@ impl SupplierProfileProcess {
         &self,
         supplier_id: &str,
         req: &SaveSupplierProfileRequest,
+        executor: &mut dyn Executor,
     ) -> Result<SupplierAccount> {
         let supplier = self
             .db
             .supplier()
-            .account(&SupplierAccountId::new(supplier_id), &mut NoTransaction)
+            .account(&SupplierAccountId::new(supplier_id), executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         let expected =
@@ -262,11 +277,12 @@ impl SupplierProfileProcess {
         &self,
         supplier: &SupplierAccount,
         req: &SaveSupplierProfileRequest,
+        executor: &mut dyn Executor,
     ) -> Result<Party> {
         let party = self
             .db
             .party()
-            .party(&supplier.party_id, &mut NoTransaction)
+            .party(&supplier.party_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商关联主体不存在".to_string()))?;
         let expected =
@@ -288,8 +304,8 @@ impl SupplierProfileProcess {
     ///
     /// # 错误
     /// 仓储查询、反序列化或修订号溢出时返回错误。
-    async fn next_party_revision_no(&self, party_id: &PartyId) -> Result<u32> {
-        Ok(self.db.party_revisions().next_revision_no(party_id, &mut NoTransaction).await?)
+    async fn next_party_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32> {
+        Ok(self.db.party_revisions().next_revision_no(party_id, executor).await?)
     }
 
     /// 查询下一商务资料修订号。
@@ -302,8 +318,12 @@ impl SupplierProfileProcess {
     ///
     /// # 错误
     /// 仓储查询、反序列化或修订号溢出时返回错误。
-    async fn next_profile_revision_no(&self, supplier_id: &SupplierAccountId) -> Result<u32> {
-        Ok(self.db.supplier().next_commercial_profile_revision_no(supplier_id, &mut NoTransaction).await?)
+    async fn next_profile_revision_no(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        Ok(self.db.supplier().next_commercial_profile_revision_no(supplier_id, executor).await?)
     }
 
     /// 构造联系人、地址、税务与银行账户事实的追加或停用变更。
@@ -323,30 +343,29 @@ impl SupplierProfileProcess {
         party_id: &PartyId,
         req: &SaveSupplierProfileRequest,
         actor_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<PartyFactChanges> {
         let mut changes = PartyFactChanges::default();
         if req.contact.is_some() || req.clear_contact {
-            changes.contacts = self.db.party_contacts().list_by_party(party_id, &mut NoTransaction).await?;
+            changes.contacts = self.db.party_contacts().list_by_party(party_id, executor).await?;
             party_change::disable_contacts(&mut changes.contacts, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_contact = self.create_contact(req, party_id, actor_id)?;
         }
         if req.address.is_some() || req.clear_address {
-            changes.addresses = self.db.party_addresses().list_by_party(party_id, &mut NoTransaction).await?;
+            changes.addresses = self.db.party_addresses().list_by_party(party_id, executor).await?;
             party_change::disable_addresses(&mut changes.addresses, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_address = self.create_address(req, party_id, actor_id)?;
         }
         if req.clear_tax_profile || req.tax_no.as_deref().is_some_and(|value| !value.trim().is_empty()) {
-            changes.tax_profiles =
-                self.db.party_tax_profiles().list_by_party(party_id, &mut NoTransaction).await?;
+            changes.tax_profiles = self.db.party_tax_profiles().list_by_party(party_id, executor).await?;
             party_change::disable_tax_profiles(&mut changes.tax_profiles, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_tax_profile = create_tax_profile(req, party_id, actor_id)?;
         }
         if req.bank_account.is_some() || req.clear_bank_account {
-            changes.bank_accounts =
-                self.db.party_bank_accounts().list_by_party(party_id, &mut NoTransaction).await?;
+            changes.bank_accounts = self.db.party_bank_accounts().list_by_party(party_id, executor).await?;
             party_change::disable_bank_accounts(&mut changes.bank_accounts, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_bank_account = self.create_bank_account(req, party_id, actor_id)?;
@@ -375,11 +394,12 @@ impl SupplierProfileProcess {
         &self,
         supplier_id: &SupplierAccountId,
         req: &SaveSupplierProfileRequest,
+        executor: &mut dyn Executor,
     ) -> Result<RatingChanges> {
         let Some(input) = &req.rating else {
             return Ok(RatingChanges::default());
         };
-        let history = self.db.supplier().list_rating_history(supplier_id, &mut NoTransaction).await?;
+        let history = self.db.supplier().list_rating_history(supplier_id, executor).await?;
         let next_no = next_supplier_revision_no(history.iter().map(|item| item.revision.revision_no))?;
         let mut current = history.last().cloned();
         if current.as_ref().is_some_and(|previous| {

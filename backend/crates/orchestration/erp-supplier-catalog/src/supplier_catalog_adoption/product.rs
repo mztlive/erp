@@ -62,7 +62,7 @@ impl SupplierCatalogAdoptionProcess {
         let mut resolved_row = self
             .with_snapshot(move |process, executor| {
                 Box::pin(async move {
-                    process
+                    let resolved = process
                         .automatic_row_with_anchor(
                             &source,
                             &target,
@@ -71,11 +71,12 @@ impl SupplierCatalogAdoptionProcess {
                             parent.as_ref(),
                             executor,
                         )
-                        .await
+                        .await?;
+                    process.prepare_source_unit(&source, &target, &resolved, &acting, executor).await?;
+                    Ok(resolved)
                 })
             })
             .await?;
-        self.prepare_source_unit(item, row, &resolved_row, actor).await?;
         if let AdoptionTarget::Create { brand_id, .. } = &mut resolved_row.target
             && brand_id.is_empty()
         {
@@ -128,6 +129,7 @@ impl SupplierCatalogAdoptionProcess {
         row: &AdoptionRow,
         resolved: &AdoptionRow,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         if !matches!(&row.target, AdoptionTarget::Auto { mapping, .. } if mapping.unit_id.is_empty()) {
             return Ok(());
@@ -136,22 +138,8 @@ impl SupplierCatalogAdoptionProcess {
             AdoptionTarget::Existing { unit_id, .. } | AdoptionTarget::Create { unit_id, .. } => unit_id,
             AdoptionTarget::Auto { .. } => return Err(Error::Internal("计量单位尚未解析".into())),
         };
-        if matches!(&resolved.target, AdoptionTarget::Create { brand_id, .. } if brand_id.is_empty()) {
-            let actor = actor.clone();
-            self.with_snapshot(move |process, executor| {
-                Box::pin(async move {
-                    process
-                        .services
-                        .catalog_access
-                        .ensure_writable(&actor, &catalog_permissions::PRODUCT_PRODUCT_CREATE, executor)
-                        .await
-                        .map_err(Error::from)
-                })
-            })
-            .await?;
-        }
         let name = item.suggested_unit().ok_or_else(|| Error::ValidationError("无法确定商品单位".into()))?;
-        self.services.catalog.ensure_source_unit(&name, unit_id, actor).await?;
+        self.services.catalog.ensure_source_unit(&name, unit_id, actor, executor).await?;
         Ok(())
     }
 

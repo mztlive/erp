@@ -60,7 +60,7 @@ impl CustomerAcceptanceProcess {
         persist_created_customer_acceptance(
             &self.db,
             self.workflow.clone(),
-            &self.rbac,
+            &self.authorization,
             acceptance.clone(),
             lines,
             actor.clone(),

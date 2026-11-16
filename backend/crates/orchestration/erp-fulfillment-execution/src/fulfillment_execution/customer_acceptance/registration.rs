@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_fulfillment::entity::fulfillment::CustomerAcceptance;
-use erp_identity::AuthorizationService;
-use erp_permissions::sales_order as sales_order_permissions;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::{fulfillment, sales_order as sales_order_permissions};
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{
@@ -174,6 +174,13 @@ pub async fn register_created_customer_acceptance_document(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    rbac.require(
+        actor,
+        &fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
+        AccessTarget::Operation,
+        executor,
+    )
+    .await?;
     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
         .require_object(actor, &sales_order_permissions::DETAIL, acceptance.sales_order_id.as_ref(), executor)
         .await?;

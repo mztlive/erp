@@ -1,8 +1,10 @@
 //! 财务办理所需资料只从应收的真实生效版本读取。
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderRevisionId, SalesOrderRevisionLineId};
+use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::repository::ReceivableExt;
 use erp_identity::AccessControlExt;
+use erp_permissions::receivable;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use persistence_core::{Executor, Transactional};
@@ -66,6 +68,27 @@ impl FundsAccess {
         id: &str,
         ex: &mut dyn Executor,
     ) -> Result<AllocationSource> {
+        let (_, authorization) = self.resolve(actor, &receivable::ACCOUNT_DETAIL, ex).await?;
+        let account_id = self.allocation_account_id(kind, id, ex).await?;
+        self.require_visible_root(&authorization, &account_id, ex).await?;
+        let account = self
+            .db
+            .receivable_accounts()
+            .find_by_id(&account_id, ex)
+            .await?
+            .ok_or_else(|| Error::NotFound("分配来源不存在".into()))?;
+        let result = self.allocation_source_view(&account, ex).await?;
+        authorization.deliver(ex).await?;
+        Ok(result)
+    }
+
+    /// 仅在详情功能资格成立后，把精确分录转换为它的真实应收子账。
+    async fn allocation_account_id(
+        &self,
+        kind: AllocationSourceKind,
+        id: &str,
+        ex: &mut dyn Executor,
+    ) -> Result<String> {
         let account_id = match kind {
             AllocationSourceKind::ReceivableAccount => id.to_owned(),
             AllocationSourceKind::ReceivableEntry => self
@@ -77,20 +100,15 @@ impl FundsAccess {
                 .receivable_account_id
                 .to_string(),
         };
-        let account = self
-            .db
-            .receivable_accounts()
-            .find_by_id(&account_id, ex)
-            .await?
-            .ok_or_else(|| Error::NotFound("分配来源不存在".into()))?;
-        self.rbac
-            .require(
-                actor,
-                &erp_permissions::receivable::ACCOUNT_DETAIL,
-                erp_identity::AccessTarget::record(&account_id)?,
-                ex,
-            )
-            .await?;
+        Ok(account_id)
+    }
+
+    /// 根子账已经过原查询过滤后，只装配该来源的固定商业字段。
+    async fn allocation_source_view(
+        &self,
+        account: &ReceivableAccount,
+        ex: &mut dyn Executor,
+    ) -> Result<AllocationSource> {
         let revision = self
             .db
             .sales_order_revisions()
@@ -142,5 +160,37 @@ impl FundsAccess {
                 unit: line.unit_snapshot,
             })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_finance::ports::funds_scope::FailClosedFundsDataScopePort;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    /// 两类来源都必须先完成统一资格检查，拒绝时不读取分录或子账。
+    #[tokio::test]
+    async fn allocation_sources_require_qualification_before_business_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("allocation_source_authorization");
+        let service =
+            FundsAccess::new(db, unavailable_authorization(), FailClosedFundsDataScopePort::shared());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for kind in [AllocationSourceKind::ReceivableEntry, AllocationSourceKind::ReceivableAccount] {
+            let result = service
+                .load_allocation_source(&actor, kind, "source", &mut SnapshotExecutor::default())
+                .await;
+            assert!(matches!(
+                result,
+                Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+            ));
+        }
     }
 }

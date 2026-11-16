@@ -1,16 +1,10 @@
-use application_core::AuditActor;
 use entity_core::BaseModel;
-use erp_audit::AuditActorLogs;
-use erp_core::common::time::Instant;
-use erp_permissions::supplier_fulfillment;
 use erp_read_models::supplier_center::execution_progress::{ExecutionOrderTreeView, ExecutionShipmentView};
-use erp_supply::api_order::{ApiOrderExecution, ApiOrderExt, ApiOrderSetupReceipt, ApiOrderStage};
+use erp_supply::api_order::{ApiOrderExecution, ApiOrderSetupReceipt, ApiOrderStage};
 use erp_supply::ports::connector::address::{
     AddressRequirement, ConfirmedSupplierAddress, SupplierAddressLevel,
 };
 use erp_supply::ports::connector::order::{CoordinateSystem, DeliveryMethod, GeocodedAddress, Recipient};
-use erp_supply::service::supplier_fulfillment::FulfillmentOrderAccess;
-use persistence_core::{NoTransaction, Transactional};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -189,127 +183,8 @@ impl ExecutionSetupView {
     }
 }
 
-impl SupplierApiOrderProcess {
-    /// 读取当前执行资料，调用方须先执行供应商订单 detail 数据范围授权。
-    /// # 参数
-    /// `id` 为已授权的供应商订单身份。
-    /// # 返回
-    /// 真实阶段、阻断原因与可供确认选项。
-    /// # 错误
-    /// 非自动执行订单返回 NotFound，密文无效返回错误。
-    pub async fn execution_setup(&self, id: &str) -> Result<ExecutionSetupView> {
-        let execution = self.load(id).await?;
-        let snapshot =
-            if execution.request_encrypted.is_some() { Some(self.decode(&execution)?) } else { None };
-        let (requirement, unavailable) = match self.setup_connector(&execution).await {
-            Ok(connector) => (Some(connector.address_requirement()), None),
-            Err(error) => (None, Some(error.to_string())),
-        };
-        let (tree, shipments) = self.execution_progress(&execution).await?;
-        let mut view =
-            ExecutionSetupView::from_execution(&execution, snapshot.as_ref(), requirement, tree, shipments);
-        if let Some(reason) = unavailable {
-            view.blocker = Some(match view.blocker {
-                Some(existing) => format!("{existing}；{reason}"),
-                None => reason,
-            });
-        }
-        Ok(view)
-    }
-
-    /// 保存经采购确认的坐标或配送选择，后台继续执行，保存不代表下单成功。
-    /// # 参数
-    /// `id` 为已授权订单；`request` 携带预期执行版本及稳定操作号。
-    /// # 返回
-    /// 已保存资料及新执行阶段。
-    /// # 错误
-    /// 旧版本、非补充阶段、无效坐标、旧选项或异载荷重试时拒绝。
-    pub async fn save_execution_setup(
-        &self,
-        id: &str,
-        request: ExecutionSetupRequest,
-        actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
-    ) -> Result<ExecutionSetupView> {
-        validate_request(&request)?;
-        let (hash, receipt) = request.receipt(id)?;
-        let mut execution = self.load(id).await?;
-        if let Some(previous) = self
-            .db
-            .supplier_api_order_setup_receipts()
-            .find_by_id(&receipt.base.id, &mut NoTransaction)
-            .await?
-        {
-            previous.ensure_replay(id, &hash)?;
-            return self.execution_setup(id).await;
-        }
-        if execution.base.version != request.expected_version
-            || execution.stage != ApiOrderStage::AwaitingSetup
-        {
-            return Err(Error::ConflictError("接口执行资料已变化，请刷新后核对".into()));
-        }
-        let mut snapshot = self.decode(&execution)?;
-        let requirement = self.setup_connector(&execution).await?.address_requirement();
-        if request.geocode.is_some() && requirement != AddressRequirement::Geocoded(CoordinateSystem::Bd09) {
-            return Err(Error::ValidationError("当前供应商不使用百度坐标，请按其收货地址要求补齐".into()));
-        }
-        apply_setup(&mut execution, &mut snapshot, &request)?;
-        if let Some(ticket) = &request.supplier_address_ticket {
-            self.apply_supplier_address(&mut execution, &mut snapshot, ticket).await?;
-        }
-        if execution.stage == ApiOrderStage::PrepareAddress {
-            snapshot.recipient.ensure_address_ready(
-                requirement,
-                &execution.connection_id,
-                &execution.base.id,
-                execution.address_fingerprint.as_deref().unwrap_or_default(),
-            )?;
-        }
-        self.encode(&mut execution, &snapshot)?;
-        execution.setup_idempotency_key = Some(request.idempotency_key);
-        execution.setup_payload_hash = Some(hash);
-        execution.blocker = None;
-        execution.next_run_at = Instant::now();
-        self.persist_setup(execution, receipt, actor, access).await?;
-        self.execution_setup(id).await
-    }
-
-    async fn persist_setup(
-        &self,
-        mut execution: ApiOrderExecution,
-        receipt: ApiOrderSetupReceipt,
-        actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
-    ) -> Result<()> {
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor = actor.clone();
-        let access = access.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .require_order(
-                            &actor,
-                            &supplier_fulfillment::ORDER_SUBMIT,
-                            &execution.base.id,
-                            executor,
-                        )
-                        .await?;
-                    db.supplier_api_order_executions().update(&mut execution, executor).await?;
-                    db.supplier_api_order_setup_receipts().create(&receipt, executor).await?;
-                    let audit = actor.resource_log(
-                        "supplier_fulfillment.execution_setup",
-                        "supplier_fulfillment_order",
-                        execution.base.id.clone(),
-                    )?;
-                    erp_audit::execution::persist_log(&db, &audit, executor).await?;
-                    Ok::<_, Error>(())
-                })
-            })
-            .await
-    }
-}
+mod read;
+mod write;
 
 impl TryFrom<ExecutionGeocode> for GeocodedAddress {
     type Error = Error;

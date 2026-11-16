@@ -1,6 +1,5 @@
 //! 应付、供应商付款与来源单据的跨领域只读投影。
 use erp_finance::dto::payable as dto;
-use erp_finance::repository::PayableExt;
 use mongodb::Database;
 mod account;
 mod display;
@@ -25,5 +24,3 @@ impl PayableReadService {
         Self { db }
     }
 }
-type PayableAccountFilter = <Database as PayableExt>::PayableAccountFilter;
-type SupplierPaymentFilter = <Database as PayableExt>::SupplierPaymentFilter;

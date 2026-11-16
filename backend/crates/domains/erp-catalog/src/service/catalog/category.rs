@@ -1,7 +1,7 @@
 use application_core::AuditActor;
 use erp_identity::AccessTarget;
 use erp_permissions::catalog;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -11,7 +11,7 @@ use crate::dto::{
     UpdateProductCategoryRequest,
 };
 use crate::entity::catalog::ProductCategoryId;
-use crate::entity::catalog::product_category::{ProductCategory, ProductCategoryUpdate};
+use crate::entity::catalog::product_category::ProductCategoryUpdate;
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
@@ -102,14 +102,39 @@ impl CatalogService {
         req: UpdateProductCategoryRequest,
         actor: &AuditActor,
     ) -> Result<ProductCategoryView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.product_category_update_stage(&id, req, &actor, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn product_category_update_stage(
+        &self,
+        id: &str,
+        req: UpdateProductCategoryRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductCategoryView> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
-        let mut category = self.load_category(id).await?;
+        let mut category = self.load_category(id, executor).await?;
         ensure_version(category.base.version, req.version)?;
         if let Some(parent_change) = &req.parent_change {
             self.ensure_parent_chain_ok(
                 &category.base.id,
                 parent_change.parent_category_id.as_ref(),
-                &mut NoTransaction,
+                executor,
             )
             .await?;
         }
@@ -126,24 +151,9 @@ impl CatalogService {
             "product_category",
             category.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    db.product_categories().update(&mut category, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<ProductCategory, crate::error::Error>(category)
-                })
-            })
-            .await?;
-        Ok(updated.into())
+        self.db.product_categories().update(&mut category, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(category.into())
     }
 
     /// 移动商品分类到新父分类（树形维护；成环检测在服务层完成）。
@@ -168,11 +178,33 @@ impl CatalogService {
         req: MoveProductCategoryRequest,
         actor: &AuditActor,
     ) -> Result<ProductCategoryView> {
-        req.validate()?;
-        let mut category = self.load_category(id).await?;
-        ensure_version(category.base.version, req.version)?;
-        self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref(), &mut NoTransaction)
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.product_category_move_stage(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn product_category_move_stage(
+        &self,
+        id: &str,
+        req: MoveProductCategoryRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductCategoryView> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
             .await?;
+        req.validate()?;
+        let mut category = self.load_category(id, executor).await?;
+        ensure_version(category.base.version, req.version)?;
+        self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref(), executor).await?;
         category.set_parent(req.parent_category_id, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -180,24 +212,9 @@ impl CatalogService {
             "product_category",
             category.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    db.product_categories().update(&mut category, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<ProductCategory, crate::error::Error>(category)
-                })
-            })
-            .await?;
-        Ok(updated.into())
+        self.db.product_categories().update(&mut category, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(category.into())
     }
 
     /// 删除商品分类（软删除，乐观锁语义）。
@@ -216,8 +233,30 @@ impl CatalogService {
     /// * `BusinessLogicError` - 分类下存在子分类
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn product_category_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut category = self.load_category(id).await?;
-        let has_children = self.db.product_categories().has_children(id, &mut NoTransaction).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.product_category_delete_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn product_category_delete_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_CATEGORY_DELETE, AccessTarget::Operation, executor)
+            .await?;
+        let mut category = self.load_category(id, executor).await?;
+        let has_children = self.db.product_categories().has_children(id, executor).await?;
         if has_children {
             return Err(Error::BusinessLogicError("分类下存在子分类，不能删除".to_string()));
         }
@@ -227,23 +266,9 @@ impl CatalogService {
             "product_category",
             category.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::PRODUCT_CATEGORY_DELETE, AccessTarget::Operation, executor)
-                        .await?;
-                    db.product_categories().soft_delete(&mut category, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
-            })
-            .await
+        self.db.product_categories().soft_delete(&mut category, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(())
     }
 
     // ---------- 商品品牌 ----------
@@ -343,5 +368,46 @@ mod tests {
 
         let truncated = interpret_parent_chain("child", &fact(Some("parent"), None, false, true));
         assert!(matches!(truncated, Err(Error::BusinessLogicError(_))));
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, service};
+
+    #[tokio::test]
+    async fn writes_authorize_before_existing_records_versions_or_related_facts() {
+        let service = service().await;
+        let actor = actor();
+        let mut executor = SnapshotExecutor::default();
+        for version in [1, 999] {
+            denied(
+                service
+                    .product_category_update_stage(
+                        "missing",
+                        serde_json::from_value(json!({"version":version})).unwrap(),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+            denied(
+                service
+                    .product_category_move_stage(
+                        "missing",
+                        serde_json::from_value(
+                            json!({"version":version,"parent_category_id":"missing-parent"}),
+                        )
+                        .unwrap(),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+            denied(service.product_category_delete_stage("missing", &actor, &mut executor).await);
+        }
     }
 }

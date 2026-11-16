@@ -7,7 +7,7 @@ use std::sync::Arc;
 use mongodb::Database;
 pub use queue::{GrantQueueHealth, GrantRecompute, GrantRule};
 
-use crate::SharedRbacService;
+use crate::AuthorizationService;
 pub use crate::entity::resource_access::SourceUpdate;
 pub use crate::ports::ResourceGrantFacts;
 
@@ -15,19 +15,23 @@ pub use crate::ports::ResourceGrantFacts;
 #[derive(Clone)]
 pub struct ResourceGrantService {
     db: Database,
-    rbac: SharedRbacService,
+    authorization: Arc<AuthorizationService>,
     facts: Arc<dyn ResourceGrantFacts>,
 }
 impl ResourceGrantService {
     /// 装配授权来源管理服务。
     /// # 参数
-    /// db、rbac 为身份设施，facts 为可信业务事实端口。
+    /// db 为身份数据库，authorization 为进程共享授权服务，facts 为可信业务事实端口。
     /// # 返回
     /// 可发布及撤销来源的服务。
     /// # 错误
     /// 不执行 I/O。
-    pub fn new(db: Database, rbac: SharedRbacService, facts: Arc<dyn ResourceGrantFacts>) -> Self {
-        Self { db, rbac, facts }
+    pub fn new(
+        db: Database,
+        authorization: Arc<AuthorizationService>,
+        facts: Arc<dyn ResourceGrantFacts>,
+    ) -> Self {
+        Self { db, authorization, facts }
     }
 }
 

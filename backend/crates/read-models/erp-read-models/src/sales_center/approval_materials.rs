@@ -14,7 +14,7 @@ use erp_workflow::entity::approval_copy::ApprovalCopyReceipt;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
 use erp_workflow::service::approval::execution::{ApprovalRuntimeService, RuntimeHistoryPage};
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders};
@@ -54,21 +54,39 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
     actor: &AuditActor,
     instance_id: &str,
 ) -> Result<ApprovalDocumentMaterials> {
-    let materials = runtime.materials(actor, instance_id).await?;
+    let (db, runtime, actor, instance_id) =
+        (db.clone(), runtime.clone(), actor.clone(), instance_id.to_owned());
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move { materials_read(&db, &runtime, &actor, &instance_id, executor).await })
+        })
+        .await
+}
+
+/// 授权、冻结版本和当前核对资料均在同一调用方快照内完成。
+async fn materials_read<A: WorkflowAuthorizationPort>(
+    db: &Database,
+    runtime: &ApprovalRuntimeService<A>,
+    actor: &AuditActor,
+    instance_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalDocumentMaterials> {
+    let materials = runtime.materials_with(actor, instance_id, executor).await?;
     let sales_order = if matches!(materials.document_type.as_str(), "sales_order" | "voucher_sales_order") {
-        Some(sales_submission(db, &materials).await?)
+        Some(sales_submission(db, &materials, executor).await?)
     } else {
         None
     };
     let (purchase_lines, extra_cost_summary) = if materials.document_type == "purchase_order" {
-        (purchase_lines(db, &materials).await?, extra_cost_summary(db, &materials).await?)
+        (purchase_lines(db, &materials, executor).await?, extra_cost_summary(db, &materials, executor).await?)
     } else {
         (None, None)
     };
-    let source_sales_orders = source_sales_orders(db, &materials).await?;
-    let (current_sales_basis, current_sales_basis_error) = optional_sales_basis(db, &materials).await?;
-    let latest_supplier_rating = supplier_rating(db, &materials).await?;
-    runtime.materials(actor, instance_id).await?;
+    let source_sales_orders = source_sales_orders(db, &materials, executor).await?;
+    let (current_sales_basis, current_sales_basis_error) =
+        optional_sales_basis(db, &materials, executor).await?;
+    let latest_supplier_rating = supplier_rating(db, &materials, executor).await?;
     Ok(ApprovalDocumentMaterials {
         materials,
         sales_order,
@@ -103,20 +121,38 @@ pub async fn copy_detail<A: WorkflowAuthorizationPort>(
     id: &str,
     after: Option<u32>,
 ) -> Result<CopyDocumentDetail> {
-    let detail = runtime.copy_detail(actor, id, after).await?;
+    let (db, runtime, actor, id) = (db.clone(), runtime.clone(), actor.clone(), id.to_owned());
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move { copy_read(&db, &runtime, &actor, &id, after, executor).await })
+        })
+        .await
+}
+
+/// 抄送的完整业务补齐结束后，验证本次读取的原收件凭证。
+async fn copy_read<A: WorkflowAuthorizationPort>(
+    db: &Database,
+    runtime: &ApprovalRuntimeService<A>,
+    actor: &AuditActor,
+    id: &str,
+    after: Option<u32>,
+    executor: &mut dyn Executor,
+) -> Result<CopyDocumentDetail> {
+    let (detail, access) = runtime.copy_read(actor, id, after, executor).await?;
     let materials = detail.materials;
     let sales_order = if matches!(materials.document_type.as_str(), "sales_order" | "voucher_sales_order") {
-        Some(sales_submission(db, &materials).await?)
+        Some(sales_submission(db, &materials, executor).await?)
     } else {
         None
     };
     let purchase_lines = if materials.document_type == "purchase_order" {
-        purchase_lines(db, &materials).await?
+        purchase_lines(db, &materials, executor).await?
     } else {
         None
     };
-    let source_sales_orders = source_sales_orders(db, &materials).await?;
-    runtime.copy_detail(actor, id, after).await?;
+    let source_sales_orders = source_sales_orders(db, &materials, executor).await?;
+    runtime.validate_copy_read(&access, executor).await?;
     Ok(CopyDocumentDetail {
         receipt: detail.receipt,
         instance_status: detail.instance_status,
@@ -134,19 +170,19 @@ pub async fn copy_detail<A: WorkflowAuthorizationPort>(
     })
 }
 
-async fn sales_submission(db: &Database, materials: &ApprovalMaterialsView) -> Result<SubmissionView> {
+async fn sales_submission(
+    db: &Database,
+    materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
+) -> Result<SubmissionView> {
     let submission = db
         .sales_order_submissions()
-        .find_by_order_and_no(
-            &SalesOrderId::new(&materials.document_id),
-            materials.subject_version,
-            &mut NoTransaction,
-        )
+        .find_by_order_and_no(&SalesOrderId::new(&materials.document_id), materials.subject_version, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("本次审批对应的销售提交不存在，请联系管理员核对".into()))?;
     let mut lines = db
         .sales_order_submission_lines()
-        .list_lines_by_submissions(&[SalesOrderSubmissionId::new(&submission.base.id)], &mut NoTransaction)
+        .list_lines_by_submissions(&[SalesOrderSubmissionId::new(&submission.base.id)], executor)
         .await?;
     validate_submission(
         materials,
@@ -157,9 +193,8 @@ async fn sales_submission(db: &Database, materials: &ApprovalMaterialsView) -> R
     )?;
     lines.sort_by_key(|line| line.line_no);
     let mut view = submission_view(submission, lines);
-    enrich_line_prices(db, &mut view.lines, &mut NoTransaction).await?;
-    enrich_inquiry_prices(db, &mut view.lines, slice::from_ref(&materials.document_id), &mut NoTransaction)
-        .await?;
+    enrich_line_prices(db, &mut view.lines, executor).await?;
+    enrich_inquiry_prices(db, &mut view.lines, slice::from_ref(&materials.document_id), executor).await?;
     Ok(view)
 }
 
@@ -193,11 +228,79 @@ fn validate_submission(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::ports::{IdentityAuditPort, PreparedResourceAudit};
+    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::{RbacService, Result as IdentityResult};
     use erp_workflow::entity::approval_integration::display_snapshot::{
         ApprovalBriefLine, ApprovalDisplaySnapshot,
     };
+    use mongodb::Client;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+
+    #[derive(Clone)]
+    struct UnusedAuthorization;
+
+    impl WorkflowAuthorizationPort for UnusedAuthorization {}
+
+    struct UnusedAudit;
+
+    #[async_trait]
+    impl IdentityAuditPort for UnusedAudit {
+        fn resource_log(
+            &self,
+            _: AuditActor,
+            _: &str,
+            _: &str,
+            _: String,
+        ) -> IdentityResult<PreparedResourceAudit> {
+            panic!("读取拒绝不得准备审计")
+        }
+
+        async fn persist(&self, _: &PreparedResourceAudit, _: &mut dyn Executor) -> IdentityResult<()> {
+            panic!("读取拒绝不得写入审计")
+        }
+    }
+
+    #[tokio::test]
+    async fn complete_material_and_copy_reads_reject_before_loading_business_data() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("approval_complete_material_read");
+        let identity = Arc::new(RbacService::new(db.clone(), Arc::new(UnusedAudit)));
+        let runtime = ApprovalRuntimeService::new(
+            db.clone(),
+            identity,
+            unavailable_authorization(),
+            UnusedAuthorization,
+        );
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        for result in [
+            materials_read(&db, &runtime, &actor, "instance", &mut SnapshotExecutor::default())
+                .await
+                .map(|_| ()),
+            copy_read(&db, &runtime, &actor, "receipt", None, &mut SnapshotExecutor::default())
+                .await
+                .map(|_| ()),
+        ] {
+            assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+        }
+        assert!(matches!(
+            materials_read(&db, &runtime, &actor, "instance", &mut ReadExecutor::default()).await,
+            Err(Error::ValidationError(_))
+        ));
+        assert!(matches!(
+            copy_read(&db, &runtime, &actor, "receipt", None, &mut ReadExecutor::default()).await,
+            Err(Error::ValidationError(_))
+        ));
+    }
 
     fn frozen_materials() -> ApprovalMaterialsView {
         let mut display = ApprovalDisplaySnapshot::new("sales-1".into());

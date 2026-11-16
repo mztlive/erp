@@ -11,7 +11,7 @@ use erp_party::{PartyAuditPort, PreparedPartyAudit, SupplierRolePort};
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::audit_conversion::{PreparedAudit, map_audit_error};
 
@@ -113,11 +113,15 @@ impl MongoSupplierRole {
 
 #[async_trait]
 impl SupplierRolePort for MongoSupplierRole {
-    async fn party_has_supplier_role(&self, party_id: &PartyId) -> erp_party::Result<bool> {
+    async fn party_has_supplier_role(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> erp_party::Result<bool> {
         Ok(self
             .db
             .supplier_accounts()
-            .find_by_party(party_id, &mut NoTransaction)
+            .find_by_party(party_id, executor)
             .await
             .map_err(erp_party::Error::from)?
             .is_some())

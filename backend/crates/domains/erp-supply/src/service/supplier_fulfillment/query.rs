@@ -1,13 +1,10 @@
-use persistence_core::NoTransaction;
-
 use super::SupplierFulfillmentService;
+use crate::Result;
 use crate::dto::supplier_fulfillment::{
     FulfillmentOrderListQuery, PageView, SortDir, SupplierFulfillmentOrderView,
 };
-use crate::entity::supplier_fulfillment::SupplierFulfillmentOrder;
 use crate::repository::SupplierFulfillmentExt;
 use crate::repository::prelude::*;
-use crate::{Error, Result};
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
 pub type FulfillmentOrderFilter =
@@ -37,24 +34,6 @@ impl SupplierFulfillmentService {
             .await?;
         let items = page.items.into_iter().map(row_view).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
-    }
-
-    /// 按 ID 加载未删除供应商子订单。
-    ///
-    /// # 参数
-    /// * `id` - 供应商履约订单主键。
-    ///
-    /// # 返回
-    /// 返回订单实体。
-    ///
-    /// # 错误
-    /// 订单不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
-    pub async fn load_order(&self, id: &str) -> Result<SupplierFulfillmentOrder> {
-        self.db
-            .supplier_fulfillment_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))
     }
 }
 

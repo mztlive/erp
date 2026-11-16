@@ -4,6 +4,8 @@ use std::cmp::Ordering;
 use application_core::AuditActor;
 use erp_catalog::CatalogService;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_api;
 use erp_supply::catalog_membership::{
     CatalogMembershipPage, CatalogMembershipState, repository as memberships,
 };
@@ -262,9 +264,13 @@ impl SupplierConnectionExecutionProcess {
         let client = db.client().clone();
         let actor = actor.clone();
         let catalog = self.catalog.clone();
+        let authorization = self.authorization.clone();
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor)
+                        .await?;
                     let mut current = SupplierApiService::new(db.clone())
                         .load_connection(&connection.base.id, executor)
                         .await?;

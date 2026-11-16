@@ -19,12 +19,14 @@ use erp_finance::repository::prelude::*;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_support::repository::prelude::*;
 use erp_support::{FileAsset, FileAssetExt, SecurityScanStatus};
+use erp_workflow::WorkItemType;
 pub use fulfillment_payment::{FulfillmentPaymentView, FulfillmentRequestView};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
 use super::purchase_payments::payment_records;
+use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
 use crate::{Error, Result};
 
 /// 业务文件列表中的安全展示字段。
@@ -139,27 +141,53 @@ impl BusinessFinanceFiles {
         Ok(result)
     }
 
-    /// 从正式授权的履约任务对象推导采购单，再读取该单已付款的银行回单。
+    /// 在原快照内授权履约任务，再读取真实采购来源已付款的银行回单。
     /// # 参数
-    /// `object_type` / `object_id` 必须来自当前工作流授权结果，不接受用户自行提供的来源单。
+    /// `actor`、`task_id` 为当前账号与正式任务，`auth` 为共享工作流授权端口。
     /// # 返回
     /// 返回该采购来源关联的银行回单。
     /// # 错误
-    /// 非采购履约对象、缺失来源或读取失败时拒绝。
-    pub async fn fulfillment(&self, object_type: &str, object_id: &str) -> Result<Vec<FinancialFileView>> {
+    /// 无任务资格、非采购履约对象、缺失来源、凭证失效或读取失败时拒绝。
+    pub async fn fulfillment(
+        &self,
+        actor: &AuditActor,
+        task_id: &str,
+        auth: Arc<dyn WorkItemAuthorizationReadPort>,
+    ) -> Result<Vec<FinancialFileView>> {
         let this = self.clone();
-        let kind = object_type.to_string();
-        let id = object_id.to_string();
+        let actor = actor.clone();
+        let task_id = task_id.to_owned();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let purchase_id = this.purchase_source(&kind, &id, executor).await?;
-                    this.payment_files(&purchase_id, executor).await
+                    this.fulfillment_files_read(&actor, &task_id, auth.as_ref(), executor).await
                 })
             })
             .await
+    }
+
+    /// 授权、真实来源与回单补齐共用原阶段，交付前验证原任务凭证。
+    async fn fulfillment_files_read(
+        &self,
+        actor: &AuditActor,
+        task_id: &str,
+        auth: &dyn WorkItemAuthorizationReadPort,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FinancialFileView>> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("履约回单读取必须使用快照事务".into()));
+        }
+        let (task, access) = auth.authorize(task_id, actor, executor).await?;
+        if task.work_item_type != WorkItemType::FulfillmentOperation {
+            return Err(Error::NotFound("采购履约任务不存在或无权查看".into()));
+        }
+        let purchase_id =
+            self.purchase_source(&task.business_object_type, &task.business_object_id, executor).await?;
+        let files = self.payment_files(&purchase_id, executor).await?;
+        self.rbac.validate(&access, executor).await?;
+        Ok(files)
     }
 
     /// 强类型履约来源只允许采购入库、供应商直发、电子交付与服务履约。
@@ -272,7 +300,61 @@ pub fn matching_file<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::CompiledAccess;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
     use super::*;
+    use crate::ports::work_item_authorization::AuthorizedTaskFact;
+
+    struct DeniedTask {
+        executors: Mutex<Vec<usize>>,
+    }
+
+    #[async_trait]
+    impl WorkItemAuthorizationReadPort for DeniedTask {
+        async fn authorize(
+            &self,
+            id: &str,
+            actor: &AuditActor,
+            executor: &mut dyn Executor,
+        ) -> erp_workflow::Result<(AuthorizedTaskFact, CompiledAccess)> {
+            assert_eq!(id, "task");
+            assert_eq!(actor.id(), "actor");
+            assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
+            self.executors.lock().unwrap().push(executor as *mut dyn Executor as *mut () as usize);
+            Err(erp_workflow::Error::Forbidden("无履约任务资格".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn fulfillment_receipts_require_original_snapshot_authorization_before_source_or_files() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("fulfillment_receipt_authorization");
+        let service = BusinessFinanceFiles::new(db, unavailable_authorization());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let auth = DeniedTask { executors: Mutex::new(vec![]) };
+        let result =
+            service.fulfillment_files_read(&actor, "task", &auth, &mut ReadExecutor::default()).await;
+        assert!(matches!(
+            result,
+            Err(Error::ValidationError(reason)) if reason == "履约回单读取必须使用快照事务"
+        ));
+        assert!(auth.executors.lock().unwrap().is_empty());
+        let mut executor = SnapshotExecutor::default();
+        let pointer = &mut executor as *mut SnapshotExecutor as usize;
+        let result = service.fulfillment_files_read(&actor, "task", &auth, &mut executor).await;
+        assert!(matches!(result, Err(Error::Forbidden(reason)) if reason == "无履约任务资格"));
+        assert_eq!(*auth.executors.lock().unwrap(), [pointer]);
+    }
+
     #[test]
     fn download_match_never_accepts_another_document_or_asset() {
         let files = vec![FinancialFileView {

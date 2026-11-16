@@ -7,8 +7,10 @@ use bpm::model::{
     ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, Timestamp,
 };
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::{Executor, Transactional};
 
 use super::super::super::apply_plan::PlannedWrites;
 use super::super::super::resume::prepare_resume;
@@ -87,7 +89,28 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         command: &ApprovalResumeCommand,
         idempotency_key: IdempotencyKey,
     ) -> Result<Option<PreparedResume>> {
-        let runtime = self.load_resume_runtime(actor, command).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let command = command.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.prepare_resume_stage(&actor, &command, idempotency_key, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 管理授权、版本读取和恢复计划共用同一快照；无资格时不读取业务事实。
+    async fn prepare_resume_stage(
+        &self,
+        actor: &AuditActor,
+        command: &ApprovalResumeCommand,
+        idempotency_key: IdempotencyKey,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PreparedResume>> {
+        let runtime = self.load_resume_runtime(actor, command, executor).await?;
         let mut members = Vec::new();
         for person in runtime.current.participants() {
             members.push(
@@ -96,7 +119,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                     &person.name,
                     &runtime.snapshot,
                     &runtime.spec,
-                    &mut NoTransaction,
+                    executor,
                 )
                 .await?,
             );
@@ -107,7 +130,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let graph = self
             .db
             .bpm_workflow()
-            .load_instance_graph(&runtime.instance, &mut NoTransaction)
+            .load_instance_graph(&runtime.instance, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
         let now = Instant::now();
@@ -118,22 +141,28 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         finish_prepared_resume(actor, command, runtime, *writes, now).map(Some)
     }
 
-    /// 按原顺序校验恢复动作、版本、历史任务、冻结主体和管理者来源边界。
+    /// 先证明当前管理者与来源，再核对恢复动作、版本及冻结主体。
     async fn load_resume_runtime(
         &self,
-        _actor: &AuditActor,
+        actor: &AuditActor,
         command: &ApprovalResumeCommand,
+        executor: &mut dyn Executor,
     ) -> Result<ResumeRuntime> {
         let instance_id = &command.approval_process_instance_id;
-        self.require_recovery_action(instance_id, RuntimeRecoveryAction::ResumeCurrentApprover).await?;
-        let (instance, current, assignee) = self.load_resume_execution(command).await?;
+        self.authorization
+            .require(actor, &internal::APPROVAL_RECOVER, AccessTarget::record(instance_id)?, executor)
+            .await?;
+        self.require_recovery_action(instance_id, RuntimeRecoveryAction::ResumeCurrentApprover, executor)
+            .await?;
+        let (instance, current, assignee) = self.load_resume_execution(command, executor).await?;
         let closed_task_guard = self
             .load_resume_task_guard(
                 &ApprovalNodeExecutionId::new(current.base.id.clone()),
                 command.expected_closed_task_version,
+                executor,
             )
             .await?;
-        let (snapshot, document_type) = self.load_resume_subject(&instance, instance_id).await?;
+        let (snapshot, document_type) = self.load_resume_subject(&instance, instance_id, executor).await?;
         let spec = adapter_spec_of(document_type)?;
         Ok(ResumeRuntime { instance, current, assignee, closed_task_guard, snapshot, document_type, spec })
     }
@@ -142,26 +171,27 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     async fn load_resume_execution(
         &self,
         command: &ApprovalResumeCommand,
+        executor: &mut dyn Executor,
     ) -> Result<(ApprovalProcessInstance, ApprovalNodeExecution, ApprovalInstanceAssignee)> {
         let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
         let instance = self
             .db
             .bpm_workflow()
-            .find_instance_by_id(&instance_id, &mut NoTransaction)
+            .find_instance_by_id(&instance_id, executor)
             .await?
             .ok_or_else(hidden_not_found)?;
         ensure_expected_version("审批实例", command.expected_instance_version, instance.base.version)?;
         let current = self
             .db
             .bpm_workflow()
-            .find_current_execution(&instance_id, &mut NoTransaction)
+            .find_current_execution(&instance_id, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例缺少当前受阻执行".to_string()))?;
         ensure_expected_version("审批执行", command.expected_execution_version, current.base.version)?;
         let assignee = self
             .db
             .bpm_workflow()
-            .find_assignee_for_node(&instance_id, &current.node_key, &mut NoTransaction)
+            .find_assignee_for_node(&instance_id, &current.node_key, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("实例缺少当前节点审批人绑定".to_string()))?;
         ensure_expected_version("审批人绑定", command.expected_assignment_version, assignee.base.version)?;
@@ -173,11 +203,12 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         &self,
         instance: &ApprovalProcessInstance,
         instance_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<(ApprovalSubjectSnapshot, DocumentType)> {
         let snapshot = self
             .db
             .approval_subject_snapshots()
-            .find_by_process_instance_id(instance_id, &mut NoTransaction)
+            .find_by_process_instance_id(instance_id, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
         let document_type = document_type_from_subject_kind(instance.subject.subject_kind())
@@ -224,9 +255,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         &self,
         execution_id: &ApprovalNodeExecutionId,
         expected_closed_task_version: Option<u64>,
+        executor: &mut dyn Executor,
     ) -> Result<Option<ClosedTaskGuard>> {
-        let tasks =
-            self.db.work_items().approval_tasks_for_execution(execution_id, &mut NoTransaction).await?;
+        let tasks = self.db.work_items().approval_tasks_for_execution(execution_id, executor).await?;
         if tasks.len() > 1 {
             return Err(Error::ConflictError("受阻执行关联多个历史审批任务".to_string()));
         }
@@ -317,4 +348,60 @@ fn finish_prepared_resume(
         snapshot: runtime.snapshot,
         spec: runtime.spec,
     })
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::{replay_resume_apply, resume_identity};
+    use super::*;
+    use crate::ports::FailClosedWorkflowAuthorizationPort;
+    use crate::service::approval::definition::test_support::unavailable_service;
+
+    #[tokio::test]
+    async fn resume_preparation_and_replay_stop_before_business_reads_when_authorization_fails() {
+        let (definition, actor) = unavailable_service().await;
+        let service = ApprovalRuntimeService::new(
+            definition.db,
+            definition.identity,
+            definition.authorization,
+            FailClosedWorkflowAuthorizationPort,
+        );
+        let command = ApprovalResumeCommand {
+            approval_process_instance_id: "unread-instance".into(),
+            expected_instance_version: 7,
+            expected_execution_version: 8,
+            expected_assignment_version: 9,
+            expected_closed_task_version: Some(10),
+            idempotency_key: "resume-key".into(),
+            actor_id: actor.id().into(),
+        };
+        let key = IdempotencyKey::parse(&command.idempotency_key).unwrap();
+        let identity = resume_identity(
+            key.clone(),
+            &command.approval_process_instance_id,
+            command.expected_instance_version,
+            command.expected_execution_version,
+            command.expected_assignment_version,
+            command.expected_closed_task_version,
+            actor.id(),
+        )
+        .unwrap();
+        assert!(matches!(
+            service.prepare_resume_stage(&actor, &command, key, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+        assert!(matches!(
+            replay_resume_apply(
+                &service.authorization,
+                &service.db,
+                &actor,
+                &command.approval_process_instance_id,
+                &identity,
+                &mut SnapshotExecutor::default(),
+            ).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+    }
 }

@@ -1,6 +1,8 @@
 //! 完整范围重验、旧成员退役及来源撤回；每批复验在事务外，结果在有界事务应用。
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
+use erp_permissions::supplier_api;
 use erp_supply::catalog_membership::repository::{self as memberships, CatalogMembershipExt};
 use erp_supply::catalog_membership::{
     CatalogMembershipScan, CatalogMembershipState, CatalogPoolMember, CatalogPoolScope,
@@ -56,11 +58,15 @@ impl SupplierConnectionExecutionProcess {
         actor: &AuditActor,
     ) -> Result<bool> {
         let (db, run, scan, actor) = (self.db.clone(), run.clone(), scan.clone(), actor.clone());
+        let authorization = self.authorization.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    authorization
+                        .require(&actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor)
+                        .await?;
                     let connection = SupplierApiService::new(db.clone())
                         .load_connection(&run.connection_id, executor)
                         .await?;

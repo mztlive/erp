@@ -2,8 +2,10 @@
 
 use std::future::Future;
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
+use erp_identity::{CompiledAccess, ResourceTargets};
 use erp_permissions::work_item;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
@@ -370,34 +372,59 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedWorkItem> {
+        let (item, access) = self.work_item_read(id, actor, executor).await?;
+        self.authorization.service.validate(&access, executor).await?;
+        Ok(item)
+    }
+
+    /// 读取任务及办理展示事实，保留原凭证供调用方完成业务补齐后交付检查。
+    /// # 参数
+    /// id 为真实任务主键，actor 为当前账号，executor 为整个读取用例的原快照事务。
+    /// # 返回
+    /// 任务投影及尚未交付的完整读取凭证；调用方必须在所有展示读取完成后 validate。
+    /// # 错误
+    /// 非事务执行器、目标非法、无权、任务缺失或业务事实读取失败时拒绝。
+    pub async fn work_item_read(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(AuthorizedWorkItem, CompiledAccess)> {
         if !executor
             .boundary()
             .is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
         {
             return Err(Error::ValidationError("任务授权读取必须使用快照事务".into()));
         }
-        self.authorization.require(actor, &work_item::DETAIL, id, executor).await?;
-        let item = self
-            .db
-            .work_items()
-            .find_work_item(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
-        let access = self.task_actions(actor, &item, executor).await?;
+        ResourceTargets::new(&[id])?;
+        let read = self.authorization.service.query(actor, &work_item::DETAIL, executor).await?;
+        let filter = WorkItemFilter { authorization: Some(Arc::new(read.clone())), ..Default::default() };
+        let Some(item) = self.db.work_items().find_visible_by_id(id, &filter, executor).await? else {
+            self.authorization.require(actor, &work_item::DETAIL, id, executor).await?;
+            return Err(Error::NotFound("任务不存在".into()));
+        };
+        let access = self.task_actions(actor, &item, &read, executor).await?;
         let scope = WorkItemScope::for_task(&item, actor.id());
-        self.ensure_task_facts(&item, actor, executor).await?;
+        self.ensure_task_current(&item, executor).await?;
         let view_access = ViewAccess::from_fields(&item.clone().into(), scope, &access);
-        Ok(AuthorizedWorkItem {
-            item,
-            allowed_actions: view_access.allowed_actions,
-            processing_state: view_access.processing_state,
-            processing_blocker: view_access.processing_blocker,
-            action_blockers: view_access.action_blockers.into_iter().map(|blocker| blocker.message).collect(),
-        })
+        Ok((
+            AuthorizedWorkItem {
+                item,
+                allowed_actions: view_access.allowed_actions,
+                processing_state: view_access.processing_state,
+                processing_blocker: view_access.processing_blocker,
+                action_blockers: view_access
+                    .action_blockers
+                    .into_iter()
+                    .map(|blocker| blocker.message)
+                    .collect(),
+            },
+            read,
+        ))
     }
 }
 
-/// 供其余领域服务使用的命令侧授权快照。
+/// 同一读取阶段取得的任务与动作投影；交付由读取用例完成凭证复验。
 #[derive(Debug, Clone)]
 pub struct AuthorizedWorkItem {
     /// 已加载的工作项实体。
@@ -458,6 +485,24 @@ mod receipt_recovery_tests {
 
     use super::super::testing::unavailable_service;
     use super::*;
+
+    #[tokio::test]
+    async fn task_read_requires_snapshot_and_stops_before_business_reads_on_authorization_failure() {
+        let service = unavailable_service();
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        assert!(matches!(
+            service.work_item_read("task", &actor, &mut NoTransaction).await,
+            Err(Error::ValidationError(reason)) if reason == "任务授权读取必须使用快照事务"
+        ));
+        assert!(matches!(
+            service.work_item_read("task", &actor, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+        assert!(matches!(
+            service.authorize_work_item_with_executor("task", &actor, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+    }
 
     #[tokio::test]
     async fn command_recovery_requires_current_snapshot_authorization_before_reading_receipts() {

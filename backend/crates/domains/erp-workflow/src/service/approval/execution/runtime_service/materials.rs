@@ -60,18 +60,30 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.materials_stage(&actor, &instance_id, executor).await })
+                Box::pin(async move { service.materials_with(&actor, &instance_id, executor).await })
             })
             .await
     }
 
-    /// 冻结资料与补充显示姓名沿实例授权的同一快照读取。
-    async fn materials_stage(
+    /// 在调用方的原快照中授权并读取冻结审批资料。
+    /// # 参数
+    /// actor、instance_id 为真实账号及精确实例，executor 为完整读取用例的活动快照事务。
+    /// # 返回
+    /// 返回当前实例授权下的冻结资料，供调用方沿原事务继续补齐结果。
+    /// # 错误
+    /// 非快照执行器、实例无权、冻结主体不一致或读取失败时拒绝。
+    pub async fn materials_with(
         &self,
         actor: &AuditActor,
         instance_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<ApprovalMaterialsView> {
+        if !executor
+            .boundary()
+            .is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
+        {
+            return Err(Error::ValidationError("审批资料读取必须使用快照事务".into()));
+        }
         self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
         let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
         let snapshot = subject.snapshot;
@@ -163,8 +175,31 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 #[cfg(test)]
 mod tests {
     use erp_core::ids::FileAssetId;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::ports::FailClosedWorkflowAuthorizationPort;
+    use crate::service::approval::definition::test_support::unavailable_service;
+
+    #[tokio::test]
+    async fn shared_materials_read_requires_snapshot_and_authorizes_before_loading_subject() {
+        let (definition, actor) = unavailable_service().await;
+        let runtime = ApprovalRuntimeService::new(
+            definition.db,
+            definition.identity,
+            definition.authorization,
+            FailClosedWorkflowAuthorizationPort,
+        );
+        assert!(matches!(
+            runtime.materials_with(&actor, "instance", &mut NoTransaction).await,
+            Err(Error::ValidationError(reason)) if reason == "审批资料读取必须使用快照事务"
+        ));
+        assert!(matches!(
+            runtime.materials_with(&actor, "instance", &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(reason)) if reason == "测试授权设施不可用"
+        ));
+    }
 
     #[test]
     fn public_material_projection_omits_internal_fingerprint_and_version() {

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_permissions::{internal, supplier};
+use erp_permissions::{internal, supplier, work_item};
 use persistence_core::Executor;
 
 use super::{AuthorizationService, rules};
@@ -187,7 +187,12 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<AccessRule> {
         if !task {
-            return self.condition(context, qualified, output, resolution, executor).await;
+            let base = self.condition(context, qualified, output, resolution, executor).await?;
+            return if context.permission == work_item::DETAIL && context.model.is_some() {
+                self.work_item_query_condition(context, qualified, resolution, base, executor).await
+            } else {
+                Ok(base)
+            };
         }
         let base = if scope_spec::kind(&context.permission)? == ActionKind::Function {
             None

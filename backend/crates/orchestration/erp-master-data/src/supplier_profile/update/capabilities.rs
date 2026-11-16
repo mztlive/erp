@@ -9,7 +9,7 @@ use erp_supplier::{
     SaveSupplierProfileRequest, SupplierCapability, SupplierCapabilityUpdate, SupplierExt, profile_change,
 };
 use id_generator::next_id;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::super::SupplierProfileProcess;
 use super::persist::CapabilityChanges;
@@ -33,8 +33,9 @@ impl SupplierProfileProcess {
         supplier_id: &SupplierAccountId,
         req: &SaveSupplierProfileRequest,
         actor_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<CapabilityChanges> {
-        let existing = self.db.supplier().list_capabilities(supplier_id, &mut NoTransaction).await?;
+        let existing = self.db.supplier().list_capabilities(supplier_id, executor).await?;
         let plan = profile_change::SupplierProfileChangePlan::from_loaded(
             &existing,
             &[],
@@ -57,6 +58,7 @@ impl SupplierProfileProcess {
             &mut existing_by_code,
             &mut changes,
             actor_id,
+            executor,
         )
         .await?;
         for code in plan.capability_creates {
@@ -92,6 +94,7 @@ impl SupplierProfileProcess {
         existing_by_code: &mut HashMap<String, SupplierCapability>,
         changes: &mut CapabilityChanges,
         actor_id: &str,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         for toggle in toggles {
             let mut capability = existing_by_code
@@ -112,11 +115,7 @@ impl SupplierProfileProcess {
             let revision_no = self
                 .db
                 .supplier()
-                .next_capability_revision_no(
-                    &capability.supplier_id,
-                    capability.capability_code,
-                    &mut NoTransaction,
-                )
+                .next_capability_revision_no(&capability.supplier_id, capability.capability_code, executor)
                 .await?;
             let revision_id = SupplierCapabilityRevisionId::new(next_id());
             capability.stable.current_revision_id = Some(revision_id.to_string());

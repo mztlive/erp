@@ -4,12 +4,14 @@
 //! - 仓库创建与修订追加：跨集合（warehouses + warehouse_revisions + 审计）→
 //!   `persistence_core::Transactional::with_transaction`，保证「仓库身份 + 当前修订指针 +
 //!   修订快照」原子可见（数据模型 §6.3）；
-//! - 仓库-SKU 预警策略更新与删除：读取使用 `NoTransaction`，写入与审计放在同一事务内。
+//! - 仓库与预警策略的授权、决定写入的读取、写入和审计共用入口事务。
 //!
 //! 业务规则来自实体（`Warehouse::new`/`WarehouseRevision::new` 完成校验与
 //! 规范化，`WarehouseSkuPolicy` 封装生效区间与重叠规则，`SensitiveText` 封装
 //! 敏感列），Service 编排经办人资格、修订序号查询与事务写入。地址与联系人指纹经
 //! `AttachmentFingerprintPort` 计算；跨域只经本 crate 端口，禁止 Service 依赖 Service。
+
+mod commands;
 
 use std::future::Future;
 use std::sync::Arc;
@@ -20,9 +22,8 @@ use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 use erp_core::region::RegionCode;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::warehouse;
-use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, PageResult, Transactional};
+use persistence_core::{Executor, PageResult, Transactional};
 use validator::Validate;
 
 pub use crate::dto::warehouse::{
@@ -32,10 +33,7 @@ pub use crate::dto::warehouse::{
     WarehouseRevisionView, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
 };
 use crate::dto::warehouse::{WarehouseListQuery, WarehouseRevisionListQuery, WarehouseSkuPolicyListQuery};
-use crate::entity::warehouse::status::EnableStatus;
-use crate::entity::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use crate::entity::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
-use crate::entity::warehouse::warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyUpdate};
 use crate::error::{Error, Result};
 use crate::ports::{
     AttachmentFingerprintPort, HandlerDuty, HandlerIdentityFact, IdentityFactPort, WarehouseAuditPort,
@@ -62,35 +60,6 @@ pub struct WarehouseService {
     fingerprint: Arc<dyn AttachmentFingerprintPort>,
     fingerprint_key: &'static [u8],
     authorization: Arc<AuthorizationService>,
-}
-
-/// 在仓库事务内执行写入并持久化审计（五处用例共用；事务边界与写入顺序不变）。
-///
-/// 调用方只提供实体写入语句块（可用 `operation_db` 与 `session`，以 `Ok::<T, Error>(value)`
-/// 收尾），宏负责 `with_transaction` 包裹与审计持久化。
-/// 用宏而不用泛型函数：写操作闭包借用调用方局部（`&mut warehouse` 等）时，
-/// 泛型高阶界限无法满足 `with_transaction` 的 `for<'a>` 要求（`E0310`），
-/// 且闭包返回借用参数的 future 时推断失败；语句块在调用点直接展开则无此约束。
-macro_rules! transact_with_audit {
-    ($service:expr, $audit:expr, $actor:expr, $permission:expr, |$db:ident, $session:ident| $body:block) => {{
-        let $db = $service.db.clone();
-        let audit_port = $service.audit.clone();
-        let audit = $audit;
-        let actor = $actor.clone();
-        let authorization = $service.authorization.clone();
-        let client = $service.db.client().clone();
-        client
-            .with_transaction(move |$session| {
-                Box::pin(async move {
-                    authorization.require(&actor, &$permission, AccessTarget::Operation, $session).await?;
-                    let result = $body;
-                    let result = result?;
-                    audit_port.persist(&audit, $session).await?;
-                    Ok(result)
-                })
-            })
-            .await
-    }};
 }
 
 impl WarehouseService {
@@ -137,45 +106,15 @@ impl WarehouseService {
         req: CreateWarehouseRequest,
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
-        req.validate()?;
-        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound).await?;
-        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound).await?;
-        let id = WarehouseId::new(next_id());
-        let revision_id = WarehouseRevisionId::new(next_id());
-        let mut warehouse = Warehouse::new(
-            id.clone(),
-            WarehouseData::new(req.warehouse_code)
-                .with_status(req.status.unwrap_or(EnableStatus::Active))
-                .with_inbound_handler_user_id(req.inbound_handler_user_id)
-                .with_outbound_handler_user_id(req.outbound_handler_user_id),
-            actor.id(),
-        )?;
-        let revision = build_warehouse_revision(
-            id.clone(),
-            revision_id,
-            1,
-            WarehouseRevisionInput {
-                name: req.name,
-                region_code: req.region_code,
-                address: req.address,
-                contact: req.contact,
-                effective_from: req.effective_from,
-                effective_to: req.effective_to,
-                change_reason: req.change_reason,
-            },
-            self.fingerprint.as_ref(),
-            self.fingerprint_key,
-        )?;
-        let audit =
-            self.audit.resource_log(actor.clone(), "warehouse.create", "warehouse", id.to_string())?;
-        transact_with_audit!(self, audit, actor, warehouse::CREATE, |operation_db, session| {
-            operation_db
-                .warehouse()
-                .create_warehouse_with_revision(&mut warehouse, &revision, session)
-                .await?;
-            Ok::<Warehouse, Error>(warehouse)
-        })
-        .map(Into::into)
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create(&actor, req, executor).await })
+            })
+            .await
     }
 
     /// 更新仓库（追加新修订并更新稳定身份，跨集合事务）。
@@ -200,54 +139,16 @@ impl WarehouseService {
         req: UpdateWarehouseRequest,
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
-        req.validate()?;
-        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound).await?;
-        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound).await?;
-        let mut warehouse = self
-            .db
-            .warehouse()
-            .warehouse(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-        ensure_expected_version(warehouse.base.version, req.version)?;
-        let revision_no = self.db.warehouse().next_revision_no(id, &mut NoTransaction).await?;
-        let revision = build_warehouse_revision(
-            WarehouseId::new(id.to_string()),
-            WarehouseRevisionId::new(next_id()),
-            revision_no,
-            WarehouseRevisionInput {
-                name: req.name,
-                region_code: req.region_code,
-                address: req.address,
-                contact: req.contact,
-                effective_from: req.effective_from,
-                effective_to: req.effective_to,
-                change_reason: req.change_reason,
-            },
-            self.fingerprint.as_ref(),
-            self.fingerprint_key,
-        )?;
-        warehouse.update(
-            WarehouseUpdate {
-                status: Some(req.status),
-                inbound_handler_user_id: Some(Some(req.inbound_handler_user_id)),
-                outbound_handler_user_id: Some(Some(req.outbound_handler_user_id)),
-            },
-            actor.id(),
-        )?;
-        warehouse.apply_revision(&revision)?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "warehouse.update",
-            "warehouse",
-            warehouse.base.id.clone(),
-        )?;
-        transact_with_audit!(self, audit, actor, warehouse::UPDATE, |operation_db, session| {
-            operation_db.warehouse_revisions().create(&revision, session).await?;
-            operation_db.warehouses().update(&mut warehouse, session).await?;
-            Ok::<Warehouse, Error>(warehouse)
-        })
-        .map(Into::into)
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update(&actor, &id, req, executor).await })
+            })
+            .await
     }
 
     /// 更新仓库入库与仓发经办人。
@@ -271,44 +172,16 @@ impl WarehouseService {
         req: UpdateWarehouseFulfillmentHandlersRequest,
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
-        req.validate()?;
-        self.ensure_handler_eligible(&req.inbound_handler_user_id, HandlerDuty::Inbound).await?;
-        self.ensure_handler_eligible(&req.outbound_handler_user_id, HandlerDuty::Outbound).await?;
-
-        let mut warehouse = self
-            .db
-            .warehouse()
-            .warehouse(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-        ensure_expected_version(warehouse.base.version, req.version)?;
-        let audit_message = format!(
-            "inbound:{}->{};outbound:{}->{}",
-            warehouse.inbound_handler_user_id.as_deref().unwrap_or("未配置"),
-            req.inbound_handler_user_id,
-            warehouse.outbound_handler_user_id.as_deref().unwrap_or("未配置"),
-            req.outbound_handler_user_id,
-        );
-        warehouse.update(
-            WarehouseUpdate {
-                status: None,
-                inbound_handler_user_id: Some(Some(req.inbound_handler_user_id)),
-                outbound_handler_user_id: Some(Some(req.outbound_handler_user_id)),
-            },
-            actor.id(),
-        )?;
-        let audit = self.audit.resource_log_with_message(
-            actor.clone(),
-            "warehouse.fulfillment_handlers.update",
-            "warehouse",
-            warehouse.base.id.clone(),
-            Some(audit_message),
-        )?;
-        transact_with_audit!(self, audit, actor, warehouse::UPDATE, |operation_db, session| {
-            operation_db.warehouses().update(&mut warehouse, session).await?;
-            Ok::<Warehouse, Error>(warehouse)
-        })
-        .map(Into::into)
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_handlers(&actor, &id, req, executor).await })
+            })
+            .await
     }
 
     /// 列出仓库收发责任配置可选的具体账号。
@@ -336,7 +209,7 @@ impl WarehouseService {
                     authorization
                         .require(&actor, &warehouse::UPDATE, AccessTarget::Operation, executor)
                         .await?;
-                    Ok(handler_option_views(identity.admin_handler_identities().await?))
+                    Ok(handler_option_views(identity.admin_handler_identities(executor).await?))
                 })
             })
             .await
@@ -465,35 +338,16 @@ impl WarehouseService {
         req: UpdateWarehouseSkuPolicyRequest,
         actor: &AuditActor,
     ) -> Result<WarehouseSkuPolicyView> {
-        req.validate()?;
-        let mut policy = self
-            .db
-            .warehouse()
-            .sku_policy(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("预警策略不存在".to_string()))?;
-        ensure_expected_version(policy.base.version, req.version)?;
-        policy.update(WarehouseSkuPolicyUpdate {
-            minimum_available_quantity: req.minimum_available_quantity,
-            status: req.status,
-        })?;
-        let existing = self
-            .db
-            .warehouse()
-            .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, &mut NoTransaction)
-            .await?;
-        policy.ensure_no_overlap(&existing).map_err(|error| Error::BusinessLogicError(error.to_string()))?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "warehouse_sku_policy.update",
-            "warehouse_sku_policy",
-            policy.base.id.clone(),
-        )?;
-        transact_with_audit!(self, audit, actor, warehouse::SKU_POLICY_UPDATE, |operation_db, session| {
-            operation_db.warehouse_sku_policies().update(&mut policy, session).await?;
-            Ok::<WarehouseSkuPolicy, Error>(policy)
-        })
-        .map(Into::into)
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_policy(&actor, &id, req, executor).await })
+            })
+            .await
     }
 
     /// 删除仓库-SKU 预警策略（软删除，乐观锁语义）。
@@ -509,28 +363,27 @@ impl WarehouseService {
     /// * `NotFound` - 策略不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn warehouse_sku_policy_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut policy = self
-            .db
-            .warehouse()
-            .sku_policy(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("预警策略不存在".to_string()))?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "warehouse_sku_policy.delete",
-            "warehouse_sku_policy",
-            policy.base.id.clone(),
-        )?;
-        transact_with_audit!(self, audit, actor, warehouse::SKU_POLICY_DELETE, |operation_db, session| {
-            operation_db.warehouse_sku_policies().soft_delete(&mut policy, session).await?;
-            Ok::<(), Error>(())
-        })
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.delete_policy(&actor, &id, executor).await })
+            })
+            .await
     }
 
     /// 校验仓储经办人是当前有效账号且具备对应正式操作权限。
-    async fn ensure_handler_eligible(&self, account_id: &str, duty: HandlerDuty) -> Result<()> {
+    async fn ensure_handler_eligible(
+        &self,
+        account_id: &str,
+        duty: HandlerDuty,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let account_id = account_id.trim();
-        let fact = self.identity.handler_identity(account_id).await?;
+        let fact = self.identity.handler_identity(account_id, executor).await?;
         ensure_handler_fact_eligible(fact.as_ref(), duty)
     }
 }

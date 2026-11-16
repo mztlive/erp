@@ -6,19 +6,60 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use persistence_core::Executor;
 
-use super::AuthorizationService;
 use super::facilities::Facilities;
-use crate::entity::authorization::{AccessContext, ResourceTargets};
+use super::{AuthorizationService, rules};
+use crate::entity::authorization::{AccessContext, QueryModel, QueryModelKey, QueryOutput, ResourceTargets};
 use crate::entity::resource_access::ResourceKind;
+use crate::ports::AccessMapping;
+use crate::repository::authorization::unavailable::UnavailableMapping;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 impl AuthorizationService {
-    pub(crate) fn unavailable_for_test() -> Arc<Self> {
+    /// 构造用于验证缺少查询绑定的失败关闭测试服务。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 没有Facts或Mapping、身份设施始终报错的测试实例。
+    /// # 错误
+    /// 不连接数据库；受支持查询在身份取证前返回缺少Mapping错误。
+    pub(crate) fn unbound_for_test() -> Arc<Self> {
         Arc::new(Self {
             facilities: Arc::new(Unavailable),
             facts: BTreeMap::new(),
             mappings: BTreeMap::new(),
+            token: Arc::new(()),
+        })
+    }
+
+    /// 为输入校验和设施故障测试提供失败关闭的统一授权入口。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 所有登记查询具有静态描述、身份设施始终报错的测试服务。
+    /// # 错误
+    /// 不读取数据库；查询无法通过身份取证，也不能执行映射转换。
+    pub(crate) fn unavailable_for_test() -> Arc<Self> {
+        Arc::new(Self {
+            facilities: Arc::new(Unavailable),
+            facts: BTreeMap::new(),
+            mappings: rules::queries::PERMISSIONS
+                .iter()
+                .map(|permission| {
+                    let mapping: Arc<dyn AccessMapping> = Arc::new(UnavailableMapping {
+                        model: QueryModel {
+                            key: QueryModelKey::parse(format!("unavailable_{}", permission.resource()))
+                                .expect("固定查询权限资源组成合法测试模型标识"),
+                            resource: permission.resource().into(),
+                            collection: "unavailable_query_fixture".into(),
+                            id_field: "id".into(),
+                            output: QueryOutput::Object,
+                            facts: BTreeSet::new(),
+                        },
+                    });
+                    (permission.clone(), mapping)
+                })
+                .collect(),
             token: Arc::new(()),
         })
     }
@@ -60,5 +101,72 @@ impl Facilities for Unavailable {
         _: &mut dyn Executor,
     ) -> Result<BTreeSet<String>> {
         Err(unavailable())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_core::common::time::Instant;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::entity::authorization::{AccessFact, RelationKey};
+
+    #[tokio::test]
+    async fn every_registered_query_fails_at_identity_before_any_mapping_conversion() {
+        let authorization = AuthorizationService::unavailable_for_test();
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        for permission in rules::queries::PERMISSIONS {
+            let mapping = authorization.mappings.get(permission).unwrap();
+            mapping.model().validate().unwrap();
+            assert_eq!(mapping.model().resource, permission.resource());
+            assert!(mapping.preparation().is_none());
+            assert!(mapping.stages().is_empty());
+            assert!(
+                matches!(authorization.query(&actor, permission, &mut SnapshotExecutor::default()).await,
+                Err(Error::Internal(reason)) if reason == "测试授权设施不可用"),
+                "{permission}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn unbound_queries_preserve_missing_binding_errors_before_identity_failure() {
+        let authorization = AuthorizationService::unbound_for_test();
+        let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+        for permission in rules::queries::PERMISSIONS {
+            assert!(
+                matches!(authorization.query(&actor, permission, &mut SnapshotExecutor::default()).await,
+                Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"),
+                "{permission}"
+            );
+        }
+    }
+
+    #[test]
+    fn unavailable_query_mapping_cannot_generate_an_authorized_key_or_filter() {
+        let authorization = AuthorizationService::unavailable_for_test();
+        let permission = &rules::queries::PERMISSIONS[0];
+        let mapping = authorization.mappings.get(permission).unwrap();
+        let context = AccessContext {
+            actor: AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin),
+            permission: permission.clone(),
+            resource: permission.resource().into(),
+            model: Some(mapping.model().key.clone()),
+            as_of: Instant::from_unix_secs(1),
+        };
+        assert!(
+            matches!(mapping.key(&context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+        );
+        assert!(
+            matches!(mapping.records(&context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+        );
+        assert!(
+            matches!(mapping.predicate(&AccessFact::Owned, &context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+        );
+        assert!(
+            matches!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! 按权限固定的授权规则。对象判断和查询转换共用这里产生的数据条件。
 use erp_permissions::{
-    catalog, internal, payable, receivable, sales_inquiry, supplier, supplier_fulfillment,
+    catalog, internal, payable, receivable, sales_inquiry, supplier, supplier_fulfillment, supplier_offering,
 };
 pub(crate) mod quality;
 pub(super) mod queries;
@@ -10,11 +10,13 @@ pub(crate) mod sources;
 use std::collections::BTreeSet;
 
 use erp_permissions::{
-    approval_instance, cost, inventory, purchase_order, purchase_payment_request, sales_order,
+    approval_instance, cost, inventory, purchase_order, purchase_payment_request, returns, sales_order,
     supplier_settlement, work_item,
 };
 
-use super::{approval_query, approvals, definitions, materials, operations, transfers, work_items};
+use super::{
+    approval_query, approvals, definitions, materials, operations, transfers, work_item_query, work_items,
+};
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::access_control::{DataScopeType, ResolvedScope, ScopeClause, ScopeDimension};
 use crate::entity::authorization::{
@@ -132,20 +134,26 @@ pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedSco
 }
 
 fn specific_target(permission: &Permission, target: TargetForm) -> Option<bool> {
-    if permission == &internal::WORK_ITEM_RECIPIENT {
+    if [
+        returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+        returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
+        returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+        returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+        supplier_fulfillment::ORDER_SUBMIT,
+        internal::SALES_CREATE_AND_SUBMIT,
+    ]
+    .contains(permission)
+    {
+        return Some(matches!(target, TargetForm::Candidate | TargetForm::Record));
+    }
+    if [internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
         return Some(target == TargetForm::Task);
     }
     if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
         return Some(target == TargetForm::Candidate);
     }
-    if permission == &supplier_fulfillment::ORDER_SUBMIT {
-        return Some(matches!(target, TargetForm::Candidate | TargetForm::Record));
-    }
     if let Some(allowed) = definitions::target(permission, target) {
         return Some(allowed);
-    }
-    if permission == &internal::SALES_CREATE_AND_SUBMIT {
-        return Some(matches!(target, TargetForm::Candidate | TargetForm::Record));
     }
     if approvals::supports(permission) {
         return Some(
@@ -153,7 +161,7 @@ fn specific_target(permission: &Permission, target: TargetForm) -> Option<bool> 
                 || (permission == &approval_instance::UPGRADE_BINDING && target == TargetForm::Candidate),
         );
     }
-    if permission == &erp_permissions::supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK {
+    if permission == &supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK {
         return Some(target == TargetForm::Task);
     }
     if permission == &purchase_payment_request::CREDIT_LIST || permission == &receivable::INVOICE_POST {
@@ -384,6 +392,12 @@ pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -
     if permission == &internal::APPROVAL_MANAGEMENT_READ {
         return approval_query::query_binding_condition();
     }
+    if permission == &work_item::DETAIL {
+        return work_item_query::binding_condition(data_condition(
+            permission,
+            Some(&capability_scope(permission)?),
+        )?);
+    }
     match kind {
         ActionKind::Source => {
             let output =
@@ -515,6 +529,7 @@ pub(super) fn task_supported(permission: &Permission) -> bool {
     scope_spec::kind(permission)
         .is_ok_and(|kind| kind == ActionKind::Task && records::condition(permission).is_none())
         || permission == &work_item::DETAIL
+        || permission == &internal::WORK_ITEM_EXECUTE
         || permission == &erp_permissions::supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK
         || permission == &supplier_fulfillment::ORDER_INVESTIGATION
         || permission == &purchase_order::CREATE
@@ -551,7 +566,7 @@ pub(super) fn task_condition(permission: &Permission, base: Option<AccessRule>) 
     if !task_supported(permission) {
         return Err(Error::ValidationError("此权限不支持精确任务".into()));
     }
-    if permission == &internal::WORK_ITEM_RECIPIENT {
+    if [internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
         return Ok(base.unwrap_or(AccessRule::Allow));
     }
     let assigned = AccessRule::Fact(AccessFact::AssignedTo);

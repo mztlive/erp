@@ -11,7 +11,6 @@ use erp_finance::repository::ReceivableExt;
 use erp_identity::AccessTarget;
 use erp_permissions::returns;
 use erp_read_models::returns_center::dto::ReceiptReversalView;
-use erp_returns::ReturnsCommandReceiptService;
 use erp_returns::dto::CommitReceiptReversalRequest;
 use erp_returns::entity::returns::ReceiptReversal;
 use erp_returns::service::ReturnsService;
@@ -25,7 +24,7 @@ use erp_workflow::service::approval::business_adapter::BindingRevalidationContex
 use erp_workflow::service::approval::execution::{PreparedExecution, prepare_start};
 use erp_workflow::service::document_registry::new_registered_document;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::super::ReturnsProcess;
@@ -38,7 +37,7 @@ use super::super::start_approval::{
     persist_receipt_reversal_runtime,
 };
 use super::context::{load_receipt_reversal_context, persist_bound_receipt_reversal_document};
-use crate::reverse_flow::command_recovery::{CommitApproval, commit_audits, recovered_resource, save_commit};
+use crate::reverse_flow::command_recovery::{CommitApproval, commit_audits, save_commit};
 use crate::{Error, Result, ReverseFlowPorts};
 
 impl ReturnsProcess {
@@ -71,38 +70,31 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
-        if let Some(id) = ReturnsCommandReceiptService::new(self.db.clone())
-            .committed_resource_id(&command_receipt, &mut NoTransaction)
-            .await?
-        {
-            return self
-                .receipt_reversal_result(
-                    &id,
-                    actor,
-                    &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
-                    AccessTarget::record(&id)?,
-                )
-                .await;
-        }
-        let input = self.prepare_receipt_reversal_commit(&req, actor, &command_receipt).await?;
-        let id = input.reversal.base.id.clone();
-        let command = command_receipt.clone();
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-
-        let client = db.client().clone();
+        let this = self.clone();
         let actor_owned = actor.clone();
-        let transaction_result = client
+        let command = command_receipt.clone();
+        let source_id = req.source_fact_id.clone();
+        let transaction_result = self
+            .db
+            .client()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { apply_commit(&db, &rbac, input, &command, &actor_owned, executor).await },
-                )
+                Box::pin(async move {
+                    this.commit_receipt_reversal_snapshot(&req, &command, &actor_owned, executor).await
+                })
             })
             .await;
         let detail_id = match transaction_result {
-            Ok(Some(existing_id)) => existing_id,
-            Ok(None) => id,
-            Err(error) => self.recover_receipt_commit(error, &command_receipt).await?,
+            Ok(id) => id,
+            Err(error) => {
+                self.recover_return_commit(
+                    error,
+                    &command_receipt,
+                    actor,
+                    DocumentType::ReceiptReversal,
+                    &source_id,
+                )
+                .await?
+            },
         };
         self.receipt_reversal_result(
             &detail_id,
@@ -113,21 +105,43 @@ impl ReturnsProcess {
         .await
     }
 
+    /// 原事务先授权服务端候选，再读取收据、准备来源并完成全部写入。
+    async fn commit_receipt_reversal_snapshot(
+        &self,
+        req: &CommitReceiptReversalRequest,
+        command: &CommandReceipt,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
+        self.require_commit_source(actor, DocumentType::ReceiptReversal, &req.source_fact_id, executor)
+            .await?;
+        if let Some(id) =
+            self.committed_return_command(command, actor, DocumentType::ReceiptReversal, executor).await?
+        {
+            return Ok(id);
+        }
+        let input = self.prepare_receipt_reversal_commit(req, actor, command, executor).await?;
+        let id = input.reversal.base.id.clone();
+        apply_commit(&self.db, &self.rbac, input, command, actor, executor).await?;
+        Ok(id)
+    }
+
     /// 按既有顺序准备原资金事实、冻结快照、单据绑定和两条业务审计。
     async fn prepare_receipt_reversal_commit(
         &self,
         req: &CommitReceiptReversalRequest,
         actor: &AuditActor,
         receipt: &CommandReceipt,
+        executor: &mut dyn Executor,
     ) -> Result<CommitPreparation> {
         let (source_fact_id, source_version, mut reversal) =
-            self.receipt_reversal_commit_source(req, actor).await?;
+            self.receipt_reversal_commit_source(req, actor, executor).await?;
         let adapter = receipt_reversal_adapter()?;
         start_receipt_reversal_approval(&mut reversal)?;
         let id = reversal.base.id.clone();
         let subject = receipt_reversal_subject_ref(&id)?;
         let (organization_id, customer_id) =
-            load_receipt_reversal_context(&self.db, &reversal.original_customer_receipt_id).await?;
+            load_receipt_reversal_context(&self.db, &reversal.original_customer_receipt_id, executor).await?;
         let _ = receipt_reversal_object_readable(&organization_id, actor.id())?;
         let now = Instant::now();
         let snapshot = build_receipt_reversal_snapshot(
@@ -166,27 +180,17 @@ impl ReturnsProcess {
         })
     }
 
-    /// 只读查询冲正命令收据，未确认提交时保留原错误。
-    async fn recover_receipt_commit(&self, error: Error, receipt: &CommandReceipt) -> Result<String> {
-        recovered_resource(
-            error,
-            ReturnsCommandReceiptService::new(self.db.clone())
-                .committed_resource_id(receipt, &mut NoTransaction)
-                .await
-                .map_err(Error::from),
-        )
-    }
-
     /// 按原顺序读取原回款及版本，准备一次创建提交所需的冲正事实。
     async fn receipt_reversal_commit_source(
         &self,
         req: &CommitReceiptReversalRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(CustomerReceiptId, u64, ReceiptReversal)> {
         let receipt = self
             .db
             .customer_receipts()
-            .find_by_id(&req.source_fact_id, &mut NoTransaction)
+            .find_by_id(&req.source_fact_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))?;
         let source_fact_id = CustomerReceiptId::new(receipt.base.id.clone());
@@ -196,7 +200,7 @@ impl ReturnsProcess {
     }
 }
 
-/// 事务前准备的数据；来源版本必须在写入事务内重验。
+/// 原事务内准备的来源版本、待写实体和审批上下文。
 struct CommitPreparation {
     source_fact_id: CustomerReceiptId,
     source_version: u64,
@@ -207,7 +211,7 @@ struct CommitPreparation {
     audits: (AuditLog, AuditLog),
 }
 
-/// 保留先重验来源、再查命令收据、最后执行写入的顺序。
+/// 已授权且未命中收据后，在原事务校验来源业务状态并执行写入。
 async fn apply_commit(
     db: &Database,
     rbac: &ReverseFlowPorts,
@@ -215,15 +219,9 @@ async fn apply_commit(
     command: &CommandReceipt,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<Option<String>> {
+) -> Result<()> {
     validate_receipt_reversal_source(db, &input.source_fact_id, input.source_version, executor).await?;
-    if let Some(id) =
-        ReturnsCommandReceiptService::new(db.clone()).committed_resource_id(command, executor).await?
-    {
-        return Ok(Some(id));
-    }
-    write_commit(db, rbac, input, command, actor, executor).await?;
-    Ok(None)
+    write_commit(db, rbac, input, command, actor, executor).await
 }
 
 /// 绑定、审批准备、实体、运行事实、审计及回执严格按原顺序写入。
@@ -321,4 +319,41 @@ async fn validate_receipt_reversal_source(
         receipt.status == CustomerReceiptStatus::Posted,
         "只有已过账的客户回款才能发起冲正",
     )?)
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::super::super::testing::{actor, denied, process};
+    use super::*;
+
+    #[tokio::test]
+    async fn creation_and_submission_authorize_before_receipt_source_or_definition_reads() {
+        let process = process().await;
+        let actor = actor();
+        let request: CommitReceiptReversalRequest = serde_json::from_value(serde_json::json!({
+            "source_fact_id":"unread-source", "reason":"correct", "idempotency_key":"command"
+        }))
+        .unwrap();
+        let receipt = CommandReceipt::from_payload(
+            "receipt-reversal-commit-",
+            actor.id(),
+            "receipt_reversal.commit",
+            "receipt_reversal",
+            &request.idempotency_key,
+            &request,
+        )
+        .unwrap();
+        denied(
+            process
+                .commit_receipt_reversal_snapshot(
+                    &request,
+                    &receipt,
+                    &actor,
+                    &mut SnapshotExecutor::default(),
+                )
+                .await,
+        );
+    }
 }

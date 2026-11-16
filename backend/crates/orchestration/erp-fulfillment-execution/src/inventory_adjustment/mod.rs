@@ -32,6 +32,7 @@ mod start_tests;
 ///
 /// Holds the root transaction for submit/cancel/create and reuses the caller
 /// Executor for approval-runtime post and cancel actions.
+#[derive(Clone)]
 pub struct InventoryAdjustmentProcess {
     identity: Arc<AuthorizationService>,
     inventory_service: Arc<InventoryService>,

@@ -1,7 +1,10 @@
 //! 消息补查与目录写入之间的窄业务入口。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_catalog::CatalogService;
+use erp_identity::AuthorizationService;
 use erp_supply::entity::supplier_api::SupplierApiConnection;
 use erp_supply::entity::supplier_catalog::SupplierCatalogItem;
 use mongodb::Database;
@@ -14,18 +17,19 @@ use crate::Result;
 pub struct CatalogMessageWriter {
     db: Database,
     catalog: CatalogService,
+    authorization: Arc<AuthorizationService>,
 }
 
 impl CatalogMessageWriter {
     /// 绑定原应用数据库及已装配的商品服务。
     /// # 参数
-    /// 数据库与商品领域服务。
+    /// 数据库、商品领域服务和应用共享授权服务。
     /// # 返回
     /// 不执行读取或写入的目录写入器。
     /// # 错误
     /// 不返回错误。
-    pub fn new(db: Database, catalog: CatalogService) -> Self {
-        Self { db, catalog }
+    pub fn new(db: Database, catalog: CatalogService, authorization: Arc<AuthorizationService>) -> Self {
+        Self { db, catalog, authorization }
     }
 
     /// 在外部补查前沿用本连接原目录采集授权。
@@ -52,6 +56,7 @@ impl CatalogMessageWriter {
         item: SupplierCatalogItem,
         actor: &AuditActor,
     ) -> Result<()> {
+        let authorization = self.authorization.clone();
         let (db, catalog, connection, actor) =
             (self.db.clone(), self.catalog.clone(), connection.clone(), actor.clone());
         self.db
@@ -59,7 +64,7 @@ impl CatalogMessageWriter {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    guard_catalog_refresh(&db, &connection, &actor, executor).await?;
+                    guard_catalog_refresh(&db, &connection, &actor, &authorization, executor).await?;
                     save_catalog_observation(&db, &catalog, item, &actor, executor).await
                 })
             })

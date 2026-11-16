@@ -464,24 +464,36 @@ impl BulkJobService {
     /// * `NotFound` - 任务不存在
     /// * `Forbidden` - 非管理员查看他人创建的任务
     pub async fn background_job_detail(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJobView> {
-        let db = self.db.clone();
-        let authorization = self.authorization.clone();
+        let service = self.clone();
         let id = id.to_owned();
         let actor = actor.clone();
-        db.client()
-            .clone()
+        self.db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let job = db
-                        .background_jobs()
-                        .find_by_id(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
-                    authorization.require(&bulk_job::BACKGROUND_JOB_DETAIL, &id, &actor, executor).await?;
+                    let job = service
+                        .authorized_job(&id, &bulk_job::BACKGROUND_JOB_DETAIL, &actor, executor)
+                        .await?;
                     Ok(job.into())
                 })
             })
             .await
+    }
+
+    /// 先检查完整任务资格，再从原快照读取业务对象；拒绝时不探测存在性。
+    async fn authorized_job(
+        &self,
+        id: &str,
+        permission: &Permission,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<BackgroundJob> {
+        self.authorization.require(permission, id, actor, executor).await?;
+        self.db
+            .background_jobs()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("后台任务不存在".into()))
     }
 
     /// 创建后台任务并登记逐项结果表（跨集合事务写入，按 `request_id` 幂等）。
@@ -517,12 +529,17 @@ impl BulkJobService {
         let job_for_tx = job.clone();
         let audit_port = self.audit.clone();
         let authorization = self.authorization.service.clone();
-        let actor = actor.clone();
+        let transaction_actor = actor.clone();
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     authorization
-                        .require(&actor, &bulk_job::BACKGROUND_JOB_CREATE, AccessTarget::Operation, executor)
+                        .require(
+                            &transaction_actor,
+                            &bulk_job::BACKGROUND_JOB_CREATE,
+                            AccessTarget::Operation,
+                            executor,
+                        )
                         .await?;
                     db.bulk_job()
                         .create_job_with_items(&job_for_tx, items, executor)
@@ -537,7 +554,7 @@ impl BulkJobService {
         match created {
             Ok(()) => Ok(job.into()),
             Err(Error::RepositoryError(persistence_core::Error::DuplicateKey(_))) => {
-                self.resolve_creation_race(&job).await
+                self.resolve_creation_race(&job, actor).await
             },
             Err(Error::RepositoryError(error)) => Err(error.into()),
             Err(error) => Err(error),
@@ -555,8 +572,32 @@ impl BulkJobService {
     /// # 错误
     /// * `ConflictError` - 请求身份已被不同载荷占用，或竞争结果已变化需刷新重试
     /// * `RepositoryError` - 回查仲裁结果时数据库查询失败
-    async fn resolve_creation_race(&self, job: &BackgroundJob) -> Result<BackgroundJobView> {
-        match self.db.bulk_job().registration_by_request_id(job, &mut NoTransaction).await? {
+    async fn resolve_creation_race(
+        &self,
+        job: &BackgroundJob,
+        actor: &AuditActor,
+    ) -> Result<BackgroundJobView> {
+        let (service, job, actor) = (self.clone(), job.clone(), actor.clone());
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.creation_replay(&job, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在新快照核验原创建资格，再按原身份只读查证，不重放写入。
+    async fn creation_replay(
+        &self,
+        job: &BackgroundJob,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<BackgroundJobView> {
+        self.authorization
+            .service
+            .require(actor, &bulk_job::BACKGROUND_JOB_CREATE, AccessTarget::Operation, executor)
+            .await?;
+        match self.db.bulk_job().registration_by_request_id(job, executor).await? {
             Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
             Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
                 "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份".to_string(),
@@ -591,27 +632,22 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BackgroundJobView> {
         req.validate()?;
-        let db = self.db.clone();
-        let authorization = self.authorization.clone();
-        let audit_port = self.audit.clone();
+        let service = self.clone();
         let id = id.to_owned();
         let actor = actor.clone();
-        db.client()
-            .clone()
+        self.db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let mut job = db
-                        .background_jobs()
-                        .find_by_id(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("后台任务不存在".into()))?;
-                    authorization.require(&bulk_job::BACKGROUND_JOB_CANCEL, &id, &actor, executor).await?;
+                    let mut job = service
+                        .authorized_job(&id, &bulk_job::BACKGROUND_JOB_CANCEL, &actor, executor)
+                        .await?;
                     check_expected_version(job.base.version, req.version)?;
-                    job.cancel(erp_core::common::time::Instant::now())?;
+                    job.cancel(Instant::now())?;
                     let audit =
-                        audit_port.resource_log(actor, "background_job.cancel", "background_job", id)?;
-                    db.background_jobs().update(&mut job, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
+                        service.audit.resource_log(actor, "background_job.cancel", "background_job", id)?;
+                    service.db.background_jobs().update(&mut job, executor).await?;
+                    service.audit.persist(&audit, executor).await?;
                     Ok(job.into())
                 })
             })
@@ -669,9 +705,6 @@ impl BulkJobService {
                             page_size,
                             executor,
                         )
-                        .await?;
-                    authorization
-                        .require(&bulk_job::BACKGROUND_JOB_ITEM_LIST, &job_id, &actor, executor)
                         .await?;
                     Ok(PageView {
                         items: result.items.into_iter().map(Into::into).collect(),
@@ -831,6 +864,89 @@ mod tests {
     use std::collections::HashSet;
 
     use super::first_unregistered_document_id;
+
+    #[tokio::test]
+    async fn detail_and_cancel_authorize_before_reading_job_existence() {
+        use std::sync::Arc;
+
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use erp_permissions::bulk_job;
+        use persistence_core::testing::SnapshotExecutor;
+
+        use super::BulkJobService;
+        use crate::error::Error;
+        use crate::ports::{FailClosedAuditPort, FailClosedBusinessDocumentPort};
+
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = BulkJobService::new(
+            client.database("background_job_original_authorization"),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedBusinessDocumentPort),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin);
+        for permission in [bulk_job::BACKGROUND_JOB_DETAIL, bulk_job::BACKGROUND_JOB_CANCEL] {
+            let error = service
+                .authorized_job("unread-job", &permission, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("资格取证失败不得读取任务存在性或版本");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    #[tokio::test]
+    async fn creation_race_replay_rechecks_original_qualification_before_reading_registered_job() {
+        use std::sync::Arc;
+
+        use application_core::AuditActor;
+        use erp_core::AccountKind;
+        use erp_identity::testing::unavailable_authorization;
+        use persistence_core::NoTransaction;
+        use persistence_core::testing::SnapshotExecutor;
+
+        use super::*;
+        use crate::entity::bulk_job::{BackgroundJobData, JobType};
+        use crate::ports::{FailClosedAuditPort, FailClosedBusinessDocumentPort};
+
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let service = BulkJobService::new(
+            client.database("creation_race_authorization"),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedBusinessDocumentPort),
+            unavailable_authorization(),
+        );
+        let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin);
+        let job = BackgroundJob::new(
+            BackgroundJobId::new("new-job"),
+            BackgroundJobData {
+                job_no: "JOB-1".into(),
+                job_type: JobType::Import,
+                domain_job_type: None,
+                domain_job_id: None,
+                selection_snapshot_id: None,
+                requested_by: actor.id().into(),
+                request_id: "request".into(),
+                input_file_asset_id: None,
+                result_file_asset_id: None,
+                total_count: 1,
+            },
+        )
+        .unwrap();
+        let error = service
+            .creation_replay(&job, &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("原创建资格失效不得返回竞争结果");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        let error = service
+            .creation_replay(&job, &actor, &mut NoTransaction)
+            .await
+            .expect_err("幂等回放必须使用新快照");
+        assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+    }
 
     /// 选择快照的两个公开读取入口必须先通过共享授权，再访问数据库。
     #[tokio::test]

@@ -6,6 +6,8 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_catalog::{CatalogAccess, CatalogService};
 use erp_core::ids::WorkItemId;
+use erp_identity::AccessTarget;
+use erp_permissions::internal;
 use erp_supplier::SupplierAccess;
 use erp_supply::service::supplier_offering::{OfferingAccess, SupplierOfferingService};
 use erp_workflow::entity::work_item::{SupplierPortalReviewIdentity, SupplierPortalReviewTaskData, WorkItem};
@@ -41,6 +43,20 @@ pub trait CatalogWorkItems: Send + Sync {
     /// 账号、范围、分配或身份设施失效时返回工作流原错误。
     async fn require_assigned(&self, actor: &AuditActor, id: &str, executor: &mut dyn Executor)
     -> Result<()>;
+
+    /// 在当前快照检查原任务完整办理资格，允许已完成结果回放。
+    /// # 参数
+    /// actor、id 为当前账号和真实任务，executor 为原事务。
+    /// # 返回
+    /// 完整资格与真实当前指派均成立时成功。
+    /// # 错误
+    /// 资格撤销、指派变化、任务不存在或授权设施失败时拒绝。
+    async fn require_result_access(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()>;
 
     /// 校验当前账号、执行权限、对象范围和正式任务责任。
     /// # 参数
@@ -118,7 +134,26 @@ impl<A: WorkflowAuthorizationPort> CatalogWorkItems for WorkItemService<A> {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.authorization.require_assigned(actor, id, executor).await
+        self.authorization.require_assigned(actor, id, executor).await.map(|_| ())
+    }
+
+    async fn require_result_access(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let task = self.authorization.require_assigned(actor, id, executor).await?;
+        self.authorization
+            .service
+            .require(
+                actor,
+                &internal::WORK_ITEM_EXECUTE,
+                AccessTarget::Task { id: task.base.id, version: task.base.version.to_string() },
+                executor,
+            )
+            .await
+            .map_err(Into::into)
     }
 
     async fn ensure_domain_decision_access(

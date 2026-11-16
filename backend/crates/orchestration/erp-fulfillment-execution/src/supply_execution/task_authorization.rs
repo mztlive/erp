@@ -25,13 +25,53 @@ pub(crate) async fn require_assignee(
     task: &WorkItem,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    require_target(identity, actor, &task.base.id, task.base.version, executor).await
+}
+
+/// 在业务任务和版本读取前，用命令中的精确任务目标执行统一授权。
+/// # 参数
+/// identity 为共享授权服务，actor、id、version 为当前命令身份及预期任务版本。
+/// # 返回
+/// 当前完整资格和精确任务目标成立时成功。
+/// # 错误
+/// 身份、指派、任务版本、来源或执行边界无效时拒绝。
+pub(super) async fn require_target(
+    identity: &AuthorizationService,
+    actor: &AuditActor,
+    id: &str,
+    version: u64,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     identity
         .require(
             actor,
             &supplier_fulfillment::ORDER_INVESTIGATION,
-            AccessTarget::Task { id: task.base.id.clone(), version: task.base.version.to_string() },
+            AccessTarget::Task { id: id.to_owned(), version: version.to_string() },
             executor,
         )
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::Error;
+
+    #[tokio::test]
+    async fn precise_command_target_requires_current_qualification_before_business_version_reads() {
+        let identity = unavailable_authorization();
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error =
+            require_target(&identity, &actor, "task", 3, &mut SnapshotExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        let error =
+            require_target(&identity, &actor, "task", 3, &mut ReadExecutor::default()).await.unwrap_err();
+        assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+    }
 }

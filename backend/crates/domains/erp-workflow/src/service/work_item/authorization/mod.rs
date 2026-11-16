@@ -12,7 +12,7 @@ use facts::WorkItemFacts;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::entity::work_item::WorkItemType;
+use crate::entity::work_item::{WorkItem, WorkItemType};
 use crate::repository::WorkItemRepositoryExt;
 use crate::repository::work_item::authorization::WorkItemMapping;
 use crate::{Error, Result, WorkItemExt};
@@ -38,7 +38,7 @@ impl WorkItemAuthorization {
     /// # 参数
     /// actor、id 为真实账号和任务，executor 为原事务。
     /// # 返回
-    /// 详情规则通过且当前仍分配给账号时成功。
+    /// 详情规则通过且当前仍分配给账号时返回原快照中的精确任务。
     /// # 错误
     /// 权限或当前分配不符时拒绝。
     pub async fn require_assigned(
@@ -46,7 +46,8 @@ impl WorkItemAuthorization {
         actor: &AuditActor,
         id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
+    ) -> Result<WorkItem> {
+        self.require(actor, &work_item::DETAIL, id, executor).await?;
         let task = self
             .db
             .work_items()
@@ -64,7 +65,7 @@ impl WorkItemAuthorization {
         if task.owner_user_id.as_deref() != Some(actor.id()) {
             return Err(Error::Forbidden("任务已指派给其他人".into()));
         }
-        Ok(())
+        Ok(task)
     }
     /// 编译固定工作项权限的读取条件。
     /// # 参数

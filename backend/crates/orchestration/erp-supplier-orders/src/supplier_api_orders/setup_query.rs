@@ -8,7 +8,6 @@ use erp_permissions::supplier_fulfillment;
 use erp_supply::api_order::ApiOrderExt;
 use erp_supply::order_tracking::TrackingState;
 use erp_supply::order_tracking::repository::OrderTrackingExt;
-use erp_supply::service::supplier_fulfillment::FulfillmentOrderAccess;
 use persistence_core::Transactional;
 use serde::Deserialize;
 
@@ -34,21 +33,19 @@ impl SupplierApiOrderProcess {
         id: &str,
         request: ExecutionQueryRequest,
         actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
     ) -> Result<ExecutionSetupView> {
-        let (db, id, actor, access) = (self.db.clone(), id.to_owned(), actor.clone(), access.clone());
+        let (db, id, actor) = (self.db.clone(), id.to_owned(), actor.clone());
+        let process = self.clone();
+        let result_actor = actor.clone();
         let result_id = id.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    access.require_order(&actor, &supplier_fulfillment::ORDER_SUBMIT, &id, executor).await?;
-                    let mut execution = db
-                        .supplier_api_order_executions()
-                        .find_by_id(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("原接口执行不存在".into()))?;
+                    let mut execution = process
+                        .authorized_setup(&id, &actor, &supplier_fulfillment::ORDER_SUBMIT, executor)
+                        .await?;
                     if request.expected_version != execution.base.version
                         || !execution.original_result_query_allowed()
                     {
@@ -75,6 +72,6 @@ impl SupplierApiOrderProcess {
                 })
             })
             .await?;
-        self.execution_setup(&result_id).await
+        self.setup_result(&result_id, &result_actor, &supplier_fulfillment::ORDER_SUBMIT).await
     }
 }

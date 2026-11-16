@@ -9,7 +9,7 @@ use erp_sales::service::sales_order::mapper::revision_view;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use serde::Serialize;
 
 use super::prices::{enrich_inquiry_prices, enrich_line_prices};
@@ -24,7 +24,7 @@ pub struct ApprovalSourceSalesOrder {
 
 /// 在审批实例授权完成后，批量读取允许清单内的精确销售版本。
 /// # 参数
-/// 数据库及已经通过实例授权的冻结资料。
+/// 数据库、已经通过实例授权的冻结资料及原快照执行器。
 /// # 返回
 /// 采购审批允许的完整来源版本；历史未冻结来源时返回空列表。
 /// # 错误
@@ -32,6 +32,7 @@ pub struct ApprovalSourceSalesOrder {
 pub(super) async fn source_sales_orders(
     db: &Database,
     materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<ApprovalSourceSalesOrder>> {
     let allowed = &materials.display.source_sales;
     if !matches!(materials.document_type.as_str(), "purchase_order" | "sales_invoice_request")
@@ -39,7 +40,7 @@ pub(super) async fn source_sales_orders(
     {
         return Ok(vec![]);
     }
-    sources(db, allowed, &mut NoTransaction).await
+    sources(db, allowed, executor).await
 }
 
 /// 读取已由调用方证明来源关系的精确销售版本。

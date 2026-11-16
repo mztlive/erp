@@ -14,7 +14,7 @@ use super::policy::{
 };
 use super::{RBAC_MODEL, RbacService, subject};
 use crate::dto::RoleItem;
-use crate::entity::rbac::{PermissionSet, RoleId};
+use crate::entity::rbac::{PermissionSet, RoleId, RoleIdSet};
 use crate::entity::role::Role;
 use crate::error::Result;
 use crate::repository::prelude::*;
@@ -258,6 +258,31 @@ impl RbacService {
 
         let enforcer = self.fresh_enforcer().await?.read().await;
         collect_role_ids(&enforcer, account_kind, account_ids)
+    }
+
+    /// 在账号列表的原快照内批量读取直接角色绑定。
+    /// # 参数
+    /// account_kind、account_ids 为本批账号，executor 为列表授权的原执行器。
+    /// # 返回
+    /// 每个账号均有一项，未绑定角色时返回空集合。
+    /// # 错误
+    /// 策略损坏、角色身份非法或数据库读取失败时拒绝。
+    pub(crate) async fn account_roles(
+        &self,
+        account_kind: AccountKind,
+        account_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, Vec<RoleId>>> {
+        let mut result = HashMap::new();
+        for batch in account_ids.chunks(500) {
+            let subjects = batch.iter().map(|id| subject(account_kind, id)).collect::<Vec<_>>();
+            let mut rows = self.policy_store.subject_policies(&subjects, executor).await?;
+            for (id, key) in batch.iter().zip(subjects) {
+                let roles = RoleIdSet::from_casbin_role_keys(rows.remove(&key).unwrap_or_default().roles)?;
+                result.insert(id.clone(), roles.into());
+            }
+        }
+        Ok(result)
     }
 
     /// 查询账号通过角色继承获得的权限。

@@ -7,7 +7,7 @@ use erp_identity::entity::authorization::{FactValue, ObjectFacts};
 use erp_identity::{AccessTarget, AuthorizationService, OrganizationDirectoryService};
 use erp_permissions::{Permission, catalog};
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use crate::authorization::CompiledScope;
 use crate::entity::catalog::Product;
@@ -104,29 +104,10 @@ impl CatalogAccess {
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))
     }
 
-    /// 在独立快照事务中读取写入预检所需的完整商品。
-    /// # 参数
-    /// actor、permission、id 为实际业务入口与商品身份。
-    /// # 返回
-    /// 当前快照中有权操作的商品；写入仍须在原写事务重新授权。
-    /// # 错误
-    /// 商品缺失、功能资格不足或数据授权失败时拒绝。
-    pub async fn product(&self, actor: &AuditActor, permission: &Permission, id: &str) -> Result<Product> {
-        let access = self.clone();
-        let actor = actor.clone();
-        let permission = permission.clone();
-        let id = id.to_owned();
-        self.db
-            .client()
-            .clone()
-            .with_transaction(move |executor| {
-                Box::pin(async move { access.require_product(&actor, &permission, &id, executor).await })
-            })
-            .await
-    }
-
     /// 在原业务事务内检查已有商品的完整授权。
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
+    ///
     /// actor 为当前账号，permission/id 为公共权限及商品，executor 为原事务。
     /// # 返回
     /// 对象授权通过时成功，不再重复装载业务实体。
@@ -147,6 +128,8 @@ impl CatalogAccess {
 
     /// 在创建事务内检查拟写入商品的完整授权。
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
+    ///
     /// actor 为当前账号，product为服务端拟持久化的完整商品，executor 为原写事务。
     /// # 返回
     /// 固定创建政策允许本次目标时成功。
@@ -253,6 +236,8 @@ impl CatalogAccess {
 
     /// 检查商品写入按钮和预检入口的功能资格。
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
+    ///
     /// actor 为操作人，permission 为公共商品权限常量，executor 为原业务执行器。
     /// # 返回
     /// 有效账号具备该动作时成功；实际写入仍须执行对象授权。

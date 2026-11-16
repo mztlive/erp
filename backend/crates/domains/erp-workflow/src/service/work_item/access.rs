@@ -2,23 +2,23 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
-use erp_identity::AccessTarget;
+use erp_identity::{AccessTarget, CompiledAccess};
 use erp_permissions::{internal, work_item};
 use persistence_core::Executor;
 
 use super::WorkItemService;
-use super::order_access::{require_order_task_read, require_supplier_portal_task_read, task_read_error};
+use super::order_access::task_read_error;
 use crate::WorkItemExt;
 use crate::entity::work_item::{TaskAccess, WorkItem, WorkItemType};
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::{ObjectFactMap, TaskReadAction, WorkflowAuthorizationPort};
+use crate::ports::{ObjectFactMap, WorkflowAuthorizationPort};
 use crate::repository::work_item::authorization::WorkItemAuthorizationExt;
-use crate::service::approval::execution::runtime_service::approval_task_readable_with_executor;
+use crate::service::approval::execution::runtime_service::approval_task_facts_current;
 
 impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     /// 任务详情已在本阶段授权后，计算展示动作资格。
     /// # 参数
-    /// actor、item 为已授权账号及任务，executor 沿用原事务。
+    /// actor、item 为已授权账号及任务，read 为原读取凭证，executor 沿用原事务。
     /// # 返回
     /// 返回同角色执行、审批决定和任务管理的展示资格。
     /// # 错误
@@ -27,9 +27,9 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         &self,
         actor: &AuditActor,
         item: &WorkItem,
+        read: &CompiledAccess,
         executor: &mut dyn Executor,
     ) -> Result<TaskAccess> {
-        let read = self.authorization.query(actor, &work_item::DETAIL, executor).await?;
         let mut access = TaskAccess::new(actor.id().to_owned());
         if read.execution_qualified(item.work_item_type.as_str(), &item.business_object_type, executor)? {
             access.executable_task_ids.insert(item.base.id.clone());
@@ -40,11 +40,10 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         access.managed_task_ids = self
             .db
             .work_items()
-            .authorized_ids(std::slice::from_ref(&item.base.id), &read, executor)
+            .authorized_ids(std::slice::from_ref(&item.base.id), read, executor)
             .await?
             .into_iter()
             .collect();
-        self.authorization.service.validate(&read, executor).await?;
         Ok(access)
     }
 
@@ -62,34 +61,23 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.authorization.require(actor, &work_item::DETAIL, &item.base.id, executor).await?;
-        self.ensure_task_facts(item, actor, executor).await
+        self.ensure_task_current(item, executor).await
     }
 
-    /// 详情已通过统一授权后，核验真实来源、冻结版本和责任事实。
+    /// 统一任务及来源授权完成后，只读取业务版本与冻结责任，不开始新的授权阶段。
     /// # 参数
-    /// item、actor 为本阶段授权的任务及账号，executor 沿用原事务。
+    /// item 为同阶段已授权任务，executor 为整个读取用例的原执行器。
     /// # 返回
-    /// 真实来源和冻结业务事实一致时成功。
+    /// 精确任务的业务版本、冻结责任及审批运行链全部匹配时成功。
     /// # 错误
-    /// 来源不可读、事实缺失、版本或责任不匹配时拒绝。
-    pub(super) async fn ensure_task_facts(
+    /// 来源业务事实缺失、冻结版本不匹配或仓储失败时拒绝。
+    pub(super) async fn ensure_task_current(
         &self,
         item: &WorkItem,
-        actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         if item.work_item_type.is_document_approval() {
-            return if approval_task_readable_with_executor(
-                &self.authorization.service,
-                &self.identity,
-                &self.db,
-                &self.auth,
-                actor,
-                item,
-                executor,
-            )
-            .await?
-            {
+            return if approval_task_facts_current(&self.db, item, executor).await? {
                 Ok(())
             } else {
                 Err(Error::Forbidden("审批任务责任链不匹配".into()))
@@ -101,26 +89,6 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.facts.load_object_facts(&keys, executor).await?;
-        let fact = facts
-            .get(&(policy.object_kind, item.business_object_id.clone()))
-            .ok_or_else(|| Error::Forbidden("任务业务对象不存在".into()))?;
-        require_supplier_portal_task_read(
-            &self.auth,
-            actor,
-            policy.object_kind,
-            &item.business_object_id,
-            executor,
-        )
-        .await?;
-        require_order_task_read(
-            &self.auth,
-            actor,
-            policy.object_kind,
-            fact,
-            TaskReadAction::Detail,
-            executor,
-        )
-        .await?;
         if !task_facts_current(item, &facts) {
             return Err(Error::Forbidden("任务业务版本或冻结责任不匹配".into()));
         }
@@ -158,32 +126,15 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<()> {
         self.authorization
             .service
-            .require(actor, &internal::WORK_ITEM_EXECUTE, AccessTarget::record(&item.base.id)?, executor)
+            .require(
+                actor,
+                &internal::WORK_ITEM_EXECUTE,
+                AccessTarget::Task { id: item.base.id.clone(), version: item.base.version.to_string() },
+                executor,
+            )
             .await
             .map_err(|error| task_read_error(error.into()))?;
-        self.ensure_decision_facts(item, actor, executor).await.map_err(task_read_error)
-    }
-
-    /// 完整授权后仅检查任务冻结的业务版本与责任事实，不再选择权限组合。
-    async fn ensure_decision_facts(
-        &self,
-        item: &WorkItem,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        if item.work_item_type.is_document_approval() {
-            return self.ensure_task_facts(item, actor, executor).await;
-        }
-        let relation = item
-            .work_item_type
-            .brief_relation(&item.business_object_type)
-            .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".into()))?;
-        let keys = HashSet::from([(relation.object_kind, item.business_object_id.clone())]);
-        let facts = self.facts.load_object_facts(&keys, executor).await?;
-        if !task_facts_current(item, &facts) {
-            return Err(Error::Forbidden("任务业务版本或冻结责任不匹配".into()));
-        }
-        Ok(())
+        self.ensure_task_current(item, executor).await.map_err(task_read_error)
     }
 }
 

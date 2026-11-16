@@ -2,7 +2,7 @@
 use erp_core::ids::{SupplierOrderActionId, SupplierOrderActionLineId};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
@@ -84,6 +84,8 @@ impl SupplierFulfillmentService {
     /// * `order` - 供应商子订单
     /// * `req` - 动作提交请求
     ///
+    /// * `executor` - 原售后命令授权及写入的事务执行器。
+    ///
     /// # 返回
     /// 全部动作行都属于该子订单时无返回值。
     ///
@@ -95,12 +97,13 @@ impl SupplierFulfillmentService {
         &self,
         order: &SupplierFulfillmentOrder,
         req: &SubmitAfterSalesActionRequest,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let order_id = SupplierFulfillmentOrderId::new(order.base.id.as_str());
         let items = self
             .db
             .supplier_fulfillment_items()
-            .find_items_by_order_ids(std::slice::from_ref(&order_id), &mut NoTransaction)
+            .find_items_by_order_ids(std::slice::from_ref(&order_id), executor)
             .await?;
         let item_ids: std::collections::HashSet<&str> =
             items.iter().map(|item| item.base.id.as_ref()).collect();

@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use application_core::AuditActor;
 use erp_core::money::Quantity;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::InventoryService;
@@ -112,12 +112,12 @@ impl InventoryService {
                     .await?;
                     let scope_meta = authorization.meta(InventoryAction::BalanceList).clone();
                     let no_scope = authorization.no_scope(InventoryAction::BalanceList);
-                    authorization.validate(executor).await?;
                     let candidates =
                         page.items.iter().map(|row| row.warehouse_id.to_string()).collect::<Vec<_>>();
                     let create_warehouses = authorization_port
                         .allowed_warehouses(&actor, InventoryAction::Create, &candidates, executor)
                         .await?;
+                    authorization.validate(executor).await?;
                     Ok(BalancePage {
                         page,
                         scope_meta,
@@ -149,7 +149,72 @@ impl InventoryService {
         fields(layer = "service", domain = "inventory", operation = "stock_balance_detail")
     )]
     pub async fn stock_balance_detail(&self, id: &str, actor: &AuditActor) -> Result<StockBalanceDetailView> {
-        let (balance, can_create, details) = self.balance_detail_snapshot(id, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.read_balance_detail(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在同一事务内读取余额、授权、附属事实和展示名称。
+    async fn read_balance_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<StockBalanceDetailView> {
+        let authorization =
+            self.authorization.authorize(actor, InventoryAction::BalanceDetail, executor).await?;
+        if !authorization.actor_is_active() {
+            return Err(Error::NotFound("库存余额不存在".into()));
+        }
+        let balance = self
+            .db
+            .inventory()
+            .authorized_stock_balance(id, authorization.query(InventoryAction::BalanceDetail), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("库存余额不存在".into()))?;
+        let can_read_adjustments = super::warehouse_allowed(
+            self.authorization.as_ref(),
+            actor,
+            InventoryAction::AdjustmentDetail,
+            balance.warehouse_id.as_ref(),
+            executor,
+        )
+        .await?;
+        let can_create = super::warehouse_allowed(
+            self.authorization.as_ref(),
+            actor,
+            InventoryAction::Create,
+            balance.warehouse_id.as_ref(),
+            executor,
+        )
+        .await?;
+        let details = balance_details(
+            &self.db,
+            self.fulfillment_facts.as_ref(),
+            &balance,
+            can_read_adjustments,
+            executor,
+        )
+        .await?;
+        let result = self.enriched_balance_detail(&balance, can_create, details, executor).await?;
+        authorization.validate(executor).await?;
+        Ok(result)
+    }
+
+    /// 展示关联仍使用详情授权的原事务，不在提交后继续读取。
+    async fn enriched_balance_detail(
+        &self,
+        balance: &StockBalance,
+        can_create: bool,
+        details: BalanceDetails,
+        executor: &mut dyn Executor,
+    ) -> Result<StockBalanceDetailView> {
         let enrichments = load_balance_enrichments(
             &self.db,
             self.warehouse_facts.as_ref(),
@@ -157,77 +222,17 @@ impl InventoryService {
             &[balance.warehouse_id.to_string()],
             &[balance.sku_id.to_string()],
             &[],
-            &mut NoTransaction,
+            executor,
         )
         .await?;
-        let balance_view = enrich_balance_view(
-            (&balance).into(),
-            &enrichments,
-            !details.reservations.is_empty(),
-            can_create,
-        );
+        let balance_view =
+            enrich_balance_view(balance.into(), &enrichments, !details.reservations.is_empty(), can_create);
         Ok(StockBalanceDetailView {
             balance: balance_view,
             recent_movements: details.movements,
             active_reservations: details.reservations,
             pending_adjustments: details.adjustments,
         })
-    }
-
-    /// 在同一事务内取证余额、关联事实及所需动作，并完成读取后复验。
-    async fn balance_detail_snapshot(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<(StockBalance, bool, BalanceDetails)> {
-        let db = self.db.clone();
-        let authorization_port = std::sync::Arc::clone(&self.authorization);
-        let fulfillment = self.fulfillment_facts.clone();
-        let actor = actor.clone();
-        let id = id.to_string();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let balance = db
-                        .inventory()
-                        .stock_balance(&id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
-                    if !super::warehouse_allowed(
-                        authorization_port.as_ref(),
-                        &actor,
-                        InventoryAction::BalanceDetail,
-                        balance.warehouse_id.as_ref(),
-                        executor,
-                    )
-                    .await?
-                    {
-                        return Err(Error::NotFound("库存余额不存在".to_string()));
-                    }
-                    let can_read_adjustments = super::warehouse_allowed(
-                        authorization_port.as_ref(),
-                        &actor,
-                        InventoryAction::AdjustmentDetail,
-                        balance.warehouse_id.as_ref(),
-                        executor,
-                    )
-                    .await?;
-                    let can_create = super::warehouse_allowed(
-                        authorization_port.as_ref(),
-                        &actor,
-                        InventoryAction::Create,
-                        balance.warehouse_id.as_ref(),
-                        executor,
-                    )
-                    .await?;
-                    let details =
-                        balance_details(&db, fulfillment.as_ref(), &balance, can_read_adjustments, executor)
-                            .await?;
-                    Ok::<_, Error>((balance, can_create, details))
-                })
-            })
-            .await
     }
 }
 
@@ -528,9 +533,91 @@ fn balance_allowed_actions(can_create_adjustment: bool) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
     use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
+    use mongodb::Client;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
+    use crate::ports::{
+        AuthorizationPort, FailClosedAdjustmentPeopleFactsPort, FailClosedAuditPort, FailClosedCatalogFacts,
+        FailClosedFulfillmentFacts, FailClosedWarehouseFacts,
+    };
+
+    struct MissingReadQuery(bool);
+
+    #[async_trait]
+    impl AuthorizationPort for MissingReadQuery {
+        async fn require_adjustment_update(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            panic!("余额详情不得检查调整单修改资格")
+        }
+
+        async fn require_adjustment(&self, _: &AuditActor, _: &str, _: &mut dyn Executor) -> Result<()> {
+            panic!("无详情凭证不得检查调整单")
+        }
+
+        async fn authorize(
+            &self,
+            _: &AuditActor,
+            action: InventoryAction,
+            executor: &mut dyn Executor,
+        ) -> Result<InventoryAuthorization> {
+            assert_eq!(action, InventoryAction::BalanceDetail);
+            assert!(executor.boundary().is_some_and(|boundary| boundary.is_snapshot()));
+            Ok(InventoryAuthorization::new(self.0, None))
+        }
+
+        async fn require_warehouse(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> Result<()> {
+            panic!("无详情凭证不得读取附加动作资格")
+        }
+
+        async fn allowed_warehouses(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> Result<BTreeSet<String>> {
+            panic!("无详情凭证不得枚举仓库动作资格")
+        }
+    }
+
+    #[tokio::test]
+    async fn balance_detail_rejects_inactive_and_unqualified_actors_before_business_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("balance_detail_authorization");
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for active in [false, true] {
+            let service = InventoryService::new(
+                db.clone(),
+                Arc::new(MissingReadQuery(active)),
+                Arc::new(FailClosedWarehouseFacts),
+                Arc::new(FailClosedCatalogFacts),
+                Arc::new(FailClosedFulfillmentFacts),
+                Arc::new(FailClosedAuditPort),
+                Arc::new(FailClosedAdjustmentPeopleFactsPort),
+            );
+            let result =
+                service.read_balance_detail("unread-balance", &actor, &mut SnapshotExecutor::default()).await;
+            assert!(matches!(result, Err(Error::NotFound(message)) if message == "库存余额不存在"));
+        }
+    }
 
     #[test]
     fn balance_create_action_is_only_emitted_from_server_authorization() {

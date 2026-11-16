@@ -6,7 +6,8 @@ use erp_core::ids::CustomerAcceptanceId;
 use erp_fulfillment::dto::{CustomerAcceptanceView, PostCustomerAcceptanceRequest};
 use erp_fulfillment::entity::fulfillment::{CustomerAcceptance, CustomerAcceptanceUpdate};
 use erp_fulfillment::service::FulfillmentService;
-use erp_identity::AuthorizationService;
+use erp_identity::{AccessTarget, AuthorizationService};
+use erp_permissions::fulfillment;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -61,7 +62,7 @@ impl CustomerAcceptanceProcess {
             acceptance_id: CustomerAcceptanceId::new(id.to_string()),
             actor: actor.clone(),
             db: self.db.clone(),
-            task_identity: self.task_identity.clone(),
+            authorization: self.authorization.clone(),
             workflow: self.workflow.clone(),
             request: req,
         };
@@ -78,7 +79,7 @@ struct AcceptancePosting {
     acceptance_id: CustomerAcceptanceId,
     actor: AuditActor,
     db: Database,
-    task_identity: Arc<AuthorizationService>,
+    authorization: Arc<AuthorizationService>,
     workflow: Arc<dyn FulfillmentWorkflow>,
     request: PostCustomerAcceptanceRequest,
 }
@@ -86,24 +87,10 @@ struct AcceptancePosting {
 impl AcceptancePosting {
     /// 按原顺序核对凭证和任务，再写入验收、销售进度及原成功审计。
     async fn apply(self, executor: &mut dyn Executor) -> Result<CustomerAcceptance> {
-        let mut acceptance =
-            FulfillmentService::load_customer_acceptance_for_post(&self.db, &self.acceptance_id, executor)
-                .await?;
-        acceptance.update(CustomerAcceptanceUpdate {
-            evidence_attachment_id: self.request.evidence_attachment_id.clone(),
-            ..Default::default()
-        })?;
-        ensure_evidence(
-            &self.db,
-            self.workflow.as_ref(),
-            acceptance.require_evidence()?,
-            &self.actor,
-            executor,
-        )
-        .await?;
+        let mut acceptance = self.prepare(executor).await?;
         let task = prepare_customer_acceptance_task_command(
             &self.db,
-            &self.task_identity,
+            &self.authorization,
             &acceptance.sales_order_id,
             self.actor.id(),
             self.request.work_item_id.as_deref(),
@@ -120,10 +107,37 @@ impl AcceptancePosting {
         .await?;
         complete_acceptance(
             &self.db,
-            &self.task_identity,
+            &self.authorization,
             &acceptance,
             &self.actor,
             CompletionKind::Post { task },
+            executor,
+        )
+        .await?;
+        Ok(acceptance)
+    }
+    /// 固定过账功能资格先于状态、版本和凭证读取。
+    async fn prepare(&self, executor: &mut dyn Executor) -> Result<CustomerAcceptance> {
+        self.authorization
+            .require(
+                &self.actor,
+                &fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_POST,
+                AccessTarget::Operation,
+                executor,
+            )
+            .await?;
+        let mut acceptance =
+            FulfillmentService::load_customer_acceptance_for_post(&self.db, &self.acceptance_id, executor)
+                .await?;
+        acceptance.update(CustomerAcceptanceUpdate {
+            evidence_attachment_id: self.request.evidence_attachment_id.clone(),
+            ..Default::default()
+        })?;
+        ensure_evidence(
+            &self.db,
+            self.workflow.as_ref(),
+            acceptance.require_evidence()?,
+            &self.actor,
             executor,
         )
         .await?;

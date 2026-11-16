@@ -12,7 +12,7 @@ use erp_identity::entity::authorization::{
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessFactsPort, AccessMapping, Error, ResourceTargets, Result};
-use erp_permissions::{approval_instance, internal};
+use erp_permissions::{Permission, approval_instance, internal, inventory};
 use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
@@ -185,7 +185,7 @@ impl InstanceFacts {
             return Err(Error::ValidationError("审批实例与冻结业务快照身份或版本不符".into()));
         }
         let document_type = snapshot.document_type.as_str();
-        object.subject_type = FactValue::Known(document_type.into());
+        subject_facts(&context.permission, &snapshot, object);
         if context.permission == internal::APPROVAL_INSTANCE_READ {
             return Ok(snapshot);
         }
@@ -230,6 +230,14 @@ impl InstanceFacts {
                 )
             }))
         .then(|| context.actor.id().to_owned()))
+    }
+}
+
+/// 冻结业务提交人提供普通撤回归属；其他入口保留实例发起人事实。
+fn subject_facts(permission: &Permission, snapshot: &ApprovalSubjectSnapshot, object: &mut ObjectFacts) {
+    object.subject_type = FactValue::Known(snapshot.document_type.as_str().into());
+    if permission == &inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
+        object.owner_id = FactValue::Known(Some(snapshot.payload.submitted_by.clone()));
     }
 }
 
@@ -565,6 +573,41 @@ mod tests {
         assert_eq!(facts.owner_id, FactValue::Known(Some("starter".into())));
         assert!(facts.relations.is_empty());
         assert_eq!(facts.assignee_id, FactValue::Missing);
+    }
+
+    #[test]
+    fn cancellation_owner_uses_frozen_submitter_while_other_reads_keep_instance_starter() {
+        let (instance, execution) = fixture();
+        let snapshot = ApprovalSubjectSnapshot::new(
+            ApprovalSubjectSnapshotId::new("snapshot"),
+            instance.typed_id(),
+            DocumentType::StockAdjustment,
+            "business-id",
+            9,
+            ApprovalSubjectSnapshotPayload {
+                document_no: "ADJ-1".into(),
+                responsible_org_id: "org".into(),
+                submitted_by: "submitter".into(),
+                submitted_at: Instant::from_unix_secs(1),
+                counterparty: None,
+                total_amount: None,
+                total_quantity: Some("1".parse().unwrap()),
+                line_count: 1,
+            },
+        )
+        .unwrap();
+        for (permission, owner) in [
+            (inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL, "submitter"),
+            (internal::APPROVAL_INSTANCE_READ, "starter"),
+            (internal::APPROVAL_RECOVER, "starter"),
+        ] {
+            let mut object = instance_facts("primary", &instance, std::slice::from_ref(&execution)).unwrap();
+            subject_facts(&permission, &snapshot, &mut object);
+            assert_eq!(object.owner_id, FactValue::Known(Some(owner.into())));
+            assert_eq!(object.subject_type, FactValue::Known("stock_adjustment".into()));
+            assert_eq!(object.id, instance.base.id);
+            assert_eq!(object.version, instance.base.version.to_string());
+        }
     }
 
     #[test]

@@ -1,6 +1,8 @@
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SalesOrderId;
 use mongodb::bson::doc;
-use persistence_core::{Executor, Repository, Result};
+use mongodb::options::FindOptions;
+use persistence_core::{Executor, Repository, Result, mongo_ops};
 
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 
@@ -23,6 +25,23 @@ pub trait WorkItemRepositoryFulfillmentExt {
     /// 查询固定限制 `FULFILLMENT_OPERATION + OPEN`，供采购单责任转交原子级联。
     async fn list_open_fulfillment_by_responsibility_key(
         &self,
+        responsibility_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
+    /// 读取旧验收命令回放需要的真实任务候选，不限制任务终态。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 原命令已核对的销售单身份。
+    /// * `responsibility_key` - 服务端固定验收责任键。
+    /// * `executor` - 原回放快照执行器。
+    /// # 返回
+    /// 至多两条未删除的验收任务，调用方仅在唯一候选时使用当前版本授权。
+    /// # 错误
+    /// 持久化读取或反序列化失败时返回错误。
+    async fn customer_acceptance_result_candidates(
+        &self,
+        sales_order_id: &str,
         responsibility_key: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>>;
@@ -101,6 +120,27 @@ impl WorkItemRepositoryFulfillmentExt for Repository<'_, WorkItem> {
                 "status": WorkItemStatus::Open.as_str(),
             },
             doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    async fn customer_acceptance_result_candidates(
+        &self,
+        sales_order_id: &str,
+        responsibility_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        let filter = doc! {
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            "business_object_type": "sales_order", "business_object_id": sales_order_id,
+            "work_item_type": WorkItemType::CustomerAcceptanceRegistration.as_str(),
+            "responsibility_key": responsibility_key,
+        };
+        mongo_ops::find_many(
+            &self.collection(),
+            filter,
+            FindOptions::builder().sort(doc! {"created_at": 1, "id": 1}).limit(2).build(),
             executor,
         )
         .await

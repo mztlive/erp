@@ -3,7 +3,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::SupplierOrderStatusHistoryId;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::SupplierFulfillmentService;
 use crate::dto::supplier_fulfillment::*;
@@ -16,6 +16,7 @@ impl SupplierFulfillmentService {
     ///
     /// # 参数
     /// * `id` - 供应商子订单 ID
+    /// * `executor` - 原拒单命令授权及写入的事务执行器。
     ///
     /// # 返回
     /// 返回 `PLACE` 动作实体。
@@ -24,13 +25,17 @@ impl SupplierFulfillmentService {
     /// * `NotFound` - 不存在 `PLACE` 动作
     ///
     /// 仓储查询失败时返回对应错误。
-    pub async fn latest_place_action(&self, id: &str) -> Result<SupplierOrderAction> {
+    pub async fn latest_place_action(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierOrderAction> {
         self.db
             .supplier_order_actions()
             .latest_by_order_and_type(
                 &SupplierFulfillmentOrderId::new(id),
                 SupplierOrderActionType::Place,
-                &mut NoTransaction,
+                executor,
             )
             .await?
             .ok_or_else(|| Error::NotFound("该订单不存在下单动作".to_string()))
@@ -41,6 +46,7 @@ impl SupplierFulfillmentService {
     /// * `id` - 供应商子订单主键，用于查找最近的 `PLACE` 动作。
     /// * `order` - 就地推进为拒单的子订单。
     /// * `req` - 供应商拒单回调请求。
+    /// * `executor` - 原拒单命令授权及写入的事务执行器。
     ///
     /// # 返回
     /// 返回尚未写入的状态历史，以及已标为失败的最近下单动作。
@@ -52,6 +58,7 @@ impl SupplierFulfillmentService {
         id: &str,
         order: &mut SupplierFulfillmentOrder,
         req: &RecordSupplierRejectRequest,
+        executor: &mut dyn Executor,
     ) -> Result<(SupplierOrderStatusHistory, SupplierOrderAction)> {
         let connection_id = order.connection_id.clone();
         let previous = order.fulfillment_status;
@@ -69,7 +76,7 @@ impl SupplierFulfillmentService {
                 external_event_id: req.external_event_id.clone(),
             }),
         )?;
-        let mut action = self.latest_place_action(id).await?;
+        let mut action = self.latest_place_action(id, executor).await?;
         action.update(SupplierOrderActionUpdate {
             status: Some(SupplierOrderActionStatus::Failed),
             response_summary: Some("供应商明确拒单（回调登记）".to_string()),

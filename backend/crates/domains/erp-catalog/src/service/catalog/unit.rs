@@ -7,7 +7,7 @@ use validator::Validate;
 use super::CatalogService;
 use super::support::ensure_version;
 use crate::dto::{PageView, SortDir, UnitOfMeasureListParams, UnitOfMeasureView, UpdateUnitOfMeasureRequest};
-use crate::entity::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureUpdate};
+use crate::entity::catalog::unit_of_measure::UnitOfMeasureUpdate;
 use crate::error::Result;
 use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
@@ -93,8 +93,33 @@ impl CatalogService {
         req: UpdateUnitOfMeasureRequest,
         actor: &AuditActor,
     ) -> Result<UnitOfMeasureView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.unit_of_measure_update_stage(&id, req, &actor, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn unit_of_measure_update_stage(
+        &self,
+        id: &str,
+        req: UpdateUnitOfMeasureRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<UnitOfMeasureView> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::UNIT_OF_MEASURE_UPDATE, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
-        let mut unit = self.load_unit(id).await?;
+        let mut unit = self.load_unit(id, executor).await?;
         ensure_version(unit.base.version, req.version)?;
         unit.update(
             UnitOfMeasureUpdate {
@@ -111,24 +136,9 @@ impl CatalogService {
             "unit_of_measure",
             unit.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::UNIT_OF_MEASURE_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    db.unit_of_measures().update(&mut unit, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<UnitOfMeasure, crate::error::Error>(unit)
-                })
-            })
-            .await?;
-        Ok(updated.into())
+        self.db.unit_of_measures().update(&mut unit, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(unit.into())
     }
 
     /// 删除计量单位（软删除，乐观锁语义）。
@@ -144,29 +154,65 @@ impl CatalogService {
     /// * `NotFound` - 单位不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn unit_of_measure_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut unit = self.load_unit(id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.unit_of_measure_delete_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn unit_of_measure_delete_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::UNIT_OF_MEASURE_DELETE, AccessTarget::Operation, executor)
+            .await?;
+        let mut unit = self.load_unit(id, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "unit_of_measure.delete",
             "unit_of_measure",
             unit.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::UNIT_OF_MEASURE_DELETE, AccessTarget::Operation, executor)
-                        .await?;
-                    db.unit_of_measures().soft_delete(&mut unit, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
-            })
-            .await
+        self.db.unit_of_measures().soft_delete(&mut unit, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, service};
+
+    #[tokio::test]
+    async fn writes_authorize_before_existing_records_versions_or_related_facts() {
+        let service = service().await;
+        let actor = actor();
+        let mut executor = SnapshotExecutor::default();
+        for version in [1, 999] {
+            denied(
+                service
+                    .unit_of_measure_update_stage(
+                        "missing",
+                        serde_json::from_value(json!({"version":version})).unwrap(),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+            denied(service.unit_of_measure_delete_stage("missing", &actor, &mut executor).await);
+        }
     }
 }

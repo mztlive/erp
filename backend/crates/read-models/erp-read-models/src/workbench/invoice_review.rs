@@ -72,21 +72,29 @@ pub async fn invoice_approval_review<A: WorkflowAuthorizationPort>(
     actor: &AuditActor,
     instance_id: &str,
 ) -> Result<InvoiceApprovalReview> {
-    let materials = runtime.materials(actor, instance_id).await?;
+    let (db, runtime, actor, instance_id) =
+        (db.clone(), runtime.clone(), actor.clone(), instance_id.to_owned());
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move { review_read(&db, &runtime, &actor, &instance_id, executor).await })
+        })
+        .await
+}
+
+/// 实例资格和完整当前票款在原快照读取，不以新授权认可先前结果。
+async fn review_read<A: WorkflowAuthorizationPort>(
+    db: &Database,
+    runtime: &ApprovalRuntimeService<A>,
+    actor: &AuditActor,
+    instance_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<InvoiceApprovalReview> {
+    let materials = runtime.materials_with(actor, instance_id, executor).await?;
     if materials.document_type != "sales_invoice_request" {
         return Err(Error::ValidationError("当前审批不是开票申请".into()));
     }
-    let database = db.clone();
-    let result = db
-        .client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move { current(&database, &materials, executor).await })
-        })
-        .await?;
-    // 响应前重验实例资格，避免读取期间责任资格失效。
-    runtime.materials(actor, instance_id).await?;
-    Ok(result)
+    current(db, &materials, executor).await
 }
 
 async fn current(

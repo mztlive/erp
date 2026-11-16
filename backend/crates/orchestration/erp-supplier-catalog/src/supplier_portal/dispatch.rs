@@ -5,7 +5,7 @@ use erp_catalog::portal::CatalogPortalExt;
 use erp_identity::PortalActor;
 use erp_supplier::portal::CooperationRepository;
 use erp_supply::portal::PortalSupplyExt;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -73,28 +73,58 @@ impl SupplierPortalProcess {
     /// # 错误
     /// 任一对象或处理资格失效时拒绝。
     pub async fn review(&self, id: &str, input: &PortalReview, actor: &AuditActor) -> Result<Value> {
-        match self.request_kind_for(id, None).await? {
+        match self.review_kind(id, &input.work_item_id, actor).await? {
             RequestKind::Offering => value(self.application_review(id, input.clone(), actor).await?),
             RequestKind::NewProduct => value(self.new_product_review(id, input.clone(), actor).await?),
             RequestKind::Cooperation => value(self.cooperation_review(id, input.clone(), actor).await?),
         }
     }
 
+    /// 分派预检只交付类型；真实任务完整资格与类型读取使用同一快照。
+    async fn review_kind(&self, id: &str, task_id: &str, actor: &AuditActor) -> Result<RequestKind> {
+        let (this, id, task_id, actor) = (self.clone(), id.to_owned(), task_id.to_owned(), actor.clone());
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { this.review_kind_stage(&id, &task_id, &actor, executor).await })
+            })
+            .await
+    }
+
+    async fn review_kind_stage(
+        &self,
+        id: &str,
+        task_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<RequestKind> {
+        self.require_review_result(id, task_id, actor, executor).await?;
+        self.load_request_kind(id, None, executor).await
+    }
+
     async fn request_kind_for(&self, id: &str, actor: Option<&PortalActor>) -> Result<RequestKind> {
         if let Some(actor) = actor {
             self.session_validate(actor, &mut NoTransaction).await?;
         }
-        let found =
-            if let Some(app) = self.db.portal_applications().find_by_id(id, &mut NoTransaction).await? {
-                Some((RequestKind::Offering, app.supplier_id))
-            } else if let Some(app) = self.db.new_product_drafts().find_by_id(id, &mut NoTransaction).await? {
-                Some((RequestKind::NewProduct, app.supplier_id))
-            } else {
-                CooperationRepository::new(&self.db)
-                    .find_any(id, &mut NoTransaction)
-                    .await?
-                    .map(|app| (RequestKind::Cooperation, app.supplier_id))
-            };
+        self.load_request_kind(id, actor, &mut NoTransaction).await
+    }
+
+    async fn load_request_kind(
+        &self,
+        id: &str,
+        actor: Option<&PortalActor>,
+        executor: &mut dyn Executor,
+    ) -> Result<RequestKind> {
+        let found = if let Some(app) = self.db.portal_applications().find_by_id(id, executor).await? {
+            Some((RequestKind::Offering, app.supplier_id))
+        } else if let Some(app) = self.db.new_product_drafts().find_by_id(id, executor).await? {
+            Some((RequestKind::NewProduct, app.supplier_id))
+        } else {
+            CooperationRepository::new(&self.db)
+                .find_any(id, executor)
+                .await?
+                .map(|app| (RequestKind::Cooperation, app.supplier_id))
+        };
         match found {
             Some((kind, supplier)) if actor.is_none_or(|a| a.supplier_id == supplier) => Ok(kind),
             _ => Err(Error::NotFound("申请不存在或无权查看".into())),
@@ -107,4 +137,21 @@ fn parse<T: DeserializeOwned>(input: Value) -> Result<T> {
 }
 fn value<T: Serialize>(result: T) -> Result<Value> {
     serde_json::to_value(result).map_err(|error| Error::Internal(error.to_string()))
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn internal_dispatch_requires_complete_task_qualification_before_request_reads() {
+        let process = super::super::testing::unavailable_process().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let result =
+            process.review_kind_stage("request", "task", &actor, &mut SnapshotExecutor::default()).await;
+        assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+    }
 }

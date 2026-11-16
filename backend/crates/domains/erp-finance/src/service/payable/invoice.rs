@@ -2,14 +2,10 @@
 use erp_core::ids::{InvoiceId, PartyId, PayableAccountId, PurchaseInvoiceAllocationId};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
-use validator::Validate;
+use persistence_core::Executor;
 
 use super::PayableService;
-use crate::dto::payable::{
-    PageView, PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView,
-    PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest, SortDir,
-};
+use crate::dto::payable::{PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest};
 use crate::entity::payable::{
     PayableAccount, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationLine, PurchaseInvoiceAllocationPlan,
 };
@@ -17,7 +13,6 @@ use crate::entity::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceK
 use crate::repository::prelude::*;
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
-type PurchaseInvoiceAllocationFilter = <mongodb::Database as PayableExt>::PurchaseInvoiceAllocationFilter;
 impl PayableService {
     /// 按已提交发票主键回读稳定登记结果。
     ///
@@ -53,51 +48,6 @@ impl PayableService {
             invoice_no: invoice.invoice_no.ok_or_else(|| Error::Internal("进项发票缺少号码".into()))?,
             gross_amount: invoice.gross_amount,
             allocations: views,
-        })
-    }
-    /// 分页查询进项发票分配列表（按应付子账筛选，FIN-R06 服务端分页）。
-    ///
-    /// 账户必填政策与请求校验保留在 Service；过滤、稳定排序
-    /// (`(created_at, id)` 同方向）、`skip/limit` 与总数均由 Repository 在
-    /// 数据库完成，只装载当前页。
-    ///
-    /// # 参数
-    /// * `params` - 应付子账、分页与排序校验参数
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图，页码与单页条数沿用归一化请求值。
-    ///
-    /// # 错误
-    /// 参数非法、应付子账缺失或仓储查询失败时返回既有服务错误。
-    ///
-    /// # 约束
-    /// 排序固定使用 `(created_at, id)` 同方向并列键，不引入未建索引的新查询形状。
-    pub async fn purchase_invoice_allocation_list(
-        &self,
-        params: &PurchaseInvoiceAllocationListParams,
-    ) -> Result<PageView<PurchaseInvoiceAllocationView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let payable_account_id = query
-            .payable_account_id
-            .ok_or_else(|| Error::ValidationError("按应付子账筛选进项发票分配为必填条件".to_string()))?;
-        let filter = PurchaseInvoiceAllocationFilter {
-            payable_account_id: Some(payable_account_id),
-            invoice_id: None,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .purchase_invoice_allocations()
-            .search_purchase_invoice_allocations(&filter, &mut NoTransaction)
-            .await?;
-        Ok(PageView {
-            items: page.items.iter().map(purchase_invoice_allocation_view).collect(),
-            total: page.total,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
         })
     }
 }
@@ -296,40 +246,6 @@ mod purchase_invoice_allocation_list_tests {
         .unwrap();
         allocation.base.created_at = created_at;
         allocation
-    }
-
-    /// 按 `(created_at, id)` 同方向排序；升序与降序均使用同一方向并列键。
-    fn stable_order(ids: &[(&str, u64)], ascending: bool) -> Vec<String> {
-        let mut rows: Vec<(&str, u64)> = ids.to_vec();
-        rows.sort_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(right.0)));
-        if !ascending {
-            rows.reverse();
-        }
-        rows.into_iter().map(|(id, _)| id.to_string()).collect()
-    }
-
-    /// 升序按创建时间再按稳定 ID 返回。
-    #[test]
-    fn allocation_stable_order_sorts_ascending() {
-        assert_eq!(stable_order(&[("a-3", 30), ("a-1", 10), ("a-2", 20)], true), ["a-1", "a-2", "a-3"]);
-    }
-
-    /// 降序对创建时间与稳定 ID 使用同一方向。
-    #[test]
-    fn allocation_stable_order_sorts_descending() {
-        assert_eq!(stable_order(&[("a-1", 10), ("a-3", 30), ("a-2", 20)], false), ["a-3", "a-2", "a-1"]);
-    }
-
-    /// 同秒事实跨页边界保持确定，无重复、无遗漏。
-    #[test]
-    fn allocation_stable_order_paginates_equal_timestamps_deterministically() {
-        let rows = [("a-2", 10), ("a-4", 10), ("a-1", 10), ("a-3", 10)];
-        let ascending = stable_order(&rows, true);
-        let descending = stable_order(&rows, false);
-        assert_eq!(ascending, ["a-1", "a-2", "a-3", "a-4"]);
-        assert_eq!(descending, ["a-4", "a-3", "a-2", "a-1"]);
-        assert_eq!(&ascending[2..], ["a-3", "a-4"]);
-        assert_eq!(&descending[2..], ["a-2", "a-1"]);
     }
 
     /// 视图映射保留分配身份，不改变金额精度。

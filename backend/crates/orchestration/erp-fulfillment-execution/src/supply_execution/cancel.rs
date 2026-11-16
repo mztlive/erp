@@ -16,7 +16,7 @@ use erp_supply::service::supplier_fulfillment::cancel::persist_after_sales;
 use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
 use erp_supply::service::supplier_fulfillment::place::ensure_capability;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierFulfillmentProcess;
@@ -142,7 +142,8 @@ impl SupplierFulfillmentProcess {
                 self.replayed_after_sales_result(order, existing, executor).await?,
             )));
         }
-        let mut intent = self.prepare_after_sales_intent(order, req, &idempotency_key, action_type).await?;
+        let mut intent =
+            self.prepare_after_sales_intent(order, req, &idempotency_key, action_type, executor).await?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.after_sales_action",
             "supplier_order_action",
@@ -177,11 +178,12 @@ impl SupplierFulfillmentProcess {
         req: &SubmitAfterSalesActionRequest,
         idempotency_key: &str,
         action_type: SupplierOrderActionType,
+        executor: &mut dyn Executor,
     ) -> Result<AfterSalesIntent> {
         let connection = self
             .db
             .supplier_api_connections()
-            .find_by_id(&order.connection_id, &mut NoTransaction)
+            .find_by_id(&order.connection_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
         let capabilities = self.domain().capabilities(&connection)?;
@@ -191,7 +193,7 @@ impl SupplierFulfillmentProcess {
             _ => return Err(Error::BusinessLogicError("不支持的售后动作类型".to_string())),
         };
         ensure_capability(&capabilities, needed)?;
-        self.domain().ensure_action_lines(&order, req).await?;
+        self.domain().ensure_action_lines(&order, req, executor).await?;
         let action = self.domain().build_after_sales_action(&order, req, idempotency_key, action_type)?;
         let lines = self.domain().build_action_lines(&action, req)?;
         self.domain().advance_after_sales(&mut order, action_type)?;

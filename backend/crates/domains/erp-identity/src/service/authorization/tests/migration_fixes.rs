@@ -1,6 +1,5 @@
 //! 第五阶段调用修复执行真实公共授权 API，不读取数据库。
 #![cfg(test)]
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -103,19 +102,16 @@ async fn work_item_management_accepts_the_original_snapshot_and_rejects_nontrans
 }
 
 fn members(stages: &[Document]) -> Vec<String> {
-    execute(
-        vec![
-            doc! {"id":"mine","owner":"user","deleted_at":0},
-            doc! {"id":"other","owner":"other","deleted_at":0},
-            doc! {"id":"deleted","owner":"user","deleted_at":1},
-        ],
-        stages,
-        &BTreeMap::new(),
-        &doc! {},
-    )
-    .iter()
-    .map(|row| row.get_str("id").unwrap().to_owned())
-    .collect()
+    let rows = vec![
+        doc! {"id":"mine","owner":"user","deleted_at":0,"detail_other":["mine"]},
+        doc! {"id":"other","owner":"other","deleted_at":0,"detail_other":["other"]},
+        doc! {"id":"deleted","owner":"user","deleted_at":1,"detail_other":["deleted"]},
+    ];
+    let collections = [("work_item_rows".into(), rows.clone())].into();
+    execute(rows, stages, &collections, &doc! {})
+        .iter()
+        .map(|row| row.get_str("id").unwrap().to_owned())
+        .collect()
 }
 
 fn task_service(

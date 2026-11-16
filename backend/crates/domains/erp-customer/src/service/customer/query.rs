@@ -218,7 +218,7 @@ mod tests {
 
     use application_core::AuditActor;
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use persistence_core::ReadExecutor;
     use persistence_core::testing::SnapshotExecutor;
 
@@ -237,7 +237,7 @@ mod tests {
             db.clone(),
             Arc::new(FailClosedAuditPort),
             Arc::new(FailClosedPartyFactPort),
-            CustomerAccess::new(db, unavailable_authorization()),
+            CustomerAccess::new(db, unbound_authorization()),
         )
     }
 

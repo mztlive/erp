@@ -317,7 +317,7 @@ mod tests {
         use application_core::AuditActor;
         use erp_core::AccountKind;
         use erp_identity::testing::unavailable_authorization;
-        use persistence_core::ReadExecutor;
+        use persistence_core::testing::SnapshotExecutor;
 
         use super::{Error, LegacyImportService};
         use crate::dto::legacy_import::{LegacyImportBatchListParams, LegacyImportRowListParams};
@@ -336,16 +336,16 @@ mod tests {
                 .batch_list_snapshot(
                     &LegacyImportBatchListParams::default(),
                     &actor,
-                    &mut ReadExecutor::default(),
+                    &mut SnapshotExecutor::default(),
                 )
                 .await
                 .expect_err("必须拒绝"),
             service
-                .batch_detail_snapshot("batch", &actor, &mut ReadExecutor::default())
+                .batch_detail_snapshot("batch", &actor, &mut SnapshotExecutor::default())
                 .await
                 .expect_err("必须拒绝"),
             service
-                .row_list_snapshot("batch", &rows, &actor, &mut ReadExecutor::default())
+                .row_list_snapshot("batch", &rows, &actor, &mut SnapshotExecutor::default())
                 .await
                 .expect_err("必须拒绝"),
         ];

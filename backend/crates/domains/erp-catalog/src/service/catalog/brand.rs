@@ -6,7 +6,7 @@ use erp_core::common::time::BusinessDate;
 use erp_identity::AccessTarget;
 use erp_permissions::catalog;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -115,18 +115,44 @@ impl CatalogService {
     /// Logo 引用无效、品牌代码冲突或事务写入失败时返回错误。
     pub async fn product_brand_create_with_assets(
         &self,
-        mut req: CreateProductBrandRequest,
+        req: CreateProductBrandRequest,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .product_brand_create_with_assets_stage(req, pending_assets, &actor, executor)
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn product_brand_create_with_assets_stage(
+        &self,
+        mut req: CreateProductBrandRequest,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductBrandView> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
         let mut used = HashSet::new();
         if let Some(asset_id) = req.logo_file_asset_id.as_mut() {
             pending_assets.resolve_id(asset_id, &mut used)?;
         }
         pending_assets.ensure_all_used(&used)?;
-        self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets).await?;
-        req.brand_code = self.brand_code(req.brand_code).await?;
+        self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets, executor).await?;
+        req.brand_code = self.brand_code(req.brand_code, executor).await?;
         let id = ProductBrandId::new(next_id());
         let brand = ProductBrand::new(
             id.clone(),
@@ -146,38 +172,19 @@ impl CatalogService {
             "product_brand",
             id.to_string(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let brand = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    pending_assets.persist(&db, executor).await?;
-                    db.product_brands().create(&brand, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<_, crate::error::Error>(brand)
-                })
-            })
-            .await?;
+        pending_assets.persist(&self.db, executor).await?;
+        self.db.product_brands().create(&brand, executor).await?;
+        self.audit.persist(&audit, executor).await?;
         Ok(brand.into())
     }
 
     /// 沿已有编号规则解析显式编号或分配新编号。
-    async fn brand_code(&self, requested: String) -> Result<String> {
+    async fn brand_code(&self, requested: String, executor: &mut dyn Executor) -> Result<String> {
         if !requested.trim().is_empty() {
             return Ok(requested);
         }
         DocumentNumberGenerator::new(self.db.clone())
-            .next_number(
-                DocumentNumberKind::ProductBrand,
-                BusinessDate::today().as_naive_date(),
-                &mut NoTransaction,
-            )
+            .next_number(DocumentNumberKind::ProductBrand, BusinessDate::today().as_naive_date(), executor)
             .await
             .map_err(|error| Error::Internal(error.to_string()))
     }
@@ -220,10 +227,38 @@ impl CatalogService {
     pub async fn product_brand_update_with_assets(
         &self,
         id: &str,
-        mut req: UpdateProductBrandRequest,
+        req: UpdateProductBrandRequest,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<ProductBrandView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service
+                        .product_brand_update_with_assets_stage(&id, req, pending_assets, &actor, executor)
+                        .await
+                })
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn product_brand_update_with_assets_stage(
+        &self,
+        id: &str,
+        mut req: UpdateProductBrandRequest,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductBrandView> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_BRAND_UPDATE, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
         let mut used = HashSet::new();
         if let Some(Some(asset_id)) = req.logo_file_asset_id.as_mut() {
@@ -233,9 +268,10 @@ impl CatalogService {
         self.ensure_brand_logo_exists(
             req.logo_file_asset_id.as_ref().and_then(Option::as_ref),
             &pending_assets,
+            executor,
         )
         .await?;
-        let mut brand = self.load_brand(id).await?;
+        let mut brand = self.load_brand(id, executor).await?;
         ensure_version(brand.base.version, req.version)?;
         brand.update(
             ProductBrandUpdate {
@@ -251,25 +287,10 @@ impl CatalogService {
             "product_brand",
             brand.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::PRODUCT_BRAND_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    pending_assets.persist(&db, executor).await?;
-                    db.product_brands().update(&mut brand, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<ProductBrand, crate::error::Error>(brand)
-                })
-            })
-            .await?;
-        Ok(updated.into())
+        pending_assets.persist(&self.db, executor).await?;
+        self.db.product_brands().update(&mut brand, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(brand.into())
     }
 
     /// 校验既有 Logo 文件资产存在；本次待登记资产由调用方事务负责。
@@ -277,6 +298,7 @@ impl CatalogService {
         &self,
         asset_id: Option<&erp_core::ids::FileAssetId>,
         pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let Some(asset_id) = asset_id else {
             return Ok(());
@@ -285,7 +307,7 @@ impl CatalogService {
             return Ok(());
         }
         self.file_assets
-            .find_by_id(asset_id, &mut NoTransaction)
+            .find_by_id(asset_id, executor)
             .await?
             .ok_or_else(|| crate::error::Error::NotFound("品牌 Logo 文件不存在".to_string()))?;
         Ok(())
@@ -304,29 +326,78 @@ impl CatalogService {
     /// * `NotFound` - 品牌不存在
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn product_brand_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
-        let mut brand = self.load_brand(id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.product_brand_delete_stage(&id, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 在原授权快照内读取版本与关联事实，完成修改和审计。
+    async fn product_brand_delete_stage(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.data_scope
+            .authorization
+            .require(actor, &catalog::PRODUCT_BRAND_DELETE, AccessTarget::Operation, executor)
+            .await?;
+        let mut brand = self.load_brand(id, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "product_brand.delete",
             "product_brand",
             brand.base.id.clone(),
         )?;
-        let authorization = self.data_scope.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &catalog::PRODUCT_BRAND_DELETE, AccessTarget::Operation, executor)
-                        .await?;
-                    db.product_brands().soft_delete(&mut brand, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
-            })
-            .await
+        self.db.product_brands().soft_delete(&mut brand, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, service};
+    use super::*;
+
+    #[tokio::test]
+    async fn writes_authorize_before_existing_records_versions_or_related_facts() {
+        let service = service().await;
+        let actor = actor();
+        let mut executor = SnapshotExecutor::default();
+        for version in [1, 999] {
+            denied(
+                service
+                    .product_brand_create_with_assets_stage(
+                        serde_json::from_value(json!({"name":"brand","logo_file_asset_id":"missing-logo"}))
+                            .unwrap(),
+                        Arc::new(EmptyPendingAttachments),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+            denied(
+                service
+                    .product_brand_update_with_assets_stage(
+                        "missing",
+                        serde_json::from_value(json!({"version":version})).unwrap(),
+                        Arc::new(EmptyPendingAttachments),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+            denied(service.product_brand_delete_stage("missing", &actor, &mut executor).await);
+        }
     }
 }

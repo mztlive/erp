@@ -5,7 +5,9 @@ use erp_core::money::Quantity;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::repository::find_active_by_field_in;
-use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository, Result, mongo_ops};
+use persistence_core::{
+    Executor, PageResult, Pagination, QueryFilter, Repository, Result, aggregate, mongo_ops,
+};
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -13,9 +15,9 @@ use super::shared::{
     scoped_base_filter, sort_doc, to_decimal128, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
-use crate::Result as InventoryResult;
 use crate::entity::inventory::StockBalance;
 use crate::ports::InventoryQuery;
+use crate::{Error as InventoryError, Result as InventoryResult};
 
 /// 库存余额列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -513,6 +515,34 @@ impl<'a> InventoryRepository<'a> {
     /// MongoDB 查询失败时返回错误。
     pub async fn stock_balance(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<StockBalance>> {
         active_entity_by_id(self.db, STOCK_BALANCES, id, executor).await
+    }
+
+    /// 按详情凭证读取完整余额，缺资格不访问业务集合。
+    ///
+    /// # 参数
+    /// id 为真实余额身份，access 为当前详情凭证，executor 为原快照执行器。
+    /// # 返回
+    /// 返回授权范围内的余额；不存在或无资格时返回 None。
+    /// # 错误
+    /// 模型错配、凭证失效及数据库读取失败时返回错误。
+    pub(crate) async fn authorized_stock_balance(
+        &self,
+        id: &str,
+        access: Option<&InventoryQuery>,
+        executor: &mut dyn Executor,
+    ) -> InventoryResult<Option<StockBalance>> {
+        let Some(access) = access else { return Ok(None) };
+        if access.collection() != STOCK_BALANCES {
+            return Err(InventoryError::ValidationError("库存授权模型与查询集合不匹配".into()));
+        }
+        access.ensure_current(executor)?;
+        let mut stages = access.stages().to_vec();
+        stages.push(doc! { "$match": { "id": id } });
+        stages.push(doc! { "$limit": 1 });
+        let collection = self.db.collection::<StockBalance>(STOCK_BALANCES);
+        let mut rows = aggregate::rows(&collection, stages, executor).await?;
+        access.ensure_current(executor)?;
+        Ok(rows.pop())
     }
 
     /// 按库存维度读取唯一余额。

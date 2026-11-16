@@ -30,11 +30,11 @@ use erp_supplier::{
 use erp_support::{EmptyPendingAttachments, PendingAttachmentBatch};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, ReadExecutor, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::validation::resolve_supplier_file_references;
 use super::{SupplierProfileProcess, SupplierProfileWithAssetsResult};
-use crate::{Error, Result};
+use crate::{Error, Result, command_insert_error};
 
 impl SupplierProfileProcess {
     /// 创建 Party、Supplier 及其当前资料；全部写入与幂等结果原子提交。
@@ -70,54 +70,60 @@ impl SupplierProfileProcess {
     /// 输入无效、创建时提交清空意图、同键异参、文件引用或敏感级别不匹配、身份重复或事务失败时返回错误。
     pub async fn create_with_assets(
         &self,
-        mut req: SaveSupplierProfileRequest,
+        req: SaveSupplierProfileRequest,
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        let rbac = self.authorization.clone();
         req.validate_contract()?;
         if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
             return Err(Error::ValidationError("创建供应商时不能提交清空既有资料的意图".to_string()));
         }
         let request_fingerprint = req.fingerprint()?;
-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            command
-                .ensure_replayable("create", None, &request_fingerprint)
-                .map_err(|e| Error::ConflictError(e.to_string()))?;
-            return Ok(SupplierProfileWithAssetsResult {
-                view: command_view(command),
-                assets_committed: false,
-            });
-        }
-        let references = self.prepare_creation_references(&mut req, &pending_assets).await?;
-        let idempotency_key = req.idempotency_key.clone();
-        let maintainer = references.maintainer.clone();
-        let prepared =
-            self.prepare_create(req, references, request_fingerprint.clone(), actor, pending_assets)?;
-        let result = prepared.result.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor = actor.clone();
-        let transaction_result = client
+        let key = req.idempotency_key.clone();
+        let this = self.clone();
+        let actor_owned = actor.clone();
+        let fingerprint = request_fingerprint.clone();
+        let transaction = self
+            .db
+            .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let current_org = rbac.access.require_create(&actor, &maintainer, executor).await?;
-                    if current_org != prepared.supplier.business_org_unit_id {
-                        return Err(Error::ConflictError("供应商维护人主属组织已变化，请重新提交".into()));
-                    }
-                    prepared.persist(&db, executor).await
+                    this.create_snapshot(req, pending_assets, &fingerprint, &actor_owned, executor).await
                 })
             })
             .await;
         self.resolve_transaction_result_with_assets(
-            transaction_result,
-            result,
-            &idempotency_key,
+            transaction,
+            &key,
             "create",
             None,
             &request_fingerprint,
+            actor,
         )
         .await
+    }
+
+    /// 候选、幂等回放、引用检查和全部创建共用一个事务。
+    async fn create_snapshot(
+        &self,
+        mut req: SaveSupplierProfileRequest,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
+        fingerprint: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierProfileWithAssetsResult> {
+        let maintainer = required_maintainer(&req)?;
+        self.authorization.access.require_create(actor, &maintainer, executor).await?;
+        if let Some(view) =
+            self.replay_command(&req.idempotency_key, "create", None, fingerprint, actor, executor).await?
+        {
+            return Ok(SupplierProfileWithAssetsResult { view, assets_committed: false });
+        }
+        let references = self.prepare_creation_references(&mut req, &pending_assets, executor).await?;
+        let prepared = self.prepare_create(req, references, fingerprint.to_owned(), actor, pending_assets)?;
+        let view = prepared.result.clone();
+        prepared.persist(&self.db, executor).await?;
+        Ok(SupplierProfileWithAssetsResult { view, assets_committed: true })
     }
 
     /// 解析附件、主数据引用和维护人主属组织事实，失败即停止后续准备。
@@ -125,6 +131,7 @@ impl SupplierProfileProcess {
         &self,
         req: &mut SaveSupplierProfileRequest,
         pending_assets: &Arc<dyn PendingAttachmentBatch>,
+        executor: &mut dyn Executor,
     ) -> Result<CreationReferences> {
         let used = resolve_supplier_file_references(req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used)?;
@@ -132,13 +139,13 @@ impl SupplierProfileProcess {
             SaveSupplierProfileRequest::required_create_identity(req.party_no.as_deref(), "主体编号")?;
         let supplier_no =
             SaveSupplierProfileRequest::required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
-        self.ensure_party_active(&req.signing_entity_party_id).await?;
-        self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachment_references(&req.qualifications, pending_assets).await?;
+        self.ensure_party_active(&req.signing_entity_party_id, executor).await?;
+        self.ensure_party_active(&req.payment_entity_party_id, executor).await?;
+        self.ensure_attachment_references(&req.qualifications, pending_assets.as_ref(), executor).await?;
         self.ensure_unique_inputs(req)?;
 
         let maintainer = required_maintainer(req)?;
-        let org = required_business_org(&self.db, &maintainer, &mut ReadExecutor::default()).await?;
+        let org = required_business_org(&self.db, &maintainer, executor).await?;
         Ok(CreationReferences { party_no, supplier_no, maintainer, org })
     }
 
@@ -393,7 +400,7 @@ impl PreparedCreate {
         if let Some(rating) = &self.rating {
             db.supplier_rating_revisions().create(rating, executor).await?;
         }
-        db.supplier_profile_commands().create(&self.command, executor).await?;
+        db.supplier_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
     }

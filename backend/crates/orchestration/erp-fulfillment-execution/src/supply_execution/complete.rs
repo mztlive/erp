@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
@@ -18,7 +16,7 @@ use erp_supply::service::supplier_fulfillment::investigate::{create_action, veri
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::dto::SupplierOrderTaskCompletionResultView;
@@ -27,8 +25,10 @@ use super::receipt::{
     CompletionReceipt, parse_positive_version, persist_supply_receipt, serialized_fingerprint, stable_digest,
     stable_evidence_id, stable_internal_idempotency_key,
 };
-use super::{SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE};
-use crate::workflow::FulfillmentWorkflow;
+use super::{
+    SupplierFulfillmentIdentity, SupplierFulfillmentProcess, W26_BUSINESS_OBJECT_TYPE, legacy,
+    task_authorization,
+};
 use crate::{Error, Result};
 
 const COMPLETION_COMMAND_PREFIX: &str = "w26-completion-";
@@ -56,7 +56,6 @@ impl SupplierFulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<SupplierOrderTaskCompletionResultView> {
         command.validate()?;
-        self.ensure_legacy_order(command.decision.order_id.as_ref(), &mut NoTransaction).await?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "任务版本")?;
         let fingerprint = serialized_fingerprint(&command)?;
         let command_id =
@@ -75,7 +74,7 @@ impl SupplierFulfillmentProcess {
         }
 
         let completion = TaskCompletion::new(
-            self.identity.workflow.clone(),
+            self.identity.clone(),
             &command,
             actor,
             expected_task_version,
@@ -160,6 +159,7 @@ impl CompletionReplay {
             return Ok(None);
         };
         let (resource_id, receipt) = self.receipt(stored)?;
+        legacy::ensure(db, &resource_id, executor).await?;
         let action = db
             .supplier_order_actions()
             .find_by_id(&receipt.terminal_action_id, executor)
@@ -197,7 +197,7 @@ struct TaskCompletion {
     terminal_action_id: String,
     idempotency_key: String,
     actor: AuditActor,
-    workflow: Arc<dyn FulfillmentWorkflow>,
+    identity: SupplierFulfillmentIdentity,
     command: SupplierOrderTaskCompletionCommand,
     expected_task_version: u64,
     command_id: String,
@@ -206,7 +206,7 @@ struct TaskCompletion {
 
 impl TaskCompletion {
     fn new(
-        workflow: Arc<dyn FulfillmentWorkflow>,
+        identity: SupplierFulfillmentIdentity,
         command: &SupplierOrderTaskCompletionCommand,
         actor: &AuditActor,
         expected_task_version: u64,
@@ -217,7 +217,7 @@ impl TaskCompletion {
             terminal_action_id: stable_evidence_id("w26c", command_id),
             idempotency_key: stable_internal_idempotency_key("w26c", command_id),
             actor: actor.clone(),
-            workflow,
+            identity,
             command: command.clone(),
             expected_task_version,
             command_id: command_id.to_string(),
@@ -230,11 +230,12 @@ impl TaskCompletion {
             db,
             &self.command,
             &self.actor,
-            self.workflow.as_ref(),
+            &self.identity,
             self.expected_task_version,
             executor,
         )
         .await?;
+        legacy::ensure(db, self.command.decision.order_id.as_ref(), executor).await?;
         let (order, evidence) = load_completion_evidence(db, &self.command, &work_item, executor).await?;
         let terminal_action = prepare_terminal_action(
             work_item.base.id.clone(),
@@ -366,15 +367,23 @@ async fn persist_completed_task(
     Ok(receipt)
 }
 
-/// 沿原次序重验正式任务、个人责任与当前授权。
+/// 先以精确任务目标授权，再核对正式任务、冻结版本及业务责任。
 async fn load_completion_task(
     db: &Database,
     command: &SupplierOrderTaskCompletionCommand,
     actor: &AuditActor,
-    workflow: &dyn FulfillmentWorkflow,
+    identity: &SupplierFulfillmentIdentity,
     expected_task_version: u64,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
+    task_authorization::require_target(
+        &identity.rbac,
+        actor,
+        command.work_item_id.as_ref(),
+        expected_task_version,
+        executor,
+    )
+    .await?;
     let work_item = db
         .work_items()
         .find_by_id(command.work_item_id.as_ref(), executor)
@@ -386,7 +395,7 @@ async fn load_completion_task(
         expected_task_version,
         &command.expected_subject_version,
     )?;
-    workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
+    identity.workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
 
     Ok(work_item)
 }
@@ -399,6 +408,7 @@ mod replay_tests {
     use erp_supply::dto::supplier_fulfillment::SupplierOrderResolution;
     use mongodb::Client;
     use persistence_core::ReadExecutor;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
 
@@ -442,8 +452,12 @@ mod replay_tests {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let (replay, _) = fixture();
         let authorization = unavailable_authorization();
-        let error = replay.load(&db, &authorization, &mut ReadExecutor::default()).await.unwrap_err();
+        let error = replay.load(&db, &authorization, &mut SnapshotExecutor::default()).await.unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        let error = replay.load(&db, &authorization, &mut ReadExecutor::default()).await.unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")
+        );
     }
 
     #[test]

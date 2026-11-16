@@ -3,13 +3,17 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_identity::{AccessTarget, AuthorizationService, CompiledAccess, OrganizationDirectoryService};
+use erp_identity::entity::authorization::{QueryModel, QueryOutput};
+use erp_identity::{
+    AccessTarget, AuthorizationService, CompiledAccess, Error as IdentityError, OrganizationDirectoryService,
+};
 use erp_permissions::{Permission, contract, internal};
 use mongodb::Database;
 use mongodb::bson::Document;
 use persistence_core::{Executor, Transactional};
 
 use crate::ports::ContractCreationPort;
+use crate::repository::ContractExt;
 use crate::{Error, Result};
 
 /// 合同授权设施；事实由组合根装配，范围规则由 identity 执行。
@@ -120,6 +124,7 @@ impl ContractAccess {
         customer_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.require_import(actor, executor).await?;
         let candidate = self.creation.candidate(actor, customer_id, executor).await?;
         Ok(self
             .authorization
@@ -215,7 +220,20 @@ impl CompiledScope {
     /// # 错误
     /// 跨事务、跨阶段或已经到期时拒绝。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> erp_identity::Result<()> {
+        Self::ensure_model(self.compiled.model())?;
         self.compiled.ensure_current(executor)
+    }
+
+    /// 合同仓储只执行合同集合的完整对象凭证，拒绝跨资源或受限输出复用。
+    fn ensure_model(model: &QueryModel) -> erp_identity::Result<()> {
+        if model.resource != "contract"
+            || model.collection != <Database as ContractExt>::CONTRACTS
+            || model.id_field != "id"
+            || model.output != QueryOutput::Object
+        {
+            return Err(IdentityError::ValidationError("合同查询凭证的资源、集合或输出不符".into()));
+        }
+        Ok(())
     }
 
     /// 复验账号、权限、版本和有效期。
@@ -251,7 +269,15 @@ fn ensure_permission(permission: &Permission) -> Result<()> {
 
 #[cfg(test)]
 mod permission_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use erp_core::AccountKind;
+    use erp_identity::entity::authorization::ObjectFacts;
+    use erp_identity::testing::unavailable_authorization;
     use erp_permissions::sales_order;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
 
     use super::*;
 
@@ -259,5 +285,79 @@ mod permission_tests {
     fn accessor_accepts_its_constant_and_rejects_foreign_resource() {
         assert!(ensure_permission(&contract::DETAIL).is_ok());
         assert!(matches!(ensure_permission(&sales_order::DETAIL), Err(Error::ValidationError(_))));
+    }
+
+    struct CreationFacts(AtomicUsize);
+
+    #[async_trait]
+    impl ContractCreationPort for CreationFacts {
+        async fn candidate(&self, _: &AuditActor, _: &str, _: &mut dyn Executor) -> Result<ObjectFacts> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(Error::NotFound("不应读取客户".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn create_qualification_and_snapshot_are_checked_before_customer_facts() {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("contract_candidate_authorization");
+        let creation = Arc::new(CreationFacts(AtomicUsize::new(0)));
+        let access = ContractAccess::new(db, unavailable_authorization(), creation.clone());
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let error = access
+            .require_create(&actor, "unread-customer", &mut SnapshotExecutor::default())
+            .await
+            .expect_err("资格取证失败必须先于客户候选事实读取");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        assert_eq!(creation.0.load(Ordering::SeqCst), 0);
+        let error = access
+            .require_create(&actor, "unread-customer", &mut NoTransaction)
+            .await
+            .expect_err("非快照调用不得读取客户候选事实");
+        assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+        assert_eq!(creation.0.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[cfg(test)]
+mod model_tests {
+    use erp_identity::entity::authorization::QueryModelKey;
+
+    use super::*;
+
+    #[test]
+    fn contract_repository_rejects_other_resources_collections_and_restricted_outputs() {
+        let model = QueryModel {
+            key: QueryModelKey::parse("contract_responsibility").unwrap(),
+            resource: "contract".into(),
+            collection: <Database as ContractExt>::CONTRACTS.into(),
+            id_field: "id".into(),
+            output: QueryOutput::Object,
+            facts: Default::default(),
+        };
+        assert!(CompiledScope::ensure_model(&model).is_ok());
+        let mut invalid = Vec::new();
+        let mut other = model.clone();
+        other.resource = "customer".into();
+        invalid.push(other);
+        let mut other = model.clone();
+        other.collection = "customers".into();
+        invalid.push(other);
+        let mut other = model.clone();
+        other.id_field = "source_id".into();
+        invalid.push(other);
+        for output in [
+            QueryOutput::Share { fields: ["id".into()].into() },
+            QueryOutput::Existence { fields: ["id".into()].into() },
+        ] {
+            let mut other = model.clone();
+            other.output = output;
+            invalid.push(other);
+        }
+        for other in invalid {
+            assert!(matches!(CompiledScope::ensure_model(&other), Err(IdentityError::ValidationError(_))));
+        }
     }
 }

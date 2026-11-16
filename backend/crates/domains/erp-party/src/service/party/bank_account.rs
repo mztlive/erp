@@ -14,7 +14,7 @@ use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::party;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::clear_default_marks;
@@ -113,7 +113,12 @@ impl PartyBankAccountService {
             .require(actor, &party::BANK_ACCOUNT_LIST, AccessTarget::Operation, executor)
             .await?;
         params.validate()?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(party_id)).await?;
+        super::ensure_outside_supplier_profile(
+            self.supplier_roles.as_ref(),
+            &PartyId::new(party_id),
+            executor,
+        )
+        .await?;
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -179,7 +184,24 @@ impl PartyBankAccountService {
         actor: &AuditActor,
     ) -> Result<PartyBankAccountView> {
         req.validate()?;
-        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let party_id = party_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.create_stage(&party_id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 仅使用已验证输入构造本域事实，不读取数据库。
+    fn prepare_record(
+        &self,
+        party_id: &str,
+        req: CreatePartyBankAccountRequest,
+        actor: &AuditActor,
+    ) -> Result<PartyBankAccount> {
         let account_number = req.account_number.clone();
         let mut account = PartyBankAccount::new(
             PartyBankAccountId::new(next_id()),
@@ -200,35 +222,34 @@ impl PartyBankAccountService {
             actor.id(),
         )?;
         account.account_number_ciphertext = self.sensitive_data.encrypt(&account_number)?;
+        Ok(account)
+    }
+
+    /// 在授权快照中核验主体和供应商边界，再原子写入默认标记、事实与审计。
+    async fn create_stage(
+        &self,
+        party_id: &str,
+        req: CreatePartyBankAccountRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyBankAccountView> {
+        self.authorization
+            .require(actor, &party::BANK_ACCOUNT_CREATE, AccessTarget::Operation, executor)
+            .await?;
+        super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+        let account = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "party_bank_account.create",
             "party_bank_account",
             account.base.id.clone(),
         )?;
-
-        let authorization = self.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let created = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &party::BANK_ACCOUNT_CREATE, AccessTarget::Operation, executor)
-                        .await?;
-                    if account.is_default {
-                        clear_default_marks!(db, party_bank_accounts, account.party_id, None, executor);
-                    }
-                    db.party_bank_accounts().create(&account, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyBankAccount, crate::error::Error>(account)
-                })
-            })
-            .await?;
-
-        Ok(created.into())
+        if account.is_default {
+            clear_default_marks!(self.db, party_bank_accounts, account.party_id, None, executor);
+        }
+        self.db.party_bank_accounts().create(&account, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(account.into())
     }
 
     /// 更新银行账户（仅生命周期字段；默认标记跨行事务）。
@@ -251,8 +272,36 @@ impl PartyBankAccountService {
         actor: &AuditActor,
     ) -> Result<PartyBankAccountView> {
         req.validate()?;
-        let mut account = self.load_bank_account(id).await?;
-        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &account.party_id).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let id = id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move { service.update_stage(&id, req, &actor, executor).await })
+            })
+            .await
+    }
+
+    /// 先验证功能资格，再从原事务读取版本及完整事实，修改与审计使用同一执行器。
+    async fn update_stage(
+        &self,
+        id: &str,
+        req: UpdatePartyBankAccountRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<PartyBankAccountView> {
+        self.authorization
+            .require(actor, &party::BANK_ACCOUNT_UPDATE, AccessTarget::Operation, executor)
+            .await?;
+        let mut account = self
+            .db
+            .party_bank_accounts()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("银行账户不存在".into()))?;
+        super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &account.party_id, executor)
+            .await?;
         super::map_version_conflict(account.ensure_version(req.version))?;
         account.update(
             PartyBankAccountUpdate {
@@ -268,43 +317,67 @@ impl PartyBankAccountService {
             "party_bank_account",
             account.base.id.clone(),
         )?;
-
-        let authorization = self.authorization.clone();
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let mut account_for_tx = account;
-        let updated = client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    authorization
-                        .require(&actor, &party::BANK_ACCOUNT_UPDATE, AccessTarget::Operation, executor)
-                        .await?;
-                    if account_for_tx.is_default {
-                        clear_default_marks!(
-                            db,
-                            party_bank_accounts,
-                            account_for_tx.party_id,
-                            Some(&account_for_tx.base.id),
-                            executor
-                        );
-                    }
-                    db.party_bank_accounts().update(&mut account_for_tx, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<PartyBankAccount, crate::error::Error>(account_for_tx)
-                })
-            })
-            .await?;
-
-        Ok(updated.into())
+        if account.is_default {
+            clear_default_marks!(
+                self.db,
+                party_bank_accounts,
+                account.party_id,
+                Some(&account.base.id),
+                executor
+            );
+        }
+        self.db.party_bank_accounts().update(&mut account, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(account.into())
     }
-    /// 读取仍存在的本域银行账户事实。
-    async fn load_bank_account(&self, id: &str) -> Result<PartyBankAccount> {
-        self.db
-            .party_bank_accounts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::ports::{FailClosedAuditPort, FailClosedSupplierRolePort};
+
+    async fn service() -> PartyBankAccountService {
+        let db = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("party_bank_account_authorization");
+        PartyBankAccountService::new(
+            db,
+            Arc::new(SensitiveDataCodec::from_secret(b"party-test-secret")),
+            Arc::new(FailClosedAuditPort),
+            Arc::new(FailClosedSupplierRolePort),
+            unavailable_authorization(),
+        )
+    }
+
+    #[tokio::test]
+    async fn update_authorizes_before_existence_version_or_supplier_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        for version in [1, 999] {
+            let req = serde_json::from_value(serde_json::json!({"version":version})).unwrap();
+            let error = service
+                .update_stage("unread-record", req, &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("无资格不得探测存在性、版本或供应商角色");
+            assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+        }
+    }
+
+    #[tokio::test]
+    async fn create_authorizes_before_party_or_supplier_reads() {
+        let service = service().await;
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let req = serde_json::from_value(serde_json::json!({"bank_account_no":"BANK-1","account_name":"name","bank_name":"bank","account_number":"6222000000000000","valid_from":"2026-01-01","is_default":false})).unwrap();
+        let error = service
+            .create_stage("unread-party", req, &actor, &mut SnapshotExecutor::default())
+            .await
+            .expect_err("无资格不得探测主体或供应商角色");
+        assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

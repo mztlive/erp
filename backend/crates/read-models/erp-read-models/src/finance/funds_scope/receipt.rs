@@ -286,9 +286,14 @@ impl FundsAccess {
     }
 
     /// 基础条件只构造明确仓储筛选，关联销售和子账由最终聚合判定。
-    async fn receipt_filter(&self, query: &CustomerReceiptListQuery) -> Result<CustomerReceiptFilter> {
+    async fn receipt_filter(
+        &self,
+        query: &CustomerReceiptListQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerReceiptFilter> {
         Ok(CustomerReceiptFilter {
-            keyword_ids: keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receipt).await?,
+            keyword_ids: keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receipt, executor)
+                .await?,
             receipt_no: query.receipt_no.clone(),
             counterparty_party_id: query.counterparty_party_id.clone(),
             status: query.status,
@@ -319,7 +324,7 @@ impl FundsAccess {
         let (_, authorization) =
             self.resolve(actor, &receivable_permissions::CUSTOMER_RECEIPT_LIST, executor).await?;
         let condition = self.receipt_condition(query, executor).await?;
-        let filter = self.receipt_filter(query).await?;
+        let filter = self.receipt_filter(query, executor).await?;
         let snapshot =
             receipt_repository::page(&self.db, query, &filter, &authorization, &condition, executor).await?;
         let total = snapshot.count()?;
@@ -370,7 +375,7 @@ impl FundsAccess {
                         .resolve(&actor, &receivable_permissions::CUSTOMER_RECEIPT_LIST, executor)
                         .await?;
                     let condition = this.receipt_condition(&query, executor).await?;
-                    let filter = this.receipt_filter(&query).await?;
+                    let filter = this.receipt_filter(&query, executor).await?;
                     let versions = receipt_repository::versions(
                         &this.db,
                         &query,
@@ -613,6 +618,18 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedCustomerReceiptRow>> {
+        let (view, authorization) = self.customer_receipt_detail_read(id, actor, executor).await?;
+        authorization.deliver(executor).await?;
+        Ok(view)
+    }
+
+    /// 返回尚未交付的回款详情及原凭证，供凭证文件补齐后统一验证。
+    pub(super) async fn customer_receipt_detail_read(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<(FundsScopedResult<ScopedCustomerReceiptRow>, FundsAuthorization)> {
         let (_access, authorization) =
             self.resolve(actor, &receivable_permissions::CUSTOMER_RECEIPT_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
@@ -653,15 +670,15 @@ impl FundsAccess {
         .await?;
         self.finish_receipt_names(std::slice::from_mut(&mut data), executor).await?;
         let parts = receipt_detail_parts(&row, &matched, &facts);
-        authorization.deliver(executor).await?;
-        Ok(FundsScopedResult {
+        let view = FundsScopedResult {
             data,
             scope_version: scope_version(&authorization.context, &parts),
             as_of: authorization.context.as_of.as_utc().to_rfc3339(),
             empty_reason: None,
             scope_summary: "回款继承销售核销来源范围；整单另需财务整账职责及全部来源可见",
             ownership_basis: "linked_sales_owner_and_receipt_operator",
-        })
+        };
+        Ok((view, authorization))
     }
 
     /// 按真实根身份读取原回款列表投影，供已完成授权的详情使用。

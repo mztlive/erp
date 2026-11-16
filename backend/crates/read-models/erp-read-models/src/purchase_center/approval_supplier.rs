@@ -7,7 +7,7 @@ use erp_supplier::entity::supplier::SupplierRatingRevision;
 use erp_supplier::repository::SupplierExt;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 use serde::Serialize;
 
 use crate::{Error, Result};
@@ -44,7 +44,7 @@ impl ApprovalSupplierRating {
 
 /// 实例授权后按精确采购提交读取供应商评估，不开放供应商目录。
 /// # 参数
-/// 数据库及已通过实例读取授权的提交资料。
+/// 数据库、已通过实例读取授权的提交资料及原快照执行器。
 /// # 返回
 /// 采购审批返回最新登记评估，其他单据返回空；无评估返回字段为空的对象。
 /// # 错误
@@ -52,6 +52,7 @@ impl ApprovalSupplierRating {
 pub(crate) async fn supplier_rating(
     db: &Database,
     materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalSupplierRating>> {
     if materials.document_type != "purchase_order" {
         return Ok(None);
@@ -61,13 +62,12 @@ pub(crate) async fn supplier_rating(
         .find_by_order_and_submission_no(
             &PurchaseOrderId::new(&materials.document_id),
             &format!("SUB-{:06}", materials.subject_version),
-            &mut NoTransaction,
+            executor,
         )
         .await?
         .ok_or_else(|| Error::ConflictError("本次审批对应的采购提交不存在，无法核对供应商评估".into()))?;
     validate_source(materials, submission.purchase_order_id.as_ref(), submission.formal_sequence())?;
-    let ratings =
-        db.supplier().list_ratings_latest_first(&submission.supplier_id, &mut NoTransaction).await?;
+    let ratings = db.supplier().list_ratings_latest_first(&submission.supplier_id, executor).await?;
     ApprovalSupplierRating::from_ratings(&submission.supplier_id, &ratings).map(Some)
 }
 

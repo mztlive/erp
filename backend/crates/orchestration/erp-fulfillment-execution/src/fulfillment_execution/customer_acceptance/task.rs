@@ -249,7 +249,7 @@ fn ensure_command_identity(
     Ok(())
 }
 
-fn responsibility_key(sales_order_id: &str) -> String {
+pub(super) fn responsibility_key(sales_order_id: &str) -> String {
     format!("sales_order:{sales_order_id}:customer_acceptance")
 }
 

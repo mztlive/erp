@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
+use erp_permissions::catalog;
 use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -18,8 +19,12 @@ use crate::error::{Error, Result};
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
 
-/// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
+/// 已规范化的商品创建输入；业务事实、编号和实体只在写事务中构造。
 pub struct ProductDraft {
+    request: CreateProductRequest,
+}
+
+struct PreparedProduct {
     /// 写入审计日志的创建原因。
     change_reason: Option<String>,
     /// SPU 稳定身份。
@@ -77,19 +82,19 @@ impl CatalogService {
         let draft = self.prepare_product_create(req, &pending_assets, actor).await?;
         let service = self.clone();
         let actor = actor.clone();
-        let product = self
-            .db
+        self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(
-                    async move { service.write_product_draft(draft, &actor, pending_assets, executor).await },
-                )
+                Box::pin(async move {
+                    let product =
+                        service.write_product_draft(draft, &actor, pending_assets, executor).await?;
+                    service.product_view(product, executor).await
+                })
             })
-            .await?;
-        self.product_view(product).await
+            .await
     }
 
-    /// 校验商品与附件并构造草稿，供跨域用例在自己的事务中写入。
+    /// 校验输入和临时附件引用；数据库事实由原写事务读取。
     ///
     /// # 参数
     /// * `req` - 商品创建请求。
@@ -98,12 +103,12 @@ impl CatalogService {
     /// # 返回
     /// 返回尚未持久化的商品草稿。
     /// # 错误
-    /// 输入、字典、媒体或规格校验失败时返回错误。
+    /// 输入、临时附件引用或未使用附件校验失败时返回错误。
     pub async fn prepare_product_create(
         &self,
         mut req: CreateProductRequest,
         pending_assets: &Arc<dyn PendingAttachmentBatch>,
-        actor: &AuditActor,
+        _actor: &AuditActor,
     ) -> Result<ProductDraft> {
         req.validate()?;
         let used = resolve_product_file_references(
@@ -113,10 +118,10 @@ impl CatalogService {
             pending_assets,
         )?;
         pending_assets.ensure_all_used(&used)?;
-        self.build_product_draft(req, actor, pending_assets.as_ref()).await
+        Ok(ProductDraft { request: req })
     }
 
-    /// 构造商品创建草稿（全部 ID 预生成，事务外完成全部业务校验）。
+    /// 使用原写事务读取字典、归属及条码，构造待写入实体。
     ///
     /// # 参数
     /// * `req` - 创建请求
@@ -132,22 +137,15 @@ impl CatalogService {
         mut req: CreateProductRequest,
         actor: &AuditActor,
         pending_assets: &dyn PendingAttachmentBatch,
-    ) -> Result<ProductDraft> {
-        self.ensure_product_dictionaries(
-            &req.category_id,
-            &req.brand_id,
-            &req.skus,
-            req.product_kind,
-            pending_assets,
-        )
-        .await?;
+        executor: &mut dyn Executor,
+    ) -> Result<PreparedProduct> {
         let product_id = ProductId::new(next_id());
         let revision_id = ProductRevisionId::new(next_id());
         let status = req.status.unwrap_or(EnableStatus::Active);
-        let media = self.build_spu_media(&revision_id, &req, pending_assets).await?;
+        let media = self.create_media(&revision_id, &req, pending_assets, executor).await?;
         let (maintainer_user_id, business_org_unit_id) =
-            self.bind_create_maintainer(req.maintainer_user_id.as_deref(), actor).await?;
-        let product_no = self.resolve_product_no(req.take_explicit_product_no()).await?;
+            self.bind_create_maintainer(req.maintainer_user_id.as_deref(), actor, executor).await?;
+        let product_no = self.resolve_product_no(req.take_explicit_product_no(), executor).await?;
         let mut product = Product::new(
             product_id.clone(),
             ProductData {
@@ -161,7 +159,14 @@ impl CatalogService {
         )?;
         ProductSkuInput::fill_blank_sku_nos(&product.product_no, Vec::new(), &mut req.skus);
         let sku_items = self
-            .build_create_sku_items(&product_id, req.effective_from, req.effective_to, actor.id(), req.skus)
+            .build_create_sku_items(
+                &product_id,
+                req.effective_from,
+                req.effective_to,
+                actor.id(),
+                req.skus,
+                executor,
+            )
             .await?;
         let revision = ProductRevision::new(
             revision_id.clone(),
@@ -179,31 +184,52 @@ impl CatalogService {
             },
         )?;
         product.attach_revision(&revision, actor.id())?;
-        Ok(ProductDraft { change_reason: req.change_reason, product, revision, media, sku_items })
+        Ok(PreparedProduct { change_reason: req.change_reason, product, revision, media, sku_items })
+    }
+
+    /// 在原创建快照核验全部字典和图片引用，再构造媒体行。
+    async fn create_media(
+        &self,
+        revision_id: &ProductRevisionId,
+        request: &CreateProductRequest,
+        pending: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevisionMedia>> {
+        self.ensure_product_dictionaries(
+            &request.category_id,
+            &request.brand_id,
+            &request.skus,
+            request.product_kind,
+            pending,
+            executor,
+        )
+        .await?;
+        self.build_spu_media(revision_id, request, pending, executor).await
     }
 
     /// 确定新商品编号：请求已指定时沿用，否则按 `SPU` 序列取号。
     ///
-    /// 放在其余校验之后，减少无效请求消耗序号；序号一经消费不回收。
+    /// 授权后取号；计数器独立提交，商品事务回滚时已消费的序号不回收。
     ///
     /// # 参数
     /// * `requested` - 请求显式指定的非空白商品编号
+    /// * `executor` - 当前授权事务执行器；计数器不加入此事务
     ///
     /// # 返回
     /// 返回待写入的商品编号，规范化由实体完成。
     ///
     /// # 错误
     /// 计数器写入失败时返回内部错误。
-    async fn resolve_product_no(&self, requested: Option<String>) -> Result<String> {
+    async fn resolve_product_no(
+        &self,
+        requested: Option<String>,
+        executor: &mut dyn Executor,
+    ) -> Result<String> {
         if let Some(product_no) = requested {
             return Ok(product_no);
         }
         DocumentNumberGenerator::new(self.db.clone())
-            .next_number(
-                DocumentNumberKind::Product,
-                BusinessDate::today().as_naive_date(),
-                &mut NoTransaction,
-            )
+            .next_number(DocumentNumberKind::Product, BusinessDate::today().as_naive_date(), executor)
             .await
             .map_err(|error| Error::Internal(error.to_string()))
     }
@@ -225,12 +251,14 @@ impl CatalogService {
         revision_id: &ProductRevisionId,
         req: &CreateProductRequest,
         pending_assets: &dyn PendingAttachmentBatch,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<ProductRevisionMedia>> {
         let carousel = self
-            .build_media_rows(revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets)
+            .build_media_rows(revision_id, &req.carousel_media, MediaRole::Carousel, pending_assets, executor)
             .await?;
-        let detail =
-            self.build_media_rows(revision_id, &req.detail_media, MediaRole::Detail, pending_assets).await?;
+        let detail = self
+            .build_media_rows(revision_id, &req.detail_media, MediaRole::Detail, pending_assets, executor)
+            .await?;
         Ok(carousel.into_iter().chain(detail).collect())
     }
 
@@ -254,6 +282,7 @@ impl CatalogService {
         effective_to: Option<BusinessDate>,
         created_by: &str,
         skus: Vec<ProductSkuInput>,
+        executor: &mut dyn Executor,
     ) -> Result<Vec<SkuEditItem>> {
         let mut sku_items = Vec::with_capacity(skus.len());
         let mut signatures = SpecificationSignatureSet::new();
@@ -264,6 +293,7 @@ impl CatalogService {
                 self.build_new_sku_item(
                     NewSkuContext { product_id, effective_from, effective_to, created_by },
                     sku_input,
+                    executor,
                 )
                 .await?,
             );
@@ -294,7 +324,15 @@ impl CatalogService {
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         executor: &mut dyn Executor,
     ) -> Result<Product> {
-        let ProductDraft { change_reason, product, revision, media, sku_items } = draft;
+        if !executor
+            .boundary()
+            .is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
+        {
+            return Err(Error::ValidationError("商品写入必须使用原快照事务".into()));
+        }
+        self.access().ensure_writable(actor, &catalog::PRODUCT_PRODUCT_CREATE, executor).await?;
+        let draft = self.build_product_draft(draft.request, actor, pending_assets.as_ref(), executor).await?;
+        let PreparedProduct { change_reason, product, revision, media, sku_items } = draft;
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "product.create",
@@ -315,5 +353,36 @@ impl CatalogService {
         }
         audit_port.persist(&audit, executor).await?;
         Ok(product)
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, service};
+    use super::*;
+
+    #[tokio::test]
+    async fn prepared_input_defers_database_facts_and_requires_snapshot_authorization_at_write() {
+        let service = service().await;
+        let actor = actor();
+        let pending: Arc<dyn PendingAttachmentBatch> = Arc::new(EmptyPendingAttachments);
+        let request: CreateProductRequest = serde_json::from_value(json!({
+            "product_kind":"PHYSICAL", "name":"product", "category_id":"missing-category",
+            "brand_id":"missing-brand", "effective_from":"2026-01-01",
+            "skus":[{"name":"sku", "base_unit_id":"missing-unit", "main_image_asset_id":"missing-image"}]
+        }))
+        .unwrap();
+        let draft = service.prepare_product_create(request.clone(), &pending, &actor).await.unwrap();
+        assert_eq!(draft.request.category_id.as_ref(), "missing-category");
+        assert!(matches!(
+            service.write_product_draft(draft, &actor, pending.clone(), &mut NoTransaction).await,
+            Err(Error::ValidationError(message)) if message == "商品写入必须使用原快照事务"
+        ));
+        let draft = service.prepare_product_create(request, &pending, &actor).await.unwrap();
+        denied(service.write_product_draft(draft, &actor, pending, &mut SnapshotExecutor::default()).await);
     }
 }

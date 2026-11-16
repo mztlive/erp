@@ -12,7 +12,7 @@ use erp_customer::{CustomerAuditPort, PartyFactPort, PartyIdentityFact, Prepared
 use erp_party::PartyExt;
 use erp_party::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::audit_conversion::{PreparedAudit, map_audit_error};
 
@@ -114,16 +114,6 @@ impl MongoCustomerPartyFacts {
 
 #[async_trait]
 impl PartyFactPort for MongoCustomerPartyFacts {
-    async fn ensure_exists(&self, party_id: &PartyId) -> erp_customer::Result<()> {
-        self.db
-            .parties()
-            .find_party(party_id, &mut NoTransaction)
-            .await
-            .map_err(erp_customer::Error::from)?
-            .ok_or_else(|| erp_customer::Error::NotFound("主体不存在".to_string()))?;
-        Ok(())
-    }
-
     async fn identities_by_ids(
         &self,
         party_ids: &[PartyId],

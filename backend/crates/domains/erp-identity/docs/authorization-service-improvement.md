@@ -379,7 +379,7 @@ fn inquiry_bindings(
 
 每个查询权限绑定一个确定的查询入口，不要求该入口的所有来源共用一个集合或输出形态。普通入口使用一个根 Mapping；资金等复杂入口由固定实现连接所需分区及来源 Mapping，identity 决定授权组合和允许输出。来源映射可以有多个，不能被业务调用方替换或作为完整对象凭证使用。不要为分区另建可由调用方配置的政策树。
 
-查询能力按公共权限常量显式声明，不按动作名称推断。`procurement_inquiry:internal_quote` 和 `purchase_payment_request:pay` 同时支持固定查询入口与精确任务检查；支持查询不改变写入授权必须使用快照事务的要求。付款入口的 `pay` 与 `detail` 必须来自同一个启用角色，查询与任务检查均执行此资格要求。
+查询能力按公共权限常量显式声明，不按动作名称推断。`procurement_inquiry:internal_quote` 和 `purchase_payment_request:pay` 同时支持固定查询入口与精确任务检查；`supplier_fulfillment_order:submit` 支持原提交资格下的执行资料和命令结果查询，`supplier_api_connection:authorize` 支持原授权资格下的操作回放，两者均不追加详情菜单资格。支持查询不改变写入授权必须使用快照事务的要求。付款入口的 `pay` 与 `detail` 必须来自同一个启用角色，查询与任务检查均执行此资格要求。
 
 Builder 按上述接口完成 Facts 和 Mapping 绑定，绑定在服务构造完成后保持固定。 `AccessMapping::relations()` 描述固定关系及来源 Mapping，默认返回空集合；有来源的实现必须提供完整描述。`relation()` 返回的来源实例必须与启动描述一致，动态准备不得替换来源或查询模型。
 

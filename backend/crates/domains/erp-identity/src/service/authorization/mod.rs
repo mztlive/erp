@@ -1,4 +1,5 @@
 //! 业务授权唯一入口；固定规则及启动绑定不能由调用方替换。
+mod approval_cancel;
 mod approval_query;
 mod approvals;
 mod builder;
@@ -7,6 +8,7 @@ mod facilities;
 mod materials;
 mod operations;
 mod organization;
+mod policy_bundles;
 pub(crate) use organization::OrganizationScope;
 mod require;
 mod resolve;
@@ -18,6 +20,7 @@ mod transfers;
 #[cfg(feature = "test-support")]
 mod unavailable;
 mod validate;
+mod work_item_query;
 pub(crate) mod work_items;
 
 use std::collections::BTreeMap;

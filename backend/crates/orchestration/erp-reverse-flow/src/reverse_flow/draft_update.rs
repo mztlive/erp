@@ -143,7 +143,6 @@ impl ReturnsProcess {
         actor: &AuditActor,
     ) -> Result<()> {
         req.validate()?;
-        let permission = format!("{}:submit", kind.as_str());
         let audit =
             actor.clone().resource_log(&format!("{}.update", kind.as_str()), kind.as_str(), id.to_owned())?;
         let rbac = self.rbac.clone();
@@ -151,8 +150,7 @@ impl ReturnsProcess {
         let id = id.to_owned();
         run_audited(&self.db, audit, move |db, executor| {
             Box::pin(async move {
-                ensure_return_start_replay_authorized(db, &rbac, &actor, kind, &permission, &id, executor)
-                    .await?;
+                ensure_return_start_replay_authorized(db, &rbac, &actor, kind, &id, executor).await?;
                 persist_financial_draft(db, kind, &id, req, executor).await
             })
         })

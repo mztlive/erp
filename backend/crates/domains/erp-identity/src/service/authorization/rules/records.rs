@@ -4,8 +4,9 @@ use std::sync::LazyLock;
 
 use erp_permissions::{
     admin, approval_instance, bulk_job, catalog, contract, cost, customer, internal, organization,
-    purchase_order, purchase_payment_request, returns, sales_order, sales_review, sales_selection, supplier,
-    supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement, work_item,
+    purchase_order, purchase_payment_request, receivable, returns, sales_order, sales_review,
+    sales_selection, supplier, supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement,
+    work_item,
 };
 
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind};
@@ -38,7 +39,13 @@ pub(crate) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
 
 static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::new(|| {
     vec![
+        (internal::CUSTOMER_PROFILE_COMMAND_READ, vec![customer::PROFILE_COMMAND_DETAIL]),
+        (internal::CUSTOMER_CREATED_RESULT_READ, vec![customer::CREATE]),
+        (internal::SUPPLIER_PROFILE_COMMAND_READ, vec![supplier::PROFILE_COMMAND_DETAIL]),
+        (internal::INVOICE_REQUEST_AMOUNTS_READ, vec![receivable::INVOICE_REQUEST_INVOICE_REQUEST_AMOUNTS]),
         (internal::CONTRACT_IMPORT, vec![contract::CREATE]),
+        (internal::CONTRACT_SALES_ACCESS, vec![contract::TERMINATE]),
+        (internal::CATALOG_ADOPTION, vec![supplier_api::ADOPTIONS_PREVIEW]),
         (
             internal::ORGANIZATION_PERSON_PROFILE_CHANGE,
             vec![organization::CHANGE, admin::ACCOUNT_UPDATE_ADMIN],
@@ -120,11 +127,8 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
 });
 
 pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
-    if permission == &internal::SUPPLIER_OFFERING_AVAILABILITY_UPDATE {
-        return vec![supplier_offering::UPDATE_AVAILABILITY];
-    }
-    if permission == &internal::SALES_SELECTION_ORDER_BASIS {
-        return vec![sales_order::CREATE];
+    if let Some(required) = independent_command(permission) {
+        return vec![required];
     }
     if let Some(required) = purchase_entry(permission) {
         return vec![required];
@@ -166,6 +170,18 @@ pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
         },
         _ => vec![],
     }
+}
+
+/// 命令派生入口保留与根修改资格相互独立的附加功能资格。
+fn independent_command(permission: &Permission) -> Option<Permission> {
+    [
+        (internal::CONTRACT_SALES_ACCESS, customer::ASSIGNMENT_APPLY),
+        (internal::CATALOG_ADOPTION, internal::SUPPLIER_OFFERING_COST_DETAIL),
+        (internal::SUPPLIER_OFFERING_AVAILABILITY_UPDATE, supplier_offering::UPDATE_AVAILABILITY),
+        (internal::SALES_SELECTION_ORDER_BASIS, sales_order::CREATE),
+    ]
+    .into_iter()
+    .find_map(|(entry, required)| (&entry == permission).then_some(required))
 }
 
 /// 采购来源检查保留独立业务入口资格，不要求其与采购范围资格来自同一角色。

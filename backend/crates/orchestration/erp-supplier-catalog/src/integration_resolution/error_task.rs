@@ -4,11 +4,14 @@
 //! W02 责任 API。本模块不保留旧动作入口。
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_core::common::time::Instant;
 use erp_identity::AccessTarget;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::IntegrationErrorTask;
 use erp_integration::service::error_task::prepare_error_task;
 use erp_permissions::integration_ops;
+use erp_workflow::entity::work_item::WorkItem;
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::IntegrationResolutionProcess;
@@ -33,52 +36,68 @@ impl IntegrationResolutionProcess {
         req: CreateErrorTaskRequest,
         actor: &AuditActor,
     ) -> Result<ErrorTaskView> {
+        let process = self.clone();
+        let actor = actor.clone();
+        self.run_audited(move |_, executor| {
+            Box::pin(async move { process.create_error_task_stage(req, &actor, executor).await })
+        })
+        .await
+    }
+
+    /// 原事务内先授权，再读取责任及来源并原子登记事实和工作项。
+    async fn create_error_task_stage(
+        &self,
+        req: CreateErrorTaskRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ErrorTaskView> {
+        self.authorization
+            .require(actor, &integration_ops::ERROR_TASK_CREATE, AccessTarget::Operation, executor)
+            .await?;
         req.validate()?;
         if let Some(message_id) = &req.message_id {
-            self.domain().ensure_message_exists(message_id.as_ref()).await?;
+            self.domain().ensure_message_exists(message_id.as_ref(), executor).await?;
         }
-        let org = self
-            .domain()
-            .access()
-            .require_handler_org(
-                &req.owner_user_id,
-                erp_core::common::time::Instant::now(),
-                &mut persistence_core::NoTransaction,
-            )
-            .await?;
+        let org =
+            self.domain().access().require_handler_org(&req.owner_user_id, Instant::now(), executor).await?;
         let task = prepare_error_task(&req, org)?;
         let work_item = error_work_item(&task)?;
-        self.store_error_task(task.clone(), work_item, actor).await?;
+        self.store_error_task(task.clone(), work_item, actor, executor).await?;
         Ok(task.into())
     }
 
     async fn store_error_task(
         &self,
         task: IntegrationErrorTask,
-        work_item: erp_workflow::entity::work_item::WorkItem,
+        work_item: WorkItem,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let audit = actor.clone().resource_log(
             "integration_error_task.create",
             "integration_error_task",
             task.base.id.clone(),
         )?;
-        let authorization = self.authorization.clone();
-        let current_actor = actor.clone();
-        self.run_audited(move |db, executor| {
-            Box::pin(async move {
-                authorization
-                    .require(
-                        &current_actor,
-                        &integration_ops::ERROR_TASK_CREATE,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                persist_created(db, CreatedFact::ErrorTask(&task), &work_item, &audit, executor).await?;
-                Ok(())
-            })
-        })
-        .await
+        persist_created(&self.db, CreatedFact::ErrorTask(&task), &work_item, &audit, executor).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, process};
+
+    #[tokio::test]
+    async fn creation_authorizes_before_linked_message_or_handler_reads() {
+        let process = process().await;
+        for message in [None, Some("missing-message")] {
+            let request = serde_json::from_value(json!({"message_id":message, "error_class":"transient_failure", "owner_user_id":"unread-owner"})).unwrap();
+            denied(
+                process.create_error_task_stage(request, &actor(), &mut SnapshotExecutor::default()).await,
+            );
+        }
     }
 }

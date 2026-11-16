@@ -47,7 +47,7 @@ impl IntegrationCenterReadService {
 
 #[cfg(test)]
 mod testing {
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use erp_integration::dto::ControlledEvidenceRef;
     use erp_integration::ports::evidence::{
         EvidenceFuture, EvidenceSubject, OriginalResultFact, VerifiedEvidence,
@@ -107,7 +107,7 @@ mod testing {
         IntegrationCenterReadService::new(
             db.clone(),
             Arc::new(UnusedEvidence),
-            IntegrationAccess::new(db, unavailable_authorization()),
+            IntegrationAccess::new(db, unbound_authorization()),
         )
     }
 }

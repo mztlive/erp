@@ -1,6 +1,6 @@
 //! 客户退款审批启动、精确授权回放、8次fresh恢复与撤回编排。
 use erp_returns::service::ReturnsService;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use super::*;
 use crate::ReverseFlowPorts;
@@ -26,22 +26,29 @@ impl ReturnsProcess {
         resubmission_reason: Option<String>,
         adapter: super::super::adapter::CustomerRefundAdapter,
         submission: ReversalSubmitReplayInput,
-    ) -> Result<CustomerRefundView> {
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let id = submission.id.as_str();
         let actor = &submission.actor;
         let subject = customer_refund_subject_ref(id)?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
+        let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let now = Instant::now();
-        let organization_id = self.customer_responsible_org_id(&refund.customer_id).await?;
+        let organization_id =
+            load_customer_responsible_org_id(&self.db, &refund.customer_id, executor).await?;
         let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
-        let _ = customer_refund_object_readable(&organization_id, actor.id())?;
-        let existing_receipt =
-            load_start_receipt(&self.db, &subject, refund.approval_subject_version, &idempotency_key).await?;
+        let existing_receipt = load_start_receipt(
+            &self.db,
+            &subject,
+            refund.approval_subject_version,
+            &idempotency_key,
+            executor,
+        )
+        .await?;
         let graph =
-            load_start_graph(&self.db, &self.rbac, &binding, actor.id(), existing_receipt.as_ref()).await?;
-        let start_input = build_customer_refund_start_input(ReverseStartInput {
+            load_start_graph(&self.db, &self.rbac, &binding, actor.id(), existing_receipt.as_ref(), executor)
+                .await?;
+        let prepared = prepare_start(build_customer_refund_start_input(ReverseStartInput {
             resubmission_reason: resubmission_reason.clone(),
             graph,
             binding: &binding,
@@ -52,9 +59,10 @@ impl ReturnsProcess {
             idempotency_key: &idempotency_key,
             receipt: existing_receipt,
             now,
-        })?;
-        let prepared = prepare_start(start_input)?;
-        self.complete_customer_refund_start(
+        })?)?;
+        persist_customer_refund_start(
+            &self.db,
+            &self.rbac,
             CustomerRefundStartPersistInput {
                 command_receipt: submission.command_receipt.clone(),
                 resubmission_reason: resubmission_reason.clone(),
@@ -67,27 +75,11 @@ impl ReturnsProcess {
                 organization_id,
                 now,
             },
-            &submission,
+            executor,
         )
         .await
     }
-    /// 完成启动持久化或精确收据恢复，再按原提交入口读取回包。
-    async fn complete_customer_refund_start(
-        &self,
-        input: CustomerRefundStartPersistInput,
-        submission: &ReversalSubmitReplayInput,
-    ) -> Result<CustomerRefundView> {
-        let persisted = persist_customer_refund_start(&self.db, &self.rbac, input).await;
-        self.finish_reversal_submit(submission, persisted.map(|_| ())).await?;
-        self.customer_refund_result(
-            &submission.id,
-            &submission.actor,
-            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
-            AccessTarget::record(&submission.id)?,
-        )
-        .await
-        .map_err(reversal_result_read_error)
-    }
+
     /// 加载撤回运行事实并写回草稿。
     ///
     /// # 参数
@@ -107,13 +99,15 @@ impl ReturnsProcess {
         refund: &mut CustomerRefund,
         req: &CancelCustomerRefundApprovalRequest,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let adapter = customer_refund_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = find_approval_binding(&self.db, id, executor).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let subject = customer_refund_subject_ref(id)?;
         let runtime =
-            load_cancel_runtime(&self.db, &binding, &subject, refund.approval_subject_version).await?;
+            load_cancel_runtime(&self.db, &binding, &subject, refund.approval_subject_version, executor)
+                .await?;
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_customer_refund_cancel_input(
@@ -143,15 +137,9 @@ impl ReturnsProcess {
                 now,
                 audit,
             },
+            executor,
         )
         .await
-    }
-    /// 读取客户往来主体作为责任组织。
-    ///
-    /// # 错误
-    /// 客户不存在或往来主体为空时返回错误。
-    async fn customer_responsible_org_id(&self, customer_id: &CustomerAccountId) -> Result<String> {
-        load_customer_responsible_org_id(&self.db, customer_id).await
     }
 }
 

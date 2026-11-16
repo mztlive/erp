@@ -7,12 +7,14 @@
 use application_core::AuditActor;
 use bpm::model::IdempotencyKey;
 use erp_core::common::time::Instant;
+use erp_identity::AccessTarget;
 use erp_inventory::{CancelStockAdjustmentApprovalRequest, StockAdjustment, StockAdjustmentView};
+use erp_permissions::inventory;
 use erp_read_models::inventory_center::load_approval_binding;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{PreparedExecution, prepare_document_cancel};
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::InventoryAdjustmentProcess;
@@ -78,25 +80,56 @@ impl InventoryAdjustmentProcess {
     }
 }
 
-/// 事务外一次性加载并校验撤回目标（实例/单据/绑定/运行事实）。
+/// 在独立准备快照中先授权，再加载全部取消计划事实。
 async fn load_cancel_target(
     service: &InventoryAdjustmentProcess,
     id: &str,
     req: &CancelStockAdjustmentApprovalRequest,
     actor: &AuditActor,
 ) -> Result<LoadedCancelTarget> {
-    let instance = load_cancel_instance(&service.db, &req.approval_process_instance_id).await?;
+    let service = service.clone();
+    let id = id.to_owned();
+    let req = req.clone();
+    let actor = actor.clone();
+    service
+        .db
+        .clone()
+        .client()
+        .with_transaction(move |executor| {
+            Box::pin(async move { load_cancel_target_step(&service, &id, &req, &actor, executor).await })
+        })
+        .await
+}
+
+/// 准备计划只使用本阶段的当前授权；写事务仍须重新证明授权与业务版本。
+async fn load_cancel_target_step(
+    service: &InventoryAdjustmentProcess,
+    id: &str,
+    req: &CancelStockAdjustmentApprovalRequest,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<LoadedCancelTarget> {
+    service
+        .identity
+        .require(
+            actor,
+            &inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL,
+            AccessTarget::record(&req.approval_process_instance_id)?,
+            executor,
+        )
+        .await?;
+    let instance = load_cancel_instance(&service.db, &req.approval_process_instance_id, executor).await?;
     ensure_cancel_instance_subject(&instance, id, req.expected_subject_version)?;
-    let authorization = cancel_authority_facts(service, &instance, actor).await?;
-    let adjustment = service.inventory().load_stock_adjustment(id).await?;
+    let authorization = cancel_authority_facts(service, &instance, actor, executor).await?;
+    let adjustment = service.inventory().load_stock_adjustment(id, executor).await?;
     ensure_expected_version("库存调整单", req.expected_version, adjustment.base.version)?;
     if adjustment.approval_subject_version != req.expected_subject_version {
         return Err(Error::ConflictError("库存调整审批主题版本已变化，请刷新后重试".to_string()));
     }
-    let binding = load_approval_binding(&service.db, id, &mut NoTransaction).await?;
+    let binding = load_approval_binding(&service.db, id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     ensure_cancel_instance_binding(&instance, &binding)?;
-    let runtime = load_cancel_runtime(&service.db, &binding, instance).await?;
+    let runtime = load_cancel_runtime(&service.db, &binding, instance, executor).await?;
     ensure_cancel_runtime_versions(&runtime, req, &authorization)?;
     Ok(LoadedCancelTarget { adjustment, binding, runtime })
 }

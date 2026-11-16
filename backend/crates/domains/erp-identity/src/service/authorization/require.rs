@@ -30,12 +30,18 @@ impl AuthorizationService {
         let kind = scope_spec::kind(permission)?;
         let form = target.form();
         rules::ensure_target(permission, kind, form)?;
-        if (form == rules::TargetForm::Task
+        if (form == rules::TargetForm::Operation
+            || form == rules::TargetForm::Task
             || !rules::is_read(permission)
             || operations::source(permission).is_some())
             && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
         {
-            return Err(Error::ValidationError("写入授权必须使用快照事务".into()));
+            let message = if form == rules::TargetForm::Operation && rules::is_read(permission) {
+                "无对象操作及其业务读取必须使用快照事务"
+            } else {
+                "写入授权必须使用快照事务"
+            };
+            return Err(Error::ValidationError(message.into()));
         }
         if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
             return self.require_work_item_qualification(actor, &target, executor).await;
@@ -76,15 +82,22 @@ impl AuthorizationService {
         let facts =
             TargetFacts::load(&self.facts, &proof.context, &proof.rule, target.borrowed()?, executor).await?;
         let mut source_proofs = self.approval_sources(&proof, &facts, executor).await?;
-        source_proofs.extend(self.work_item_sources(&proof, &facts, executor).await?);
+        let sources = self.work_item_sources(&proof, &facts, executor).await?;
+        source_proofs.extend(sources.proofs);
         let grants = self.target_grants(&proof.context, &proof.rule, &facts, executor).await?;
         facts.require(&proof.context, &proof.rule, &grants, executor)?;
         self.validate_proof(&proof, executor).await?;
         facts.revalidate(&self.facts, &proof.context, executor).await?;
+        for (context, source_facts) in &sources.facts {
+            source_facts.revalidate(&self.facts, context, executor).await?;
+        }
         for source in &source_proofs {
             self.validate_proof(source, executor).await?;
         }
         facts.require(&proof.context, &proof.rule, &grants, executor)?;
+        for (_, source_facts) in &sources.facts {
+            source_facts.ensure_current()?;
+        }
         for source in &source_proofs {
             source.ensure_current(executor)?;
         }

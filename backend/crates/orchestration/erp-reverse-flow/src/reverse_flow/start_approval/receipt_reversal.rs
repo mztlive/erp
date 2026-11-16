@@ -14,7 +14,7 @@ use erp_workflow::service::approval::execution::{
 };
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use super::super::adapter::receipt_reversal_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
@@ -30,6 +30,7 @@ use crate::{Error, Result, ReverseFlowPorts};
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
 /// * `idempotency_key` - 调用方幂等键
+/// * `executor` - 本次提交事务执行器。
 ///
 /// # 返回
 /// 已提交收据或空。
@@ -41,6 +42,7 @@ pub async fn load_receipt_reversal_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     load_start_receipt_for_document_type(
         db,
@@ -48,6 +50,7 @@ pub async fn load_receipt_reversal_start_receipt(
         subject,
         subject_version,
         idempotency_key,
+        executor,
     )
     .await
 }
@@ -129,9 +132,10 @@ pub struct ReceiptReversalStartPersistInput {
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 冲正单、快照与启动计划
+/// * `executor` - 用例入口的原事务执行器。
 ///
 /// # 返回
-/// 返回提交后的冲正单实体，由调用方装配视图。
+/// 完成启动写入或命中精确提交回执后成功。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
@@ -142,26 +146,10 @@ pub async fn persist_receipt_reversal_start(
     db: &Database,
     rbac: &ReverseFlowPorts,
     input: ReceiptReversalStartPersistInput,
-) -> Result<ReceiptReversal> {
-    let db = db.clone();
-    let rbac = rbac.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move { persist_receipt_reversal_start_apply(&db, &rbac, input, executor).await })
-        })
-        .await
-}
-
-/// 在调用方执行器内重验提交资格并按原顺序写入启动事实。
-async fn persist_receipt_reversal_start_apply(
-    db: &Database,
-    rbac: &ReverseFlowPorts,
-    input: ReceiptReversalStartPersistInput,
     executor: &mut dyn Executor,
-) -> Result<ReceiptReversal> {
-    if let Some(reversal) = replay_committed_start(db, rbac, &input, executor).await? {
-        return Ok(reversal);
+) -> Result<()> {
+    if replay_committed_start(db, rbac, &input, executor).await?.is_some() {
+        return Ok(());
     }
     let ReceiptReversalStartPersistInput {
         resubmission_reason,
@@ -176,7 +164,7 @@ async fn persist_receipt_reversal_start_apply(
         now,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
-        return replay_persisted_receipt_reversal(db, &id, &command_receipt, executor).await;
+        return replay_persisted_receipt_reversal(db, &id, &command_receipt, executor).await.map(|_| ());
     };
     if command_receipt.actor_id() != actor.id() {
         return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
@@ -205,7 +193,7 @@ async fn persist_receipt_reversal_start_apply(
     )
     .await?;
     persist_submit_receipt(db, &command_receipt, id, &audit, executor).await?;
-    Ok(reversal)
+    Ok(())
 }
 
 /// 沿原顺序重验提交来源，再恢复已提交的同一命令结果。
@@ -220,7 +208,6 @@ async fn replay_committed_start(
         rbac,
         &input.actor,
         DocumentType::ReceiptReversal,
-        "receipt_reversal:submit",
         &input.id,
         executor,
     )

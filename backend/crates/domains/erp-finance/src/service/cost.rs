@@ -6,12 +6,12 @@
 pub mod fulfillment_actual;
 pub mod purchase_initial;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use self::dto::SortDir;
@@ -32,8 +32,6 @@ use crate::{Error, Result};
 type CostEntryFilter = <mongodb::Database as CostExt>::CostEntryFilter;
 /// 成本事实列表持久化投影类型。
 type CostEntryRow = <mongodb::Database as CostExt>::CostEntryRow;
-/// 成本分配列表筛选条件类型。
-type CostAllocationFilter = <mongodb::Database as CostExt>::CostAllocationFilter;
 
 /// 成本服务。
 ///
@@ -57,114 +55,35 @@ impl CostService {
         Self { db }
     }
 
-    /// 分页查询成本事实列表。
-    ///
-    /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
+    /// 在已授权命令的原快照中装配成本事实与全部分配行。
     ///
     /// # 参数
-    /// * `params` - 查询参数（`cost_type`/`cost_stage`/`cost_scope`/`supplier_id`/
-    ///   `source_document_id` 扁平筛选）
+    /// * `id` - 原命令创建的成本事实身份。
+    /// * `executor` - 已完成命令授权和写入的活动快照事务执行器。
     ///
     /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 返回原事务可见的登记结果，不追加成本详情功能资格。
     ///
     /// # 错误
-    /// 分页、范围版本非法或排序字段不在白名单时返回 `ValidationError`；
-    /// 成本事实或分配的仓储读取失败时返回对应错误。
-    pub async fn cost_entry_list(&self, params: &CostEntryListParams) -> Result<PageView<CostEntryView>> {
-        let filter = cost_entry_filter(params)?;
-        let page = self.db.cost_entries().search_cost_entries(&filter, &mut NoTransaction).await?;
-        let entry_ids = page.items.iter().map(|row| CostEntryId::new(row.id.clone())).collect::<Vec<_>>();
-        let mut allocations_by_entry = self.cost_allocations_by_entry(&entry_ids).await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| {
-                let allocations = allocations_by_entry.remove(&row.id).unwrap_or_default();
-                cost_entry_row_view(row, allocations)
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
-    }
-
-    /// 查询成本事实详情（事实 + 分配行）。
-    ///
-    /// # 参数
-    /// * `id` - 成本事实 ID
-    ///
-    /// # 返回
-    /// 返回完整成本视图。
-    ///
-    /// # 错误
-    /// 成本事实不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
-    pub async fn cost_entry_detail(&self, id: &str) -> Result<CostEntryView> {
-        self.cost_entry_view(id.to_string()).await
-    }
-
-    /// 分页查询成本分配列表。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数（`cost_entry_id`/`sales_order_id` 筛选）
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图。
-    ///
-    /// # 错误
-    /// 分页、范围版本或排序参数非法时返回 `ValidationError`；仓储查询失败时返回对应错误。
-    pub async fn cost_allocation_list(
+    /// 缺少活动快照证明、成本事实缺失或任一事实读取失败时拒绝。
+    pub async fn cost_entry_detail_with_executor(
         &self,
-        params: &CostAllocationListParams,
-    ) -> Result<PageView<CostAllocationView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let filter = CostAllocationFilter {
-            cost_entry_id: query.cost_entry_id,
-            sales_order_id: query.sales_order_id,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self.db.cost_allocations().search_cost_allocations(&filter, &mut NoTransaction).await?;
-        // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-        // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| CostAllocationView {
-                id: row.id,
-                cost_entry_id: row.cost_entry_id,
-                sales_order_id: row.sales_order_id,
-                sales_order_line_id: row.sales_order_line_id,
-                allocated_gross_amount: row.allocated_gross_amount,
-                allocated_net_amount: row.allocated_net_amount,
-                rounding_residual_flag: row.rounding_residual_flag,
-            })
-            .collect();
-        Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
-    }
-
-    /// 装配成本事实详情视图。
-    ///
-    /// # 参数
-    /// * `id` - 成本事实 ID
-    ///
-    /// # 返回
-    /// 返回完整成本视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 成本事实不存在
-    async fn cost_entry_view(&self, id: String) -> Result<CostEntryView> {
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CostEntryView> {
+        if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
+            return Err(Error::ValidationError("成本命令结果必须在原授权快照中读取".into()));
+        }
         let entry = self
             .db
             .cost_entries()
-            .find_by_id(&id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("成本事实不存在".to_string()))?;
         let allocations = self
             .db
             .cost_allocations()
-            .find_allocations_by_entries(&[entry.base.id.clone().into()], &mut NoTransaction)
+            .find_allocations_by_entries(&[entry.base.id.clone().into()], executor)
             .await?
             .into_iter()
             .map(cost_allocation_entity_view)
@@ -189,29 +108,6 @@ impl CostService {
             created_at: entry.base.created_at,
             allocations,
         })
-    }
-
-    /// 批量读取本页成本事实的分配事实并按成本事实分组。
-    ///
-    /// # 参数
-    /// * `entry_ids` - 当前页成本事实 ID，空页直接得到空映射
-    ///
-    /// # 返回
-    /// 返回按成本事实 ID 分组且保持仓储返回相对顺序的分配事实。
-    ///
-    /// # 错误
-    /// 仓储读取失败时返回错误。
-    async fn cost_allocations_by_entry(
-        &self,
-        entry_ids: &[CostEntryId],
-    ) -> Result<HashMap<String, Vec<CostAllocation>>> {
-        let allocations =
-            self.db.cost_allocations().find_allocations_by_entries(entry_ids, &mut NoTransaction).await?;
-        let mut by_entry = HashMap::<String, Vec<CostAllocation>>::new();
-        for allocation in allocations {
-            by_entry.entry(allocation.cost_entry_id.to_string()).or_default().push(allocation);
-        }
-        Ok(by_entry)
     }
 }
 
@@ -460,11 +356,34 @@ mod tests {
 
     use erp_core::ids::{CostAllocationId, CostEntryId, SalesOrderId};
     use erp_core::money::Amount;
+    use mongodb::Client;
+    use persistence_core::{Executor, NoTransaction, ReadExecutor};
     use serde_json::json;
 
     use super::{
-        CostAllocation, CostAllocationData, CostEntryRow, cost_allocation_entity_view, cost_entry_row_view,
+        CostAllocation, CostAllocationData, CostEntryRow, CostService, cost_allocation_entity_view,
+        cost_entry_row_view,
     };
+    use crate::Error;
+
+    #[tokio::test]
+    async fn command_result_rejects_non_snapshot_executors_before_reading_cost_facts() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("cost-command-result-unit");
+        let service = CostService::new(db);
+        for mut executor in [
+            Box::new(NoTransaction) as Box<dyn Executor>,
+            Box::new(ReadExecutor::default()) as Box<dyn Executor>,
+        ] {
+            let result = service.cost_entry_detail_with_executor("entry-1", executor.as_mut()).await;
+            assert!(matches!(
+                result,
+                Err(Error::ValidationError(message)) if message == "成本命令结果必须在原授权快照中读取"
+            ));
+        }
+    }
 
     #[test]
     fn entry_view_copies_zero_amount_scale_and_keeps_missing_allocations_empty() {

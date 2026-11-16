@@ -22,9 +22,10 @@ use erp_supply::portal::{
 use erp_supply::ports::offering_qualification::PortalQuoteQualificationPort;
 use erp_workflow::entity::work_item::SupplierPortalReviewTaskData;
 use id_generator::next_id;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use serde_json::{Value, json};
 
+use super::command::scoped_command;
 use super::offerings::review_comment;
 use super::{NewProductSave, PortalDecision, PortalReview, PortalTransition, SupplierPortalProcess};
 use crate::supply_governance::offering::MongoOfferingQualification;
@@ -277,7 +278,6 @@ impl SupplierPortalProcess {
         input: PortalReview,
         actor: &AuditActor,
     ) -> Result<NewProductDraft> {
-        let current = self.catalog_portal().load(id, &mut NoTransaction).await?;
         let payload = json!({"application_id":id,"input":input});
         let key = input.idempotency_key.clone();
         let id = id.to_string();
@@ -285,12 +285,19 @@ impl SupplierPortalProcess {
             PortalDecision::Approve => "supplier_portal.new_product_approve",
             PortalDecision::Return => "supplier_portal.new_product_return",
         };
-        self.internal_command(
+        let target_id = id.clone();
+        let task_id = input.work_item_id.clone();
+        self.internal_target_command(
             actor,
-            &current.supplier_id,
             (action, supplier::DETAIL, supplier_portal::ADMIN_REVIEW),
-            &key,
-            &payload,
+            move |this, actor, executor| {
+                Box::pin(async move {
+                    this.require_review_result(&target_id, &task_id, &actor, executor).await?;
+                    let current = this.catalog_portal().load(&target_id, executor).await?;
+                    let command = scoped_command(actor.id(), &current.supplier_id, action, &key, &payload)?;
+                    Ok((current.supplier_id, command))
+                })
+            },
             move |this, actor, executor| {
                 Box::pin(async move { this.review_new_product(&id, &input, &actor, executor).await })
             },

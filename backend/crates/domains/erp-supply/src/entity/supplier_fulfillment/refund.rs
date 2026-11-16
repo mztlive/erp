@@ -174,6 +174,32 @@ impl SupplierRefundFact {
         })
     }
 
+    /// 核对外部退款身份命中的回执是否对应本次已授权订单和退款结果。
+    ///
+    /// # 参数
+    /// * `order_id` - 本次已授权的供应商履约订单。
+    /// * `amount` - 请求中的实际退款金额。
+    /// * `refunded_at` - 请求中的退款发生时间。
+    /// * `source_event_id` - 请求中的来源事件身份。
+    ///
+    /// # 返回
+    /// 订单和全部退款结果字段一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn matches_result(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        amount: Amount,
+        refunded_at: Instant,
+        source_event_id: &str,
+    ) -> bool {
+        self.supplier_fulfillment_order_id == *order_id
+            && self.refund_amount == amount
+            && self.refunded_at == refunded_at
+            && self.source_event_id == source_event_id.trim()
+    }
+
     /// 校验退款分配与退款头的一致性（数据模型 §6.19：各行净含税金额合计等于退款头金额）。
     ///
     /// 逐行校验分配归属本退款头；只有 `APPLY` 分配参与合计（`REVERSE` 是纠错事实，
@@ -412,6 +438,24 @@ mod tests {
         assert_eq!(fact.source_event_id, "EVT-2001");
         assert_eq!(fact.refund_amount, Amount::from_str("19.98").unwrap());
         assert_eq!(fact.inbox_message_id, InboxMessageId::new("message-1"));
+    }
+
+    #[test]
+    fn refund_replay_requires_the_authorized_order_and_original_result() {
+        let fact = SupplierRefundFact::new(SupplierRefundFactId::new("fact"), sample_fact_data()).unwrap();
+        let order = SupplierFulfillmentOrderId::new("order-1");
+        let amount = fact.refund_amount;
+        let at = fact.refunded_at;
+        assert!(fact.matches_result(&order, amount, at, " EVT-2001 "));
+        assert!(!fact.matches_result(&SupplierFulfillmentOrderId::new("order-2"), amount, at, "EVT-2001"));
+        assert!(!fact.matches_result(&order, Amount::from_str("1.00").unwrap(), at, "EVT-2001"));
+        assert!(!fact.matches_result(
+            &order,
+            amount,
+            Instant::from_unix_secs(at.unix_secs() + 1),
+            "EVT-2001",
+        ));
+        assert!(!fact.matches_result(&order, amount, at, "EVT-2002"));
     }
 
     #[test]

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use application_core::AuditActor;
 use erp_core::ids::ProductId;
 use erp_permissions::catalog as catalog_permissions;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -25,7 +25,7 @@ use crate::source_sync::repository::ProductSourceExt;
 /// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;
 
-/// 整组上/下架在事务外完成校验后形成的待写集合。
+/// 整组上/下架在原授权事务内完成校验后形成的待写集合。
 struct ProductListingChange {
     product_id: ProductId,
     changed: Vec<Sku>,
@@ -54,11 +54,33 @@ impl CatalogService {
         req: UpdateProductListingRequest,
         actor: &AuditActor,
     ) -> Result<ProductListingView> {
-        let change = self.prepare_product_listing_change(product_id, req.listing_status, actor).await?;
+        let service = self.clone();
+        let actor = actor.clone();
+        let product_id = product_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    service.product_listing_update_stage(&product_id, req, &actor, executor).await
+                })
+            })
+            .await
+    }
+
+    /// 在原事务完成授权、事实读取、写入与回包。
+    async fn product_listing_update_stage(
+        &self,
+        product_id: &str,
+        req: UpdateProductListingRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductListingView> {
+        let change =
+            self.prepare_product_listing_change(product_id, req.listing_status, actor, executor).await?;
         if change.changed.is_empty() {
             return Ok(change.view);
         }
-        self.write_product_listing_change(change, req.listing_status, actor).await
+        self.write_product_listing_change(change, req.listing_status, actor, executor).await
     }
 
     /// 切换单个 SKU 的上架状态。
@@ -79,13 +101,34 @@ impl CatalogService {
         req: UpdateSkuListingRequest,
         actor: &AuditActor,
     ) -> Result<SkuView> {
+        let service = self.clone();
+        let actor = actor.clone();
+        let sku_id = sku_id.to_owned();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(
+                    async move { service.sku_listing_update_stage(&sku_id, req, &actor, executor).await },
+                )
+            })
+            .await
+    }
+
+    /// 在原事务完成授权、事实读取、写入与回包。
+    async fn sku_listing_update_stage(
+        &self,
+        sku_id: &str,
+        req: UpdateSkuListingRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<SkuView> {
         req.validate()?;
         let (sku, changed) =
-            self.prepare_sku_listing_change(sku_id, req.version, req.listing_status, actor).await?;
+            self.prepare_sku_listing_change(sku_id, req.version, req.listing_status, actor, executor).await?;
         if !changed {
             return Ok(sku.into());
         }
-        let sku = self.write_sku_listing_change(sku, req.listing_status, actor).await?;
+        let sku = self.write_sku_listing_change(sku, req.listing_status, actor, executor).await?;
         Ok(sku.into())
     }
 
@@ -95,16 +138,18 @@ impl CatalogService {
         product_id: &str,
         target: ListingStatus,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<ProductListingChange> {
-        let product =
-            self.access().product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, product_id).await?;
+        let product = self
+            .access()
+            .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, product_id, executor)
+            .await?;
         product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用的商品不能上架".to_string()));
         }
         let product_id = ProductId::new(product.base.id);
-        let skus =
-            self.db.skus().find_by_product_ids(std::slice::from_ref(&product_id), &mut NoTransaction).await?;
+        let skus = self.db.skus().find_by_product_ids(std::slice::from_ref(&product_id), executor).await?;
         let active_count = skus.iter().filter(|sku| sku.is_active()).count();
         if target.is_listed() && active_count == 0 {
             return Err(Error::BusinessLogicError("商品下没有可上架的 SKU".to_string()));
@@ -114,12 +159,13 @@ impl CatalogService {
         Ok(ProductListingChange { product_id, changed, view })
     }
 
-    /// 在一个事务内写入整组 SKU 状态与审计日志。
+    /// 沿用本事务准备阶段的完整授权，写入整组 SKU 状态与审计日志。
     async fn write_product_listing_change(
         &self,
         change: ProductListingChange,
         target: ListingStatus,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<ProductListingView> {
         let ProductListingChange { product_id, mut changed, view } = change;
         let audit = self.audit.resource_log_with_message(
@@ -129,30 +175,12 @@ impl CatalogService {
             product_id.to_string(),
             Some(format!("整组{}", target.label())),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let access = self.access();
-        let actor = actor.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .require(
-                            &actor,
-                            &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
-                            product_id.as_ref(),
-                            executor,
-                        )
-                        .await?;
-                    for sku in &mut changed {
-                        db.skus().update(sku, executor).await?;
-                    }
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
-            })
-            .await?;
+
+        for sku in &mut changed {
+            self.db.skus().update(sku, executor).await?;
+        }
+        self.audit.persist(&audit, executor).await?;
+
         Ok(view)
     }
 
@@ -163,15 +191,13 @@ impl CatalogService {
         version: u64,
         target: ListingStatus,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<(Sku, bool)> {
-        let Some(mut sku) = self.db.skus().find_by_id(sku_id, &mut NoTransaction).await? else {
+        self.access().ensure_writable(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, executor).await?;
+        let Some(mut sku) = self.db.skus().find_by_id(sku_id, executor).await? else {
             return Err(Error::NotFound("SKU 不存在".to_string()));
         };
-        ensure_version(sku.base.version, version)?;
-        let product = self
-            .access()
-            .product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, sku.product_id.as_ref())
-            .await?;
+        let product = self.authorize_sku_listing_change(&sku, version, actor, executor).await?;
         product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用商品下的 SKU 不能上架".to_string()));
@@ -180,12 +206,34 @@ impl CatalogService {
         Ok((sku, changed))
     }
 
-    /// 在一个事务内写入单 SKU 状态与审计日志。
+    /// 先检查所属商品的完整修改资格，再报告当前 SKU 的版本冲突。
+    async fn authorize_sku_listing_change(
+        &self,
+        sku: &Sku,
+        version: u64,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Product> {
+        let product = self
+            .access()
+            .require_product(
+                actor,
+                &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
+                sku.product_id.as_ref(),
+                executor,
+            )
+            .await?;
+        ensure_version(sku.base.version, version)?;
+        Ok(product)
+    }
+
+    /// 沿用本事务准备阶段的完整授权，写入单 SKU 状态与审计日志。
     async fn write_sku_listing_change(
         &self,
         mut sku: Sku,
         target: ListingStatus,
         actor: &AuditActor,
+        executor: &mut dyn Executor,
     ) -> Result<Sku> {
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
@@ -194,33 +242,16 @@ impl CatalogService {
             sku.base.id.clone(),
             Some(target.label().to_string()),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let audit_port = self.audit.clone();
-        let access = self.access();
-        let actor = actor.clone();
-        client
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access
-                        .require(
-                            &actor,
-                            &catalog_permissions::PRODUCT_PRODUCT_UPDATE,
-                            sku.product_id.as_ref(),
-                            executor,
-                        )
-                        .await?;
-                    db.skus().update(&mut sku, executor).await?;
-                    audit_port.persist(&audit, executor).await?;
-                    Ok::<Sku, crate::error::Error>(sku)
-                })
-            })
-            .await
+
+        self.db.skus().update(&mut sku, executor).await?;
+        self.audit.persist(&audit, executor).await?;
+        Ok(sku)
     }
 
     /// 为一组 SPU 批量计算继承上架状态，避免列表 N+1。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `product_ids` - 要汇总的商品稳定 ID
     ///
     /// # 返回
@@ -231,8 +262,9 @@ impl CatalogService {
     pub(super) async fn product_listing_views(
         &self,
         product_ids: &[ProductId],
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, ProductListingView>> {
-        let summaries = self.db.catalog().listing_summaries(product_ids, &mut NoTransaction).await?;
+        let summaries = self.db.catalog().listing_summaries(product_ids, executor).await?;
         Ok(product_listing_views_from_summaries(product_ids, &summaries))
     }
 
@@ -241,6 +273,7 @@ impl CatalogService {
     /// 名称、分类、品牌、维护人姓名与供给计数不在此填充。
     ///
     /// # 参数
+    /// * `executor` - 原授权事务或读取阶段的执行器。
     /// * `product` - 已加载的商品实体
     ///
     /// # 返回
@@ -248,12 +281,16 @@ impl CatalogService {
     ///
     /// # 错误
     /// 上架汇总读取失败时返回仓储错误。
-    pub(super) async fn product_view(&self, product: Product) -> Result<ProductView> {
+    pub(super) async fn product_view(
+        &self,
+        product: Product,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductView> {
         let product_id = ProductId::new(product.base.id.clone());
-        let mut summaries = self.product_listing_views(std::slice::from_ref(&product_id)).await?;
+        let mut summaries = self.product_listing_views(std::slice::from_ref(&product_id), executor).await?;
         let summary =
             summaries.remove(product_id.as_ref()).unwrap_or(ProductListingView::new(product_id.to_string()));
-        let source = self.db.product_sources().find_by_id(&product.base.id, &mut NoTransaction).await?;
+        let source = self.db.product_sources().find_by_id(&product.base.id, executor).await?;
         Ok(ProductView {
             id: product.base.id,
             product_no: product.product_no,
@@ -402,5 +439,72 @@ mod tests {
         assert_eq!(views["partial"].listing_status, ProductListingStatus::PartiallyListed);
         assert_eq!(views["all-unlisted"].listing_status, ProductListingStatus::Unlisted);
         assert_eq!(views["all-unlisted"].sku_count, 2);
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::ids::{SkuId, UnitOfMeasureId};
+    use persistence_core::testing::SnapshotExecutor;
+    use serde_json::json;
+
+    use super::super::testing::{actor, denied, service};
+    use super::*;
+    use crate::entity::catalog::sku::SkuData;
+    use crate::entity::catalog::{EMPTY_SPEC_SIGNATURE, EnableStatus};
+
+    #[tokio::test]
+    async fn sku_version_conflicts_are_not_reported_before_product_authorization() {
+        let service = service().await;
+        let actor = actor();
+        let sku = Sku::new(
+            SkuId::new("sku"),
+            SkuData {
+                sku_no: "SKU-1".into(),
+                product_id: ProductId::new("product"),
+                base_unit_id: UnitOfMeasureId::new("unit"),
+                specification_signature: EMPTY_SPEC_SIGNATURE.into(),
+                status: EnableStatus::Active,
+                listing_status: ListingStatus::Unlisted,
+            },
+            actor.id(),
+        )
+        .unwrap();
+        for version in [sku.base.version, sku.base.version + 1] {
+            denied(
+                service
+                    .authorize_sku_listing_change(&sku, version, &actor, &mut SnapshotExecutor::default())
+                    .await,
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn writes_authorize_before_existing_records_versions_or_related_facts() {
+        let service = service().await;
+        let actor = actor();
+        let mut executor = SnapshotExecutor::default();
+        for version in [1, 999] {
+            denied(
+                service
+                    .product_listing_update_stage(
+                        "missing",
+                        serde_json::from_value(json!({"listing_status":"listed"})).unwrap(),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+            denied(
+                service
+                    .sku_listing_update_stage(
+                        "missing",
+                        serde_json::from_value(json!({"version":version,"listing_status":"listed"})).unwrap(),
+                        &actor,
+                        &mut executor,
+                    )
+                    .await,
+            );
+        }
     }
 }

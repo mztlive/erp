@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
+use erp_permissions::supplier_fulfillment;
 use erp_supply::api_order::{ApiOrderExecution, ApiOrderStage};
 use erp_supply::ports::connector::SupplierConnector;
 use erp_supply::ports::connector::address::{
@@ -11,7 +13,7 @@ use erp_supply::ports::connector::address::{
     SupplierAddressDepth, SupplierAddressLevel,
 };
 use erp_supply::service::supplier_api::SupplierApiService;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::snapshot::ExecutionSnapshot;
@@ -122,7 +124,7 @@ impl AddressTicket {
 impl SupplierApiOrderProcess {
     /// 按已授权原执行返回服务器验证并封装的下一层地址候选。
     /// # 参数
-    /// `id` 已由 Handler 执行 submit 对象范围授权，`query` 仅携带前一层票据。
+    /// `id` 为原订单，`query` 仅携带前一层票据，actor 为当前认证操作人。
     /// # 返回
     /// 当前连接和冻结地址专属的可选择候选，不执行下单。
     /// # 错误
@@ -131,10 +133,10 @@ impl SupplierApiOrderProcess {
         &self,
         id: &str,
         query: ExecutionAddressQuery,
+        actor: &AuditActor,
     ) -> Result<ExecutionAddressCandidates> {
-        let execution = self.load(id).await?;
+        let (execution, connector) = self.address_context(id, actor).await?;
         ensure_address_editable(&execution, &self.decode(&execution)?)?;
-        let connector = self.setup_connector(&execution).await?;
         if connector.address_requirement() != AddressRequirement::FourLevel {
             return Err(Error::ValidationError("当前供应商不使用四级地址选择".into()));
         }
@@ -147,11 +149,45 @@ impl SupplierApiOrderProcess {
             .map_err(|error| Error::BusinessLogicError(error.summary))?
             .value;
         validate_candidates(&candidates, query.level, parent_code.as_deref())?;
+        let (fresh, _) = self.address_context(id, actor).await?;
+        if fresh.base.version != execution.base.version {
+            return Err(Error::ConflictError("执行资料已变化，请重新选择地址".into()));
+        }
+        self.address_candidates(&execution, &path, candidates)
+    }
+
+    async fn address_context(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<(ApiOrderExecution, Arc<dyn SupplierConnector>)> {
+        let (process, id, actor) = (self.clone(), id.to_owned(), actor.clone());
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (access, execution) = process
+                        .setup_access(&id, &actor, &supplier_fulfillment::ORDER_SUBMIT, executor)
+                        .await?;
+                    let connector = process.setup_connector(&execution, executor).await?;
+                    access.validate(executor).await?;
+                    Ok((execution, connector))
+                })
+            })
+            .await
+    }
+
+    fn address_candidates(
+        &self,
+        execution: &ApiOrderExecution,
+        path: &[SupplierAddressCandidate],
+        candidates: Vec<SupplierAddressCandidate>,
+    ) -> Result<ExecutionAddressCandidates> {
         let mut result = Vec::new();
         for candidate in candidates {
-            let mut selected = path.clone();
+            let mut selected = path.to_vec();
             selected.push(candidate.clone());
-            let ticket = AddressTicket::for_execution(&execution, selected, Instant::now())?;
+            let ticket = AddressTicket::for_execution(execution, selected, Instant::now())?;
             let text =
                 serde_json::to_string(&ticket).map_err(|_| Error::Internal("地址候选无法保存".into()))?;
             result.push(ExecutionAddressCandidate {
@@ -167,9 +203,10 @@ impl SupplierApiOrderProcess {
     pub(super) async fn setup_connector(
         &self,
         execution: &ApiOrderExecution,
+        executor: &mut dyn Executor,
     ) -> Result<Arc<dyn SupplierConnector>> {
         let connection = SupplierApiService::new(self.db.clone())
-            .load_connection(&execution.connection_id, &mut NoTransaction)
+            .load_connection(&execution.connection_id, executor)
             .await?;
         self.runtime
             .fulfillment_connector(&connection)
@@ -181,12 +218,12 @@ impl SupplierApiOrderProcess {
         execution: &mut ApiOrderExecution,
         snapshot: &mut ExecutionSnapshot,
         ticket: &str,
+        connector: &dyn SupplierConnector,
     ) -> Result<()> {
         ensure_address_editable(execution, snapshot)?;
         let proof = self.decode_address_ticket(ticket)?;
         proof.validate(execution, Instant::now())?;
         let address = proof.into_address()?;
-        let connector = self.setup_connector(execution).await?;
         if connector.address_requirement() != AddressRequirement::FourLevel {
             return Err(Error::ValidationError("当前供应商不使用四级地址选择".into()));
         }

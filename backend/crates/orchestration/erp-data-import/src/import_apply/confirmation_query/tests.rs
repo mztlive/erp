@@ -6,6 +6,7 @@ use erp_workflow::entity::work_item::{
 };
 use erp_workflow::service::work_item::{AuthorizedWorkItem, ProcessingState, WorkItemAllowedAction};
 use persistence_core::ReadExecutor;
+use persistence_core::testing::SnapshotExecutor;
 
 use super::{authorized_work_item_view, read_only_work_item_view, work_item_view};
 
@@ -138,6 +139,13 @@ async fn confirmation_list_stops_before_records_when_identity_is_unavailable() {
     let params = serde_json::from_value(serde_json::json!({})).unwrap();
     let error = service
         .confirmation_list_stage(&params, &actor, &mut ReadExecutor::default())
+        .await
+        .expect_err("非快照读取必须在取证前拒绝");
+    assert!(
+        matches!(error, crate::Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")
+    );
+    let error = service
+        .confirmation_list_stage(&params, &actor, &mut SnapshotExecutor::default())
         .await
         .expect_err("必须先验证入口权限");
     assert!(matches!(error, crate::Error::Internal(reason) if reason == "测试授权设施不可用"));

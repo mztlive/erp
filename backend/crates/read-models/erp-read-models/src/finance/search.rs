@@ -12,7 +12,7 @@ use erp_supplier::repository::prelude::*;
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::Executor;
 
 use crate::{Error, Result};
 
@@ -21,7 +21,7 @@ use crate::{Error, Result};
 /// 名称、来源单号、财务关系任何一段失败时整次查询失败。
 ///
 /// # 参数
-/// 数据库、可选关键词及需要解析的财务对象类型。
+/// 数据库、可选关键词、需要解析的财务对象类型及原读取执行器。
 /// # 返回
 /// 返回完整关键词命中身份；空关键词不限制列表。
 /// # 错误
@@ -30,6 +30,7 @@ pub(super) async fn keyword_ids(
     db: &Database,
     q: Option<&str>,
     target: FinanceSearchTarget,
+    executor: &mut dyn Executor,
 ) -> Result<Option<Vec<String>>> {
     let Some(q) = normalized_text(q) else {
         return Ok(None);
@@ -38,34 +39,30 @@ pub(super) async fn keyword_ids(
         target,
         FinanceSearchTarget::Receivable | FinanceSearchTarget::Receipt | FinanceSearchTarget::SalesInvoice
     ) {
-        sales_facts(db, q).await?
+        sales_facts(db, q, executor).await?
     } else {
-        purchase_facts(db, q).await?
+        purchase_facts(db, q, executor).await?
     };
-    Ok(Some(FinanceKeywordRepository::new(db).matching_ids(target, &facts, &mut NoTransaction).await?))
+    Ok(Some(FinanceKeywordRepository::new(db).matching_ids(target, &facts, executor).await?))
 }
 
-/// 销售单号和主体名称使用各自非事务执行器并行读取，不共享可变执行器。
-async fn sales_facts(db: &Database, q: String) -> Result<FinanceKeyword> {
-    let (parties, orders) = tokio::join!(
-        async { db.party().matching_current_party_ids_by_name(&q, &mut NoTransaction).await },
-        async { db.sales_orders().matching_ids_by_number(&q, &mut NoTransaction).await },
-    );
+/// 销售单号和主体名称沿原执行器串行读取，保持与授权及最终页面相同快照。
+async fn sales_facts(db: &Database, q: String, executor: &mut dyn Executor) -> Result<FinanceKeyword> {
+    let parties = db.party().matching_current_party_ids_by_name(&q, executor).await;
+    let orders = db.sales_orders().matching_ids_by_number(&q, executor).await;
     sales_keyword(q, parties.map_err(Error::from), orders.map_err(Error::from))
 }
 
-/// 名称到供应商仍按依赖顺序读取，与采购及结算单号两个独立读取并行。
-async fn purchase_facts(db: &Database, q: String) -> Result<FinanceKeyword> {
-    let (parties, orders, statements) = tokio::join!(
-        async {
-            let parties = db.party().matching_current_party_ids_by_name(&q, &mut NoTransaction).await?;
-            let suppliers =
-                db.supplier_accounts().matching_ids_by_parties(&parties, &mut NoTransaction).await?;
-            Ok::<_, Error>((parties, suppliers))
-        },
-        async { db.purchase_orders().matching_ids_by_number(&q, &mut NoTransaction).await },
-        async { db.supplier_settlement_statements().matching_ids_by_number(&q, &mut NoTransaction).await },
-    );
+/// 名称、供应商与两类来源单号沿同一执行器读取，不混入事务外物化身份。
+async fn purchase_facts(db: &Database, q: String, executor: &mut dyn Executor) -> Result<FinanceKeyword> {
+    let parties = async {
+        let parties = db.party().matching_current_party_ids_by_name(&q, executor).await?;
+        let suppliers = db.supplier_accounts().matching_ids_by_parties(&parties, executor).await?;
+        Ok::<_, Error>((parties, suppliers))
+    }
+    .await;
+    let orders = db.purchase_orders().matching_ids_by_number(&q, executor).await;
+    let statements = db.supplier_settlement_statements().matching_ids_by_number(&q, executor).await;
     purchase_keyword(q, parties, orders.map_err(Error::from), statements.map_err(Error::from))
 }
 
@@ -104,7 +101,7 @@ fn purchase_keyword(
 mod tests {
     use super::*;
 
-    /// 并行读取结果仍保留销售侧所有命中身份，不把空集合或大量结果解释为无筛选。
+    /// 读取结果保留销售侧所有命中身份，不把空集合或大量结果解释为无筛选。
     #[test]
     fn sales_facts_keep_complete_ids_and_empty_matches() {
         let orders = (0..10_001).map(|index| SalesOrderId::new(index.to_string())).collect();

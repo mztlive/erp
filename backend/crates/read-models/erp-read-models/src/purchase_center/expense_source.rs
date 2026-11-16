@@ -289,7 +289,7 @@ fn summary(row: SalesOrderRow, customer_name: Option<String>) -> ExpenseSourceSu
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
-    use erp_identity::testing::unavailable_authorization;
+    use erp_identity::testing::unbound_authorization;
     use mongodb::Client;
     use persistence_core::testing::SnapshotExecutor;
 
@@ -299,7 +299,7 @@ mod tests {
     async fn expense_sources_stop_before_business_reads_when_mapping_is_missing() {
         let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
         let db = client.database("expense_source_authorization");
-        let service = ExpenseSourceReadService::new(db, unavailable_authorization());
+        let service = ExpenseSourceReadService::new(db, unbound_authorization());
         let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
         let errors = [
             service

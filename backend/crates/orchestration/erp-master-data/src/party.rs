@@ -5,9 +5,8 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::run_audited;
-use erp_core::ids::PartyId;
+use erp_party::PartyService;
 use erp_party::ports::SupplierRolePort;
-use erp_party::{PartyExt, PartyService};
 use mongodb::Database;
 
 use crate::{Error, Result};
@@ -43,16 +42,14 @@ pub fn process_name() -> &'static str {
 pub async fn delete_party(
     db: Database,
     service: PartyService,
-    supplier_roles: Arc<dyn SupplierRolePort>,
+    _supplier_roles: Arc<dyn SupplierRolePort>,
     id: String,
     actor: AuditActor,
 ) -> Result<()> {
-    let mut party = service.load_party(&id).await?;
-    erp_party::ensure_outside_supplier_profile(&*supplier_roles, &PartyId::new(&id)).await?;
-    let audit = actor.clone().resource_log("party.delete", "party", party.base.id.clone())?;
-    run_audited(&db, audit, move |db, executor| {
+    let audit = actor.clone().resource_log("party.delete", "party", id.clone())?;
+    run_audited(&db, audit, move |_db, executor| {
         Box::pin(async move {
-            db.parties().soft_delete(&mut party, executor).await?;
+            service.delete_party(&id, &actor, executor).await?;
             Ok::<(), Error>(())
         })
     })

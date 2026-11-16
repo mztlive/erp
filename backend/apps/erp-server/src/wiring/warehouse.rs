@@ -8,7 +8,7 @@ use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::*;
-use erp_identity::{AccessControlExt, Permission, SharedRbacService};
+use erp_identity::{AccessControlExt, AccountCore, Permission, SharedRbacService};
 use erp_support::content_fingerprint;
 use erp_warehouse::{
     AttachmentFingerprintPort, HandlerIdentityFact, IdentityFactPort, PreparedWarehouseAudit,
@@ -16,7 +16,7 @@ use erp_warehouse::{
 };
 use erp_workflow::WorkItemType;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::audit_conversion::{PreparedAudit, map_audit_error};
 
@@ -137,16 +137,15 @@ impl MongoWarehouseIdentity {
 
     async fn identity_fact(
         &self,
-        account: &erp_identity::AccountCore,
+        account: &AccountCore,
+        executor: &mut dyn Executor,
     ) -> erp_warehouse::Result<HandlerIdentityFact> {
         let inbound = handler_permissions(required_fulfillment_permissions("purchase_receipt"));
         let outbound = handler_permissions(required_fulfillment_permissions("delivery"));
         let actor =
             AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
         let requested = inbound.iter().chain(&outbound).cloned().collect::<Vec<_>>();
-        let qualified = super::authorization::authorization_service(self.db.clone(), self.rbac.clone())
-            .permissions(&actor, &requested, &mut NoTransaction)
-            .await?;
+        let qualified = self.rbac.qualified_permissions(&actor, &requested, executor).await?;
         let can_login = qualified.is_some();
         let inbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&inbound));
         let outbound_eligible = qualified.as_ref().is_some_and(|value| value.same_role(&outbound));
@@ -163,29 +162,36 @@ impl MongoWarehouseIdentity {
 
 #[async_trait]
 impl IdentityFactPort for MongoWarehouseIdentity {
-    async fn handler_identity(&self, account_id: &str) -> erp_warehouse::Result<Option<HandlerIdentityFact>> {
+    async fn handler_identity(
+        &self,
+        account_id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_warehouse::Result<Option<HandlerIdentityFact>> {
         let account = self
             .db
             .accounts()
-            .find_work_item_account(account_id, &mut NoTransaction)
+            .find_work_item_account(account_id, executor)
             .await
             .map_err(erp_warehouse::Error::from)?;
         match account {
-            Some(account) => Ok(Some(self.identity_fact(&account).await?)),
+            Some(account) => Ok(Some(self.identity_fact(&account, executor).await?)),
             None => Ok(None),
         }
     }
 
-    async fn admin_handler_identities(&self) -> erp_warehouse::Result<Vec<HandlerIdentityFact>> {
+    async fn admin_handler_identities(
+        &self,
+        executor: &mut dyn Executor,
+    ) -> erp_warehouse::Result<Vec<HandlerIdentityFact>> {
         let accounts = self
             .db
             .accounts()
-            .list_by_kind(AccountKind::Admin, &mut NoTransaction)
+            .list_by_kind(AccountKind::Admin, executor)
             .await
             .map_err(erp_warehouse::Error::from)?;
         let mut facts = Vec::new();
         for account in accounts {
-            facts.push(self.identity_fact(&account).await?);
+            facts.push(self.identity_fact(&account, executor).await?);
         }
         Ok(facts)
     }

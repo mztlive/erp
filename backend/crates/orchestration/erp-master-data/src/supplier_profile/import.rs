@@ -5,7 +5,7 @@ use erp_party::repository::prelude::*;
 use erp_supplier::SupplierExt;
 use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult, SupplierImportRow};
 use erp_supplier::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, Transactional};
 
 use super::SupplierProfileProcess;
 use crate::{Error, Result};
@@ -44,7 +44,7 @@ impl SupplierProfileProcess {
     /// 首先回读去重记录，随后完成引用解析和根命令事务。
     async fn import_row(&self, row: &SupplierImportRow, actor: &AuditActor) -> Result<SupplierImportResult> {
         row.validate()?;
-        if let Some(done) = self.command_result(&row.command_key()).await? {
+        if let Some(done) = self.imported_result(&row.command_key(), actor).await? {
             return Ok(row_result(
                 row,
                 "skipped",
@@ -53,19 +53,39 @@ impl SupplierProfileProcess {
                 Some(done.supplier_no),
             ));
         }
-        if let Some(existing) = self.existing_import_supplier(row.cell(1)).await? {
-            return Ok(row_result(
-                row,
-                "skipped",
-                "系统已有同名供应商，本行未写入",
-                Some(existing.base.id),
-                Some(existing.supplier_no),
-            ));
-        }
-        let (signing, payment) = row.company_names();
-        let signing = self.import_company(signing).await?;
-        let payment = self.import_company(payment).await?;
-        let command = row.command(signing, payment, actor.id())?;
+        let this = self.clone();
+        let row_owned = row.clone();
+        let actor_owned = actor.clone();
+        let reference = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    this.authorization
+                        .access
+                        .require_create(&actor_owned, actor_owned.id(), executor)
+                        .await?;
+                    if let Some(existing) = this.existing_import_supplier(row_owned.cell(1), executor).await?
+                    {
+                        return Ok::<_, Error>(Err(row_result(
+                            &row_owned,
+                            "skipped",
+                            "系统已有同名供应商，本行未写入",
+                            Some(existing.base.id),
+                            Some(existing.supplier_no),
+                        )));
+                    }
+                    let (signing, payment) = row_owned.company_names();
+                    let signing = this.import_company(signing, executor).await?;
+                    let payment = this.import_company(payment, executor).await?;
+                    Ok(Ok(row_owned.command(signing, payment, actor_owned.id())?))
+                })
+            })
+            .await?;
+        let command = match reference {
+            Ok(command) => command,
+            Err(result) => return Ok(result),
+        };
         self.submit_import_row(row, command, actor).await
     }
 
@@ -85,7 +105,7 @@ impl SupplierProfileProcess {
                 Some(done.supplier_no),
             )),
             Err(error) => {
-                if let Some(done) = self.command_result(&row.command_key()).await? {
+                if let Some(done) = self.imported_result(&row.command_key(), actor).await? {
                     return Ok(row_result(
                         row,
                         "skipped",
@@ -100,23 +120,29 @@ impl SupplierProfileProcess {
     }
 
     /// 公司名称或别名只允许精确匹配已启用的我方公司。
-    async fn import_company(&self, name: &str) -> Result<erp_core::ids::PartyId> {
+    async fn import_company(
+        &self,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<erp_core::ids::PartyId> {
         let company = self
             .db
             .parties()
-            .company_by_name(name, &mut NoTransaction)
+            .company_by_name(name, executor)
             .await?
             .ok_or_else(|| Error::ValidationError(format!("公司主体“{name}”尚未维护或已停用")))?;
         Ok(erp_core::ids::PartyId::new(company.base.id))
     }
 
     /// 精确匹配当前法定名称，不将其他企业主体自动转换成供应商。
-    async fn existing_import_supplier(&self, name: &str) -> Result<Option<erp_supplier::SupplierAccount>> {
-        let parties = self.db.party().exact_current_party_ids_by_name(name, &mut NoTransaction).await?;
+    async fn existing_import_supplier(
+        &self,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<erp_supplier::SupplierAccount>> {
+        let parties = self.db.party().exact_current_party_ids_by_name(name, executor).await?;
         for party in parties {
-            if let Some(supplier) =
-                self.db.supplier_accounts().find_by_party(&party, &mut NoTransaction).await?
-            {
+            if let Some(supplier) = self.db.supplier_accounts().find_by_party(&party, executor).await? {
                 return Ok(Some(supplier));
             }
         }

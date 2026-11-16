@@ -10,21 +10,20 @@
 //! 客户、归属与附件事实走消费方 Port；账号目录使用 identity 公开 API。
 //! 文件资产写入与跨域根事务由 `erp-processes` 持有，本模块提供事务内接口。
 
+use std::slice;
 use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::ids::{CustomerAccountId, FileAssetId};
 use erp_identity::AccountDirectoryService;
-use erp_permissions::contract;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use crate::authorization::CompiledScope;
 pub use crate::authorization::ContractAccess;
 use crate::dto::contract::{
-    ArchiveContractRevisionRequest, ContractDetailView, ContractRevisionView, ContractView,
-    CreateContractRequest, TerminateContractRequest, UploadContractRequest,
+    ContractDetailView, ContractRevisionView, ContractView, CreateContractRequest, UploadContractRequest,
 };
 use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
@@ -35,6 +34,7 @@ use crate::repository::ContractExt;
 use crate::repository::prelude::*;
 
 mod archive;
+mod commands;
 mod company;
 mod detail;
 mod fingerprint;
@@ -120,7 +120,6 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractView> {
         req.validate()?;
-        self.ensure_active_customer(&req.customer_id).await?;
         let customer_id = req.customer_id.to_string();
         let planned = plan_first_archive(req, actor.id())?;
         let audit = self.audit.resource_log(
@@ -133,40 +132,30 @@ impl ContractService {
         let db = self.db.clone();
         let audit_port = self.audit.clone();
         let access = self.data_scope.clone();
-        let companies = self.companies.clone();
+        let service = self.clone();
         let actor_for_tx = actor.clone();
-        let mut contract_for_tx = planned.contract.clone();
+        let mut contract_for_tx = planned.contract;
         let revision = planned.revision;
         execute_authorized_transaction(
             &db,
             &audit_port,
             &audit,
-            TxAuthorization::Create(customer_id),
+            customer_id,
             access,
             actor_for_tx,
-            Box::new(move |db, executor| {
+            Box::new(move |_, executor| {
                 Box::pin(async move {
-                    require_signing_company(
-                        companies.as_ref(),
-                        &contract_for_tx.settlement_party_id,
-                        executor,
-                    )
-                    .await?;
-                    db.contract()
-                        .create_contract_with_revision(&mut contract_for_tx, &revision, executor)
-                        .await?;
-                    Ok::<(), crate::error::Error>(())
+                    service.apply_create(&mut contract_for_tx, &revision, executor).await?;
+                    Ok(contract_for_tx.into())
                 })
             }),
         )
-        .await?;
-
-        Ok(planned.contract.into())
+        .await
     }
 
-    /// 按已登记文件资产规划合同首次归档，不开启事务、不写附件。
+    /// 按已登记文件资产规划合同首次归档，不读取数据库、不写附件。
     ///
-    /// 对象存储写入与文件资产登记由 `erp-processes` 在同一 Executor 上完成。
+    /// 对象存储写入与文件资产登记由所属编排入口组织。
     ///
     /// # 参数
     /// * `req` - 合同业务字段
@@ -177,7 +166,7 @@ impl ContractService {
     /// 返回待写入的合同与首修订。
     ///
     /// # 错误
-    /// 客户不存在或停用、字段非法时返回错误。
+    /// 字段非法时返回错误；客户及公司资格在原写事务由 apply_create 核验。
     pub async fn plan_upload(
         &self,
         req: UploadContractRequest,
@@ -185,9 +174,7 @@ impl ContractService {
         actor_id: &str,
     ) -> Result<PlannedContractArchive> {
         req.validate()?;
-        self.ensure_active_customer(&req.customer_id).await?;
         let settlement_party_id = required_settlement(req.settlement_party_id.as_ref())?;
-        require_signing_company(self.companies.as_ref(), &settlement_party_id, &mut NoTransaction).await?;
         plan_upload_archive(req, file_asset_id, settlement_party_id, actor_id)
     }
 
@@ -211,6 +198,7 @@ impl ContractService {
         revision: &ContractRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.ensure_active_customer(&contract.customer_id, executor).await?;
         require_signing_company(self.companies.as_ref(), &contract.settlement_party_id, executor).await?;
         self.db.contract().create_contract_with_revision(contract, revision, executor).await?;
         Ok(())
@@ -271,6 +259,15 @@ impl ContractService {
             .find_authorized(id, scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("合同不存在或无权查看".to_string()))?;
+        self.detail_view(contract, executor).await
+    }
+
+    /// 从已授权的原对象或命令结果补齐修订与姓名，不增加详情菜单资格。
+    async fn detail_view(
+        &self,
+        contract: Contract,
+        executor: &mut dyn Executor,
+    ) -> Result<ContractDetailView> {
         let revisions =
             self.db.contract_revisions().list_by_contract(&contract.base.id.clone().into(), executor).await?;
         let shared_sales_user_ids = contract.shared_sales_user_ids.clone();
@@ -293,141 +290,6 @@ impl ContractService {
             version: view.version,
             revisions: revisions.into_iter().map(ContractRevisionView::from).collect(),
         })
-    }
-
-    /// 归档合同新版本（追加不可变版本并切换当前版本指针，乐观锁语义）。
-    ///
-    /// 期望版本 `req.version` 与当前版本不一致时直接返回冲突（409）；仓储层
-    /// `update` 同时以 `id + version` CAS 兜底并发竞争。
-    ///
-    /// 编排经 [`execute_authorized_transaction`]；范围重验仍在事务内先执行。
-    ///
-    /// # 参数
-    /// * `id` - 合同 ID
-    /// * `req` - 追加版本请求（含期望版本与 PDF 关联）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回追加后的合同详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 合同不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
-    pub async fn archive_contract_revision(
-        &self,
-        id: &str,
-        req: ArchiveContractRevisionRequest,
-        actor: &AuditActor,
-    ) -> Result<ContractDetailView> {
-        req.validate()?;
-        let contract = self
-            .db
-            .contracts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
-        conflict_if_stale_version(contract.matches_version(req.version))?;
-        let current_revision_no = self
-            .db
-            .contract_revisions()
-            .latest_revision_no(&contract.base.id.clone().into(), &mut NoTransaction)
-            .await?;
-        let planned = plan_next_revision(contract, req, current_revision_no.unwrap_or(0))?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract.archive_revision",
-            "contract",
-            planned.contract.base.id.clone(),
-        )?;
-
-        let db = self.db.clone();
-        let audit_port = self.audit.clone();
-        let access = self.data_scope.clone();
-        let actor_for_tx = actor.clone();
-        let contract_id = id.to_string();
-        let mut contract_for_tx = planned.contract;
-        let revision = planned.revision;
-        execute_authorized_transaction(
-            &db,
-            &audit_port,
-            &audit,
-            TxAuthorization::Use(contract_id),
-            access,
-            actor_for_tx,
-            Box::new(move |db, executor| {
-                Box::pin(async move {
-                    db.contract()
-                        .archive_contract_revision(&mut contract_for_tx, &revision, executor)
-                        .await?;
-                    Ok::<(), crate::error::Error>(())
-                })
-            }),
-        )
-        .await?;
-
-        self.contract_detail(id, actor).await
-    }
-
-    /// 终止合同（乐观锁语义；历史销售引用保持不变，W04 授权终止）。
-    ///
-    /// 编排经 [`execute_authorized_transaction`]；终止状态机仍在事务外先执行。
-    ///
-    /// # 参数
-    /// * `id` - 合同 ID
-    /// * `req` - 终止请求（含期望版本）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回终止后的合同详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 合同不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
-    /// * `Logic` - 非 `Effective` 状态不允许终止（实体状态机拒绝）
-    pub async fn terminate_contract(
-        &self,
-        id: &str,
-        req: TerminateContractRequest,
-        actor: &AuditActor,
-    ) -> Result<ContractDetailView> {
-        req.validate()?;
-        let mut contract = self
-            .db
-            .contracts()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
-        conflict_if_stale_version(contract.matches_version(req.version))?;
-        contract.terminate(actor.id())?;
-        let audit = self.audit.resource_log(
-            actor.clone(),
-            "contract.terminate",
-            "contract",
-            contract.base.id.clone(),
-        )?;
-
-        let db = self.db.clone();
-        let audit_port = self.audit.clone();
-        let access = self.data_scope.clone();
-        let actor_for_tx = actor.clone();
-        let contract_id = id.to_string();
-        execute_authorized_transaction(
-            &db,
-            &audit_port,
-            &audit,
-            TxAuthorization::Use(contract_id),
-            access,
-            actor_for_tx,
-            Box::new(move |db, executor| {
-                Box::pin(async move {
-                    db.contracts().update(&mut contract, executor).await?;
-                    Ok::<(), crate::error::Error>(())
-                })
-            }),
-        )
-        .await?;
-
-        self.contract_detail(id, actor).await
     }
 
     /// 在调用方事务内证明按指定客户创建合同的资格。
@@ -487,6 +349,7 @@ impl ContractService {
     ///
     /// # 参数
     /// * `customer_id` - 客户角色 ID
+    /// * `executor` - 原授权写事务的执行器。
     ///
     /// # 返回
     /// 返回客户最小事实。
@@ -496,57 +359,49 @@ impl ContractService {
     pub async fn ensure_active_customer(
         &self,
         customer_id: &CustomerAccountId,
+        executor: &mut dyn Executor,
     ) -> Result<CustomerAccountFact> {
-        customer_eligibility(self.customers.find_by_id(customer_id).await?)
+        let facts = self.customers.find_by_ids(slice::from_ref(customer_id), executor).await?;
+        customer_eligibility(facts.into_iter().find(|fact| fact.id == customer_id.as_ref()))
     }
 }
 
-/// 写命令事务内的授权目标：新建客户或既有合同。
-enum TxAuthorization {
-    /// 新建归档：证明按指定客户创建的资格。
-    Create(String),
-    /// 既有合同：重验 `update` 对象资格。
-    Use(String),
-}
-
 /// 本命令的仓储写入闭包：事务内执行，失败整事务回滚。
-type TxAction = Box<
+type TxAction<T> = Box<
     dyn for<'a> FnOnce(
             &'a Database,
             &'a mut dyn Executor,
-        ) -> std::pin::Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
         + Send,
 >;
 
-/// 授权事务执行 + 审计落盘的统一编排（三写命令共用）。
+/// 首次归档的授权事务和审计编排。
 ///
-/// 范围重验始终在事务内先执行（`Create` 走 `require_create`，
-/// `Use` 走 `require_with(..., "update", ...)`），再执行动作闭包的仓储写入，
-/// 最后落盘审计；任一步失败整事务回滚。
+/// 原事务先核验真实客户候选，再执行合同写入和审计；任一步失败整事务回滚。
 ///
 /// # 参数
 /// * `db` - 合同数据库
 /// * `audit_port` - 审计写入端口
 /// * `audit` - 已规划的审计记录
-/// * `authorization` - 事务内授权目标
+/// * `customer_id` - 真实客户来源身份
 /// * `access` - 合同范围访问器
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `action` - 本命令的仓储写入闭包
 ///
 /// # 返回
-/// 事务提交成功时返回 `Ok(())`。
+/// 事务提交成功时返回本命令在原事务生成的响应。
 ///
 /// # 错误
 /// 授权拒绝、仓储写入或审计落盘失败时返回原错误。
-async fn execute_authorized_transaction(
+async fn execute_authorized_transaction<T: Send + 'static>(
     db: &Database,
     audit_port: &Arc<dyn ContractAuditPort>,
     audit: &PreparedContractAudit,
-    authorization: TxAuthorization,
+    customer_id: String,
     access: ContractAccess,
     actor: AuditActor,
-    action: TxAction,
-) -> Result<()> {
+    action: TxAction<T>,
+) -> Result<T> {
     let client = db.client().clone();
     let db = db.clone();
     client
@@ -554,17 +409,10 @@ async fn execute_authorized_transaction(
             let audit_port = audit_port.clone();
             let audit = audit.clone();
             Box::pin(async move {
-                match authorization {
-                    TxAuthorization::Create(customer_id) => {
-                        access.require_create(&actor, &customer_id, executor).await?;
-                    },
-                    TxAuthorization::Use(contract_id) => {
-                        access.require_with(actor, &contract::TERMINATE, &contract_id, executor).await?;
-                    },
-                }
-                action(&db, executor).await?;
+                access.require_create(&actor, &customer_id, executor).await?;
+                let result = action(&db, executor).await?;
                 audit_port.persist(&audit, executor).await?;
-                Ok::<(), crate::error::Error>(())
+                Ok::<T, crate::error::Error>(result)
             })
         })
         .await

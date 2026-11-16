@@ -1,10 +1,9 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
-use erp_contract::Error as ContractError;
 use erp_data_import::data_transfer::{TransferKind, TransferReader};
 use erp_identity::Permission;
 use erp_supply::OfferingAccess;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use crate::wiring::{MongoPurchaseDataScope, customer_access, funds_access_with_rbac};
 mod error;
@@ -45,6 +44,15 @@ impl TransferReader for Reads {
         actor: &AuditActor,
     ) -> erp_data_import::Result<Value> {
         self.read_page(kind, query, actor).await.map_err(Into::into)
+    }
+    async fn page_with(
+        &self,
+        kind: TransferKind,
+        query: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> erp_data_import::Result<Value> {
+        self.read_page_with(kind, query, actor, executor).await.map_err(Into::into)
     }
     async fn report(
         &self,
@@ -96,8 +104,9 @@ impl Reads {
                     .await?,
             ),
             Receivables | SupplierPayables => funds(state, kind, query, actor).await,
-            SupplierQuoteArchive | SupplierQuotePreview => quotes(state, query, actor).await,
-            ProductPoolExcel => output(state.catalog_center().sellable_sku_list(&input(query)?).await?),
+            SupplierQuoteArchive | SupplierQuotePreview | ProductPoolExcel => {
+                Err(Error::ValidationError("此任务必须沿原功能授权快照读取".into()))
+            },
             MasterData => master(state, query, actor).await,
             _ => Err(Error::ValidationError("此任务不是列表查询".into())),
         }
@@ -133,7 +142,7 @@ async fn master(state: &Application, query: &Value, actor: &AuditActor) -> Resul
     match query["resource"].as_str() {
         Some("supplier") => output(state.supplier_service().supplier_list(&input(query)?, actor).await?),
         Some("product") => output(state.catalog_center().product_list(&input(query)?, actor).await?),
-        Some("sellable") => output(state.catalog_center().sellable_sku_list(&input(query)?).await?),
+        Some("sellable") => Err(Error::ValidationError("商品池任务必须沿原功能授权快照读取".into())),
         _ => Err(Error::ValidationError("未知的主数据目录".into())),
     }
 }
@@ -168,16 +177,55 @@ async fn funds(state: &Application, kind: TransferKind, query: &Value, actor: &A
     }
 }
 
-async fn quotes(state: &Application, query: &Value, actor: &AuditActor) -> Result<Value> {
-    if query["source"] == "products" {
-        output(state.catalog_center().sellable_sku_list(&input(query)?).await?)
-    } else {
+impl Reads {
+    /// 固定商品池和报价任务沿原功能资格快照读取，保留所属业务数据授权。
+    async fn read_page_with(
+        &self,
+        kind: TransferKind,
+        query: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Value> {
+        match kind {
+            TransferKind::ProductPoolExcel => self.product_page(query, actor, executor).await,
+            TransferKind::MasterData if query["resource"] == "sellable" => {
+                self.product_page(query, actor, executor).await
+            },
+            TransferKind::SupplierQuoteArchive | TransferKind::SupplierQuotePreview => {
+                if query["source"] == "products" {
+                    self.product_page(query, actor, executor).await
+                } else {
+                    self.quote_page(query, actor, executor).await
+                }
+            },
+            _ => Err(Error::ValidationError("此任务不支持原功能授权快照分页".into())),
+        }
+    }
+
+    /// 商品资格、分页、计数及供应商编号由同一业务读取步骤执行。
+    async fn product_page(
+        &self,
+        query: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Value> {
+        output(self.0.catalog_center().sellable_sku_list_with(&input(query)?, actor, executor).await?)
+    }
+
+    /// 报价来源只在原快照读取供给，并保留既有成本脱敏。
+    async fn quote_page(
+        &self,
+        query: &Value,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<Value> {
+        let state = &self.0;
         let mut page = SupplierOfferingReadService::new(
             state.db(),
-            OfferingAccess::new(state.db(), state.rbac()),
+            OfferingAccess::new(state.db(), state.authorization().into()),
             MongoOfferingProcurementOwners::shared(state.db()),
         )
-        .list(&input(query)?, actor)
+        .list_with(&input(query)?, actor, executor)
         .await?;
         for item in &mut page.data.page.items {
             item.redact_costs();
@@ -187,33 +235,9 @@ async fn quotes(state: &Application, query: &Value, actor: &AuditActor) -> Resul
 }
 
 async fn sales(state: &Application, query: &Value, actor: &AuditActor) -> Result<Value> {
-    let mut page = output(
+    output(
         SalesOrderReadService::with_rbac(state.db(), state.rbac())
-            .sales_order_list(&input(query)?, actor)
+            .sales_order_export_page(&input(query)?, actor)
             .await?,
-    )?;
-    let can_read = state
-        .authorization()
-        .has_permission(actor, &Permission::parse("contract:detail")?, &mut NoTransaction)
-        .await?;
-    if let Some(rows) = page["items"].as_array_mut() {
-        for row in rows {
-            let Some(id) = row["contract_id"].as_str().filter(|s| !s.is_empty()) else {
-                continue;
-            };
-            let number = if can_read {
-                match state.contract_service().contract_detail(id, actor).await {
-                    Ok(detail) => detail.contract_no,
-                    Err(ContractError::Forbidden(_)) | Err(ContractError::NotFound(_)) => {
-                        "合同资料不可读取".into()
-                    },
-                    Err(error) => return Err(error.into()),
-                }
-            } else {
-                "合同资料不可读取".into()
-            };
-            row["contract_no"] = Value::String(number);
-        }
-    }
-    Ok(page)
+    )
 }

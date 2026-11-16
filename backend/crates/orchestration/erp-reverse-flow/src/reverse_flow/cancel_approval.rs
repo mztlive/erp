@@ -13,7 +13,7 @@ pub(super) use erp_workflow::service::approval::execution::cancel_prepare::Docum
 use erp_workflow::service::approval::execution::cancel_prepare::document_cancel_runtime;
 use erp_workflow::service::approval::execution::{CancelExecutionInput, PreparedExecution};
 use mongodb::Database;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Executor;
 
 use crate::{Result, ReverseFlowPorts};
 
@@ -37,6 +37,7 @@ pub(super) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     subject: &SubjectRef,
     subject_version: u32,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
     Ok(document_cancel_runtime(
         db,
@@ -44,7 +45,7 @@ pub(super) async fn load_cancel_runtime(
         subject,
         subject_version,
         "客户退款单绑定的审批定义不存在",
-        &mut NoTransaction,
+        executor,
     )
     .await?)
 }
@@ -131,44 +132,36 @@ pub(super) async fn persist_customer_refund_cancel(
     db: &Database,
     rbac: &ReverseFlowPorts,
     input: CustomerRefundCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let CustomerRefundCancelPersistInput { mut refund, prepared, open_tasks, actor_id, reason, now, audit } =
         input;
-    let db = db.clone();
-    let runtime = rbac.runtime.clone();
-    let authorization = rbac.identity.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
-                authorization
-                    .require(
-                        &actor,
-                        &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                super::cancel_write::persist(
-                    super::cancel_write::MongoCancelWrite {
-                        db: &db,
-                        runtime,
-                        record: super::cancel_write::CancelledReturn::CustomerRefund(&mut refund),
-                        prepared,
-                        open_tasks,
-                        actor_id,
-                        reason,
-                        now,
-                        audit,
-                        closed_tasks: Vec::new(),
-                    },
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+
+    let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+    rbac.identity
+        .require(
+            &actor,
+            &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+            executor,
+        )
+        .await?;
+    super::cancel_write::persist(
+        super::cancel_write::MongoCancelWrite {
+            db,
+            runtime: rbac.runtime.clone(),
+            record: super::cancel_write::CancelledReturn::CustomerRefund(&mut refund),
+            prepared,
+            open_tasks,
+            actor_id,
+            reason,
+            now,
+            audit,
+            closed_tasks: Vec::new(),
+        },
+        executor,
+    )
+    .await
 }
 
 /// 构造供应商退款统一 `cancel_approval` 输入。
@@ -254,44 +247,36 @@ pub(super) async fn persist_supplier_refund_cancel(
     db: &Database,
     rbac: &ReverseFlowPorts,
     input: SupplierRefundCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let SupplierRefundCancelPersistInput { mut refund, prepared, open_tasks, actor_id, reason, now, audit } =
         input;
-    let db = db.clone();
-    let runtime = rbac.runtime.clone();
-    let authorization = rbac.identity.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
-                authorization
-                    .require(
-                        &actor,
-                        &returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CANCEL_APPROVAL,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                super::cancel_write::persist(
-                    super::cancel_write::MongoCancelWrite {
-                        db: &db,
-                        runtime,
-                        record: super::cancel_write::CancelledReturn::SupplierRefund(&mut refund),
-                        prepared,
-                        open_tasks,
-                        actor_id,
-                        reason,
-                        now,
-                        audit,
-                        closed_tasks: Vec::new(),
-                    },
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+
+    let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+    rbac.identity
+        .require(
+            &actor,
+            &returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+            executor,
+        )
+        .await?;
+    super::cancel_write::persist(
+        super::cancel_write::MongoCancelWrite {
+            db,
+            runtime: rbac.runtime.clone(),
+            record: super::cancel_write::CancelledReturn::SupplierRefund(&mut refund),
+            prepared,
+            open_tasks,
+            actor_id,
+            reason,
+            now,
+            audit,
+            closed_tasks: Vec::new(),
+        },
+        executor,
+    )
+    .await
 }
 
 /// 构造回款冲正统一 `cancel_approval` 输入。
@@ -377,6 +362,7 @@ pub(super) async fn persist_receipt_reversal_cancel(
     db: &Database,
     rbac: &ReverseFlowPorts,
     input: ReceiptReversalCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let ReceiptReversalCancelPersistInput {
         mut reversal,
@@ -387,41 +373,32 @@ pub(super) async fn persist_receipt_reversal_cancel(
         now,
         audit,
     } = input;
-    let db = db.clone();
-    let runtime = rbac.runtime.clone();
-    let authorization = rbac.identity.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
-                authorization
-                    .require(
-                        &actor,
-                        &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CANCEL_APPROVAL,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                super::cancel_write::persist(
-                    super::cancel_write::MongoCancelWrite {
-                        db: &db,
-                        runtime,
-                        record: super::cancel_write::CancelledReturn::ReceiptReversal(&mut reversal),
-                        prepared,
-                        open_tasks,
-                        actor_id,
-                        reason,
-                        now,
-                        audit,
-                        closed_tasks: Vec::new(),
-                    },
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+
+    let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+    rbac.identity
+        .require(
+            &actor,
+            &returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+            executor,
+        )
+        .await?;
+    super::cancel_write::persist(
+        super::cancel_write::MongoCancelWrite {
+            db,
+            runtime: rbac.runtime.clone(),
+            record: super::cancel_write::CancelledReturn::ReceiptReversal(&mut reversal),
+            prepared,
+            open_tasks,
+            actor_id,
+            reason,
+            now,
+            audit,
+            closed_tasks: Vec::new(),
+        },
+        executor,
+    )
+    .await
 }
 
 /// 构造付款冲正统一 `cancel_approval` 输入。
@@ -507,6 +484,7 @@ pub(super) async fn persist_payment_reversal_cancel(
     db: &Database,
     rbac: &ReverseFlowPorts,
     input: PaymentReversalCancelPersistInput,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let PaymentReversalCancelPersistInput {
         mut reversal,
@@ -517,39 +495,30 @@ pub(super) async fn persist_payment_reversal_cancel(
         now,
         audit,
     } = input;
-    let db = db.clone();
-    let runtime = rbac.runtime.clone();
-    let authorization = rbac.identity.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
-                authorization
-                    .require(
-                        &actor,
-                        &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CANCEL_APPROVAL,
-                        AccessTarget::Operation,
-                        executor,
-                    )
-                    .await?;
-                super::cancel_write::persist(
-                    super::cancel_write::MongoCancelWrite {
-                        db: &db,
-                        runtime,
-                        record: super::cancel_write::CancelledReturn::PaymentReversal(&mut reversal),
-                        prepared,
-                        open_tasks,
-                        actor_id,
-                        reason,
-                        now,
-                        audit,
-                        closed_tasks: Vec::new(),
-                    },
-                    executor,
-                )
-                .await
-            })
-        })
-        .await
+
+    let actor = AuditActor::new(actor_id.clone(), actor_id.clone(), AccountKind::Admin);
+    rbac.identity
+        .require(
+            &actor,
+            &returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_CANCEL_APPROVAL,
+            AccessTarget::Operation,
+            executor,
+        )
+        .await?;
+    super::cancel_write::persist(
+        super::cancel_write::MongoCancelWrite {
+            db,
+            runtime: rbac.runtime.clone(),
+            record: super::cancel_write::CancelledReturn::PaymentReversal(&mut reversal),
+            prepared,
+            open_tasks,
+            actor_id,
+            reason,
+            now,
+            audit,
+            closed_tasks: Vec::new(),
+        },
+        executor,
+    )
+    .await
 }

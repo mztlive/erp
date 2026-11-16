@@ -1,6 +1,9 @@
 //! customer 的内置权限。
 use crate::{Permission, PermissionDef, groups, resources};
 
+/// 客户资料归属新增按钮沿用的既有功能资格。
+pub const ASSIGNMENT_CREATE: Permission = Permission::new("customer_assignment", "create");
+
 /// 创建完整客户资料。
 pub const PROFILE_CREATE: Permission = CREATE;
 

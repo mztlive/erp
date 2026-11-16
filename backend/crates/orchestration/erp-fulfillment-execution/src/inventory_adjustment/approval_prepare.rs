@@ -39,7 +39,7 @@ use erp_workflow::service::approval::process_kind::process_kind_of;
 use erp_workflow::service::approval::read;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt};
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use super::adapter::{require_frozen_binding, workflow_snapshot_from_inventory};
 use super::mapping::{
@@ -50,24 +50,6 @@ use crate::workflow::FulfillmentWorkflow;
 use crate::{Error, Result};
 
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
-
-/// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `binding` - 创建时冻结的定义绑定
-///
-/// # 返回
-/// 返回已持久化的定义图。
-///
-/// # 错误
-/// 定义不存在或仓储失败时返回冲突或仓储错误。
-pub async fn load_bound_definition_graph(
-    db: &Database,
-    binding: &ApprovalDefinitionBinding,
-) -> Result<DefinitionGraph> {
-    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
-}
 
 /// 在调用方数据库快照内加载冻结绑定对应的定义图。
 ///

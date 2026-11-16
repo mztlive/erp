@@ -14,8 +14,14 @@ pub const WORK_ITEM_EXECUTION_QUALIFICATION: Permission =
 /// 合同识别任务的功能入口；归档时另行检查真实合同创建候选。
 pub const CONTRACT_IMPORT: Permission = Permission::new("contract_import", "operate");
 
+/// 合同销售共享沿用合同修改范围，并独立核对客户负责人分配资格。
+pub const CONTRACT_SALES_ACCESS: Permission = Permission::new("contract", "sales_access_update");
+
 /// 受保护内部对象的固定授权入口。
 pub const CATALOG_PREVIEW_DETAIL: Permission = Permission::new("supplier_catalog_adoption_preview", "detail");
+
+/// 选品及其基础单位补齐使用既有选品入口和成本读取的完整资格。
+pub const CATALOG_ADOPTION: Permission = Permission::new("supplier_catalog_adoption", "operate");
 
 /// 受保护内部对象的固定授权入口。
 pub const PORTAL_MATERIAL_READ: Permission = Permission::new("supplier_portal_material", "read");
@@ -74,6 +80,18 @@ pub const CONNECTION_DISABLE: Permission = Permission::new("supplier_api_connect
 
 /// 在客户当前范围内选择客户开展新业务；沿用客户详情功能资格。
 pub const CUSTOMER_SELECT: Permission = Permission::new("customer", "select_current");
+
+/// 客户创建回执按原创建资格和当前真实归属重新读取结果。
+pub const CUSTOMER_CREATED_RESULT_READ: Permission = Permission::new("customer", "created_result_read");
+
+/// 查询客户资料命令回执的既有详情功能资格。
+pub const CUSTOMER_PROFILE_COMMAND_READ: Permission = Permission::new("customer", "profile_command_read");
+
+/// 查询供应商资料命令回执的既有详情功能资格。
+pub const SUPPLIER_PROFILE_COMMAND_READ: Permission = Permission::new("supplier", "profile_command_read");
+
+/// 开票金额候选读取沿用申请列表功能资格，不签发应收对象凭证。
+pub const INVOICE_REQUEST_AMOUNTS_READ: Permission = Permission::new("sales_invoice_request", "amounts_read");
 /// 读取本人销售询价导入预览。
 pub const SALES_INQUIRY_IMPORT_PREVIEW: Permission =
     Permission::new("sales_inquiry_import_preview", "detail");

@@ -5,7 +5,7 @@ use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::service::approval::read;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 
 use crate::{Error, Result, ReverseFlowPorts};
 
@@ -17,6 +17,7 @@ use crate::{Error, Result, ReverseFlowPorts};
 /// * `binding` - 创建时冻结的定义绑定
 /// * `actor` - 本次申请人
 /// * `receipt` - 已提交启动收据，可空
+/// * `executor` - 本次提交事务执行器。
 ///
 /// # 返回
 /// 返回已解析新人员或恢复原实例人员的启动图。
@@ -29,11 +30,10 @@ pub async fn load_start_graph(
     binding: &ApprovalDefinitionBinding,
     actor: &str,
     receipt: Option<&ApprovalCommandReceipt>,
+    executor: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let graph = load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await?;
-    resolve_start_approvers(db, &rbac.identity, graph, actor, receipt, &mut NoTransaction)
-        .await
-        .map_err(Into::into)
+    let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
+    resolve_start_approvers(db, &rbac.identity, graph, actor, receipt, executor).await.map_err(Into::into)
 }
 
 /// 使用调用方执行器加载冻结绑定的定义图。
@@ -66,6 +66,7 @@ pub async fn load_bound_definition_graph_with_executor(
 /// * `subject` - 审批主题引用。
 /// * `subject_version` - 主题版本。
 /// * `idempotency_key` - 启动幂等键。
+/// * `executor` - 本次提交事务执行器。
 ///
 /// # 返回
 /// 命中任一作用域时返回该收据；都未命中时返回 `None`。
@@ -78,8 +79,9 @@ pub async fn load_start_receipt_for_document_type(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    read::start_receipt(db, document_type, subject, subject_version, idempotency_key, &mut NoTransaction)
+    read::start_receipt(db, document_type, subject, subject_version, idempotency_key, executor)
         .await
         .map_err(Error::from)
 }

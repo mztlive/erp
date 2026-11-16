@@ -15,7 +15,7 @@ use erp_workflow::service::approval::execution::{
 use erp_workflow::service::approval::resubmission::complete_resubmission;
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use mongodb::Database;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use super::super::adapter::supplier_refund_object_readable;
 use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_start_input};
@@ -30,6 +30,7 @@ use crate::{Error, Result, ReverseFlowPorts};
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
 /// * `idempotency_key` - 调用方幂等键
+/// * `executor` - 本次提交事务执行器。
 ///
 /// # 返回
 /// 已提交收据或空。
@@ -41,6 +42,7 @@ pub async fn load_supplier_refund_start_receipt(
     subject: &SubjectRef,
     subject_version: u32,
     idempotency_key: &str,
+    executor: &mut dyn Executor,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     load_start_receipt_for_document_type(
         db,
@@ -48,6 +50,7 @@ pub async fn load_supplier_refund_start_receipt(
         subject,
         subject_version,
         idempotency_key,
+        executor,
     )
     .await
 }
@@ -129,9 +132,10 @@ pub struct SupplierRefundStartPersistInput {
 /// # 参数
 /// * `db` - 数据库
 /// * `input` - 退款单、快照与启动计划
+/// * `executor` - 用例入口的原事务执行器。
 ///
 /// # 返回
-/// 返回提交后的退款单实体，由调用方装配视图。
+/// 完成启动写入或命中精确提交回执后成功。
 ///
 /// # 错误
 /// 仓储写入失败或计划不完整时返回错误，事务回滚。
@@ -142,24 +146,11 @@ pub async fn persist_supplier_refund_start(
     db: &Database,
     rbac: &ReverseFlowPorts,
     input: SupplierRefundStartPersistInput,
-) -> Result<SupplierRefund> {
-    let db = db.clone();
-    let rbac = rbac.clone();
-    db.client()
-        .clone()
-        .with_transaction(move |executor| {
-            Box::pin(async move { persist_start(db, rbac, input, executor).await })
-        })
-        .await
-}
-
-/// 启动写入在同一事务中重新授权，回放不产生额外写入。
-async fn persist_start(
-    db: Database,
-    rbac: ReverseFlowPorts,
-    input: SupplierRefundStartPersistInput,
     executor: &mut dyn Executor,
-) -> Result<SupplierRefund> {
+) -> Result<()> {
+    if replay_committed_start(db, rbac, &input, executor).await?.is_some() {
+        return Ok(());
+    }
     let SupplierRefundStartPersistInput {
         command_receipt,
         resubmission_reason,
@@ -172,31 +163,18 @@ async fn persist_start(
         organization_id,
         now,
     } = input;
-    super::authorization::ensure_replay_authorized(
-        &db,
-        &rbac,
-        &actor,
-        DocumentType::SupplierRefund,
-        "supplier_refund:submit",
-        &refund.base.id,
-        executor,
-    )
-    .await?;
-    if committed_reversal_submit(&db, &id, &command_receipt, executor).await?.is_some() {
-        return ReturnsService::new(db.clone()).load_supplier_refund(&id, executor).await.map_err(Into::into);
-    }
     let PreparedExecution::Apply(writes) = prepared else {
         return Err(Error::ConflictError("提交收据未包含原请求版本，请刷新后重试".into()));
     };
-    super::super::return_settlement::validate_settlement(&db, &refund, executor).await?;
+    super::super::return_settlement::validate_settlement(db, &refund, executor).await?;
     let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id.clone())?;
-    persist_start_guard(&db, &writes, now, executor).await?;
+    persist_start_guard(db, &writes, now, executor).await?;
     let mut refund = refund;
-    ReturnsService::persist_supplier_refund(&db, &mut refund, executor).await?;
+    ReturnsService::persist_supplier_refund(db, &mut refund, executor).await?;
     persist_supplier_refund_runtime(
         resubmission_reason.as_deref(),
-        &db,
-        &rbac,
+        db,
+        rbac,
         &writes,
         &snapshot_payload,
         StartTaskContext {
@@ -208,8 +186,30 @@ async fn persist_start(
         executor,
     )
     .await?;
-    persist_submit_receipt(&db, &command_receipt, id, &audit, executor).await?;
-    Ok::<SupplierRefund, crate::Error>(refund)
+    persist_submit_receipt(db, &command_receipt, id, &audit, executor).await?;
+    Ok(())
+}
+
+/// 在读取或写入业务状态前，以原事务重验真实单据并恢复精确命令。
+async fn replay_committed_start(
+    db: &Database,
+    rbac: &ReverseFlowPorts,
+    input: &SupplierRefundStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<Option<SupplierRefund>> {
+    super::authorization::ensure_replay_authorized(
+        db,
+        rbac,
+        &input.actor,
+        DocumentType::SupplierRefund,
+        &input.refund.base.id,
+        executor,
+    )
+    .await?;
+    if committed_reversal_submit(db, &input.id, &input.command_receipt, executor).await?.is_some() {
+        return Ok(Some(ReturnsService::new(db.clone()).load_supplier_refund(&input.id, executor).await?));
+    }
+    Ok(None)
 }
 
 /// 回执和注册单据守卫先写入，后续失败由外层事务整体回滚。

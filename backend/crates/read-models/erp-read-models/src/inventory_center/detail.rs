@@ -2,11 +2,11 @@ use std::future::Future;
 
 use application_core::AuditActor;
 use erp_inventory::{
-    DocumentApprovalView, Result as InventoryResult, StockAdjustment, StockAdjustmentDetailView,
-    StockAdjustmentLineView, StockAdjustmentView,
+    DocumentApprovalView, InventoryService, Result as InventoryResult, StockAdjustment,
+    StockAdjustmentDetailView, StockAdjustmentLineView, StockAdjustmentView,
 };
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, Transactional};
 
 use super::InventoryAdjustmentReadService;
 use super::approval::{self, load_approval_binding};
@@ -60,8 +60,7 @@ impl InventoryAdjustmentReadService {
         let id = id.to_string();
         let read_actor = actor.clone();
         let approval_instance = approval_instance.map(|(id, version)| (id.to_string(), version));
-        let mut view = self
-            .db
+        self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
@@ -76,10 +75,7 @@ impl InventoryAdjustmentReadService {
                         .await
                 })
             })
-            .await?;
-        // 纯展示失败可降级；不要让名称查询错误使已完成的核心读取快照失效。
-        self.enrich_display_names(&mut view, actor).await;
-        Ok(view)
+            .await
     }
 
     /// 在调用方读取快照内组装已授权详情，不开启事务。
@@ -91,7 +87,7 @@ impl InventoryAdjustmentReadService {
     /// * `executor` - 同一授权、业务、审批与人员身份事实读取快照。
     ///
     /// # 返回
-    /// 返回核心业务事实、人员身份及当前调用人审批动作；纯展示姓名与 SKU 名称由独立入口在快照成功后补全。
+    /// 返回同一快照的业务事实、人员身份、展示名称及当前调用人审批动作。
     ///
     /// # 错误
     /// 对象不可读、审批绑定或实例不一致、事实读取失败时返回对应错误。
@@ -117,29 +113,14 @@ impl InventoryAdjustmentReadService {
             adjustment_view.apply_people(&fact);
         }
         let lines = lines.into_iter().map(Into::into).collect::<Vec<StockAdjustmentLineView>>();
-        Ok(StockAdjustmentDetailView {
+        let mut view = StockAdjustmentDetailView {
             approval,
             adjustment: adjustment_view,
             lines,
             posted_movements: movements.into_iter().map(Into::into).collect(),
-        })
-    }
-    async fn enrich_display_names(&self, view: &mut StockAdjustmentDetailView, actor: &AuditActor) {
-        optional_display_names(
-            self.inventory.enrich_adjustment_people_names(
-                std::slice::from_mut(&mut view.adjustment),
-                &mut NoTransaction,
-            ),
-            actor,
-            "people",
-        )
-        .await;
-        optional_display_names(
-            self.inventory.enrich_adjustment_line_names(&mut view.lines, &mut NoTransaction),
-            actor,
-            "sku",
-        )
-        .await;
+        };
+        enrich_display_names(inventory, &mut view.adjustment, &mut view.lines, actor, executor).await;
+        Ok(view)
     }
 
     async fn approval_view(
@@ -168,6 +149,23 @@ impl InventoryAdjustmentReadService {
     }
 }
 
+/// 可选展示字段与核心事实使用同一执行器；数据库事务失败仍由原事务向上传播。
+async fn enrich_display_names(
+    inventory: &InventoryService,
+    adjustment: &mut StockAdjustmentView,
+    lines: &mut [StockAdjustmentLineView],
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) {
+    optional_display_names(
+        inventory.enrich_adjustment_people_names(std::slice::from_mut(adjustment), executor),
+        actor,
+        "people",
+    )
+    .await;
+    optional_display_names(inventory.enrich_adjustment_line_names(lines, executor), actor, "sku").await;
+}
+
 /// 纯展示关联不可用时保留缺失名称；正式命令和授权事实不进入该降级路径。
 async fn optional_display_names(
     read: impl Future<Output = InventoryResult<()>>,
@@ -189,12 +187,22 @@ async fn optional_display_names(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeSet, HashMap};
     use std::future::ready;
+    use std::sync::{Arc, Mutex};
 
+    use async_trait::async_trait;
     use erp_core::AccountKind;
-    use erp_inventory::{Error as InventoryError, MovementDirection};
+    use erp_inventory::{
+        AdjustmentPeopleFact, AdjustmentPeopleFactsPort, AdjustmentReasonType, AuthorizationPort,
+        CatalogFactsPort, Error as InventoryError, FailClosedAuditPort, FailClosedFulfillmentFacts,
+        FailClosedWarehouseFacts, InventoryAction, InventoryAuthorization, MovementDirection, SkuFact,
+        SkuRevisionFact, StockAdjustmentState,
+    };
+    use mongodb::Client;
     use mongodb::error::Error as MongoError;
-    use persistence_core::Error as PersistenceError;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{Error as PersistenceError, ExecutionBoundary};
 
     use super::*;
 
@@ -212,6 +220,189 @@ mod tests {
             sku_name: None,
             quantity: "2".parse().unwrap(),
             direction: MovementDirection::Increase,
+        }
+    }
+
+    struct DisplayFacts {
+        boundary: ExecutionBoundary,
+        fail_people: bool,
+        calls: Mutex<Vec<&'static str>>,
+    }
+
+    impl DisplayFacts {
+        fn record(&self, field: &'static str, executor: &mut dyn Executor) {
+            assert!(self.boundary.is_current(executor));
+            assert!(executor.boundary().unwrap().is_snapshot());
+            self.calls.lock().unwrap().push(field);
+        }
+    }
+
+    #[async_trait]
+    impl AuthorizationPort for DisplayFacts {
+        async fn require_adjustment_update(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> InventoryResult<()> {
+            panic!("展示补齐不得检查修改资格")
+        }
+
+        async fn require_adjustment(
+            &self,
+            _: &AuditActor,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> InventoryResult<()> {
+            panic!("展示补齐不得重新授权")
+        }
+        async fn authorize(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &mut dyn Executor,
+        ) -> InventoryResult<InventoryAuthorization> {
+            panic!("展示补齐不得重新授权")
+        }
+        async fn require_warehouse(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &str,
+            _: &mut dyn Executor,
+        ) -> InventoryResult<()> {
+            panic!("展示补齐不得重新授权")
+        }
+        async fn allowed_warehouses(
+            &self,
+            _: &AuditActor,
+            _: InventoryAction,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> InventoryResult<BTreeSet<String>> {
+            panic!("展示补齐不得重新授权")
+        }
+    }
+
+    #[async_trait]
+    impl AdjustmentPeopleFactsPort for DisplayFacts {
+        async fn names_by_ids(
+            &self,
+            ids: &[String],
+            executor: &mut dyn Executor,
+        ) -> InventoryResult<HashMap<String, String>> {
+            self.record("people", executor);
+            assert_eq!(ids, ["warehouse-user"]);
+            if self.fail_people {
+                return Err(InventoryError::Internal("optional-name-unavailable".into()));
+            }
+            Ok([("warehouse-user".into(), "仓储经办".into())].into())
+        }
+        async fn people_by_adjustment_ids(
+            &self,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> InventoryResult<HashMap<String, AdjustmentPeopleFact>> {
+            panic!("展示补齐不得重读人员责任事实")
+        }
+        async fn adjustment_ids_submitted_by(
+            &self,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> InventoryResult<Vec<String>> {
+            panic!("展示补齐不得按人员筛选")
+        }
+        async fn adjustment_ids_assigned_to(
+            &self,
+            _: &[String],
+            _: &mut dyn Executor,
+        ) -> InventoryResult<Vec<String>> {
+            panic!("展示补齐不得按人员筛选")
+        }
+    }
+
+    #[async_trait]
+    impl CatalogFactsPort for DisplayFacts {
+        async fn skus_by_ids(
+            &self,
+            ids: &[String],
+            executor: &mut dyn Executor,
+        ) -> InventoryResult<HashMap<String, SkuFact>> {
+            self.record("sku", executor);
+            assert_eq!(ids, ["sku-1"]);
+            Ok([(
+                "sku-1".into(),
+                SkuFact {
+                    id: "sku-1".into(),
+                    sku_no: "SKU-001".into(),
+                    current_revision_id: Some("revision".into()),
+                },
+            )]
+            .into())
+        }
+        async fn sku_revisions_by_ids(
+            &self,
+            ids: &[String],
+            executor: &mut dyn Executor,
+        ) -> InventoryResult<HashMap<String, SkuRevisionFact>> {
+            self.record("revision", executor);
+            assert_eq!(ids, ["revision"]);
+            Ok([(
+                "revision".into(),
+                SkuRevisionFact { id: "revision".into(), name: "礼品卡".into(), specification: None },
+            )]
+            .into())
+        }
+    }
+
+    #[tokio::test]
+    async fn display_people_and_sku_reads_keep_the_original_snapshot_even_after_optional_failure() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("inventory_display_unit");
+        for fail_people in [false, true] {
+            let mut executor = SnapshotExecutor::default();
+            let facts = Arc::new(DisplayFacts {
+                boundary: executor.boundary().unwrap(),
+                fail_people,
+                calls: Mutex::new(vec![]),
+            });
+            let inventory = InventoryService::new(
+                db.clone(),
+                facts.clone(),
+                Arc::new(FailClosedWarehouseFacts),
+                facts.clone(),
+                Arc::new(FailClosedFulfillmentFacts),
+                Arc::new(FailClosedAuditPort),
+                facts.clone(),
+            );
+            let mut adjustment = StockAdjustmentView {
+                id: "adjustment".into(),
+                adjustment_no: "ADJ-1".into(),
+                warehouse_id: "warehouse".into(),
+                reason_type: AdjustmentReasonType::StockGain,
+                status: StockAdjustmentState::Draft,
+                prepared_by: "warehouse-user".into(),
+                prepared_by_name: None,
+                submitted_by: None,
+                submitted_by_name: None,
+                current_assignee: None,
+                current_assignee_name: None,
+                reviewed_by: None,
+                finance_reviewed_by: None,
+                note: None,
+                occurred_at: None,
+                version: "1".into(),
+                created_at: 1,
+            };
+            let mut lines = vec![line()];
+            enrich_display_names(&inventory, &mut adjustment, &mut lines, &actor(), &mut executor).await;
+            assert_eq!(facts.calls.lock().unwrap().as_slice(), ["people", "sku", "revision"]);
+            assert_eq!(adjustment.prepared_by_name.as_deref(), (!fail_people).then_some("仓储经办"));
+            assert_eq!(lines[0].sku_name.as_deref(), Some("礼品卡"));
+            assert_eq!(lines[0].quantity, "2".parse().unwrap());
+            assert!(facts.boundary.is_current(&executor));
         }
     }
 

@@ -19,7 +19,7 @@ use erp_workflow::service::work_item::expected_task_version;
 use mongodb::Database;
 #[cfg(test)]
 use persistence_core::ReadExecutor;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Error as PersistenceError, Executor, Transactional};
 use validator::Validate;
 
 use super::SupplierOfferingProcess;
@@ -47,114 +47,150 @@ impl SupplierOfferingProcess {
         req: CompleteSupplierSupplyExceptionTaskRequest,
         actor: &AuditActor,
     ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-        req.validate()?;
-        let offering_id = id.trim();
-        if offering_id.is_empty() || req.decision.offering_id.trim() != offering_id {
-            return Err(Error::ValidationError("路径供给 ID 与任务决定不一致".to_string()));
-        }
-        let work_item_id = req.work_item_id.trim();
-        let subject_version = req.expected_subject_version.trim();
-        if work_item_id.is_empty() || subject_version.is_empty() {
-            return Err(Error::ValidationError("任务 ID 与来源版本不能为空".to_string()));
-        }
-        let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let receipt = CommandReceipt::from_payload(
-            "supplier-supply-exception:",
-            actor.id(),
-            SUPPLY_EXCEPTION_COMPLETE_ACTION,
-            "work_item",
-            &req.idempotency_key,
-            &req,
-        )?;
-        if let Some(committed_id) = self.committed_exception_resource(&receipt).await? {
-            return self.replay_supply_exception_completion(&committed_id, &req).await;
-        }
-
+        let target = ExceptionCompletionTarget::new(id, req, actor, (self.fresh_work_items)())?;
         let db = self.db.clone();
         let client = db.client().clone();
-        let target = ExceptionCompletionTarget {
-            work_items: (self.fresh_work_items)(),
-            actor: actor.clone(),
-            request: req.clone(),
-            command: receipt.clone(),
-            offering_id: offering_id.to_string(),
-            expected_task_version,
-        };
+        let transaction_target = target.clone();
         let transaction_result = client
             .with_transaction(move |executor| {
-                Box::pin(async move { apply_exception_completion(&db, target, executor).await })
+                Box::pin(async move {
+                    let mut replay =
+                        MongoExceptionReplay { db: &db, work_items: transaction_target.work_items.as_ref() };
+                    if let Some(result) = replay_completion(
+                        &mut replay,
+                        &transaction_target.actor,
+                        &transaction_target.command,
+                        &transaction_target.request,
+                        executor,
+                    )
+                    .await?
+                    {
+                        return Ok(result);
+                    }
+                    apply_exception_completion(&db, &transaction_target, executor).await
+                })
             })
             .await;
 
         match transaction_result {
             Ok(result) => Ok(result),
-            Err(error) => self.recover_exception_completion(error, &receipt, &req).await,
+            Err(error) if error.command_may_have_committed() => {
+                self.recover_exception_completion(error, target).await
+            },
+            Err(error) => Err(error),
         }
     }
+    /// 提交可能成功时，在新快照重新授权并只读回放原命令。
     async fn recover_exception_completion(
         &self,
         error: Error,
-        receipt: &CommandReceipt,
-        req: &CompleteSupplierSupplyExceptionTaskRequest,
+        target: ExceptionCompletionTarget,
     ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-        let recovered = async {
-            match self.committed_exception_resource(receipt).await? {
-                Some(committed_id) => {
-                    self.replay_supply_exception_completion(&committed_id, req).await.map(Some)
-                },
-                None => Ok(None),
-            }
-        }
-        .await;
+        let db = self.db.clone();
+        let recovered = self
+            .db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let mut replay = MongoExceptionReplay { db: &db, work_items: target.work_items.as_ref() };
+                    replay_completion(&mut replay, &target.actor, &target.command, &target.request, executor)
+                        .await
+                })
+            })
+            .await;
         recover_command(error, recovered)
     }
+}
 
-    /// 仅通过拥有领域回执恢复已提交的任务定位。
-    async fn committed_exception_resource(
-        &self,
+/// 授权先于回执与任务读取；回放不执行写入或开放状态校验。
+#[async_trait]
+trait ExceptionReplayPort: Send {
+    async fn authorize(&mut self, actor: &AuditActor, id: &str, executor: &mut dyn Executor) -> Result<()>;
+    async fn receipt(
+        &mut self,
         command: &CommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplyExceptionReceipt>>;
+    async fn task(&mut self, id: &str, executor: &mut dyn Executor) -> Result<WorkItem>;
+}
+
+struct MongoExceptionReplay<'a> {
+    db: &'a Database,
+    work_items: &'a dyn CatalogWorkItems,
+}
+#[async_trait]
+impl ExceptionReplayPort for MongoExceptionReplay<'_> {
+    async fn authorize(&mut self, actor: &AuditActor, id: &str, executor: &mut dyn Executor) -> Result<()> {
+        Ok(self.work_items.require_result_access(actor, id, executor).await?)
+    }
+    async fn receipt(
+        &mut self,
+        command: &CommandReceipt,
+        executor: &mut dyn Executor,
     ) -> Result<Option<SupplyExceptionReceipt>> {
-        let Some(receipt) =
-            self.db.supply_command_receipts().find_command(command.id(), &mut NoTransaction).await?
+        let Some(receipt) = self.db.supply_command_receipts().find_command(command.id(), executor).await?
         else {
             return Ok(None);
         };
         receipt.committed_resource_id(command)?;
         let SupplyCommandResult::SupplyException(result) = receipt.result else {
-            return Err(Error::Internal("供应停止任务回执类型非法".to_string()));
+            return Err(Error::Internal("供应停止任务回执类型非法".into()));
         };
         Ok(Some(result))
     }
-    async fn replay_supply_exception_completion(
-        &self,
-        committed: &SupplyExceptionReceipt,
-        req: &CompleteSupplierSupplyExceptionTaskRequest,
-    ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
-        let committed_work_item_id = committed.work_item_id.as_str();
-        if committed_work_item_id != req.work_item_id.trim() {
-            return Err(Error::ConflictError("同一操作号已用于其它供应停止任务".to_string()));
-        }
-        let work_item = self
-            .db
+    async fn task(&mut self, id: &str, executor: &mut dyn Executor) -> Result<WorkItem> {
+        self.db
             .work_items()
-            .find_by_id(committed_work_item_id, &mut NoTransaction)
+            .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::Internal("已提交任务结果不存在".to_string()))?;
-        if work_item.status != WorkItemStatus::Completed
-            || work_item.business_object_id != req.decision.offering_id.trim()
-            || committed.offering_id != work_item.business_object_id
-            || committed.subject_version != work_item.subject_version
-            || committed.subject_version != req.expected_subject_version.trim()
-            || work_item.base.version < committed.task_version
-            || committed.evidence_reference != req.decision.evidence_reference.trim()
-            || committed.comment != req.decision.comment.trim()
-        {
-            return Err(Error::Internal("已提交供应停止任务结果不完整".to_string()));
-        }
-        Ok(supply_exception_completion_result(&work_item, req))
+            .ok_or_else(|| Error::Internal("已提交任务结果不存在".into()))
     }
 }
 
+/// 本次资格、原回执和真实终态任务必须使用同一执行器。
+async fn replay_completion<P: ExceptionReplayPort>(
+    port: &mut P,
+    actor: &AuditActor,
+    command: &CommandReceipt,
+    request: &CompleteSupplierSupplyExceptionTaskRequest,
+    executor: &mut dyn Executor,
+) -> Result<Option<CompleteSupplierSupplyExceptionTaskResult>> {
+    port.authorize(actor, request.work_item_id.trim(), executor).await?;
+    let Some(committed) = port.receipt(command, executor).await? else {
+        return Ok(None);
+    };
+    if committed.work_item_id != request.work_item_id.trim() {
+        return Err(Error::ConflictError("同一操作号已用于其它供应停止任务".into()));
+    }
+    let task = port.task(&committed.work_item_id, executor).await?;
+    ensure_committed_exception(&committed, &task, request)?;
+    Ok(Some(supply_exception_completion_result(&task, request)))
+}
+
+/// 回放只核对持久化完成结果，不重新要求旧任务仍开放或仍是旧版本。
+fn ensure_committed_exception(
+    committed: &SupplyExceptionReceipt,
+    task: &WorkItem,
+    req: &CompleteSupplierSupplyExceptionTaskRequest,
+) -> Result<()> {
+    if task.work_item_type != WorkItemType::BusinessException
+        || task.business_object_type != "SUPPLIER_OFFERING"
+        || task.reason_code.as_deref() != Some("SUPPLIER_STOPPED")
+        || task.status != WorkItemStatus::Completed
+        || task.business_object_id != req.decision.offering_id.trim()
+        || committed.offering_id != task.business_object_id
+        || committed.subject_version != task.subject_version
+        || committed.subject_version != req.expected_subject_version.trim()
+        || task.base.version < committed.task_version
+        || committed.evidence_reference != req.decision.evidence_reference.trim()
+        || committed.comment != req.decision.comment.trim()
+    {
+        return Err(Error::Internal("已提交供应停止任务结果不完整".into()));
+    }
+    Ok(())
+}
+
+#[derive(Clone)]
 struct ExceptionCompletionTarget {
     offering_id: String,
     expected_task_version: u64,
@@ -164,9 +200,45 @@ struct ExceptionCompletionTarget {
     work_items: Arc<dyn CatalogWorkItems>,
 }
 
+impl ExceptionCompletionTarget {
+    /// 固定请求身份和任务版本，首次执行与回放共用同一原命令。
+    fn new(
+        id: &str,
+        req: CompleteSupplierSupplyExceptionTaskRequest,
+        actor: &AuditActor,
+        work_items: Arc<dyn CatalogWorkItems>,
+    ) -> Result<Self> {
+        req.validate()?;
+        let offering_id = id.trim();
+        if offering_id.is_empty() || req.decision.offering_id.trim() != offering_id {
+            return Err(Error::ValidationError("路径供给 ID 与任务决定不一致".into()));
+        }
+        if req.work_item_id.trim().is_empty() || req.expected_subject_version.trim().is_empty() {
+            return Err(Error::ValidationError("任务 ID 与来源版本不能为空".into()));
+        }
+        let expected_task_version = expected_task_version(&req.expected_task_version)?;
+        let command = CommandReceipt::from_payload(
+            "supplier-supply-exception:",
+            actor.id(),
+            SUPPLY_EXCEPTION_COMPLETE_ACTION,
+            "work_item",
+            &req.idempotency_key,
+            &req,
+        )?;
+        Ok(Self {
+            offering_id: offering_id.into(),
+            expected_task_version,
+            request: req,
+            command,
+            actor: actor.clone(),
+            work_items,
+        })
+    }
+}
+
 async fn apply_exception_completion(
     db: &Database,
-    target: ExceptionCompletionTarget,
+    target: &ExceptionCompletionTarget,
     executor: &mut dyn Executor,
 ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
     let typed_offering_id = SupplierOfferingId::new(&target.offering_id);
@@ -258,6 +330,102 @@ mod tests {
             ensure_supply_exception_work_item(&task, "offering-1", task.base.version, "offering:3",).is_err()
         );
     }
+    struct ReplayRecorder {
+        calls: Vec<&'static str>,
+        denied: bool,
+        pointer: usize,
+        task: WorkItem,
+    }
+    impl ReplayRecorder {
+        fn record(&mut self, call: &'static str, executor: &mut dyn Executor) {
+            assert_eq!(executor as *mut dyn Executor as *mut () as usize, self.pointer);
+            assert!(executor.boundary().unwrap().is_snapshot());
+            self.calls.push(call);
+        }
+    }
+    #[async_trait]
+    impl ExceptionReplayPort for ReplayRecorder {
+        async fn authorize(
+            &mut self,
+            actor: &AuditActor,
+            id: &str,
+            executor: &mut dyn Executor,
+        ) -> Result<()> {
+            self.record("authorize", executor);
+            assert_eq!((actor.id(), id), ("operator-1", "work-item-1"));
+            if self.denied { Err(Error::Forbidden("当前办理资格已撤销".into())) } else { Ok(()) }
+        }
+        async fn receipt(
+            &mut self,
+            _: &CommandReceipt,
+            executor: &mut dyn Executor,
+        ) -> Result<Option<SupplyExceptionReceipt>> {
+            self.record("receipt", executor);
+            Ok(Some(SupplyExceptionReceipt {
+                work_item_id: "work-item-1".into(),
+                offering_id: "offering-1".into(),
+                subject_version: "offering:2".into(),
+                task_version: 6,
+                evidence_reference: "evidence".into(),
+                comment: "checked".into(),
+            }))
+        }
+        async fn task(&mut self, id: &str, executor: &mut dyn Executor) -> Result<WorkItem> {
+            self.record("task", executor);
+            assert_eq!(id, "work-item-1");
+            Ok(self.task.clone())
+        }
+    }
+    #[tokio::test]
+    async fn completed_replay_reauthorizes_before_reads_and_does_not_require_old_open_version() {
+        use erp_core::AccountKind;
+        use erp_supply::dto::supplier_offering::{
+            SupplierSupplyExceptionDecision, SupplierSupplyExceptionDecisionType,
+        };
+        use persistence_core::testing::SnapshotExecutor;
+        let actor = AuditActor::new("operator-1".into(), "operator".into(), AccountKind::Admin);
+        let req = CompleteSupplierSupplyExceptionTaskRequest {
+            work_item_id: "work-item-1".into(),
+            expected_task_version: "1".into(),
+            expected_subject_version: "offering:2".into(),
+            idempotency_key: "key".into(),
+            decision: SupplierSupplyExceptionDecision {
+                decision_type: SupplierSupplyExceptionDecisionType::AcknowledgeSafetyPause,
+                offering_id: "offering-1".into(),
+                evidence_reference: "evidence".into(),
+                comment: "checked".into(),
+            },
+        };
+        let command = CommandReceipt::from_payload(
+            "exception:",
+            actor.id(),
+            SUPPLY_EXCEPTION_COMPLETE_ACTION,
+            "work_item",
+            "key",
+            &req,
+        )
+        .unwrap();
+        for denied in [false, true] {
+            let mut task = supply_exception_task();
+            task.complete_by_domain_command(actor.id(), Instant::from_unix_secs(2)).unwrap();
+            task.base.version = 7;
+            let mut executor = SnapshotExecutor::default();
+            let mut port = ReplayRecorder {
+                calls: vec![],
+                denied,
+                pointer: &mut executor as *mut SnapshotExecutor as usize,
+                task,
+            };
+            let result = replay_completion(&mut port, &actor, &command, &req, &mut executor).await;
+            if denied {
+                assert!(matches!(result, Err(Error::Forbidden(message)) if message == "当前办理资格已撤销"));
+                assert_eq!(port.calls, ["authorize"]);
+            } else {
+                assert_eq!(result.unwrap().unwrap().work_item_id, "work-item-1");
+                assert_eq!(port.calls, ["authorize", "receipt", "task"]);
+            }
+        }
+    }
     fn supply_exception_task() -> WorkItem {
         WorkItem::new_at(
             WorkItemId::new("work-item-1"),
@@ -307,7 +475,10 @@ impl CompletionWritePort for MongoCompletionWrite<'_> {
             result.task_version = self.work_item.base.version;
         }
         receipt.validate()?;
-        self.db.supply_command_receipts().create(&receipt, executor).await.map_err(Into::into)
+        self.db.supply_command_receipts().create(&receipt, executor).await.map_err(|error| match error {
+            error @ PersistenceError::DuplicateKey(_) => Error::ReceiptDuplicate(error),
+            other => other.into(),
+        })
     }
 }
 /// 原任务CAS、单次业务事件、领域回执顺序；任一失败停止后续步骤。

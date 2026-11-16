@@ -210,7 +210,7 @@ async fn sellable_snapshot_rejects_non_snapshot_before_authorization_or_business
     let service = sellable_service(query.clone()).await;
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
     let result = service
-        .sellable_snapshot(&SellableSkuListParams::default(), &actor, &mut ReadExecutor::default())
+        .sellable_sku_list_with(&SellableSkuListParams::default(), &actor, &mut ReadExecutor::default())
         .await;
     assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "商品读取必须使用快照事务"));
     assert!(query.calls.lock().unwrap().is_empty());
@@ -222,7 +222,7 @@ async fn sellable_snapshot_stops_before_business_reading_when_authorization_fail
     let service = sellable_service(query.clone()).await;
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
     let result = service
-        .sellable_snapshot(&SellableSkuListParams::default(), &actor, &mut SnapshotExecutor::default())
+        .sellable_sku_list_with(&SellableSkuListParams::default(), &actor, &mut SnapshotExecutor::default())
         .await;
     assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     assert!(query.calls.lock().unwrap().is_empty());

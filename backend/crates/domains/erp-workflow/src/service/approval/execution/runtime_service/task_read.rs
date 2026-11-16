@@ -1,58 +1,17 @@
 //! 审批任务只读入口复用冻结运行责任链，不依赖普通业务列表范围。
 
-use application_core::AuditActor;
 use bpm::model::ApprovalNodeExecution;
 use bpm::model::types::ApprovalNodeExecutionStatus;
-use erp_identity::{AuthorizationService, SharedRbacService};
-use erp_permissions::internal as internal_permissions;
-use mongodb::Database;
-use persistence_core::Executor;
 
 use super::read_auth::{RuntimeReadSubject, task_proves_current_responsibility};
 use crate::entity::work_item::{WorkItem, WorkItemStatus};
-use crate::error::{Error, Result};
-use crate::ports::WorkflowAuthorizationPort;
+use crate::error::Result;
 use crate::service::approval::business_adapter::adapter_spec_of;
-use crate::service::approval::require_approval_management_with_executor;
 
 mod batch;
-pub use batch::approval_tasks_readable_with_executor;
+pub(crate) use batch::approval_task_facts_current;
 #[cfg(test)]
 mod tests;
-
-/// 验证任务、执行、实例及冻结主体，形成仅该审批任务的读取资格。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `db` / `auth` - 工作流仓储及当前权限事实。
-/// * `actor` - 当前已认证读者。
-/// * `item` - 服务端读取的审批任务。
-/// * `executor` - 当前查询或命令事务。
-/// # 返回
-/// 当前任务负责人或实际完成该任务的人返回 true；不授予业务单据详情权限。
-/// # 错误
-/// 仓储、策略或冻结主体损坏时失败关闭。
-pub async fn approval_task_readable_with_executor(
-    authorization: &AuthorizationService,
-    identity_service: &SharedRbacService,
-    db: &Database,
-    auth: &impl WorkflowAuthorizationPort,
-    actor: &AuditActor,
-    item: &WorkItem,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    let readable = approval_tasks_readable_with_executor(
-        authorization,
-        identity_service,
-        db,
-        auth,
-        actor,
-        &[item],
-        executor,
-    )
-    .await?;
-    Ok(readable.first().copied().unwrap_or(false))
-}
 
 /// 对单任务和批量任务共用同一开放唯一链及实际完成链规则。
 ///
@@ -82,41 +41,6 @@ fn task_chain_matches_subject(
     } else {
         terminal_task_matches_subject(item, subject, execution, owner, owner_role.as_str())
     })
-}
-
-/// 管理员在真实业务来源边界内读取已验证的审批任务。
-///
-/// # 参数
-/// * `identity_service` - 同一应用注入的共享身份与权限服务。
-/// * `auth` / `actor` - 当前权限端口与身份
-/// * `subject` - 已验证冻结主体
-/// * `executor` - 原事务执行器
-///
-/// # 返回
-/// 原管理资格和真实来源都成立时返回 true，权限拒绝返回 false。
-///
-/// # 错误
-/// 除 Forbidden 之外的策略及来源错误原样传播。
-async fn manager_can_read(
-    authorization: &AuthorizationService,
-    actor: &AuditActor,
-    subject: &RuntimeReadSubject,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    match require_approval_management_with_executor(
-        authorization,
-        actor,
-        &internal_permissions::APPROVAL_MANAGEMENT_READ,
-        subject.document_type,
-        &subject.instance.base.id,
-        executor,
-    )
-    .await
-    {
-        Ok(()) => Ok(true),
-        Err(Error::Forbidden(_)) => Ok(false),
-        Err(error) => Err(error),
-    }
 }
 
 /// 已完成任务只承认同一次实际决定与冻结提交主体。

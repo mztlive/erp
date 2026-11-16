@@ -15,7 +15,7 @@ use erp_supply::dto::delivery_template::{
 use erp_supply::service::delivery_template::DeliveryTemplateService;
 use id_generator::next_id;
 use mongodb::Database;
-use persistence_core::{NoTransaction, ReadExecutor};
+use persistence_core::{Executor, Transactional};
 
 use crate::{Error, Result};
 
@@ -40,16 +40,29 @@ pub async fn supplier_delivery_templates(
     supplier_id: String,
     actor: AuditActor,
 ) -> Result<Vec<DeliveryTemplateView>> {
+    let transaction_db = db.clone();
+    db.client()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                template_list(&transaction_db, authorization.as_ref(), &supplier_id, &actor, executor).await
+            })
+        })
+        .await
+}
+
+/// 原快照先检查固定读取资格，再读取并投影完整模板集合。
+async fn template_list(
+    db: &Database,
+    authorization: &AuthorizationService,
+    supplier_id: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Vec<DeliveryTemplateView>> {
     authorization
-        .require(
-            &actor,
-            &internal::DELIVERY_TEMPLATE_READ,
-            AccessTarget::Operation,
-            &mut ReadExecutor::default(),
-        )
+        .require(actor, &internal::DELIVERY_TEMPLATE_READ, AccessTarget::Operation, executor)
         .await?;
-    let templates = DeliveryTemplateService::new(db)
-        .supplier_templates(&SupplierAccountId::new(supplier_id), &mut NoTransaction)
+    let templates = DeliveryTemplateService::new(db.clone())
+        .supplier_templates(&SupplierAccountId::new(supplier_id), executor)
         .await?;
     Ok(templates.iter().map(DeliveryTemplateView::from_template).collect())
 }
@@ -75,9 +88,6 @@ pub async fn create_delivery_template(
     req: SaveDeliveryTemplateRequest,
     actor: AuditActor,
 ) -> Result<DeliveryTemplateView> {
-    if db.supplier_accounts().find_by_id(supplier_id.trim(), &mut NoTransaction).await?.is_none() {
-        return Err(Error::NotFound("供应商不存在".into()));
-    }
     let content = req.into_content()?;
     let id = SupplierDeliveryTemplateId::new(next_id());
     let audit = actor.clone().resource_log_with_message(
@@ -92,6 +102,9 @@ pub async fn create_delivery_template(
             authorization
                 .require(&actor, &internal::DELIVERY_TEMPLATE_WRITE, AccessTarget::Operation, executor)
                 .await?;
+            if db.supplier_accounts().find_by_id(supplier.as_ref(), executor).await?.is_none() {
+                return Err(Error::NotFound("供应商不存在".into()));
+            }
             let service = DeliveryTemplateService::new(db.clone());
             Ok(service.create(id, supplier, content, actor.id(), executor).await?)
         })
@@ -225,4 +238,33 @@ pub async fn assign_offering_delivery_template(
         })
     })
     .await
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::unavailable_authorization;
+    use mongodb::Client;
+    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn template_read_requires_snapshot_authorization_before_supplier_or_template_reads() {
+        let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
+            .await
+            .unwrap()
+            .database("delivery_template_read_unit");
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let authorization = unavailable_authorization();
+        assert!(matches!(
+            template_list(&db, &authorization, "supplier", &actor, &mut NoTransaction).await,
+            Err(Error::ValidationError(_))
+        ));
+        assert!(matches!(
+            template_list(&db, &authorization, "supplier", &actor, &mut SnapshotExecutor::default()).await,
+            Err(Error::Internal(message)) if message == "测试授权设施不可用"
+        ));
+    }
 }

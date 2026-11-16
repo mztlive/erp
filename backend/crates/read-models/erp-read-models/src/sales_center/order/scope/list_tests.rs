@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use erp_core::AccountKind;
 use erp_core::money::Amount;
-use erp_identity::testing::unavailable_authorization;
+use erp_identity::testing::unbound_authorization;
 use erp_sales::entity::sales_order::{
     BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress,
     OriginSystem, ReviewStatus,
@@ -96,7 +96,7 @@ impl SalesListRead for ListReader {
 }
 
 /// 构造当前页已完成金额、任务及客户补齐的替身数据。
-fn presented_row() -> SalesOrderView {
+pub(super) fn presented_row() -> SalesOrderView {
     SalesOrderView {
         id: "sale".into(),
         order_no: "SO-1".into(),
@@ -154,7 +154,7 @@ async fn production_load_checks_authorization_before_keyword_or_business_reads()
         .await
         .unwrap()
         .database("sales_list_authorization");
-    let service = SalesOrderReadService::with_rbac(db, unavailable_authorization());
+    let service = SalesOrderReadService::with_rbac(db, unbound_authorization());
     let params = serde_json::from_value(serde_json::json!({"q": "客户关键词"})).unwrap();
     let result = service.load(&params, &actor(), &mut SnapshotExecutor::default()).await;
     assert!(matches!(

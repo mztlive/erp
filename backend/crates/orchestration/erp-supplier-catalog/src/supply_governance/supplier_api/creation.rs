@@ -8,7 +8,7 @@ use erp_supply::dto::supplier_api::*;
 use erp_supply::entity::supplier_api::PreparedSupplierConnectionCreate;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 use erp_supply::service::supplier_api::{SupplierApiService, map_command_shape_rejection};
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::Transactional;
 use validator::Validate;
 
 use super::SupplierApiGovernanceProcess;
@@ -45,12 +45,7 @@ impl SupplierApiGovernanceProcess {
             req.capabilities.len(),
         )
         .map_err(map_command_shape_rejection)?;
-        self.db
-            .supplier_accounts()
-            .find_by_id(&req.supplier_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("API 供应商不存在".to_string()))?;
-
+        let supplier_id = req.supplier_id.clone();
         let mut connection = SupplierApiService::prepare_connection(req, prepared, actor.id())?;
         let target = SupplierReferenceTarget::from(&connection);
         if let Ok(config) = self.reference_registry.deployment_config(&target) {
@@ -78,6 +73,10 @@ impl SupplierApiGovernanceProcess {
                             executor,
                         )
                         .await?;
+                    db.supplier_accounts()
+                        .find_by_id(&supplier_id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("API 供应商不存在".into()))?;
                     SupplierApiService::new(db.clone())
                         .persist_created_connection(&connection_tx, executor)
                         .await?;

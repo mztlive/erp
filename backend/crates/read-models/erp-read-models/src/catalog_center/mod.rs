@@ -78,13 +78,24 @@ impl CatalogCenterReadService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.sellable_snapshot(&params, &actor, executor).await })
+                Box::pin(async move { service.sellable_sku_list_with(&params, &actor, executor).await })
             })
             .await
     }
 
-    /// 功能资格、分页、计数和供应商编号共用同一快照，完成后核验原读取阶段。
-    async fn sellable_snapshot(
+    /// 在调用方快照内查询可售 SKU，保留固定功能资格与完整分页语义。
+    ///
+    /// # 参数
+    /// * `params` - 可售筛选，排序、分页和资格日期沿用商品领域校验。
+    /// * `actor` - 当前已认证账号。
+    /// * `executor` - 调用方活动快照执行器，资格、分页、计数与展示补齐共用它。
+    ///
+    /// # 返回
+    /// 返回完成供应商编号补齐的原分页视图，成员、行序及总数保持原值。
+    ///
+    /// # 错误
+    /// 非快照执行器、缺少商品读取资格、筛选非法或关联读取失败时拒绝。
+    pub async fn sellable_sku_list_with(
         &self,
         params: &SellableSkuListParams,
         actor: &AuditActor,

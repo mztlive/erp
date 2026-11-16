@@ -186,6 +186,30 @@ impl SupplierOrderStatusHistory {
     pub fn belongs_to_order(&self, order_id: &SupplierFulfillmentOrderId) -> bool {
         self.supplier_fulfillment_order_id == *order_id
     }
+
+    /// 核对外部事件命中的拒单回执是否对应本次真实订单和业务载荷。
+    ///
+    /// # 参数
+    /// * `order_id` - 本次已授权的实际供应商履约订单。
+    /// * `status_version` - 请求中的供应商状态版本。
+    /// * `occurred_at` - 请求中的业务发生时间。
+    ///
+    /// # 返回
+    /// 订单、拒单结果、版本和发生时间全部一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn matches_reject(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        status_version: &str,
+        occurred_at: Instant,
+    ) -> bool {
+        self.belongs_to_order(order_id)
+            && self.new_status == FulfillmentStatus::Rejected
+            && self.supplier_status_version == status_version.trim()
+            && self.occurred_at == occurred_at
+    }
 }
 
 #[cfg(test)]
@@ -232,6 +256,23 @@ mod tests {
         assert_eq!(history.source_type, SourceType::SupplierCallback);
         assert!(history.belongs_to_order(&SupplierFulfillmentOrderId::new("order-1")));
         assert!(!history.belongs_to_order(&SupplierFulfillmentOrderId::new("order-2")));
+    }
+
+    #[test]
+    fn reject_replay_requires_the_authorized_order_and_original_payload() {
+        let mut data = sample_data();
+        data.previous_status = FulfillmentStatus::Submitting;
+        data.new_status = FulfillmentStatus::Rejected;
+        let mut history =
+            SupplierOrderStatusHistory::new(SupplierOrderStatusHistoryId::new("history"), data).unwrap();
+        let order = SupplierFulfillmentOrderId::new("order-1");
+        let at = history.occurred_at;
+        assert!(history.matches_reject(&order, " v5 ", at));
+        assert!(!history.matches_reject(&SupplierFulfillmentOrderId::new("order-2"), "v5", at));
+        assert!(!history.matches_reject(&order, "v6", at));
+        assert!(!history.matches_reject(&order, "v5", Instant::from_unix_secs(at.unix_secs() + 1)));
+        history.new_status = FulfillmentStatus::Accepted;
+        assert!(!history.matches_reject(&order, "v5", at));
     }
 
     #[test]
