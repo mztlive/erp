@@ -97,6 +97,7 @@ impl From<erp_identity::Error> for Error {
 #[cfg(test)]
 mod tests {
     use application_core::ErrorClass;
+    use erp_identity::Error as IdentityError;
     use mongodb::error::Error as MongoError;
 
     use super::Error;
@@ -130,5 +131,25 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
+    }
+
+    #[test]
+    fn identity_failures_keep_error_classes_and_messages() {
+        let cases = [
+            (IdentityError::Forbidden("permission denied".into()), ErrorClass::Forbidden),
+            (IdentityError::Unauthenticated("account inactive".into()), ErrorClass::Forbidden),
+            (IdentityError::ValidationError("snapshot required".into()), ErrorClass::BusinessRule),
+            (IdentityError::ConflictError("DATA_SCOPE_CHANGED".into()), ErrorClass::Conflict),
+            (IdentityError::Internal("identity unavailable".into()), ErrorClass::Internal),
+        ];
+        for (source, class) in cases {
+            let message = source.to_string();
+            let converted = Error::from(source);
+            assert_eq!(converted.class(), class);
+            assert_eq!(converted.to_string(), message);
+        }
+        assert!(
+            matches!(Error::from(IdentityError::Rbac("rbac unavailable".into())), Error::Internal(reason) if reason == "rbac unavailable")
+        );
     }
 }
