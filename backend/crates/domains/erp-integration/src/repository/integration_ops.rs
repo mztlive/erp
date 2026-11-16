@@ -650,9 +650,85 @@ fn ensure_authorized_model(
 
 #[cfg(test)]
 mod tests {
+    use erp_core::common::time::Instant;
+    use erp_identity::entity::authorization::{QueryModel, QueryModelKey, QueryOutput};
+    use erp_identity::testing::compiled_access;
     use mongodb::bson::doc;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{Error as PersistenceError, Executor};
 
-    use super::{DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS, sort_doc};
+    use super::{
+        DIFFERENCE_SORT_FIELDS, ERROR_TASK_SORT_FIELDS, INBOX_SORT_FIELDS, ensure_authorized_model, sort_doc,
+    };
+    use crate::repository::authorization::mapping;
+
+    fn models() -> Vec<QueryModel> {
+        ["integration_error_task", "reconciliation_difference"]
+            .into_iter()
+            .map(|resource| mapping(resource).unwrap().model().clone())
+            .collect()
+    }
+
+    #[test]
+    fn repository_guard_accepts_each_current_object_model_and_rejects_every_mismatched_field() {
+        let mut executor = SnapshotExecutor::default();
+        for model in models() {
+            let access = compiled_access(model.clone(), &executor, None).unwrap();
+            ensure_authorized_model(&access, &model.resource, &model.collection, &mut executor).unwrap();
+            let mut wrong_models = vec![model.clone(); 5];
+            wrong_models[0].resource = "other_resource".into();
+            wrong_models[1].collection = "other_collection".into();
+            wrong_models[2].key = QueryModelKey::parse("other_key").unwrap();
+            wrong_models[3].id_field = "other_id".into();
+            wrong_models[4].output = QueryOutput::Existence { fields: ["id".into()].into() };
+            for wrong in wrong_models {
+                let access = compiled_access(wrong, &executor, None).unwrap();
+                assert!(matches!(
+                    ensure_authorized_model(&access, &model.resource, &model.collection, &mut executor),
+                    Err(PersistenceError::EntityMetadataOutOfRange("集成授权模型与仓储不匹配"))
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn repository_guard_rejects_other_executors_and_every_ended_read_stage() {
+        for model in models() {
+            let mut executor = SnapshotExecutor::default();
+            let access = compiled_access(model.clone(), &executor, None).unwrap();
+            let mut other = SnapshotExecutor::default();
+            assert!(matches!(
+                ensure_authorized_model(&access, &model.resource, &model.collection, &mut other),
+                Err(PersistenceError::EntityMetadataOutOfRange("集成授权阶段已失效"))
+            ));
+            executor.next_read();
+            assert!(
+                ensure_authorized_model(&access, &model.resource, &model.collection, &mut executor).is_err()
+            );
+            let access = compiled_access(model.clone(), &executor, None).unwrap();
+            executor.restart();
+            assert!(
+                ensure_authorized_model(&access, &model.resource, &model.collection, &mut executor).is_err()
+            );
+            let access = compiled_access(model.clone(), &executor, None).unwrap();
+            executor.session();
+            assert!(
+                ensure_authorized_model(&access, &model.resource, &model.collection, &mut executor).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn repository_guard_rejects_expired_access_with_the_existing_persistence_error() {
+        let mut executor = SnapshotExecutor::default();
+        for model in models() {
+            let access = compiled_access(model.clone(), &executor, Some(Instant::from_unix_secs(1))).unwrap();
+            assert!(matches!(
+                ensure_authorized_model(&access, &model.resource, &model.collection, &mut executor),
+                Err(PersistenceError::EntityMetadataOutOfRange("集成授权阶段已失效"))
+            ));
+        }
+    }
 
     #[test]
     fn sort_doc_defaults_to_created_at_and_rejects_non_whitelisted_fields() {

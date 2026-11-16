@@ -1,4 +1,6 @@
 //! 集成本域查询、实体准备与调用方事务内写入。
+use std::collections::HashMap;
+
 use application_core::AuditActor;
 use erp_permissions::integration_ops;
 use id_generator::next_id;
@@ -11,8 +13,12 @@ use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
+use crate::repository::integration_ops::ReconciliationDifferenceRow;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
+
+mod delivery;
+
 /// 对账差异列表筛选条件类型。
 type DifferenceFilter = <Database as IntegrationOpsExt>::ReconciliationDifferenceFilter;
 impl IntegrationOpsService {
@@ -47,7 +53,7 @@ impl IntegrationOpsService {
             .await
     }
 
-    /// 无有效范围时不查库，直接返回空页。
+    /// 在原事务内完成授权、根分页、最新决定补齐与交付复验。
     async fn difference_page(
         &self,
         query: dto::DifferenceListQuery,
@@ -73,10 +79,7 @@ impl IntegrationOpsService {
             .reconciliation_differences()
             .search_differences(&filter, &scope.read_scope, executor)
             .await?;
-        access.validate(&scope.read_scope, executor).await?;
-        let total = page.total;
-        let items = project_difference_rows(self, page.items, executor).await?;
-        Ok(difference_list_view(total, items, &filter, scope.meta))
+        delivery::deliver_difference_page(self, page, &scope.read_scope, &filter, scope.meta, executor).await
     }
 
     /// 把历史处理人筛选解析为差异 ID 集合。
@@ -179,17 +182,10 @@ fn difference_list_view(
 }
 
 /// 无最新决定的差异状态为 `None`、版本为 0。
-async fn project_difference_rows(
-    service: &IntegrationOpsService,
-    rows: Vec<crate::repository::integration_ops::ReconciliationDifferenceRow>,
-    executor: &mut dyn Executor,
-) -> Result<Vec<DifferenceView>> {
-    let difference_ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-    let latest_by_difference = service
-        .db
-        .reconciliation_difference_resolutions()
-        .find_latest_by_differences(&difference_ids, executor)
-        .await?;
+fn project_difference_rows(
+    rows: Vec<ReconciliationDifferenceRow>,
+    latest_by_difference: &HashMap<String, ReconciliationDifferenceResolution>,
+) -> Vec<DifferenceView> {
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         let (status, version) = latest_by_difference
@@ -212,7 +208,7 @@ async fn project_difference_rows(
             owner_user_name: None,
         });
     }
-    Ok(items)
+    items
 }
 
 /// 在调用方事务内保存不可变差异事实。
@@ -234,4 +230,38 @@ pub async fn persist_difference(
 ) -> Result<()> {
     db.reconciliation_differences().create(difference, executor).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::{unavailable_authorization, unbound_authorization};
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::service::IntegrationAccess;
+
+    #[tokio::test]
+    async fn difference_page_rejects_missing_mapping_and_identity_failure_before_business_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("difference_authorization_test");
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        for (authorization, missing_mapping) in
+            [(unbound_authorization(), true), (unavailable_authorization(), false)]
+        {
+            let access = IntegrationAccess::new(db.clone(), authorization);
+            let service = IntegrationOpsService::new(db.clone(), access);
+            let params = DifferenceListParams::default();
+            let error = service
+                .difference_page(params.normalized().unwrap(), &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("授权失败必须先于历史操作人、根分页及决定补齐读取");
+            if missing_mapping {
+                assert!(matches!(error, Error::ValidationError(reason) if reason == "缺少查询 Mapping 绑定"));
+            } else {
+                assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+            }
+        }
+    }
 }

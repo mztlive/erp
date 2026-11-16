@@ -46,7 +46,7 @@ impl IntegrationOpsService {
             .await
     }
 
-    /// 无有效范围时不查库，直接返回空页。
+    /// 在原事务内完成授权、根分页与交付复验。
     async fn error_task_page(
         &self,
         query: dto::ErrorTaskListQuery,
@@ -92,6 +92,40 @@ impl IntegrationOpsService {
             .await?
             .ok_or_else(|| Error::NotFound("关联消息不存在".to_string()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use erp_core::AccountKind;
+    use erp_identity::testing::{unavailable_authorization, unbound_authorization};
+    use persistence_core::testing::SnapshotExecutor;
+
+    use super::*;
+    use crate::service::IntegrationAccess;
+
+    #[tokio::test]
+    async fn error_task_page_rejects_missing_mapping_and_identity_failure_before_business_reads() {
+        let client =
+            mongodb::Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let db = client.database("error_task_authorization_test");
+        let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+        for (authorization, missing_mapping) in
+            [(unbound_authorization(), true), (unavailable_authorization(), false)]
+        {
+            let access = IntegrationAccess::new(db.clone(), authorization);
+            let service = IntegrationOpsService::new(db.clone(), access);
+            let params = ErrorTaskListParams::default();
+            let error = service
+                .error_task_page(params.normalized().unwrap(), &actor, &mut SnapshotExecutor::default())
+                .await
+                .expect_err("授权失败必须先于业务仓储读取");
+            if missing_mapping {
+                assert!(matches!(error, Error::ValidationError(reason) if reason == "缺少查询 Mapping 绑定"));
+            } else {
+                assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+            }
+        }
     }
 }
 /// 由已校验请求构造原责任政策下的错误任务。
