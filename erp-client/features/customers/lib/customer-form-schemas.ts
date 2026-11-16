@@ -84,7 +84,7 @@ const editSchema = z.object({
     unifiedCreditCode: unifiedCreditCodeSchema,
     defaultPaymentTerm: z.string(),
     status: z.enum(["active", "disabled"]),
-    changeReason: z.string().trim().min(2, "请填写修订原因"),
+    changeReason: z.string().trim().min(2, "请填写修改原因"),
     contacts: z.array(contactRowSchema),
     addresses: z.array(addressRowSchema),
     bankAccounts: z.array(bankAccountRowSchema),

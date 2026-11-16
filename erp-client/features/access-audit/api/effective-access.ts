@@ -58,7 +58,7 @@ export async function fetchEffectiveAccess(
             moduleAndActionGrants: role.permissions.map((code, index) => ({
                 id: `perm-${index}`,
                 layer: "MODULE_ACTION" as const,
-                layerLabel: "模块与动作权限",
+                layerLabel: "功能操作权限",
                 targetLabel: permissionLabel(code),
                 capability: code,
                 sourceType: "ROLE",
@@ -100,7 +100,7 @@ export async function fetchEffectiveAccess(
         moduleAndActionGrants: admin.role_ids.map((roleId, index) => ({
             id: `ur-${index}`,
             layer: "MODULE_ACTION" as const,
-            layerLabel: "模块与动作权限",
+            layerLabel: "功能操作权限",
             targetLabel: roleNameById.get(roleId) ?? roleId,
             capability: "ROLE_MEMBER",
             sourceType: "USER_ROLE",
@@ -110,7 +110,7 @@ export async function fetchEffectiveAccess(
             ...scopeViewRows(subjectId, scopes).map((scope) => ({
                 id: scope.id,
                 layer: "DATA_SCOPE" as const,
-                layerLabel: "人员数据范围",
+                layerLabel: "数据可见范围",
                 targetLabel: scope.summary ?? "无数据访问范围",
                 capability: scope.resource ?? "",
                 sourceType: "USER",
@@ -150,11 +150,12 @@ export async function fetchEffectiveAccess(
             .map((assignment) => ({
                 id: assignment.id,
                 code: "REVOKED",
-                message: `角色 ${assignment.role_id} 已撤权`,
+                message: `角色 ${roleNameById.get(assignment.role_id) ?? assignment.role_id} 已撤权`,
                 layer: "MODULE_ACTION" as const,
-                layerLabel: "模块与动作权限",
+                layerLabel: "功能操作权限",
                 sourceType: "USER_ROLE",
-                sourceLabel: assignment.role_id,
+                sourceLabel:
+                    roleNameById.get(assignment.role_id) ?? assignment.role_id,
             })),
         permissionVersion,
         calculatedAt: asOf,

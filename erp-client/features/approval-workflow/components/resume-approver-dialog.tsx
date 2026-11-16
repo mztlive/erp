@@ -78,7 +78,7 @@ export function ResumeApproverDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
-                    <DialogTitle>恢复当前审批人</DialogTitle>
+                    <DialogTitle>继续由原审批人审批</DialogTitle>
                     <DialogDescription>
                         重新通知原审批人处理当前节点，已完成的审批不变。
                     </DialogDescription>
@@ -105,7 +105,7 @@ export function ResumeApproverDialog({
                         disabled={resume.isPending}
                         onClick={() => void submit()}
                     >
-                        {resume.isPending ? "提交中" : "确认恢复"}
+                        {resume.isPending ? "提交中" : "确认继续"}
                     </LoadingButton>
                 </DialogFooter>
             </DialogContent>

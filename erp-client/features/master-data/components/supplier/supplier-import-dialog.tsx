@@ -92,7 +92,7 @@ export const SupplierImportDialog = ({
                 ),
             )
             setError(
-                `${getErrorMessage(err, "导入响应未收到")}。请点击重试核对，已导入的供应商不会重复创建。`,
+                `${getErrorMessage(err, "导入响应未收到")}。网络响应超时，暂未确认是否提交成功，请点击「重新确认」（不会重复创建记录）。`,
             )
         }
     }
@@ -220,7 +220,7 @@ export const SupplierImportDialog = ({
                             {mutation.isPending
                                 ? "提交中…"
                                 : uncertain
-                                  ? "重试核对"
+                                  ? "重新确认"
                                   : "提交后台导入"}
                         </LoadingButton>
                     </div>

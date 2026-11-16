@@ -133,7 +133,7 @@ export function clientValidation(
         issues.push({
             id: "type-mismatch",
             label: "单据类型",
-            message: "这条草稿和当前单据对不上",
+            message: "草稿信息与当前单据不一致，请刷新后核对",
         })
         return issues
     }
@@ -260,7 +260,7 @@ export function clientValidation(
                 issues.push({
                     id: `ship-rsv-${i}`,
                     label: "留货",
-                    message: "找不到为这单留的货，先联系仓储确认",
+                    message: "未找到该销售单锁定的库存，请联系仓库核实",
                 })
             }
         })

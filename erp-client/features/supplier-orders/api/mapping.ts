@@ -129,7 +129,7 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
             {
                 action: "VIEW_SUPPLIER_NAME",
                 code: "SUPPLIER_NAME_NOT_PROJECTED_IN_LIST",
-                message: "列表接口未返回权威供应商名称，禁止以 ID 伪装名称",
+                message: "供应商名称加载异常，请刷新重试。",
             },
         ],
         priority: priorityOf(fulfillment),

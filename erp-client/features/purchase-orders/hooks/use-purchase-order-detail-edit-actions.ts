@@ -144,8 +144,8 @@ export function usePurchaseOrderDetailEditActions({
                 status: "rejected",
                 title: "保存失败",
                 description: allowZero
-                    ? `「${invalidLine.itemName}」数量须为 0 或正数（填 0 表示移除该行），含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`
-                    : `「${invalidLine.itemName}」数量与含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`,
+                    ? `「${invalidLine.itemName}」数量须为 0 或正数（填 0 表示移除该行），含税单价须为正数，税率须在 0% 到 100% 之间。`
+                    : `「${invalidLine.itemName}」数量与含税单价须为正数，税率须在 0% 到 100% 之间。`,
             })
             return false
         }
@@ -189,12 +189,6 @@ export function usePurchaseOrderDetailEditActions({
                 title: "草稿已保存",
                 description: `金额已按系统规范计算：含税 ${response.data.totals.gross} / 不含税 ${response.data.totals.net} / 税额 ${response.data.totals.tax}`,
                 reference: response.reference,
-                facts: [
-                    {
-                        label: "数据版本",
-                        value: `v${response.data.lockVersion}`,
-                    },
-                ],
             })
             await refetch()
         } else if (response.status === "unknown") {
@@ -263,17 +257,13 @@ export function usePurchaseOrderDetailEditActions({
             setResult({
                 status: "succeeded",
                 title: "已提交审批",
-                description: "已形成不可修改的采购提交并进入审批；编辑已结束。",
+                description: "采购单已提交审批，审批期间不可修改。",
                 reference: response.reference,
                 facts: [
                     { label: "单据编号", value: response.data.purchaseNo },
                     {
                         label: "提交记录",
                         value: `第 ${response.data.submissionNo} 次提交`,
-                    },
-                    {
-                        label: "数据版本",
-                        value: `v${response.data.lockVersion}`,
                     },
                 ],
             })
@@ -321,12 +311,6 @@ export function usePurchaseOrderDetailEditActions({
                 description:
                     "该采购草稿不再占用销售待分配供给数量；如原任务已经完成，系统已建立新的供给分配任务。",
                 reference: response.reference,
-                facts: [
-                    {
-                        label: "数据版本",
-                        value: `v${response.data.lockVersion}`,
-                    },
-                ],
             })
             if (onFinished) onFinished()
             else router.replace(`/procurement/orders/${purchaseOrderId}`)

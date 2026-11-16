@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { BackgroundJobsPage } from "@/features/background-jobs/pages/background-jobs-page"
 
 export const metadata: Metadata = {
-    title: "后台任务",
+    title: "批量任务记录",
 }
 
 function BackgroundJobsFallback() {

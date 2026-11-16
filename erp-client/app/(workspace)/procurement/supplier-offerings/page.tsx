@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { SupplierOfferingsPage } from "@/features/supplier-offerings/pages/supplier-offerings-page"
 
 export const metadata: Metadata = {
-    title: "供应商供给",
+    title: "供应商供货目录",
 }
 
 function Fallback() {

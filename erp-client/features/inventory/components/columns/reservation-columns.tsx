@@ -94,7 +94,7 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
                         actions={[
                             {
                                 id: `inventory-ledger-reservation-row-${segment}-fulfillment`,
-                                label: "履约上下文",
+                                label: "查看发货任务",
                                 icon: ArrowUpRightIcon,
                                 href,
                             },

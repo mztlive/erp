@@ -103,7 +103,8 @@ export function ReceiptSessionFields({
                         files={field.state.value}
                         disabled={locked}
                         errors={
-                            field.state.meta.isTouched || field.form.state.isSubmitted
+                            field.state.meta.isTouched ||
+                            field.form.state.isSubmitted
                                 ? toFieldErrors(field.state.meta.errors)
                                 : []
                         }

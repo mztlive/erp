@@ -39,13 +39,9 @@ export function CustomerQualityCharts({
                     dimensionKey="scale"
                     tagKey="scaleTag"
                     titleFallback="客户规模分层"
-                    description={(ruleVersion) => (
+                    description={() => (
                         <>
-                            点击柱形筛选明细
-                            {ruleVersion
-                                ? ` · 标签规则版本 v${ruleVersion}`
-                                : ""}
-                            。柱形颜色仅作区分，具体数值见下方表格。
+                            点击柱形筛选明细。柱形颜色仅作区分，具体数值见下方表格。
                         </>
                     )}
                     tableCaption="客户规模分层等价数据表"
@@ -61,13 +57,8 @@ export function CustomerQualityCharts({
                     dimensionKey="profit"
                     tagKey="profitTag"
                     titleFallback="利润贡献分布"
-                    description={(ruleVersion) => (
-                        <>
-                            仅成本完整非卡券；卡券收入不进入利润标签
-                            {ruleVersion
-                                ? ` · 标签规则版本 v${ruleVersion}`
-                                : ""}
-                        </>
+                    description={() => (
+                        <>仅成本完整非卡券；卡券收入不进入利润标签</>
                     )}
                     tableCaption="利润贡献分布等价数据表"
                     labelColumnHeader="标签"

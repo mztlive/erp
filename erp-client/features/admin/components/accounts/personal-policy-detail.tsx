@@ -92,7 +92,7 @@ export function PersonalPolicyDetail({
                 {configurable &&
                     business.authorization_policy === "directory" && (
                         <p className="text-xs leading-5 text-muted-foreground">
-                            仅控制候选项是否可见，不授予关联业务的数据或操作权限。
+                            仅决定在下拉选择框中能否看到对应资料，不代表可以查看或处理其业务单据。
                         </p>
                     )}
                 {configurable && otherActions.length > 0 && (

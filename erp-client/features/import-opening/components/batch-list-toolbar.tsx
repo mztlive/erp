@@ -28,7 +28,7 @@ const OBJECT_FILTER_OPTIONS: ReadonlyArray<{
     value: BatchObjectTypeDraft
     label: string
 }> = [
-    { value: "all", label: "全部对象" },
+    { value: "all", label: "全部类型" },
     ...(Object.keys(OBJECT_CODE_LABEL) as ImportObjectCode[]).map((code) => ({
         value: code,
         label: OBJECT_CODE_LABEL[code],
@@ -88,7 +88,7 @@ export function BatchListToolbar({
                 <OptionCombobox
                     id={`${toolbarIdPrefix}-object-type`}
                     className="w-56 max-w-full min-w-0"
-                    filterLabel="对象集合"
+                    filterLabel="导入数据类型"
                     value={objectTypeDraft}
                     onValueChange={(value) =>
                         setObjectTypeDraft(
@@ -96,9 +96,9 @@ export function BatchListToolbar({
                         )
                     }
                     options={OBJECT_FILTER_OPTIONS}
-                    aria-label="对象集合"
-                    placeholder="全部对象"
-                    searchPlaceholder="搜索对象名称"
+                    aria-label="导入数据类型"
+                    placeholder="全部类型"
+                    searchPlaceholder="搜索数据类型"
                     allowClear={false}
                 />
             }

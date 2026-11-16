@@ -71,12 +71,12 @@ export function RoleWorkbenchMetrics({
                                     </span>
                                 ) : data?.noScope ? (
                                     <span className="text-sm text-muted-foreground">
-                                        当前无数据范围
+                                        暂无数据查看权限
                                     </span>
                                 ) : value == null ? (
                                     <span className="text-sm text-muted-foreground">
                                         {data?.limited
-                                            ? "当前口径受限"
+                                            ? "仅统计权限内部分数据"
                                             : "暂不可用"}
                                     </span>
                                 ) : metric.field === "count" ? (
@@ -120,7 +120,7 @@ export function RoleWorkbenchMetrics({
                                       : query.isPending
                                         ? "读取中…"
                                         : "更新时间待返回"}
-                                {data?.limited ? " · 部分覆盖或权限受限" : ""}
+                                {data?.limited ? " · 仅统计权限内部分数据" : ""}
                             </span>
                         </button>
                         <div className="absolute top-2.5 right-2.5">
@@ -154,7 +154,7 @@ export function RoleWorkbenchMetrics({
                                     更新时间：{workbenchTime(data?.asOf, true)}
                                 </p>
                                 {data?.limited && (
-                                    <p>当前统计部分覆盖或权限受限。</p>
+                                    <p>当前仅统计权限内部分数据。</p>
                                 )}
                                 {data?.note && <p>{data.note}</p>}
                             </WorkbenchDataInfo>

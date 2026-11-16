@@ -231,14 +231,14 @@ export const DIMENSION_LABEL: Record<ProfitLossDimension, string> = {
     sales_order: "销售单",
     customer: "客户",
     scenario: "福利场景",
-    attribution_user: "历史归属销售",
-    attribution_org: "历史归属组织",
+    attribution_user: "签单归属销售",
+    attribution_org: "签单所属部门",
 }
 
 export const COVERAGE_FILTER_LABEL: Record<ProfitLossCoverage, string> = {
     covered: "成本完整",
-    uncovered: "未覆盖",
-    all: "全部覆盖状态",
+    uncovered: "成本未归集",
+    all: "全部归集状态",
 }
 
 export const COVERAGE_STATE_UI: Record<
@@ -246,6 +246,6 @@ export const COVERAGE_STATE_UI: Record<
     { label: string; tone: StatusTone }
 > = {
     COVERED: { label: "完整", tone: "success" },
-    PARTIAL: { label: "部分", tone: "warning" },
-    UNCOVERED: { label: "未覆盖", tone: "destructive" },
+    PARTIAL: { label: "部分待归集", tone: "warning" },
+    UNCOVERED: { label: "成本未归集", tone: "destructive" },
 }

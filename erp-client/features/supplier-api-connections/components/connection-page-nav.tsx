@@ -26,7 +26,7 @@ export function ConnectionPageNav({
             items={[
                 {
                     id: `supplier-api-connection-${segment}-settings-nav`,
-                    label: "API 设置",
+                    label: "平台设置",
                     href: buildSupplierConnectionSettingsHref(connectionId),
                     active: active === "settings",
                 },

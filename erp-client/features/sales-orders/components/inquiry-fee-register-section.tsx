@@ -111,7 +111,9 @@ export function InquiryFeeRegisterSection({
             })
             .catch(() => {
                 if (active)
-                    setFailure("无法读取上次费用及凭证，请检查本机存储后重试。")
+                    setFailure(
+                        "无法读取上次填写的费用及凭证，请清理浏览器缓存后重试。",
+                    )
             })
         return () => {
             active = false
@@ -332,7 +334,7 @@ function InquiryFeeRegistration({
         return (
             <Alert variant="destructive">
                 <AlertDescription>
-                    无法恢复该笔费用的本机输入，请检查浏览器存储后重新选择。
+                    无法恢复该笔费用的暂存输入，请清理浏览器缓存后重新选择。
                 </AlertDescription>
             </Alert>
         )
@@ -546,12 +548,12 @@ function InquiryFeeRegistrationForm({
                         </form.AppField>
                         <p className="text-sm text-muted-foreground">
                             {candidate.public_note || "按已接受费用条件登记。"}{" "}
-                            原来源会与费用事实一并保存，后续冲减不自动恢复询价费用可用额。
+                            登记后将自动关联原询价费用并扣减可登记额度；后续若发生费用冲减，原询价额度不会自动恢复。
                         </p>
                         {storageFailure ? (
                             <Alert variant="destructive">
                                 <AlertDescription>
-                                    费用输入或凭证未能保存到本机，请检查存储后重试。当前内容仍保留，尚未登记。
+                                    费用输入或凭证未能暂存，请清理浏览器缓存或关闭无痕模式后重试。当前内容仍保留在页面中，尚未登记。
                                 </AlertDescription>
                             </Alert>
                         ) : null}
@@ -621,7 +623,7 @@ function InquiryFeeRegistrationForm({
                         : []
                 }
                 effects={[
-                    "在同一事务核对来源、分摊余额和费用类别，登记实际费用并占用对应金额。",
+                    "核对费用来源、可登记余额与费用类别，登记实际发生的费用。",
                     "本次不生成费用采购或应付；后续财务冲减不自动恢复询价额度。",
                 ]}
                 onConfirm={async () => {

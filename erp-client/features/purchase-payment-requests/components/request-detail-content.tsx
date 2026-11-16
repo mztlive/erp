@@ -191,9 +191,9 @@ export function RequestDetailContent({
                             </p>
                             {request.status === "closed" && (
                                 <p className="text-xs leading-5 text-muted-foreground">
-                                    付款授权已终止：
+                                    本申请已终止后续付款：
                                     {request.close_reason || "未记录原因"}
-                                    。已付记录继续保留，冲正后不恢复付款授权。
+                                    。已付记录继续保留，后续即使冲正也不会恢复付款资格。
                                 </p>
                             )}
                         </div>

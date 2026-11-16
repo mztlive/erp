@@ -223,7 +223,7 @@ export const SelectionReviewCenter = ({
                         >
                             <p>
                                 {message ||
-                                    "上次操作结果待核对，请先恢复本次请求。"}
+                                    "刚才的操作尚未完成确认，请点击下方按钮继续。"}
                             </p>
                             {request &&
                                 ((!submitting && !saving) || reconciling) && (
@@ -236,7 +236,7 @@ export const SelectionReviewCenter = ({
                                         }
                                         onClick={onRecover}
                                     >
-                                        核对并恢复本次操作
+                                        继续确认
                                     </LoadingButton>
                                 )}
                         </section>

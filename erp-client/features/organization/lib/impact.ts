@@ -45,7 +45,7 @@ export function impactChanges(
                 field: unit.name,
                 before: "无",
                 after: `${KIND_LABEL[unit.kind]} · 启用`,
-                note: "新建组织节点",
+                note: "新增部门/团队",
             })
             continue
         }
@@ -76,10 +76,10 @@ export function impactChanges(
                 field: `${unit.name} 的上级`,
                 before: previous.parent_id
                     ? unitLabel(receipt.before.units, previous.parent_id)
-                    : "根节点",
+                    : "一级部门",
                 after: unit.parent_id
                     ? unitLabel(receipt.after.units, unit.parent_id)
-                    : "根节点",
+                    : "一级部门",
             })
         }
         if (previous.enabled && !unit.enabled) {
@@ -88,7 +88,7 @@ export function impactChanges(
                 field: unit.name,
                 before: "启用",
                 after: "停用",
-                note: "历史节点保留，不删除业务事实",
+                note: "停用后保留历史部门记录，不影响已有业务单据",
             })
         }
     }
@@ -105,7 +105,7 @@ export function impactChanges(
             id: `member-end-${item.id}`,
             field: resolvePerson(people, item.user_id),
             before: unitLabel(receipt.before.units, item.org_unit_id),
-            after: "结束主属关系",
+            after: "移出原所属部门",
             note: "不改派任务、不改写历史业绩",
         })
     }
@@ -116,7 +116,7 @@ export function impactChanges(
         changes.push({
             id: `member-add-${item.id}`,
             field: resolvePerson(people, item.user_id),
-            before: "无当前主属",
+            before: "暂未分配部门",
             after: unitLabel(receipt.after.units, item.org_unit_id),
             note: "调岗保留原关系记录",
         })

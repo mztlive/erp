@@ -371,8 +371,8 @@ type RevisionSource =
 
 const revisionSourceLabels = {
     "mall-sync": "商城同步",
-    "erp-change": "ERP 变更",
-    "migration-baseline": "迁移基线",
+    "erp-change": "人工修订",
+    "migration-baseline": "期初导入",
     "system-correction": "系统纠正",
 } satisfies Record<RevisionSource, string>
 

@@ -32,7 +32,7 @@ import type {
 } from "@/features/import-opening/types"
 
 const CANCEL_PENDING_REASON_OPTIONS = [
-    { value: "OPERATOR_CANCELLED", label: "操作人终止本批未应用项" },
+    { value: "OPERATOR_CANCELLED", label: "操作人终止本批未导入数据" },
     { value: "DATA_SCOPE_CHANGED", label: "导入数据范围已变化" },
     { value: "BUSINESS_WINDOW_CLOSED", label: "业务执行窗口已关闭" },
     { value: "OTHER", label: "其它终止原因" },
@@ -70,9 +70,9 @@ function CancelPendingDialog({
                 closeButtonId="operations-import-batch-detail-execution-cancel-dialog-close"
             >
                 <DialogHeader>
-                    <DialogTitle>取消尚未应用项</DialogTitle>
+                    <DialogTitle>取消未导入数据</DialogTitle>
                     <DialogDescription>
-                        仅取消本批尚未应用的项，已成功和已跳过的结果保留。
+                        仅取消本批尚未导入的数据，已成功和已跳过的记录保留。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -121,7 +121,7 @@ function CancelPendingDialog({
                         <form.AppForm>
                             <form.SubmitButton
                                 id="operations-import-batch-detail-execution-cancel-submit"
-                                label="确认取消未应用项"
+                                label="确认取消未导入数据"
                                 pendingLabel="正在取消"
                                 disabled={pending}
                                 loading={pending}
@@ -163,7 +163,7 @@ export function ImportExecutionActions({
             <CardHeader className="border-b border-grid">
                 <CardTitle>导入执行</CardTitle>
                 <CardDescription>
-                    历史期初导入执行器尚未接通，暂不能启动或重试应用。试算及责任确认记录继续保留，待业务迁移专项完成后处理；已开始批次仍可取消未应用项。
+                    期初数据正式写入功能暂未开放。当前预检与部门确认记录已保存；已开始的批次仍可取消未导入的数据。
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pt-4">
@@ -182,7 +182,7 @@ export function ImportExecutionActions({
                             disabled
                             onClick={() => setConfirming("START_APPLY")}
                         >
-                            提交应用
+                            开始正式导入
                         </Button>
                     ) : null}
                     {canCancel ? (
@@ -194,7 +194,7 @@ export function ImportExecutionActions({
                             disabled={isExecuting}
                             onClick={() => setCancelling(true)}
                         >
-                            取消未应用项
+                            取消未导入数据
                         </Button>
                     ) : null}
                     {canRetry ? (
@@ -205,7 +205,7 @@ export function ImportExecutionActions({
                             disabled
                             onClick={() => setConfirming("RETRY_FAILED")}
                         >
-                            重新准备失败项
+                            重试失败数据
                         </Button>
                     ) : null}
                 </div>
@@ -219,14 +219,16 @@ export function ImportExecutionActions({
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)
                     }}
-                    title="提交导入应用"
-                    actionLabel="确认提交应用"
-                    confirmLabel="确认提交应用"
-                    description="提交后开始导入当前待应用项。"
-                    fromStatus={{ label: "待应用", tone: "success" }}
+                    title="开始正式导入"
+                    actionLabel="确认开始导入"
+                    confirmLabel="确认开始导入"
+                    description="提交后将开始正式导入当前待处理数据。"
+                    fromStatus={{ label: "待导入", tone: "success" }}
                     toStatus={{ label: "导入中", tone: "info" }}
-                    effects={["启动关联后台任务", "只处理当前仍待应用的项"]}
-                    irreversibleEffects={["已形成的业务对象不会由本批自动回滚"]}
+                    effects={["启动后台导入任务", "仅处理当前待导入的数据"]}
+                    irreversibleEffects={[
+                        "已成功导入的业务数据会自动保留，不会撤回",
+                    ]}
                     pending={isExecuting}
                     onConfirm={() => execute("START_APPLY")}
                 />
@@ -240,15 +242,15 @@ export function ImportExecutionActions({
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)
                     }}
-                    title="重新准备失败项"
-                    actionLabel="确认重新准备"
-                    confirmLabel="确认重新准备"
-                    description="仅准备上轮失败项；准备完成后仍需点击“提交应用”。"
+                    title="重试失败数据"
+                    actionLabel="确认重试"
+                    confirmLabel="确认重试"
+                    description="仅重置上轮失败的数据；重置完成后仍需点击“开始正式导入”。"
                     fromStatus={{ label: "失败结果", tone: "destructive" }}
-                    toStatus={{ label: "待应用", tone: "success" }}
+                    toStatus={{ label: "待导入", tone: "success" }}
                     effects={[
                         "保留已成功与已跳过结果",
-                        "仅清理失败行的上次失败诊断",
+                        "重置失败记录状态以便重新导入",
                     ]}
                     pending={isExecuting}
                     onConfirm={() => execute("RETRY_FAILED")}

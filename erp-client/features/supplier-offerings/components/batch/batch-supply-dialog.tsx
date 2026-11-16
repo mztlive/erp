@@ -120,7 +120,7 @@ function BatchSupplyEditor({
                                             >
                                                 <AlertDescription>
                                                     有 {unknown.length}{" "}
-                                                    行结果待确认，内容已锁定。关闭后可在当前浏览器标签页重新打开此操作恢复；不要清除浏览器会话数据。
+                                                    行提交结果待确认，请点击下方「确认待定结果」完成核对。
                                                 </AlertDescription>
                                             </Alert>
                                         )}

@@ -86,7 +86,7 @@ export function CaliberQueryBody({
             const file = await exportMutation.mutateAsync(exportInput)
             downloadQualityCsv(file.csvContent, file.fileName)
             setExportDone(
-                `已导出 ${file.rowCount} 行（${file.fileName}，${file.generatedAt} 生成，版本已绑定）。`,
+                `已导出 ${file.rowCount} 行（${file.fileName}，${file.generatedAt} 生成）。`,
             )
         } catch (error) {
             setExportError(getErrorMessage(error, "导出失败，请重试。"))
@@ -137,9 +137,6 @@ export function CaliberQueryBody({
                 orderCount={data.totals.orderCount}
                 grossTotal={data.totals.grossTotal}
                 unpricedCount={data.totals.unpricedCount}
-                policyVersion={data.policyVersion}
-                organizationVersion={data.organizationVersion}
-                scopeVersion={data.scopeVersion}
             />
             {emptyReason === "filtered-empty" || data.rows.total === 0 ? (
                 <BusinessEmptyState

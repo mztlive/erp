@@ -72,7 +72,7 @@ export function PortalQuotesPage() {
         <PortalSurface
             variant="list"
             title="已有商品报价"
-            description="从采购向您开放的公司 SKU 中明确选择规格。公司销售价与其他供应商报价不对外开放。"
+            description="查看采购方向您开放询价的商品规格，选择规格后可提交供货报价。"
             actions={
                 <Button
                     id="supplier-portal-quotes-batch"
@@ -93,8 +93,8 @@ export function PortalQuotesPage() {
                 toolbar={
                     <PortalListSearchForm
                         searchId="supplier-portal-catalog-search"
-                        searchLabel="商品或公司SKU编号"
-                        placeholder="商品或公司 SKU 编号"
+                        searchLabel="商品名称或编号"
+                        placeholder="商品名称或编号"
                         value={search}
                         onChange={setSearch}
                         submitId="supplier-portal-catalog-search-submit"
@@ -123,7 +123,7 @@ export function PortalQuotesPage() {
                         }
                         emptyState={
                             <p className="p-6 text-sm text-muted-foreground">
-                                暂无开放的规格。未建档商品可从“新品提报”提交。
+                                暂无开放询价的商品规格。未建档商品可从「新品提报」提交。
                             </p>
                         }
                     />

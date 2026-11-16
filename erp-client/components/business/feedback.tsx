@@ -302,22 +302,22 @@ const formalResultPresets: Record<
 > = {
     succeeded: {
         title: resultText.operationSucceeded,
-        description: "结果已经形成，并可在关联单据与审计记录中追溯。",
+        description: "操作已生效，可在关联单据或操作记录中查看。",
         label: "已完成",
         icon: CircleCheckIcon,
         tone: "success",
     },
     rejected: {
         title: resultText.operationRejected,
-        description: "本次操作未形成目标结果，请根据原因继续处理。",
+        description: "操作未通过，请按提示原因调整后重试。",
         label: "未通过",
         icon: CircleXIcon,
         tone: "destructive",
     },
     blocked: {
         title: resultText.operationBlocked,
-        description: "当前前置条件尚未满足，本次操作未形成处理结果。",
-        label: "已阻断",
+        description: "当前条件暂不满足，操作未生效。",
+        label: "暂不可操作",
         icon: TriangleAlertIcon,
         tone: "warning",
     },
@@ -330,7 +330,8 @@ const formalResultPresets: Record<
     },
     unknown: {
         title: resultText.unknown,
-        description: "不得按成功处理，请等待核对或进入异常处理流程。",
+        description:
+            "暂无法确认是否提交成功，请先刷新核对单据状态，切勿重复操作。",
         label: "结果未知",
         icon: TriangleAlertIcon,
         tone: "warning",
@@ -473,8 +474,8 @@ function BackgroundJobProgress({
     const statusPresentation = backgroundJobStatusPresentation[status]
     const modeDescription =
         mode === "all-or-nothing"
-            ? "整批按原子方式执行；任一项失败时，整批结果不生效。"
-            : "允许部分成功；已经形成的有效结果不会因同批其他失败而回退。"
+            ? "全部校验通过后一起生效；若任一条有误，整批均不生效。"
+            : "允许部分生效；已成功处理的记录立即生效，失败项可单独修正后重试。"
 
     return (
         <section
@@ -499,7 +500,7 @@ function BackgroundJobProgress({
                         tone={mode === "all-or-nothing" ? "neutral" : "info"}
                         label={
                             mode === "all-or-nothing"
-                                ? "整批原子执行"
+                                ? "全部通过才生效"
                                 : "允许部分成功"
                         }
                     />

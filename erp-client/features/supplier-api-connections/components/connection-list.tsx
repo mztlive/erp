@@ -99,8 +99,8 @@ export function ConnectionList({
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="供应商"
-                title="API 连接"
-                description="选择供应商连接，进入 API 设置或商品库。"
+                title="平台连接"
+                description="选择供应商平台连接，进入平台设置或商品库。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -162,7 +162,7 @@ export function ConnectionList({
             ) : null}
 
             <ListWorkSurface
-                ariaLabel="API 供应商连接列表"
+                ariaLabel="供应商平台连接列表"
                 views={
                     <ListWorkspaceViews
                         ariaLabel="连接状态与健康视图"

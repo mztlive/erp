@@ -66,7 +66,7 @@ export function CopyRolePermissions({
                         <DialogTitle>复制角色权限</DialogTitle>
                         <DialogDescription>
                             复制将替换当前勾选的 {currentCount}{" "}
-                            项权限，保存角色后才生效。全权角色不能作为复制来源。
+                            项权限，保存角色后才生效。超级管理员角色不能作为复制来源。
                         </DialogDescription>
                     </DialogHeader>
                     <OptionCombobox
@@ -84,7 +84,7 @@ export function CopyRolePermissions({
                     {source && (
                         <p className="text-sm">
                             将使用「{source.name}」的 {copyable.length}{" "}
-                            项可配置权限。特殊授权不参与复制，当前角色已有的特殊授权保持不变。
+                            项可配置权限。整模块全选授权不参与复制，当前角色已有的整模块全选授权保持不变。
                         </p>
                     )}
                     <DialogFooter>
@@ -156,7 +156,7 @@ export function RolePermissionReview({
         changes: "本次变更",
         selected: "已授权权限",
         dangerous: "已授权的高风险权限",
-        preserved: "保留的特殊授权",
+        preserved: "整模块全选授权",
     }
     const nameChanged = name.trim() !== initialName.trim()
     return (
@@ -196,7 +196,7 @@ export function RolePermissionReview({
                             />
                             {authorizationModeChanged && (
                                 <p className="text-sm text-muted-foreground">
-                                    授权方式已调整。切换为自选操作后，今后新增的操作需要另行授予。
+                                    已切换为按单项操作授权，后续新增功能需手动勾选。
                                 </p>
                             )}
                             {!authorizationModeChanged &&
@@ -233,7 +233,7 @@ export function RolePermissionReview({
                             !preservedCodes.includes("*:*"))) && (
                         <>
                             <p className="text-sm text-muted-foreground">
-                                以下为当前保留的特殊授权。关闭此窗口后，可直接在对应模块取消不需要的操作；跨业务授权覆盖的操作只读，其他特殊授权须由权限管理员核对。
+                                以下为当前保留的整模块全选授权。关闭此窗口后，可在对应模块改按单项操作勾选；跨模块全选授权的操作需由超级管理员调整。
                             </p>
                             <ul className="space-y-2 text-sm">
                                 {preservedCodes.map((code) => (

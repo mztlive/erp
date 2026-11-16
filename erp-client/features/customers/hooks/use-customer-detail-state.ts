@@ -74,22 +74,17 @@ export function useCustomerDetailState(customerId: string, section?: string) {
         setFormDirty(false)
     }, [])
 
-    /** 保存成功：退出编辑并通过短暂 Toast 告知新版本。 */
-    const completeEditing = React.useCallback(
-        (revisionNo?: number) => {
-            setEditing(false)
-            setFormDirty(false)
-            const savedRevisionNo =
-                revisionNo ?? customer?.currentRevision.revisionNo ?? 0
-            toast.add({
-                title: "客户资料已保存",
-                description: `新版本 v${savedRevisionNo} 已生效，历史单据记录不变。`,
-                type: "success",
-                timeout: 4000,
-            })
-        },
-        [customer],
-    )
+    /** 保存成功：退出编辑并通过短暂 Toast 提示结果。 */
+    const completeEditing = React.useCallback((_revisionNo?: number) => {
+        setEditing(false)
+        setFormDirty(false)
+        toast.add({
+            title: "客户资料已保存",
+            description: "客户资料已更新，历史单据记录不受影响。",
+            type: "success",
+            timeout: 4000,
+        })
+    }, [])
 
     const dismissPendingSection = React.useCallback(
         () => setPendingSection(null),

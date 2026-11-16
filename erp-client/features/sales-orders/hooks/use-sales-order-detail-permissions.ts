@@ -91,7 +91,7 @@ function permissionKindFallback(kind: SalesOrderDetailPermissionKind): string {
         case "createPurchase":
             return "当前账号没有供给分配权限"
         case "openFulfillment":
-            return "当前账号没有履约/交付工作面权限"
+            return "当前账号没有履约与交付查看权限"
         case "openReceivable":
             return "当前账号没有客户往来权限"
         case "registerAcceptance":

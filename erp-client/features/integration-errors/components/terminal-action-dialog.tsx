@@ -37,7 +37,7 @@ export function TerminalActionDialog({
                 onOpenChange={(open) => {
                     if (!open) onCancel()
                 }}
-                actionLabel={duplicate ? "关闭重复" : "关闭误派"}
+                actionLabel={duplicate ? "关闭重复" : "关闭误派任务"}
                 title={duplicate ? "确认关闭重复任务" : "确认关闭误派任务"}
                 description="关闭当前任务，不改变业务记录。"
                 fromStatus={{ label: item.status.label, tone: "warning" }}
@@ -67,7 +67,7 @@ export function TerminalActionDialog({
             description="登记本次对账结论，不改变两侧业务数据。"
             fromStatus={{ label: item.status.label, tone: "warning" }}
             toStatus={{ label: "已确认", tone: "success" }}
-            effects={["按注册原因追加对账处理记录", "不改变两侧业务数据"]}
+            effects={["按所选差异原因记录本次对账结论", "不改变两侧业务数据"]}
             irreversibleEffects={["对账结论写入审计，不可自动撤回"]}
             pending={pending}
             onConfirm={onConfirm}

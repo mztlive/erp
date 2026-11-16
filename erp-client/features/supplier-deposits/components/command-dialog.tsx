@@ -121,7 +121,7 @@ const specs: Record<DepositAction, ActionSpec> = {
     revoke: {
         title: "撤销自动余额执行授权",
         description:
-            "撤销后停止新增占用和未发送的订单写操作。原订单调查、已发生扣款及返款继续处理。",
+            "撤销后停止新增占用和未提交的采购下单扣款。原订单调查、已发生扣款及返款继续处理。",
         submit: "撤销授权",
         fields: [],
     },
@@ -133,7 +133,7 @@ const specs: Record<DepositAction, ActionSpec> = {
         fields: [
             { name: "covered_from", label: "对账起始时间", kind: "time" },
             { name: "covered_until", label: "对账截止时间", kind: "time" },
-            { name: "observed_at", label: "供应商余额采样时间", kind: "time" },
+            { name: "observed_at", label: "供应商余额查询时间", kind: "time" },
             {
                 name: "remote_balance",
                 label: "供应商余额（元）",
@@ -366,8 +366,8 @@ export function DepositCommandDialog({
                     </span>,
                 ]}
                 effects={[
-                    "停止本授权范围内的新占用与尚未发送的写操作。",
-                    "原订单调查、既有占用和已发生资金事实继续处理，不自动释放可能已扣款的资金。",
+                    "停止本授权范围内的新占用与尚未提交的采购下单扣款。",
+                    "原订单调查、既有占用和已发生的扣款与退款记录继续处理，不自动释放可能已扣款的资金。",
                 ]}
                 onConfirm={async () => {
                     const command =

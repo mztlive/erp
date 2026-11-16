@@ -447,7 +447,7 @@ export function WorkspaceDocumentTaskDetail({
                                 <span>
                                     {facts
                                         ? "已保留当前可见内容；部分最新信息可能暂未显示。"
-                                        : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
+                                        : "当前未能加载单据详情，请重试后再执行审批或财务操作。"}
                                 </span>
                                 <Button
                                     id={`workspace-task-detail-document-facts-retry-${toAutomationIdSegment(item.workItemId)}`}
@@ -541,7 +541,7 @@ export function WorkspaceDocumentTaskDetail({
                   documentFacts.isPending ? (
                     <DetailBlock title="金额">
                         <p className="text-sm text-muted-foreground">
-                            正在读取单据事实…
+                            正在加载单据详情…
                         </p>
                     </DetailBlock>
                 ) : null}

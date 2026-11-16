@@ -140,7 +140,7 @@ export function useIntegrationActions({
             (kind === "ADD_EVIDENCE" || kind === "LINK_COMPENSATION") &&
             evidenceRefs?.length === 0
         ) {
-            setActionError("请先从受控证据入口关联已有证据")
+            setActionError("请先关联相关的业务单据或核验凭证后再提交")
             return
         }
         const identity = commandIdentities.current.get(kind, item.identity.id)
@@ -196,7 +196,7 @@ export function useIntegrationActions({
                 (kind) => !kinds.has(kind),
             )
         ) {
-            setActionError("完成凭证尚未齐备，请先从证据入口完成关联")
+            setActionError("完成处理所需的核验凭证尚未关联，请先补充核验凭证")
             return
         }
         const identity = commandIdentities.current.get(

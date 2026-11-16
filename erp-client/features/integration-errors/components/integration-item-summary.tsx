@@ -126,12 +126,12 @@ export function IntegrationItemSummary({
                         }
                     />
                     {item.compensationOpen ? (
-                        <Badge variant="destructive">补偿未闭环</Badge>
+                        <Badge variant="destructive">后续补救未完成</Badge>
                     ) : null}
                     {item.classification.errorClass ===
                     "parameter-or-mapping" ? (
                         <span className="text-sm text-muted-foreground">
-                            请先修复主数据引用，再核验处理结果。
+                            请先修正关联的商品、客户或供应商资料，再重新核对。
                         </span>
                     ) : null}
                 </div>
@@ -213,7 +213,7 @@ export function IntegrationItemSummary({
                     {item.message ? (
                         <>
                             <Fact
-                                label="消息方向"
+                                label="同步方向"
                                 value={item.message.directionLabel}
                             />
                             <Fact
@@ -231,8 +231,8 @@ export function IntegrationItemSummary({
             {item.difference ? (
                 <>
                     <BusinessDiffPanel
-                        title="对账左右证据"
-                        caption="左右侧金额与行数对照"
+                        title="双方数据核对"
+                        caption="外部账单与系统记录对照"
                         fieldColumnLabel="对照项"
                         beforeColumnLabel={item.difference.leftLabel}
                         afterColumnLabel={item.difference.rightLabel}
@@ -244,7 +244,7 @@ export function IntegrationItemSummary({
                                 field: "对照摘要",
                                 before: item.difference.leftSummary,
                                 after: item.difference.rightSummary,
-                                note: "两侧对照，只读证据",
+                                note: "双方数据只读对照",
                             },
                             {
                                 id: "summary",

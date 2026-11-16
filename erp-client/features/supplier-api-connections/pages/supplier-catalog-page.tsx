@@ -40,20 +40,20 @@ export function SupplierCatalogPage() {
                 <ListWorkspaceHeader
                     eyebrow="采购选品"
                     title="供应商品库"
-                    description="从 API 连接选择供应商后，同步并选择需要经营的商品。"
+                    description="从平台连接选择供应商后，同步并选择需要经营的商品。"
                 />
                 <BusinessEmptyState
                     kind="no-data"
                     icon={PlugZapIcon}
                     title="请选择供应商连接"
-                    description="供应商品库按供应商连接隔离。先在「API 连接」选择供应商，再进入商品库同步商品。"
+                    description="供应商品库按供应商连接隔离。先在「平台连接」选择供应商，再进入商品库同步商品。"
                     action={
                         <Button
                             id="supplier-catalog-open-connections"
                             render={<Link href="/supplier-api/connections" />}
                         >
                             <PlugZapIcon aria-hidden="true" />
-                            前往 API 连接
+                            前往平台连接
                         </Button>
                     }
                 />
@@ -93,7 +93,7 @@ export function SupplierCatalogPage() {
                         kind="no-data"
                         icon={PlugZapIcon}
                         title="此供应商连接已不可用"
-                        description="原链接对应的连接已不存在。请回到 API 连接重新选择供应商。"
+                        description="原链接对应的连接已不存在。请回到平台连接重新选择供应商。"
                         action={
                             <Button
                                 id="supplier-catalog-reselect-connection"
@@ -101,7 +101,7 @@ export function SupplierCatalogPage() {
                                     <Link href="/supplier-api/connections" />
                                 }
                             >
-                                返回 API 连接
+                                返回平台连接
                             </Button>
                         }
                     />

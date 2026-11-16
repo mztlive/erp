@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { DemoMasterDataPage } from "@/features/demo-master-data/pages/demo-master-data-page"
 
 export const metadata: Metadata = {
-    title: "演示主数据",
+    title: "示例业务数据",
 }
 
 function DemoMasterDataFallback() {

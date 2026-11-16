@@ -65,7 +65,7 @@ export function RequestMaterials({
     return (
         <section
             className="space-y-4 border-t pt-5"
-            aria-label="冻结采购销售与审核材料"
+            aria-label="申请提交时的采购与销售单据"
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-base font-semibold">
@@ -212,7 +212,7 @@ export function RequestMaterials({
                             : "销售单完整预览"}
                     </DialogTitle>
                     <DialogDescription className="sr-only">
-                        付款申请冻结的完整来源版本，按 Esc 或点击遮罩关闭。
+                        付款申请提交时的完整单据，按 Esc 或点击空白处关闭。
                     </DialogDescription>
                     <div className="relative min-h-0 flex-1">
                         <DialogClose

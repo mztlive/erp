@@ -105,7 +105,7 @@ export function SalesOrderHandoverButton({
                     <AlertDialogHeader>
                         <AlertDialogTitle>交接销售责任</AlertDialogTitle>
                         <AlertDialogDescription>
-                            开放验收任务随交接转交；审批任务、已完成验收与历史归属保持不变。业务组织不随接收人部门变化。
+                            待验收记录随交接转交；审批任务、已完成验收与历史归属保持不变。业务组织不随接收人部门变化。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div
@@ -121,23 +121,23 @@ export function SalesOrderHandoverButton({
                                 className="mt-1 text-muted-foreground"
                                 role="status"
                             >
-                                正在加载开放验收…
+                                正在加载待验收记录…
                             </p>
                         ) : acceptancePreview.isError || !acceptanceSummary ? (
                             <p className="mt-1 text-muted-foreground">
-                                开放验收清单加载失败，仍可继续交接，以服务端原子转交结果为准。
+                                待验收明细加载失败，仍可继续办理交接，系统会自动将全部待验收任务转交给新负责人。
                             </p>
                         ) : acceptanceSummary.openLines === 0 ? (
                             <p className="mt-1 text-muted-foreground">
-                                当前无开放验收数量；提交后新验收任务归新负责人。
+                                当前无待验收记录；提交后新验收任务归新负责人。
                             </p>
                         ) : (
                             <p className="mt-1 text-muted-foreground">
-                                开放验收 {acceptanceSummary.openLines} 行
+                                待验收记录 {acceptanceSummary.openLines} 行
                                 {acceptanceSummary.unitCode
                                     ? `，待验收 ${qtyWithUnit(acceptanceSummary.pendingQuantity, acceptanceSummary.unitCode)}`
                                     : ""}
-                                ，随交接原子转交；审批任务保持不变。
+                                ，随交接一并转交；审批任务保持不变。
                             </p>
                         )}
                     </div>
@@ -147,7 +147,7 @@ export function SalesOrderHandoverButton({
                                 htmlFor={`sales-orders-detail-handover-target-${orderSegment}`}
                                 className="text-sm font-medium"
                             >
-                                接收人（只列出合格有效人员）
+                                接收销售人员
                                 <RequiredMark />
                             </label>
                             <NativeSelect

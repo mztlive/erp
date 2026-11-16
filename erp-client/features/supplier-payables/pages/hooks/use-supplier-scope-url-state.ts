@@ -223,7 +223,7 @@ export function useSupplierScopeUrlState() {
         if (purchaseOrderId)
             chips.push({ key: "purchaseOrderId", label: "已限定采购单" })
         if (payableAccountId) {
-            chips.push({ key: "payableAccountId", label: "已限定应付子账" })
+            chips.push({ key: "payableAccountId", label: "已限定应付记录" })
         }
         return chips
     }, [

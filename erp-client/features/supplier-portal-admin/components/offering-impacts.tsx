@@ -76,19 +76,19 @@ export function PortalOfferingImpacts({
             },
             {
                 id: "source-line-count",
-                header: "真实选源行数",
+                header: "关联采购明细行数",
                 accessorFn: (row) => row.lines.length,
                 meta: { numeric: true, align: "end" },
             },
             {
                 id: "open-task-count",
-                header: "当前开放任务数",
+                header: "待处理履约任务数",
                 accessorFn: (row) => row.tasks.length,
                 meta: { numeric: true, align: "end" },
             },
             {
                 id: "tasks",
-                header: "开放履约任务",
+                header: "待处理履约任务",
                 enableHiding: false,
                 cell: ({ row }) =>
                     row.original.tasks.length ? (
@@ -112,7 +112,7 @@ export function PortalOfferingImpacts({
                         </div>
                     ) : (
                         <span className="text-muted-foreground">
-                            暂无当前可查看的开放任务
+                            暂无待处理履约任务
                         </span>
                     ),
             },
@@ -126,7 +126,7 @@ export function PortalOfferingImpacts({
                 <div>
                     <h2 className="font-semibold">当前采购与履约影响</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        表内仅显示当前账号可查看的采购单与开放任务。核对当前负责人及未完成履约；旧采购单的价格、付款条件和已冻结选源保持原值。
+                        表内仅显示当前账号可查看的关联采购单与待处理任务。请核对采购负责人及未完成履约情况；已生效的历史采购单价格、付款条件及供货关系保持原值。
                     </p>
                 </div>
                 <Button
@@ -178,7 +178,7 @@ export function PortalOfferingImpacts({
                 table={
                     <DataTable
                         id={`${prefix}-table`}
-                        caption="当前供给实际关联的采购单及开放履约任务"
+                        caption="当前供货商品关联的采购单及待处理履约任务"
                         data={query.data?.items ?? []}
                         columns={columns}
                         getRowId={(row) => row.purchase_order_id}
@@ -200,7 +200,7 @@ export function PortalOfferingImpacts({
                         }
                         emptyState={
                             <p className="p-6 text-sm text-muted-foreground">
-                                当前权限及已记录选源范围内，没有关联的未完成采购。历史未记录选源的关联仍需人工核验。
+                                当前权限范围内暂未查到受影响的未完成采购单；如存在早期历史采购单，仍需人工核对。
                             </p>
                         }
                     />

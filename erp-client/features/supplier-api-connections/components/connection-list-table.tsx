@@ -58,7 +58,7 @@ export function ConnectionListTable({
             getRowId={(row) => row.connectionId}
             rowCount={data?.total ?? 0}
             rowLabel={(row) => row.connectionCode}
-            caption="API 供应商连接列表"
+            caption="供应商平台连接列表"
             layout="flush"
             enableColumnPinning
             defaultColumnVisibility={{ owners: false, nextStep: false }}

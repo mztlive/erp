@@ -78,7 +78,7 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
             if (!sameUnit) warnings.push("单位需核对")
             const supplyPrice = source.procurement_supply_price_gross
             if (supplyPrice == null || supplyPrice === "")
-                warnings.push("供给价未填写")
+                warnings.push("销售预估采购价未填写")
             try {
                 if (
                     sameUnit &&
@@ -89,7 +89,7 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                     if (
                         compareDecimal(line.unit_cost_gross, supplyPrice, 6) > 0
                     ) {
-                        warnings.push("高于供给价")
+                        warnings.push("高于销售预估采购价")
                         priceDifference = subtractFixed(
                             line.unit_cost_gross,
                             supplyPrice,

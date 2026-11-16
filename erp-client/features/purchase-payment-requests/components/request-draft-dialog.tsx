@@ -426,7 +426,7 @@ function RequestDraftForm({
                                 )}
                                 {unknown && (
                                     <p role="alert" className="text-sm">
-                                        提交结果暂无法确认。请点击“查询本次提交结果”，系统将恢复原次结果，不会重复生成申请或占用余额。
+                                        提交结果暂无法确认。请点击“查询本次提交结果”，系统将查询上次提交结果，不会重复生成申请或占用余额。
                                     </p>
                                 )}
                                 <div className="flex flex-wrap items-center justify-between gap-3">

@@ -42,5 +42,5 @@ export const PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL: Readonly<
     SKU: "SKU",
     CATEGORY: "分类",
     PRODUCT_KIND: "商品类型",
-    DEFAULT_DISPATCHER: "默认负责人池",
+    DEFAULT_DISPATCHER: "默认分派组",
 }

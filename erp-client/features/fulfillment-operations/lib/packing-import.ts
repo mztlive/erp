@@ -114,7 +114,7 @@ export async function createPackingWorkbook(context: PackingImportContext) {
         "每个导入地址必须包含本次发货的全部商品，各商品的包裹数量合计必须等于页面上的本次发货数量。部分发货请先在页面修改本次数量，再下载模板。",
         "物流公司和单号必填。电话、物流单号必须保留文本格式，不能使用公式。数量必须大于0，最多6位小数。",
         `常用物流公司：${CARRIER_OPTIONS.map((option) => option.label).join("、")}；其他物流公司可直接填写名称。`,
-        "仅支持当前任务导出的 .xlsx，文件最多5 MB，每次最多100行包裹商品；覆盖后整个任务的包裹商品关联仍不得超过100项。",
+        "仅支持当前任务导出的 .xlsx，文件最多5 MB，每次最多100行包裹商品；覆盖后整个任务的包裹商品明细行数仍不得超过100项。",
         "上传后核对覆盖预览，确认后更新页面录入；须再保存草稿或确认发货。任何一行校验失败，整次导入不生效。",
     ])
         notes.addRow([note])
@@ -320,7 +320,7 @@ export async function readPackingWorkbook(
         packages.flatMap((parcel) => parcel.items).length > 100
     )
         throw new Error(
-            "覆盖后整个任务超过100个地址、包裹或包裹商品关联，请减少拆包",
+            "覆盖后整个任务超过100个地址、包裹或包裹商品明细行数，请减少拆包",
         )
     return {
         packing: { ...context.packing, packages },

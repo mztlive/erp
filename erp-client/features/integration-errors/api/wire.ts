@@ -305,7 +305,7 @@ export function toDirectReconciliationWire(input: DirectReconciliationInput) {
             DIRECT_REASON_CONCLUSIONS[input.decision.reasonCode] !==
                 input.decision.conclusion)
     ) {
-        throw new Error("直接对账原因代码、注册原因与结论必须一致")
+        throw new Error("所选差异原因与对账结论不一致，请重新选择")
     }
     const decision =
         input.decision.kind === "NON_TERMINAL_ACTION"

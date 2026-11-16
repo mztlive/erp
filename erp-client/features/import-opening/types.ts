@@ -121,12 +121,12 @@ export const PIPELINE_TO_INDICATOR: Record<
 }
 
 export const PIPELINE_STAGE_LABEL: Record<ImportPipelineStage, string> = {
-    RECEIVE: "安全接收",
-    VALIDATE: "结构校验",
-    TRIAL: "业务校验与试算",
-    CONFIRM: "责任确认",
-    APPLY: "后台应用",
-    RESULT: "结果",
+    RECEIVE: "上传文件",
+    VALIDATE: "格式检查",
+    TRIAL: "数据预检",
+    CONFIRM: "部门核对",
+    APPLY: "正式导入",
+    RESULT: "导入结果",
 }
 
 export const ENVIRONMENT_LABEL: Record<ImportEnvironment, string> = {
@@ -158,11 +158,11 @@ export const BATCH_STATUS_LABEL: Record<ImportBatchStatus, string> = {
     RECEIVING: "接收中",
     SCANNING: "安全扫描",
     VALIDATING: "校验中",
-    TRIAL_READY: "试算完成",
+    TRIAL_READY: "预检完成",
     AWAITING_CONFIRMATION: "待业务确认",
-    CONFIRMATION_BLOCKED: "确认入口阻断",
-    READY_TO_APPLY: "可提交应用",
-    APPLYING: "后台应用中",
+    CONFIRMATION_BLOCKED: "待补齐核对任务",
+    READY_TO_APPLY: "待正式导入",
+    APPLYING: "正在导入",
     PARTIAL_SUCCESS: "部分成功",
     SUCCEEDED: "已成功",
     FAILED: "失败",
@@ -199,16 +199,16 @@ export const ISSUE_CODE_LABEL: Record<ImportIssueCode, string> = {
 }
 
 export const ROW_STATUS_LABEL: Record<IssueRowStatus, string> = {
-    PENDING_MAPPING: "待映射",
+    PENDING_MAPPING: "待匹配资料",
     CONFLICT: "冲突",
     FAILED: "失败",
     SKIPPED: "跳过",
 }
 
 export const RETENTION_LABEL: Record<RetentionClass, string> = {
-    SUCCESS_AUDIT: "成功审计资产 · 长期保留",
-    FAILURE_DIAG: "失败诊断 · 保留 30 天",
-    EXPORT_TEMP: "导出结果 · 保留 7 天",
+    SUCCESS_AUDIT: "导入成功记录（长期保存）",
+    FAILURE_DIAG: "失败原因明细（保留 30 天）",
+    EXPORT_TEMP: "导出结果（保留 7 天）",
 }
 
 type SafeFileAssetView = Readonly<{

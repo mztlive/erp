@@ -178,8 +178,9 @@ export function PurchasePaymentArrangement({
                             />
                         }
                     >
-                        查看采购单
-                        {arrangement.state === "blocked" ? "并处理依据" : ""}
+                        {arrangement.state === "blocked"
+                            ? "前往采购单处理销售变更"
+                            : "查看采购单"}
                         <ArrowUpRightIcon aria-hidden="true" />
                     </Button>
                 )}
@@ -245,7 +246,7 @@ export function PurchasePaymentArrangement({
                     role="alert"
                     className="mt-4 rounded-lg bg-destructive/5 p-3 text-sm leading-6 text-destructive"
                 >
-                    销售变更影响尚未处理，本采购暂停付款申请和付款。请先处理采购依据。
+                    销售变更影响尚未处理，本采购暂停付款申请和付款。请先根据最新销售单调整或确认本采购单。
                 </p>
             )}
             {arrangement.state === "pending" && (

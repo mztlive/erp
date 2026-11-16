@@ -155,9 +155,9 @@ export function RequestReviewSummary({
                     )}
                     {request.status === "closed" && (
                         <p className="w-full text-muted-foreground">
-                            付款授权已终止：
+                            本申请已终止后续付款：
                             {request.close_reason || "未记录原因"}
-                            。冲正后不恢复付款授权。
+                            。冲正后不再恢复付款资格。
                         </p>
                     )}
                 </div>

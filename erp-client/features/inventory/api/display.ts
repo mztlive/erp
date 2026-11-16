@@ -17,13 +17,13 @@ import {
 } from "@/features/inventory/types"
 
 export const OPENING_STOCK_NOTE =
-    "期初库存只能通过导入与期初的基准日实盘导入形成流水；旧商城的库存数量不作为 ERP 库存记录，本台账不会写入或展示旧商城库存数据。"
+    "期初库存通过实盘导入建立；本台账仅统计 ERP 体系内的自有仓库实物库存。"
 
 export const EXCLUDED_NOTE =
     "供应商直发、电子交付、线下服务与实体卡不进入本台账的自有实物库存。"
 
 export const SEGREGATION_NOTE =
-    "经办提交后进入审批，经办本人不得担任当前节点审批人；余额仅在审批通过并过账后由系统更新。"
+    "库存调整需经他人审批通过后生效，申请人本人不能审批。"
 
 export function secsToIso(secs: number | null | undefined): string {
     if (secs == null || secs === 0) return ""

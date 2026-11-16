@@ -32,7 +32,7 @@ export function ResultSection({
         <div className="space-y-4">
             {partitions ? (
                 <BatchOperationResult
-                    title="应用结果分区"
+                    title="导入结果明细"
                     succeeded={partitions.succeeded.map((i) => ({
                         id: i.id,
                         label: i.label,
@@ -80,7 +80,7 @@ export function ResultSection({
                     succeeded={batch.backgroundJob.succeeded}
                     skipped={batch.backgroundJob.skipped}
                     failed={batch.backgroundJob.failed}
-                    label="最终应用进度"
+                    label="正式导入进度"
                 />
             ) : null}
 

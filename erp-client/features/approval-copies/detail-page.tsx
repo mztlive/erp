@@ -21,7 +21,7 @@ const STATUS: Record<string, string> = {
     CANCELLED: "已撤回",
     BLOCKED: "审批受阻",
     ACTIVE: "待审批",
-    SUPERSEDED: "已替换",
+    SUPERSEDED: "往轮记录",
 }
 
 export function ApprovalCopyDetailPage({ id }: { id: string }) {
@@ -152,7 +152,7 @@ function CopyDetailPane({ id }: { id: string }) {
                             variant="outline"
                             onClick={() => setAfter(undefined)}
                         >
-                            返回首段记录
+                            回到第一页
                         </Button>
                     )}
                     {data.history.has_more && (
@@ -163,7 +163,7 @@ function CopyDetailPane({ id }: { id: string }) {
                                 setAfter(data.history.next_cursor ?? undefined)
                             }
                         >
-                            后续记录
+                            加载更多记录
                         </Button>
                     )}
                 </div>

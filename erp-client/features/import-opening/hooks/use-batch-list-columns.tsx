@@ -61,7 +61,7 @@ export function useBatchListColumns({
             },
             {
                 id: "objects",
-                header: "对象集合",
+                header: "导入数据类型",
                 cell: ({ row }) => (
                     <span className="text-sm">
                         {formatObjectSet(row.original.sourceObjectSet)}

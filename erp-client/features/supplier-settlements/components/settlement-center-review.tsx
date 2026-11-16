@@ -23,7 +23,7 @@ function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">复核记录</CardTitle>
                 <CardDescription>
-                    提交 / 驳回 / 确认追加式记录；岗位分离由系统校验
+                    支持提交复核、退回修改与复核确认；提交与复核需由不同人员操作
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pt-4">

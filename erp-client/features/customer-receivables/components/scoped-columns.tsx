@@ -35,7 +35,7 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
     return [
         {
             id: "order",
-            header: "销售单 / 子账",
+            header: "销售单 / 应收款项",
             meta: { label: "销售单", width: "reference" },
             cell: ({ row }) => (
                 <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
@@ -47,16 +47,16 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
                         )}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                        子账 #{row.original.account_seq}
+                        应收款项 #{row.original.account_seq}
                     </span>
                 </div>
             ),
         },
         {
             id: "visible",
-            header: "获授权已核销",
+            header: "权限内已核销",
             meta: {
-                label: "获授权份额",
+                label: "本人权限内金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -130,9 +130,9 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
         },
         {
             id: "visible",
-            header: "获授权已分配",
+            header: "权限内已分配",
             meta: {
-                label: "获授权份额",
+                label: "本人权限内金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -198,9 +198,9 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
         },
         {
             id: "visible",
-            header: "获授权已分配",
+            header: "权限内已分配",
             meta: {
-                label: "获授权份额",
+                label: "本人权限内金额",
                 width: "amount",
                 align: "end",
                 numeric: true,

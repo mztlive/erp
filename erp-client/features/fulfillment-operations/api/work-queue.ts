@@ -96,7 +96,7 @@ export function decodeFulfillmentQueuePage(
 ): FulfillmentQueueWirePage {
     const result = fulfillmentQueuePageSchema.safeParse(input)
     if (result.success) return result.data
-    throw new Error(`履约队列响应契约不匹配：${z.prettifyError(result.error)}`)
+    throw new Error("履约任务列表数据异常，请刷新重试或联系管理员。")
 }
 
 const PRIORITY_VALUE = {

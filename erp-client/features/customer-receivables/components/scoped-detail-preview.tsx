@@ -52,7 +52,7 @@ export function ReceivableScopeDetailPreview({
 }: Props) {
     const title =
         data?.kind === "receivable"
-            ? `子账 #${data.receivable.account_seq}`
+            ? `应收款项 #${data.receivable.account_seq}`
             : data?.kind === "receipt"
               ? `回款单 ${data.receipt.receipt_no}`
               : data?.kind === "invoice"
@@ -164,7 +164,7 @@ export function ReceivableScopeDetailPreview({
             ) : data?.kind === "receivable" ? (
                 <div className={bodyClassName}>
                     <PreviewAmount
-                        label="获授权已核销"
+                        label="权限内已核销"
                         value={data.receivable.visible_settled_share}
                     >
                         <span>
@@ -200,7 +200,7 @@ export function ReceivableScopeDetailPreview({
             ) : data?.kind === "receipt" ? (
                 <div className={bodyClassName}>
                     <PreviewAmount
-                        label="获授权已分配"
+                        label="权限内已分配"
                         value={data.receipt.visible_allocated_share}
                     >
                         <span>
@@ -226,7 +226,7 @@ export function ReceivableScopeDetailPreview({
                             />
                         </span>
                     </PreviewAmount>
-                    <PreviewSection title="获授权分配">
+                    <PreviewSection title="权限内分配">
                         <dl className="space-y-3">
                             {(data.receipt.allocations ?? []).map((line) => (
                                 <PreviewFact
@@ -244,7 +244,7 @@ export function ReceivableScopeDetailPreview({
                             ))}
                         </dl>
                         {(data.receipt.allocations ?? []).length === 0 ? (
-                            <PreviewNote>暂无获授权分配</PreviewNote>
+                            <PreviewNote>暂无权限内分配</PreviewNote>
                         ) : null}
                     </PreviewSection>
                     {limited ? (
@@ -254,7 +254,7 @@ export function ReceivableScopeDetailPreview({
             ) : data?.kind === "invoice" ? (
                 <div className={bodyClassName}>
                     <PreviewAmount
-                        label="获授权已分配"
+                        label="权限内已分配"
                         value={data.invoice.visible_allocated_share}
                     >
                         <span>
@@ -280,7 +280,7 @@ export function ReceivableScopeDetailPreview({
                             />
                         </span>
                     </PreviewAmount>
-                    <PreviewSection title="获授权分配">
+                    <PreviewSection title="权限内分配">
                         <dl className="space-y-3">
                             {(data.invoice.allocations ?? []).map((line) => (
                                 <PreviewFact
@@ -298,7 +298,7 @@ export function ReceivableScopeDetailPreview({
                             ))}
                         </dl>
                         {(data.invoice.allocations ?? []).length === 0 ? (
-                            <PreviewNote>暂无获授权分配</PreviewNote>
+                            <PreviewNote>暂无权限内分配</PreviewNote>
                         ) : null}
                     </PreviewSection>
                     {limited ? (

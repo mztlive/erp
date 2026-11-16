@@ -344,9 +344,9 @@ export function toCenter(
             .map((record) => ({
                 id: `health-${record.recordId}`,
                 severity: "destructive" as const,
-                title: "鉴权/签名失败",
+                title: "平台授权失效",
                 description:
-                    record.errorSummary ?? "请检查安全引用与适配器配置。",
+                    record.errorSummary ?? "请检查平台授权与接口配置。",
             })),
         nextStep:
             detail.action_blockers[0]?.message ??

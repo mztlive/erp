@@ -59,7 +59,9 @@ const clonePayload = <T>(payload: T): T => structuredClone(payload)
 const defaultKeyFactory: KeyFactory = (prefix) => {
     const randomId = globalThis.crypto?.randomUUID?.()
     if (!randomId) {
-        throw new Error("当前环境无法生成安全的操作标识")
+        throw new Error(
+            "当前浏览器环境受限，无法提交操作，请刷新或更换浏览器后重试",
+        )
     }
     return `${prefix}:${randomId}`
 }

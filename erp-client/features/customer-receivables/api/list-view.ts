@@ -168,7 +168,7 @@ export async function fetchCustomerAccountsList(
         unallocated: {
             receipts: unallocatedReceipts,
             invoices: unallocatedInvoices,
-            note: "待核销视图中回款与销项发票分区展示；两类未分配余额不得相加为单一指标。",
+            note: "下方分别列出待核销的回款与待关联销售单的销项发票。",
         },
         counterparties: [...cpMap.values()],
         total,
@@ -188,7 +188,7 @@ export async function fetchCustomerAccountsList(
                 : undefined,
         submitPolicy: {
             allowUnallocatedRemainder: true,
-            label: "允许保留未分配余额（系统统一判定）",
+            label: "允许保留未分配余额",
         },
     }
 }

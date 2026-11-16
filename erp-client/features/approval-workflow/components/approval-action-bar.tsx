@@ -210,7 +210,7 @@ export function ApprovalActionBar({
                     {reviseRejected
                         ? "修改原单"
                         : emergencyWithdraw
-                          ? "应急撤回审批"
+                          ? "代申请人撤回"
                           : "撤回审批"}
                 </Button>
             ) : null}
@@ -221,7 +221,7 @@ export function ApprovalActionBar({
                     variant="outline"
                     onClick={() => setDialog("upgrade")}
                 >
-                    更新审批流程版本
+                    采用最新审批流程
                 </Button>
             ) : null}
             {!canReadSensitive ? (

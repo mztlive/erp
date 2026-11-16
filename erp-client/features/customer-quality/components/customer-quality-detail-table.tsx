@@ -101,7 +101,7 @@ export function CustomerQualityDetailTable({
                                         title="当前筛选无客户结果"
                                         description={
                                             <>
-                                                总体指标仍按当前期间与权限范围聚合（未因表格筛选归零）。筛选：
+                                                上方汇总指标统计当前期间与权限范围内的全部客户。筛选：
                                                 {filterSummary}
                                             </>
                                         }

@@ -23,9 +23,7 @@ export function CustomerQualityMetricStrip({
                     const valueNode =
                         m.fieldDenied || m.reliability === "unavailable" ? (
                             <span className="text-muted-foreground">
-                                {m.fieldDenied
-                                    ? "当前角色不可查看"
-                                    : "暂无可靠口径"}
+                                {m.fieldDenied ? "当前角色不可查看" : "待核算"}
                             </span>
                         ) : (
                             m.value

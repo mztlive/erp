@@ -99,7 +99,7 @@ export function SupplierAllocationSessionPage({
             description={
                 session
                     ? [
-                          `供应商 ${session.supplierName} 已锁定；核销池仅含该供应商开放目标。采购单与结算单可混合，不同供应商禁止混入。`,
+                          `供应商 ${session.supplierName} 已锁定；仅展示该供应商的待核销单据。可同时勾选采购单与结算单，不可跨供应商核销。`,
                           session.existingDocumentNo
                               ? `继续核销 ${session.existingDocumentNo}。`
                               : null,

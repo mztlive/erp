@@ -27,7 +27,7 @@ export function useScopeListExport(exportRows: () => Promise<ScopeCsvExport>) {
             downloadListCsv(result.content, result.fileName)
             toast.add({
                 title: "导出已完成",
-                description: `已按当前范围生成 ${result.fileName}（${result.rowCount} 条）。`,
+                description: `已按当前筛选条件导出 ${result.fileName}（共 ${result.rowCount} 条）。`,
                 type: "success",
             })
         } catch (error) {

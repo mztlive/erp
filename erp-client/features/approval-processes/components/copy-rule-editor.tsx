@@ -348,8 +348,8 @@ function CopyRuleList({
                                     <SelectGroup key={String(nodeEvent)}>
                                         <SelectLabel>
                                             {nodeEvent
-                                                ? "节点事件"
-                                                : "流程事件"}
+                                                ? "按具体审批步骤触发"
+                                                : "按整体审批结果触发"}
                                         </SelectLabel>
                                         {available
                                             .filter(

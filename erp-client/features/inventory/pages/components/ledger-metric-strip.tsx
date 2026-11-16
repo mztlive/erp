@@ -12,19 +12,19 @@ export function LedgerMetricStrip({
         <MetricStrip className="mb-4" columns={4} aria-label="库存台账指标">
             <MetricItem
                 id="inventory-ledger-metric-combos"
-                label="库存组合"
+                label="在库品项数"
                 value={metrics.balanceDimensionCount}
                 detail="按仓库与 SKU 组合统计"
                 detailMode="tooltip"
             />
             <MetricItem
                 id="inventory-ledger-metric-reserved"
-                label="有效预占组合"
+                label="有预留品项"
                 value={metrics.reservedDimensionCount}
             />
             <MetricItem
                 id="inventory-ledger-metric-zero"
-                label="零可用组合"
+                label="缺货/零可用品项"
                 value={metrics.zeroAvailableDimensionCount}
                 detail="可用数量为 0"
                 detailMode="tooltip"

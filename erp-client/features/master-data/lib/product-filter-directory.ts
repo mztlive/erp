@@ -6,7 +6,7 @@ import type { ProductFilterOptions } from "@/features/master-data/types"
 
 /** 与 SelectorQueryFeedback 的无范围文案一致。 */
 export const DIRECTORY_NO_SCOPE_MESSAGE =
-    "当前角色无此目录的数据范围，请申请权限"
+    "暂无该资料的查看权限，请联系管理员开通"
 
 const DIRECTORY_LOAD_FAILED_MESSAGE = "候选加载失败，请重试"
 

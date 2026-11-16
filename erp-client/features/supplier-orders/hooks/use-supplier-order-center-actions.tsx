@@ -89,10 +89,10 @@ export function useSupplierOrderCenterActions(
         if (workItemId && !detail.workItem) {
             setResult({
                 status: "blocked",
-                title: "正式任务不可处理",
+                title: "当前待办暂无法处理",
                 description:
                     detail.workItemBlocker?.message ??
-                    "未查询到正式任务，禁止改走订单直接动作。",
+                    "未找到关联的异常处理待办，请刷新页面后重试。",
             })
             return
         }
@@ -227,10 +227,10 @@ export function useSupplierOrderCenterActions(
             setReplayOpen(false)
             setResult({
                 status: "blocked",
-                title: "正式任务不可处理",
+                title: "当前待办暂无法处理",
                 description:
                     detail.workItemBlocker?.message ??
-                    "未查询到正式任务，禁止改走订单直接动作。",
+                    "未找到关联的异常处理待办，请刷新页面后重试。",
             })
             return
         }

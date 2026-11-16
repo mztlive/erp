@@ -62,7 +62,7 @@ export function ProfitLossMetrics({ data }: { data: ProfitLossView }) {
                     }
                     detail={
                         data.coverage.reliability === "partial"
-                            ? "部分覆盖 · 仅可靠子集"
+                            ? "部分成本待归集"
                             : SCOPE_LABEL
                     }
                     status={

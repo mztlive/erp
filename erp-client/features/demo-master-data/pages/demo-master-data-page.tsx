@@ -68,8 +68,8 @@ export function DemoMasterDataPage() {
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="系统"
-                title="演示主数据"
-                description="生成客户、供应商、商品、仓库、字典及供给，并准备岗位账号、部门、审批流程和默认负责人。新建岗位账号初始密码为 123456，已有账号不改密码。删除演示主数据会清空当前数据库，包括非演示数据、所有单据、审批配置、部门和其他账号，仅保留 admin 账号及必要超管授权。清空后不可恢复，可以重新生成演示数据。"
+                title="示例业务数据"
+                description="生成示例客户、供应商、商品、仓库、字典及供给，并准备岗位账号、部门、审批流程和默认负责人。新建岗位账号初始密码为 123456，已有账号不改密码。重置系统数据会清空当前系统中的全部业务与示例数据（包括所有单据、审批配置、部门和其他账号），仅保留超管账号及必要权限。重置后不可恢复，可随时重新生成示例业务数据。"
             >
                 {canApply ? (
                     <LoadingButton
@@ -86,7 +86,7 @@ export function DemoMasterDataPage() {
                     >
                         {apply.isPending
                             ? (progress ?? "正在生成")
-                            : "生成演示主数据"}
+                            : "生成示例业务数据"}
                     </LoadingButton>
                 ) : null}
                 {canRemove ? (
@@ -99,8 +99,8 @@ export function DemoMasterDataPage() {
                         onClick={() => setConfirmRemove(true)}
                     >
                         {remove.isPending
-                            ? "正在清空数据库"
-                            : "删除演示主数据（清空数据库）"}
+                            ? "正在重置系统数据"
+                            : "重置系统数据（仅保留超管账号）"}
                     </Button>
                 ) : null}
             </ListWorkspaceHeader>
@@ -109,16 +109,16 @@ export function DemoMasterDataPage() {
                 <BusinessFailureState
                     idPrefix="demo-master-data-status"
                     error={statusQuery.error}
-                    title="演示主数据暂不可查看"
+                    title="示例业务数据暂不可查看"
                     onRetry={() => void statusQuery.refetch()}
                 />
             ) : null}
 
             {statusQuery.data && !statusQuery.data.enabled ? (
                 <Alert>
-                    <AlertTitle>当前环境未开放演示主数据</AlertTitle>
+                    <AlertTitle>当前环境未启用示例业务数据</AlertTitle>
                     <AlertDescription>
-                        请在运行配置里打开 demo.master_data，重新启动后再生成。
+                        当前环境未启用示例数据功能，请联系系统运维人员开启后再试。
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -158,10 +158,10 @@ export function DemoMasterDataPage() {
 
             {remove.isSuccess ? (
                 <Alert role="status">
-                    <AlertTitle>数据库已清空</AlertTitle>
+                    <AlertTitle>系统数据已重置</AlertTitle>
                     <AlertDescription>
-                        已删除 {remove.data.deleted_documents} 条记录，仅保留
-                        admin 账号及必要超管授权。可以重新生成演示数据。
+                        已清理 {remove.data.deleted_documents}{" "}
+                        条记录，仅保留超管账号及必要权限。可随时重新生成示例业务数据。
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -169,19 +169,19 @@ export function DemoMasterDataPage() {
                 idPrefix="demo-master-data-remove"
                 open={confirmRemove}
                 onOpenChange={setConfirmRemove}
-                title="清空数据库，仅保留 admin"
-                description="此操作会删除当前数据库中的全部演示数据和非演示数据。请先停止其他人员及后台任务的写入。"
-                actionLabel="清空数据库"
-                confirmLabel="确认清空，仅保留 admin"
+                title="重置系统数据（仅保留超管账号）"
+                description="此操作会清除系统内的全部示例数据和业务数据。重置前请确认没有其他人员正在操作系统或执行导入导出任务。"
+                actionLabel="重置系统数据"
+                confirmLabel="确认重置，仅保留超管账号"
                 cancelLabel="取消"
                 actionVariant="destructive"
                 fromStatus="已有数据"
-                toStatus="仅保留 admin"
-                summary={["保留 admin 账号、原密码和超级管理员权限。"]}
+                toStatus="仅保留超管账号"
+                summary={["保留超级管理员账号、原密码及全部系统权限。"]}
                 irreversibleEffects={[
-                    "所有业务单据、主数据、库存、审批定义与记录、部门、责任规则和其他账号都会永久删除。",
-                    "数据库中的附件资料和审计历史一并清空；文件存储中的附件文件不会删除。",
-                    "清空后无法恢复，重新生成会创建新的岗位账号和业务资料。",
+                    "所有业务单据、基础资料、库存、审批配置与记录、部门、人员权限及其他账号都会永久删除。",
+                    "操作日志与单据附件记录将一并清空。",
+                    "重置后无法恢复，重新生成示例数据会创建新的岗位账号和业务资料。",
                 ]}
                 pending={remove.isPending}
                 onConfirm={() => {

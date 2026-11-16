@@ -183,7 +183,7 @@ export function resolveFocusTask(
     ) {
         return {
             id: "approval",
-            title: "销售单等审批",
+            title: "销售单审批中",
             description: "",
             actionLabel: "去审批",
             tone: "info",
@@ -195,9 +195,8 @@ export function resolveFocusTask(
     ) {
         return {
             id: "approval",
-            title: "卡券销售等审批",
-            description:
-                "审批通过后本单才会生效。卡券运营是流程中的普通审批节点。",
+            title: "销售单审批中",
+            description: "审批通过后本单正式生效，请留意当前审批进度。",
             actionLabel: "去审批",
             tone: "info",
         }
@@ -212,13 +211,12 @@ export function resolveFocusTask(
         }
     }
     if (order.activeChangeOrder) {
-        const { statusLabel, baseRevisionNo } = order.activeChangeOrder
-        const base = baseRevisionNo > 0 ? `（基于 v${baseRevisionNo}）` : ""
+        const { statusLabel } = order.activeChangeOrder
         return {
             id: "versions",
-            title: "有一笔改单还在走",
-            description: `改单${statusLabel}${base}，生效前客户仍按当前版本执行。`,
-            actionLabel: "看历史版本",
+            title: "销售变更单处理中",
+            description: `当前有一笔销售变更（${statusLabel}），变更生效前仍按原订单履约。`,
+            actionLabel: "查看变更详情",
             tone: "warning",
         }
     }
@@ -401,7 +399,7 @@ export function navItemsFor(
         {
             id: "collaboration",
             label: "协同",
-            hint: "商城对接已移除，执行投影待未来重做时恢复",
+            hint: "查看福利商城卡券制卡、发卡及激活进度",
             show: order.nature === "card_voucher",
         },
         {

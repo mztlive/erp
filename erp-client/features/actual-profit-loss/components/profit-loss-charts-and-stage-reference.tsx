@@ -313,7 +313,7 @@ export function ProfitLossChartsAndStageReference({
                             <p className="text-sm text-muted-foreground">
                                 {data.fieldPermissions.canViewCost
                                     ? "当前范围无成本构成数据。"
-                                    : "无成本明细权限；不展示构成占比，避免通过图表比例泄露。"}
+                                    : "暂无成本明细查看权限，暂不展示成本构成占比。"}
                             </p>
                         )}
                     </CardContent>
@@ -325,7 +325,7 @@ export function ProfitLossChartsAndStageReference({
                 <CardHeader className="border-b border-grid">
                     <CardTitle>预计/已确认成本参考</CardTitle>
                     <CardDescription>
-                        仅执行期对照，不参与实际经营盈亏或实际利润率；与实际成本使用不同文案样式。
+                        此处仅为预算与执行期估算对照，不计入实际经营盈亏和利润率。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-4">

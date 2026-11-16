@@ -30,10 +30,18 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
 import type { ColumnDef } from "@tanstack/react-table"
 import { getErrorMessage } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { useScopeListExport } from "@/lib/use-scope-list-export"
+import {
+    requestStatusLabels,
+    type RequestStatus,
+} from "@/features/invoice-requests/api"
 import type { ScopedInvoiceRequestWire } from "@/features/invoice-requests/scoped"
 import { exportInvoiceRequestScopeCsv } from "@/features/invoice-requests/scoped-export"
 import {
@@ -41,11 +49,63 @@ import {
     useInvoiceRequestScopeListQuery,
 } from "@/features/invoice-requests/hooks/scoped-queries"
 import { useInvoiceRequestScopeUrlState } from "@/features/invoice-requests/hooks/use-scope-url-state"
-import { scopeText } from "@/lib/ui-text"
 
 const toolbarPrefix = "invoice-request-scope-toolbar"
 
-function ScopeColumns(): ColumnDef<ScopedInvoiceRequestWire>[] {
+type ScopedRequestWithOptionalNames = ScopedInvoiceRequestWire & {
+    applicant_user_name?: string | null
+    applicant_name?: string | null
+    created_by_name?: string | null
+    handler_user_name?: string | null
+    handler_name?: string | null
+}
+
+function isInternalIdentifier(value: string): boolean {
+    const trimmed = value.trim()
+    return (
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            trimmed,
+        ) || /^[a-z]{2,6}_[a-z0-9_-]{6,}$/i.test(trimmed)
+    )
+}
+
+function requestStatusLabel(status: string): string {
+    const normalized = status.trim().toLowerCase()
+    return Object.hasOwn(requestStatusLabels, normalized)
+        ? requestStatusLabels[normalized as RequestStatus]
+        : "状态待确认"
+}
+
+function resolveScopedPersonName(
+    row: ScopedRequestWithOptionalNames,
+    role: "applicant" | "handler",
+    resolvedNames: ReadonlyMap<string, string>,
+): string {
+    if (role === "applicant") {
+        const inline =
+            row.applicant_user_name?.trim() ||
+            row.applicant_name?.trim() ||
+            row.created_by_name?.trim() ||
+            ""
+        if (inline) return inline
+        const fromDirectory = resolvedNames.get(row.applicant_user_id)
+        if (fromDirectory) return fromDirectory
+        const rawId = row.applicant_user_id.trim()
+        return !rawId || isInternalIdentifier(rawId) ? "当前不可见" : rawId
+    }
+    if (!row.handler_user_id) return ""
+    const inline =
+        row.handler_user_name?.trim() || row.handler_name?.trim() || ""
+    if (inline) return inline
+    const fromDirectory = resolvedNames.get(row.handler_user_id)
+    if (fromDirectory) return fromDirectory
+    const rawId = row.handler_user_id.trim()
+    return !rawId || isInternalIdentifier(rawId) ? "当前不可见" : rawId
+}
+
+function ScopeColumns(
+    resolvedNames: ReadonlyMap<string, string>,
+): ColumnDef<ScopedInvoiceRequestWire>[] {
     return [
         {
             id: "doc",
@@ -77,24 +137,38 @@ function ScopeColumns(): ColumnDef<ScopedInvoiceRequestWire>[] {
             id: "people",
             header: "申请人 / 当前处理人",
             meta: { label: "经办", width: "default" },
-            cell: ({ row }) => (
-                <div className="flex min-w-0 flex-col gap-1 text-xs">
-                    <span className="break-words">
-                        申请人 {row.original.applicant_user_id}
-                    </span>
-                    <span className="break-words text-muted-foreground">
-                        {row.original.handler_user_id
-                            ? `当前处理人 ${row.original.handler_user_id}`
-                            : "暂无当前处理人"}
-                    </span>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const applicantLabel = resolveScopedPersonName(
+                    row.original as ScopedRequestWithOptionalNames,
+                    "applicant",
+                    resolvedNames,
+                )
+                const handlerLabel = resolveScopedPersonName(
+                    row.original as ScopedRequestWithOptionalNames,
+                    "handler",
+                    resolvedNames,
+                )
+                return (
+                    <div className="flex min-w-0 flex-col gap-1 text-xs">
+                        <span className="break-words">
+                            申请人 {applicantLabel}
+                        </span>
+                        <span className="break-words text-muted-foreground">
+                            {row.original.handler_user_id
+                                ? `当前处理人 ${handlerLabel}`
+                                : "暂无当前处理人"}
+                        </span>
+                    </div>
+                )
+            },
         },
         {
             id: "status",
             header: "状态",
             cell: ({ row }) => (
-                <span className="text-sm">{row.original.status}</span>
+                <span className="text-sm">
+                    {requestStatusLabel(row.original.status)}
+                </span>
             ),
         },
     ]
@@ -107,8 +181,57 @@ export function InvoiceRequestScopePage() {
     const listQuery = useInvoiceRequestScopeListQuery(urlState.query)
     const [detailId, setDetailId] = React.useState<string | null>(null)
     const detailQuery = useInvoiceRequestScopeDetailQuery(detailId)
-    const columns = React.useMemo(ScopeColumns, [])
     const data = listQuery.data
+    const missingPersonIds = React.useMemo(() => {
+        const ids = new Set<string>()
+        const collect = (row: ScopedRequestWithOptionalNames) => {
+            if (
+                row.applicant_user_id &&
+                !row.applicant_user_name?.trim() &&
+                !row.applicant_name?.trim() &&
+                !row.created_by_name?.trim()
+            ) {
+                ids.add(row.applicant_user_id)
+            }
+            if (
+                row.handler_user_id &&
+                !row.handler_user_name?.trim() &&
+                !row.handler_name?.trim()
+            ) {
+                ids.add(row.handler_user_id)
+            }
+        }
+        for (const row of data?.requests ?? []) {
+            collect(row as ScopedRequestWithOptionalNames)
+        }
+        if (detailQuery.data) {
+            collect(detailQuery.data as ScopedRequestWithOptionalNames)
+        }
+        return [...ids]
+    }, [data?.requests, detailQuery.data])
+    const account = useAccountProfileQuery()
+    const canReadBusiness = hasPermission(
+        account.data?.permissions,
+        "business_person:list",
+    )
+    const selectedPeople = usePersonDirectorySelected(
+        "business",
+        missingPersonIds,
+        canReadBusiness && missingPersonIds.length > 0,
+    )
+    const resolvedNames = React.useMemo(() => {
+        const map = new Map<string, string>()
+        if (selectedPeople.isSuccess && selectedPeople.data) {
+            for (const item of selectedPeople.data.items) {
+                map.set(item.id, item.name.trim() || personDirectoryLabel(item))
+            }
+        }
+        return map
+    }, [selectedPeople.data, selectedPeople.isSuccess])
+    const columns = React.useMemo(
+        () => ScopeColumns(resolvedNames),
+        [resolvedNames],
+    )
     const { exporting, handleExport } = useScopeListExport(() =>
         exportInvoiceRequestScopeCsv(urlState.query),
     )
@@ -135,8 +258,8 @@ export function InvoiceRequestScopePage() {
         ) : data && (data.emptyReason === "no_scope" || !data.hasScope) ? (
             <BusinessEmptyState
                 kind="no-scope"
-                title="当前角色未配置开票申请范围"
-                description="不得用 0 元假装无申请。请申请数据范围后再查询。"
+                title="暂无可查看的开票申请数据"
+                description="您当前尚未配置开票申请的数据查看范围，请联系管理员开通权限后再查询。"
             />
         ) : data && data.total === 0 ? (
             <BusinessEmptyState
@@ -176,8 +299,8 @@ export function InvoiceRequestScopePage() {
         <PageScaffold density="compact" className="space-y-4">
             <ListWorkspaceHeader
                 eyebrow="财务"
-                title="开票申请（按数据范围）"
-                description="按负责销售、申请人与当前开票处理人查询；不改变正式开票准入。"
+                title="开票申请汇总"
+                description="按负责销售、申请人或财务处理人查询开票申请进度。"
             />
 
             <FundsScopeBanner
@@ -395,22 +518,32 @@ export function InvoiceRequestScopePage() {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            {detailQuery.data.applicant_user_id}
+                                            {resolveScopedPersonName(
+                                                detailQuery.data,
+                                                "applicant",
+                                                resolvedNames,
+                                            )}
                                         </TableCell>
                                         <TableCell>
-                                            {detailQuery.data.handler_user_id ??
-                                                "—"}
+                                            {detailQuery.data.handler_user_id
+                                                ? resolveScopedPersonName(
+                                                      detailQuery.data,
+                                                      "handler",
+                                                      resolvedNames,
+                                                  )
+                                                : "—"}
                                         </TableCell>
                                         <TableCell>
-                                            {detailQuery.data.status}
+                                            {requestStatusLabel(
+                                                detailQuery.data.status,
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>
                             {detailQuery.data.permission_limited ? (
                                 <p className="mt-2 text-xs text-muted-foreground">
-                                    {scopeText.limitedOnlyVisibleShare}
-                                    。申请金额为行级事实始终返回。
+                                    部分金额受限时仅显示本人权限内金额
                                 </p>
                             ) : null}
                         </div>

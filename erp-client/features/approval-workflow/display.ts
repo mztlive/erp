@@ -34,8 +34,8 @@ export const EXECUTION_STATUS_LABEL: Record<string, string> = {
 }
 
 export const RECOVERY_ACTION_LABEL: Record<RecoveryOption, string> = {
-    RESUME_CURRENT_APPROVER: "恢复当前审批人",
-    CANCEL_BLOCKED: "取消受阻审批",
+    RESUME_CURRENT_APPROVER: "继续由原审批人审批",
+    CANCEL_BLOCKED: "终止并退回此审批",
 }
 
 /**

@@ -534,7 +534,7 @@ export function OrganizationChangeDialog({
                                 }
                                 description={ORGANIZATION_BOUNDARY_NOTICE}
                                 filterSummary="本次配置变更"
-                                selectionScope="当前组织配置边界"
+                                selectionScope="当前调整的部门范围"
                                 estimated={counts.estimated}
                                 processable={counts.processable}
                                 skipped={counts.skipped}

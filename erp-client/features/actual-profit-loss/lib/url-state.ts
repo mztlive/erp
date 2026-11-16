@@ -120,13 +120,16 @@ export function mapFreshnessState(
         return { uiState: "syncing", statusLabel: "正在刷新数据" }
     }
     if (options?.refreshFailed) {
-        return { uiState: "failed", statusLabel: "刷新失败 · 保留旧数据" }
+        return {
+            uiState: "failed",
+            statusLabel: "刷新失败 · 当前仍显示上次数据",
+        }
     }
     switch (state) {
         case "stale":
             return {
                 uiState: "stale",
-                statusLabel: "数据陈旧 · 来源更新时间已超前",
+                statusLabel: "数据待更新 · 业务单据已有新变动",
             }
         case "rebuilding":
             return { uiState: "syncing", statusLabel: "数据更新中" }

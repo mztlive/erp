@@ -456,7 +456,7 @@ export function SellableItemsListPage() {
                         toast.add({
                             title: prepared ? "正在准备选品册" : "选品册已创建",
                             description: prepared
-                                ? `正在为「${customerName}」冻结商品并生成陈列。`
+                                ? `正在为「${customerName}」生成专属选品册商品清单。`
                                 : `已为「${customerName}」创建选品册，准备未开始，可在选品册继续。`,
                             type: prepared ? "success" : "warning",
                             timeout: 6000,

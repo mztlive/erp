@@ -134,9 +134,9 @@ export function InquiryExpenseSourceSection({
             aria-label="已接受询价费用来源"
         >
             <div>
-                <h3 className="font-medium">从已接受询价费用创建</h3>
+                <h3 className="font-medium">关联询价已确认的费用</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    已在询价中明确的费用须从这里选择，保留原费用和分摊来源。下方手工费用用于其他未关联询价的费用，不会按名称猜测来源。
+                    询价阶段已确认的费用请直接从下方选择；其他临时费用请在下方手工录入。
                 </p>
             </div>
             {pending ? (
@@ -642,8 +642,8 @@ function InquiryExpenseSourceForm({
                         : []
                 }
                 effects={[
-                    "原子核对销售来源、已接受费用、分摊和余额，创建一张费用采购并提交审批。",
-                    "审批中、撤回或驳回仍保留费用占用；已办理金额不能直接释放。",
+                    "核对关联销售单与询价费用余额，生成费用采购单并提交审批",
+                    "提交后将锁定该笔询价费用的可转金额",
                 ]}
                 onConfirm={async () => {
                     if (!preview) return

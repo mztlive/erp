@@ -30,7 +30,7 @@ export function SourceSkuPicker({
             <Input
                 id="selection-reprepare-skus"
                 value={q}
-                placeholder="商品名称或 SKU 编号"
+                placeholder="商品名称或商品编号"
                 onChange={(event) => {
                     setQ(event.target.value)
                     setPage(1)

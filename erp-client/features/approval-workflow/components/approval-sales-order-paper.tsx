@@ -331,7 +331,7 @@ export function ApprovalSalesOrderPaper({
             footer={
                 isSubmission
                     ? "本预览保留此次审批提交的销售内容及全部明细。"
-                    : "本预览展示本次采购审批锁定的销售版本及全部明细。"
+                    : "本预览展示本次采购审批提交时的销售单内容及全部明细。"
             }
         />
     )

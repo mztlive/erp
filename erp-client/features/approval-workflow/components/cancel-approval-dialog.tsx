@@ -193,9 +193,9 @@ export function CancelApprovalDialog({
             ? "修改原单"
             : mode === "withdraw"
               ? emergency
-                  ? "应急撤回审批"
+                  ? "代申请人撤回"
                   : "撤回审批"
-              : "取消受阻审批"
+              : "终止并退回此审批"
 
     return (
         <Dialog
@@ -224,7 +224,7 @@ export function CancelApprovalDialog({
                             ? "此操作不可恢复，不会改派或继续推进。"
                             : null}
                         {emergency
-                            ? "你正在代原提交人撤回，系统会记录应急代办身份。"
+                            ? "您正在代原申请人撤回此审批，系统将记录本次代撤回操作。"
                             : null}
                     </DialogDescription>
                 </DialogHeader>
@@ -272,7 +272,7 @@ export function CancelApprovalDialog({
                                           ? "撤回并修改原单"
                                           : mode === "withdraw"
                                             ? "确认撤回"
-                                            : "确认取消"
+                                            : "确认终止"
                                 }
                                 disabled={pending}
                             />

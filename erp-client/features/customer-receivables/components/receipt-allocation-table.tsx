@@ -98,7 +98,9 @@ export function ReceiptAllocationTable({
             </div>
             {allocations.length === 0 ? (
                 <div className="border-y border-border py-14 text-center">
-                    <p className="text-sm font-medium text-foreground">尚未添加待核销应收</p>
+                    <p className="text-sm font-medium text-foreground">
+                        尚未添加待核销应收
+                    </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                         点击右上角「添加应收」选择销售单；支持一次批量添加多笔。
                     </p>
@@ -116,7 +118,10 @@ export function ReceiptAllocationTable({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>销售单 / 应收项目</TableHead>
-                                    <TableHead className="w-36" data-align="end">
+                                    <TableHead
+                                        className="w-36"
+                                        data-align="end"
+                                    >
                                         可核销金额
                                     </TableHead>
                                     <TableHead
@@ -135,7 +140,9 @@ export function ReceiptAllocationTable({
                                 {allocations.map((line) => {
                                     const target = targets.get(line.targetId)
                                     const source = target
-                                        ? sources.get(allocationSourceKey(target))
+                                        ? sources.get(
+                                              allocationSourceKey(target),
+                                          )
                                         : undefined
                                     const segment = toAutomationIdSegment(
                                         line.targetId,
@@ -162,7 +169,8 @@ export function ReceiptAllocationTable({
                                                             false
                                                         }
                                                         failed={
-                                                            source?.isError ?? false
+                                                            source?.isError ??
+                                                            false
                                                         }
                                                         onRetry={() =>
                                                             void source?.refetch()
@@ -206,7 +214,8 @@ export function ReceiptAllocationTable({
                                                             aria-label={`${line.label} 本次核销金额`}
                                                             aria-invalid={
                                                                 rowIssues.length >
-                                                                    0 || undefined
+                                                                    0 ||
+                                                                undefined
                                                             }
                                                             aria-describedby={
                                                                 rowIssues.length
@@ -259,7 +268,8 @@ export function ReceiptAllocationTable({
                                                     size="xs"
                                                     variant="ghost"
                                                     disabled={
-                                                        disabled || removalDisabled
+                                                        disabled ||
+                                                        removalDisabled
                                                     }
                                                     aria-label={`移除 ${line.label}`}
                                                     onClick={() =>

@@ -236,12 +236,12 @@ export function SupplierAccountsToolbar({
                             {showTrackMore ? (
                                 <ListWorkspaceFilterField
                                     htmlFor={`${prefix}-filter-track`}
-                                    label="轨道"
+                                    label="单据类型"
                                 >
                                     <OptionCombobox
                                         id={`${prefix}-filter-track`}
                                         className="w-full min-w-0"
-                                        aria-label="轨道"
+                                        aria-label="单据类型"
                                         value={
                                             trackDraft === "all"
                                                 ? null

@@ -223,7 +223,7 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                     nextOrganization < organization)
             ) {
                 const error = Object.assign(
-                    new Error("DATA_SCOPE_CHANGED：数据范围已变化，请重新查询"),
+                    new Error("当前账号的数据访问范围已更新，请刷新或重新查询"),
                     {
                         status: 409,
                         code: "DATA_SCOPE_CHANGED",

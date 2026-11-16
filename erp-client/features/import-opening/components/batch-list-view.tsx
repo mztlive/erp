@@ -122,10 +122,9 @@ export function BatchListView({
 
             <Alert>
                 <ShieldAlertIcon />
-                <AlertTitle>安全边界</AlertTitle>
+                <AlertTitle>导入文件规范</AlertTitle>
                 <AlertDescription>
-                    本页不展示原始
-                    SQL、数据库连接头、禁止字段或存储对象键。不合规导出只能在受控临时区清洗后，以白名单合规包进入安全接收。
+                    请上传按标准模板整理的期初数据文件，系统将在预检通过并经各部门核对后正式导入。
                 </AlertDescription>
             </Alert>
 

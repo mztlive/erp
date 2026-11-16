@@ -23,7 +23,7 @@ export const ROLE_WORKBENCHES = [
         id: "WB-03",
         name: "采购工作台",
         view: "procurement",
-        description: "询报价、供给分配与采购执行",
+        description: "询价比价、货源安排与采购跟进",
         tasks: [
             "PROCUREMENT_ORDER_CREATION",
             "PURCHASE_PAYMENT_ARRANGEMENT",
@@ -46,7 +46,7 @@ export const ROLE_WORKBENCHES = [
         id: "WB-04",
         name: "出纳工作台",
         view: "finance",
-        description: "收付款分配与已批准付款执行",
+        description: "客户回款核销与供应商付款办理",
         tasks: ["SUPPLIER_PAYMENT_EXECUTION", "PURCHASE_RETURN_REFUND"],
         operations: [
             {

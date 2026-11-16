@@ -192,9 +192,14 @@ export function useCustomerQualityColumns({
                         r.costUncoveredNetRevenue == null ||
                         r.costCoverageRate == null
                     ) {
+                        const isVoucherOnly = /^0+(?:\.0+)?%?$/.test(
+                            r.nonVoucherShare.trim(),
+                        )
                         return (
                             <span className="text-sm text-muted-foreground">
-                                卡券/未覆盖 — 不显示为 0
+                                {isVoucherOnly
+                                    ? "不适用（卡券）"
+                                    : "待核算成本"}
                             </span>
                         )
                     }
@@ -245,7 +250,7 @@ export function useCustomerQualityColumns({
                     if (r.actualProfitLossNet == null) {
                         return (
                             <span className="text-sm text-muted-foreground">
-                                暂无可靠口径
+                                待核算
                             </span>
                         )
                     }

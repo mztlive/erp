@@ -214,6 +214,6 @@ export function splitPackage(
         },
     ]
     if (packages.flatMap((row) => row.items).length > 100)
-        throw new Error("包裹商品关联超过100项，请减少拆分")
+        throw new Error("包裹商品明细行数超过100项，请减少拆分")
     return { ...packing, packages }
 }

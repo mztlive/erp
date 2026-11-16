@@ -77,9 +77,9 @@ export function useSupplierOrdersQueryResult({
             if (detail.workItem) {
                 setActionResult({
                     status: "blocked",
-                    title: "请进入正式任务处理",
+                    title: "请进入待办任务处理",
                     description:
-                        "当前订单已关联正式任务；列表直接入口不得降级提交对象查询命令。",
+                        "该订单已有异常处理待办，请进入订单详情或从工作台待办中处理。",
                 })
                 return
             }
@@ -148,7 +148,7 @@ export function useSupplierOrdersQueryResult({
                 title:
                     res.status === "succeeded"
                         ? "查询原结果已完成"
-                        : "查询未形成终局成功",
+                        : "暂未获取到明确的订单结果",
                 description: res.message,
                 reference: res.reference,
             })

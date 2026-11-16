@@ -37,7 +37,7 @@ function SettlementCenterItems({
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
                 <CardTitle className="text-base">结算明细</CardTitle>
                 <CardDescription>
-                    冻结数据 + 不可变完成/取消/退款记录 · 金额只读，不可修改
+                    按结算单锁定的业务明细汇总，金额仅供核对，不可直接修改
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -149,14 +149,14 @@ function SettlementCenterItems({
                                     colSpan={12}
                                     className="py-6 text-center text-muted-foreground"
                                 >
-                                    暂无明细；可在草稿态刷新试算纳入不可变记录
+                                    暂无明细；可在草稿状态下点击刷新试算，自动带入已确认的业务记录
                                 </TableCell>
                             </TableRow>
                         ) : null}
                     </TableBody>
                 </Table>
                 <p className="mt-2 text-xs text-muted-foreground">
-                    输入控件未提供金额编辑路径；账单原值与订单记录不可覆盖。
+                    为保障账实一致，明细金额来自采购单与供应商账单原值，不支持在此处手动修改。
                 </p>
             </CardContent>
         </Card>

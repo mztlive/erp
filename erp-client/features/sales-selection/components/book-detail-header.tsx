@@ -240,7 +240,7 @@ export function BookDetailHeader({
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                            整册重生成
+                            重新生成整册
                         </LoadingButton>
                     ) : null}
                     <Button

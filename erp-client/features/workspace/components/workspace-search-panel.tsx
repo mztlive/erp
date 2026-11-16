@@ -223,8 +223,8 @@ export function WorkspaceSearchPanel({
                             {(field) => (
                                 <ListSearchField
                                     id="workspace-queue-toolbar-search-input"
-                                    aria-label="搜索单号、来源单号、往来方或商品"
-                                    placeholder="单号、来源单号、往来方、商品"
+                                    aria-label="搜索单号、来源单号、客户/供应商或商品"
+                                    placeholder="搜索单号、来源单号、客户/供应商、商品"
                                     value={field.state.value}
                                     onChange={field.handleChange}
                                 />

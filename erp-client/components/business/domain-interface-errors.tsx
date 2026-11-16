@@ -161,16 +161,16 @@ export type InterfaceErrorResolutionPanelProps =
 
 const interfaceErrorClassPresentation = {
     "capability-unsupported": {
-        label: "能力不支持",
+        label: "对方平台暂不支持该操作",
         tone: "warning",
         alert: "warning",
-        guidance: "查看商品或连接能力并转人工，不进行自动重试。",
+        guidance: "请查看商品或平台连接能力并转人工处理，系统不会自动重试。",
     },
     "parameter-or-mapping": {
-        label: "参数或映射错误",
+        label: "资料编码或格式不匹配",
         tone: "destructive",
         alert: "destructive",
-        guidance: "先修复参数或基础资料映射，当前请求不可直接重试。",
+        guidance: "请先核对并修正商品编码或基础资料匹配关系后再试。",
     },
     "business-rejected": {
         label: "供应商业务拒绝",
@@ -191,13 +191,13 @@ const interfaceErrorClassPresentation = {
         guidance: "查询原订单或退款结果；仍未知时转人工并保留风险标记。",
     },
     "authentication-or-signature": {
-        label: "鉴权或签名失败",
+        label: "平台授权或密钥失效",
         tone: "destructive",
         alert: "destructive",
-        guidance: "停止自动重试并排查连接配置，不展示或复制密钥正文。",
+        guidance: "已暂停自动重试，请检查供应商平台连接配置。",
     },
     "rate-limited": {
-        label: "调用次数受限",
+        label: "接口访问过于频繁",
         tone: "warning",
         alert: "warning",
         guidance: "请稍后重试，不要高频重复操作。",
@@ -212,7 +212,7 @@ const interfaceErrorClassPresentation = {
         label: "通知顺序异常",
         tone: "warning",
         alert: "warning",
-        guidance: "保留当前有效状态，并展示被拒绝的状态变化。",
+        guidance: "系统将保留当前有效状态，暂不应用旧通知的状态变化。",
     },
 } satisfies Record<
     InterfaceErrorClass,
@@ -302,9 +302,9 @@ function InterfaceErrorResolutionPanel({
             {...props}
         >
             <CardHeader className="border-b border-border">
-                <CardTitle>接口错误处理</CardTitle>
+                <CardTitle>平台同步异常处理</CardTitle>
                 <CardDescription>
-                    先确认原请求的处理结果，再决定重试、转人工或关闭任务。
+                    请先查询供应商平台的实际处理结果，再决定重新发送、转人工跟进或完结任务。
                 </CardDescription>
                 <CardAction className="flex flex-wrap items-center justify-end gap-2">
                     {errorCode != null ? (
@@ -353,7 +353,7 @@ function InterfaceErrorResolutionPanel({
                 latestAttempt.nextRetryAt != null ? (
                     <DescriptionList columns="three">
                         <DescriptionItem>
-                            <DescriptionTerm>请求摘要</DescriptionTerm>
+                            <DescriptionTerm>发送内容摘要</DescriptionTerm>
                             <DescriptionDetails>
                                 {latestAttempt.requestSummary ?? (
                                     <span className="text-muted-foreground">
@@ -363,7 +363,7 @@ function InterfaceErrorResolutionPanel({
                             </DescriptionDetails>
                         </DescriptionItem>
                         <DescriptionItem>
-                            <DescriptionTerm>响应摘要</DescriptionTerm>
+                            <DescriptionTerm>平台返回结果</DescriptionTerm>
                             <DescriptionDetails>
                                 {latestAttempt.responseSummary ?? (
                                     <span className="text-muted-foreground">
@@ -400,7 +400,7 @@ function InterfaceErrorResolutionPanel({
                     <DescriptionList columns="one">
                         <DescriptionItem>
                             <DescriptionTerm>
-                                可关闭任务的完成凭证
+                                完结任务的核验凭证
                             </DescriptionTerm>
                             <DescriptionDetails>
                                 {terminalEvidence}
@@ -418,11 +418,11 @@ function InterfaceErrorResolutionPanel({
                         />
                         <ResolutionActionSlot
                             title={resultText.useOriginalTaskNoRetry}
-                            description="仅在系统确认原请求无结果且可安全重试时使用。"
+                            description="仅在确认对方平台未收到或未处理成功时使用安全重试。"
                             action={retrySameKeyAction}
                         />
                         <ResolutionActionSlot
-                            title="转人工或补偿"
+                            title="转人工跟进"
                             description="结果仍未知或外部系统不支持查询时保留风险并转交。"
                             action={manualAction}
                         />
@@ -436,7 +436,7 @@ function InterfaceErrorResolutionPanel({
             </CardContent>
 
             <CardFooter className="border-t border-border text-xs text-muted-foreground">
-                本组件不提供“直接标记成功”；成功必须来自可验证的处理结果或已复核的补偿记录。
+                为保证账实一致，须先查明平台实际处理结果或登记人工补救记录后，方可完结此项异常。
             </CardFooter>
         </Card>
     )

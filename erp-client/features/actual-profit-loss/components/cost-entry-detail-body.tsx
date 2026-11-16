@@ -141,13 +141,13 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                     </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>
-                    <DescriptionTerm>原成本引用</DescriptionTerm>
+                    <DescriptionTerm>关联原成本记录</DescriptionTerm>
                     <DescriptionDetails>
                         {entry.originalCostEntryLabel ?? "—（非冲减）"}
                     </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>
-                    <DescriptionTerm>凭证授权摘要</DescriptionTerm>
+                    <DescriptionTerm>关联凭证说明</DescriptionTerm>
                     <DescriptionDetails>
                         {entry.voucherSummary ?? "—"}
                     </DescriptionDetails>
@@ -156,10 +156,10 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
 
             {entry.correctionHref ? (
                 <Alert>
-                    <AlertTitle>前往纠错来源</AlertTitle>
+                    <AlertTitle>前往原单据更正</AlertTitle>
                     <AlertDescription className="flex flex-col gap-2">
                         <span>
-                            本页不执行变更确认。打开原业务对象使用变更/冲减流程后，返回本页等待数据刷新。
+                            如需调整成本金额，请打开对应业务单据办理变更，完成后返回本页刷新即可。
                         </span>
                         <Button
                             id={`actual-profit-loss-cost-entry-${toAutomationIdSegment(entry.costEntryId)}-correction`}

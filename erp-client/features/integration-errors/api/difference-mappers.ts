@@ -93,18 +93,18 @@ export function mapDifference(
             ) ?? displayName(diff.owner_user_name, diff.owner_user_id),
         createdAt: tsToIso(diff.created_at),
         difference: {
-            leftLabel: "左侧证据",
+            leftLabel: "外部平台记录",
             leftSummary:
                 diff.left_fact_label?.trim() ||
                 (diff.left_fact_reference
-                    ? "左侧证据名称未提供"
-                    : "未关联证据"),
-            rightLabel: "右侧证据",
+                    ? "外部平台记录名称未提供"
+                    : "暂无记录"),
+            rightLabel: "本系统记录",
             rightSummary:
                 diff.right_fact_label?.trim() ||
                 (diff.right_fact_reference
-                    ? "右侧证据名称未提供"
-                    : "未关联证据"),
+                    ? "本系统记录名称未提供"
+                    : "暂无记录"),
             boundary: diff.business_object_label?.trim() || "关联业务对象",
             watermark: tsToIso(diff.created_at),
             differenceType: diff.difference_type,

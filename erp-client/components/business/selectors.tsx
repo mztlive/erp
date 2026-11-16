@@ -68,7 +68,7 @@ function BusinessObjectCombobox({
     label,
     filterLabel,
     placeholder = "搜索名称或编号",
-    emptyLabel = "没有符合条件的对象",
+    emptyLabel = "没有符合条件的记录",
     loading = false,
     onRefresh,
     disabled = false,
@@ -93,8 +93,8 @@ function BusinessObjectCombobox({
                   id: value,
                   code: "",
                   label: loading
-                      ? "已选对象（正在核对）"
-                      : "已选对象（当前不可用）",
+                      ? "已选项（正在核对）"
+                      : "已选项（当前不可用）",
                   status: { label: "待核对", tone: "neutral" },
               }
             : null)

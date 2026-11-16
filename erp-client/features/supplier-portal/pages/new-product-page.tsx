@@ -60,9 +60,9 @@ const newSku = () => ({
 const skuSchema = termsSchema
     .omit({ reason: true })
     .extend({
-        name: z.string().trim().min(1, "请输入SKU名称"),
+        name: z.string().trim().min(1, "请输入规格名称"),
         orderingCode: z.string().trim().min(1, "请输入订货编码"),
-        unitRaw: z.string().trim().min(1, "请输入原始单位及包装含义"),
+        unitRaw: z.string().trim().min(1, "请输入计量单位与包装规格"),
         specs: z.string(),
         rowId: z.string(),
         packOriginalUnit: z.string(),
@@ -114,12 +114,12 @@ const skuSchema = termsSchema
 const completeSchema = z.object({
     name: z.string().trim().min(1, "请输入商品名称"),
     productKind: z.string().min(1, "请选择商品类型"),
-    brandRaw: z.string().trim().min(1, "请输入品牌原始资料"),
-    categoryRaw: z.string().trim().min(1, "请输入分类原始完整路径"),
+    brandRaw: z.string().trim().min(1, "请输入品牌名称"),
+    categoryRaw: z.string().trim().min(1, "请输入建议商品分类"),
     skus: z
         .array(skuSchema)
-        .min(1, "至少填写一个SKU")
-        .max(100, "每批最多100个SKU"),
+        .min(1, "至少填写一个规格")
+        .max(100, "每批最多100个规格"),
 })
 function dictionaryValue(
     raw: string,
@@ -139,7 +139,7 @@ export function PortalNewProductPage() {
     return (
         <PortalSurface
             title="新品提报"
-            description="商品资料及多个规格一次提交。审核入库后，新建规格由内部定价并上架。"
+            description="商品资料及多个规格一次提交。审核通过后，采购方将完成建档与后续合作上架。"
             actions={
                 <Button
                     id="supplier-portal-new-product-batch"
@@ -407,7 +407,7 @@ export function PortalNewProductEditor({
                         unit.refetch(),
                     ])
                     setComplete(
-                        "当前资料已读取，原稿继续保留。请核对品牌、分类和单位匹配，重新选择后保存。",
+                        "当前资料已读取，已填信息继续保留。请核对品牌、分类和单位匹配，重新选择后保存。",
                     )
                 }}
                 onConfirmed={() => {
@@ -456,7 +456,7 @@ export function PortalNewProductEditor({
                     {(field) => (
                         <field.TextField
                             id={`${idPrefix}-brand-raw`}
-                            label="品牌原始资料"
+                            label="品牌名称"
                             required
                             disabled={disabled}
                             description="未匹配时保留真实名称；无品牌请明确填写，不以未知替代。"
@@ -467,7 +467,7 @@ export function PortalNewProductEditor({
                     {(field) => (
                         <field.SelectField
                             id={`${idPrefix}-brand`}
-                            label="匹配已有品牌（可空）"
+                            label="对应采购方品牌（选填）"
                             options={dictionaryOptions(brand.data ?? [])}
                             onRefresh={() =>
                                 brand.refetch({ throwOnError: true })
@@ -491,7 +491,7 @@ export function PortalNewProductEditor({
                     {(field) => (
                         <field.TextField
                             id={`${idPrefix}-category-raw`}
-                            label="分类原始完整路径"
+                            label="建议商品分类"
                             required
                             disabled={disabled}
                             description="例如：食品 / 饮料 / 果汁；尚未匹配可保存并送审。"
@@ -507,7 +507,7 @@ export function PortalNewProductEditor({
                                         category.refetch({ throwOnError: true })
                                     }
                                     id={`${idPrefix}-category`}
-                                    label="匹配已有分类（可空）"
+                                    label="对应采购方分类（选填）"
                                     options={dictionaryOptions(
                                         category.data ?? [],
                                         kind,
@@ -663,7 +663,7 @@ export function PortalNewProductEditor({
                                     <div className="grid gap-4 md:grid-cols-2">
                                         {(
                                             [
-                                                ["name", "SKU名称"],
+                                                ["name", "规格名称"],
                                                 [
                                                     "orderingCode",
                                                     "供应商订货编码",
@@ -674,7 +674,7 @@ export function PortalNewProductEditor({
                                                 ],
                                                 [
                                                     "unitRaw",
-                                                    "原始单位及包装含义",
+                                                    "计量单位与包装规格",
                                                 ],
                                                 ["barcode", "条码"],
                                             ] as const
@@ -708,7 +708,7 @@ export function PortalNewProductEditor({
                                                         })
                                                     }
                                                     id={`${prefix}-unit`}
-                                                    label="匹配已有单位（可空）"
+                                                    label="对应标准单位（选填）"
                                                     options={dictionaryOptions(
                                                         unit.data ?? [],
                                                     )}
@@ -829,7 +829,7 @@ export function PortalNewProductEditor({
                                                     ],
                                                     [
                                                         "packBaseUnit",
-                                                        "基础单位（如瓶，须与原始单位一致）",
+                                                        "基础单位（如瓶，须与计量单位一致）",
                                                     ],
                                                     [
                                                         "packRatio",
@@ -963,7 +963,7 @@ export function PortalNewProductEditor({
                                       .join("\n")
                                 : new Set(codes).size !== codes.length
                                   ? "订货编码重复，请修正对应规格。"
-                                  : "资料完整，可保存草稿后提交审核；尚未匹配的字典由内部审核处理。",
+                                  : "资料完整，可保存草稿后提交审核；未匹配的品牌、分类或单位将由采购方审核时协助匹配。",
                         )
                     }}
                 >

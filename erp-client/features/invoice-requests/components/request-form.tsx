@@ -408,9 +408,7 @@ export function InvoiceRequestForm({
                     role="status"
                     className="space-y-3 rounded-lg border p-3 text-sm"
                 >
-                    <p>
-                        原保存结果仍未确认，本地输入已保留。读取最新版本不会认定原保存成功。
-                    </p>
+                    <p>刚才的保存结果尚未确认，已保留您当前填写的内容。</p>
                     <LoadingButton
                         id="invoice-request-check-save"
                         type="button"
@@ -433,11 +431,9 @@ export function InvoiceRequestForm({
                     ) : null}
                     {latest ? (
                         <p>
-                            服务端当前版本 {latest.version} ·{" "}
-                            {requestStatusLabels[latest.status]}。
                             {versionAdvanced
-                                ? "版本已前进，原版本不能再次保存。"
-                                : "版本尚未前进，可重试原保存请求。"}
+                                ? `该申请单已被更新（当前状态：${requestStatusLabels[latest.status]}），请加载最新内容后再修改。`
+                                : "刚才的保存尚未生效，可点击重新保存继续提交。"}
                         </p>
                     ) : null}
                     {versionAdvanced && latestEditable ? (
@@ -506,7 +502,7 @@ export function InvoiceRequestForm({
                             void form.handleSubmit()
                         }}
                     >
-                        {saveUncertain ? "重试原保存请求" : "保存修改"}
+                        {saveUncertain ? "重新保存" : "保存修改"}
                     </LoadingButton>
                 ) : null}
                 {uncertain ? (

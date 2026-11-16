@@ -31,7 +31,7 @@ export function FundsScopeBanner({
         >
             <ShieldAlertIcon aria-hidden="true" />
             <AlertTitle>
-                {permissionLimited ? "仅显示获授权份额" : "按数据范围查询"}
+                {permissionLimited ? "仅显示本人权限内金额" : "当前可查看范围"}
             </AlertTitle>
             <AlertDescription className="min-w-0 break-words">
                 {scopeSummary ? <span>{scopeSummary}</span> : null}
@@ -47,7 +47,7 @@ export function FundsScopeBanner({
                 ) : null}
                 {asOf ? (
                     <span className="mt-1 block text-xs opacity-80">
-                        查询时点 <span className="num">{asOf}</span>
+                        数据统计截至 <span className="num">{asOf}</span>
                     </span>
                 ) : null}
             </AlertDescription>
@@ -71,7 +71,7 @@ export function scopeQueryFrameHeading(
     return {
         title: (
             <span className="inline-flex min-w-0 flex-wrap items-baseline gap-2">
-                按数据范围查询
+                往来账款汇总列表
                 <span
                     aria-live="polite"
                     className="font-normal text-muted-foreground"

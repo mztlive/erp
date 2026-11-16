@@ -51,7 +51,7 @@ export function useIntegrationResponsibilityCommands({
                 title:
                     kind === "CLOSE_DUPLICATE"
                         ? "已关闭重复任务"
-                        : "已关闭误派",
+                        : "已关闭误派任务",
                 description: "仅关闭当前处理任务；未写入业务解决结论。",
                 workItemStatus: "CLOSED",
                 stayOnItem: false,

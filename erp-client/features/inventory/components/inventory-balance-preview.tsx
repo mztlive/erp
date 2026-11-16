@@ -382,7 +382,7 @@ function InventoryBalancePreview({
                             "full",
                             "passthrough",
                         )}
-                        。页面不提供编辑库存数量或直接释放预占；纠错须走调整单。
+                        。如需盘盈、盘亏或报损纠错，请点击右上角「发起库存调整」。
                     </p>
                 </div>
             ) : (

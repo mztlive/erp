@@ -162,7 +162,7 @@ export function ProfitLossRowsPanel({
                     ariaLabel="盈亏明细维度"
                     hint={
                         data
-                            ? "明细与指标使用同一范围 · 点击历史归属查看该组订单 · 可用的成本金额支持下钻"
+                            ? "明细与指标使用同一范围 · 点击签单归属查看该组订单 · 点击成本金额可查看明细"
                             : undefined
                     }
                     items={(
@@ -214,8 +214,8 @@ export function ProfitLossRowsPanel({
                         <OptionCombobox
                             id="actual-profit-loss-coverage"
                             className="w-64 max-w-full min-w-0"
-                            filterLabel="成本覆盖"
-                            aria-label="成本覆盖"
+                            filterLabel="成本归集完整度"
+                            aria-label="成本归集完整度"
                             allowClear={false}
                             value={coverage}
                             options={COVERAGE_OPTIONS}
@@ -234,19 +234,19 @@ export function ProfitLossRowsPanel({
                         <div className="space-y-5">
                             {directoryError != null && (
                                 <BusinessFailureState
-                                    title="历史候选加载失败"
+                                    title="销售与部门列表加载失败"
                                     error={directoryError}
                                     onRetry={onRetryDirectory}
                                 />
                             )}
                             <fieldset className="min-w-0 space-y-3">
                                 <legend className="mb-1 text-sm font-medium">
-                                    历史归属
+                                    签单归属
                                 </legend>
                                 <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                                     <ListWorkspaceFilterField
                                         htmlFor="actual-profit-loss-filter-attribution-user"
-                                        label="历史归属销售"
+                                        label="签单归属销售"
                                     >
                                         <MultiOptionCombobox
                                             onRefresh={onRefreshDirectory}
@@ -260,13 +260,13 @@ export function ProfitLossRowsPanel({
                                                 historyDirectory?.attributionUserOptions ??
                                                 []
                                             }
-                                            placeholder="全部历史归属销售"
-                                            aria-label="历史归属销售"
+                                            placeholder="全部签单归属销售"
+                                            aria-label="签单归属销售"
                                         />
                                     </ListWorkspaceFilterField>
                                     <ListWorkspaceFilterField
                                         htmlFor="actual-profit-loss-filter-attribution-org"
-                                        label="历史归属组织（含当时下级）"
+                                        label="签单所属部门（含当时下级）"
                                     >
                                         <MultiOptionCombobox
                                             onRefresh={onRefreshDirectory}
@@ -280,8 +280,8 @@ export function ProfitLossRowsPanel({
                                                 historyDirectory?.attributionOrgOptions ??
                                                 []
                                             }
-                                            placeholder="全部历史归属组织"
-                                            aria-label="历史归属组织"
+                                            placeholder="全部签单所属部门"
+                                            aria-label="签单所属部门"
                                         />
                                     </ListWorkspaceFilterField>
                                 </div>
@@ -388,7 +388,7 @@ export function ProfitLossRowsPanel({
                                 ? "账号具备查询权限，但当前授权范围未包含可读取业务，请联系权限管理员核对范围。"
                                 : hasFilters
                                   ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                  : "可调整统计期间或覆盖口径后重试。"
+                                  : "可调整统计期间或成本归集筛选条件后重试。"
                         }
                         className={listWorkspaceEmptyStateClassName}
                         action={

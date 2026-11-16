@@ -61,8 +61,8 @@ export function CustomerReceivablesListPane({
         return (
             <BusinessEmptyState
                 kind="no-scope"
-                title="当前角色未配置客户往来范围"
-                description="不得用 0 元假装无应收。请申请财务数据范围。"
+                title="暂无可查看的客户往来数据"
+                description="您当前尚未配置客户往来的数据查看范围，请联系管理员开通相应权限后再查询。"
             />
         )
     }

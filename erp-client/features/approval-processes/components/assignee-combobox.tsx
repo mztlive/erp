@@ -100,7 +100,9 @@ export function AssigneeCombobox({
             loading={assignees == null && query.isFetching}
             placeholder={placeholder}
             emptyLabel={
-                copies ? "没有匹配的有效内部账号" : "没有符合定义期资格的账号"
+                copies
+                    ? "没有匹配的有效内部账号"
+                    : "未找到具备该单据审批权限的员工"
             }
             disabled={disabled}
             allowClear={allowClear}

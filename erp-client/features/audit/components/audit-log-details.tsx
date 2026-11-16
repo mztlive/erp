@@ -146,7 +146,7 @@ export function AuditLogDetails({ row }: { row: AuditLogItem }) {
                 </div>
             </details>
             <p className="text-xs text-muted-foreground">
-                人物名称与业务编号使用操作发生时保存的记录。历史缺失信息不补用当前资料。
+                操作人与单据编号均为操作发生时的历史记录，不会随当前资料修改而变动。
             </p>
         </div>
     )

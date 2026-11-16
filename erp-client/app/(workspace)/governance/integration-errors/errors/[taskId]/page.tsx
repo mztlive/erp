@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { IntegrationErrorTaskDetailPage } from "@/features/integration-errors/pages/integration-error-detail-page"
 
 export const metadata: Metadata = {
-    title: "接口错误任务",
+    title: "外部同步异常处理",
 }
 
 function Fallback() {

@@ -12,8 +12,8 @@ import {
 } from "@/features/finance-responsibilities/types"
 
 function matchLabel(rule: FinanceResponsibilityRule): string {
-    if (rule.scope === "DEFAULT") return "未命中指定往来方时使用"
-    return rule.counterpartyNo ?? "往来方资料不可用"
+    if (rule.scope === "DEFAULT") return "未单独指定客户/供应商时生效"
+    return rule.counterpartyNo ?? "客户/供应商资料不可用"
 }
 
 /** 财务责任规则列表列；编辑沿用表格行打开合同。 */
@@ -34,8 +34,8 @@ export function useFinanceResponsibilityColumns() {
             {
                 id: "scope",
                 accessorFn: (row) => FINANCE_SCOPE_LABEL[row.scope],
-                header: "匹配层级",
-                meta: { label: "匹配层级", width: "status" },
+                header: "适用范围",
+                meta: { label: "适用范围", width: "status" },
             },
             {
                 id: "counterparty",
@@ -49,8 +49,8 @@ export function useFinanceResponsibilityColumns() {
             {
                 id: "owner",
                 accessorFn: (row) => row.ownerNames.join("、"),
-                header: "负责人池",
-                meta: { label: "负责人池", width: "default" },
+                header: "经办人组",
+                meta: { label: "经办人组", width: "default" },
             },
             {
                 id: "strategy",

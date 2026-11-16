@@ -22,8 +22,8 @@ const CONFIRMATION_LABEL = {
 
 const NODE_ROLE_LABEL: Record<SupplierExecutionOrderNodeRole, string> = {
     PARENT: "历史父单",
-    RESERVATION_ROOT: "待确认预占单",
-    LEAF: "当前子单",
+    RESERVATION_ROOT: "待确认锁库单",
+    LEAF: "拆分后子订单",
     UNRESOLVED: "关系待核实",
 }
 
@@ -67,19 +67,19 @@ export function SupplierOrderExecutionTree({
                 <div className="space-y-1">
                     <h3 className="text-sm font-semibold">供应商订单</h3>
                     <p className="text-xs text-muted-foreground">
-                        原始根单：
+                        主订单号：
                         <span className="num">{tree.root_order_no}</span>
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {leaves.length > 0 || !reservations.length ? (
                         <Badge variant="outline">
-                            {leaves.length} 个当前子单
+                            {leaves.length} 个拆分后子订单
                         </Badge>
                     ) : null}
                     {reservations.length > 0 ? (
                         <Badge variant="warning">
-                            {reservations.length} 个待确认预占单
+                            {reservations.length} 个待确认锁库单
                         </Badge>
                     ) : null}
                     {confirmed > 0 ? (
@@ -105,23 +105,23 @@ export function SupplierOrderExecutionTree({
             {tree.pending ? (
                 <Alert variant="warning">
                     <AlertDescription>
-                        当前父子订单关系仍待核验，确认和自动交付应用继续等待。暂未返回子单不代表没有拆单。
+                        供应商拆单结果核验中，请稍后刷新查看；请勿重复下单或确认。
                     </AlertDescription>
                 </Alert>
             ) : null}
             {confirmationUnknown ? (
                 <p className="text-xs text-warning-soft-foreground">
-                    存在已发送但结果待核实的确认。继续查询原结果，不重复发送，也不将原子单的成功复制给新拆分子单。
+                    存在确认结果待核实的子订单，请点击「查询原结果」核对，请勿重复确认。
                 </p>
             ) : null}
             {reservations.length > 0 ? (
                 <p className="text-xs text-muted-foreground">
-                    预占单用于确认或取消。确认后继续查询子单及物流，预占数量不计入已发货数量。
+                    待确认锁库单需确认或取消后才会生效；锁库数量不计入实际已发货数量。
                 </p>
             ) : null}
             {current.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                    尚未取得可执行的完整子单集合。
+                    暂未获取到供应商拆分后的子订单明细。
                 </p>
             ) : (
                 <div className="divide-y">
@@ -133,8 +133,8 @@ export function SupplierOrderExecutionTree({
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <h4 className="text-sm font-medium">
                                     {node.role === "RESERVATION_ROOT"
-                                        ? "预占单"
-                                        : "子单"}{" "}
+                                        ? "锁库单"
+                                        : "子订单"}{" "}
                                     <span className="num">
                                         {node.external_order_no}
                                     </span>
@@ -252,8 +252,7 @@ export function SupplierOrderExecutionTree({
                 </details>
             ) : null}
             <p className="text-xs leading-5 text-muted-foreground">
-                历史父单保留追溯。实际发货按有商品数量证明的 ERP
-                交付记录累计，供应商取消与账户返款分别核实。
+                历史主单仅作关联追溯；实际发货数量以系统确认的交付记录为准。
             </p>
         </section>
     )

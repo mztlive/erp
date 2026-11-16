@@ -59,14 +59,14 @@ export const OPERATION_DONE_LABEL: Record<FulfillmentOperationType, string> = {
     SERVICE: "已完成",
 }
 
-/** 队列空态：说清「今天这类活干完了」 */
+/** 队列空态 */
 export const OPERATION_CLEARED_LABEL: Record<FulfillmentOperationType, string> =
     {
-        RECEIPT: "今天的入库都干完了",
-        WAREHOUSE_SHIP: "今天的发货都干完了",
-        SUPPLIER_DIRECT: "今天的直发都干完了",
-        ELECTRONIC: "今天的电子交付都干完了",
-        SERVICE: "今天的服务都干完了",
+        RECEIPT: "当前没有待处理的入库任务",
+        WAREHOUSE_SHIP: "当前没有待处理的发货任务",
+        SUPPLIER_DIRECT: "当前没有待处理的直发任务",
+        ELECTRONIC: "当前没有待处理的电子交付任务",
+        SERVICE: "当前没有待处理的服务任务",
     }
 
 export const RESULT_LABEL: Record<FulfillmentResultCode, string> = {

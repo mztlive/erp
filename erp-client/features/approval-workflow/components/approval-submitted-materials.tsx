@@ -116,7 +116,7 @@ export function ApprovalSubmittedMaterialsContent({
                                 <p className="text-sm">{source.list_summary}</p>
                             )}
                         <p className="text-sm text-muted-foreground">
-                            提交资料保留自此次提交，后续变化不改写原资料。
+                            以下为本次提交审批时的单据内容与附件。
                         </p>
                     </>
                 ) : (
@@ -132,7 +132,7 @@ export function ApprovalSubmittedMaterialsContent({
                             {view === "source-sales"
                                 ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
                                 : `提交版本 ${version}`}{" "}
-                            · 提交资料保留自此次提交，后续变化不改写原资料。
+                            · 以下为本次提交审批时的单据内容与附件。
                         </p>
                     </>
                 )}

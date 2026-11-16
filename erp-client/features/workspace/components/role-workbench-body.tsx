@@ -122,7 +122,7 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
                         单位：项。今日到期与已超期可能重叠，不相加；未设置到期时间的任务不计入这两列。
                     </p>
                     <p>
-                        统计数量来自当前岗位对应类型的全部开放任务，不是紧要事项的数量。
+                        统计数量来自当前岗位对应类型的全部待办任务，不是紧要事项的数量。
                     </p>
                     {role.template.tasks.map((type, index) => (
                         <p key={type}>
@@ -140,7 +140,7 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
             <div className="px-2 py-3">
                 <Table>
                     <TableCaption className="sr-only">
-                        本人开放任务数量与时限，单位：项
+                        本人待办任务数量与时限，单位：项
                     </TableCaption>
                     <TableHeader>
                         <TableRow>
@@ -283,9 +283,7 @@ function RoleWorkbenchStages({
                     id={`${presentation.prefix}-workbench-stages-info`}
                     title={presentation.stagesTitle}
                 >
-                    <p>
-                        按单据当前状态计数；所列状态互斥，不代表历史转化率。横条以当前最多的状态为基准。
-                    </p>
+                    <p>展示各阶段单据的当前数量分布。</p>
                     {role.metrics.map((item, index) => (
                         <div key={item.key}>
                             <p className="font-medium text-foreground">
@@ -347,8 +345,8 @@ function RoleWorkbenchStages({
                                         {query.isError
                                             ? "读取失败，点击重试"
                                             : query.data?.noScope
-                                              ? "当前无数据范围"
-                                              : "当前口径受限"}
+                                              ? "暂无数据查看权限"
+                                              : "仅统计权限内部分数据"}
                                     </span>
                                 ) : (
                                     <>
@@ -384,7 +382,7 @@ function RoleWorkbenchStages({
                             </button>
                             {query.data?.limited && (
                                 <p className="px-1 pb-1 text-xs text-muted-foreground">
-                                    {item.label} · 部分覆盖或权限受限
+                                    {item.label} · 仅统计权限内部分数据
                                 </p>
                             )}
                         </div>

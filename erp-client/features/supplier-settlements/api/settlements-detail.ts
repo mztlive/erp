@@ -30,7 +30,7 @@ export async function fetchSettlementDetail(input: {
                   action: "REVIEW_DECISION",
                   code: "FORMAL_REVIEW_WORK_ITEM_NOT_ACCESSIBLE",
                   message:
-                      "指定任务与当前结算单或 W27 路由不匹配，禁止降级为对象直接确认。",
+                      "当前待办与该结算单不匹配，请从工作台待办列表重新进入处理。",
               }
             : detail.review_action_blockers?.[0]
     return toDetail(detail, formalTask, workItemBlocker)

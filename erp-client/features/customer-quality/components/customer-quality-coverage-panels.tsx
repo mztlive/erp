@@ -41,7 +41,7 @@ export function CustomerQualityCoveragePanels({
                             <span className="num">
                                 {coverage.costCoverageRate}
                             </span>
-                            。缺失成本不显示为 0，利润须与覆盖率同屏解读。
+                            。缺少成本的订单不计算利润。
                         </>
                     }
                 />

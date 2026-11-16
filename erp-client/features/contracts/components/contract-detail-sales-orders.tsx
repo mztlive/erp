@@ -51,7 +51,7 @@ export function ContractDetailSalesOrders({
                                 <TableHead>销售单号</TableHead>
                                 <TableHead>业务性质</TableHead>
                                 <TableHead>合同版本</TableHead>
-                                <TableHead>主状态</TableHead>
+                                <TableHead>单据状态</TableHead>
                                 <TableHead>履约 / 回款 / 开票</TableHead>
                                 <TableHead data-align="end">含税金额</TableHead>
                                 <TableHead data-align="end">操作</TableHead>

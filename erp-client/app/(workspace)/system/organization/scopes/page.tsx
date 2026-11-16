@@ -5,7 +5,7 @@ import { Suspense } from "react"
 import { DataScopesPage } from "@/features/organization/pages/data-scopes-page"
 
 export const metadata: Metadata = {
-    title: "范围配置",
+    title: "数据查看范围设置",
 }
 
 function DataScopesFallback() {

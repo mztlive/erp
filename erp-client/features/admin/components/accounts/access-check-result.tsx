@@ -87,9 +87,9 @@ function summarize(
             input.resource === "sales_order" &&
             ["detail", "update"].includes(input.action)
         return {
-            title: "有操作权限，尚未检查具体单据",
+            title: "已具备功能权限（视具体单据归属生效）",
             description:
-                "本次只检查了权限配置，不能据此判断某张单据是否在此人的可操作范围内。",
+                "已确认具备该项操作权限；实际办理时还需符合具体单据的归属部门、负责人及单据状态。",
             next: canCheckOrder
                 ? "在上方选择一张销售单，再点“开始检查”，即可核对此人对这张单据的权限。"
                 : "此操作目前只支持配置检查；请在对应业务中核对具体对象及操作条件。",

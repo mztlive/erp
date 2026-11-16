@@ -64,7 +64,9 @@ export function appendPoolDeliverySheet(
     for (const product of products) {
         if (product.inquiry_supported === false) continue
         if (!product.delivery_key)
-            throw new Error("商品配送关联缺失，请重新导出")
+            throw new Error(
+                "部分商品的收货地址信息不完整，请刷新页面核对后重新导出",
+            )
         const row = sheet.addRow(Array<string>(18).fill(""))
         row.height = 28
         row.alignment = { vertical: "top", wrapText: true }

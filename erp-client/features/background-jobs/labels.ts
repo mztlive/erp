@@ -18,7 +18,7 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
     export: "导出",
     batch: "批量",
     sync: "同步",
-    backfill: "回填",
+    backfill: "历史数据补录",
     reconciliation: "对账",
 }
 
@@ -28,8 +28,8 @@ export const JOB_DOMAIN_LABELS: Record<string, string> = {
     DATA_TRANSFER: "导入导出",
     SUPPLIER_IMPORT: "供应商导入",
     BRAND_IMPORT: "品牌导入",
-    SUPPLIER_HEALTH_CHECK: "供应商接口检测",
-    SUPPLIER_CATALOG_SYNC: "供应商目录同步",
+    SUPPLIER_HEALTH_CHECK: "供应商平台连接检测",
+    SUPPLIER_CATALOG_SYNC: "供应商商品同步",
     LEGACY_IMPORT: "历史期初导入",
     SALES_ORDER_EXPORT: "销售单导出",
     INVENTORY_LEDGER_EXPORT: "库存台账导出",

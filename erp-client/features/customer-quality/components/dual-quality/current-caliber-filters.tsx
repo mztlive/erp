@@ -3,8 +3,14 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { OptionCombobox } from "@/components/business/option-combobox"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
+import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
+import { hasPermission } from "@/lib/permissions"
+import type { CurrentQualityRow } from "../../dual-types"
 import type { useCurrentQualityFilters } from "../../hooks/use-current-quality-filters"
 import type { PatchDual } from "../../lib/dual-filter-state"
 
@@ -21,9 +27,11 @@ const CURRENT_SORT_OPTIONS = [
 export function CurrentCaliberFilters({
     filters,
     patchDual,
+    items,
 }: {
     filters: ReturnType<typeof useCurrentQualityFilters>
     patchDual: PatchDual
+    items?: readonly CurrentQualityRow[]
 }) {
     const {
         ownerIds,
@@ -40,6 +48,60 @@ export function CurrentCaliberFilters({
         applyOrgs,
         applyDescendants,
     } = filters
+    const isUserGroup = ownerGroup?.startsWith("user:") ?? false
+    const isOrgGroup = ownerGroup?.startsWith("org:") ?? false
+    const strippedGroupId = ownerGroup
+        ? ownerGroup.replace(/^(user|org):/, "")
+        : ""
+    const matchedItem = ownerGroup
+        ? items?.find(
+              (row) =>
+                  (isUserGroup &&
+                      (row.groupId === strippedGroupId ||
+                          row.ownerUserId === strippedGroupId)) ||
+                  (isOrgGroup &&
+                      (row.groupId === strippedGroupId ||
+                          row.ownerOrgUnitId === strippedGroupId)) ||
+                  row.groupId === strippedGroupId,
+          )
+        : undefined
+    const itemLabel =
+        matchedItem?.label ??
+        (isUserGroup
+            ? matchedItem?.ownerUserName
+            : matchedItem?.ownerOrgUnitName)
+    const account = useAccountProfileQuery()
+    const needPersonLookup = Boolean(
+        isUserGroup && strippedGroupId && !itemLabel,
+    )
+    const canReadSales = hasPermission(
+        account.data?.permissions,
+        "sales_person:list",
+    )
+    const selectedPeople = usePersonDirectorySelected(
+        "sales",
+        needPersonLookup ? [strippedGroupId] : [],
+        needPersonLookup && canReadSales,
+    )
+    const needOrgLookup = Boolean(isOrgGroup && strippedGroupId && !itemLabel)
+    const canReadOrgs = hasPermission(
+        account.data?.permissions,
+        "org_unit:list",
+    )
+    const orgState = useOrganizationStateQuery(needOrgLookup && canReadOrgs)
+    const resolvedPerson = selectedPeople.data?.items.find(
+        (item) => item.id === strippedGroupId,
+    )
+    const resolvedOrg = orgState.data?.units.find(
+        (unit) => unit.id === strippedGroupId,
+    )
+    const ownerGroupLabel =
+        itemLabel ||
+        (resolvedPerson
+            ? resolvedPerson.name.trim() || personDirectoryLabel(resolvedPerson)
+            : undefined) ||
+        resolvedOrg?.name ||
+        strippedGroupId
     return (
         <>
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -172,7 +234,7 @@ export function CurrentCaliberFilters({
             {ownerGroup ? (
                 <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-body-compact">
                     <span className="min-w-0 truncate">
-                        现任分组下钻：{ownerGroup}
+                        当前分组明细：{ownerGroupLabel}
                     </span>
                     <Button
                         id="customers-quality-dual-drill-clear"
@@ -187,7 +249,7 @@ export function CurrentCaliberFilters({
                             })
                         }
                     >
-                        清除下钻
+                        清除明细筛选
                     </Button>
                 </div>
             ) : null}

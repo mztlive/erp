@@ -91,7 +91,7 @@ export function TaskTimeline({
                 </div>
                 {approval && (
                     <p className="text-xs text-muted-foreground">
-                        记录展示实际发生的操作，本次审批依据仍以提交资料为准。
+                        以下为单据最新动态；审批请以本次提交时的资料为准。
                     </p>
                 )}
                 {query.isPending ? (

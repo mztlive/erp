@@ -372,10 +372,7 @@ function FinancialDraftForm({
                     await mutations.confirm(current)
                     setUnknown(null)
                     onClose()
-                } else
-                    setError(
-                        "原单尚未进入审批，本次提交尚未确认。可使用原操作重试。",
-                    )
+                } else setError("暂未确认是否提交成功，请直接点击重新提交。")
             } else if (unknown.stage === "save") {
                 if (
                     current.version > unknown.version &&
@@ -398,12 +395,10 @@ function FinancialDraftForm({
                     isFinancialDraft(current)
                 ) {
                     setUnknown({ ...unknown, confirmedUnchanged: true })
-                    setError(
-                        "原单版本未变化，尚未确认保存完成。可使用原值重试保存。",
-                    )
+                    setError("网络超时，暂未确认是否保存成功，请点击重新保存。")
                 } else {
                     setUnknown({ ...unknown, latest: current })
-                    setError("原单状态或内容已变化，请采用最新原单后继续处理。")
+                    setError("该单据已被更新，请先加载最新内容后再继续修改。")
                 }
             }
         } catch (cause) {
@@ -577,7 +572,7 @@ function FinancialDraftForm({
                 {saved && !error ? (
                     <p className="text-sm text-muted-foreground">
                         {kind === "customer_receipt"
-                            ? "到账信息已保存，核销分配在提交审批时保存。"
+                            ? "到账信息已暂存；提交审批时将一并更新核销明细。"
                             : "修改已保存。"}
                     </p>
                 ) : null}
@@ -638,7 +633,7 @@ function FinancialDraftForm({
                                 disabled={pending || checking}
                                 onClick={() => void saveIntent(unknown)}
                             >
-                                使用原值重试保存
+                                重新保存
                             </LoadingButton>
                         ) : null}
                         {unknown.stage === "save" && unknown.latest ? (
@@ -661,7 +656,7 @@ function FinancialDraftForm({
                                     setError(null)
                                 }}
                             >
-                                采用最新原单
+                                加载最新内容
                             </Button>
                         ) : null}
                         {unknown.stage === "saved" ? (

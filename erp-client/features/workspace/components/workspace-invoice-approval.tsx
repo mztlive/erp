@@ -518,7 +518,7 @@ function Source({
             </div>
             <p className="text-xs text-muted-foreground">
                 {frozen
-                    ? "申请提交时锁定的销售版本"
+                    ? "提交申请时的销售单内容"
                     : "当前生效销售版本，点击单号查看完整明细与合同凭证"}
             </p>
             <dl className="grid gap-x-6 gap-y-3 @min-[640px]/document:grid-cols-2">

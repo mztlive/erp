@@ -202,7 +202,7 @@ export function ProductImportDialog({
                                 >
                                     {legacy.isPending
                                         ? "提交中…"
-                                        : "改用普通上传"}
+                                        : "切换备用通道上传"}
                                 </LoadingButton>
                             </>
                         ) : (

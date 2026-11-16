@@ -40,7 +40,7 @@ export function PurchaseChangeCoverageEffects({
                 </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-                按本次提交内容预判，生效时按当时事实复核；缺口生效后回到供给分配，由采购负责人重新安排供应。
+                以上为预计受影响的销售需求；改单审批通过后，产生的采购缺口将重新生成待采购任务。
             </p>
             <ul className="divide-y divide-border/60">
                 {effects.map((effect) => (

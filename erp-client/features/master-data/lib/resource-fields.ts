@@ -79,7 +79,7 @@ export function currentResourceFieldValues(
             matched === "—" ||
             matched === "****" ||
             matched === "（敏感字段，需授权查看）" ||
-            matched === "（请从财务上下文查看）" ||
+            matched === "（请前往财务模块查看）" ||
             /^\d+\s*项$/.test(matched)
         ) {
             continue

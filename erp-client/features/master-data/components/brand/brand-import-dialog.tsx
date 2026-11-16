@@ -128,7 +128,7 @@ export function BrandImportDialog({
                     {uncertain && (
                         <p role="alert" className="text-sm text-destructive">
                             {getErrorMessage(mutation.error, "提交响应未收到")}
-                            。任务可能已经登记，请点击「重试核对」获取原任务；同一次提交不会重复创建任务。
+                            。网络响应超时，暂未确认是否提交成功，请点击「重新确认」（不会重复创建记录）。
                         </p>
                     )}
                     {source && (
@@ -223,7 +223,7 @@ export function BrandImportDialog({
                                         )
                                 }}
                             >
-                                {uncertain ? "重试核对" : "提交后台导入"}
+                                {uncertain ? "重新确认" : "提交后台导入"}
                             </LoadingButton>
                         )}
                     </div>

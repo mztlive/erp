@@ -55,7 +55,7 @@ export function useIntegrationDirectActions({
             (r) => r.registeredReasonId === reconReasonId,
         )
         if (!reason || reason.conclusion !== conclusion) {
-            setActionError("请选择与结论匹配的注册原因")
+            setActionError("请选择与结论匹配的差异原因")
             return
         }
         const evidence = item.linkedEvidence
@@ -65,7 +65,7 @@ export function useIntegrationDirectActions({
                 (kind) => !evidenceKinds.has(kind),
             )
         ) {
-            setActionError("结论所需证据尚未齐备")
+            setActionError("确认结论所需的核验凭证尚未关联，请先补充核验凭证")
             return
         }
         const identity = commandIdentities.get(conclusion, item.identity.id)
@@ -105,7 +105,7 @@ export function useIntegrationDirectActions({
             (needsEvidence && item.linkedEvidence.length === 0)
         ) {
             if (needsEvidence && item?.linkedEvidence.length === 0) {
-                setActionError("请先从受控证据入口关联已有证据")
+                setActionError("请先关联相关的业务单据或核验凭证后再提交")
             }
             return
         }

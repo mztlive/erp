@@ -43,7 +43,7 @@ export function AftersalesSection({
         >
             {afterSales.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                    暂无售后请求。取消与退款必须引用既有请求，禁止任意创建。
+                    暂无售后申请记录。如需取消订单或申请退款，请先由关联销售单或采购单发起售后。
                 </p>
             ) : (
                 <div className="space-y-4">
@@ -134,8 +134,7 @@ export function AftersalesSection({
                                     </GuardedBusinessAction>
                                 </div>
                                 <p className="text-tiny text-muted-foreground">
-                                    领域动作引用售后请求 {as.requestNo}
-                                    ，重复提交返回原结果；不读写任务。
+                                    关联售后申请单：{as.requestNo}
                                 </p>
                             </CardContent>
                         </Card>

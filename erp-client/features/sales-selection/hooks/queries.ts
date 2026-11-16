@@ -217,7 +217,7 @@ export const useBookOperations = () => {
             if (variables.silent) return
             toast.add({
                 title: "准备任务已启动",
-                description: "正在冻结商品池并生成陈列，请稍后查看进度。",
+                description: "正在生成商品清单，请稍后查看进度。",
                 type: "success",
                 timeout: 4000,
             })
@@ -280,7 +280,7 @@ export const useBookOperations = () => {
             )
             await invalidateBookCaches(queryClient, variables.bookId)
             toast.add({
-                title: "重生成任务已启动",
+                title: "重新生成任务已启动",
                 description: "沿用当前商品池，完成后替换对应档位陈列。",
                 type: "success",
                 timeout: 4000,
@@ -337,7 +337,7 @@ export const useBookOperations = () => {
             await invalidateBookCaches(queryClient, variables.bookId)
             toast.add({
                 title: "选品册已关闭",
-                description: "公开页将只展示结束态，不再接受提交。",
+                description: "客户选品链接已关闭，不再接受新提交。",
                 type: "success",
                 timeout: 4000,
             })
@@ -396,7 +396,7 @@ export const useBookOperations = () => {
             await invalidateBookCaches(queryClient, variables.bookId)
             toast.add({
                 title: "陈列项已删除",
-                description: "发布前可继续删减，发布后将冻结。",
+                description: "发布前可继续删减，发布后将锁定不可修改。",
                 type: "success",
                 timeout: 4000,
             })

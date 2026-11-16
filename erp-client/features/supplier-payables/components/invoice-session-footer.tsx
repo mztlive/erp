@@ -32,7 +32,9 @@ export function InvoiceSessionFooter({
     const factCents = cents(factAmount || "0")
     const allocatedCents = cents(allocatedHint || "0")
     const overAllocated = factCents > BigInt(0) && allocatedCents > factCents
-    const overAmount = overAllocated ? fromCents(allocatedCents - factCents) : "0"
+    const overAmount = overAllocated
+        ? fromCents(allocatedCents - factCents)
+        : "0"
 
     return (
         <aside
@@ -69,11 +71,7 @@ export function InvoiceSessionFooter({
                                     ? "text-lg font-semibold text-destructive"
                                     : "text-lg font-medium"
                             }
-                            value={
-                                overAllocated
-                                    ? overAmount
-                                    : unallocatedHint
-                            }
+                            value={overAllocated ? overAmount : unallocatedHint}
                         />
                     </div>
                 </div>

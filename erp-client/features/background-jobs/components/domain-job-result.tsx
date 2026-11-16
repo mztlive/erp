@@ -73,7 +73,7 @@ function domainJobPresentation(job: BackgroundJobView): DomainJobPresentation {
             return {
                 title: "历史期初导入结果",
                 description:
-                    "请在导入批次中核对试算、责任确认及已生成的业务对象。后续应用和失败项处理，以批次页面当前允许的操作为准。",
+                    "请前往期初导入批次详情页，查看预检结果、部门核对进度及导入明细。",
                 href: job.domain_job_id
                     ? `/governance/imports?batchId=${encodeURIComponent(job.domain_job_id)}&section=result`
                     : "/governance/imports",
@@ -97,7 +97,7 @@ function domainJobPresentation(job: BackgroundJobView): DomainJobPresentation {
             return {
                 title: "执行记录",
                 description:
-                    "此任务尚未提供可识别的业务结果入口。请凭任务号联系管理员核对原业务及执行结果，再决定后续处理。",
+                    "暂无法直接跳转至对应业务页面，请凭任务号联系管理员核对处理结果。",
             }
         }
     }

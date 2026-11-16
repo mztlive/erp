@@ -384,9 +384,9 @@ export function WorkspaceTaskSurface({
                 aria-label="当前任务"
             >
                 <Alert variant="destructive">
-                    <AlertTitle>任务处理器未登记</AlertTitle>
+                    <AlertTitle>暂不支持在工作台直接办理</AlertTitle>
                     <AlertDescription>
-                        当前任务类型与业务对象没有签署原地处理面，系统已停止提供处理动作。请联系管理员核对任务类型、业务对象和处理器登记。
+                        该事项暂不支持在当前面板直接处理，请前往对应业务模块办理，或联系管理员。
                     </AlertDescription>
                 </Alert>
             </WorkspaceTaskPane>

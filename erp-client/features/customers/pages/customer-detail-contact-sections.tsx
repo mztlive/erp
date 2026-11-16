@@ -35,7 +35,7 @@ export function CustomerDetailContactSections({
                 {customer.partitions.contacts === "error" ? (
                     <BusinessFailureState
                         kind="system"
-                        description="联系分区失败；主体身份仍保留。"
+                        description="联系方式与地址加载失败，请重试"
                         action={
                             <Button
                                 id="customers-detail-contacts-retry"
@@ -43,7 +43,7 @@ export function CustomerDetailContactSections({
                                 size="sm"
                                 onClick={() => void refetch()}
                             >
-                                重试分区
+                                重新加载
                             </Button>
                         }
                     />

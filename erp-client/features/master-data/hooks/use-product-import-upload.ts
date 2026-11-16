@@ -186,7 +186,10 @@ export function useProductImportDirectUpload() {
                     })
                 }
                 setError(
-                    getErrorMessage(err, "直传失败，请重试或改用普通上传。"),
+                    getErrorMessage(
+                        err,
+                        "高速上传失败，请重试或切换备用通道上传。",
+                    ),
                 )
                 setActive(false)
                 throw err

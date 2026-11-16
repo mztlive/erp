@@ -33,7 +33,7 @@ export function PurchaseOrderExecutionFunds({
 }) {
     if (costMasked || !order.apiExecutionFunds?.length) return null
     return (
-        <PurchaseOrderDetailSection title="供应商预存款执行">
+        <PurchaseOrderDetailSection title="预存款扣款与核销进度">
             <div className="divide-y">
                 {order.apiExecutionFunds.map((funds) => {
                     const execution = order.apiExecutions?.find(
@@ -74,28 +74,19 @@ export function PurchaseOrderExecutionFunds({
                             ) : null}
                             {funds.status === "not_reserved" ? (
                                 <p className="text-sm text-muted-foreground">
-                                    尚未取得本次执行的专属资金占用。请核对订单付款批准、账户到账余额和执行授权。
+                                    暂未冻结预存款额度，请核对付款申请是否已批准、预存款余额及自动扣款授权是否充足。
                                 </p>
                             ) : (
                                 <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
                                     {[
+                                        ["批准使用额度", funds.approvedAmount],
+                                        ["冻结中金额", funds.reservedAmount],
                                         [
-                                            "原占用批准额度",
-                                            funds.approvedAmount,
-                                        ],
-                                        [
-                                            "尚未消耗的占用",
-                                            funds.reservedAmount,
-                                        ],
-                                        [
-                                            "真实扣款已核实",
+                                            "供应商已扣款",
                                             funds.verifiedDebitAmount,
                                         ],
-                                        ["实际核销净额", funds.settledAmount],
-                                        [
-                                            "实际返款已到账",
-                                            funds.returnedAmount,
-                                        ],
+                                        ["已核销应付", funds.settledAmount],
+                                        ["已退回预存款", funds.returnedAmount],
                                     ].map(([name, value]) => (
                                         <div key={name}>
                                             <dt className="text-xs text-muted-foreground">

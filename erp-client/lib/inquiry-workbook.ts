@@ -120,7 +120,7 @@ export async function buildInquiryCustomerWorkbook(
 
     const blob = await workbookBlob(workbook)
     if (blob.size > INQUIRY_IMPORT_MAX_BYTES)
-        throw new Error("生成的模板超过 5 MiB，请减少商品数量后重新下载")
+        throw new Error("生成的模板超过 5 MB，请减少商品数量后重新下载")
     return blob
 }
 
@@ -156,7 +156,7 @@ export function appendInquiryDeliverySheets(
             "模板版本",
             pool ? INQUIRY_POOL_TEMPLATE_VERSION : INQUIRY_TEMPLATE_VERSION,
         ],
-        ["文件限制", "仅支持 XLSX 文件，大小不超过 5 MiB（5,242,880 字节）。"],
+        ["文件限制", "仅支持 Excel（.xlsx）格式文件，文件大小不超过 5 MB。"],
         [
             "行数限制",
             "配送需求最多 2,000 行；按 SKU、交期及交付条件分组后最多 200 条需求，每条需求最多 100 个地址。超限须拆分后重新询价。",
@@ -196,12 +196,12 @@ export function appendInquiryDeliverySheets(
         [
             "公式处理",
             pool
-                ? "系统自动带出的商品资料和配送数量可直接导入，无须转值。请勿修改自动公式；自行添加的其他公式须先选择性粘贴为值。"
-                : "不接受公式单元格。请先复制公式计算结果，再选择性粘贴为值；不得只保留公式缓存值。",
+                ? "系统自动带出的商品资料和配送数量可直接导入，无须转值。请勿修改自动公式；自行添加的其他公式须先选择性粘贴为数值。"
+                : "表格中请勿使用公式；如有公式计算，请复制后使用“粘贴为数值”。",
         ],
         [
             "导入确认",
-            "销售上传后先查看逐行校验和合并结果。存在错误时修正文件并重新预览，不会部分写入。",
+            "上传后可先预览核对；如有填写有误的行，请按提示修改表格后重新上传。",
         ],
     ]
     for (const instruction of instructions) addTextRow(notes, instruction)
@@ -216,7 +216,7 @@ export function appendInquiryDeliverySheets(
         ])
         addTextRow(notes, [
             "筛选与取消选品",
-            "可在配送页筛选 SKU 编号非空的行。取消选品后，已填地址仍保留，须核对并清空该行配送内容；系统不会静默删除已填资料。",
+            "可在配送页筛选 SKU 编号非空的行。如在商品页取消勾选某商品，请同步清空配送页中该商品已填写的收货信息。",
         ])
         addTextRow(notes, [
             "发送客户前",

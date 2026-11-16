@@ -94,7 +94,7 @@ export function PurchaseSourceUpdateDraftDialog({
                     <DialogHeader>
                         <DialogTitle>修改采购原单</DialogTitle>
                         <DialogDescription>
-                            按来源销售的新要求调整。保存后仍需提交审批，采购依据更新才算处理完成。
+                            按来源销售的新要求调整。保存后仍需提交审批，销售变更才算处理完成。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="min-h-0 overflow-auto space-y-4">

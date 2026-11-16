@@ -85,7 +85,9 @@ export async function saveFulfillmentOperation(
         )
         return { editVersion: updated.version }
     }
-    throw new Error("电子交付与服务履约草稿不支持保存；请直接确认正式单据")
+    throw new Error(
+        "电子交付与线下服务无需保存草稿，填写完成后请直接点击确认。",
+    )
 }
 
 /**

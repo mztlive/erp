@@ -220,7 +220,7 @@ export function PurchaseOrderCreateBatchBar({
                     {!compact ? "重新自动分配（直发优先）" : null}
                 </TooltipTrigger>
                 <TooltipContent>
-                    重新自动分配（直发优先）：仅重新推荐本次分配的商品，将替换这些商品的手工调整与拆分方案；暂不分配的商品保持原方案。
+                    将已勾选商品重置为系统推荐方案（优先供应商直发）。
                 </TooltipContent>
             </Tooltip>
         </div>

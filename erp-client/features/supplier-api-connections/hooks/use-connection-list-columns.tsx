@@ -167,7 +167,7 @@ export function useConnectionListColumns(
                                 },
                                 {
                                     id: `supplier-api-connections-list-row-${segment}-open-settings`,
-                                    label: "API 设置",
+                                    label: "平台设置",
                                     icon: Settings2Icon,
                                     onClick: () =>
                                         onOpen(row.original.connectionId),

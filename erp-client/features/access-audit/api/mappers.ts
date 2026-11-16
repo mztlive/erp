@@ -55,10 +55,10 @@ function governancePolicies(): AccessGovernancePolicyView {
 }
 
 const SCOPE_TYPE_LABEL: Record<BackendDataScope["scope_type"], string> = {
-    expression: "人员数据范围",
-    company: "公司级",
-    organization: "组织",
-    team: "团队",
+    expression: "数据可见范围",
+    company: "全公司",
+    organization: "指定部门",
+    team: "指定团队",
     self_owned: "本人负责",
     collaborative: "协作参与",
 }

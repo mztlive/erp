@@ -18,7 +18,7 @@ export function buildAccountsCsv(data: CustomerAccountsListView): string {
             "到期日",
             "应收总额",
             "净已收",
-            "开放应收",
+            "待收金额",
             "净已开票",
             "可开票",
             "状态",
@@ -80,7 +80,7 @@ export function buildAccountsCsv(data: CustomerAccountsListView): string {
             row.statusLabel,
         ])
     } else {
-        header = ["轨道", "单号", "供应商", "记录金额", "未分配余额"]
+        header = ["单据类型", "单号", "往来主体", "记录金额", "未分配余额"]
         rows = [
             ...data.unallocated.receipts.map((row) => [
                 "回款",

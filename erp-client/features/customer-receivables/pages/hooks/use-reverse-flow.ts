@@ -354,7 +354,7 @@ export function useReverseFlow(args: {
         setLastResult({
             status: "succeeded",
             title: "冲正已提交审批",
-            description: "已按已绑定的审批流程启动审批，原回款保留。",
+            description: "已提交审批，审批通过后生效。",
             reference: res.reversal.reversalNo,
             facts: [
                 { label: "冲正单号", value: res.reversal.reversalNo },
@@ -460,7 +460,7 @@ export function useReverseFlow(args: {
         setLastResult({
             status: "succeeded",
             title: "退款已提交审批",
-            description: "已按已绑定的审批流程启动审批，原回款保留。",
+            description: "已提交审批，审批通过后生效。",
             reference: res.refund.refundNo,
             facts: [
                 { label: "退款单号", value: res.refund.refundNo },
@@ -506,11 +506,11 @@ export function useReverseFlow(args: {
         if (res.status === "succeeded") {
             setLastResult({
                 status: "succeeded",
-                title: "反向记录已追加",
+                title: "冲销/红票记录已登记",
                 description: res.message,
                 reference: res.reverseFactNo,
                 facts: [
-                    { label: "反向单号", value: res.reverseFactNo },
+                    { label: "冲正/红票单号", value: res.reverseFactNo },
                     { label: "原记录", value: reverseConfirm.label },
                 ],
             })

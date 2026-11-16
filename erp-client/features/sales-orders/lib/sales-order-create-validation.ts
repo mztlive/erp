@@ -313,7 +313,7 @@ const createSalesOrderSchema = z
                     context.addIssue({
                         code: "custom",
                         path: ["lineItems", index, "sku"],
-                        message: "请选择商品/SKU",
+                        message: "请选择商品",
                     })
                 }
                 if (!line.dueDate) {

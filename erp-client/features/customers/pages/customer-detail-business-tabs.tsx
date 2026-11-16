@@ -105,7 +105,7 @@ export function CustomerDetailRelatedTab({
             {customer.partitions.related === "error" ? (
                 <BusinessFailureState
                     kind="system"
-                    description="关联业务分区失败；主体与其它分区仍保留。"
+                    description="合同与销售单加载失败"
                     action={
                         <Button
                             id="customers-detail-related-retry"
@@ -113,7 +113,7 @@ export function CustomerDetailRelatedTab({
                             size="sm"
                             onClick={() => void refetch()}
                         >
-                            重试
+                            重新加载
                         </Button>
                     }
                 />
@@ -148,7 +148,7 @@ export function CustomerDetailSettlementTab({
         <DocumentSection
             className={detailSectionClassName}
             title="票款摘要"
-            description="只读，不在此核销或开票。"
+            description="仅展示回款与开票汇总，办理核销或开票请前往「客户往来」。"
             action={
                 <Button
                     id="customers-detail-settlement-open-accounts"
@@ -164,7 +164,7 @@ export function CustomerDetailSettlementTab({
             {customer.partitions.settlement === "error" ? (
                 <BusinessFailureState
                     kind="system"
-                    description="票款分区失败；主体身份仍保留。"
+                    description="票款汇总加载失败"
                     action={
                         <Button
                             id="customers-detail-settlement-retry"
@@ -172,7 +172,7 @@ export function CustomerDetailSettlementTab({
                             size="sm"
                             onClick={() => void refetch()}
                         >
-                            重试
+                            重新加载
                         </Button>
                     }
                 />

@@ -76,7 +76,7 @@ export function PortalApplicationsPage() {
         <PortalSurface
             variant="list"
             title="我的申请"
-            description="草稿可修改；送审后的供应商原稿保留，采购确认前不影响生效条款。"
+            description="草稿可修改；提交审核后的申请资料将保留，采购确认前不影响当前生效条款。"
         >
             <ListWorkSurface
                 ariaLabel="我的申请"

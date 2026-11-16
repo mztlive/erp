@@ -36,8 +36,8 @@ export function MyTransfersPage({ portal = false }: { portal?: boolean }) {
         <main className="mx-auto max-w-5xl space-y-4 p-6">
             <h1 className="text-xl font-semibold">我的文件任务</h1>
             <p className="text-sm text-muted-foreground">
-                关闭页面后任务继续处理。文件结果保留 7
-                天；导入预览仍受业务确认有效期限制。下载时会重新检查当前权限。
+                关闭页面后任务会继续在后台处理。导出和结果文件保留 7
+                天；如导入内容有确认期限，请在有效期内完成确认，下载时将校验当前账号权限。
             </p>
             {query.isPending && <p>正在加载…</p>}
             {query.isError && (

@@ -44,7 +44,7 @@ export function PeriodBlockerCard({
             </Alert>
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
-                    <CardTitle>显式期间</CardTitle>
+                    <CardTitle>选择统计期间</CardTitle>
                     <CardDescription>
                         选定后作为本页所有统计的唯一期间。
                     </CardDescription>

@@ -183,10 +183,10 @@ export function PortalApplicationContent({
                     </h2>
                     <dl className="grid gap-2 text-sm md:grid-cols-2">
                         <div>
-                            品牌原稿：{product.brand?.raw_name || "未填写"}
+                            提报品牌：{product.brand?.raw_name || "未填写"}
                         </div>
                         <div>
-                            分类原稿：{product.category?.raw_name || "未填写"}
+                            提报分类：{product.category?.raw_name || "未填写"}
                         </div>
                         <div>型号：{product.model || "未填写"}</div>
                         <div>说明：{product.description || "未填写"}</div>
@@ -209,7 +209,7 @@ export function PortalApplicationContent({
                                         )
                                         .join(" / ") || "未填写"}
                                 </p>
-                                <p>单位原稿：{sku.unit.raw_name}</p>
+                                <p>提报单位：{sku.unit.raw_name}</p>
                                 <p>订货编码：{sku.ordering_code}</p>
                                 <p>条码：{sku.barcode || "未填写"}</p>
                                 <p>
@@ -293,7 +293,7 @@ export function PortalApplicationContent({
             ) : null}
             {showHistory && !!application.submissions?.length && (
                 <section className="space-y-3">
-                    <h2 className="font-semibold">历次提交原稿</h2>
+                    <h2 className="font-semibold">历次提交记录</h2>
                     <Accordion>
                         {application.submissions.map((submission, index) => {
                             const key = String(
@@ -341,15 +341,15 @@ export function PortalApplicationContent({
                         {application.result.summary ??
                             (application.kind === "new_product"
                                 ? application.result.product_created
-                                    ? "已建立商品及供给；本次新建规格待内部定价并上架。"
-                                    : "已完成匹配及供给处理；本次新建规格待内部定价并上架，复用规格保留原上架状态。"
+                                    ? "审核通过，已建立商品与供货关系；采购方将完成建档与后续合作上架。"
+                                    : "审核通过，已完成匹配及供货关系处理；新增规格将由采购方完成后续合作上架，复用规格保持原状态。"
                                 : application.result.operation === "REVISE" ||
                                     application.kind === "terms"
                                   ? "已追加供给条款版本。"
                                   : application.kind === "stop"
                                     ? "采购已确认停止供应。"
                                     : application.kind === "cooperation"
-                                      ? "付款条件已生效，已冻结采购单保持原条件。"
+                                      ? "付款条件已生效，已生效的历史采购单保持原条件。"
                                       : "已建立供给。")}
                     </p>
                     {application.result.skus?.map((sku, index) => (

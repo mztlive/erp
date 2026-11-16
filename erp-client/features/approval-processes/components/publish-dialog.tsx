@@ -92,7 +92,7 @@ export function PublishDialog({
                         {rejectionPolicyCopy()}
                     </p>
                     <p className="text-xs leading-5 text-muted-foreground">
-                        发布后当前已发布版本将退役。已绑定单据和进行中的审批不受影响。
+                        发布后，新发起的单据将按此版本审批；已创建或审批中的单据仍按原流程继续执行。
                     </p>
                 </div>
                 {error ? (

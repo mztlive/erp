@@ -212,14 +212,14 @@ export function SuppliersListPage() {
                                     className={listWorkspaceEmptyStateClassName}
                                     title={
                                         noScope
-                                            ? "当前角色无供应商范围"
+                                            ? "暂无可查看的供应商"
                                             : hasActiveFilters
                                               ? "当前筛选无结果"
                                               : "还没有供应商与资质资料"
                                     }
                                     description={
                                         noScope
-                                            ? "当前权限与数据范围内没有供应商；不代表系统尚无供应商。"
+                                            ? "您当前尚未分配供应商的数据查看权限，请联系管理员开通。"
                                             : hasActiveFilters
                                               ? masterDataCopy.filterEmptyDescription
                                               : "点击「新建」创建第一份资料；历史记录会随资料保留。"

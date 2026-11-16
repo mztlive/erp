@@ -187,7 +187,7 @@ export function CustomerForm({
                 : "创建客户"
             : saveMutation.isPending
               ? "保存中…"
-              : "保存修订"
+              : "保存修改"
 
     return (
         <form
@@ -202,8 +202,8 @@ export function CustomerForm({
             {grouped ? (
                 <FormSection
                     grouped={grouped}
-                    title="主体身份与客户角色"
-                    description="保存后生成新基础资料版本，历史单据记录不变"
+                    title="客户基本资料"
+                    description="修改仅对后续新业务生效，不影响已创建的合同和销售单"
                 >
                     <div className="grid gap-4 sm:grid-cols-2">
                         <form.AppField
@@ -266,9 +266,9 @@ export function CustomerForm({
                                 children={(field) => (
                                     <field.TextareaField
                                         id="customers-form-change-reason"
-                                        label="修订原因"
+                                        label="修改原因"
                                         required
-                                        placeholder="必填，写入修订时间线"
+                                        placeholder="请说明本次修改客户资料的原因"
                                     />
                                 )}
                             />
@@ -315,7 +315,7 @@ export function CustomerForm({
                                 id="customers-form-payment-term"
                                 label="默认付款条件"
                                 options={PAYMENT_TERM_OPTIONS}
-                                placeholder="录单提示"
+                                placeholder="开单时按需选择（选填）"
                                 allowClear={false}
                             />
                         )}

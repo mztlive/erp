@@ -271,8 +271,8 @@ export const HEALTH_LABEL: Record<HealthResult, string> = {
     FAILED: "失败",
     PARTIAL: "部分能力失败",
     UNCHECKED: "未检查",
-    STALE: "检查陈旧",
-    AUTH_FAILED: "鉴权/签名失败",
+    STALE: "检查待更新",
+    AUTH_FAILED: "平台授权失效",
     UNKNOWN: "结果未知",
 }
 
@@ -287,8 +287,8 @@ export const HEALTH_TONE: Record<HealthResult, StatusTone> = {
 }
 
 export const CATALOG_LABEL: Record<CatalogFreshnessState, string> = {
-    FRESH: "目录新鲜",
-    STALE: "目录陈旧",
+    FRESH: "近期已同步",
+    STALE: "数据待更新",
     RUNNING: "同步中",
     FAILED: "同步失败",
     NEVER: "从未同步",
@@ -330,5 +330,5 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
     START_CATALOG_SYNC: "触发目录同步",
     DISABLE: "停用连接",
     ENABLE: "启用连接",
-    HEALTH_AUTH_FAILED: "鉴权/签名失败",
+    HEALTH_AUTH_FAILED: "平台授权失效",
 }

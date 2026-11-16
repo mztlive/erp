@@ -37,9 +37,9 @@ export function CurrentRowsTable({
                         ) : null}
                         <TableHead data-align="end">订单数</TableHead>
                         <TableHead data-align="end">含税总额</TableHead>
-                        <TableHead data-align="end">缺版本</TableHead>
+                        <TableHead data-align="end">待核价单数</TableHead>
                         {grouped ? (
-                            <TableHead data-align="end">下钻</TableHead>
+                            <TableHead data-align="end">查看明细</TableHead>
                         ) : null}
                     </TableRow>
                 </TableHeader>
@@ -109,7 +109,7 @@ export function CurrentRowsTable({
                                                     })
                                                 }
                                             >
-                                                下钻
+                                                查看明细
                                             </Button>
                                         ) : (
                                             "—"

@@ -35,7 +35,7 @@ export function HistoryCaliberPanel({
     return (
         <div className="flex min-w-0 flex-col gap-3">
             <p className="text-xs text-muted-foreground">
-                历史贡献口径：按销售单首次生效时冻结的负责人与组织祖先路径分组汇总；人员调岗、客户换任不改写历史，永不用现任负责人回填。
+                按销售单签单时归属的销售与部门统计历史贡献；人员后续调岗或客户更换负责人，不会改变历史订单归属。
             </p>
 
             <HistoryCaliberFilters

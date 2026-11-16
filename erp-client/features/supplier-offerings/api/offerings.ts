@@ -51,7 +51,7 @@ export async function fetchSupplierSupplyExceptionWorkItem(
         !task.taskVersion.trim() ||
         unsupportedActions.length > 0
     ) {
-        throw new Error("当前任务不符合供应停止核对合同，已阻止处理。")
+        throw new Error("当前待办任务类型不匹配，请返回待办列表重新进入。")
     }
 
     return task as SupplierSupplyExceptionWorkItem

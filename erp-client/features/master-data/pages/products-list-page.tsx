@@ -288,14 +288,14 @@ export function ProductsListPage() {
                                     className={listWorkspaceEmptyStateClassName}
                                     title={
                                         noScope
-                                            ? "当前没有可查看的商品范围"
+                                            ? "暂无可查看的商品"
                                             : hasActiveFilters
                                               ? "当前筛选无结果"
                                               : "还没有商品列表资料"
                                     }
                                     description={
                                         noScope
-                                            ? "已授权动作但没有可见商品。请联系管理员配置数据范围，或清除筛选后重试。"
+                                            ? "您当前尚未分配商品的数据查看权限，请联系管理员开通后再试。"
                                             : hasActiveFilters
                                               ? masterDataCopy.filterEmptyDescription
                                               : "点击「新建」创建第一份资料；历史记录会随资料保留。"

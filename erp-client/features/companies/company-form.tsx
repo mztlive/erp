@@ -83,7 +83,7 @@ export const CompanyForm = ({
                 setError(
                     getErrorMessage(err, "保存失败，请重试") +
                         (unknown
-                            ? "。结果暂无法确认，请保持当前内容重试核对。"
+                            ? "。结果暂无法确认，请保持当前内容并点击「重新确认」。"
                             : ""),
                 )
             }
@@ -177,7 +177,7 @@ export const CompanyForm = ({
                             {mutation.isPending
                                 ? "保存中…"
                                 : uncertain
-                                  ? "重试核对"
+                                  ? "重新确认"
                                   : "保存"}
                         </LoadingButton>
                     </div>

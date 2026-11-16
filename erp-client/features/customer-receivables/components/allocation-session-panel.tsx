@@ -313,13 +313,15 @@ export function AllocationSessionPanel({
                                         form={form}
                                         receiptId={session.existingFactId}
                                         unsavedFileCount={
-                                            session.fact.receiptFileNames?.length ?? 0
+                                            session.fact.receiptFileNames
+                                                ?.length ?? 0
                                         }
                                         existing={existing}
                                         locked={locked || editingDisabled}
                                     />
 
-                                    {attempted && receiptFactIssues.length > 0 ? (
+                                    {attempted &&
+                                    receiptFactIssues.length > 0 ? (
                                         <ValidationSummary
                                             id="customer-receivables-session-fact-validation"
                                             issues={receiptFactIssues}
@@ -337,7 +339,9 @@ export function AllocationSessionPanel({
                                         role="status"
                                         className="flex items-center justify-between gap-3 rounded-md bg-muted px-3.5 py-2 text-sm"
                                     >
-                                        <span>已移除 {removedLine.line.label}</span>
+                                        <span>
+                                            已移除 {removedLine.line.label}
+                                        </span>
                                         {canOperate && (
                                             <Button
                                                 id="customer-receivables-session-undo-remove"
@@ -454,7 +458,9 @@ export function AllocationSessionPanel({
                                     difference: (
                                         <span>
                                             <MoneyValue
-                                                value={money(proposedUnallocated)}
+                                                value={money(
+                                                    proposedUnallocated,
+                                                )}
                                                 taxBasis="gross"
                                             />
                                             <span className="ml-1 text-xs text-muted-foreground">
@@ -470,13 +476,15 @@ export function AllocationSessionPanel({
                                     session.status === "posted" ||
                                     postedLocally
                                 }
-                                addLabel="从池中选择"
-                                addDisabledReason="请从左侧同主体池加入目标"
-                                onRemoveAllocation={(a) => removeLine(a.lineKey)}
+                                addLabel="选择核销单据"
+                                addDisabledReason="请从左侧待核销应收账款中添加"
+                                onRemoveAllocation={(a) =>
+                                    removeLine(a.lineKey)
+                                }
                                 columns={[
                                     {
                                         id: "target",
-                                        header: "目标",
+                                        header: "待核销单据",
                                         renderValue: ({ item }) => (
                                             <div>
                                                 <div className="text-sm">
@@ -490,7 +498,7 @@ export function AllocationSessionPanel({
                                     },
                                     {
                                         id: "open",
-                                        header: "开放余额",
+                                        header: "待核销余额",
                                         align: "end",
                                         numeric: true,
                                         renderValue: ({ item }) => (

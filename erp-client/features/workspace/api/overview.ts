@@ -117,7 +117,7 @@ export async function fetchOverviewData(
                           id: row.id,
                           title:
                               row.sales_order_no ||
-                              `应收子账 ${row.account_seq}`,
+                              `应收款项 #${row.account_seq}`,
                           description: "应收未收余额",
                           amount: row.open_total,
                           href: `/finance/customer-accounts?view=receivable&previewKind=receivable&previewId=${encodeURIComponent(row.id)}`,

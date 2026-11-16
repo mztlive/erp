@@ -199,7 +199,7 @@ export function IntegrationErrorsPage({
     if (queueQuery.isError && !focusMode) {
         return (
             <IntegrationPageFailure
-                title="接口错误与对账中心"
+                title="外部同步异常与对账"
                 description="加载失败"
                 error={queueQuery.error}
                 onRetry={() => void queueQuery.refetch()}
@@ -210,7 +210,7 @@ export function IntegrationErrorsPage({
     if (focusMode && detailItemQuery.isError) {
         return (
             <IntegrationPageFailure
-                title="接口错误与对账中心"
+                title="外部同步异常与对账"
                 description="任务加载失败"
                 error={detailItemQuery.error}
                 onRetry={() => void detailItemQuery.refetch()}

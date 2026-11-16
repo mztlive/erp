@@ -522,7 +522,7 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                 salesOrderLineId: line.sales_order_line_id,
                 salesOrderRevisionLineId: line.sales_order_revision_line_id,
                 salesPrices: line.sales_prices ?? undefined,
-                itemName: line.product_name ?? "确认分行",
+                itemName: line.product_name ?? "关联销售明细",
                 itemSku: line.specification ?? undefined,
                 salesQuantity,
                 coveredQuantity,

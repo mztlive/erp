@@ -63,11 +63,11 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "info",
     },
     PROCUREMENT_ORDER_CREATION: {
-        label: "待供给分配",
+        label: "待安排采购",
         family: "procurement",
-        badgeLabel: "供给分配",
+        badgeLabel: "采购分单",
         badgeVariant: "lime",
-        openActionLabel: "去分配供给",
+        openActionLabel: "去安排采购",
     },
     PURCHASE_PAYMENT_ARRANGEMENT: {
         label: "采购付款待安排",
@@ -139,11 +139,11 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "去确认导入范围",
     },
     INTEGRATION_RESULT_UNKNOWN: {
-        label: "集成结果未知",
+        label: "外部同步结果待确认",
         family: "exception",
-        badgeLabel: "集成未知",
+        badgeLabel: "同步待确认",
         badgeVariant: "violet",
-        openActionLabel: "去确认集成结果",
+        openActionLabel: "去核对同步状态",
     },
     BUSINESS_EXCEPTION: {
         label: "业务异常",

@@ -70,7 +70,7 @@ export function ContractSalesAccessDialog({
                 <DialogHeader>
                     <DialogTitle>管理合同共享销售</DialogTitle>
                     <DialogDescription>
-                        选中的销售在具备相应权限时可查看本合同及附件。选用合同新开单还须具有当前客户资格。共享不会开放其他销售单，也不会改变本合同的负责销售。
+                        选中的销售在具备相应权限时可查看本合同及附件。选用合同开单仍需拥有对应客户权限；共享本合同不会同步共享关联销售单，也不会改变合同负责人。
                     </DialogDescription>
                 </DialogHeader>
                 <form

@@ -54,7 +54,7 @@ export interface WorkTaskItemProps extends Omit<
     counterparty?: React.ReactNode
     enteredAt: React.ReactNode
     enteredDateTime?: string
-    /** 默认密度下「进入时间」字段的标签；默认「进入队列」（沿用既有语境）。 */
+    /** 默认密度下「进入时间」字段的标签；默认「接收时间」。 */
     enteredAtLabel?: string
     dueAt?: React.ReactNode
     dueDateTime?: string
@@ -81,7 +81,7 @@ export function WorkTaskItem({
     counterparty,
     enteredAt,
     enteredDateTime,
-    enteredAtLabel = "进入队列",
+    enteredAtLabel = "接收时间",
     dueAt,
     dueDateTime,
     responsibleParty,
@@ -244,12 +244,12 @@ export interface BusinessDiffPanelProps extends Omit<
  */
 export function BusinessDiffPanel({
     changes,
-    title = "字段变更",
-    caption = "字段变更前后值对比",
+    title = "修改内容对比",
+    caption = "修改前后内容对比",
     emptyValue = "—",
-    emptyMessage = "没有字段变更",
+    emptyMessage = "无修改内容",
     count,
-    fieldColumnLabel = "字段",
+    fieldColumnLabel = "项目",
     beforeColumnLabel = "变更前",
     afterColumnLabel = "变更后",
     noteColumnLabel = "变更说明",
@@ -338,9 +338,9 @@ export interface AuditTimelineProps extends Omit<
 /** 审计记录时间线。组件不格式化时间，也不推导操作者或来源。 */
 export function AuditTimeline({
     entries,
-    emptyMessage = "暂无审计记录",
+    emptyMessage = "暂无操作记录",
     className,
-    "aria-label": ariaLabel = "审计记录",
+    "aria-label": ariaLabel = "操作记录",
     ...props
 }: AuditTimelineProps) {
     if (entries.length === 0) {
@@ -436,7 +436,7 @@ const importStages: ReadonlyArray<{
     label: string
 }> = [
     { key: "upload", label: "上传" },
-    { key: "mapping", label: "映射" },
+    { key: "mapping", label: "资料匹配" },
     { key: "validation", label: "校验" },
     { key: "preview", label: "预览" },
     { key: "submission", label: "提交" },
@@ -538,30 +538,59 @@ export type ImportIssue = Readonly<{
 }>
 
 /**
- * 导入/批量结果的错误码中文映射。命中才翻译，未命中的原样展示（不猜测），
- * 避免把枚举原值直接上屏。
+ * 导入/批量结果的问题类型中文映射。优先覆盖常见枚举，
+ * 未命中的全大写英文码兜底为「其他异常」，避免把原始枚举码直接上屏。
  */
 const IMPORT_CODE_LABEL: Readonly<Record<string, string>> = {
     CUSTOMER_NOT_FOUND: "客户不存在",
-    AMOUNT_PRECISION: "金额精度不符",
+    AMOUNT_PRECISION: "金额小数位数超限",
     STOCK_QTY_INVALID: "库存数量无效",
-    MAPPING_CONFLICT: "映射冲突",
+    MAPPING_CONFLICT: "关联资料匹配冲突",
     HISTORY_FLOW_FORBIDDEN: "历史流程禁止修改",
     BASELINE_DATE_MISMATCH: "基准日不一致",
     CARD_DRAFT_EXCLUDED: "卡券草稿已排除",
+    QUALIFICATION_EXPIRED: "资质已过期",
     IDEMPOTENT_SKIP: "已处理跳过",
     OUT_OF_SCOPE: "超出导入范围",
     STAGE_NOT_READY: "阶段未就绪",
     CONFIRMATIONS_INCOMPLETE: "责任确认未完成",
     STALE_CONFIRMATION: "确认已过期",
     JOB_RUNNING: "任务执行中",
-    VALIDATION_ENV_REQUIRED: "需在验证环境校验",
+    VALIDATION_ENV_REQUIRED: "请先在验证环境中完成预检",
     ADMIN_CANNOT_CONFIRM: "管理员不能确认",
-    IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED: "确认任务尚未配置",
+    IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED: "部门确认流程尚未启用",
+    IMPORT_CONFIRMATION_TASK_MISSING: "部门确认任务缺失",
+    IMPORT_CONFIRMATION_CONTEXT_MISMATCH: "确认范围与任务入口不一致",
+    PENDING_MAPPING: "待资料匹配",
+    CONFLICT: "资料冲突",
+    FAILED: "处理失败",
+    SKIPPED: "已跳过",
+    SUCCEEDED: "处理成功",
+    INQUIRY_IMPORT_INVALID: "导入数据校验未通过",
+    PERMISSION_DENIED: "暂无权限",
+    REQUEST_FIELD_INVALID: "填写内容有误",
+    VALIDATION_FAILED: "校验未通过",
+    DUPLICATE: "记录重复",
+    NOT_FOUND: "未找到对应资料",
+    TIMEOUT: "处理超时",
+    INVALID: "内容不符合要求",
+    ERROR: "处理异常",
+    UNKNOWN: "其他异常",
+    REJECTED: "未通过",
+    BLOCKED: "暂不可操作",
+    CANCELLED: "已取消",
+    PENDING: "待处理",
 }
 
+const rawCodeTokenPattern = /^(?:[A-Z]{4,}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/
+
 export function importCodeLabel(code: string): string {
-    return IMPORT_CODE_LABEL[code] ?? code
+    const normalized = code.trim()
+    if (!normalized) return "其他异常"
+    const upper = normalized.toUpperCase()
+    if (IMPORT_CODE_LABEL[normalized]) return IMPORT_CODE_LABEL[normalized]
+    if (IMPORT_CODE_LABEL[upper]) return IMPORT_CODE_LABEL[upper]
+    return rawCodeTokenPattern.test(normalized) ? "其他异常" : code
 }
 
 export interface ImportIssueTableProps extends Omit<
@@ -603,8 +632,8 @@ export function ImportIssueTable({
                 <TableHeader>
                     <TableRow>
                         <TableHead>行号</TableHead>
-                        <TableHead>字段</TableHead>
-                        <TableHead>错误码</TableHead>
+                        <TableHead>列名 / 项目</TableHead>
+                        <TableHead>问题类型</TableHead>
                         <TableHead>说明</TableHead>
                         <TableHead>修复方式</TableHead>
                     </TableRow>

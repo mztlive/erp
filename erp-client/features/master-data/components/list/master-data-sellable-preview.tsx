@@ -105,8 +105,8 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                     {formatEffectiveRange(row.effectiveFrom, row.effectiveTo)}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    销售资格核对时点：{item.eligibilityAsOf}
-                    。价格、商品状态或供给变化后，资格将重新计算。
+                    可售状态核对时间：{item.eligibilityAsOf}
+                    。价格、商品上下架或供货情况变化后，可售状态将自动更新。
                 </p>
             </section>
         </div>

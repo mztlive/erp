@@ -82,19 +82,20 @@ export type PrepaymentGateCopy = {
 }
 
 const PREPAYMENT_GATE_COPY: PrepaymentGateCopy = {
-    title: "先款后货门禁",
-    description: "仅按已确认付款的有效净分配判断，不以付款申请或附件代替。",
+    title: "先款后货付款核对",
+    description:
+        "按财务已确认并关联到本单的实际付款净额计算（仅提交付款申请或上传附件不计入）。",
     allowedBadge: "允许继续履约",
-    blockedBadge: "履约已阻断",
+    blockedBadge: "待补齐货款",
     amountTerm: "最低有效付款金额",
     ratioTerm: "最低有效付款比例",
     allocatedTerm: "已分配",
     gapTerm: "当前缺口",
     updatedTerm: "计算更新时间",
-    allowedTitle: "付款门禁已满足",
-    blockedTitle: "付款门禁尚未满足",
-    allowedBody: "当前有效净付款分配已达到冻结条件，可以继续本次履约。",
-    blockedBody: "新的入库、直发、电子交付或服务确认必须等待缺口补齐。",
+    allowedTitle: "货款已达标，可办理收发货",
+    blockedTitle: "货款未付齐，暂不可收发货",
+    allowedBody: "已确认付款金额已满足约定条件，可继续办理收发货。",
+    blockedBody: "请先补齐剩余货款，确认到账后方可办理入库、直发或交付确认。",
 }
 
 function PrepaymentGate({
@@ -241,7 +242,9 @@ export type CostBasis = "ACTUAL" | "STANDARD" | "NONE"
 
 export type CostCoverageBreakdown = Readonly<Record<CostBasis, React.ReactNode>>
 
-export type CostCoverageNoticeProps = DomainPanelProps & {
+export type CostCoverageNoticeProps = Omit<DomainPanelProps, "title"> & {
+    title?: React.ReactNode
+    description?: React.ReactNode
     basis: CostBasis
     /** 仅用于进度条渲染的 0..100 数值投影，由调用方提供。 */
     coveragePercent: number
@@ -258,12 +261,12 @@ const costBasisStatus = {
     ACTUAL: {
         label: "实际成本",
         tone: "success",
-        description: "当前成本来自实际发生或后续权威差额。",
+        description: "按实际采购结算金额或对账确认差额计算。",
     },
     STANDARD: {
         label: "标准成本",
         tone: "info",
-        description: "当前成本使用消费发生时有效的标准供给成本。",
+        description: "按发货或核销时的标准供货价估算。",
     },
     NONE: {
         label: "无可用成本",
@@ -284,7 +287,7 @@ const costCoverageStatus = {
         label: "成本已覆盖",
         tone: "success",
         alert: "success",
-        description: "当前范围的成本已完整覆盖。",
+        description: "当前范围内的订单均已获取完整成本。",
     },
     partial: {
         label: "成本部分覆盖",
@@ -309,6 +312,8 @@ const costCoverageStatus = {
 >
 
 function CostCoverageNotice({
+    title = "成本归集完整度",
+    description = "展示当前统计范围内已获取准确采购成本的订单比例。",
     basis,
     coveragePercent,
     coverageLabel,
@@ -330,10 +335,8 @@ function CostCoverageNotice({
             {...props}
         >
             <CardHeader className="border-b border-border">
-                <CardTitle>成本覆盖</CardTitle>
-                <CardDescription>
-                    成本来源与覆盖率必须和利润口径同时展示。
-                </CardDescription>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
                 <CardAction className="flex flex-wrap items-center justify-end gap-2">
                     <StatusBadge
                         tone={coverageStatus.tone}

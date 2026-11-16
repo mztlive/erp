@@ -111,7 +111,7 @@ export function mapErrorTask(
                   idempotencyKeySummary: "—",
                   businessFactKeySummary: "—",
                   schemaVersion: "—",
-                  directionLabel: "入站",
+                  directionLabel: "外部推送",
                   maskedPayloadSummary: task.last_attempt_summary ?? "—",
               }
             : undefined,

@@ -21,7 +21,7 @@ export type WorkspaceSearchOption = { value: string; label: string }
 export type WorkspaceSearchOptions = Record<string, WorkspaceSearchOption[]>
 export const WORKSPACE_FILTER_LABELS = {
     item_types: "事项类型",
-    counterparties: "往来方",
+    counterparties: "客户 / 供应商",
     handlers: "处理人",
     sales_orders: "来源销售单",
     purchase_orders: "来源采购单",

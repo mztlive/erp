@@ -24,7 +24,7 @@ export function ContractDetailOverview({
         <div className="space-y-8">
             <DocumentSection
                 title="合同要点"
-                description="身份、客户、状态、版本与有效期；不含合同级金额。"
+                description="合同基本签约信息与有效期限（实际交易金额以具体销售单为准）。"
             >
                 <DocumentSummary
                     columns="two"
@@ -60,7 +60,7 @@ export function ContractDetailOverview({
                             id: "recognition",
                             label: "归档依据",
                             value: rev.recognizedFields
-                                ? "原文识别并匹配主数据"
+                                ? "智能识别并核对归档"
                                 : "历史归档",
                         },
                         {
@@ -113,7 +113,7 @@ export function ContractDetailOverview({
                 title="关联销售摘要"
                 description={
                     <>
-                        金额仅为各销售单摘要，不汇总为合同金额。更新于{" "}
+                        以下为关联销售单汇总，实际交易金额以各销售单为准。更新于{" "}
                         <span className="num">
                             {formatAsOf(contract.relatedSalesOrdersAsOf)}
                         </span>
@@ -136,7 +136,7 @@ export function ContractDetailOverview({
                 <p className="text-sm leading-relaxed">
                     当前关联 {contract.relatedSalesOrders.length} 张销售单
                     {contract.relatedSalesOrders.length > 0
-                        ? "，可在「关联销售单」分区查看明细。"
+                        ? "，可在「关联销售单」标签页查看明细。"
                         : "。"}
                 </p>
             </DocumentSection>

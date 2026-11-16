@@ -39,7 +39,7 @@ import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 
 const STAGE_LABELS: Record<string, string> = {
     QUEUED: "排队中",
-    SNAPSHOT: "冻结商品池",
+    SNAPSHOT: "锁定候选商品",
     SEARCH: "智能生成套餐",
     IMAGES: "准备陈列图片",
     WRITE: "保存陈列结果",
@@ -315,7 +315,7 @@ export function BookWorkflowBanner({
                             选品形态：
                             {SELECTION_FORM_LABEL[detail.selection_form]} ·
                             商品来源：{POOL_SOURCE_LABEL[detail.source_kind]}
-                            。点击右上角「开始准备」抓取 SKU 并生成初始陈列。
+                            。点击右上角「开始准备」，系统将根据规则自动生成商品或套餐清单。
                         </p>
                     </div>
                     {onEdit ? (
@@ -348,7 +348,7 @@ export function BookWorkflowBanner({
                                     detail.prepare_stage ?? "QUEUED"
                                 ] ?? "处理商品"}
                             </span>
-                            。后台正在冻结商品快照并生成陈列，期间不可修改与发布。
+                            。系统正在生成商品与套餐清单，完成后即可核对价格并发布。
                         </p>
                         {preparePercent != null ? (
                             <Progress value={preparePercent}>
@@ -448,7 +448,7 @@ export function BookWorkflowBanner({
                             <span>客户已完成选品并提交方案</span>
                         </div>
                         <p className="text-sm">
-                            选品册陈列已冻结。
+                            客户已提交选品，商品清单已锁定。
                             {detail.proposal_no ? (
                                 <>
                                     销售方案编号：
@@ -484,7 +484,7 @@ export function BookWorkflowBanner({
                         该选品册已{detail.status === "CLOSED" ? "关闭" : "作废"}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                        该选品册处于业务终态，仅供查阅历史快照，不可再编辑、重生成或发布。
+                        该选品册已结束，仅支持查看历史商品清单，不可再修改或重新发布。
                     </p>
                 </div>
             ) : null}

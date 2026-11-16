@@ -236,7 +236,6 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                     </span>
                                 </p>
                                 <p className="text-tiny text-muted-foreground">
-                                    任务号尾号 {lastAction.idempotencyKeyTail} ·
                                     尝试 {lastAction.attemptCount}
                                 </p>
                             </section>

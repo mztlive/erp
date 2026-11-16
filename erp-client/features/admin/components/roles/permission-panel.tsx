@@ -361,9 +361,9 @@ function PermissionSection({
             </div>
             {specialPermissions.length > 0 && (
                 <p className="mb-3 rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
-                    另有特殊授权：
+                    包含整模块全选授权：
                     {specialPermissions.map(permissionLabel).join("、")}
-                    。调整本业务的单项权限会将该业务的全部操作改为自选操作；跨业务授权覆盖的操作只读，其他特殊授权保留。
+                    。如改为按单项操作授权，系统将仅保留本次勾选的操作（后续新增功能需手动勾选）；跨模块全选授权的操作不可单独取消。
                 </p>
             )}
             <div className="divide-y divide-border border-y border-border">

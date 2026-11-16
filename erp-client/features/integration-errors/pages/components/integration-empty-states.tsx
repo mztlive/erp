@@ -5,8 +5,8 @@ export function IntegrationEmptyScope() {
     return (
         <BusinessEmptyState
             kind="no-scope"
-            title="当前角色无集成处理范围"
-            description="当前权限与数据范围内没有可处理的异常或差异；不代表系统尚无记录。"
+            title="暂无处理权限"
+            description="当前账号授权范围内没有待处理的外部异常或对账差异。"
             className="rounded-lg border-0 bg-transparent shadow-none ring-0"
         />
     )

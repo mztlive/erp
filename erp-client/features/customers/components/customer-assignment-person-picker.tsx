@@ -135,7 +135,7 @@ export function CustomerAssignmentPersonPicker({
                 description={
                     canReadOrganization
                         ? "按部门选择一位销售人员，确认后返回归属调整。"
-                        : "当前账号未开放部门信息，可按姓名或账号选择。"
+                        : "当前暂无权限查看部门结构，可按姓名或账号搜索选择。"
                 }
                 unassignedDepartmentLabel="未显示部门归属"
                 value={value || null}

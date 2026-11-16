@@ -234,7 +234,7 @@ export function reportOperationProblem(
             description:
                 options.description ??
                 (failure.kind === "system"
-                    ? "暂未确认操作结果，请回到来源页面核对；当前输入已保留。"
+                    ? "暂未确认是否提交成功，请返回原单据页面核对最新状态；您刚才填写的内容仍已保留。"
                     : failure.kind === "permission"
                       ? "当前账号无权执行此操作，请联系管理员确认权限。"
                       : failure.description),

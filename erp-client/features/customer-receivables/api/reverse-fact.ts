@@ -112,7 +112,7 @@ export async function reverseFact(
                 reverseFactId: submitted.reversalId,
                 reverseFactNo: submitted.reversalNo,
                 operationId: commandInput.idempotencyKey,
-                message: "已提交回款冲正审批，原回款保留。",
+                message: "已提交回款冲正审批，审批通过后生效。",
                 approval: submitted.approval,
                 subjectStatus: submitted.status,
             }
@@ -136,7 +136,7 @@ export async function reverseFact(
                 reverseFactId: submitted.refundId,
                 reverseFactNo: submitted.refundNo,
                 operationId: commandInput.idempotencyKey,
-                message: "已提交客户退款审批，原回款保留。",
+                message: "已提交客户退款审批，审批通过后生效。",
                 approval: submitted.approval,
                 subjectStatus: submitted.status,
             }
@@ -157,7 +157,7 @@ export async function reverseFact(
             reverseFactId: red.id,
             reverseFactNo: red.invoice_no ?? "附件登记",
             operationId: commandInput.idempotencyKey,
-            message: "已登记独立红票并追加反向分配，原蓝票保留。",
+            message: "已登记红字发票并冲减对应销售单的已开票金额。",
         }
         return result
     } catch (err) {

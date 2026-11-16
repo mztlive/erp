@@ -145,13 +145,13 @@ function BusinessDetailContent({
                         )}
                         {metric.field === "overdue" && (
                             <p className="mb-4 text-xs leading-5 text-muted-foreground">
-                                逾期金额按应收分录的到期日计算。下方展示当前授权范围全部应收子账（含未逾期）的当前余额，进入客户往来查看分录与逾期构成。
+                                逾期金额按每笔应收款的到期日计算。下方展示当前权限范围内的全部客户应收款余额（含未逾期），可点击进入客户往来查看逾期明细。
                             </p>
                         )}
                         {!data?.rows.length ? (
                             <p className="py-10 text-center text-sm text-muted-foreground">
                                 {data?.noScope
-                                    ? "当前角色无数据范围"
+                                    ? "暂无数据查看权限"
                                     : "当前范围暂无业务记录"}
                             </p>
                         ) : (

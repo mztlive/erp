@@ -314,9 +314,7 @@ export const SelectionForm = ({
                 return
             }
             if (kind === "unknown") {
-                setMessage(
-                    "操作结果尚未确认。已保留本次请求，请核对结果后继续。",
-                )
+                setMessage("刚才的操作尚未完成确认，请先核对结果后再继续。")
                 return
             }
             keepRequest(null)
@@ -798,7 +796,7 @@ export const SelectionForm = ({
                             <div className="flex-1">
                                 <p className="font-semibold leading-relaxed">
                                     {message ||
-                                        "上次操作结果待核对，请先恢复本次请求。"}
+                                        "刚才的操作尚未完成确认，请点击下方按钮继续。"}
                                 </p>
                                 {request &&
                                     (!mutation.isPending || reconciling) && (
@@ -815,7 +813,7 @@ export const SelectionForm = ({
                                                 mutation.mutate(request)
                                             }}
                                         >
-                                            核对并恢复本次操作
+                                            继续确认
                                         </LoadingButton>
                                     )}
                             </div>
@@ -1151,7 +1149,7 @@ export const SelectionForm = ({
                                     <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground bg-muted">
                                         <Package className="h-10 w-10 stroke-[1.5]" />
                                         <span className="mt-2 text-xs font-medium text-muted-foreground">
-                                            精选商品快照
+                                            暂无商品图片
                                         </span>
                                     </div>
                                 )}

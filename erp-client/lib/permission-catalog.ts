@@ -45,13 +45,16 @@ const SYSTEM_GROUP_NAMES = new Set([
     "角色管理",
     "系统审计",
     "来源注册",
+    "基础来源设置",
     "单据注册",
     "统一待办",
     "批量任务",
     "文件资产",
+    "文件与附件",
     "权限与审计",
     "组织管理",
     "集成治理",
+    "外部平台同步与对账",
 ])
 
 export function isSystemGroup(name: string): boolean {
@@ -104,7 +107,7 @@ const ACTION_LABEL: Record<string, string> = {
     apply: "应用",
     reapply: "重新应用",
     publish: "发布",
-    upgrade_binding: "升级绑定",
+    upgrade_binding: "更新审批流程版本",
     retire: "下架",
     expire: "设为失效",
     post: "记账",
@@ -113,17 +116,17 @@ const ACTION_LABEL: Record<string, string> = {
     operate: "操作",
     execute: "执行",
     command: "下发指令",
-    writeback: "回写",
+    writeback: "同步处理结果",
     complete: "完成",
     close: "关闭",
     resume: "恢复",
     reassign: "改派",
     resolve: "标记已解决",
     investigate: "排查",
-    request_source_fix: "请求源端修复",
+    request_source_fix: "退回来源系统修正",
     cancel: "取消",
     cancel_approval: "撤回审批",
-    cancel_blocked: "取消受阻审批",
+    cancel_blocked: "终止受阻审批",
     reject: "驳回",
     revoke: "撤销授权",
     reverse: "冲销",
@@ -202,26 +205,26 @@ export function actionLabel(action: string): string {
  * 推导有歧义，或推导结果会把实现术语（投影 / 事实 / 水位）带进界面的对象。
  */
 const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
-    approval_instance: "审批实例",
+    approval_instance: "审批单据",
     user_role: "用户角色",
     permission: "权限定义",
     data_scope: "数据范围",
-    personal_business_grant: "个人业务授权",
-    person_data_scope: "人员数据范围",
+    personal_business_grant: "个人数据范围授权",
+    person_data_scope: "人员数据查看范围",
     org_unit: "内部组织",
-    person_query_qualification: "人员查询资格",
+    person_query_qualification: "可选人员范围",
     approval_process: "审批流程",
     work_item: "待办",
     customer_scope: "客户范围",
     customer_sensitive: "客户敏感信息",
     supplier_sensitive: "供应商敏感信息",
     supplier_refund_fact: "供应商退款记录",
-    integration_task: "集成任务",
+    integration_task: "外部同步任务",
     cost_entry: "成本记录",
     legacy_import_confirmation: "导入确认记录",
-    supplier_settlement_source_evidence: "结算来源证据",
-    bulk_selection_snapshot: "批量选择记录",
-    bulk_selection_item: "批量选择逐项结果",
+    supplier_settlement_source_evidence: "结算原始凭据",
+    bulk_selection_snapshot: "批量操作记录",
+    bulk_selection_item: "批量操作明细",
 }
 
 /**
@@ -230,14 +233,25 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
  */
 const GROUP_NAME_OVERRIDES: Record<string, string> = {
     执行投影: "执行信息",
+    来源注册: "基础来源设置",
+    文件资产: "文件与附件",
+    集成治理: "外部平台同步与对账",
 }
 
-/** 组描述清洗：去掉文档编号（W05 等），把实现术语换成业务语言。 */
+/** 组描述与权限描述清洗：去掉文档编号（W05 等），把实现术语换成业务语言。 */
 function sanitizeGroupText(text: string): string {
     return text
         .replace(/（[^（）]*W\d+[^（）]*）|\([^()]*W\d+[^()]*\)/g, "")
+        .replace(/（幂等）/g, "")
         .replace(/投影/g, "执行信息")
         .replace(/事实/g, "记录")
+        .replace(/快照/g, "记录")
+        .replace(/按固定 view /g, "")
+        .replace(/当前 blocker 的唯一合法恢复方式/g, "受阻审批恢复方式")
+        .replace(/非人员一致性 blocker/g, "异常受阻审批")
+        .replace(/审批实例/g, "审批单据")
+        .replace(/供给分配/g, "货源分配")
+        .replace(/供应商供给/g, "供应商供货目录")
         .trim()
 }
 
@@ -333,7 +347,7 @@ const RAW_GROUPS = PERMISSION_GROUPS.map((group) => ({
     permissions: group.permissions.map((permission) => ({
         method: permission.method,
         path: permission.path,
-        description: permission.description,
+        description: sanitizeGroupText(permission.description),
         resource: permission.permission.resource,
         action: permission.permission.action,
     })),

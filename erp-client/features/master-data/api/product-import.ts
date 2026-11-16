@@ -171,7 +171,7 @@ export const putProductImportDirectPart = (
             if (!etag) {
                 reject(
                     new Error(
-                        "对象存储未返回分片标识，请检查存储跨域配置后重试，或改用普通上传。",
+                        "文件高速上传未成功，请切换备用上传方式重试，或联系管理员检查存储配置。",
                     ),
                 )
                 return

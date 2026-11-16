@@ -34,7 +34,7 @@ export function auditActorLabel(row: AuditLogItem): string {
 }
 
 export function auditActionLabel(row: AuditLogItem): string {
-    return row.structured_event?.action_label || "中文动作未记录"
+    return row.structured_event?.action_label || "未记录操作名称"
 }
 
 export function auditObjectLabel(row: AuditLogItem): string {

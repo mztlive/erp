@@ -166,23 +166,23 @@ export async function fetchAccessList(
         {
             action: "EXPORT_AUDIT",
             code: "AUDIT_ACCESS_POLICY_MISSING",
-            message: "审计导出策略未配置，导出暂不可用。",
+            message: "暂未开启操作记录导出功能。",
         },
         {
             action: "EXPORT_CONFIGURATION",
             code: "AUDIT_ACCESS_POLICY_MISSING",
-            message: "配置导出策略未配置，导出暂不可用。",
+            message: "暂未开启权限配置导出功能。",
         },
         {
             action: "ASSIGN_USER_ROLE",
             code: "USER_ROLE_TIME_POLICY_MISSING",
             message:
-                "用户角色时间策略未配置：仅允许立即紧急撤权，不可预约/到期编辑。",
+                "暂不支持设置角色生效或到期时间，仅支持立即调整或紧急撤权。",
         },
         {
             action: "UPDATE_FIELD_POLICY",
             code: "FIELD_POLICY_GRANULARITY_MISSING",
-            message: "字段粒度策略未配置：字段策略只读，不可提交变更。",
+            message: "暂不支持按字段单独设置权限，当前仅支持查看。",
         },
     ]
 

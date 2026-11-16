@@ -97,9 +97,7 @@ export async function centerProduct(
           )
         : undefined
     if (!currentRev) {
-        throw new Error(
-            "商品当前修订不存在或已漂移，禁止以历史修订回填编辑表单",
-        )
+        throw new Error("商品最新版本数据异常，暂无法编辑，请刷新页面后重试")
     }
     const skus = await fetchAllPages<SkuDto>(
         `/admin/products/${encodedId}/skus`,
@@ -210,7 +208,7 @@ export async function centerProduct(
             : undefined
         if (!rev) {
             throw new Error(
-                `SKU ${sku.sku_no} 的当前修订不存在或已漂移，禁止编辑`,
+                `规格（${sku.sku_no}）数据版本异常，暂无法编辑，请刷新重试`,
             )
         }
         const unit = unitById.get(sku.base_unit_id)

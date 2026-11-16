@@ -140,7 +140,7 @@ function DataScopeSection({
         <section className="space-y-3">
             <h3 className="font-medium">数据访问依据</h3>
             <p className="text-xs leading-5 text-muted-foreground">
-                在已有操作权限的前提下，分别按业务范围、来源关系、任务指派、治理委派或目录资格判断。
+                在具备功能权限的前提下，实际可查看或处理的单据还需满足以下数据范围规则。
             </p>
             {groups.length === 0 ? (
                 <p className="text-xs leading-5 text-muted-foreground">
@@ -194,7 +194,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
         return (
             <BusinessEmptyState
                 kind="no-data"
-                title="主体不存在或无权查看"
+                title="对象不存在或无权查看"
                 description="仅展示当前账号有权管理的角色。"
             />
         )
@@ -241,7 +241,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                             variant="warning"
                         >
                             <AlertTitle>{blocker.message}</AlertTitle>
-                            <AlertDescription>{blocker.code}</AlertDescription>
+                            <AlertDescription>当前不可操作</AlertDescription>
                         </Alert>
                     ))}
                 </section>

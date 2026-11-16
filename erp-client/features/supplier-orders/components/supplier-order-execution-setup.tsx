@@ -242,7 +242,7 @@ export function SupplierOrderExecutionSetup({
                             {saveOutcomeUnknown && mutation.variables ? (
                                 <>
                                     <p className="text-sm text-warning-soft-foreground">
-                                        原保存结果尚未查明，已保留本次地址选择和原操作。重试只提交原资料，不更换地址票据。
+                                        上次保存结果确认中，已保留您填写的配送资料，请点击「重试保存」确认结果。
                                     </p>
                                     <Button
                                         id={`${prefix}-retry-original-save`}
@@ -263,7 +263,7 @@ export function SupplierOrderExecutionSetup({
                                                 .catch(() => undefined)
                                         }}
                                     >
-                                        重试原保存
+                                        重试保存
                                     </Button>
                                 </>
                             ) : null}

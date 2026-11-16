@@ -284,7 +284,7 @@ export function useBatchSupplyEditor({
             try {
                 sessionStorage.setItem(storageKey, JSON.stringify(snapshot))
             } catch {
-                message("浏览器无法保存本次提交记录，请释放会话存储后重试。")
+                message("浏览器本地暂存空间受限，请清理缓存后重试。")
                 return
             }
             changeRows(snapshot.rows)

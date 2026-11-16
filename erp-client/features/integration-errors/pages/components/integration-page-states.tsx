@@ -64,7 +64,7 @@ export function IntegrationNotFound({
 }) {
     return (
         <PageScaffold>
-            <PageHeader title="接口错误与对账中心" description="未找到该任务" />
+            <PageHeader title="外部同步异常与对账" description="未找到该任务" />
             <BusinessEmptyState
                 kind="no-data"
                 title="未找到该任务或差异"

@@ -165,9 +165,9 @@ export function PurchaseOrderCreatePage({
                         ? "供给分配已完成"
                         : "本次供给分配已保存",
                     description: !taskCompleted
-                        ? "当前责任范围仍有未分配数量，任务继续保留在工作台，请完成剩余供给分配。"
+                        ? "您负责的商品仍有未分配数量，待办将继续保留，请继续分配剩余商品。"
                         : count === 0
-                          ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
+                          ? `已锁定 ${stockCount} 项现货库存并生成仓库发货单，无需新建采购单。`
                           : stockCount > 0
                             ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
                             : count > 1
@@ -193,10 +193,10 @@ export function PurchaseOrderCreatePage({
                 }
                 setActionError({
                     title: original.hasUnknown
-                        ? "原操作仍待核对"
+                        ? "上次提交结果确认中"
                         : "供给分配失败",
                     description: original.hasUnknown
-                        ? `${result.message} 本次未能完成核对，已保留原操作，请继续核对或联系管理员。`
+                        ? `${result.message} 网络响应超时，系统正在确认上次提交是否成功，请先刷新核对避免重复建单。`
                         : result.code === "CONFLICT"
                           ? `${result.message} 创建依据已刷新，请核对后重试。`
                           : result.message,
@@ -204,16 +204,16 @@ export function PurchaseOrderCreatePage({
                 return
             }
             setActionError({
-                title: "供给分配结果待确认",
-                description: `${result.message} 原操作已保留，请核对上次供给分配结果，刷新后仍可继续核对。`,
+                title: "上次提交结果确认中",
+                description: `${result.message} 网络响应超时，系统正在确认上次提交是否成功，请先刷新核对避免重复建单。`,
             })
         } catch (error) {
             setActionError({
                 error,
-                title: "供给分配结果待核对",
+                title: "上次提交结果确认中",
                 description: getErrorMessage(
                     error,
-                    "原操作已保留，请核对上次供给分配结果。",
+                    "网络响应超时，系统正在确认上次提交是否成功，请先刷新核对避免重复建单。",
                 ),
             })
         }
@@ -777,12 +777,12 @@ export function PurchaseOrderCreatePage({
 
     const pendingRecovery = sourcingCommand.pending ? (
         <Alert variant="warning">
-            <AlertTitle>上次供给分配结果待核对</AlertTitle>
+            <AlertTitle>上次提交结果确认中</AlertTitle>
             <AlertDescription>
                 <p>
                     {sourcingCommand.pending.salesOrderNo} ·{" "}
                     {sourcingCommand.pending.input.lines.length}{" "}
-                    条分配已保留。请先核对原操作，再继续其他供给分配。
+                    条分配已保留。网络响应超时，系统正在确认上次提交是否成功，请先刷新核对避免重复建单。
                 </p>
                 <Button
                     id="procurement-sourcing-recover-saved-command"
@@ -794,7 +794,7 @@ export function PurchaseOrderCreatePage({
                 >
                     {createMutation.isPending
                         ? "正在核对…"
-                        : "核对上次供给分配"}
+                        : "核对上次提交结果"}
                 </Button>
             </AlertDescription>
         </Alert>
@@ -810,7 +810,7 @@ export function PurchaseOrderCreatePage({
             >
                 {embedded ? null : (
                     <PageHeader
-                        title="供给分配"
+                        title="货源分配与采购建单"
                         description="正在加载库存与采购供给…"
                     />
                 )}
@@ -837,8 +837,8 @@ export function PurchaseOrderCreatePage({
             >
                 {embedded ? null : (
                     <PageHeader
-                        title="供给分配"
-                        description="供给依据加载失败"
+                        title="货源分配与采购建单"
+                        description="待采购商品及报价加载失败"
                     />
                 )}
                 {pendingRecovery}
@@ -941,7 +941,7 @@ export function PurchaseOrderCreatePage({
             data-testid="purchase-create-preview"
             onClick={() => void openPreview()}
         >
-            预览供给分配
+            预览分单结果
         </Button>
     )
 
@@ -962,8 +962,8 @@ export function PurchaseOrderCreatePage({
             >
                 {embedded ? null : (
                     <PageHeader
-                        title="供给分配"
-                        description="系统优先推荐现有库存，不足部分再推荐采购；确认后一次完成库存预留和采购缺口建单。"
+                        title="货源分配与采购建单"
+                        description="优先使用现有库存，不足部分生成采购单并提交审批。"
                         actions={
                             <PageActions
                                 actions={[

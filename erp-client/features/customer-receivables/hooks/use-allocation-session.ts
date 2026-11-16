@@ -399,7 +399,7 @@ export function useAllocationSession({
                 label: line.label,
                 message: isReceipt
                     ? `核销金额不可超过当前可核销余额 ${line.openAmount}（已扣除待审批占用）`
-                    : `拟分配不可超过开放余额 ${line.openAmount}`,
+                    : `拟分配不可超过待核销余额 ${line.openAmount}`,
                 targetId,
             })
         }
@@ -407,7 +407,7 @@ export function useAllocationSession({
             issues.push({
                 id: `task-target-${line.lineKey}`,
                 label: line.label,
-                message: "一次销项开票只能分配到当前任务绑定的应收子账",
+                message: "一次销项开票只能分配到当前任务绑定的应收款项",
             })
         }
     }
@@ -457,11 +457,11 @@ export function useAllocationSession({
     function addFromPool(target: AllocationTarget) {
         if (allocations.some((a) => a.targetId === target.targetId)) return
         if (target.counterpartyPartyId !== session.counterpartyPartyId) {
-            setActionError("跨主体目标不能分配，请选择同主体目标。")
+            setActionError("不能跨结算公司核销，请选择当前结算公司的应收款项。")
             return
         }
         if (!isReceipt && target.targetId !== taskReceivableAccountId) {
-            setActionError("一次销项开票只能选择当前任务绑定的应收子账。")
+            setActionError("一次销项开票只能选择当前任务绑定的应收款项。")
             return
         }
         const alreadyAllocated = sumAmounts(
@@ -502,7 +502,7 @@ export function useAllocationSession({
                     target.counterpartyPartyId !== session.counterpartyPartyId,
             )
         ) {
-            setActionError("跨主体目标不能分配，请选择同主体目标。")
+            setActionError("不能跨结算公司核销，请选择当前结算公司的应收款项。")
             return
         }
         setAllocations((prev) => {

@@ -14,7 +14,7 @@ export function ContractDetailSettlement({
     return (
         <DocumentSection
             title="结算与开票"
-            description="当前合同修订的结构化记录；销售单关联时锁定该版本。"
+            description="当前合同约定的结算与开票条款，新建销售单时将默认带入。"
         >
             <DocumentSummary
                 columns="two"
@@ -46,7 +46,7 @@ export function ContractDetailSettlement({
                     },
                     {
                         id: "tax",
-                        label: "税号（打码）",
+                        label: "税号",
                         value:
                             rev.invoiceRequirementSnapshot.taxIdMasked ?? "—",
                         numeric: true,

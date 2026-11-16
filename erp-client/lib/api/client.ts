@@ -196,7 +196,7 @@ const apiFetch = async <T>(
             kind: "Validation",
             message:
                 envelope.errorMessage ||
-                "请求未通过业务校验，请检查填写内容后重试。",
+                "提交的内容不符合要求，请核对修改后再试。",
             status: envelope.status,
             code: envelope.code,
             requiredPermission: envelope.requiredPermission,

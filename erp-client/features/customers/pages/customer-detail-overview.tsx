@@ -53,7 +53,7 @@ export function CustomerDetailMetrics({
                 value={String(
                     customer.metrics.inProgressSalesOrderCount ?? "—",
                 )}
-                detail="正式关联数据完整分页汇总"
+                detail="该客户当前履约中的销售单总数"
                 detailMode="tooltip"
             />
             <MetricItem
@@ -129,7 +129,7 @@ export function CustomerDetailOverviewTab({
         <>
             <DocumentSection
                 className={detailSectionClassName}
-                title="主体身份与客户角色"
+                title="客户基本资料"
                 action={
                     !editBlocked ? (
                         <Button
@@ -151,7 +151,7 @@ export function CustomerDetailOverviewTab({
                 {customer.partitions.identity === "error" ? (
                     <BusinessFailureState
                         kind="system"
-                        description="主体分区加载失败。"
+                        description="基本信息加载失败"
                         action={
                             <Button
                                 id="customers-detail-overview-retry"
@@ -159,7 +159,7 @@ export function CustomerDetailOverviewTab({
                                 size="sm"
                                 onClick={() => void refetch()}
                             >
-                                重试
+                                重新加载
                             </Button>
                         }
                     />
@@ -195,7 +195,7 @@ export function CustomerDetailOverviewTab({
                                           customer.currentRevision
                                               .defaultPaymentTerm,
                                       )
-                                    : "—（仅录单提示）",
+                                    : "未设置（开单时按需选择）",
                             },
                         ]}
                     />

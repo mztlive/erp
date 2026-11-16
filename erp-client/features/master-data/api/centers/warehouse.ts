@@ -49,7 +49,7 @@ export async function centerWarehouse(
             reservedQty: "—",
             hasBlockingStock: false,
             w10Href: `/inventory?warehouseId=${encodeURIComponent(wh.id)}`,
-            policyNote: "库存摘要由 W10 投影提供；当前接口未返回数量。",
+            policyNote: "可前往库存台账查看该仓库的实时在库与预占明细。",
         },
         revisionTimeline:
             timeline.length > 0
