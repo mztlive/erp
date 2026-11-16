@@ -18,7 +18,7 @@ export function WorkspaceTopNav({
     return (
         <header
             data-slot="workspace-top-nav"
-            className="flex h-workspace-topbar min-w-0 shrink-0 items-center gap-2 border-b border-border bg-card px-workspace-inline md:gap-3 md:px-page-inline min-[75rem]:px-page-inline-lg"
+            className="flex h-workspace-topbar min-w-0 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-3 md:pr-5 md:pl-4"
         >
             <SidebarTrigger
                 id="workspace-topbar-navigation-trigger"
@@ -27,9 +27,9 @@ export function WorkspaceTopNav({
             {tabs}
             <nav
                 aria-label="全局功能"
-                className="flex min-w-0 shrink-0 items-center gap-2"
+                className="flex min-w-0 shrink-0 items-center gap-1"
             >
-                {actions}
+                {actions ? <div className="mr-1 min-w-0">{actions}</div> : null}
                 <SystemFeedbackPanel />
                 <InboxPopover />
                 <WorkspaceAccountMenu />

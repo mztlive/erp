@@ -1783,16 +1783,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "create",
                 },
             },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "恢复有权治理的授权来源计算",
-                permission: {
-                    resource: "resource_source",
-                    action: "recompute",
-                },
-            },
         ],
     },
     {
@@ -2023,66 +2013,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "party_bank_account",
                     action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "查看联系人详情",
-                permission: {
-                    resource: "party_contact",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "揭示联系人敏感信息",
-                permission: {
-                    resource: "party_contact",
-                    action: "reveal",
-                },
-            },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "查看地址详情",
-                permission: {
-                    resource: "party_address",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "揭示地址敏感信息",
-                permission: {
-                    resource: "party_address",
-                    action: "reveal",
-                },
-            },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "查看税务资料详情",
-                permission: {
-                    resource: "party_tax_profile",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POLICY",
-                path: "",
-                description: "查看银行账户详情",
-                permission: {
-                    resource: "party_bank_account",
-                    action: "detail",
                 },
             },
         ],
@@ -5303,7 +5233,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/sales-invoice-requests/{id}/cancel",
-                description: "撤回开票申请或取消剩余额度",
+                description: "撤回开票申请",
                 permission: {
                     resource: "sales_invoice_request",
                     action: "cancel",

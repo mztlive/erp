@@ -13,15 +13,15 @@ import { WorkspaceTabs } from "./workspace-tabs"
 
 function WorkspaceSidebarHeader() {
     return (
-        <div className="flex items-center gap-3 px-3 py-3">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-xs">
+        <div className="flex items-center gap-2.5 px-2.5 py-1">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-xs">
                 <Building2Icon className="size-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
                 <div className="truncate text-sm font-bold tracking-tight text-foreground">
                     福尚云 ERP
                 </div>
-                <div className="truncate text-[11px] font-medium text-muted-foreground">
+                <div className="truncate text-tiny font-medium text-muted-foreground">
                     经营协同工作台
                 </div>
             </div>

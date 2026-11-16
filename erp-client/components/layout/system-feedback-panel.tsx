@@ -79,6 +79,7 @@ export function SystemFeedbackPanel() {
             all ||
             new URL(item.href, window.location.origin).pathname === pathname,
     )
+    const problemCount = state.problems.length
     return (
         <Sheet
             open={state.open}
@@ -87,18 +88,30 @@ export function SystemFeedbackPanel() {
             <Button
                 id="system-feedback-open"
                 variant="ghost"
-                size="sm"
-                aria-label={`系统提示，${state.problems.length} 项`}
+                size="icon-sm"
+                className={
+                    problemCount > 0
+                        ? "relative text-foreground hover:text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                }
+                aria-label={`系统提示，${problemCount} 项`}
+                title={
+                    problemCount > 0
+                        ? `系统提示（${problemCount} 项待处理）`
+                        : "系统提示"
+                }
                 onClick={() => {
                     setAll(false)
                     feedbackStore().open(true)
                 }}
             >
-                <CircleAlertIcon aria-hidden />{" "}
-                <span className="max-sm:sr-only">系统提示</span>
-                {state.problems.length > 0 && (
-                    <span className="num">{state.problems.length}</span>
-                )}
+                <CircleAlertIcon className="size-4" aria-hidden />
+                <span className="sr-only">系统提示</span>
+                {problemCount > 0 ? (
+                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-semibold leading-none text-destructive-foreground ring-2 ring-card">
+                        {problemCount > 99 ? "99+" : problemCount}
+                    </span>
+                ) : null}
             </Button>
             <SheetContent size="preview" closeButtonId="system-feedback-close">
                 <SheetHeader>

@@ -43,7 +43,7 @@ export function WorkspaceAccountMenu() {
     const accountLabel = profileQuery.data?.account || "后台账号"
 
     return (
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1">
             {!profileQuery.isPending && !canViewBackgroundJobs && (
                 <div className="min-w-0">
                     <Button
@@ -52,13 +52,18 @@ export function WorkspaceAccountMenu() {
                         render={<Link href="/account/data-transfers" />}
                         variant="ghost"
                         size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground"
                         aria-label="我的文件任务"
                         title="我的文件任务"
                     >
-                        <ListChecksIcon aria-hidden="true" />
+                        <ListChecksIcon className="size-4" aria-hidden="true" />
                     </Button>
                 </div>
             )}
+            <span
+                aria-hidden="true"
+                className="mx-1 hidden h-4 w-px shrink-0 bg-border sm:block"
+            />
             <div className="min-w-0">
                 <DropdownMenu>
                     <DropdownMenuTrigger
@@ -66,26 +71,26 @@ export function WorkspaceAccountMenu() {
                         render={
                             <Button
                                 variant="ghost"
-                                className="h-9 max-w-56 gap-2 px-2"
+                                className="h-control-sm max-w-48 gap-2 pr-2 pl-1.5"
                                 aria-label="账号菜单"
                             />
                         }
                     >
-                        <Avatar size="sm" className="size-7 rounded-md">
-                            <AvatarFallback className="rounded-md bg-zinc-900 font-semibold text-zinc-100 text-xs dark:bg-zinc-100 dark:text-zinc-900">
+                        <Avatar size="sm">
+                            <AvatarFallback className="bg-muted font-medium text-foreground text-xs">
                                 {displayInitial(
                                     profileQuery.data?.name,
                                     profileQuery.data?.account,
                                 )}
                             </AvatarFallback>
                         </Avatar>
-                        <span className="hidden min-w-0 text-left text-sm leading-tight sm:block">
+                        <span className="hidden min-w-0 text-left text-body-compact leading-tight sm:block">
                             <span className="block truncate font-medium">
                                 {displayName}
                             </span>
                         </span>
                         <ChevronDownIcon
-                            className="ml-0.5 size-3.5 text-muted-foreground"
+                            className="size-3.5 text-muted-foreground"
                             aria-hidden="true"
                         />
                     </DropdownMenuTrigger>

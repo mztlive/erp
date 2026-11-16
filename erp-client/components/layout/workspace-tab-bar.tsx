@@ -143,6 +143,18 @@ export function WorkspaceTabBar({
         })
     }
 
+    const stripMask =
+        scroll.left || scroll.right
+            ? {
+                  maskImage:
+                      scroll.left && scroll.right
+                          ? "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)"
+                          : scroll.left
+                            ? "linear-gradient(to right, transparent, black 16px, black 100%)"
+                            : "linear-gradient(to right, black 0%, black calc(100% - 16px), transparent)",
+              }
+            : undefined
+
     return (
         <div
             data-slot="workspace-tab-bar"
@@ -151,13 +163,14 @@ export function WorkspaceTabBar({
             <div
                 ref={strip}
                 onScroll={measure}
-                className="@container h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                style={stripMask}
+                className="@container flex h-full min-w-0 flex-1 items-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 <div
                     ref={track}
                     role="tablist"
                     aria-label="已打开的工作页"
-                    className="flex h-full w-max min-w-full items-center gap-1"
+                    className="flex h-full w-max items-center gap-1"
                 >
                     {tabs.map((tab, index) => {
                         const selected = tab.id === active
@@ -166,9 +179,9 @@ export function WorkspaceTabBar({
                             <div
                                 key={tab.id}
                                 className={cn(
-                                    "group/workspace-tab relative flex h-9 max-w-[min(15rem,100cqi)] shrink-0 items-center rounded-md motion-safe:transition-colors",
+                                    "group/workspace-tab relative flex h-control-sm max-w-[min(14rem,100cqi)] shrink-0 items-center rounded-md motion-safe:transition-colors",
                                     selected
-                                        ? "bg-muted text-foreground"
+                                        ? "bg-secondary text-foreground"
                                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                                 )}
                             >
@@ -181,7 +194,7 @@ export function WorkspaceTabBar({
                                     tabIndex={selected ? 0 : -1}
                                     title={`${tab.title}${tab.dirty ? "（输入已修改）" : ""}`}
                                     className={cn(
-                                        "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+                                        "flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md pr-1 pl-2.5 text-body-compact outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
                                         selected && "font-medium",
                                     )}
                                     onClick={() => onSelect(tab)}
@@ -193,7 +206,7 @@ export function WorkspaceTabBar({
                                         className={cn(
                                             "size-3.5 shrink-0",
                                             selected
-                                                ? "text-foreground/75"
+                                                ? "text-foreground"
                                                 : "text-muted-foreground",
                                         )}
                                         aria-hidden="true"
@@ -208,7 +221,7 @@ export function WorkspaceTabBar({
                                         />
                                     ) : null}
                                 </button>
-                                <span className="relative mr-1 flex size-control-xs shrink-0 items-center justify-center">
+                                <span className="relative mr-1 flex size-5 shrink-0 items-center justify-center">
                                     <button
                                         id={`workspace-tab-close-${tab.id}`}
                                         type="button"
@@ -220,15 +233,15 @@ export function WorkspaceTabBar({
                                                 : undefined
                                         }
                                         className={cn(
-                                            "absolute inset-0 flex items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-foreground/8 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:transition-opacity",
+                                            "flex size-5 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-background/80 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:transition-[opacity,background-color,color]",
                                             selected
-                                                ? "opacity-70"
-                                                : "opacity-0 group-hover/workspace-tab:opacity-70 group-focus-within/workspace-tab:opacity-70 [@media(hover:none)]:opacity-70",
+                                                ? "opacity-70 hover:opacity-100"
+                                                : "opacity-45 group-hover/workspace-tab:opacity-80 group-hover/workspace-tab:hover:opacity-100 group-focus-within/workspace-tab:opacity-80 [@media(hover:none)]:opacity-70",
                                         )}
                                         onClick={() => onClose([tab.id])}
                                     >
                                         <XIcon
-                                            className="size-3.5"
+                                            className="size-3"
                                             aria-hidden="true"
                                         />
                                     </button>
@@ -274,11 +287,7 @@ export function WorkspaceTabBar({
                             <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                className={cn(
-                                    "text-muted-foreground",
-                                    !scroll.overflow &&
-                                        "opacity-0 group-hover/workspace-tabs:opacity-100 group-focus-within/workspace-tabs:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 [@media(hover:none)]:opacity-100",
-                                )}
+                                className="text-muted-foreground/75 hover:text-foreground"
                                 aria-label={`页签操作，已打开 ${tabs.length} 个页面`}
                                 title="查看已打开的页面"
                             />
